@@ -131,8 +131,17 @@ class DropbotMonitorMixinService(HasTraits):
             try:
                 logger.debug(f"Attempting to create DropBot serial proxy on port {port_name}")
                 self.proxy = DramatiqDropbotSerialProxy(port=port_name)
-                # this will send out a connected signal to the message router is successful
+                # this will send out a connected signal to the message router if successful
+                logger.info(f"DropBot connected on port {port_name}")
 
+                self._on_dropbot_proxy_connected()
+
+                # once dropbot setup, set connection to active
+                self.dropbot_connection_active = True
+
+                publish_message(topic=DROPBOT_SETUP_SUCCESS, message="")
+                self.on_chip_check_request(message="")
+                
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
                 err = e
@@ -145,17 +154,6 @@ class DropbotMonitorMixinService(HasTraits):
             except Exception as e:
                 err = e
                 publish_message(topic="dropbot/error", message=str(e))
-
-            else:
-                logger.info(f"Connected to DropBot on port {port_name}")
-                logger.debug(f"Connecting DropBot BLINKER signals to handlers")
-
-                self._on_dropbot_proxy_connected()
-
-                # once dropbot setup, set connection to active
-                self.dropbot_connection_active = True
-
-                publish_message(topic=DROPBOT_SETUP_SUCCESS, message="")
 
             ###########################################################################################
 

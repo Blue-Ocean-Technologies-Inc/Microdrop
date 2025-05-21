@@ -79,9 +79,6 @@ class DropBotStatusLabel(QLabel):
         
         if dropbot_connected is not None:
             self.dropbot_connected = dropbot_connected
-            if dropbot_connected:
-                # request chip check
-                publish_message(topic=CHIP_CHECK, message='')
         else:
             dropbot_connected = self.dropbot_connected
         

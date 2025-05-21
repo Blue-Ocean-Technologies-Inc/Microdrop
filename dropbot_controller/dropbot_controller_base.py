@@ -157,10 +157,11 @@ class DropbotControllerBase(HasTraits):
                                 hv_output_selected=False,
                                 hv_output_enabled=False,
                                 event_mask=EVENT_CHANNELS_UPDATED |
-                                           EVENT_SHORTS_DETECTED |
-                                           EVENT_ENABLE)
+                                            EVENT_SHORTS_DETECTED |
+                                            EVENT_ENABLE)
         
         # Connect proxy signals
+        logger.debug(f"Connecting DropBot BLINKER signals to handlers")
         self.proxy.signals.signal('halted').connect(self._halted_event_wrapper, weak=False)
         self.proxy.signals.signal('output_enabled').connect(self._output_state_changed_wrapper, weak=False)
         self.proxy.signals.signal('output_disabled').connect(self._output_state_changed_wrapper, weak=False)

@@ -27,15 +27,14 @@ class DropbotStatesSettingMixinService(HasTraits):
         Method to set the voltage on the dropbot device.
         """
         try:
-            voltage = float(message)
-            self.voltage = voltage
+            self.voltage = float(message)
             if self.realtime_mode:
-                self.proxy.update_state(voltage=voltage)
+                self.proxy.update_state(voltage=self.voltage)
             else:
                 self.proxy.update_state(
                     hv_output_enabled=False,
-                    voltage=voltage)
-            logger.info(f"Set voltage to {voltage} V")
+                    voltage=self.voltage)
+            logger.info(f"Set voltage to {self.voltage} V")
         except Exception as e:
             logger.error(f"Error setting voltage: {e}")
             raise
@@ -45,15 +44,14 @@ class DropbotStatesSettingMixinService(HasTraits):
         Method to set the frequency on the dropbot device.
         """
         try:
-            frequency = float(message)
-            self.frequency = frequency
+            self.frequency = float(message)
             if self.realtime_mode:
-                self.proxy.update_state(frequency=frequency)
+                self.proxy.update_state(frequency=self.frequency)
             else:
                 self.proxy.update_state(
                     hv_output_enabled=False,
-                    frequency=frequency)
-            logger.info(f"Set frequency to {frequency} Hz")
+                    frequency=self.frequency)
+            logger.info(f"Set frequency to {self.frequency} Hz")
         except Exception as e:
             logger.error(f"Error setting frequency: {e}")
             raise
@@ -63,10 +61,12 @@ class DropbotStatesSettingMixinService(HasTraits):
         Method to set the realtime mode on the dropbot device.
         """
         if message == "True":
+            self.realtime_mode = True
             self.proxy.update_state(hv_output_selected=True,
                                     hv_output_enabled=True,
                                     voltage=self.voltage,
                                     frequency=self.frequency)
         else:
+            self.realtime_mode = False
             self.proxy.update_state(hv_output_enabled=False)
         logger.info(f"Set realtime mode to {self.realtime_mode}")
