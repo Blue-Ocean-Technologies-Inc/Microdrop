@@ -17,6 +17,7 @@ class DropbotStatesSettingMixinService(HasTraits):
     id = "dropbot_states_setting_mixin_service"
     name = 'Dropbot States Setting Mixin'
     realtime_mode = Bool(False)
+    # TODO: Get these from a config file
     voltage = Float(30)
     frequency = Float(1000)
 

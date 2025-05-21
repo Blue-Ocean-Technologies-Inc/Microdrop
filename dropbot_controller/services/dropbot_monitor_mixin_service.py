@@ -28,7 +28,6 @@ class DropbotMonitorMixinService(HasTraits):
 
     id = "dropbot_monitor_mixin_service"
     name = 'Dropbot Monitor Mixin'
-    realtime_mode = Bool(True)
     monitor_scheduler = Instance(BackgroundScheduler,
                                  desc="An AP scheduler job to periodically look for dropbot connected ports."
                                  )
@@ -77,13 +76,6 @@ class DropbotMonitorMixinService(HasTraits):
                                 hv_output_enabled=False,
                                 voltage=0)
         logger.error("Halted DropBot: Disconnect everything and reconnect")
-
-    # def on_set_realtime_mode_request(self, message):
-    #     if message == "True":
-    #         self.realtime_mode = True
-    #     else:
-    #         self.realtime_mode = False
-    #     logger.info(f"Set realtime mode to {self.realtime_mode}")
     
     ############################################################
     # Connect / Disconnect signal handlers
