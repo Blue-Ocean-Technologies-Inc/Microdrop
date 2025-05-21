@@ -5,7 +5,7 @@ from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, level='DEBUG')
 
 
 class ElectrodeScene(QGraphicsScene):
@@ -93,12 +93,12 @@ class ElectrodeScene(QGraphicsScene):
                     src_key = self.electrode_ids_visited[-2]
                     dst_key = self.electrode_ids_visited[-1]
                     key = (src_key, dst_key)
-
+                    
                     # Find the corresponding path item and update its visual representation.
                     found_item = find_path_item(self, key)
-                    found_item.update_color()
-
-                    print(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
+                    if found_item is not None:
+                        found_item.update_color()
+                        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
 
                 # Update the electrode pressed to the current electrode view.
                 self.electrode_pressed = electrode_view
