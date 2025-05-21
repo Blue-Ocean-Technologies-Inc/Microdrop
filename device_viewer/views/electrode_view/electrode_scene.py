@@ -116,6 +116,8 @@ class ElectrodeScene(QGraphicsScene):
 
         else:
             logger.info(self.electrode_channels_visited)
+            # TODO: Implement the logic to handle the mouse release event. Add header to the path and indicate CW & CCW rotation for closed loops
+            
 
         self.electrode_pressed = None
         self.electrode_channels_visited = []
