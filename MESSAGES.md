@@ -2,7 +2,9 @@ Plugins do not communicate with each other, all updates are dispatched by the me
 
 Messages are sent via publish_message() from microdrop_utils/dramatiq_pub_sub_helpers.py.
 
-They are received/handled using _on_{topic}_triggered handlers, which made functional by microdrop_utils/dramatiq_controller_base.py. 
+They are received/handled using _on_{topic}_triggered (or similar) handlers, which made functional by microdrop_utils/dramatiq_controller_base.py. 
+
+I used ** and !! to indicate that a plugin is listening to a signal that they are sending. We were having positive feedback loops when the dropbot isnt detected (like 7 logs a seconds) so this may contribute to it. Loop may of course also occur between two plugins. 
 
 ## Backend
 
@@ -17,7 +19,7 @@ Sending: (Via proxy)
 - self.proxy.frequency
 
 Receiving: (Via proxy)
-- proxy.signals.signal('output_enabled')
+- proxy.signals.signal('output_enabled') (dropbot_controller_base.py:164)
 - proxy.signals.signal('output_disabled')
 - proxy.signals.signal('halted')
 - proxy.signals.signal('capacitance-updated')
@@ -48,7 +50,7 @@ Receiving: (Via handlers)
 ### electrode_controller
 
 Sending: (Via proxy)
-- proxy.state_of_channels
+- proxy.state_of_channels (electrode_state_change_service.py:38)
 
 Receiving: (Via handlers)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
@@ -62,7 +64,16 @@ Receiving:
 
 ### dropbot_tools_menu
 
+Receiving: (Via handlers)
 - SELF_TESTS_PROGRESS "dropbot/signals/self_tests_progress"
+
+Sending: (Via publish_message)
+- TEST_VOLTAGE "dropbot/requests/test_voltage" (menus.py:78)
+- TEST_ON_BOARD_FEEDBACK_CALIBRATION "dropbot/requests/test_on_board_feedback_calibration"
+- TEST_SHORTS "dropbot/requests/test_shorts"
+- TEST_CHANNELS "dropbot/requests/test_channels"
+- RUN_ALL_TESTS "dropbot/requests/run_all_tests"
+- START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring" 
 
 ### manual_controls
 
