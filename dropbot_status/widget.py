@@ -252,7 +252,14 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             chip_inserted = False
         logger.debug(f"Chip inserted: {chip_inserted}")
         self.status_label.update_status_icon(chip_inserted=chip_inserted)
-    
+
+    def _on_realtime_mode_updated_triggered(self, body):
+        if body == 'False':
+            self.status_label.update_capacitance_reading(capacitance='-')
+            self.status_label.update_voltage_reading(voltage='-')
+            self.status_label.update_pressure_reading(pressure='-')
+            self.status_label.update_force_reading(force='-')
+
     # def _on_chip_not_inserted_triggered(self, body):
     #     self.status_label.update_status_icon(chip_inserted=False)
 

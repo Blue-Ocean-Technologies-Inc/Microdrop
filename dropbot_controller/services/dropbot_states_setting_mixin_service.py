@@ -1,8 +1,11 @@
 from traits.api import provides, HasTraits, Bool, Float
 
 from microdrop_utils._logger import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
+
+from ..consts import REALTIME_MODE_UPDATED
 
 
 logger = get_logger(__name__, level="DEBUG")
@@ -66,7 +69,9 @@ class DropbotStatesSettingMixinService(HasTraits):
                                     hv_output_enabled=True,
                                     voltage=self.voltage,
                                     frequency=self.frequency)
+            publish_message(topic=REALTIME_MODE_UPDATED, message="True")
         else:
             self.realtime_mode = False
             self.proxy.update_state(hv_output_enabled=False)
+            publish_message(topic=REALTIME_MODE_UPDATED, message="False")
         logger.info(f"Set realtime mode to {self.realtime_mode}")
