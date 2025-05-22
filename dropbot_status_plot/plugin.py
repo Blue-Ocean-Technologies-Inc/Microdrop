@@ -38,14 +38,18 @@ class DropbotStatusPlotPlugin(Plugin):
     #### Trait initializers ###################################################
 
     def _contributed_task_extensions_default(self):
-        from .dock_panes import DropbotStatusCapacitancePlotDockPane, DropbotStatusVoltagePlotDockPane
+        from .dock_panes import (DropbotStatusCapacitancePlotDockPane, 
+                                 DropbotStatusVoltagePlotDockPane, 
+                                 DropbotStatusVoltageCapacitancePlotDockPane 
+                                 )
 
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,  # specify which task id it has to add on to
                 dock_pane_factories=[
                     DropbotStatusVoltagePlotDockPane,
-                    DropbotStatusCapacitancePlotDockPane
+                    DropbotStatusCapacitancePlotDockPane,
+                    DropbotStatusVoltageCapacitancePlotDockPane,
                 ],
             )
         ]
