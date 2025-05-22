@@ -8,6 +8,7 @@ from envisage.api import CorePlugin, Plugin, SERVICE_OFFERS, ServiceOffer
 from envisage.application import Application
 from traits.api import provides, HasTraits, List, observe
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # plugin imports
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -17,7 +18,6 @@ from message_router.plugin import MessageRouterPlugin
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # local helpers imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils._logger import get_logger
