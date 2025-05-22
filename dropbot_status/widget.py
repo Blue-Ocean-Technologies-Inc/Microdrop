@@ -198,6 +198,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def _on_chip_inserted_triggered(self, body):
         if body == 'True':
             chip_inserted = True
+            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
         elif body == 'False':
             chip_inserted = False
         else:
