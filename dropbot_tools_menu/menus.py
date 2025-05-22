@@ -17,6 +17,13 @@ from traitsui.api import View, HGroup, UItem
 
 from .consts import PKG
 
+#new
+from .self_test_intro_dialog import SelfTestIntroDialog
+
+from PySide6 import QtWidgets
+
+
+from dropbot_controller.consts import SELF_TESTS_PROGRESS
 
 class ProgressBar(HasTraits):
     """A TraitsUI application with a progress bar."""
@@ -58,11 +65,24 @@ class RunTests(DramatiqMessagePublishAction):
     def perform(self, event=None):
         logger.info("Requesting running self tests for dropbot")
 
-        self.task.progress_bar = ProgressBar(current_message="Starting dropbot tests\n", num_tasks=self.num_tests)
-        self.task.progress_bar_instance = self.task.progress_bar.edit_traits()
+        #super().perform(event)
 
-        super().perform(event)
+        ##intro dialog box with images        
+        app = QtWidgets.QApplication.instance()
+        parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
+        intro_dialog = SelfTestIntroDialog(parent=parent_window)
+        result = intro_dialog.exec_()
+        if result == QtWidgets.QDialog.Accepted:
+            super().perform(event)
+            return
+        
+        
+            
+           
 
+
+        
+        
 
 def dropbot_tools_menu_factory():
     """
@@ -85,6 +105,13 @@ def dropbot_tools_menu_factory():
 
     # create an action to run all the test options at once
     run_all_tests = RunTests(name="Run all on-board self-tests", topic=RUN_ALL_TESTS, num_tests=len(ALL_TESTS))
+
+    '''
+    (from hardware_test.py)
+    ALL_TESTS = ['system_info', 'test_system_metrics', 'test_i2c', 'test_voltage',
+             'test_shorts', 'test_on_board_feedback_calibration',
+             'test_channels']
+    '''
 
     # create an action to restart dropbot search
     dropbot_search = DramatiqMessagePublishAction(name="Search for Dropbot Connection", topic=START_DEVICE_MONITORING)
