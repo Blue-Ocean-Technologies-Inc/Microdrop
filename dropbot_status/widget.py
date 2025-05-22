@@ -232,3 +232,106 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         voltage = json.loads(body).get('voltage', '-')
         self.status_label.update_capacitance_reading(capacitance)
         self.status_label.update_voltage_reading(voltage)
+
+    ####### Dropbot Icon Image Control Methods ###########
+
+    def _on_disconnected_triggered(self, body):
+        self.status_label.update_status_icon(dropbot_connected=False)
+
+    def _on_connected_triggered(self, body):
+        self.status_label.update_status_icon(dropbot_connected=True)
+        
+    def _on_chip_inserted_triggered(self, body):
+        if body == 'True':
+            chip_inserted = True
+            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
+        elif body == 'False':
+            chip_inserted = False
+        else:
+            logger.error(f"Invalid chip inserted value: {body}")
+            chip_inserted = False
+        logger.debug(f"Chip inserted: {chip_inserted}")
+        self.status_label.update_status_icon(chip_inserted=chip_inserted)
+    
+    # def _on_chip_not_inserted_triggered(self, body):
+    #     self.status_label.update_status_icon(chip_inserted=False)
+
+    ##################################################################################################
+
+    ########## Warning methods ################
+    def _on_show_warning_triggered(self, body): # This is not controlled by the dramatiq controller! Called manually in dramatiq_dropbot_status_controller.py
+        body = json.loads(body)
+
+        title = body.get('title', ''),
+        message = body.get('message', '')
+
+        self.warning_popup = QMessageBox()
+        self.warning_popup.setWindowTitle(f"WARNING: {title}")
+        self.warning_popup.setText(str(message))
+        self.warning_popup.exec()
+
+    def _on_no_power_triggered(self, body):
+        if self.no_power:
+            return
+
+        self.no_power = True
+        # Initialize the dialog
+        self.no_power_dialog = QDialog()
+        self.no_power_dialog.setWindowTitle("ERROR: No Power")
+        self.no_power_dialog.setFixedSize(370, 250)
+
+        # Create the layout
+        layout = QVBoxLayout()
+        self.no_power_dialog.setLayout(layout)
+
+        # Create the web engine view for displaying HTML
+        self.browser = QTextBrowser()
+
+        html_content = f"""
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERROR: No Power</title>
+</head>
+<body>
+    <h3>DropBot currently has no power supply connected.</h3>
+    <strong>Plug in power supply cable<br></strong> <img src='{os.path.dirname(__file__)}{os.sep}images{os.sep}dropbot-power.png' width="104" height="90">
+    <strong><br>Click the "Retry" button after plugging in the power cable to attempt reconnection</strong>
+</body>
+</html>
+
+        """
+
+        self.browser.setHtml(html_content)
+
+        # Create the retry button and connect its signal
+        self.no_power_retry_button = QPushButton("Retry")
+        self.no_power_retry_button.clicked.connect(self.request_retry_connection)
+
+        # Add widgets to the layout
+        layout.addWidget(self.browser)
+        layout.addWidget(self.no_power_retry_button)
+
+        # Show the dialog
+        self.no_power_dialog.exec()
+
+    def _on_halted_triggered(self, message):
+        self.halted_popup = QMessageBox()
+        self.halted_popup.setWindowTitle("ERROR: DropBot Halted")
+        self.halted_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
+        self.halted_popup.setText(f"DropBot has been halted, reason was {message}."
+                                  "\n\n"
+                                  "All channels have been disabled and high voltage has been turned off until "
+                                  "the DropBot is restarted (e.g. unplug all cables and plug back in).")
+
+        self.halted_popup.exec()
+
+    ##################################################################################################
+    
+    ####### handlers for dramatiq listener topics ##########
+    def _on_setup_success_triggered(self, message):
+        publish_message(message="", topic=START_DEVICE_MONITORING)
+    ##################################################################################################
