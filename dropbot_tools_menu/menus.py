@@ -18,12 +18,11 @@ from traitsui.api import View, HGroup, UItem
 from .consts import PKG
 
 #new
-from .self_test_intro_dialog import SelfTestIntroDialog
-
+from .self_test_dialogs import SelfTestIntroDialog, ResultsDialog
 from PySide6 import QtWidgets
-
-
 from dropbot_controller.consts import SELF_TESTS_PROGRESS
+import json
+from bs4 import BeautifulSoup #html parser
 
 class ProgressBar(HasTraits):
     """A TraitsUI application with a progress bar."""
@@ -32,11 +31,21 @@ class ProgressBar(HasTraits):
     progress = Int(0)
     num_tasks = Int(1)
 
+    def _progress_default(self):
+        return 0
+
+    def _num_tasks_default(self):
+        return 1
+
     traits_view = View(
         HGroup(
             UItem(
                 "progress",
-                editor=ProgressEditor(message_name="current_message", min_name="progress", max_name="num_tasks")
+                editor=ProgressEditor(
+                    message_name="current_message", 
+                    min_name="progress", 
+                    max_name="num_tasks"
+                ),
             ),
         ),
         title="Running Dropbot On-board Self-tests...",
@@ -129,3 +138,48 @@ def dropbot_tools_menu_factory():
 
     # return an SMenu object compiling each object made and put into Dropbot menu under Tools menu.
     return SMenu(items=[run_all_tests, test_options_menu, dropbot_search], id="dropbot_tools", name="Dropbot")
+
+
+def parse_html_report(html_path):
+    """
+    Parse the test voltage report and return a dictionary of the results.
+    """
+    with open(html_path, 'r', encoding='utf-8') as file:
+        soup = BeautifulSoup(file, 'html.parser')
+
+    # extract JSON results from the <script id="results"> tag
+    script_tag = soup.find('script', {'id': 'results'})
+    if not script_tag:
+        raise ValueError("No <script id='results'> tag found in the HTML report.")
+    
+    json_data = json.loads(script_tag.string)
+
+    # extract test voltage results for specific parsing
+    voltage_results = json_data.get("test_voltage", {})
+    table = []
+    if 'target_voltage' in voltage_results and 'measured_voltage' in voltage_results:
+        target_voltages = voltage_results['target_voltage']['__ndarray__']
+        measured_voltages = voltage_results['measured_voltage']
+
+        # create a table-like structure
+        table = ['Target Voltage', 'Measured Voltage']
+        for t, m in zip(target_voltages, measured_voltages):
+            table.append([f'{t:.2f}', f'{m:.2f}'])
+
+   
+
+    # rms error
+    rms_error = voltage_results.get('rms_error', None)
+
+    # plot data
+    plot_data = { 
+        "x": voltage_results.get("target_voltage", {}).get("__ndarray__", []),
+        "y": voltage_results.get("measured_voltage", [])
+    }
+
+    return {
+        "table": table,
+        "rms_error": rms_error,
+        "plot_data": plot_data
+    }
+        

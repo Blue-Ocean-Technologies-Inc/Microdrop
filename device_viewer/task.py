@@ -31,6 +31,9 @@ listener_name = f"{PKG}_listener"
 from dropbot_tools_menu.menus import ProgressBar, ALL_TESTS
 from microdrop_utils import open_html_in_browser
 import threading
+from dropbot_tools_menu.menus import parse_html_report
+from dropbot_tools_menu.self_test_dialogs import ResultsDialog, SelfTestIntroDialog
+# from PySide6 import Qt
 
 @provides(IDramatiqControllerBase)
 class DeviceViewerTask(Task):
@@ -185,15 +188,36 @@ class DeviceViewerTask(Task):
         print(current_message, threading.current_thread().name)
 
         if active_state == False:
-            self.progress_bar.current_message += f"Done running all tests. Generating report...\n"
+            self.progress_bar.current_message = f"Done running all tests. Generating report...\n"
 
-        if current_message:
-            self.progress_bar.current_message += f"Processing: {current_message}\n"
+        elif current_message:
+            self.progress_bar.current_message = f"Processing: {current_message}\n"
 
         if done_test_number is not None:
-            self.progress_bar.progress = done_test_number + 1
+            percentage = int(((done_test_number + 1) / self.progress_bar.num_tasks) * 100)
+            self.progress_bar.progress = percentage
+
+            #self.progress_bar.progress = done_test_number + 1
+            #self.progress_bar.current_message = f"Completed: {percentage}% ({done_test_number + 1}/{self.progress_bar.num_tasks} tests)"
 
         if report_path:
-            self.progress_bar.current_message += f"Generated report at {report_path}" + "\n" + "Can close window."
-            open_html_in_browser(report_path)
+            self.progress_bar.current_message = f"Generated report at {report_path}" + "\n" + "Can close window."
+
+            # if self.progress_bar:
+            #     self.progress_bar.close()
+            #     self.progress_bar = None
+
+            try:
+                parsed_data = parse_html_report(report_path)
+                dialog = ResultsDialog(
+                    parent = None,
+                    table_data=parsed_data.get('table'),
+                    rms_error=parsed_data.get('rms_error'),
+                    plot_data=parsed_data.get('plot_data')
+                )
+                #dialog.setWindowModality(Qt.NonModal)
+                dialog.exec_()
+                # dialog.show()
+            except Exception as e:
+                logger.error(f"Error parsing HTML report: {e}")
 
