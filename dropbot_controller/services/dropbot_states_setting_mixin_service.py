@@ -63,6 +63,9 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         Method to set the realtime mode on the dropbot device.
         """
+        # update_state doesn't return anything useful, and theres no way to register callbacks using signals.signal.connect, so we just assume that
+        # if it doesn't return an error, then it worked.
+        # TODO: Once acks are working firmware side, we can use that to confirm that the message was received.
         if message == "True":
             self.realtime_mode = True
             self.proxy.update_state(hv_output_selected=True,
