@@ -49,11 +49,17 @@ class DeviceViewerApplication(TasksApplication):
     # above two traits are gotten from the preferences file
 
     # branding
-    icon = ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
-    splash_screen = SplashScreen(
-        image=ImageResource(f'{os.path.dirname(__file__)}{os.sep}scibots.jpg'),
-        text="Microdrop-Next-Gen v.alpha"
-    )
+    icon = Instance(ImageResource)
+    splash_screen = Instance(SplashScreen)
+
+    def _icon_default(self):
+        return ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
+
+    def _splash_screen_default(self):
+        return SplashScreen(
+            image=ImageResource(f'{os.path.dirname(__file__)}{os.sep}scibots.jpg'),
+            text="Microdrop-Next-Gen v.alpha"
+        )
 
     #### 'Application' interface ####################################
 
