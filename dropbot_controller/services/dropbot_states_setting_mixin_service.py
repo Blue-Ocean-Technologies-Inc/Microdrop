@@ -1,6 +1,7 @@
 from traits.api import provides, HasTraits, Bool, Float
 
 from microdrop_utils._logger import get_logger
+from microdrop_utils.decorators import debounce
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
@@ -22,6 +23,7 @@ class DropbotStatesSettingMixinService(HasTraits):
     frequency = Float(1000)
 
     ######################################## Methods to Expose #############################################
+    @debounce(wait_seconds=0.5)
     def on_set_voltage_request(self, message):
         """
         Method to set the voltage on the dropbot device.
@@ -39,6 +41,7 @@ class DropbotStatesSettingMixinService(HasTraits):
             logger.error(f"Error setting voltage: {e}")
             raise
 
+    @debounce(wait_seconds=0.5)
     def on_set_frequency_request(self, message):
         """
         Method to set the frequency on the dropbot device.
@@ -56,6 +59,7 @@ class DropbotStatesSettingMixinService(HasTraits):
             logger.error(f"Error setting frequency: {e}")
             raise
 
+    @debounce(wait_seconds=1.0)
     def on_set_realtime_mode_request(self, message):
         """
         Method to set the realtime mode on the dropbot device.
