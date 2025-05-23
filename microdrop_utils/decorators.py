@@ -1,80 +1,91 @@
 import asyncio
 import functools
-import time
+import threading
 from typing import Any, Callable, TypeVar, cast
 
 T = TypeVar('T')
+F = TypeVar('F', bound=Callable[..., Any])
 
-def debounce(wait_seconds: float = 0.5):
+
+def debounce(wait_seconds: float = 0.5) -> Callable[[F], F]:
     """
-    A decorator that debounces a function, ensuring it is only called once within
-    the specified wait time period. If called multiple times, only the last call
-    will be executed after the wait period.
-    
+    Decorator that will postpone a function's execution until after
+    wait_seconds have elapsed since the last time it was invoked.
+
     Args:
-        wait_seconds (float): The time in seconds to wait before executing the
-            function. Defaults to 0.5 seconds.
-    
+        wait_seconds: Time in seconds to wait before executing the function
+
     Returns:
-        Callable: The debounced function.
+        Decorated function that will be debounced
     """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        last_called: float = 0
-        timer: asyncio.TimerHandle | None = None
-        
-        @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> T:
-            nonlocal last_called, timer
-            
-            current_time = time.time()
-            if current_time - last_called < wait_seconds:
-                # Cancel the previous timer if it exists
+    def decorator(fn: F) -> F:
+        timer: threading.Timer | None = None
+        lock = threading.Lock()
+
+        @functools.wraps(fn)
+        def wrapped(*args: Any, **kwargs: Any) -> None:
+            nonlocal timer
+
+            def call_it() -> None:
+                try:
+                    fn(*args, **kwargs)
+                except Exception as e:
+                    # Log the error but don't let it propagate to avoid breaking the timer
+                    print(f"Error in debounced function: {e}")
+
+            with lock:
                 if timer is not None:
                     timer.cancel()
-                
+                timer = threading.Timer(wait_seconds, call_it)
+                timer.daemon = True
+                timer.start()
+
+        return cast(F, wrapped)
+    return decorator
+
+
+def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
+    """
+    Async debounce decorator: delays coroutine until wait_seconds
+    have passed since last invocation.
+
+    Args:
+        wait_seconds: Time in seconds to wait before executing the coroutine
+
+    Returns:
+        Decorated coroutine that will be debounced
+    """
+    def decorator(fn: F) -> F:
+        task: asyncio.Task[Any] | None = None
+        lock = asyncio.Lock()
+
+        @functools.wraps(fn)
+        async def wrapped(*args: Any, **kwargs: Any) -> None:
+            nonlocal task
+
+            async def call_it() -> None:
                 try:
-                    # Use get_running_loop() which is more explicit about requirements
-                    loop = asyncio.get_running_loop()
-                    timer = loop.call_later(
-                        wait_seconds,
-                        lambda: asyncio.create_task(func(*args, **kwargs))
-                    )
-                except RuntimeError:
-                    # If no event loop is running, fall back to synchronous execution
-                    return await func(*args, **kwargs)
-                return cast(T, None)
-            
-            last_called = current_time
-            return await func(*args, **kwargs)
-        
-        @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> T:
-            nonlocal last_called, timer
-            
-            current_time = time.time()
-            if current_time - last_called < wait_seconds:
-                # Cancel the previous timer if it exists
-                if timer is not None:
-                    timer.cancel()
-                
-                try:
-                    # Use get_running_loop() which is more explicit about requirements
-                    loop = asyncio.get_running_loop()
-                    timer = loop.call_later(
-                        wait_seconds,
-                        lambda: func(*args, **kwargs)
-                    )
-                except RuntimeError:
-                    # If no event loop is running, execute immediately
-                    return func(*args, **kwargs)
-                return cast(T, None)
-            
-            last_called = current_time
-            return func(*args, **kwargs)
-        
-        # Return the appropriate wrapper based on whether the function is async
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-    
+                    await fn(*args, **kwargs)
+                except Exception as e:
+                    # Log the error but don't let it propagate to avoid breaking the timer
+                    print(f"Error in debounced async function: {e}")
+
+            async with lock:
+                if task and not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+                async def waiter() -> None:
+                    try:
+                        await asyncio.sleep(wait_seconds)
+                        await call_it()
+                    except asyncio.CancelledError:
+                        pass
+
+                task = asyncio.create_task(waiter())
+
+        return cast(F, wrapped)
     return decorator

@@ -3,6 +3,7 @@ from traitsui.api import View, Group, Item, Controller
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
+from microdrop_utils.decorators import debounce
 from .consts import PKG_name
 
 
@@ -46,17 +47,19 @@ ManualControlView = View(
 
 
 class ManualControlControl(Controller):
-
+    @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, object, traitname, value):
         publish_message(topic=SET_VOLTAGE, message=str(value))
         logger.debug(f"Requesting Voltage change to {value} V")
         return super().setattr(info, object, traitname, value)
 
+    @debounce(wait_seconds=0.3)
     def frequency_setattr(self, info, object, traitname, value):
         publish_message(topic=SET_FREQUENCY, message=str(value))
         logger.debug(f"Requesting Frequency change to {value} Hz")
         return super().setattr(info, object, traitname, value)
 
+    @debounce(wait_seconds=0.5)
     def realtime_mode_setattr(self, info, object, traitname, value):
         publish_message(
             topic=SET_REALTIME_MODE,
