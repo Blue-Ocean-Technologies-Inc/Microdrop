@@ -30,7 +30,7 @@ def get_timestamped_results_path(test_name: str, path: [str, Path]):
         path = Path(path)
 
     # Generate unique filename
-    timestamp = dt.datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H_%M_%S')
 
     return path.joinpath(f'{test_name}_results-{timestamp}')
 
