@@ -11,7 +11,8 @@ logger = get_logger(__name__)
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
 
 
-def publish_message(message, topic, actor_to_send="message_router_actor", queue_name="default", message_kwargs=None, message_options=None):
+def publish_message(message, topic, actor_to_send="message_router_actor", queue_name="default", 
+                    message_kwargs=None, message_options=None, override_deduplication=False):
     """
     Publish a message to a given actor with a certain topic
     """
@@ -21,6 +22,10 @@ def publish_message(message, topic, actor_to_send="message_router_actor", queue_
 
     if message_options is None:
         message_options = {"max_retries": 1}
+
+    if override_deduplication:
+        message_options["message_id"] = f"{topic}"
+        message_options["deduplication"] = True
 
     if message_kwargs is None:
         message_kwargs = {}

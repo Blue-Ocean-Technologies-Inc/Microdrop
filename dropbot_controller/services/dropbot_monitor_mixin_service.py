@@ -64,7 +64,7 @@ class DropbotMonitorMixinService(HasTraits):
         if self.proxy is not None:
             chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
             logger.info(f"Chip check result: {chip_check_result}")
-            publish_message(topic=CHIP_INSERTED, message=f'{chip_check_result}')
+            publish_message(topic=CHIP_INSERTED, message=f'{chip_check_result}', override_deduplication=True)
     
     def on_retry_connection_request(self, message):
         logger.info("Attempting to retry connecting with a dropbot")

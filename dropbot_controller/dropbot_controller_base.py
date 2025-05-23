@@ -210,9 +210,9 @@ class DropbotControllerBase(HasTraits):
     def _output_state_changed_wrapper(signal: dict[str, str]):
         if signal['event'] == 'output_enabled':
             logger.debug("Publishing Chip Inserted")
-            publish_message(topic=CHIP_INSERTED, message='True')
+            publish_message(topic=CHIP_INSERTED, message='True', override_deduplication=True)
         elif signal['event'] == 'output_disabled':
             logger.debug("Publishing Chip Not Inserted")
-            publish_message(topic=CHIP_INSERTED, message='False')
+            publish_message(topic=CHIP_INSERTED, message='False', override_deduplication=True)
         else:
             logger.warn(f"Unknown signal received: {signal}")
