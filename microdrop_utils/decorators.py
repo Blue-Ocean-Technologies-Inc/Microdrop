@@ -32,12 +32,16 @@ def debounce(wait_seconds: float = 0.5):
                 if timer is not None:
                     timer.cancel()
                 
-                # Create a new timer
-                loop = asyncio.get_event_loop()
-                timer = loop.call_later(
-                    wait_seconds,
-                    lambda: asyncio.create_task(func(*args, **kwargs))
-                )
+                try:
+                    # Use get_running_loop() which is more explicit about requirements
+                    loop = asyncio.get_running_loop()
+                    timer = loop.call_later(
+                        wait_seconds,
+                        lambda: asyncio.create_task(func(*args, **kwargs))
+                    )
+                except RuntimeError:
+                    # If no event loop is running, fall back to synchronous execution
+                    return await func(*args, **kwargs)
                 return cast(T, None)
             
             last_called = current_time
@@ -53,12 +57,16 @@ def debounce(wait_seconds: float = 0.5):
                 if timer is not None:
                     timer.cancel()
                 
-                # Create a new timer
-                loop = asyncio.get_event_loop()
-                timer = loop.call_later(
-                    wait_seconds,
-                    lambda: func(*args, **kwargs)
-                )
+                try:
+                    # Use get_running_loop() which is more explicit about requirements
+                    loop = asyncio.get_running_loop()
+                    timer = loop.call_later(
+                        wait_seconds,
+                        lambda: func(*args, **kwargs)
+                    )
+                except RuntimeError:
+                    # If no event loop is running, execute immediately
+                    return func(*args, **kwargs)
                 return cast(T, None)
             
             last_called = current_time
@@ -69,4 +77,4 @@ def debounce(wait_seconds: float = 0.5):
             return async_wrapper
         return sync_wrapper
     
-    return decorator 
+    return decorator
