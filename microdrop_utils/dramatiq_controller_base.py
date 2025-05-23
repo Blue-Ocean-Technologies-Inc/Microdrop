@@ -1,8 +1,11 @@
 import re
 import warnings
+from datetime import datetime
+from typing import Any
 
 import dramatiq
 from dramatiq import Actor
+from dramatiq.middleware import CurrentMessage
 from traits.api import Instance, Str, provides, HasTraits, Callable
 
 from . import logger
@@ -139,7 +142,17 @@ def basic_listener_actor_routine(parent_obj: object, message: any, topic: str,
     Returns:
         None
     """
-    logger.info(f"{parent_obj.name}: Received message: {message} from topic: {topic}")
+    msg_proxy = CurrentMessage.get_current_message()
+    if msg_proxy is not None:
+        raw = msg_proxy._message
+        msg_timestamp = raw.message_timestamp
+    else:
+        msg_timestamp = None
+        
+    # Create a timestamped message object
+    timestamped_message = TimestampedMessage(content=message, timestamp=msg_timestamp)
+    
+    logger.info(f"{parent_obj.name}: Received message: '{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
 
     # Split the topic into parts and take the last segment as the key.
     topic_parts = topic.split("/")
@@ -149,10 +162,10 @@ def basic_listener_actor_routine(parent_obj: object, message: any, topic: str,
     requested_method = handler_name_pattern.format(topic=topic_key)
 
     # invoke the method, and check if any error_message shows up
-    err_msg = invoke_class_method(parent_obj, requested_method, message)
+    err_msg = invoke_class_method(parent_obj, requested_method, timestamped_message)
 
     if err_msg:
-        logger.error(f"{parent_obj.name}: Received message: {message} from topic: {topic} Failed to execute due to "
+        logger.error(f"{parent_obj.name}: Received message: {timestamped_message} from topic: {topic} Failed to execute due to "
                      f"error: {err_msg}")
 
 
@@ -187,3 +200,27 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
         error_msg = f"Method '{requested_method}' not found for {parent_obj}."
         logger.warning(error_msg)
         return error_msg
+
+
+class TimestampedMessage(str):
+    """A string subclass that includes a timestamp attribute."""
+    
+    def __new__(cls, content: Any, timestamp: str):
+        # Convert content to string and create the string instance
+        instance = super().__new__(cls, str(content))
+        # Store the timestamp as an instance attribute in ISO format
+        if timestamp is None:
+            timestamp_iso = "Timestamp not available"
+        else:
+            timestamp_iso = datetime.fromtimestamp(timestamp / 1000).isoformat()
+            
+        instance._timestamp = timestamp_iso
+        return instance
+    
+    @property
+    def timestamp(self) -> str:
+        """Get the timestamp of the message."""
+        return self._timestamp
+    
+    def __repr__(self) -> str:
+        return f"TimestampedMessage({super().__repr__()}, timestamp={self._timestamp})"

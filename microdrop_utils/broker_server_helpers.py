@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import os
 
 from dramatiq import get_broker, Worker
+from dramatiq.middleware import CurrentMessage
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +53,24 @@ def stop_redis_server():
 
 def remove_middleware_from_dramatiq_broker(middleware_name: str, broker: 'dramatiq.broker.Broker'):
     # Remove Prometheus middleware if it exists
-    for el in broker.middleware:
-        if el.__module__ == middleware_name:
-            broker.middleware.remove(el)
+    broker.middleware[:] = [
+        m for m in broker.middleware
+        if m.__module__ != middleware_name
+    ]
 
 
 def start_workers(**kwargs) -> 'dramatiq.worker.Worker':
     """
     A startup routine for apps that make use of dramatiq.
     """
+    
     BROKER = get_broker()
-
+    
+    # Add the CurrentMessage middleware so you we can inspect the timestamp
+    BROKER.add_middleware(CurrentMessage())
+    
+    # Flush any old messages, start the worker, then run your app logic
+    BROKER.flush_all()
     worker = Worker(broker=BROKER, **kwargs)
     worker.start()
 
