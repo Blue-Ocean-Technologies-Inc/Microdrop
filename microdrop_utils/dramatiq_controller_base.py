@@ -7,6 +7,7 @@ from traits.api import Instance, Str, provides, HasTraits, Callable
 
 from . import logger
 from .i_dramatiq_controller_base import IDramatiqControllerBase
+from microdrop_utils.function_helpers import call_safely
 
 
 @provides(IDramatiqControllerBase)
@@ -79,14 +80,16 @@ class DramatiqControllerBase(HasTraits):
         """
 
         @dramatiq.actor(actor_name=self.listener_name, queue_name=self.listener_queue)
-        def create_listener_actor(message: str, topic: str) -> None:
+        def create_listener_actor(message: str, topic: str, timestamp: float = None) -> None:
             """Handle incoming Dramatiq messages.
 
             Args:
                 message: Content of the received message
                 topic: Topic/routing key of the message
+                timestamp: Timestamp of the message
             """
-            self.listener_actor_method(message, topic)
+            logger.debug(f"Received message with timestamp: {timestamp}")
+            call_safely(self.listener_actor_method, message, topic, timestamp=timestamp)
 
         return create_listener_actor
 
@@ -170,7 +173,7 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
         if callable(class_method):
             # Invoke the requested method with the provided arguments and log any errors calling it
             try:
-                class_method(*args, **kwargs)
+                call_safely(class_method, *args, **kwargs)
                 return error_msg
 
             except Exception as e:

@@ -9,7 +9,6 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
 from microdrop_utils.dramatiq_controller_base import invoke_class_method
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
 logger = get_logger(__name__)
 
 # local imports
@@ -34,11 +33,11 @@ class DramatiqDropbotStatusController(HasTraits):
     # this can be set later by whatever UI view that uses it
     listener_name = Str(desc="Unique identifier for the Dramatiq actor")
 
-    def listener_actor_routine(self, message, topic):
+    def listener_actor_routine(self, message, topic, timestamp=None):
         logger.debug(f"UI_LISTENER: Received message: {message} from topic: {topic}. Triggering UI Signal")
         if hasattr(self, 'view') and self.view is not None:
             try:
-                self.view.controller_signal.emit(json.dumps({'message': message, 'topic': topic}))
+                self.view.controller_signal.emit(json.dumps({'message': message, 'topic': topic, 'timestamp': timestamp}))
             except RuntimeError as e:
                 if "Signal source has been deleted" in str(e):
                     logger.warning("View has been deleted, stopping signal emission")
@@ -72,11 +71,12 @@ class DramatiqDropbotStatusController(HasTraits):
         signal = json.loads(signal)
         topic = signal.get("topic", "")
         message = signal.get("message", "")
+        timestamp = float(signal.get("timestamp", ""))
         head_topic = topic.split('/')[-1]
         sub_topic = topic.split('/')[-2]
         method = f"_on_{head_topic}_triggered"
 
-        err_msg = invoke_class_method(self.view, method, message)
+        err_msg = invoke_class_method(self.view, method, message, timestamp=timestamp)
         if err_msg:
 
             # special topic warnings. Catch them all and print out to screen. Generic method for all warnings in case no

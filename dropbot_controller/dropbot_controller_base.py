@@ -59,14 +59,14 @@ class DropbotControllerBase(HasTraits):
                 self.proxy = None
                 self.dropbot_connection_active = False
 
-    def listener_actor_routine(self, message, topic):
+    def listener_actor_routine(self, message, topic, timestamp=None):
         """
         A Dramatiq actor that listens to messages.
 
         Parameters:
         message (str): The received message.
         topic (str): The topic of the message.
-
+        timestamp (float): The timestamp of the message.
         """
 
         logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{message}' from topic: '{topic}'")
@@ -115,7 +115,7 @@ class DropbotControllerBase(HasTraits):
             logger.debug(f"Ignored request from topic '{topic}': Not a Dropbot-related request.")
 
         if requested_method:
-            err_msg = invoke_class_method(self, requested_method, message)
+            err_msg = invoke_class_method(self, requested_method, message, timestamp=timestamp)
 
             if err_msg:
                 logger.error(
