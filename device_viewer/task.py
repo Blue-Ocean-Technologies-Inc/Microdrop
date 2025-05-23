@@ -28,13 +28,16 @@ DEFAULT_SVG_FILE = f"{os.path.dirname(__file__)}{os.sep}2x3device.svg"
 
 listener_name = f"{PKG}_listener"
 
+from dropbot_tools_menu.menus import ProgressBar, ALL_TESTS
+from microdrop_utils import open_html_in_browser
+import threading
 
 @provides(IDramatiqControllerBase)
 class DeviceViewerTask(Task):
     ##########################################################
     # 'IDramatiqControllerBase' interface.
     ##########################################################
-
+    progress_bar = None
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     listener_name = f"{PKG}_listener"
@@ -163,3 +166,34 @@ class DeviceViewerTask(Task):
     def show_help(self):
         """Show the help dialog."""
         logger.info("Showing help dialog.")
+
+    ##########################################################
+    # Including below function permanently this class, so no need to dynamically attach it in dropbot_tools_menu/plugin.py
+    ##########################################################
+
+    def _on_self_tests_progress_triggered(self, current_message):
+        '''
+        Method adds on to the device viewer task to listen to the self tests topic and react accordingly
+        '''
+
+        message = json.loads(current_message)
+        active_state = message.get('active_state')
+        current_message = message.get('current_message')
+        done_test_number = message.get('done_test_number')
+        report_path = message.get('report_path')
+
+        print(current_message, threading.current_thread().name)
+
+        if active_state == False:
+            self.progress_bar.current_message += f"Done running all tests. Generating report...\n"
+
+        if current_message:
+            self.progress_bar.current_message += f"Processing: {current_message}\n"
+
+        if done_test_number is not None:
+            self.progress_bar.progress = done_test_number + 1
+
+        if report_path:
+            self.progress_bar.current_message += f"Generated report at {report_path}" + "\n" + "Can close window."
+            open_html_in_browser(report_path)
+

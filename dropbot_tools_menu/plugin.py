@@ -9,7 +9,9 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from device_viewer.consts import PKG as device_viewer_PKG
 
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
-from .device_viewer_task_method_additions import _on_self_tests_progress_triggered
+
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
 
 class DropbotToolsMenuPlugin(Plugin):
@@ -72,5 +74,5 @@ class DropbotToolsMenuPlugin(Plugin):
         """Set up the task listeners once the window is available."""
         for task in self.application.active_window.tasks:
             if task.id == f"{device_viewer_PKG}.task":
-                setattr(task, _on_self_tests_progress_triggered.__name__,
-                        partial(_on_self_tests_progress_triggered, task))
+                # removed the device_viewer_task_method_additions.py file, added below debug statement for sanity check
+                logger.debug(f"Task {task.id} is ready to receive progress updates.")

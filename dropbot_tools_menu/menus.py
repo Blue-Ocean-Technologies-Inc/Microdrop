@@ -73,16 +73,27 @@ class RunTests(DramatiqMessagePublishAction):
         intro_dialog = SelfTestIntroDialog(parent=parent_window)
         result = intro_dialog.exec_()
         if result == QtWidgets.QDialog.Accepted:
-            super().perform(event)
-            return
-        
-        
             
-           
+            # reference to the DeviceViewerTask instance
+            task = getattr(self, "task", None)
+            if task is None:
+                logger.error("Cannot find DeviceViewerTask instance.")
+                return
 
+            # traitsUI progress bar
+            if not hasattr(task, "progress_bar") or task.progress_bar is None:
+                task.progress_bar = ProgressBar(num_tasks=len(ALL_TESTS))
+            else:
+                task.progress_bar.num_tasks = len(ALL_TESTS)
+            task.progress_bar.progress = 0
+            task.progress_bar.current_message = "Starting...\n"
 
-        
-        
+            # start tests
+            super().perform(event)
+            
+            # show progress bar
+            #task.progress_bar.edit_traits(kind="modal")
+            task.progress_bar.edit_traits()
 
 def dropbot_tools_menu_factory():
     """
