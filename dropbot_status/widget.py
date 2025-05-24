@@ -163,20 +163,22 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def _on_shorts_detected_triggered(self, shorts_dict):
         shorts = json.loads(shorts_dict).get('Shorts_detected', [])
 
+        if len(shorts) == 0:
+            self.logger.info("No shorts were detected.")
+            return
+            
         self.shorts_popup = QMessageBox()
         self.shorts_popup.setFixedSize(300, 200)
         self.shorts_popup.setWindowTitle("ERROR: Shorts Detected")
         self.shorts_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
-        if len(shorts) > 0:
-            shorts_str = str(shorts).strip('[]')
-            self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
-                                      f"[{shorts_str}] \n \n"
-                                      f"You may continue using the DropBot, but the affected channels have "
-                                      f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
-                                      f"back in).")
-        else:
-            self.shorts_popup.setWindowTitle("Short Detection Complete")
-            self.shorts_popup.setText("No shorts were detected.")
+
+        shorts_str = str(shorts).strip('[]')
+        self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
+                                    f"[{shorts_str}] \n \n"
+                                    f"You may continue using the DropBot, but the affected channels have "
+                                    f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
+                                    f"back in).")
+
 
         self.shorts_popup.exec()
 
