@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
-from traits.api import Instance
+from traits.api import Instance, Dict
 import dramatiq
 from dramatiq.middleware import CurrentMessage
 
@@ -43,6 +43,8 @@ class DropbotControllerBase(HasTraits):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     listener_name = f"{PKG}_listener"
+    
+    timestamps = Dict(str, datetime)
 
     def __del__(self):
         """Cleanup when the controller is destroyed."""
@@ -126,6 +128,11 @@ class DropbotControllerBase(HasTraits):
             logger.debug(f"Ignored request from topic '{topic}': Not a Dropbot-related request.")
 
         if requested_method:
+            if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
+                logger.debug(f"DropbotController: Ignoring older message from topic: {topic} received at {timestamped_message.timestamp_dt}")
+                return
+            self.timestamps[topic] = timestamped_message.timestamp_dt
+            
             err_msg = invoke_class_method(self, requested_method, timestamped_message)
 
             if err_msg:

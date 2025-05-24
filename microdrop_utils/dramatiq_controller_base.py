@@ -244,17 +244,19 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
 class TimestampedMessage(str):
     """A string subclass that includes a timestamp attribute."""
 
-    def __new__(cls, content: Any, timestamp: str):
+    def __new__(cls, content: Any, timestamp: float | None):
         # Convert content to string and create the string instance
         instance = super().__new__(cls, str(content))
         # Store the timestamp as an instance attribute in ISO format
         if timestamp is None:
             timestamp_iso = "Timestamp not available"
+            timestamp_dt = datetime.min
         else:
-            timestamp_iso = datetime.fromtimestamp(
-                timestamp / 1000
-            ).isoformat()
+            timestamp_dt = datetime.fromtimestamp(timestamp / 1000)
+            timestamp_iso = timestamp_dt.isoformat()
 
+        # Store the timestamp as an instance attribute
+        instance._timestamp_dt = timestamp_dt
         instance._timestamp = timestamp_iso
         return instance
 
@@ -262,6 +264,11 @@ class TimestampedMessage(str):
     def timestamp(self) -> str:
         """Get the timestamp of the message."""
         return self._timestamp
+
+    @property
+    def timestamp_dt(self) -> datetime:
+        """Get the timestamp of the message as a datetime object."""
+        return self._timestamp_dt
 
     def __repr__(self) -> str:
         return (
