@@ -19,6 +19,8 @@ from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB
 
 logger = get_logger(__name__, level="DEBUG")
 
+# silence all APScheduler job-exception logs
+get_logger('apscheduler.executors.default').setLevel(level="WARNING")
 
 @provides(IDropbotControlMixinService)
 class DropbotMonitorMixinService(HasTraits):
@@ -31,6 +33,7 @@ class DropbotMonitorMixinService(HasTraits):
     monitor_scheduler = Instance(BackgroundScheduler,
                                  desc="An AP scheduler job to periodically look for dropbot connected ports."
                                  )
+    _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
 
     ######################################## Methods to Expose #############################################
     def on_start_device_monitoring_request(self, hwids_to_check):
@@ -41,16 +44,28 @@ class DropbotMonitorMixinService(HasTraits):
         if not hwids_to_check:
             hwids_to_check = [DROPBOT_DB3_120_HWID]
 
+        def check_devices_with_error_handling():
+            """
+            Wrapper to handle errors from check_devices_available.
+            """
+            try:
+                return check_devices_available(hwids_to_check)
+            except Exception as e:
+                if not self._error_shown:
+                    logger.error(f"{str(e)}")
+                    self._error_shown = True
+                return None
+        
         scheduler = BackgroundScheduler()
         scheduler.add_job(
-            func=functools.partial(check_devices_available, hwids_to_check),
+            func=check_devices_with_error_handling,
             trigger=IntervalTrigger(seconds=2),
         )
         scheduler.add_listener(self._on_dropbot_port_found, EVENT_JOB_EXECUTED)
         self.monitor_scheduler = scheduler
 
         logger.info("DropBot monitor created and started")
-
+        # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
     def on_detect_shorts_request(self, message):
@@ -101,12 +116,18 @@ class DropbotMonitorMixinService(HasTraits):
         """
         Method defining what to do when dropbot has been found on a port.
         """
+        # if check_devices returned nothing => still disconnected
+        if not event.retval:
+            return
+        
         logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
         logger.debug("Paused DropBot monitor")
         self.port_name = str(event.retval)
         logger.info('Attempting to connect to DropBot on port: %s', self.port_name)
+        self._no_power = False # Reset no power state when device is found
         self._connect_to_dropbot(port_name=self.port_name)
+        self._error_shown = False  # Reset error state when device is found
 
     def _connect_to_dropbot(self, port_name):
         """
@@ -145,15 +166,18 @@ class DropbotMonitorMixinService(HasTraits):
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
                 err = e
+                self.proxy.terminate()
 
             except dropbot.proxy.NoPower as e:
                 self._no_power = True
                 publish_message(topic=NO_POWER, message=str(e))
                 err = e
+                self.proxy.terminate()
 
             except Exception as e:
                 err = e
                 publish_message(topic="dropbot/error", message=str(e))
+                self.proxy.terminate()
 
             ###########################################################################################
 
