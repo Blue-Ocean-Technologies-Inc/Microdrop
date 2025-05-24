@@ -17,7 +17,7 @@ def publish_message(message, topic, actor_to_send="message_router_actor", queue_
     Publish a message to a given actor with a certain topic
     """
     logger.debug(f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}")
-    # print(f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}")
+
     broker = dramatiq.get_broker()
 
     if message_options is None:
