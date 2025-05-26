@@ -122,7 +122,7 @@ class DropbotSelfTestsMixinService(HasTraits):
 
             logger.info(f"Report generating in the file {report_path}")
             generate_report(result, report_path, force=True)
-            publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps({"report_path": report_path}))
+            publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps({"report_path": report_path, "test_name": test_name}))
 
             # do whatever else is defined in func
             func(self, report_generation_directory)

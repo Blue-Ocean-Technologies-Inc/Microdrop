@@ -31,8 +31,8 @@ listener_name = f"{PKG}_listener"
 from dropbot_tools_menu.menus import ProgressBar, ALL_TESTS
 from microdrop_utils import open_html_in_browser
 import threading
-from dropbot_tools_menu.menus import parse_html_report
-from dropbot_tools_menu.self_test_dialogs import ResultsDialog, SelfTestIntroDialog
+from dropbot_tools_menu.menus import parse_test_voltage_html_report, parse_on_board_feedback_calibration_html_report, parse_scan_test_board_html_report
+from dropbot_tools_menu.self_test_dialogs import ResultsDialog, SelfTestIntroDialog, ScanTestBoardResultsDialog
 # from PySide6 import Qt
 
 @provides(IDramatiqControllerBase)
@@ -182,47 +182,66 @@ class DeviceViewerTask(Task):
         '''
         Method adds on to the device viewer task to listen to the self tests topic and react accordingly
         '''
-
         message = json.loads(current_message)
         active_state = message.get('active_state')
         current_message = message.get('current_message')
         done_test_number = message.get('done_test_number')
         report_path = message.get('report_path')
+        test_name = message.get('test_name')
 
-        logger.info(f"Handler called. last_test_mode={getattr(self, 'last_test_mode', None)}, active_state={active_state}, current_message={current_message}, done_test_number={done_test_number}, report_path={report_path}")
-
-        print(current_message, threading.current_thread().name)
+        logger.info(f"Handler called. last_test_mode={getattr(self, 'last_test_mode', None)}, test_name = {test_name}, current_message={current_message}, done_test_number={done_test_number}, report_path={report_path}")
         
-        if getattr(self, 'last_test_mode', 'individual') == "all":
-            if self.progress_bar is not None:
-                if active_state == False:
-                    self.progress_bar.current_message = f"Done running all tests. Generating report...\n"
-                elif current_message:
-                    self.progress_bar.current_message = f"Processing: {current_message}\n"
-                if done_test_number is not None:
-                    percentage = int(((done_test_number + 1) / self.progress_bar.num_tasks) * 100)
-                    self.progress_bar.progress = percentage
-                if report_path:                                               
-                    # self.progress_bar_ui.dispose()
-                    # self.progress_bar_ui = None
-                    # self.progress_bar = None
-                    # open report as html in browser
-                    open_html_in_browser(report_path)
+        # print(current_message, threading.current_thread().name)
+        
+        if self.progress_bar is not None:
+            if active_state == False:
+                self.progress_bar.current_message = "Done running all tests. Generating report...\n"
+            elif current_message:
+                self.progress_bar.current_message = f"Processing: {current_message}\n"
+            if done_test_number is not None:
+                percentage = int(((done_test_number + 1) / self.progress_bar.num_tasks) * 100)
+                self.progress_bar.progress = percentage
 
-            
+        if report_path:
+            # close progress bar
+            # if hasattr(self, "progress_bar_ui") and self.progress_bar_ui is not None:
+            #     self.progress_bar_ui.dispose()
+            #     self.progress_bar_ui = None
+            # self.progress_bar = None
 
-        else: # individual test
-            if report_path:
-                try:
-                    parsed_data = parse_html_report(report_path)
+            # show report on html or on results dialog depending on last_test_mode
+            # Handle results for each individual test by name
+            if getattr(self, 'last_test_mode', 'individual') == "individual":
+                if test_name == 'test_voltage':
+                    parsed_data = parse_test_voltage_html_report(report_path)
                     dialog = ResultsDialog(
                         parent=None,
                         table_data=parsed_data.get('table'),
                         rms_error=parsed_data.get('rms_error'),
                         plot_data=parsed_data.get('plot_data')
                     )
-                    dialog.exec_()
-                except Exception as e:
-                    logger.error(f"Error parsing HTML report: {e}")
+                elif test_name == 'test_on_board_feedback_calibration':
+                    parsed_data = parse_on_board_feedback_calibration_html_report(report_path)
+                    dialog = ResultsDialog(
+                        parent=None,
+                        table_data=parsed_data.get('table'),
+                        rms_error=None,
+                        plot_data=parsed_data.get('plot_data')
+                    )
+                elif test_name == 'test_channels':
+                    parsed_data = parse_scan_test_board_html_report(report_path)
+                    dialog = ScanTestBoardResultsDialog(
+                        parent=None,
+                        description_text=parsed_data.get('description_text', ''),
+                        images=parsed_data.get('images', [])
+                    )                       
+                else:
+                    # add other individual tests here
+                    return
+                dialog.exec_()
+            elif getattr(self, 'last_test_mode', 'all') == "all":
+                open_html_in_browser(report_path)
+            
+            
             
 

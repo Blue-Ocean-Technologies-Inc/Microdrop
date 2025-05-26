@@ -1,6 +1,6 @@
 import os
 from PySide6 import QtGui, QtCore
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QDialogButtonBox
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QScrollArea, QDialogButtonBox, QWidget
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -99,7 +99,7 @@ class ResultsDialog(QDialog):
 
         # Add table
         if table_data:
-            table_label = QLabel("Voltage Results (Target vs. Measured):")
+            table_label = QLabel("Results (Target vs. Measured):")
             table_label.setWordWrap(True)
             layout.addWidget(table_label)
 
@@ -117,11 +117,42 @@ class ResultsDialog(QDialog):
             ax = canvas.figure.add_subplot(111)
             ax.plot(plot_data['x'], plot_data['y'], 'o-', label="Measured vs Target")
             ax.plot(plot_data['x'], plot_data['x'], 'k--', label="Ideal")
-            ax.set_title("Measured vs Target Voltage")
-            ax.set_xlabel("Target Voltage (V)")
-            ax.set_ylabel("Measured Voltage (V)")
+            ax.set_title("Measured vs Target")
+            ax.set_xlabel("Target")
+            ax.set_ylabel("Measured")
             ax.legend()
 
         
         self.setLayout(layout)
+
+class ScanTestBoardResultsDialog(QDialog):
+    def __init__(self, parent=None, description_text="", images=None):
+        super().__init__(parent)
+        self.setWindowTitle("Scan Test Board Results")
+        layout = QVBoxLayout()
+
+        if description_text:
+            layout.addWidget(QLabel(description_text))
+
+        if images:
+            for img_path in images:
+                if os.path.exists(img_path):
+                    pixmap = QtGui.QPixmap(img_path)
+                    img_label = QLabel()
+                    img_label.setPixmap(pixmap)
+                    img_label.setScaledContents(True)
+                    img_label.setMaximumHeight(400)
+                    layout.addWidget(img_label)
+                else:
+                    layout.addWidget(QLabel(f"(Image not found: {img_path})"))
+
+        # Scroll area for overflow ???
+        scroll = QScrollArea()
+        container = QWidget()
+        container.setLayout(layout)
+        scroll.setWidget(container)
+        scroll.setWidgetResizable(True)
+        dialog_layout = QVBoxLayout()
+        dialog_layout.addWidget(scroll)
+        self.setLayout(dialog_layout)
 

@@ -23,6 +23,10 @@ from PySide6 import QtWidgets
 from dropbot_controller.consts import SELF_TESTS_PROGRESS
 import json
 from bs4 import BeautifulSoup #html parser
+import numpy as np
+import os
+import base64
+import tempfile
 
 class ProgressBar(HasTraits):
     """A TraitsUI application with a progress bar."""
@@ -81,39 +85,33 @@ class RunTests(DramatiqMessagePublishAction):
         if task is None:
             logger.error("Cannot find DeviceViewerTask instance.")
             return
+        
+        # set test mode separately
+        if self.num_tests == len(ALL_TESTS):
+            task.last_test_mode = "all"         
+        else:
+            task.last_test_mode = "individual"
 
-        if self.num_tests == len(ALL_TESTS): # running all tests
-            task.last_test_mode = "all" # for debugging only
-            logger.info("Set last_test_mode to 'all'")
-            # intro dialog box 
-            app = QtWidgets.QApplication.instance()
-            parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
-            intro_dialog = SelfTestIntroDialog(parent=parent_window)
-            result = intro_dialog.exec_()
-            if result != QtWidgets.QDialog.Accepted:
-                return
-            
-            # progress bar
-            if not hasattr(task, "progress_bar") or task.progress_bar is None:
-                task.progress_bar = ProgressBar(num_tasks=len(ALL_TESTS))
-                # task.progress_bar_ui = self.progress_bar.edit_traits()
-            else:
-                task.progress_bar.num_tasks = len(ALL_TESTS)
-            task.progress_bar.progress = 0
-            task.progress_bar.current_message = "Starting...\n"
-
-            super().perform(event)
-
-            # show progress bar
-            task.progress_bar.edit_traits()
+        app = QtWidgets.QApplication.instance()
+        parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
+        intro_dialog = SelfTestIntroDialog(parent=parent_window)
+        result = intro_dialog.exec_()
+        if result != QtWidgets.QDialog.Accepted:
+            return
+        
+        # progress bar
+        if not hasattr(task, "progress_bar") or task.progress_bar is None:
+            task.progress_bar = ProgressBar(num_tasks=self.num_tests)
             # task.progress_bar_ui = self.progress_bar.edit_traits()
-            
-            # results handled in update handler (will open report of all tests in browser)
+        else:
+            task.progress_bar.num_tasks = self.num_tests
+        task.progress_bar.progress = 0
+        task.progress_bar.current_message = "Starting...\n"
 
-        else: # individual test
-            task.last_test_mode = "individual" # for debugging only
-            logger.info("Set last_test_mode to 'individual'")
-            super().perform(event)
+        # show progress bar
+        task.progress_bar_ui = task.progress_bar.edit_traits()        
+        # results handled in update handler (will open report of all tests in browser)
+        super().perform(event)
 
 def dropbot_tools_menu_factory():
     """
@@ -151,7 +149,7 @@ def dropbot_tools_menu_factory():
     return SMenu(items=[run_all_tests, test_options_menu, dropbot_search], id="dropbot_tools", name="Dropbot")
 
 
-def parse_html_report(html_path):
+def parse_test_voltage_html_report(html_path):
     """
     Parse the test voltage report and return a dictionary of the results.
     """
@@ -194,3 +192,90 @@ def parse_html_report(html_path):
         "plot_data": plot_data
     }
         
+def parse_on_board_feedback_calibration_html_report(html_path):
+    """
+    Parse the on-board feedback calibration report and return a dictionary of the results.
+    """
+    with open(html_path, 'r', encoding='utf-8') as file:
+        soup = BeautifulSoup(file, 'html.parser')
+
+    # extract JSON results from the <script id="results"> tag
+    script_tag = soup.find('script', {'id': 'results'})
+    if not script_tag:
+        raise ValueError("No <script id='results'> tag found in the HTML report.")
+    
+    json_data = json.loads(script_tag.string)
+    results = json_data.get("test_on_board_feedback_calibration", {})
+    c_measured = results.get("c_measured", {}).get("__ndarray__", [])
+
+    # Nominal capacitance values (pF)
+    nominal_capacitances = [0.0, 10.0, 100.0, 470.0]  # pF, order matches rows
+    table = [["Nominal Capacitance (pF)", "Measured Capacitance (mean, pF)"]]
+    x = []
+    y = []
+
+    if c_measured and len(c_measured) == 4:  # check if we always expect 4 rows
+        for idx, row in enumerate(c_measured):
+            if row:
+                measured_mean_pf = np.mean(row) * 1e12  # F to pF
+                table.append([f"{nominal_capacitances[idx]:.1f}", f"{measured_mean_pf:.2f}"])
+                x.append(nominal_capacitances[idx])
+                y.append(measured_mean_pf)
+
+    plot_data = {
+        "x": x,
+        "y": y
+    }
+
+    return {
+        "table": table,
+        "plot_data": plot_data
+    }
+
+def parse_scan_test_board_html_report(html_path):
+    """
+    Parse the scan test board report and return a dictionary.
+    Extracts:
+      - description_text: Any text before the first plot/image
+      - images: paths to PNG images found in <img> tags (file or base64)
+    """
+    with open(html_path, 'r', encoding='utf-8') as f:
+        soup = BeautifulSoup(f, 'html.parser')
+
+    images = []
+    for img in soup.find_all('img'):
+        src = img.get('src', '')
+        if src.lower().startswith('data:image/png;base64,'):
+            # Extract and decode base64 PNG
+            b64_data = src.split('base64,')[1]
+            img_bytes = base64.b64decode(b64_data)
+            # Save to a temp file
+            tmp_dir = tempfile.gettempdir()
+            tmp_path = os.path.join(tmp_dir, f'scan_test_board_{len(images)}.png')
+            with open(tmp_path, 'wb') as out:
+                out.write(img_bytes)
+            images.append(tmp_path)
+        elif '.png' in src.lower():
+            # Relative or absolute file path
+            if not os.path.isabs(src):
+                src = os.path.join(os.path.dirname(html_path), src)
+            images.append(src)
+
+    # Extract description text before first image
+    description_text = ""
+    body = soup.body
+    found_img = False
+    if body:
+        for tag in body.descendants:
+            if getattr(tag, 'name', None) == 'img':
+                found_img = True
+                break
+            if getattr(tag, 'name', None) in ('p', 'div', 'span', 'h1', 'h2', 'h3') and tag.string:
+                description_text += tag.string.strip() + "\n"
+        description_text = description_text.strip()
+
+    return {
+        "description_text": description_text,
+        "images": images
+    }
+
