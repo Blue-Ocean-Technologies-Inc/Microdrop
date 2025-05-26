@@ -76,33 +76,44 @@ class RunTests(DramatiqMessagePublishAction):
 
         #super().perform(event)
 
-        ##intro dialog box with images        
-        app = QtWidgets.QApplication.instance()
-        parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
-        intro_dialog = SelfTestIntroDialog(parent=parent_window)
-        result = intro_dialog.exec_()
-        if result == QtWidgets.QDialog.Accepted:
-            
-            # reference to the DeviceViewerTask instance
-            task = getattr(self, "task", None)
-            if task is None:
-                logger.error("Cannot find DeviceViewerTask instance.")
-                return
+        # referencing to DeviceViewerTask instance
+        task = getattr(self, "task", None)
+        if task is None:
+            logger.error("Cannot find DeviceViewerTask instance.")
+            return
 
-            # traitsUI progress bar
+        if self.num_tests == len(ALL_TESTS): # running all tests
+            task.last_test_mode = "all" # for debugging only
+            logger.info("Set last_test_mode to 'all'")
+            # intro dialog box 
+            app = QtWidgets.QApplication.instance()
+            parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
+            intro_dialog = SelfTestIntroDialog(parent=parent_window)
+            result = intro_dialog.exec_()
+            if result != QtWidgets.QDialog.Accepted:
+                return
+            
+            # progress bar
             if not hasattr(task, "progress_bar") or task.progress_bar is None:
                 task.progress_bar = ProgressBar(num_tasks=len(ALL_TESTS))
+                # task.progress_bar_ui = self.progress_bar.edit_traits()
             else:
                 task.progress_bar.num_tasks = len(ALL_TESTS)
             task.progress_bar.progress = 0
             task.progress_bar.current_message = "Starting...\n"
 
-            # start tests
             super().perform(event)
-            
+
             # show progress bar
-            #task.progress_bar.edit_traits(kind="modal")
             task.progress_bar.edit_traits()
+            # task.progress_bar_ui = self.progress_bar.edit_traits()
+            
+            # results handled in update handler (will open report of all tests in browser)
+
+        else: # individual test
+            task.last_test_mode = "individual" # for debugging only
+            logger.info("Set last_test_mode to 'individual'")
+            super().perform(event)
 
 def dropbot_tools_menu_factory():
     """

@@ -122,13 +122,6 @@ class ResultsDialog(QDialog):
             ax.set_ylabel("Measured Voltage (V)")
             ax.legend()
 
-        # Add a close button
-        close_button = QPushButton("Close")
-        # close_button.clicked.connect(self.on_cancel_clicked)
-        close_button.clicked.connect(self.accept)
-        layout.addWidget(close_button)
-
+        
         self.setLayout(layout)
 
-    # def _on_cancel_clicked(self):
-    #     self.close()

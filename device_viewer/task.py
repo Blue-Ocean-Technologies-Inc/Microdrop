@@ -40,6 +40,10 @@ class DeviceViewerTask(Task):
     ##########################################################
     # 'IDramatiqControllerBase' interface.
     ##########################################################
+    # for debugging purposes
+    last_test_mode = Str("individual")  # or 'all'
+
+
     progress_bar = None
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -185,39 +189,40 @@ class DeviceViewerTask(Task):
         done_test_number = message.get('done_test_number')
         report_path = message.get('report_path')
 
+        logger.info(f"Handler called. last_test_mode={getattr(self, 'last_test_mode', None)}, active_state={active_state}, current_message={current_message}, done_test_number={done_test_number}, report_path={report_path}")
+
         print(current_message, threading.current_thread().name)
+        
+        if getattr(self, 'last_test_mode', 'individual') == "all":
+            if self.progress_bar is not None:
+                if active_state == False:
+                    self.progress_bar.current_message = f"Done running all tests. Generating report...\n"
+                elif current_message:
+                    self.progress_bar.current_message = f"Processing: {current_message}\n"
+                if done_test_number is not None:
+                    percentage = int(((done_test_number + 1) / self.progress_bar.num_tasks) * 100)
+                    self.progress_bar.progress = percentage
+                if report_path:                                               
+                    # self.progress_bar_ui.dispose()
+                    # self.progress_bar_ui = None
+                    # self.progress_bar = None
+                    # open report as html in browser
+                    open_html_in_browser(report_path)
 
-        if active_state == False:
-            self.progress_bar.current_message = f"Done running all tests. Generating report...\n"
+            
 
-        elif current_message:
-            self.progress_bar.current_message = f"Processing: {current_message}\n"
-
-        if done_test_number is not None:
-            percentage = int(((done_test_number + 1) / self.progress_bar.num_tasks) * 100)
-            self.progress_bar.progress = percentage
-
-            #self.progress_bar.progress = done_test_number + 1
-            #self.progress_bar.current_message = f"Completed: {percentage}% ({done_test_number + 1}/{self.progress_bar.num_tasks} tests)"
-
-        if report_path:
-            self.progress_bar.current_message = f"Generated report at {report_path}" + "\n" + "Can close window."
-
-            # if self.progress_bar:
-            #     self.progress_bar.close()
-            #     self.progress_bar = None
-
-            try:
-                parsed_data = parse_html_report(report_path)
-                dialog = ResultsDialog(
-                    parent = None,
-                    table_data=parsed_data.get('table'),
-                    rms_error=parsed_data.get('rms_error'),
-                    plot_data=parsed_data.get('plot_data')
-                )
-                #dialog.setWindowModality(Qt.NonModal)
-                dialog.exec_()
-                # dialog.show()
-            except Exception as e:
-                logger.error(f"Error parsing HTML report: {e}")
+        else: # individual test
+            if report_path:
+                try:
+                    parsed_data = parse_html_report(report_path)
+                    dialog = ResultsDialog(
+                        parent=None,
+                        table_data=parsed_data.get('table'),
+                        rms_error=parsed_data.get('rms_error'),
+                        plot_data=parsed_data.get('plot_data')
+                    )
+                    dialog.exec_()
+                except Exception as e:
+                    logger.error(f"Error parsing HTML report: {e}")
+            
 
