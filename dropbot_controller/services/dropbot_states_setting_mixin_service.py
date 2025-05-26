@@ -28,6 +28,8 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.voltage = float(message)
+            if self.voltage < 30 or self.voltage > 150:
+                raise ValueError("Voltage must be between 30 and 150 V")
             if self.realtime_mode:
                 self.proxy.update_state(voltage=self.voltage)
             else:
@@ -45,6 +47,8 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.frequency = float(message)
+            if self.frequency < 100 or self.frequency > 20000:
+                raise ValueError("Frequency must be between 100 and 20000 Hz")
             if self.realtime_mode:
                 self.proxy.update_state(frequency=self.frequency)
             else:
