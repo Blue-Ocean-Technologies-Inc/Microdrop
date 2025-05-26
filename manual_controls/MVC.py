@@ -12,7 +12,7 @@ logger = get_logger(__name__, level="DEBUG")
 
 class ManualControlModel(HasTraits):
     voltage = Range(
-        30, 1000,
+        30, 150,
         desc="the voltage to set on the dropbot device"
     )
     frequency = Range(
