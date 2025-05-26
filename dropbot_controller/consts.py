@@ -27,6 +27,7 @@ SHORTS_DETECTED = 'dropbot/signals/shorts_detected'
 CAPACITANCE_UPDATED = 'dropbot/signals/capacitance_updated'
 DROPBOT_SETUP_SUCCESS = 'dropbot/signals/setup_success'
 SELF_TESTS_PROGRESS = 'dropbot/signals/self_tests_progress'
+REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
 START_DEVICE_MONITORING = "dropbot/requests/start_device_monitoring"

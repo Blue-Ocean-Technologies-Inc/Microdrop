@@ -155,7 +155,8 @@ class DeviceViewerTask(Task):
 
     ####### handlers for dramatiq listener topics ##########
     def _on_setup_success_triggered(self, message):
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
+        if self.electrodes_model:
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     ##########################################################
     # Public interface.

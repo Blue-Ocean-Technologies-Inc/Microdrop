@@ -60,29 +60,19 @@ Imports functions from /microdrop_utils/broker_server_helpers.py that no longer 
 
 ### /examples/run_device_viewer_pluggable_dropbot_service_demo.py
 
-Requires dropbot to be plugged in to operate.
+Dummy plugin offering Envisage service
 
 ### /examples/run_device_viewer_pluggable_backend.py
 
+Runs only the backend plugins, and tries to run the redis server
 
+### /examples/run_device_viewer_pluggable_frontend.py
 
-# Plugins
+Runs only the frontend (GUI). Needs the redis server and backend to function properly
 
-## /dropbot_controller
+### /examples/run_dropbot_status_ui_singly.py
 
-## /dropbot_status
-
-## /dropbot_status_plot
-
-## /dropbot_tools_menu
-
-## /electrode_controller
-
-## /manual_controls
-
-## /device_viewer
-
-## /BlankMicrodropCanvas
+Runs only the plots and status widget, without the other usual pluins
 
 # Tests
 
@@ -109,5 +99,13 @@ conda env remove -n microdrop --all
 ```
 or
 ```bash
-micromamba env remove -n microdrop --all
+micromamba env remove -n microdrop
+```
+
+# Debugging
+
+On Linux/Mac (probably) you can use strace on the device path itself to snoop all serial communication between a python process (the backend) and the dropbot. Logs are quite clean, and gives you good idea of what's actually being sent/recieved hardware side.
+
+```bash
+strace -s 256 -P <device path> -e trace=write,read -o trace.log -f python <script name>
 ```
