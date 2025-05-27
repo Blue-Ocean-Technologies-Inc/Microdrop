@@ -12,6 +12,7 @@ from dropbot.hardware_test import (ALL_TESTS, system_info, test_system_metrics,
 from dropbot.self_test import generate_report
 from traits.api import provides, HasTraits
 
+from microdrop_utils.file_handler import open_html_in_browser
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..consts import SELF_TESTS_PROGRESS

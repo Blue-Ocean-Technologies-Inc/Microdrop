@@ -29,7 +29,6 @@ DEFAULT_SVG_FILE = f"{os.path.dirname(__file__)}{os.sep}2x3device.svg"
 listener_name = f"{PKG}_listener"
 
 from dropbot_tools_menu.menus import ProgressBar, ALL_TESTS
-from microdrop_utils import open_html_in_browser
 import threading
 from dropbot_tools_menu.menus import parse_test_voltage_html_report, parse_on_board_feedback_calibration_html_report, parse_scan_test_board_html_report
 from dropbot_tools_menu.self_test_dialogs import ResultsDialog, SelfTestIntroDialog, ScanTestBoardResultsDialog
