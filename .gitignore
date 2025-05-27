@@ -1,7 +1,13 @@
-/.idea
+# IDE files
+.idea
 .vscode
-**/application_logs
+
+# Python generated files
 **/__pycache__
-dump.rdb
-results.txt
-*.log
+
+# Application generated files
+**/application_logs
+**/dump.rdb
+**/results.txt
+**/*.log
+**/*test*.html
