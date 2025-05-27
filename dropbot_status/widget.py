@@ -210,7 +210,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         shorts = json.loads(shorts_dict).get('Shorts_detected', [])
 
         if len(shorts) == 0:
-            self.logger.info("No shorts were detected.")
+            logger.info("No shorts were detected.")
             return
             
         self.shorts_popup = QMessageBox()
