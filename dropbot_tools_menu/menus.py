@@ -20,7 +20,7 @@ from .consts import PKG
 #new
 from .self_test_dialogs import SelfTestIntroDialog, ResultsDialog
 from PySide6 import QtWidgets
-from dropbot_controller.consts import SELF_TESTS_PROGRESS
+# from dropbot_controller.consts import SELF_TESTS_PROGRESS
 import json
 from bs4 import BeautifulSoup #html parser
 import numpy as np
@@ -28,35 +28,6 @@ import os
 import base64
 import tempfile
 
-class ProgressBar(HasTraits):
-    """A TraitsUI application with a progress bar."""
-
-    current_message = Str()
-    progress = Int(0)
-    num_tasks = Int(1)
-
-    def _progress_default(self):
-        return 0
-
-    def _num_tasks_default(self):
-        return 1
-
-    traits_view = View(
-        HGroup(
-            UItem(
-                "progress",
-                editor=ProgressEditor(
-                    message_name="current_message", 
-                    min_name="progress", 
-                    max_name="num_tasks"
-                ),
-            ),
-        ),
-        title="Running Dropbot On-board Self-tests...",
-        resizable=True,
-        width=400,
-        height=100
-    )
 
 class DramatiqMessagePublishAction(TaskWindowAction):
     topic = Str(desc="topic this action connects to")
@@ -78,39 +49,6 @@ class RunTests(DramatiqMessagePublishAction):
     def perform(self, event=None):
         logger.info("Requesting running self tests for dropbot")
 
-        #super().perform(event)
-
-        # referencing to DeviceViewerTask instance
-        task = getattr(self, "task", None)
-        if task is None:
-            logger.error("Cannot find DeviceViewerTask instance.")
-            return
-        
-        # set test mode separately
-        if self.num_tests == len(ALL_TESTS):
-            task.last_test_mode = "all"         
-        else:
-            task.last_test_mode = "individual"
-
-        app = QtWidgets.QApplication.instance()
-        parent_window = app.topLevelWidgets()[0] if app and app.topLevelWidgets() else None
-        intro_dialog = SelfTestIntroDialog(parent=parent_window)
-        result = intro_dialog.exec_()
-        if result != QtWidgets.QDialog.Accepted:
-            return
-        
-        # progress bar
-        if not hasattr(task, "progress_bar") or task.progress_bar is None:
-            task.progress_bar = ProgressBar(num_tasks=self.num_tests)
-            # task.progress_bar_ui = self.progress_bar.edit_traits()
-        else:
-            task.progress_bar.num_tasks = self.num_tests
-        task.progress_bar.progress = 0
-        task.progress_bar.current_message = "Starting...\n"
-
-        # show progress bar
-        task.progress_bar_ui = task.progress_bar.edit_traits()        
-        # results handled in update handler (will open report of all tests in browser)
         super().perform(event)
 
 def dropbot_tools_menu_factory():
