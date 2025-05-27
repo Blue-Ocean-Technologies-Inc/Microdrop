@@ -11,9 +11,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING
 
-from traits.api import HasTraits, Str, Int, Any
-from traitsui.editors.progress_editor import ProgressEditor
-from traitsui.api import View, HGroup, UItem
+from traits.api import Str, Int, Any
 
 from .consts import PKG
 

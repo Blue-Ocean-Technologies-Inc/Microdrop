@@ -28,7 +28,7 @@ DEFAULT_SVG_FILE = f"{os.path.dirname(__file__)}{os.sep}2x3device.svg"
 
 listener_name = f"{PKG}_listener"
 
-from dropbot_tools_menu.menus import ProgressBar, ALL_TESTS
+from dropbot_tools_menu.menus import ALL_TESTS
 import threading
 from dropbot_tools_menu.menus import parse_test_voltage_html_report, parse_on_board_feedback_calibration_html_report, parse_scan_test_board_html_report
 from dropbot_tools_menu.self_test_dialogs import ResultsDialog, SelfTestIntroDialog, ScanTestBoardResultsDialog
@@ -221,10 +221,10 @@ class DeviceViewerTask(Task):
             # TODO: Progress bar should be part of the child window and the message should be an attribute of the child window
             # self.progress_bar.progress = percentage
 
-        if not active_state and report_path :
+        #if not active_state and report_path :
             # TODO: Close child window here when all tests are done
             # i.e., self.close_child_window()
-        elif not active_state and report_path is None:
+        #elif not active_state and report_path is None:
             # TODO: Close child window here when all tests are done and create a new one with the report
             # i.e., self.close_child_window()
             
@@ -268,6 +268,11 @@ class DeviceViewerTask(Task):
             # elif getattr(self, 'last_test_mode', 'all') == "all":
             #     open_html_in_browser(report_path)
 
+
+# new imports (move to top once complete)
+from traits.api import HasTraits, Str, Int
+from traitsui.editors.progress_editor import ProgressEditor
+from traitsui.api import View, HGroup, UItem
 
 class ProgressBar(HasTraits):
     """A TraitsUI application with a progress bar."""
