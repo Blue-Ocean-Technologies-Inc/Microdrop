@@ -76,6 +76,9 @@ class DramatiqDropbotStatusController(HasTraits):
         sub_topic = topic.split('/')[-2]
         method = f"_on_{head_topic}_triggered"
 
+        if head_topic == "self_tests_progress":
+            return
+        
         err_msg = invoke_class_method(self.view, method, message)
         if err_msg:
 
