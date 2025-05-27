@@ -3,7 +3,10 @@ import sys
 from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 
+
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context
 
 
@@ -16,6 +19,8 @@ def main(args):
     from message_router.plugin import MessageRouterPlugin
     from manual_controls.plugin import ManualControlsPlugin
     from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
+    from dropbot_status_plot.plugin import DropbotStatusPlotPlugin
+
 
     plugins = [
         CorePlugin(),
@@ -24,7 +29,8 @@ def main(args):
         DropbotStatusPlugin(),
         MessageRouterPlugin(),
         ManualControlsPlugin(),
-        DropbotToolsMenuPlugin()
+        DropbotToolsMenuPlugin(),
+        DropbotStatusPlotPlugin()
     ]
 
     app = DeviceViewerApplication(plugins=plugins)

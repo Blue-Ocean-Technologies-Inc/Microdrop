@@ -13,7 +13,9 @@ class ExampleApp(Application):
 def demo():
 
     from examples.toy_plugins.frontend import UIPlugin, PlotViewPlugin, TableViewPlugin
-    from examples.broker import BROKER
+    from dramatiq import get_broker
+
+    BROKER = get_broker()
 
     # Note that fully fledged unittests for enthought services is available via
     # https://github.com/enthought/envisage/blob/main/envisage/tests
