@@ -4,6 +4,8 @@ import contextlib
 import signal
 import time
 
+from envisage.ui.tasks.tasks_application import TasksApplication
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from examples.plugin_consts import *
@@ -31,7 +33,10 @@ def main(args, plugins=None, contexts=None, application=None, persist=False):
 
     def stop_app(signum, frame):
         print("Shutting down...")
-        app.stop()
+        if isinstance(app, TasksApplication): # It's a UI application, so we call exit so that the application can save its state via TasksApplication.exit()
+            app.exit()
+        else: # It's a backend application, so we call Application.stop() since exit() doesn't exist
+            app.stop()
         exit(0)
 
     # Register signal handlers
