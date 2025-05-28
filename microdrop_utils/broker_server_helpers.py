@@ -23,6 +23,7 @@ def is_redis_running():
 
 def start_redis_server(retries=5, wait=3):
     """Start the Redis server."""
+    process = None
     if not is_redis_running():
         process = subprocess.Popen(["redis-server", f"{os.path.dirname(__file__)}{os.sep}redis.conf"])
         for _ in range(retries):  # Retry up to 5 times
@@ -37,18 +38,20 @@ def start_redis_server(retries=5, wait=3):
 
     else:
         print("Redis server is already running.")
-    return None
+    return process
 
 
-def stop_redis_server():
-    import redis
+def stop_redis_server(process):
     """Stop the Redis server."""
-    try:
-        client = redis.StrictRedis(host='localhost', port=6379)
-        client.shutdown()
-        print("Redis server stopped.")
-    except redis.exceptions.ConnectionError as e:
-        print(f"Failed to stop Redis server: {e}")
+    if process is None:
+        print("Redis server is not running, so no need to stop it.")
+        return
+    else:
+        try:
+            process.terminate()
+            print("Redis server stopped.")
+        except Exception as e:
+            print(f"Failed to stop Redis server: {e}")
 
 
 def remove_middleware_from_dramatiq_broker(middleware_name: str, broker: 'dramatiq.broker.Broker'):
@@ -82,15 +85,15 @@ def redis_server_context():
     """
     Context manager for apps that make use of a redis server
     """
-
+    process = None
     try:
-        start_redis_server()
+        process = start_redis_server()
 
         yield  # This is where the main logic will execute within the context
 
     finally:
         # Shutdown routine
-        stop_redis_server()
+        stop_redis_server(process)
 
 
 @contextmanager
