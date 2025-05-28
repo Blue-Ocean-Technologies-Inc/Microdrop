@@ -110,7 +110,6 @@ def dramatiq_workers_context(**kwargs):
     finally:
         # Shutdown routine
         worker.stop()
-        get_broker().flush_all()
 
 
 # Example usage
