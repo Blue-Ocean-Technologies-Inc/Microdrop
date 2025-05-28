@@ -1,8 +1,11 @@
 from traits.api import provides, HasTraits, Bool, Float
 
 from microdrop_utils._logger import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
+
+from ..consts import REALTIME_MODE_UPDATED
 
 
 logger = get_logger(__name__, level="DEBUG")
@@ -28,6 +31,8 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.voltage = float(message)
+            if self.voltage < 30 or self.voltage > 150:
+                raise ValueError("Voltage must be between 30 and 150 V")
             if self.realtime_mode:
                 self.proxy.update_state(voltage=self.voltage)
             else:
@@ -45,6 +50,8 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.frequency = float(message)
+            if self.frequency < 100 or self.frequency > 20000:
+                raise ValueError("Frequency must be between 100 and 20000 Hz")
             if self.realtime_mode:
                 self.proxy.update_state(frequency=self.frequency)
             else:
@@ -60,13 +67,18 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         Method to set the realtime mode on the dropbot device.
         """
+        # update_state doesn't return anything useful, and theres no way to register callbacks using signals.signal.connect, so we just assume that
+        # if it doesn't return an error, then it worked.
+        # TODO: Once acks are working firmware side, we can use that to confirm that the message was received.
         if message == "True":
             self.realtime_mode = True
             self.proxy.update_state(hv_output_selected=True,
                                     hv_output_enabled=True,
                                     voltage=self.voltage,
                                     frequency=self.frequency)
+            publish_message(topic=REALTIME_MODE_UPDATED, message="True")
         else:
             self.realtime_mode = False
             self.proxy.update_state(hv_output_enabled=False)
+            publish_message(topic=REALTIME_MODE_UPDATED, message="False")
         logger.info(f"Set realtime mode to {self.realtime_mode}")

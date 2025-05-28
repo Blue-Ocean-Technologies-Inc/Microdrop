@@ -1,13 +1,15 @@
 import json
+from datetime import datetime
 
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
-from traits.api import Instance
+from traits.api import Instance, Dict
 import dramatiq
+from dramatiq.middleware import CurrentMessage
 
 # unit handling
 from pint import UnitRegistry
 
-from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method
+from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 ureg = UnitRegistry()
 
@@ -41,6 +43,8 @@ class DropbotControllerBase(HasTraits):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     listener_name = f"{PKG}_listener"
+    
+    timestamps = Dict(str, datetime)
 
     def __del__(self):
         """Cleanup when the controller is destroyed."""
@@ -68,8 +72,17 @@ class DropbotControllerBase(HasTraits):
         topic (str): The topic of the message.
 
         """
-
-        logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{message}' from topic: '{topic}'")
+        msg_proxy = CurrentMessage.get_current_message()
+        if msg_proxy is not None:
+            raw = msg_proxy._message
+            msg_timestamp = raw.message_timestamp
+        else:
+            msg_timestamp = None
+       
+        # Create a timestamped message object
+        timestamped_message = TimestampedMessage(content=message, timestamp=msg_timestamp)
+      
+        logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
 
         # find the topics hierarchy: first element is the head topic. Last element is the specific topic
         topics_tree = topic.split("/")
@@ -115,7 +128,12 @@ class DropbotControllerBase(HasTraits):
             logger.debug(f"Ignored request from topic '{topic}': Not a Dropbot-related request.")
 
         if requested_method:
-            err_msg = invoke_class_method(self, requested_method, message)
+            if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
+                logger.debug(f"DropbotController: Ignoring older message from topic: {topic} received at {timestamped_message.timestamp_dt}")
+                return
+            self.timestamps[topic] = timestamped_message.timestamp_dt
+            
+            err_msg = invoke_class_method(self, requested_method, timestamped_message)
 
             if err_msg:
                 logger.error(

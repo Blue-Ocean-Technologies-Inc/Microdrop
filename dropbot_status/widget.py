@@ -3,7 +3,7 @@ import json
 import os
 
 # pyside imports
-from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, QTextBrowser
+from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, QTextBrowser, QGridLayout
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 
@@ -32,44 +32,84 @@ class DropBotStatusLabel(QLabel):
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(300, 120)
+        self.setFixedSize(400, 120)
         self.setContentsMargins(10, 10, 10, 10)
 
-        self.status_bar = QHBoxLayout()
-        self.status_bar.setContentsMargins(0, 0, 0, 0)
-        self.status_bar.setSpacing(10)
+        # Main horizontal layout to hold icon and grid
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(10)
 
+        # Add dropbot icon to the left
         self.dropbot_icon = QLabel()
         self.dropbot_icon.setFixedSize(100, 100)
         self.dropbot_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_bar.addWidget(self.dropbot_icon)
+        self.main_layout.addWidget(self.dropbot_icon)
 
-        self.text_layout = QVBoxLayout()
-        self.text_layout.setContentsMargins(0, 0, 0, 0)
-        self.text_layout.setSpacing(5)
+        # Create grid layout for status information
+        self.grid_layout = QGridLayout()
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setHorizontalSpacing(10)  # Space between columns
+        self.grid_layout.setVerticalSpacing(1)     # Minimal space between rows
 
-        # Default status to disconnected
+        # Create fonts
+        bold_font = self.font()
+        bold_font.setBold(True)
+
+        # Create label pairs (static label + value label)
+        self.connection_label = QLabel("Status:")
+        self.connection_label.setFont(bold_font)
         self.dropbot_connection_status = QLabel()
+        
+        self.chip_label = QLabel("Chip Status:")
+        self.chip_label.setFont(bold_font)
         self.dropbot_chip_status = QLabel()
+        
+        self.capacitance_label = QLabel("Capacitance:")
+        self.capacitance_label.setFont(bold_font)
+        self.dropbot_capacitance_reading = QLabel("-")
+        
+        self.voltage_label = QLabel("Voltage:")
+        self.voltage_label.setFont(bold_font)
+        self.dropbot_voltage_reading = QLabel("-")
+
+        self.pressure_label = QLabel("c<sub>device</sub>:")
+        self.pressure_label.setFont(bold_font)
+        self.dropbot_pressure_reading = QLabel("-")
+
+        self.force_label = QLabel("Force")
+        self.force_label.setFont(bold_font)
+        self.dropbot_force_reading = QLabel("-")
+
+        # Set initial status
         self.update_status_icon(dropbot_connected=False, chip_inserted=False)
 
-        # report readings
-        self.dropbot_capacitance_reading = QLabel("Capacitance: 0 pF")
-        self.dropbot_voltage_reading = QLabel("Voltage: 0 V")
-        self.dropbot_capacitance_reading.setContentsMargins(0, 0, 0, 0)
-        self.dropbot_voltage_reading.setContentsMargins(0, 0, 0, 0)
+        # Add pairs to grid - labels in column 0, values in column 1
+        self.grid_layout.addWidget(self.connection_label, 0, 0)
+        self.grid_layout.addWidget(self.dropbot_connection_status, 0, 1)
+        
+        self.grid_layout.addWidget(self.chip_label, 1, 0)
+        self.grid_layout.addWidget(self.dropbot_chip_status, 1, 1)
+        
+        self.grid_layout.addWidget(self.capacitance_label, 2, 0)
+        self.grid_layout.addWidget(self.dropbot_capacitance_reading, 2, 1)
+        
+        self.grid_layout.addWidget(self.voltage_label, 3, 0)
+        self.grid_layout.addWidget(self.dropbot_voltage_reading, 3, 1)
 
-        self.text_layout.addWidget(self.dropbot_connection_status)
-        self.text_layout.addWidget(self.dropbot_chip_status)
-        self.text_layout.addWidget(self.dropbot_capacitance_reading)
-        self.text_layout.addWidget(self.dropbot_voltage_reading)
-        self.text_layout.addStretch(1)
+        self.grid_layout.addWidget(self.pressure_label, 4, 0)
+        self.grid_layout.addWidget(self.dropbot_pressure_reading, 4, 1)
 
-        self.status_bar.addLayout(self.text_layout)
-        self.status_bar.addStretch(1)
+        self.grid_layout.addWidget(self.force_label, 5, 0)
+        self.grid_layout.addWidget(self.dropbot_force_reading, 5, 1)
 
-        self.setLayout(self.status_bar)
-        self.setStyleSheet('QLabel { font-size: 12px; }')
+        # Add the grid to the main layout
+        self.main_layout.addLayout(self.grid_layout)
+        
+        # Add stretch to the right
+        self.main_layout.addStretch(1)
+
+        self.setLayout(self.main_layout)
         self.dropbot_connected = False
 
     def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
@@ -89,14 +129,14 @@ class DropBotStatusLabel(QLabel):
             if chip_inserted:
                 logger.info("Chip Inserted")
                 # dropbot ready to use: give greenlight and display chip.
-                self.dropbot_chip_status.setText("Chip inserted")
+                self.dropbot_chip_status.setText("Inserted")
                 img_path = DROPBOT_CHIP_INSERTED_IMAGE
                 status_color = green
 
             # dropbot connected but no chip inside. Yellow signal.
             else:
                 logger.info("Chip Not Inserted")
-                self.dropbot_chip_status.setText("Chip not inserted")
+                self.dropbot_chip_status.setText("Not Inserted")
                 img_path = DROPBOT_IMAGE
                 status_color = yellow
 
@@ -106,7 +146,7 @@ class DropBotStatusLabel(QLabel):
             img_path = DROPBOT_IMAGE
             status_color = red
             self.dropbot_connection_status.setText("Disconnected")
-            self.dropbot_chip_status.setText("Chip not inserted")
+            self.dropbot_chip_status.setText("Not inserted")
 
         pixmap = QPixmap(img_path)
         if pixmap.isNull():
@@ -118,10 +158,16 @@ class DropBotStatusLabel(QLabel):
         self.dropbot_icon.setStyleSheet(f'QLabel {{ background-color : {status_color} ; }}')
 
     def update_capacitance_reading(self, capacitance):
-        self.dropbot_capacitance_reading.setText(f"Capacitance: {capacitance}")
+        self.dropbot_capacitance_reading.setText(capacitance)
 
     def update_voltage_reading(self, voltage):
-        self.dropbot_voltage_reading.setText(f"Voltage: {voltage}")
+        self.dropbot_voltage_reading.setText(voltage)
+
+    def update_pressure_reading(self, pressure):
+        self.dropbot_pressure_reading.setText(pressure)
+
+    def update_force_reading(self, force):
+        self.dropbot_force_reading.setText(force)
 
 
 class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
@@ -163,27 +209,29 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def _on_shorts_detected_triggered(self, shorts_dict):
         shorts = json.loads(shorts_dict).get('Shorts_detected', [])
 
+        if len(shorts) == 0:
+            self.logger.info("No shorts were detected.")
+            return
+            
         self.shorts_popup = QMessageBox()
         self.shorts_popup.setFixedSize(300, 200)
         self.shorts_popup.setWindowTitle("ERROR: Shorts Detected")
         self.shorts_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
-        if len(shorts) > 0:
-            shorts_str = str(shorts).strip('[]')
-            self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
-                                      f"[{shorts_str}] \n \n"
-                                      f"You may continue using the DropBot, but the affected channels have "
-                                      f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
-                                      f"back in).")
-        else:
-            self.shorts_popup.setWindowTitle("Short Detection Complete")
-            self.shorts_popup.setText("No shorts were detected.")
+
+        shorts_str = str(shorts).strip('[]')
+        self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
+                                    f"[{shorts_str}] \n \n"
+                                    f"You may continue using the DropBot, but the affected channels have "
+                                    f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
+                                    f"back in).")
+
 
         self.shorts_popup.exec()
 
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
-        capacitance = json.loads(body).get('capacitance', '0 pF')
-        voltage = json.loads(body).get('voltage', '0 V')
+        capacitance = json.loads(body).get('capacitance', '-')
+        voltage = json.loads(body).get('voltage', '-')
         self.status_label.update_capacitance_reading(capacitance)
         self.status_label.update_voltage_reading(voltage)
 
@@ -206,7 +254,14 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             chip_inserted = False
         logger.debug(f"Chip inserted: {chip_inserted}")
         self.status_label.update_status_icon(chip_inserted=chip_inserted)
-    
+
+    def _on_realtime_mode_updated_triggered(self, body):
+        if body == 'False':
+            self.status_label.update_capacitance_reading(capacitance='-')
+            self.status_label.update_voltage_reading(voltage='-')
+            self.status_label.update_pressure_reading(pressure='-')
+            self.status_label.update_force_reading(force='-')
+
     # def _on_chip_not_inserted_triggered(self, body):
     #     self.status_label.update_status_icon(chip_inserted=False)
 
