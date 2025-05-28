@@ -11,6 +11,7 @@ from PySide6.QtGui import QPixmap
 from microdrop_utils._logger import get_logger
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.timestamped_message import TimestampedMessage
 
 from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
 
@@ -112,9 +113,24 @@ class DropBotStatusLabel(QLabel):
         self.setLayout(self.main_layout)
         self.dropbot_connected = False
 
-    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
+    def update_status_icon(self, dropbot_connected=None, chip_inserted=False, timestamp=None):
         """
-        Update status based on if device connected and chip inserted or not.
+        Update status based on if device connected and chip inserted or not. Follows this flowchart:
+
+        Is Dropbot Connected?
+            |          \
+            n            y
+            |             \
+        Disconnected       Is Chip Inserted?
+            |                   |          \
+           Red                  n            y
+                                |             \
+                            Not Inserted   Inserted
+                                |             |
+                              Yellow        Green
+
+        If the timestamp is provided, we only update the status if the timestamp is after the most recent status message.
+        This is to avoid updating the status if the message is older than the most recent status message.
         """
         
         if dropbot_connected is not None:
@@ -177,6 +193,9 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         # flag for if no pwoer is true or not
         self.no_power_dialog = None
         self.no_power = None
+        self.realtime_mode = False
+        self.connected_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer
+        self.chip_inserted_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer
         self.layout = QVBoxLayout(self)
 
         self.status_label = DropBotStatusLabel()
@@ -230,40 +249,45 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
-        capacitance = json.loads(body).get('capacitance', '-')
-        voltage = json.loads(body).get('voltage', '-')
-        self.status_label.update_capacitance_reading(capacitance)
-        self.status_label.update_voltage_reading(voltage)
+        if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
+            capacitance = json.loads(body).get('capacitance', '-')
+            voltage = json.loads(body).get('voltage', '-')
+            self.status_label.update_capacitance_reading(capacitance)
+            self.status_label.update_voltage_reading(voltage)
 
     ####### Dropbot Icon Image Control Methods ###########
 
     def _on_disconnected_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=False)
+        if body.is_after(self.connected_message):  
+            self.status_label.update_status_icon(dropbot_connected=False)
+            self.connected_message = body
 
     def _on_connected_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=True)
+        if body.is_after(self.connected_message):
+            self.status_label.update_status_icon(dropbot_connected=True)
+            self.connected_message = body
         
-    def _on_chip_inserted_triggered(self, body):
-        if body == 'True':
-            chip_inserted = True
-            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
-        elif body == 'False':
-            chip_inserted = False
-        else:
-            logger.error(f"Invalid chip inserted value: {body}")
-            chip_inserted = False
-        logger.debug(f"Chip inserted: {chip_inserted}")
-        self.status_label.update_status_icon(chip_inserted=chip_inserted)
+    def _on_chip_inserted_triggered(self, body : TimestampedMessage):
+        if body.is_after(self.chip_inserted_message):
+            if body == 'True':
+                chip_inserted = True
+                self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
+            elif body == 'False':
+                chip_inserted = False
+            else:
+                logger.error(f"Invalid chip inserted value: {body}")
+                chip_inserted = False
+            logger.debug(f"Chip inserted: {chip_inserted}")
+            self.status_label.update_status_icon(chip_inserted=chip_inserted)
+            self.chip_inserted_message = body
 
     def _on_realtime_mode_updated_triggered(self, body):
-        if body == 'False':
+        self.realtime_mode = body == 'True'
+        if not self.realtime_mode:
             self.status_label.update_capacitance_reading(capacitance='-')
             self.status_label.update_voltage_reading(voltage='-')
             self.status_label.update_pressure_reading(pressure='-')
             self.status_label.update_force_reading(force='-')
-
-    # def _on_chip_not_inserted_triggered(self, body):
-    #     self.status_label.update_status_icon(chip_inserted=False)
 
     ##################################################################################################
 
