@@ -1,13 +1,13 @@
 import subprocess
 import time
-import logging
 from contextlib import contextmanager
 import os
 
 from dramatiq import get_broker, Worker
 from dramatiq.middleware import CurrentMessage
 
-logger = logging.getLogger(__name__)
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
 
 def is_redis_running():

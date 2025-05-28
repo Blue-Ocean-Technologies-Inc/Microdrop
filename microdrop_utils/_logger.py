@@ -3,10 +3,6 @@ import time
 import logging
 from pathlib import Path
 
-# Modify library loggers
-logging.getLogger("dramatiq.broker").setLevel(logging.WARNING)
-logging.getLogger("dramatiq.worker").setLevel(logging.WARNING)
-
 LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
 LOGLEVEL = "INFO"
 
@@ -38,6 +34,18 @@ LEVEL_COLORS = {
     'CRITICAL': COLORS['DEEP_RED']
 }
 
+LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL
+}
+
+
+ROOT_LOGGER = logging.getLogger()
+ROOT_LOGGER.setLevel(LEVELS[LOGLEVEL])
+
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
         super().__init__(fmt, datefmt)
@@ -57,13 +65,6 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
-    levels = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL
-    }
 
     Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
     
@@ -87,14 +88,12 @@ def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
     console_handler.setFormatter(console_formatter)
 
     # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(levels[level])
-    root_logger.handlers = []  # Clear existing handlers
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+    ROOT_LOGGER.handlers = []  # Clear existing handlers
+    ROOT_LOGGER.addHandler(file_handler)
+    ROOT_LOGGER.addHandler(console_handler)
 
     # Get the named logger
     logger = logging.getLogger(name)
-    logger.setLevel(levels[level])
+    logger.setLevel(LEVELS[level])
 
     return logger
