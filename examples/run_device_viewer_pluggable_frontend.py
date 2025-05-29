@@ -8,7 +8,7 @@ from examples.run_device_viewer_pluggable import main as run_device_viewer_plugg
 from examples.plugin_consts import *
 
 def main(args):
-    """Run the application."""
+    """Run only the frontend plugins."""
     plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS
     contexts = FRONTEND_CONTEXT + REQUIRED_CONTEXT
     run_device_viewer_pluggable(args, plugins=plugins, contexts=contexts, application=FRONTEND_APPLICATION, persist=False)

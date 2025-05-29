@@ -10,7 +10,7 @@ from examples.plugin_consts import *
 
 
 def main(args):
-    """Run the application."""
+    """Run only the backend plugins."""
     plugins = REQUIRED_PLUGINS + BACKEND_PLUGINS
     contexts = BACKEND_CONTEXT + REQUIRED_CONTEXT
     
