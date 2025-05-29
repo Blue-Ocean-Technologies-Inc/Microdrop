@@ -15,10 +15,8 @@ from traits.api import Str, Int, Any
 
 from .consts import PKG
 
-#new
-from .self_test_dialogs import SelfTestIntroDialog, ResultsDialog
-from PySide6 import QtWidgets
-# from dropbot_controller.consts import SELF_TESTS_PROGRESS
+from .self_test_dialogs import ShowSelfTestIntroDialogAction
+
 import json
 from bs4 import BeautifulSoup #html parser
 import numpy as np
@@ -46,9 +44,15 @@ class RunTests(DramatiqMessagePublishAction):
 
     def perform(self, event=None):
         logger.info("Requesting running self tests for dropbot")
-
-        super().perform(event)
-
+        self_test_intro_dialog = ShowSelfTestIntroDialogAction()
+      
+        # only show the intro dialog for the tests that require the test board
+        if self.topic != TEST_VOLTAGE and self.topic != TEST_ON_BOARD_FEEDBACK_CALIBRATION:
+            if self_test_intro_dialog.perform(event):
+                super().perform(event)
+        else:
+            super().perform(event)
+       
 def dropbot_tools_menu_factory():
     """
     Create a menu for the Manual Controls
