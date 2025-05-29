@@ -166,18 +166,21 @@ class DropbotMonitorMixinService(HasTraits):
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
                 err = e
-                self.proxy.terminate()
+                if self.proxy is not None:
+                    self.proxy.terminate()
 
             except dropbot.proxy.NoPower as e:
                 self._no_power = True
                 publish_message(topic=NO_POWER, message=str(e))
                 err = e
-                self.proxy.terminate()
+                if self.proxy is not None:
+                    self.proxy.terminate()
 
             except Exception as e:
                 err = e
                 publish_message(topic="dropbot/error", message=str(e))
-                self.proxy.terminate()
+                if self.proxy is not None:
+                    self.proxy.terminate()
 
             ###########################################################################################
 
