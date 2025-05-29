@@ -72,15 +72,9 @@ class DropbotControllerBase(HasTraits):
         topic (str): The topic of the message.
 
         """
-        msg_proxy = CurrentMessage.get_current_message()
-        if msg_proxy is not None:
-            raw = msg_proxy._message
-            msg_timestamp = raw.message_timestamp
-        else:
-            msg_timestamp = None
        
         # Create a timestamped message object
-        timestamped_message = TimestampedMessage(content=message, timestamp=msg_timestamp)
+        timestamped_message = message
       
         logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
 

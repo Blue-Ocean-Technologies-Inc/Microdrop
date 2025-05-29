@@ -44,6 +44,14 @@ The data channel is stored in data-channels. The "center" is found by parsing an
 
 Because of manual parsing, the application only allows certain kinds of SVGs. Notably, it does not support any form of curve (C, S, Q, T, A, etc) in the path (see manual parsing in svg_to_paths())
 
+# Libraries
+
+## dropbot.py
+
+### SerialProxy.update_state(**kwargs)
+
+Does not return anything useful as of writing. Updates *partially*, meaning that if a kwarg isn't specified it retains its previous value instead of having a defualt it's reverting to.
+
 # Files/Folders
 
 ## /examples

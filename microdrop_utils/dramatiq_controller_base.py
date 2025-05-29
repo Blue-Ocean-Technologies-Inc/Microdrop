@@ -1,4 +1,5 @@
 import re
+import traceback
 import warnings
 from typing import Any
 from datetime import datetime
@@ -11,6 +12,7 @@ from traits.api import Instance, Str, provides, HasTraits, Callable
 
 from . import logger
 from .i_dramatiq_controller_base import IDramatiqControllerBase
+from .timestamped_message import TimestampedMessage
 
 
 @provides(IDramatiqControllerBase)
@@ -99,7 +101,18 @@ class DramatiqControllerBase(HasTraits):
                 message: Content of the received message
                 topic: Topic/routing key of the message
             """
-            self.listener_actor_method(message, topic)
+
+            msg_proxy = CurrentMessage.get_current_message()
+            msg_timestamp = (
+                msg_proxy._message.message_timestamp if msg_proxy is not None
+                else None
+            )
+
+            timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
+                content=message,
+                timestamp=msg_timestamp
+            )
+            self.listener_actor_method(timestamped_message, topic)
 
         return create_listener_actor
 
@@ -222,9 +235,10 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
                 class_method(*args, **kwargs)
                 return error_msg
             except Exception as e:
+                stack_trace = traceback.format_exc()
                 error_msg = (
                     f"Error executing '{requested_method}': "
-                    f"\nArguments: {args, kwargs}\n Exception: {e}"
+                    f"\nArguments: {args, kwargs}\n {stack_trace}"
                 )
                 logger.error(error_msg)
                 return error_msg
@@ -240,38 +254,3 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
         logger.warning(error_msg)
         return error_msg
 
-
-class TimestampedMessage(str):
-    """A string subclass that includes a timestamp attribute."""
-
-    def __new__(cls, content: Any, timestamp: float | None):
-        # Convert content to string and create the string instance
-        instance = super().__new__(cls, str(content))
-        # Store the timestamp as an instance attribute in ISO format
-        if timestamp is None:
-            timestamp_iso = "Timestamp not available"
-            timestamp_dt = datetime.min
-        else:
-            timestamp_dt = datetime.fromtimestamp(timestamp / 1000)
-            timestamp_iso = timestamp_dt.isoformat()
-
-        # Store the timestamp as an instance attribute
-        instance._timestamp_dt = timestamp_dt
-        instance._timestamp = timestamp_iso
-        return instance
-
-    @property
-    def timestamp(self) -> str:
-        """Get the timestamp of the message."""
-        return self._timestamp
-
-    @property
-    def timestamp_dt(self) -> datetime:
-        """Get the timestamp of the message as a datetime object."""
-        return self._timestamp_dt
-
-    def __repr__(self) -> str:
-        return (
-            f"TimestampedMessage({super().__repr__()}, "
-            f"timestamp={self._timestamp})"
-        )

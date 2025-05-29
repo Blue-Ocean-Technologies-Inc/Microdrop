@@ -1,5 +1,8 @@
 from traits.api import HasTraits, Range, Bool
-from traitsui.api import View, Group, Item, Controller
+from traitsui.api import View, Group, Item, BasicEditorFactory, Handler
+from traitsui.qt.editor import Editor as QtEditor
+from PySide6.QtWidgets import QPushButton
+
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
@@ -9,6 +12,36 @@ from .consts import PKG_name
 
 logger = get_logger(__name__, level="DEBUG")
 
+
+class ToggleEditor(QtEditor):
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setCheckable(True)
+        self.control.setChecked(self.value)
+        self.control.clicked.connect(self.click_handler)
+
+    def click_handler(self):
+        '''Set the trait value to the button state.'''
+        self.value = self.control.isChecked()
+    
+    def update_editor(self):
+        '''Override from QtEditor. Run when the trait changes externally to the editor. Default behavior is to update the label to the trait value.'''
+        checked = self.value # Get the trait value
+        if checked:
+            self.control.setText("On")
+            self.control.setStyleSheet(
+                "QPushButton { background-color: green; font-weight: bold; max-width: 100px;} QPushButton:hover { background-color: lightgreen; }"
+            )
+        else:
+            self.control.setText("Off")
+            self.control.setStyleSheet(
+                "QPushButton { background-color: red; font-weight: bold; max-width: 100px;} QPushButton:hover { background-color: lightcoral; }"
+            )
+
+
+class ToggleEditorFactory(BasicEditorFactory):
+    # Editor is the class that actually implements your editor
+    klass = ToggleEditor
 
 class ManualControlModel(HasTraits):
     voltage = Range(
@@ -37,8 +70,9 @@ ManualControlView = View(
         Item(
             name='realtime_mode',
             label='Realtime Mode',
-            style='simple',
+            style='custom',
             resizable=True,
+            editor=ToggleEditorFactory(),
         ),
     ),
     title=PKG_name,
@@ -46,7 +80,7 @@ ManualControlView = View(
 )
 
 
-class ManualControlControl(Controller):
+class ManualControlControl(Handler):
     @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, object, traitname, value):
         publish_message(topic=SET_VOLTAGE, message=str(value))
@@ -72,8 +106,8 @@ class ManualControlControl(Controller):
 if __name__ == "__main__":
     model = ManualControlModel()
     view = ManualControlView
-    controller = ManualControlControl()
+    handler = ManualControlControl()
 
-    view.handler = controller
+    view.handler = handler
 
     model.configure_traits(view=view)

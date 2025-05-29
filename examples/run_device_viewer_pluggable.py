@@ -1,43 +1,55 @@
 import os
 import sys
+import contextlib
+import signal
+import time
 
-from envisage.api import CorePlugin
-from envisage.ui.tasks.api import TasksPlugin
+from envisage.ui.tasks.tasks_application import TasksApplication
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 
+from examples.plugin_consts import *
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
-def main(args):
+def main(args, plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""
 
-    from device_viewer.application import DeviceViewerApplication
-    from device_viewer.plugin import DeviceViewerPlugin
-    from dropbot_status.plugin import DropbotStatusPlugin
-    from message_router.plugin import MessageRouterPlugin
-    from dropbot_controller.plugin import DropbotControllerPlugin
-    from manual_controls.plugin import ManualControlsPlugin
-    from electrode_controller.plugin import ElectrodeControllerPlugin
-    from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-    from dropbot_status_plot.plugin import DropbotStatusPlotPlugin
+    if plugins is None:
+        plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS
+    if contexts is None:
+        contexts = FRONTEND_CONTEXT + BACKEND_CONTEXT + REQUIRED_CONTEXT
+    if application is None:
+        application = DEFAULT_APPLICATION
 
-    plugins = [
-        CorePlugin(),
-        TasksPlugin(),
-        DeviceViewerPlugin(),
-        DropbotStatusPlugin(),
-        ElectrodeControllerPlugin(),
-        MessageRouterPlugin(),
-        DropbotControllerPlugin(),
-        ManualControlsPlugin(),
-        DropbotToolsMenuPlugin(),
-        DropbotStatusPlotPlugin()
-    ]
 
-    app = DeviceViewerApplication(plugins=plugins)
+    logger.debug(f"Instantiating application {application} with plugins {plugins}")
 
-    with redis_server_context(), dramatiq_workers_context():
+    # Instantiate plugins
+    plugin_instances = [plugin() for plugin in plugins]
+
+    # Instantiate application
+    app = application(plugins=plugin_instances)
+
+    def stop_app(signum, frame):
+        print("Shutting down...")
+        if isinstance(app, TasksApplication): # It's a UI application, so we call exit so that the application can save its state via TasksApplication.exit()
+            app.exit()
+        else: # It's a backend application, so we call Application.stop() since exit() doesn't exist
+            app.stop()
+        exit(0)
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, stop_app)
+    signal.signal(signal.SIGTERM, stop_app)
+
+    with contextlib.ExitStack() as stack: # contextlib.ExitStack is a context manager that allows you to stack multiple context managers
+        for context in contexts:
+            stack.enter_context(context())
         app.run()
+        if persist:
+            while True:
+                time.sleep(0.001)
 
 
 if __name__ == "__main__":
