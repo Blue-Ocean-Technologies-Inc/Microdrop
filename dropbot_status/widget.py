@@ -10,6 +10,7 @@ from PySide6.QtGui import QPixmap
 # local imports
 from microdrop_utils._logger import get_logger
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
+from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 
@@ -194,8 +195,9 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.no_power_dialog = None
         self.no_power = None
         self.realtime_mode = False
-        self.connected_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer
-        self.chip_inserted_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer
+        self.connected_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer. The string is not important.
+        self.chip_inserted_message = TimestampedMessage("", 0)
+        self.realtime_mode_message = TimestampedMessage("", 0)
         self.layout = QVBoxLayout(self)
 
         self.status_label = DropBotStatusLabel()
@@ -257,30 +259,31 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
     ####### Dropbot Icon Image Control Methods ###########
 
+    @timestamped_value('connected_message')
     def _on_disconnected_triggered(self, body):
-        if body.is_after(self.connected_message):  
-            self.status_label.update_status_icon(dropbot_connected=False)
-            self.connected_message = body
+        self.status_label.update_status_icon(dropbot_connected=False)
+        self.connected_message = body
 
+    @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
-        if body.is_after(self.connected_message):
-            self.status_label.update_status_icon(dropbot_connected=True)
-            self.connected_message = body
+        self.status_label.update_status_icon(dropbot_connected=True)
+        self.connected_message = body
         
+    @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
-        if body.is_after(self.chip_inserted_message):
-            if body == 'True':
-                chip_inserted = True
-                self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
-            elif body == 'False':
-                chip_inserted = False
-            else:
-                logger.error(f"Invalid chip inserted value: {body}")
-                chip_inserted = False
-            logger.debug(f"Chip inserted: {chip_inserted}")
-            self.status_label.update_status_icon(chip_inserted=chip_inserted)
-            self.chip_inserted_message = body
+        if body == 'True':
+            chip_inserted = True
+            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
+        elif body == 'False':
+            chip_inserted = False
+        else:
+            logger.error(f"Invalid chip inserted value: {body}")
+            chip_inserted = False
+        logger.debug(f"Chip inserted: {chip_inserted}")
+        self.status_label.update_status_icon(chip_inserted=chip_inserted)
+        self.chip_inserted_message = body
 
+    @timestamped_value('realtime_mode_message')
     def _on_realtime_mode_updated_triggered(self, body):
         self.realtime_mode = body == 'True'
         if not self.realtime_mode:
