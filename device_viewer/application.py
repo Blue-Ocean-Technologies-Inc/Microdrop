@@ -16,6 +16,9 @@ from traits.api import Bool, Instance, List, Property, observe, Directory
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__, level="DEBUG")
+
 
 class DeviceViewerApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
@@ -105,3 +108,18 @@ class DeviceViewerApplication(TasksApplication):
     @observe('started')
     def _on_application_started(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
+
+    #### Handler for Layout Restore Errors if any ##########################
+    def start(self):
+        try:
+            logger.debug("Starting new Device Viewer application instance.")
+            return super().start()
+        except Exception as e:
+            
+            import traceback
+            logger.debug("Error restoring layout, falling back to default layout.")
+            traceback.print_exc()
+            
+            self.preferences_helper.always_use_default_layout = True
+            
+            return super().start()
