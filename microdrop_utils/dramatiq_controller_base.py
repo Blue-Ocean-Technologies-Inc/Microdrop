@@ -149,7 +149,7 @@ def generate_class_method_dramatiq_listener_actor(
 
 def basic_listener_actor_routine(
     parent_obj: object,
-    message: Any,
+    timestamped_message: TimestampedMessage,    
     topic: str,
     handler_name_pattern: str = "_on_{topic}_triggered"
 ) -> None:
@@ -163,7 +163,7 @@ def basic_listener_actor_routine(
     Args:
         parent_obj: Object expected to have a handler method for the topic.
                    Should have a 'name' attribute used for logging.
-        message: Message or data payload to be processed by handler method.
+        timestamped_message: TimestampedMessage object containing the message and timestamp.
         topic: Topic string from which handler method name is derived.
                Expected to be a string with segments separated by "/".
         handler_name_pattern: Format string defining handler method's name.
@@ -174,16 +174,7 @@ def basic_listener_actor_routine(
         For a topic "devices/sensor", the computed method name will be
         "_on_sensor_triggered".
     """
-    msg_proxy = CurrentMessage.get_current_message()
-    msg_timestamp = (
-        msg_proxy._message.message_timestamp if msg_proxy is not None
-        else None
-    )
-
-    timestamped_message = TimestampedMessage(
-        content=message,
-        timestamp=msg_timestamp
-    )
+    
 
     logger.info(
         f"{parent_obj.name}: Received message: '{timestamped_message}' "

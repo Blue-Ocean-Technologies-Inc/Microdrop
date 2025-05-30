@@ -63,7 +63,7 @@ class DropbotControllerBase(HasTraits):
                 self.proxy = None
                 self.dropbot_connection_active = False
 
-    def listener_actor_routine(self, message, topic):
+    def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """
         A Dramatiq actor that listens to messages.
 
@@ -72,9 +72,6 @@ class DropbotControllerBase(HasTraits):
         topic (str): The topic of the message.
 
         """
-       
-        # Create a timestamped message object
-        timestamped_message = message
       
         logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
 
