@@ -128,7 +128,7 @@ class DropbotControllerBase(HasTraits):
 
             if err_msg:
                 logger.error(
-                    f" {self.listener_name}; Received message: {message} from topic: {topic} Failed to execute due to "
+                    f" {self.listener_name}; Received message: {timestamped_message} from topic: {topic} Failed to execute due to "
                     f"error: {err_msg}")
 
     def traits_init(self):
