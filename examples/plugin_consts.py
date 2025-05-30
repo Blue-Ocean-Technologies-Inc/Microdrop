@@ -13,6 +13,7 @@ from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 
 FRONTEND_PLUGINS = [
+    TasksPlugin,
     DeviceViewerPlugin,
     DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
@@ -27,7 +28,6 @@ BACKEND_PLUGINS = [
 
 REQUIRED_PLUGINS = [
     CorePlugin,
-    TasksPlugin,
     MessageRouterPlugin,
 ]
 
