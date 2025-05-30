@@ -21,7 +21,7 @@ class ManualControlsDockPane(TraitsDockPane):
 
     model = ManualControlModel()
     view = ManualControlView
-    controller = ManualControlControl()
+    controller = ManualControlControl(model)
 
     view.handler = controller
 
