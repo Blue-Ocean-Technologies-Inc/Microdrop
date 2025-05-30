@@ -94,19 +94,24 @@ class DramatiqControllerBase(HasTraits):
             actor_name=self.listener_name,
             queue_name=self.listener_queue
         )
-        def create_listener_actor(message: str, topic: str) -> None:
+        def create_listener_actor(message: str, topic: str, timestamp: float | None = None) -> None:
             """Handle incoming Dramatiq messages.
 
             Args:
                 message: Content of the received message
                 topic: Topic/routing key of the message
+                timestamp: Timestamp of the message. If None, the timestamp is extracted from the current message.
             """
-
-            msg_proxy = CurrentMessage.get_current_message()
-            msg_timestamp = (
-                msg_proxy._message.message_timestamp if msg_proxy is not None
-                else None
-            )
+            if timestamp is None: # This is the message *to* the message_router
+                msg_proxy = CurrentMessage.get_current_message()
+                msg_timestamp = (
+                    msg_proxy._message.message_timestamp if msg_proxy is not None
+                    else None
+                )
+                logger.debug(f"Message going to message_router: {message} at {msg_timestamp}")
+            else: # This is the message *from* the message_router (since message_router is the only publish_message that adds a timestamp)
+                msg_timestamp = timestamp
+                logger.debug(f"Message received from message_router: {message} at {msg_timestamp}")
 
             timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
                 content=message,
