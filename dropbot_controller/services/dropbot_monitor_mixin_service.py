@@ -15,8 +15,8 @@ from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialP
 from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
-    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_SETUP_SUCCESS
+from ..consts import DROPBOT_SETUP_SUCCESS, NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
+    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -179,7 +179,7 @@ class DropbotMonitorMixinService(HasTraits):
 
             except Exception as e:
                 err = f'{traceback.format_exc()}'
-                publish_message(topic="dropbot/error", message=str(e))
+                publish_message(topic=DROPBOT_ERROR, message=str(e))
                 if self.proxy is not None:
                     self.proxy.terminate()
 

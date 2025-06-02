@@ -1,4 +1,4 @@
-from dropbot_controller.consts import SELF_TESTS_PROGRESS
+from dropbot_controller.consts import SELF_TESTS_PROGRESS, ELECTRODES_STATE_CHANGE
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -12,6 +12,3 @@ ACTOR_TOPIC_DICT = {
                                  SELF_TESTS_PROGRESS,
     ]}
 
-
-# Topics emitted by this plugin
-ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'

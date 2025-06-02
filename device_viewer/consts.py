@@ -9,7 +9,3 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
                                  DROPBOT_SETUP_SUCCESS,
     ]}
-
-
-# Topics emitted by this plugin
-ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'

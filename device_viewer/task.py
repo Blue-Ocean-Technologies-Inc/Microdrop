@@ -14,7 +14,7 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from .models.electrodes import Electrodes
 from .views.device_view_pane import DeviceViewerPane
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from .consts import ELECTRODES_STATE_CHANGE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from .services.electrode_interaction_service import ElectrodeInteractionControllerService
 from .consts import PKG
 
