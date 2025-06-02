@@ -10,10 +10,12 @@ from dramatiq import Actor
 from dramatiq.middleware import CurrentMessage
 from traits.api import Instance, Str, provides, HasTraits, Callable
 
-from . import logger
+from microdrop_utils._logger import get_logger
+
 from .i_dramatiq_controller_base import IDramatiqControllerBase
 from .timestamped_message import TimestampedMessage
 
+logger = get_logger(__name__, level="DEBUG")
 
 @provides(IDramatiqControllerBase)
 class DramatiqControllerBase(HasTraits):

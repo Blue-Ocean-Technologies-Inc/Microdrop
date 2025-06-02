@@ -2,6 +2,7 @@ from traits.api import HasTraits, provides, Str
 import dramatiq
 import json
 from traits.api import Instance
+from PySide6.QtCore import Slot
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils._logger import get_logger
@@ -67,6 +68,7 @@ class DramatiqDropbotStatusController(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
+    @Slot(str)  
     def controller_signal_handler(self, signal):
         """
         Handle GUI action required for signal triggered by dropbot status listener.

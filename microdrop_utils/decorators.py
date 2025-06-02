@@ -95,6 +95,7 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
         return cast(F, wrapped)
     return decorator
 
+
 def timestamped_value(property_name: str) -> Callable[[F], F]:
     '''
     Decorator that will only run the method if the body is more recent than the current value. Should be used on callbacks of the form

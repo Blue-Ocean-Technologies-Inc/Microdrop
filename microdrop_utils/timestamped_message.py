@@ -1,9 +1,8 @@
-from functools import total_ordering
 from datetime import datetime
 import json
 from typing import Any
 
-@total_ordering # Provides __lt__, __eq__, __gt__, __ge__, __le__ from just the two __lt__ and __eq__ methods
+
 class TimestampedMessage(str):
     """A string subclass that includes a timestamp attribute."""
 
@@ -23,10 +22,10 @@ class TimestampedMessage(str):
         instance._timestamp = timestamp_iso
         instance._timestamp_ms = timestamp
         return instance
-    
+   
     def serialize(self) -> str:
         return json.dumps({'message': self, 'timestamp': self._timestamp_ms})
-    
+  
     @staticmethod
     def deserialize(serialized_message: str) -> 'TimestampedMessage':
         data = json.loads(serialized_message)
@@ -47,6 +46,6 @@ class TimestampedMessage(str):
             f"TimestampedMessage({super().__repr__()}, "
             f"timestamp={self._timestamp})"
         )
-    
+   
     def is_after(self, other: 'TimestampedMessage') -> bool:
         return self._timestamp_dt > other._timestamp_dt

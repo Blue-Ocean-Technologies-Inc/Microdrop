@@ -114,7 +114,7 @@ class DropBotStatusLabel(QLabel):
         self.setLayout(self.main_layout)
         self.dropbot_connected = False
 
-    def update_status_icon(self, dropbot_connected=None, chip_inserted=False, timestamp=None):
+    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
         """
         Update status based on if device connected and chip inserted or not. Follows this flowchart:
 
