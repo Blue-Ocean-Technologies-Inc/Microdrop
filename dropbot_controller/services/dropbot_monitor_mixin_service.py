@@ -36,6 +36,7 @@ class DropbotMonitorMixinService(HasTraits):
                                  desc="An AP scheduler job to periodically look for dropbot connected ports."
                                  )
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
+    _no_power = Bool(False) 
 
     def publish_status(self):
         if self.dropbot_connection_active:
