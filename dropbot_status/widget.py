@@ -268,6 +268,11 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def _on_connected_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=True)
         self.connected_message = body
+
+    @timestamped_value('connected_message')
+    def _on_setup_success_triggered(self, body):
+        self.status_label.update_status_icon(dropbot_connected=True)
+        self.connected_message = body
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
@@ -364,10 +369,3 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
                                   "the DropBot is restarted (e.g. unplug all cables and plug back in).")
 
         self.halted_popup.exec()
-
-    ##################################################################################################
-    
-    ####### handlers for dramatiq listener topics ##########
-    def _on_setup_success_triggered(self, message):
-        publish_message(message="", topic=START_DEVICE_MONITORING)
-    ##################################################################################################

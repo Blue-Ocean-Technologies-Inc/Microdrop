@@ -105,9 +105,7 @@ class DropbotControllerBase(HasTraits):
             # 3. Handle specific dropbot requests that would change dropbot connectivity
             ## 3.1. Request to activate dropbot connection
             elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
-                if not self.dropbot_connection_active:
-                    requested_method = f"on_{specific_sub_topic}_request"
-                    logger.debug(f"Executing {specific_sub_topic} method as Dropbot is currently disconnected.")
+                requested_method = f"on_{specific_sub_topic}_request"
 
             # 4. Handle all other requests
             elif primary_sub_topic == 'requests':
