@@ -25,7 +25,7 @@ class ToggleEditor(QtEditor):
 
     def click_handler(self):
         '''Set the trait value to the button state.'''
-        self.value = not self.value
+        self.ui.handler.realtime_mode_setattr(not self.value)
     
     def update_editor(self):
         '''Override from QtEditor. Run when the trait changes externally to the editor. Default behavior is to update the label to the trait value.'''
@@ -111,15 +111,14 @@ class ManualControlControl(Controller):
         logger.debug(f"Requesting Frequency change to {value} Hz")
         return super().setattr(info, object, traitname, value)
 
-    #@debounce(wait_seconds=0.5)
-    def realtime_mode_setattr(self, info, object, traitname, value):
+    @debounce(wait_seconds=0.5)
+    def realtime_mode_setattr(self, value):
         publish_message(
             topic=SET_REALTIME_MODE,
             message=str(value)
         )
         logger.debug(f"Set realtime mode to {value}")
         self.model.realtime_mode = value
-        return super().setattr(info, object, traitname, value)
     
     def traits_init(self):
         logger.info("Starting ManualControls listener")
