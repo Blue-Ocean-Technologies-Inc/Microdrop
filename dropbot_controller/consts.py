@@ -11,11 +11,14 @@ DROPBOT_DB3_120_HWID = 'VID:PID=16C0:0483'
 # `OUTPUT_ENABLE_PIN`.
 OUTPUT_ENABLE_PIN = 22
 
+SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
+
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
     "dropbot_controller_listener": [
         "dropbot/requests/#",
-        "dropbot/signals/disconnected"
+        "dropbot/signals/disconnected",
+        SELF_TEST_CANCEL
     ]}
 
 # Topics published by this plugin

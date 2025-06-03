@@ -11,7 +11,7 @@ from microdrop_utils.dramatiq_controller_base import invoke_class_method
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 # local imports
 from .interfaces.i_dramatiq_dropbot_status_controller import IDramatiqDropbotStatusController

@@ -227,25 +227,28 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     ######## shorts found method ###########
     def _on_shorts_detected_triggered(self, shorts_dict):
         shorts = json.loads(shorts_dict).get('Shorts_detected', [])
+        show_window = json.loads(shorts_dict).get('Show_window', False)
 
-        if len(shorts) == 0:
+        if len(shorts) == 0 and not show_window:
             logger.info("No shorts were detected.")
-            return
-            
-        self.shorts_popup = QMessageBox()
-        self.shorts_popup.setFixedSize(300, 200)
-        self.shorts_popup.setWindowTitle("ERROR: Shorts Detected")
-        self.shorts_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
-
-        shorts_str = str(shorts).strip('[]')
-        self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
-                                    f"[{shorts_str}] \n \n"
-                                    f"You may continue using the DropBot, but the affected channels have "
-                                    f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
-                                    f"back in).")
-
-
-        self.shorts_popup.exec()
+            return        
+        else: 
+            self.shorts_popup = QMessageBox()
+            self.shorts_popup.setFixedSize(300, 200)            
+            if len(shorts) == 0:
+                self.shorts_popup.setWindowTitle("No shorts were detected.")  
+                self.shorts_popup.setText("No shorts were detected on any channels.")              
+            else:
+                self.shorts_popup.setWindowTitle("Shorts Detected")
+                shorts_str = str(shorts).strip('[]')
+                self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
+                                        f"[{shorts_str}] \n \n"
+                                        f"You may continue using the DropBot, but the affected channels have "
+                                        f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
+                                        f"back in).")     
+                    
+            self.shorts_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
+            self.shorts_popup.exec()
 
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
@@ -311,7 +314,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         # Initialize the dialog
         self.no_power_dialog = QDialog()
         self.no_power_dialog.setWindowTitle("ERROR: No Power")
-        self.no_power_dialog.setFixedSize(370, 250)
+        self.no_power_dialog.setFixedSize(400, 300)
 
         # Create the layout
         layout = QVBoxLayout()

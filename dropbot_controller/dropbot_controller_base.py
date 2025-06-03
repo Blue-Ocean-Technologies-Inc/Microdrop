@@ -14,7 +14,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 ureg = UnitRegistry()
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
-                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, DROPBOT_SETUP_SUCCESS)
+                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, DROPBOT_SETUP_SUCCESS, SELF_TEST_CANCEL)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -105,13 +105,18 @@ class DropbotControllerBase(HasTraits):
                 return
 
             # 3. Handle specific dropbot requests that would change dropbot connectivity
-            ## 3.1. Request to activate dropbot connection
             elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
                 if not self.dropbot_connection_active:
+                    ## 3.1. Request to activate dropbot connection
                     requested_method = f"on_{specific_sub_topic}_request"
                     logger.debug(f"Executing {specific_sub_topic} method as Dropbot is currently disconnected.")
+            
+            # 4. Handle request to cancel self-test
+            elif topic == SELF_TEST_CANCEL:
+                logger.debug(f"Received SELF_TEST_CANCEL signal")
+                self.cancel_self_test()
 
-            # 4. Handle all other requests
+            # 5. Handle all other requests
             elif primary_sub_topic == 'requests':
                 if self.dropbot_connection_active:
                     requested_method = f"on_{specific_sub_topic}_request"

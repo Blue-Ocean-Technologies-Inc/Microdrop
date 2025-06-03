@@ -17,6 +17,8 @@ from traits.api import provides, HasTraits, Str, Instance
 from microdrop_utils.file_handler import open_html_in_browser
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from dropbot_controller.consts import SHORTS_DETECTED
+
 from ..consts import SELF_TESTS_PROGRESS
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -43,62 +45,6 @@ def get_timestamped_results_path(test_name: str, path: [str, Path]) -> Path:
     return path.joinpath(f'{test_name}_results-{timestamp}')
 
 
-def _self_test(proxy, tests=None, report_path=None):
-    """
-    .. versionadded:: 1.28
-
-    Perform quality control tests.
-
-    Parameters
-    ----------
-    proxy : dropbot.SerialProxy
-        DropBot control board reference.
-    tests : list, optional
-        List of names of test functions to run.
-
-        By default, run all tests.
-
-    Returns
-    -------
-    dict
-        Results from all tests.
-    """
-    total_time = 0
-
-    if tests is None:
-        tests = ALL_TESTS
-    results = {}
-
-    stuctured_message = {"active_state": True, "current_test_name": None, 
-                         "current_test_id": 0, "total_tests": len(tests), 
-                         "report_path": report_path }
-
-    for i, test_name_i in enumerate(pbar := tqdm(tests)):
-        # description of test that will be processed
-        stuctured_message["current_test_name"] = test_name_i
-        stuctured_message["current_test_id"] = i
-        pbar.set_description(test_name_i)
-        
-        # publish the job
-        publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(stuctured_message))
-        
-        # do the job
-        test_func_i = eval(test_name_i)
-        results[test_name_i] = test_func_i(proxy)
-
-        duration_i = results[test_name_i]['duration']
-        logger.debug('%s: %.1f s', test_name_i, duration_i)
-        total_time += duration_i
-
-    stuctured_message["active_state"] = False
-    stuctured_message["current_test_name"] = None
-    publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(stuctured_message))
-
-    logger.info('**Total time: %.1f s**', total_time)
-
-    return results
-
-
 @provides(IDropbotControlMixinService)
 class DropbotSelfTestsMixinService(HasTraits):
     """
@@ -108,7 +54,14 @@ class DropbotSelfTestsMixinService(HasTraits):
     id = Str("dropbot_self_tests_mixin_service")
     name = Str('Dropbot Self Tests Mixin')
     results_dialog = Instance(ResultsDialogAction)
-    
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._self_test_cancelled = False
+
+    def cancel_self_test(self):
+        self._self_test_cancelled = True
+         
     ######################################## private methods ##############################################
 
     @staticmethod
@@ -118,7 +71,6 @@ class DropbotSelfTestsMixinService(HasTraits):
             """
             Method to execute a dropbot test based on the name
             """
-
             # find the required test name based on the dropbot function name see dropbot.hardware_test
             test_name = "_".join(func.__name__.split('_')[1:-1])
             
@@ -134,24 +86,27 @@ class DropbotSelfTestsMixinService(HasTraits):
                 report_path = None
 
             logger.info(f"Running test: {test_name}, with output path in: {report_path}")
-            result = _self_test(self.proxy, tests=tests, report_path=report_path)
-
-            logger.info(f"Report generating in the file {report_path}")
-            generate_report(result, report_path, force=True)
-            
+            self._self_test_cancelled = False
+            with self.proxy.signals.signal('shorts-detected').muted():
+                result = self._self_test(self.proxy, tests=tests, report_path=report_path)
+      
             if report_path is not None:
+                logger.info(f"Report generating in the file {report_path}")
+                generate_report(result, report_path, force=True)
                 open_html_in_browser(report_path)
+            elif self._self_test_cancelled:
+                logger.info("Self-test was cancelled, skipping report and result dialog.")
             else:
                 plot_data = None
                 if test_name == "test_voltage":
                     plot_data = plot_test_voltage_results(result[test_name], 
-                                                          return_fig=True)
+                                                        return_fig=True)
                 elif test_name == "test_on_board_feedback_calibration":
                     plot_data = plot_test_on_board_feedback_calibration_results(result[test_name], 
                                                                                 return_fig=True)
                 elif test_name == "test_channels":
                     plot_data = plot_test_channels_results(result[test_name], 
-                                                           return_fig=True)
+                                                        return_fig=True)
                             
                 if plot_data is not None:
                     # Pull up the report in a window 
@@ -162,13 +117,76 @@ class DropbotSelfTestsMixinService(HasTraits):
                                                     plot_data=plot_data)
                     GUI.invoke_later(show_results_dialog)
                 else:
-                    # TODO: show the result of short test
+                    shorts_dict = {'Shorts_detected': result[test_name]['shorts'], 
+                                   'Show_window': True}
+                    publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
                     pass
 
             # do whatever else is defined in func
-            func(self, report_generation_directory)
-
+            func(self, report_generation_directory)  
         return _execute_test
+    
+    def _self_test(self, proxy, tests=None, report_path=None):
+        """
+        .. versionadded:: 1.28
+
+        Perform quality control tests.
+
+        Parameters
+        ----------
+        proxy : dropbot.SerialProxy
+            DropBot control board reference.
+        tests : list, optional
+            List of names of test functions to run.
+
+            By default, run all tests.
+
+        Returns
+        -------
+        dict
+            Results from all tests.
+        """
+        total_time = 0
+
+        if tests is None:
+            tests = ALL_TESTS
+        results = {}
+
+        structured_message = {"active_state": True, "current_test_name": None, 
+                            "current_test_id": 0, "total_tests": len(tests), 
+                            "report_path": report_path }
+
+        for i, test_name_i in enumerate(pbar := tqdm(tests)):
+            if self._self_test_cancelled:
+                logger.info("Self-test cancelled by user.")
+                break
+            # description of test that will be processed
+            structured_message["current_test_name"] = test_name_i
+            structured_message["current_test_id"] = i
+            pbar.set_description(test_name_i)
+            
+            # publish the job
+            publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(structured_message))
+            
+            if len(tests) == 1 and test_name_i == "test_shorts":
+                import time
+                time.sleep(0.3)
+
+            # do the job
+            test_func_i = eval(test_name_i)
+            results[test_name_i] = test_func_i(proxy)
+
+            duration_i = results[test_name_i]['duration']
+            logger.debug('%s: %.1f s', test_name_i, duration_i)
+            total_time += duration_i
+
+        structured_message["active_state"] = False
+        structured_message["current_test_name"] = None
+        publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(structured_message))
+
+        logger.info('**Total time: %.1f s**', total_time)
+
+        return results
 
     ######################################## Methods to Expose #############################################
 
