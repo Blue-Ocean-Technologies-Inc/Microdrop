@@ -1,10 +1,11 @@
 from envisage.application import Application
-from device_viewer.application import DeviceViewerApplication
-from device_viewer.plugin import DeviceViewerPlugin
+from microdrop_application.application import MicrodropApplication
+from microdrop_application.plugin import MicrodropPlugin
 from dropbot_status_plot.plugin import DropbotStatusPlotPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_status.plugin import DropbotStatusPlugin
 from manual_controls.plugin import ManualControlsPlugin
+from BlankMicrodropCanvas.application import MicrodropCanvasTaskApplication
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
@@ -14,7 +15,7 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 
 FRONTEND_PLUGINS = [
     TasksPlugin,
-    DeviceViewerPlugin,
+    MicrodropPlugin,
     DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,
@@ -45,6 +46,6 @@ FRONTEND_CONTEXT = [
 
 BACKEND_APPLICATION = Application
 
-FRONTEND_APPLICATION = DeviceViewerApplication
+FRONTEND_APPLICATION = MicrodropApplication
 
-DEFAULT_APPLICATION = DeviceViewerApplication
+DEFAULT_APPLICATION = MicrodropApplication

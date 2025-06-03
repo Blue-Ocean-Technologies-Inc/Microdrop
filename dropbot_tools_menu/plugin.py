@@ -6,7 +6,7 @@ from traits.api import List, observe, Str
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from device_viewer.consts import PKG as device_viewer_PKG
+from microdrop_application.consts import PKG as microdrop_application_PKG
 
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 
@@ -33,7 +33,7 @@ class DropbotToolsMenuPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     #: The task id to contribute task extension view to
-    task_id_to_contribute_view = Str(default_value=f"{device_viewer_PKG}.task")
+    task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
     #### Trait initializers ###################################################
 
@@ -73,6 +73,6 @@ class DropbotToolsMenuPlugin(Plugin):
     def _setup_task_listeners(self):
         """Set up the task listeners once the window is available."""
         for task in self.application.active_window.tasks:
-            if task.id == f"{device_viewer_PKG}.task":
-                # removed the device_viewer_task_method_additions.py file, added below debug statement for sanity check
+            if task.id == f"{microdrop_application_PKG}.task":
+                # removed the microdrop_application_task_method_additions.py file, added below debug statement for sanity check
                 logger.debug(f"Task {task.id} is ready to receive progress updates.")
