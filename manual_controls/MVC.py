@@ -1,24 +1,31 @@
-from traits.api import HasTraits, Range, Bool, provides, Instance
-from traitsui.api import View, Group, Item, BasicEditorFactory, Handler, Controller
+import dramatiq
+from traits.api import HasTraits, Range, Bool, provides, Instance, Str
+from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
-import dramatiq
 
 from microdrop_utils._logger import get_logger
-from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
+from microdrop_utils.dramatiq_controller_base import (IDramatiqControllerBase, 
+                                                      basic_listener_actor_routine, 
+                                                      generate_class_method_dramatiq_listener_actor)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
 from microdrop_utils.decorators import debounce
-from .consts import PKG_name, listener_name
-from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.timestamped_message import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
+
+from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
+
+from .consts import PKG_name, listener_name
 
 
 logger = get_logger(__name__, level="DEBUG")
 
 
 class ToggleEditor(QtEditor):
+    button_style_sheet = Str("QPushButton { background-color: green; font-weight: bold;"
+                             "max-width: 100px; border-radius: 10px; padding: 2px;}")
+    hover_style_sheet = Str("QPushButton:hover { background-color: lightgreen; }")
+    
     def init(self, parent):
         self.control = QPushButton()  # The button is the control that will be displayed in the editor
         self.control.setCheckable(True)
@@ -39,14 +46,11 @@ class ToggleEditor(QtEditor):
         '''
         if self.value:
             self.control.setText("On")
-            self.control.setStyleSheet(
-                "QPushButton { background-color: green; font-weight: bold; max-width: 100px;} QPushButton:hover { background-color: lightgreen; }"
-            )
+            self.control.setStyleSheet(self.button_style_sheet + self.hover_style_sheet)
         else:
             self.control.setText("Off")
-            self.control.setStyleSheet(
-                "QPushButton { background-color: red; font-weight: bold; max-width: 100px;} QPushButton:hover { background-color: lightcoral; }"
-            )
+            self.control.setStyleSheet(self.button_style_sheet.replace("green", "red") + 
+                                       self.hover_style_sheet.replace("lightgreen", "lightcoral"))
 
 
 class ToggleEditorFactory(BasicEditorFactory):
