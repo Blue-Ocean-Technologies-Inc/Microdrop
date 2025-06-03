@@ -107,13 +107,17 @@ def timestamped_value(property_name: str) -> Callable[[F], F]:
 
     Returns:
         Decorated function that will only run the method if the body is more recent than the current value
+
+    To force an update, pass force_update=True as a keyword argument to the method when calling it. You still need to pass a TimestampedMessage as the first argument, but the timestamp will be ignored.
     '''
     def decorator(method: F) -> F:
         @functools.wraps(method)
         def wrapped(self, body: TimestampedMessage,  *args, **kwargs) -> None:
             if body.is_after(getattr(self, property_name)):
                 setattr(self, property_name, body)
-                return method(self, body, *args, **kwargs)
+                return method(self, body) # Note that we don't pass any args or kwargs to the method since we specify the function signature
+            elif kwargs.get('force_update', False):
+                return method(self, body)
             else:
                 logger.info(f"Skipping {property_name} update because it is older than the last update")
         return wrapped

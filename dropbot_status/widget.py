@@ -262,17 +262,15 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     @timestamped_value('connected_message')
     def _on_disconnected_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=False)
-        self.connected_message = body
+        self._on_realtime_mode_updated_triggered(TimestampedMessage("False", None), force_update=True) # Set realtime mode to False when disconnected
 
     @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=True)
-        self.connected_message = body
 
     @timestamped_value('connected_message')
     def _on_setup_success_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=True)
-        self.connected_message = body
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
@@ -286,7 +284,6 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             chip_inserted = False
         logger.debug(f"Chip inserted: {chip_inserted}")
         self.status_label.update_status_icon(chip_inserted=chip_inserted)
-        self.chip_inserted_message = body
 
     @timestamped_value('realtime_mode_message')
     def _on_realtime_mode_updated_triggered(self, body):
