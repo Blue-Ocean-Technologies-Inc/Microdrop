@@ -20,17 +20,24 @@ logger = get_logger(__name__, level="DEBUG")
 
 class ToggleEditor(QtEditor):
     def init(self, parent):
-        self.control = QPushButton()
+        self.control = QPushButton()  # The button is the control that will be displayed in the editor
+        self.control.setCheckable(True)
+        self.control.setChecked(self.value)
         self.control.clicked.connect(self.click_handler)
 
     def click_handler(self):
-        '''Set the trait value to the button state.'''
-        self.ui.handler.realtime_mode_setattr(not self.value)
-    
+        '''Update the trait value to the button state. The value change will also invoke the _setattr method.'''
+        self.value = self.control.isChecked() # Monitor the button state, don't simply invert self.value because it will trigger the _setattr method multiple times
+
     def update_editor(self):
-        '''Override from QtEditor. Run when the trait changes externally to the editor. Default behavior is to update the label to the trait value.'''
-        checked = self.value # Get the trait value
-        if checked:
+        '''
+        Override from QtEditor. Run when the trait changes externally to the editor. 
+        Default behavior is to update the label to the trait value.
+       
+        ATTENTION: For some reason, update_editor is called when the button is debounced, 
+        but it's not called when the button is clicked.
+        '''
+        if self.value:
             self.control.setText("On")
             self.control.setStyleSheet(
                 "QPushButton { background-color: green; font-weight: bold; max-width: 100px;} QPushButton:hover { background-color: lightgreen; }"
@@ -45,6 +52,7 @@ class ToggleEditor(QtEditor):
 class ToggleEditorFactory(BasicEditorFactory):
     # Editor is the class that actually implements your editor
     klass = ToggleEditor
+
 
 class ManualControlModel(HasTraits):
     voltage = Range(
@@ -111,29 +119,32 @@ class ManualControlControl(Controller):
         logger.debug(f"Requesting Frequency change to {value} Hz")
         return super().setattr(info, object, traitname, value)
 
-    @debounce(wait_seconds=0.5)
-    def realtime_mode_setattr(self, value):
-        publish_message(
-            topic=SET_REALTIME_MODE,
-            message=str(value)
-        )
-        logger.debug(f"Set realtime mode to {value}")
-        self.model.realtime_mode = value
-    
+    @debounce(wait_seconds=0.3)
+    def realtime_mode_setattr(self, info, object, traitname, value):
+        if self.model.realtime_mode != value:  # Only send the message if the value has changed
+            publish_message(
+                topic=SET_REALTIME_MODE,
+                message=str(value)
+            )
+            self.model.realtime_mode = value
+            logger.debug(f"Set realtime mode to {value}")
+        
+        # info.realtime_mode.update_editor()  # You can use info to acces the editor from the ui but it's not needed when debouncing because it will call update_editor anyway
+        return super().setattr(info, object, traitname, value)
+  
     def traits_init(self):
         logger.info("Starting ManualControls listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
-    
+   
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
-    
+   
     @timestamped_value('realtime_mode_message')
     def _on_realtime_mode_updated_triggered(self, message):
         logger.debug(f"Realtime mode updated to {message}")
         self.model.realtime_mode = message == "True"
-
 
 
 if __name__ == "__main__":
