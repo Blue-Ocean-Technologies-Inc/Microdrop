@@ -45,9 +45,11 @@ class ToggleEditor(QtEditor):
         but it's not called when the button is clicked.
         '''
         if self.value:
+            self.control.setChecked(True)
             self.control.setText("On")
             self.control.setStyleSheet(self.button_style_sheet + self.hover_style_sheet)
         else:
+            self.control.setChecked(False)
             self.control.setText("Off")
             self.control.setStyleSheet(self.button_style_sheet.replace("green", "red") + 
                                        self.hover_style_sheet.replace("lightgreen", "lightcoral"))
@@ -125,13 +127,13 @@ class ManualControlControl(Controller):
 
     @debounce(wait_seconds=0.3)
     def realtime_mode_setattr(self, info, object, traitname, value):
-        if self.model.realtime_mode != value:  # Only send the message if the value has changed
-            publish_message(
-                topic=SET_REALTIME_MODE,
-                message=str(value)
-            )
-            self.model.realtime_mode = value
-            logger.debug(f"Set realtime mode to {value}")
+        # if self.model.realtime_mode != value:  # Only send the message if the value has changed
+        publish_message(
+            topic=SET_REALTIME_MODE,
+            message=str(value)
+        )
+        logger.debug(f"Set realtime mode to {value}")
+        info.realtime_mode.control.setChecked(value)
         
         # info.realtime_mode.update_editor()  # You can use info to acces the editor from the ui but it's not needed when debouncing because it will call update_editor anyway
         return super().setattr(info, object, traitname, value)
