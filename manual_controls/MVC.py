@@ -35,6 +35,8 @@ class ToggleEditor(QtEditor):
     def click_handler(self):
         '''Update the trait value to the button state. The value change will also invoke the _setattr method.'''
         self.value = self.control.isChecked() # Monitor the button state, don't simply invert self.value because it will trigger the _setattr method multiple times
+        # This assignment and the setChecked() in update_editor keep the control.isChecked synced with the model
+        # In this case, the 'isChecked' property only exists to store state in a place readable by the view, and has no visual effect
 
     def update_editor(self):
         '''
@@ -105,6 +107,7 @@ class ManualControlControl(Controller):
     name = listener_name
 
     realtime_mode_message = Instance(TimestampedMessage)
+    disconnected_message = Instance(TimestampedMessage)
 
     def __init__(self, model):
         super().__init__()
@@ -112,8 +115,10 @@ class ManualControlControl(Controller):
 
     def _realtime_mode_message_default(self):
         return TimestampedMessage("", 0)
+        
+    def _disconnected_message_default(self):
+        return TimestampedMessage("", 0)
 
-    @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, object, traitname, value):
         publish_message(topic=SET_VOLTAGE, message=str(value))
         logger.debug(f"Requesting Voltage change to {value} V")
@@ -125,9 +130,10 @@ class ManualControlControl(Controller):
         logger.debug(f"Requesting Frequency change to {value} Hz")
         return super().setattr(info, object, traitname, value)
 
+    # This callback will not call update_editor() when it is not debounced!
+    # This is likely because update_editor is only called by 'external' trait changes, and the new thread spawned by the decorator appears as such
     @debounce(wait_seconds=0.3)
     def realtime_mode_setattr(self, info, object, traitname, value):
-        # if self.model.realtime_mode != value:  # Only send the message if the value has changed
         publish_message(
             topic=SET_REALTIME_MODE,
             message=str(value)
@@ -151,6 +157,11 @@ class ManualControlControl(Controller):
     def _on_realtime_mode_updated_triggered(self, message):
         logger.debug(f"Realtime mode updated to {message}")
         self.model.realtime_mode = message == "True"
+
+    @timestamped_value('disconnected_message')
+    def _on_disconnected_triggered(self, message):
+        logger.debug(f"Disconnected from dropbot")
+        self.model.realtime_mode = False
 
 
 if __name__ == "__main__":
