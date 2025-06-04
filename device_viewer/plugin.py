@@ -5,7 +5,7 @@ from traits.api import List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, PREFERENCES, PREFERENCES_PANES, TASKS
+from envisage.api import Plugin
 from envisage.ui.tasks.api import TaskFactory
 
 # local imports
@@ -24,33 +24,5 @@ class DeviceViewerPlugin(Plugin):
     name = PKG_name + " Plugin"
 
     #### Contributions to extension points made by this plugin ################
-
-    preferences = List(contributes_to=PREFERENCES)
-    preferences_panes = List(contributes_to=PREFERENCES_PANES)
-    tasks = List(contributes_to=TASKS)
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
-
-    ###########################################################################
-    # Protected interface.
-    ###########################################################################
-
-    def _preferences_default(self):
-        filename = os.path.join(os.path.dirname(__file__), "preferences.ini")
-        return ["file://" + filename]
-
-    def _preferences_panes_default(self):
-        from .preferences import DeviceViewerPreferencesPane
-
-        return [DeviceViewerPreferencesPane]
-
-    def _tasks_default(self):
-        from .task import DeviceViewerTask
-
-        return [
-            TaskFactory(
-                id=f"{PKG}.task",
-                name=f"{PKG_name} Widget",
-                factory=DeviceViewerTask,
-            )
-        ]

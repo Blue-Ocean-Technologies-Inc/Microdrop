@@ -69,34 +69,12 @@ class DeviceViewerTask(Task):
 
     #### 'Task' interface #####################################################
 
-    id = f"{PKG}.task"
-    name = PKG.title().replace("_", " ")
-
-    menu_bar = SMenuBar(
-
-        SMenu(
-            TaskAction(id="open_svg_file", name='&Open SVG File', method='open_file_dialog', accelerator='Ctrl+O'),
-            id="File", name="&File"
-        ),
-
-        SMenu(id="Edit", name="&Edit"),
-
-        SMenu(id="Tools", name="&Tools"),
-
-        SMenu(TaskToggleGroup(), id="View", name="&View")
-    )
-
     def create_central_pane(self):
         """Create the central pane with the device viewer widget with a default view.
         """
 
         return DeviceViewerPane(electrodes=self.electrodes_model)
-
-    def create_dock_panes(self):
-        """Create any dock panes needed for the task."""
-        return [
-        ]
-
+    
     def activated(self):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
@@ -161,60 +139,3 @@ class DeviceViewerTask(Task):
     def _on_setup_success_triggered(self, message):
         if self.electrodes_model:
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
-
-    ##########################################################
-    # Public interface.
-    ##########################################################
-    def show_help(self):
-        """Show the help dialog."""
-        logger.info("Showing help dialog.")
-
-    ##########################################################
-    # Including below function permanently this class, so no need to dynamically attach it in dropbot_tools_menu/plugin.py
-    ##########################################################
-
-    def _on_self_tests_progress_triggered(self, current_message):
-        '''
-        Method adds on to the device viewer task to listen to the self tests topic and react accordingly
-        '''
-        message = json.loads(current_message)
-        active_state = message.get('active_state')
-        current_test_name = message.get('current_test_name')
-        current_test_id = message.get('current_test_id')
-        total_tests = message.get('total_tests')
-        report_path = message.get('report_path')
-        
-        def show_dialog():
-            self.wait_for_test_dialog = WaitForTestDialogAction()
-            if total_tests == 1:
-                test_name = current_test_name.replace("_", " ").capitalize()
-                self.wait_for_test_dialog.perform(self, 
-                                                  test_name=test_name)
-            else:
-                test_name = 'All Tests'
-                self.wait_for_test_dialog.perform(self, 
-                                                  test_name=test_name, 
-                                                  mode="progress_bar")
-            
-        if current_test_id == 0 and current_test_name is not None:
-            # Start child window here when current_test_id == 0
-            # Force the dialog to be shown in the next event loop iteration
-            GUI.invoke_later(show_dialog)
-            
-        logger.info(f"Handler called. test_name = {current_test_name}, Running test = {current_test_id} / {total_tests}")
-
-        # Update the progress bar if in progress mode.
-        if total_tests > 1:
-            if not active_state:
-                percentage = 100
-            else:
-                percentage = int((current_test_id / total_tests) * 100)
-                
-            logger.debug(f"Progress: {percentage}")
-            GUI.invoke_later(self.wait_for_test_dialog.set_progress, 
-                             percentage, 
-                             current_test_name)
-
-        # Close the dialog when the test is done
-        if not active_state:
-            GUI.invoke_later(self.wait_for_test_dialog.close)
