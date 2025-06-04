@@ -106,12 +106,7 @@ class DropbotControllerBase(HasTraits):
             elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
                 requested_method = f"on_{specific_sub_topic}_request"
             
-            # 4. Handle request to cancel self-test
-            elif topic == SELF_TEST_CANCEL:
-                logger.debug(f"Received SELF_TEST_CANCEL signal")
-                self.cancel_self_test()
-
-            # 5. Handle all other requests
+            # 4. Handle all other requests
             elif primary_sub_topic == 'requests':
                 if self.dropbot_connection_active:
                     requested_method = f"on_{specific_sub_topic}_request"

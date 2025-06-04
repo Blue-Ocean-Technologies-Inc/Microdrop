@@ -224,3 +224,10 @@ class DropbotSelfTestsMixinService(HasTraits):
         Method to run the test board scan.
         """
         pass
+
+    def on_self_test_cancel_request(self, message):
+        """
+        Method to cancel the self test
+        """
+        logger.info("Self test cancelled by user.")
+        self.cancel_self_test()
