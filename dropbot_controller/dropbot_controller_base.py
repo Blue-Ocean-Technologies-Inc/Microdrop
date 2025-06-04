@@ -19,7 +19,8 @@ from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEV
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
 from traits.api import HasTraits, provides, Bool
-from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy, CONNECTED, DISCONNECTED
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
+from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from microdrop_utils._logger import get_logger
@@ -63,7 +64,7 @@ class DropbotControllerBase(HasTraits):
                 self.proxy = None
                 self.dropbot_connection_active = False
 
-    def listener_actor_routine(self, message, topic):
+    def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """
         A Dramatiq actor that listens to messages.
 
@@ -72,9 +73,6 @@ class DropbotControllerBase(HasTraits):
         topic (str): The topic of the message.
 
         """
-       
-        # Create a timestamped message object
-        timestamped_message = message
       
         logger.debug(f"DROPBOT BACKEND LISTENER: Received message: '{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
 
@@ -96,7 +94,7 @@ class DropbotControllerBase(HasTraits):
         if head_topic == 'dropbot':
 
             # 2. Handle the connected / disconnected signals
-            if topic in [CONNECTED, DISCONNECTED]:
+            if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
                 requested_method = f"on_{specific_sub_topic}_signal"
             # Handle setup success signal
             elif topic == DROPBOT_SETUP_SUCCESS:
@@ -106,10 +104,7 @@ class DropbotControllerBase(HasTraits):
 
             # 3. Handle specific dropbot requests that would change dropbot connectivity
             elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
-                if not self.dropbot_connection_active:
-                    ## 3.1. Request to activate dropbot connection
-                    requested_method = f"on_{specific_sub_topic}_request"
-                    logger.debug(f"Executing {specific_sub_topic} method as Dropbot is currently disconnected.")
+                requested_method = f"on_{specific_sub_topic}_request"
             
             # 4. Handle request to cancel self-test
             elif topic == SELF_TEST_CANCEL:
@@ -136,7 +131,7 @@ class DropbotControllerBase(HasTraits):
 
             if err_msg:
                 logger.error(
-                    f" {self.listener_name}; Received message: {message} from topic: {topic} Failed to execute due to "
+                    f" {self.listener_name}; Received message: {timestamped_message} from topic: {topic} Failed to execute due to "
                     f"error: {err_msg}")
 
     def traits_init(self):

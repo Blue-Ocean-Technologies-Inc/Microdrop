@@ -11,15 +11,6 @@ DROPBOT_DB3_120_HWID = 'VID:PID=16C0:0483'
 # `OUTPUT_ENABLE_PIN`.
 OUTPUT_ENABLE_PIN = 22
 
-SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
-
-# Topics actor declared by plugin subscribes to
-ACTOR_TOPIC_DICT = {
-    "dropbot_controller_listener": [
-        "dropbot/requests/#",
-        "dropbot/signals/disconnected",
-        SELF_TEST_CANCEL
-    ]}
 
 # Topics published by this plugin
 NO_DROPBOT_AVAILABLE = 'dropbot/signals/warnings/no_dropbot_available'
@@ -31,6 +22,8 @@ CAPACITANCE_UPDATED = 'dropbot/signals/capacitance_updated'
 DROPBOT_SETUP_SUCCESS = 'dropbot/signals/setup_success'
 SELF_TESTS_PROGRESS = 'dropbot/signals/self_tests_progress'
 REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
+DROPBOT_CONNECTED = 'dropbot/signals/connected'
+DROPBOT_DISCONNECTED = 'dropbot/signals/disconnected'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
 START_DEVICE_MONITORING = "dropbot/requests/start_device_monitoring"
@@ -45,6 +38,18 @@ TEST_VOLTAGE = "dropbot/requests/test_voltage"
 TEST_ON_BOARD_FEEDBACK_CALIBRATION = "dropbot/requests/test_on_board_feedback_calibration"
 TEST_SHORTS = "dropbot/requests/test_shorts"
 TEST_CHANNELS = "dropbot/requests/test_channels"
-
-# Chip Check Topic
 CHIP_CHECK = "dropbot/requests/chip_check"
+ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'
+SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
+
+# Dropbot Error Topics
+DROPBOT_ERROR = 'dropbot/error'
+
+# Topics actor declared by plugin subscribes to
+ACTOR_TOPIC_DICT = {
+    "dropbot_controller_listener": [
+        "dropbot/requests/#",
+        DROPBOT_CONNECTED,
+        DROPBOT_DISCONNECTED,
+        SELF_TEST_CANCEL
+    ]}

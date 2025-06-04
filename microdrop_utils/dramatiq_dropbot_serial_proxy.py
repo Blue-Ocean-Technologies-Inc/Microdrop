@@ -1,12 +1,11 @@
 from .dramatiq_pub_sub_helpers import publish_message
 from dropbot.proxy import SerialProxy
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 import base_node_rpc as bnr
 import functools as ft
 
-CONNECTED = "dropbot/signals/connected"
-DISCONNECTED = "dropbot/signals/disconnected"
 
-connection_flags = {"connected": CONNECTED, "disconnected": DISCONNECTED}
+connection_flags = {"connected": DROPBOT_CONNECTED, "disconnected": DROPBOT_DISCONNECTED}
 
 
 class DramatiqDropbotSerialProxy(SerialProxy):

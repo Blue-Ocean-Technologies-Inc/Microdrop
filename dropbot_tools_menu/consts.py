@@ -1,19 +1,16 @@
-from dropbot_controller.consts import SELF_TESTS_PROGRESS, DROPBOT_SETUP_SUCCESS
-from microdrop_utils.dramatiq_dropbot_serial_proxy import DISCONNECTED
+from dropbot_controller.consts import SELF_TESTS_PROGRESS, ELECTRODES_STATE_CHANGE, DROPBOT_SETUP_SUCCESS, DROPBOT_DISCONNECTED
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-from device_viewer.consts import PKG as device_viewer_package
+from microdrop_application.consts import PKG as microdrop_application_package
 
 # Topics this plugin wants some actors to subscribe to:
 ACTOR_TOPIC_DICT = {
-    f"{device_viewer_package}_listener": [SELF_TESTS_PROGRESS],
+    f"{microdrop_application_package}_listener": [ SELF_TESTS_PROGRESS], # This adds the listener to the microdrop application task, not itself
     f"{PKG}_listener": [ 
                                  DROPBOT_SETUP_SUCCESS,
-                                 DISCONNECTED
+                                 DROPBOT_DISCONNECTED,
+                                 SELF_TESTS_PROGRESS
     ]}
 
-
-# Topics emitted by this plugin
-ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'

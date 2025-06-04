@@ -1,5 +1,6 @@
 import functools
 import json
+import traceback
 
 import dropbot
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE
@@ -8,14 +9,15 @@ from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy, connection_flags
 from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
-    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_SETUP_SUCCESS
+from ..consts import DROPBOT_SETUP_SUCCESS, NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
+    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -34,6 +36,13 @@ class DropbotMonitorMixinService(HasTraits):
                                  desc="An AP scheduler job to periodically look for dropbot connected ports."
                                  )
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
+    _no_power = Bool(False) 
+
+    def publish_status(self):
+        if self.dropbot_connection_active:
+            publish_message(topic=DROPBOT_SETUP_SUCCESS, message=f'dropbot_setup_success')
+        
+        self.on_chip_check_request(message="")
 
     ######################################## Methods to Expose #############################################
     def on_start_device_monitoring_request(self, hwids_to_check):
@@ -41,6 +50,10 @@ class DropbotMonitorMixinService(HasTraits):
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
         """
+        if self.dropbot_connection_active:
+            self.publish_status()
+            return
+
         if not hwids_to_check:
             hwids_to_check = [DROPBOT_DB3_120_HWID]
 
@@ -75,6 +88,7 @@ class DropbotMonitorMixinService(HasTraits):
             logger.info(f"Detected shorts: {shorts_dict}")
             publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
 
+    @debounce(wait_seconds=0.5)
     def on_chip_check_request(self, message):
         if self.proxy is not None:
             chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
@@ -82,6 +96,8 @@ class DropbotMonitorMixinService(HasTraits):
             publish_message(topic=CHIP_INSERTED, message=f'{chip_check_result}')
     
     def on_retry_connection_request(self, message):
+        if self.dropbot_connection_active:
+            return
         logger.info("Attempting to retry connecting with a dropbot")
         self.monitor_scheduler.resume()
 
@@ -160,25 +176,24 @@ class DropbotMonitorMixinService(HasTraits):
                 # once dropbot setup, set connection to active
                 self.dropbot_connection_active = True
 
-                publish_message(topic=DROPBOT_SETUP_SUCCESS, message="")
-                self.on_chip_check_request(message="")
+                self.publish_status()
                 
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
-                err = e
+                err = f'{traceback.format_exc()}'
                 if self.proxy is not None:
                     self.proxy.terminate()
 
             except dropbot.proxy.NoPower as e:
                 self._no_power = True
                 publish_message(topic=NO_POWER, message=str(e))
-                err = e
+                err = f'{traceback.format_exc()}'
                 if self.proxy is not None:
                     self.proxy.terminate()
 
             except Exception as e:
-                err = e
-                publish_message(topic="dropbot/error", message=str(e))
+                err = f'{traceback.format_exc()}'
+                publish_message(topic=DROPBOT_ERROR, message=str(e))
                 if self.proxy is not None:
                     self.proxy.terminate()
 

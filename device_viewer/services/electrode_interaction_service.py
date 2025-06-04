@@ -4,7 +4,7 @@ from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.electrodes import Electrodes
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from device_viewer.consts import ELECTRODES_STATE_CHANGE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 
 logger = get_logger(__name__)
 

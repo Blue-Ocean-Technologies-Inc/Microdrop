@@ -6,7 +6,7 @@ from traits.api import List, observe, Str, Bool
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from device_viewer.consts import PKG as device_viewer_PKG
+from microdrop_application.consts import PKG as microdrop_application_PKG
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 
@@ -38,7 +38,7 @@ class DropbotToolsMenuPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     #: The task id to contribute task extension view to
-    task_id_to_contribute_view = Str(default_value=f"{device_viewer_PKG}.task")
+    task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
     dropbot_connected = Bool(False)
 

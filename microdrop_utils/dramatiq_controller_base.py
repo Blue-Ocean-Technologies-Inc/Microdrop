@@ -10,10 +10,12 @@ from dramatiq import Actor
 from dramatiq.middleware import CurrentMessage
 from traits.api import Instance, Str, provides, HasTraits, Callable
 
-from . import logger
+from microdrop_utils._logger import get_logger
+
 from .i_dramatiq_controller_base import IDramatiqControllerBase
 from .timestamped_message import TimestampedMessage
 
+logger = get_logger(__name__, level="DEBUG")
 
 @provides(IDramatiqControllerBase)
 class DramatiqControllerBase(HasTraits):
@@ -94,19 +96,24 @@ class DramatiqControllerBase(HasTraits):
             actor_name=self.listener_name,
             queue_name=self.listener_queue
         )
-        def create_listener_actor(message: str, topic: str) -> None:
+        def create_listener_actor(message: str, topic: str, timestamp: float | None = None) -> None:
             """Handle incoming Dramatiq messages.
 
             Args:
                 message: Content of the received message
                 topic: Topic/routing key of the message
+                timestamp: Timestamp of the message. If None, the timestamp is extracted from the current message.
             """
-
-            msg_proxy = CurrentMessage.get_current_message()
-            msg_timestamp = (
-                msg_proxy._message.message_timestamp if msg_proxy is not None
-                else None
-            )
+            if timestamp is None: # This is the message *to* the message_router
+                msg_proxy = CurrentMessage.get_current_message()
+                msg_timestamp = (
+                    msg_proxy._message.message_timestamp if msg_proxy is not None
+                    else None
+                )
+                logger.debug(f"Message going to message_router: {message} at {msg_timestamp}")
+            else: # This is the message *from* the message_router (since message_router is the only publish_message that adds a timestamp)
+                msg_timestamp = timestamp
+                logger.debug(f"Message received from message_router: {message} at {msg_timestamp}")
 
             timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
                 content=message,
@@ -149,7 +156,7 @@ def generate_class_method_dramatiq_listener_actor(
 
 def basic_listener_actor_routine(
     parent_obj: object,
-    message: Any,
+    timestamped_message: TimestampedMessage,    
     topic: str,
     handler_name_pattern: str = "_on_{topic}_triggered"
 ) -> None:
@@ -163,7 +170,7 @@ def basic_listener_actor_routine(
     Args:
         parent_obj: Object expected to have a handler method for the topic.
                    Should have a 'name' attribute used for logging.
-        message: Message or data payload to be processed by handler method.
+        timestamped_message: TimestampedMessage object containing the message and timestamp.
         topic: Topic string from which handler method name is derived.
                Expected to be a string with segments separated by "/".
         handler_name_pattern: Format string defining handler method's name.
@@ -174,16 +181,7 @@ def basic_listener_actor_routine(
         For a topic "devices/sensor", the computed method name will be
         "_on_sensor_triggered".
     """
-    msg_proxy = CurrentMessage.get_current_message()
-    msg_timestamp = (
-        msg_proxy._message.message_timestamp if msg_proxy is not None
-        else None
-    )
-
-    timestamped_message = TimestampedMessage(
-        content=message,
-        timestamp=msg_timestamp
-    )
+    
 
     logger.info(
         f"{parent_obj.name}: Received message: '{timestamped_message}' "

@@ -3,6 +3,11 @@ import functools
 import threading
 from typing import Any, Callable, TypeVar, cast
 
+from microdrop_utils.timestamped_message import TimestampedMessage
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
+
 T = TypeVar('T')
 F = TypeVar('F', bound=Callable[..., Any])
 
@@ -88,4 +93,32 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
                 task = asyncio.create_task(waiter())
 
         return cast(F, wrapped)
+    return decorator
+
+
+def timestamped_value(property_name: str) -> Callable[[F], F]:
+    '''
+    Decorator that will only run the method if the body is more recent than the current value. Should be used on callbacks of the form
+    
+    def callback(self, body: TimestampedMessage, *args, **kwargs)
+
+    Args:
+        property_name: The class attribute that stores the TimestampedMessage to be compared with the body and updated
+
+    Returns:
+        Decorated function that will only run the method if the body is more recent than the current value
+
+    To force an update, pass force_update=True as a keyword argument to the method when calling it. You still need to pass a TimestampedMessage as the first argument, but the timestamp will be ignored.
+    '''
+    def decorator(method: F) -> F:
+        @functools.wraps(method)
+        def wrapped(self, body: TimestampedMessage,  *args, **kwargs) -> None:
+            if body.is_after(getattr(self, property_name)):
+                setattr(self, property_name, body)
+                return method(self, body) # Note that we don't pass any args or kwargs to the method since we specify the function signature
+            elif kwargs.get('force_update', False):
+                return method(self, body)
+            else:
+                logger.info(f"Skipping {property_name} update because it is older than the last update")
+        return wrapped
     return decorator
