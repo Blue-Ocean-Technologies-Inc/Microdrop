@@ -12,7 +12,7 @@ from traits.api import Instance, Str, provides
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 # Local imports.
 from .models.electrodes import Electrodes
-from .views.device_view_pane import DeviceViewerPane
+from .views.device_view_pane import DeviceViewerDockPane
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from .services.electrode_interaction_service import ElectrodeInteractionControllerService
@@ -73,7 +73,7 @@ class DeviceViewerTask(Task):
         """Create the central pane with the device viewer widget with a default view.
         """
 
-        return DeviceViewerPane(electrodes=self.electrodes_model)
+        return DeviceViewerDockPane(electrodes=self.electrodes_model)
     
     def activated(self):
         """Called when the task is activated."""

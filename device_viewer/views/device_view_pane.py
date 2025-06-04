@@ -1,6 +1,6 @@
 # enthought imports
 from traits.api import Instance
-from pyface.tasks.api import TaskPane
+from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtCore import Qt
@@ -11,22 +11,38 @@ from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from microdrop_utils._logger import get_logger
+from device_viewer.models.electrodes import Electrodes
+from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
+from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+import json
 
 logger = get_logger(__name__)
 
 
-class DeviceViewerPane(TaskPane):
+class DeviceViewerDockPane(DockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
     """
 
     # ----------- Device View Pane traits ---------------------
 
+    electrodes_model = Instance(Electrodes)
+
+    id = PKG + ".pane"
+    name = PKG_name + " Dock Pane"
+
     scene = Instance(QGraphicsScene)
     view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
     # --------- Device View trait initializers -------------
+    def _electrodes_model_default(self):
+        electrodes = Electrodes()
+        electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+        return electrodes
+
     def _scene_default(self):
         return ElectrodeScene()
 
@@ -36,6 +52,26 @@ class DeviceViewerPane(TaskPane):
         view.setViewport(QOpenGLWidget())
 
         return view
+    
+    # --------- Trait change handlers ----------------------------
+    def _electrodes_changed(self, new_model):
+        """Handle when the electrodes model changes."""
+
+        # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
+        self.set_view_from_model(new_model)
+        logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
+
+        # Initialize the electrode mouse interaction service with the new model and layer
+        interaction_service = ElectrodeInteractionControllerService(
+            electrodes_model=new_model,
+            electrode_view_layer=self.current_electrode_layer
+        )
+
+        # Update the scene with the interaction service
+        self.scene.interaction_service = interaction_service
+
+        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Device View class methods -------------------------
     def remove_current_layer(self):
@@ -47,10 +83,16 @@ class DeviceViewerPane(TaskPane):
             self.scene.clear()
             self.scene.update()
 
-    # ITaskPane interface
-    def create(self, parent):
-        self.control = self.view
-        self.control.setParent(parent)
+    def create_contents(self, parent):
+        """Called when the task is activated."""
+        logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
+        _electrodes = Electrodes()
+        _electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+        self.electrodes_model = _electrodes
+
+        self.view.setParent(parent)
+        self.set_view_from_model(self.electrodes_model)
+        return self.view
 
     def set_view_from_model(self, new_model):
         self.remove_current_layer()

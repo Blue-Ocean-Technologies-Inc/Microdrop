@@ -1,15 +1,20 @@
 # Standard library imports.
 import os.path
 
-from traits.api import List
+from traits.api import List, Str
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin
-from envisage.ui.tasks.api import TaskFactory
+from envisage.api import Plugin, TASK_EXTENSIONS
+from envisage.ui.tasks.api import TaskFactory, TaskExtension
+from pyface.action.schema.schema_addition import SchemaAddition
 
 # local imports
+from microdrop_application.consts import PKG as microdrop_application_PKG
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class DeviceViewerPlugin(Plugin):
@@ -26,3 +31,26 @@ class DeviceViewerPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
+
+    contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+
+    def _contributed_task_extensions_default(self):
+        from .views.device_view_pane import DeviceViewerDockPane
+        from .menus import device_viewer_menu_factory
+
+        return [ 
+            TaskExtension(
+                task_id=self.task_id_to_contribute_view,
+                dock_pane_factories=[DeviceViewerDockPane],
+                actions=[
+                    SchemaAddition(
+                        factory=device_viewer_menu_factory,
+                        before="TaskToggleGroup",
+                        path='MenuBar/View',
+                    )
+
+                ]
+            )
+        ]

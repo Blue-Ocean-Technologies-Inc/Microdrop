@@ -12,6 +12,7 @@ from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
+from device_viewer.plugin import DeviceViewerPlugin
 
 FRONTEND_PLUGINS = [
     TasksPlugin,
@@ -20,6 +21,7 @@ FRONTEND_PLUGINS = [
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,
     ManualControlsPlugin,
+    DeviceViewerPlugin,
 ]
 
 BACKEND_PLUGINS = [

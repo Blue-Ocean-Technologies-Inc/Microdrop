@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
-LOGLEVEL = "INFO"
+LOGLEVEL = "DEBUG"
 
 # ANSI color codes
 COLORS = {
