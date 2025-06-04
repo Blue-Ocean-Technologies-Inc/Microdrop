@@ -1,48 +1,42 @@
-import os
 from pathlib import Path
 
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSplitter, QSizePolicy
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
 from pyface.tasks.task_pane import TaskPane
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap
 
 
-class MicrodropPane(TaskPane):
-    id = "white_canvas.pane"
-    name = "White Canvas Pane"
-
+class MicrodropCentralCanvas(TaskPane):
+    id = "microdrop.central_canvas"
+    name = "Microdrop Canvas"
+    
     def create(self, parent):
-        widget = QWidget(parent)
-        widget.setStyleSheet("background-color: white;")
-        
-        main_with_sidebar = create_with_sidebar(central_widget=widget)
-        self.control = main_with_sidebar
+        widget = MicrodropSidebar(parent)
+        self.control = widget
 
 
 class MicrodropSidebar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAutoFillBackground(True)
-        palette = self.palette()
-        palette.setColor(self.backgroundRole(), '#575757')
-        self.setPalette(palette)
-        self.setStyleSheet("""background-color: none; QLabel, 
-                           QPushButton { background: transparent; }
-        """)
+        
+        self.setMinimumWidth(80)
+        self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
+        self.setStyleSheet("background: transparent;")
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(20)
+        layout.setContentsMargins(0, 10, 0, 10) # add some padding to the top and bottom
+        layout.setSpacing(15) # add some spacing between the items
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter) # Align the items to the top and center
 
+        # Logo
         logo_label = QLabel()
-        logo_label.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         pixmap = QPixmap(Path(__file__).parents[1]/ "resources" / "scibots-icon.png")
         if not pixmap.isNull():
             logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
         logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        layout.addWidget(logo_label, alignment=Qt.AlignHCenter | Qt.AlignTop)
-        layout.addSpacing(10)
+        layout.addWidget(logo_label)
 
+        # Hamburger button
         hamburger_btn = QPushButton()
         hamburger_btn.setFixedSize(QSize(40, 40))
         hamburger_btn.setText("☰")
@@ -50,27 +44,4 @@ class MicrodropSidebar(QWidget):
         hamburger_btn.setCursor(Qt.PointingHandCursor)
         layout.addWidget(hamburger_btn, alignment=Qt.AlignHCenter)
 
-        layout.addStretch(1) # Spacer to push items to top
-
         self.setLayout(layout)
-        self.setMinimumWidth(80)
-        self.setMaximumWidth(200)
-        self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
-
-
-def create_with_sidebar(central_widget: QWidget):
-    """
-    Returns a QSplitter with a sidebar on the left and the given central widget on the right.
-    You can use this as your main window's central widget.
-    """
-    splitter = QSplitter(Qt.Horizontal)
-    sidebar = MicrodropSidebar()
-    splitter.addWidget(sidebar)
-    splitter.addWidget(central_widget)
-    splitter.setSizes([80, 600])
-    splitter.setCollapsible(0, False)
-    splitter.setCollapsible(1, False)
-    sidebar.setMinimumWidth(80)
-    sidebar.setMaximumWidth(200)
-    sidebar.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
-    return splitter
