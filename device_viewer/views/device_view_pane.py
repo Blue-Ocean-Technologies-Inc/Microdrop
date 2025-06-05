@@ -1,6 +1,7 @@
 # enthought imports
 import dramatiq
 from traits.api import Instance
+from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
@@ -42,7 +43,6 @@ class DeviceViewerDockPane(DockPane):
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
-    name = listener_name
     # --------- Dramatiq Init ------------------------------
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
@@ -118,3 +118,17 @@ class DeviceViewerDockPane(DockPane):
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
         self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def open_file_dialog(self):
+        """Open a file dialog to select an SVG file and set it in the central pane."""
+        dialog = FileDialog(action='open', wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
+        if dialog.open() == OK:
+            svg_file = dialog.path
+            logger.info(f"Selected SVG file: {svg_file}")
+
+            new_model = Electrodes()
+            new_model.set_electrodes_from_svg_file(svg_file)
+            logger.debug(f"Created electrodes from SVG file: {new_model.svg_model.filename}")
+
+            self.electrodes_model = new_model
+            logger.info(f"Electrodes model set to {new_model}")

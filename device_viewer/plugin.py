@@ -2,6 +2,7 @@
 import os.path
 
 from traits.api import List, Str
+from device_viewer.menus import open_file_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
@@ -38,7 +39,6 @@ class DeviceViewerPlugin(Plugin):
 
     def _contributed_task_extensions_default(self):
         from .views.device_view_pane import DeviceViewerDockPane
-        from .menus import device_viewer_menu_factory
 
         return [ 
             TaskExtension(
@@ -46,9 +46,8 @@ class DeviceViewerPlugin(Plugin):
                 dock_pane_factories=[DeviceViewerDockPane],
                 actions=[
                     SchemaAddition(
-                        factory=device_viewer_menu_factory,
-                        before="TaskToggleGroup",
-                        path='MenuBar/View',
+                        factory=open_file_dialogue_menu_factory,
+                        path='MenuBar/File'
                     )
 
                 ]
