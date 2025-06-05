@@ -1,5 +1,5 @@
 
-def set_status_bar_message(text: str, window = None, timeout = 2000):
+def set_status_bar_message(text: str, window = None, timeout = 3000):
     if window is not None:
         if hasattr(window, "control"):
             window = window.control

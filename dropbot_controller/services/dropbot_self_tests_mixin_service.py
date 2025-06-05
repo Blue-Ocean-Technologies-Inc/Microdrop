@@ -182,6 +182,7 @@ class DropbotSelfTestsMixinService(HasTraits):
 
         structured_message["active_state"] = False
         structured_message["current_test_name"] = None
+        structured_message["cancelled"] = self._self_test_cancelled
         publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(structured_message))
 
         logger.info('**Total time: %.1f s**', total_time)

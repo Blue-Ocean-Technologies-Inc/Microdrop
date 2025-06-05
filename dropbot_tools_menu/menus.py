@@ -7,6 +7,7 @@ from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.status_bar_utils import set_status_bar_message
 
 from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING
@@ -40,9 +41,15 @@ class RunTests(DramatiqMessagePublishAction):
         return None
 
     def perform(self, event=None):
-        dropbot_connected = self.plugin.dropbot_connected
+        window = getattr(event, "task", None)
+        if window is not None and hasattr(window, "window"):
+            window = window.window
+        else:
+            window = None
 
+        dropbot_connected = self.plugin.dropbot_connected
         if not dropbot_connected:
+            set_status_bar_message("Warning: Cannot start test, Dropbot is disconnected", window)
             disconnected_dialog = DropbotDisconnectedDialogAction()
             return disconnected_dialog.perform(event)
 
@@ -51,9 +58,12 @@ class RunTests(DramatiqMessagePublishAction):
       
         # only show the intro dialog for the tests that require the test board
         if self.topic != TEST_VOLTAGE and self.topic != TEST_ON_BOARD_FEEDBACK_CALIBRATION:
+            set_status_bar_message("Click OK to continue", window)
             if self_test_intro_dialog.perform(event):
+                set_status_bar_message("Running self tests...", window, 15000)
                 super().perform(event)
         else:
+            set_status_bar_message("Running self tests...", window, 30000)
             super().perform(event)
 
 
