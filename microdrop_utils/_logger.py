@@ -48,19 +48,40 @@ LEVELS = {
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
-    "CRITICAL": logging.CRITICAL
+    "CRITICAL": logging.CRITICAL,
+    "OFF": logging.CRITICAL + 10
 }
 
 
+def is_only_enabled():
+    return len(logging_config.get('only', []).items()) > 0
+
+def apply_only():
+    ROOT_LOGGER.setLevel(LEVELS['OFF']) # Turn off root logger
+    for name, logger in logging.Logger.manager.loggerDict.items(): # Turn off all named loggers
+        if isinstance(logger, logging.Logger): # Some entries are placeholders/uninitialized
+            logger.setLevel(LEVELS['OFF'])
+
+    for logger_name, logger_level in list(logging_config.get('levels', {}).items()) + list(logging_config.get('ignore_default_level', {}).items()): # Turn off all loggers named in json (except only)
+        logging.getLogger(logger_name).setLevel(LEVELS['OFF']) # We want to set the level to the minimum of the logger level and the root level
+
+    for logger_name, logger_level in logging_config.get('only', {}).items():
+        logging.getLogger(logger_name).setLevel(LEVELS[logger_level])
+
+
 ROOT_LOGGER = logging.getLogger()
-ROOT_LOGGER.setLevel(LEVELS[LOGLEVEL])
 
 # Set logging levels for config
-for logger_name, logger_level in logging_config.get('levels', {}).items():
-    logging.getLogger(logger_name).setLevel(min(LEVELS[logger_level], LEVELS[LOGLEVEL])) # We want to set the level to the minimum of the logger level and the root level
+if not is_only_enabled():
+    ROOT_LOGGER.setLevel(LEVELS[LOGLEVEL])
 
-for logger_name, logger_level in logging_config.get('ignore_default_level', {}).items():
-    logging.getLogger(logger_name).setLevel(LEVELS[logger_level])
+    for logger_name, logger_level in logging_config.get('levels', {}).items():
+        logging.getLogger(logger_name).setLevel(min(LEVELS[logger_level], LEVELS[LOGLEVEL])) # We want to set the level to the minimum of the logger level and the root level
+
+    for logger_name, logger_level in logging_config.get('ignore_default_level', {}).items():
+        logging.getLogger(logger_name).setLevel(LEVELS[logger_level])
+else:
+    apply_only()
 
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
@@ -112,5 +133,8 @@ def get_logger(name, log_file_path=LOGFILE):
     ROOT_LOGGER.handlers = []  # Clear existing handlers
     ROOT_LOGGER.addHandler(file_handler)
     ROOT_LOGGER.addHandler(console_handler)
+
+    if is_only_enabled(): # We keep calling this to silence all new logger created by imports/libraries since the last time get_logger was called
+        apply_only()
 
     return logging.getLogger(name)
