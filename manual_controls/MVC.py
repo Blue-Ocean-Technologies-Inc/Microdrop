@@ -76,7 +76,7 @@ class ManualControlModel(HasTraits):
 
 ManualControlView = View(
     Group(
-        Item(
+Group(        Item(
             name='voltage',
             label='Voltage (V)',
             resizable=True,
@@ -92,7 +92,7 @@ ManualControlView = View(
             style='custom',
             resizable=True,
             editor=ToggleEditorFactory(),
-        ),
+        ),), show_border=True, padding=10,
     ),
     title=PKG_name,
     resizable=True,
