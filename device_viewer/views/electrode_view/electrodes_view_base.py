@@ -91,7 +91,7 @@ class ElectrodeView(QGraphicsPathItem):
         self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
 
         # Make the electrode selectable and focusable
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
 
     #################################################################################
