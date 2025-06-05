@@ -1,4 +1,5 @@
 # enthought imports
+import dramatiq
 from traits.api import Instance
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
@@ -9,6 +10,7 @@ from pyface.qt.QtCore import Qt
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
+from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from microdrop_utils._logger import get_logger
 from device_viewer.models.electrodes import Electrodes
@@ -16,6 +18,7 @@ from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from ..consts import listener_name
 import json
 
 logger = get_logger(__name__)
@@ -37,7 +40,20 @@ class DeviceViewerDockPane(DockPane):
     view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
+    dramatiq_listener_actor = Instance(dramatiq.Actor)
+
+    name = listener_name
+    # --------- Dramatiq Init ------------------------------
+    def listener_actor_routine(self, message, topic):
+        return basic_listener_actor_routine(self, message, topic)
+
     # --------- Device View trait initializers -------------
+    def traits_init(self):
+        logger.info("Starting ManualControls listener")
+        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=listener_name,
+            class_method=self.listener_actor_routine)
+
     def _electrodes_model_default(self):
         electrodes = Electrodes()
         electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
@@ -72,6 +88,11 @@ class DeviceViewerDockPane(DockPane):
 
         logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
+
+    # ------- Dramatiq handlers ---------------------------
+    def _on_setup_success_triggered(self, message):
+        if self.electrodes_model:
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Device View class methods -------------------------
     def remove_current_layer(self):
