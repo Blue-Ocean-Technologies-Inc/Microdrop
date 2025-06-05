@@ -25,7 +25,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction, ResultsDialogAction
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 DEFAULT_SVG_FILE = f"{os.path.dirname(__file__)}{os.sep}2x3device.svg"
 
 listener_name = f"{PKG}_listener"

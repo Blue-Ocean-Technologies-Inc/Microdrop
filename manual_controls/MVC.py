@@ -18,7 +18,7 @@ from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_M
 from .consts import PKG_name, listener_name
 
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 class ToggleEditor(QtEditor):

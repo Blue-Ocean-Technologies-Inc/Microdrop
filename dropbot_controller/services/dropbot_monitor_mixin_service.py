@@ -19,10 +19,7 @@ from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinSer
 from ..consts import DROPBOT_SETUP_SUCCESS, NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
     OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED
 
-logger = get_logger(__name__, level="DEBUG")
-
-# silence all APScheduler job-exception logs
-get_logger('apscheduler.executors.default').setLevel(level="WARNING")
+logger = get_logger(__name__)
 
 @provides(IDropbotControlMixinService)
 class DropbotMonitorMixinService(HasTraits):

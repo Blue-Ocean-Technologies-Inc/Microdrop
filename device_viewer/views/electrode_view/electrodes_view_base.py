@@ -13,7 +13,7 @@ from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphic
 from .default_settings import default_colors, default_alphas
 from device_viewer.models.electrodes import Electrode
 
-logger = get_logger(__name__, level='DEBUG')
+logger = get_logger(__name__)
 
 
 # electrode connection lines

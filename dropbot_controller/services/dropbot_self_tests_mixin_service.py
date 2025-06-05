@@ -28,7 +28,7 @@ from pyface.api import GUI
 
 from dropbot_tools_menu.self_test_dialogs import ResultsDialogAction
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 def get_timestamped_results_path(test_name: str, path: [str, Path]) -> Path:

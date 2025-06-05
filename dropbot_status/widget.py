@@ -20,7 +20,7 @@ from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
 from traits.api import HasTraits, Range, Bool
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 red = '#f15854'
 yellow = '#decf3f'

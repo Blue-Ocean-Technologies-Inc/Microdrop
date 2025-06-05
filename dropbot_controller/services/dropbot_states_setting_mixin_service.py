@@ -8,7 +8,7 @@ from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinSer
 from ..consts import REALTIME_MODE_UPDATED
 
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 @provides(IDropbotControlMixinService)

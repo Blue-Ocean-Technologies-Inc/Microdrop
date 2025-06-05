@@ -1,10 +1,19 @@
 import os
 import time
+import json
 import logging
 from pathlib import Path
 
+
+logging_config = {}
+# Load logging configuration from logging.json
+with open('logging.json', 'r') as f:
+    logging_config = json.load(f)
+
+# Set default logging level
+LOGLEVEL = logging_config.get('default', 'INFO')
+
 LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
-LOGLEVEL = "DEBUG"
 
 # ANSI color codes
 COLORS = {
@@ -46,6 +55,13 @@ LEVELS = {
 ROOT_LOGGER = logging.getLogger()
 ROOT_LOGGER.setLevel(LEVELS[LOGLEVEL])
 
+# Set logging levels for config
+for logger_name, logger_level in logging_config.get('levels', {}).items():
+    logging.getLogger(logger_name).setLevel(min(LEVELS[logger_level], LEVELS[LOGLEVEL])) # We want to set the level to the minimum of the logger level and the root level
+
+for logger_name, logger_level in logging_config.get('ignore_default_level', {}).items():
+    logging.getLogger(logger_name).setLevel(LEVELS[logger_level])
+
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
         super().__init__(fmt, datefmt)
@@ -64,7 +80,12 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
-def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
+def get_logger(name, log_file_path=LOGFILE):
+    # Get the logging level for the logger from the config
+    logger_level = logging_config.get('levels', {}).get(name, LOGLEVEL)
+
+    # Set the level for the logger
+    ROOT_LOGGER.setLevel(LEVELS[logger_level])
 
     Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
     
@@ -92,8 +113,4 @@ def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
     ROOT_LOGGER.addHandler(file_handler)
     ROOT_LOGGER.addHandler(console_handler)
 
-    # Get the named logger
-    logger = logging.getLogger(name)
-    logger.setLevel(LEVELS[level])
-
-    return logger
+    return logging.getLogger(name)

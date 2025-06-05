@@ -5,7 +5,7 @@ from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, level='DEBUG')
+logger = get_logger(__name__)
 
 
 class ElectrodeScene(QGraphicsScene):

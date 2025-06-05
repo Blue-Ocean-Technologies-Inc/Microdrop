@@ -21,7 +21,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction, ResultsDialogAction
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 listener_name = f"{PKG}_listener"
 

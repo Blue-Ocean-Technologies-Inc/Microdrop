@@ -17,7 +17,7 @@ from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
 from microdrop_utils._logger import get_logger
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 class MicrodropApplication(TasksApplication):

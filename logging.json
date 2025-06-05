@@ -1,0 +1,16 @@
+{
+    "default": "INFO",
+    "levels": {
+        "dropbot_controller.dropbot_controller_base": "DEBUG",
+        "dropbot_controller.services.dropbot_monitor_mixin_service": "DEBUG",
+        "dropbot_controller.services.dropbot_self_tests_mixin_service": "DEBUG",
+        "dropbot_controller.services.dropbot_states_setting_mixin_service": "DEBUG",
+        "microdrop_application.application": "DEBUG",
+        "microdrop_application.task": "DEBUG",
+        "microdrop_utils.dramatiq_controller_base": "DEBUG"
+    },
+    "ignore_default_level": {
+        "apscheduler.executors.default": "WARNING",
+        "apscheduler.scheduler": "WARNING"
+    }
+}

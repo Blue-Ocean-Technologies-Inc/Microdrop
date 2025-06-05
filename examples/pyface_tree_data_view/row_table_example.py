@@ -147,7 +147,6 @@ class MainWindow(ApplicationWindow):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
 
     # Create the GUI (this does NOT start the GUI event loop).
     gui = GUI()
