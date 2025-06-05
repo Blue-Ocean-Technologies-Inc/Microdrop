@@ -16,6 +16,8 @@ from traits.api import Bool, Instance, List, Property, observe, Directory
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
+from PySide6.QtWidgets import QStatusBar
+
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, level="DEBUG")
 
@@ -123,3 +125,16 @@ class MicrodropApplication(TasksApplication):
             self.preferences_helper.always_use_default_layout = True
             
             return super().start()
+
+    # status bar at the bottom of the window 
+    @observe('windows:items')
+    def _on_windows_updated(self, event):
+        for window in event.added:
+            if hasattr(window, "control") and window.control is not None:
+                if not hasattr(window.control, "_statusbar"):
+                    status_bar = QStatusBar(window.control)
+                    status_bar.setFixedHeight(30)
+                    status_bar.showMessage("Ready", 10000)
+
+                    window.control.setStatusBar(status_bar)
+                    window.control._statusbar = status_bar
