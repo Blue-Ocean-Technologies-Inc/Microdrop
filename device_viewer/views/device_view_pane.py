@@ -54,7 +54,7 @@ class DeviceViewerDockPane(DockPane):
         return view
     
     # --------- Trait change handlers ----------------------------
-    def _electrodes_changed(self, new_model):
+    def _electrodes_model_changed(self, new_model):
         """Handle when the electrodes model changes."""
 
         # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
@@ -86,12 +86,9 @@ class DeviceViewerDockPane(DockPane):
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
-        _electrodes = Electrodes()
-        _electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
-        self.electrodes_model = _electrodes
+        self._electrodes_model_changed(self.electrodes_model)
 
         self.view.setParent(parent)
-        self.set_view_from_model(self.electrodes_model)
         return self.view
 
     def set_view_from_model(self, new_model):
