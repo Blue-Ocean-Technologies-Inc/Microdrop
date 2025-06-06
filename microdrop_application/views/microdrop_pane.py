@@ -58,21 +58,21 @@ class MicrodropSidebar(QWidget):
         # Menu buttons
         self.menu_buttons = []
         menu_options = [
-            ("\t\tFile", "file.png"),
-            ("\t\tTools", "tools.png"),
-            ("\t\tHelp", "help.png"),
-            ("\t\tInfo", "info.png"),
-            ("\t\tDiagnostics", "diagnostics.png"),
-            ("\t\tPlugins", "plugins.png"),
-            ("\t\tProtocol\n\t\tRepository", "protocol_repository.png"),
-            ("\t\tExit", "exit.png"),
+            ("File", "file.png"),
+            ("Tools", "tools.png"),
+            ("Help", "help.png"),
+            ("Info", "info.png"),
+            ("Diagnostics", "diagnostics.png"),
+            ("Plugins", "plugins.png"),
+            ("Protocol Repository", "protocol_repository.png"),
+            ("Exit", "exit.png"),
         ]
         icon_dir = Path(__file__).parents[1] / "resources"
         icon_size = QSize(22, 22)
         font = QFont()
         font.setBold(True)
         for option, icon in menu_options:
-            btn = QPushButton(option)
+            btn = QPushButton("\n".join(option.split(" ")))
             btn.setFont(font)
             btn.setFixedWidth(140)
             btn.setIcon(QIcon(str(icon_dir / icon)))
@@ -82,7 +82,7 @@ class MicrodropSidebar(QWidget):
                 background: none;
                 border: none;
                 color: green;
-                font-size:16px;
+                font-size:2em;
                 text-align: left;
                 padding-left: 8px;
                 """
@@ -97,8 +97,8 @@ class MicrodropSidebar(QWidget):
 
         # connections
         button_names = [name for name, _ in menu_options]
-        self.menu_buttons[button_names.index("\t\tExit")].clicked.connect(self._handle_exit)
-        self.menu_buttons[button_names.index("\t\tDiagnostics")].clicked.connect(self._handle_diagnostics)
+        self.menu_buttons[button_names.index("Exit")].clicked.connect(self._handle_exit)
+        self.menu_buttons[button_names.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
 
         self.setLayout(self.layout)
 
