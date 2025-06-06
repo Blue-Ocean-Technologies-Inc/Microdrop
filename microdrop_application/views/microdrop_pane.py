@@ -5,6 +5,9 @@ from pyface.tasks.task_pane import TaskPane
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap
 
+from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
+from dropbot_tools_menu.menus import dropbot_tools_menu_factory
+
 
 class MicrodropCentralCanvas(TaskPane):
     id = "microdrop.central_canvas"
@@ -69,11 +72,27 @@ class MicrodropSidebar(QWidget):
 
         # connections
         self.menu_buttons[menu_options.index("Exit")].clicked.connect(self._handle_exit)
+        self.menu_buttons[menu_options.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
 
         self.setLayout(self.layout)
 
     def toggle_menu(self):
         self.menu_widget.setVisible(not self.menu_widget.isVisible())
+
+    def _handle_diagnostics(self):
+        app = self.task.window.application
+        dropbot_plugin = None
+        for plugin in app.plugin_manager._plugins:
+            if isinstance(plugin, DropbotToolsMenuPlugin):
+                dropbot_plugin = plugin
+                break
+        if dropbot_plugin is None:
+            print("DropbotToolsMenuPlugin not found.")
+            return
+
+        dropbot_menu = dropbot_tools_menu_factory(dropbot_plugin)
+        run_all_tests_action = dropbot_menu.items[0]
+        run_all_tests_action.perform(self)
 
     def _handle_exit(self):
         self.task.window.application.exit()

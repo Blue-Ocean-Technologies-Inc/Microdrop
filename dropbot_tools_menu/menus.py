@@ -35,8 +35,10 @@ class RunTests(DramatiqMessagePublishAction):
     message = Property(Directory, observe="object.application.app_data_dir")
     plugin = Any()
 
-    def _get_message(self):
-        if self.object.application:
+    def _get_message(self, event = None):
+        # if event and hasattr(event, "task") and hasattr(event.task, "application"):
+        #     return event.task.application.app_data_dir
+        if self.object and hasattr(self.object, "application"):
             return self.object.application.app_data_dir
         return None
 
