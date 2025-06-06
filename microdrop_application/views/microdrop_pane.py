@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
 from pyface.tasks.task_pane import TaskPane
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QFont
+from PySide6.QtGui import QPixmap, QIcon, QFont, QPainter
 
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
@@ -72,7 +72,8 @@ class MicrodropSidebar(QWidget):
         font = QFont()
         font.setBold(True)
         for option, icon in menu_options:
-            btn = QPushButton("\n".join(option.split(" ")))
+            label = "\n\t\t".join(option.split(" "))
+            btn = QPushButton("\t\t"+label)
             btn.setFont(font)
             btn.setFixedWidth(140)
             btn.setIcon(QIcon(str(icon_dir / icon)))
