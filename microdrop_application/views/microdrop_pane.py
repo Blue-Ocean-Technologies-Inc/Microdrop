@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
 from pyface.tasks.task_pane import TaskPane
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QIcon, QFont
 
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
@@ -52,16 +52,41 @@ class MicrodropSidebar(QWidget):
         self.menu_widget = QWidget()
         self.menu_layout = QVBoxLayout()
         self.menu_layout.setContentsMargins(0, 0, 0, 0)
-        self.menu_layout.setSpacing(5)
+        self.menu_layout.setSpacing(26)
         self.menu_widget.setLayout(self.menu_layout)
 
         # Menu buttons
         self.menu_buttons = []
-        menu_options = ["File", "Tools", "Help", "Info", "Diagnostics", "Plugins", "Protocol Repository", "Exit"]
-        for option in menu_options:
+        menu_options = [
+            ("\t\tFile", "file.png"),
+            ("\t\tTools", "tools.png"),
+            ("\t\tHelp", "help.png"),
+            ("\t\tInfo", "info.png"),
+            ("\t\tDiagnostics", "diagnostics.png"),
+            ("\t\tPlugins", "plugins.png"),
+            ("\t\tProtocol\n\t\tRepository", "protocol_repository.png"),
+            ("\t\tExit", "exit.png"),
+        ]
+        icon_dir = Path(__file__).parents[1] / "resources"
+        icon_size = QSize(22, 22)
+        font = QFont()
+        font.setBold(True)
+        for option, icon in menu_options:
             btn = QPushButton(option)
+            btn.setFont(font)
             btn.setFixedWidth(140)
-            btn.setStyleSheet("background: none; border: none; color: green; font-size:16px;")
+            btn.setIcon(QIcon(str(icon_dir / icon)))
+            btn.setIconSize(icon_size)
+            btn.setStyleSheet(
+                """
+                background: none;
+                border: none;
+                color: green;
+                font-size:16px;
+                text-align: left;
+                padding-left: 8px;
+                """
+            )
             btn.setCursor(Qt.PointingHandCursor)
              
             self.menu_layout.addWidget(btn)
@@ -71,8 +96,9 @@ class MicrodropSidebar(QWidget):
         self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
 
         # connections
-        self.menu_buttons[menu_options.index("Exit")].clicked.connect(self._handle_exit)
-        self.menu_buttons[menu_options.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
+        button_names = [name for name, _ in menu_options]
+        self.menu_buttons[button_names.index("\t\tExit")].clicked.connect(self._handle_exit)
+        self.menu_buttons[button_names.index("\t\tDiagnostics")].clicked.connect(self._handle_diagnostics)
 
         self.setLayout(self.layout)
 
