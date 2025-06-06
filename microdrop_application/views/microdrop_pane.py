@@ -11,13 +11,14 @@ class MicrodropCentralCanvas(TaskPane):
     name = "Microdrop Canvas"
     
     def create(self, parent):
-        widget = MicrodropSidebar(parent)
+        widget = MicrodropSidebar(parent, task = self.task)
         self.control = widget
 
 
 class MicrodropSidebar(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, task=None):
         super().__init__(parent)
+        self.task = task
         
         self.setMinimumWidth(80)
         self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
@@ -66,7 +67,13 @@ class MicrodropSidebar(QWidget):
         self.menu_widget.setVisible(False)
         self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
 
+        # connections
+        self.menu_buttons[menu_options.index("Exit")].clicked.connect(self._handle_exit)
+
         self.setLayout(self.layout)
 
     def toggle_menu(self):
         self.menu_widget.setVisible(not self.menu_widget.isVisible())
+
+    def _handle_exit(self):
+        self.task.window.application.exit()
