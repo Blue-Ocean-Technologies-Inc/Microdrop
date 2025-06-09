@@ -59,6 +59,8 @@ if __name__ == "__main__":
     # export QT_FONT_DPI=96
     # Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
     if "pi" in platform.uname().node.lower():
+        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
         os.environ["QT_SCALE_FACTOR"] = "0.7"
+        os.environ["QT_FONT_DPI"] = "96"
         print(f"running with environment variables: {os.environ['QT_SCALE_FACTOR']}")
     main(sys.argv)
