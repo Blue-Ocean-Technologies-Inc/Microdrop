@@ -4,13 +4,16 @@ import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout, QStyledItemDelegate, QSpinBox, QDoubleSpinBox,
-                               QStyle, QSizePolicy)
+                               QStyle, QSizePolicy, QFileDialog)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-logger = get_logger(__name__)
+from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
+from protocol_grid.model.example_tree_data import visualize_protocol_from_model
+
+logger = get_logger(__name__, level="DEBUG")
 
 
 class SpinBoxDelegate(QStyledItemDelegate):
@@ -100,15 +103,25 @@ class PGCWidget(QWidget):
         self.add_step_into_button = QPushButton("Add Step Into")
         self.add_step_into_button.clicked.connect(lambda: self.add_step(into=True))
 
+        self.export_json_button = QPushButton("Export to JSON")
+        self.export_json_button.clicked.connect(self.export_to_json)
+        self.export_png_button = QPushButton("Export to PNG")
+        self.export_png_button.clicked.connect(self.export_to_png)
+        
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.add_group_button)
         button_layout.addWidget(self.add_group_into_button)
         button_layout.addWidget(self.add_step_button)
         button_layout.addWidget(self.add_step_into_button)
 
+        export_layout = QHBoxLayout()
+        export_layout.addWidget(self.export_json_button)
+        export_layout.addWidget(self.export_png_button)
+
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tree)
         self.layout.addLayout(button_layout)
+        self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
 
     def add_group(self, into=False):
@@ -204,6 +217,88 @@ class PGCWidget(QWidget):
         root_item = self.model.invisibleRootItem()
         add_items(root_item, protocol)
         self.tree.expandAll()
+
+    def to_protocol_model(self):
+        """
+        Walk the QTreeView/QStandardItemModel and reconstruct ProtocolGroup/ProtocolStep tree.
+        """
+        def parse_group(item, idx_path=None):
+            if idx_path is None:
+                idx_path = [0]
+            group_name = item.text() # group name is the header (column 0) of this item
+            group = ProtocolGroup(
+                group_idx=idx_path,
+                name=group_name,
+                elements=[]
+            )
+            for row in range(item.rowCount()):
+                desc_item = item.child(row, 0)
+                if desc_item is None or desc_item.get_item_type() != "Description":
+                    continue
+                desc = desc_item.get_item_data()
+                # if the row is a group (has children)
+                if desc == "Group" and desc_item.hasChildren():                   
+                    group.elements.append(parse_group(desc_item, idx_path + [row]))  # recursion
+                else:
+                    parameters = {} # step (leaf)
+                    try:
+                        parameters["Repetitions"] = int(item.child(row, 1).text())
+                        parameters["Duration"] = float(item.child(row, 2).text())
+                        parameters["Voltage"] = float(item.child(row, 3).text())
+                        parameters["Frequency"] = float(item.child(row, 4).text())
+                    except Exception:
+                        parameters = {}
+                    step = ProtocolStep(
+                        idx=idx_path + [row],
+                        name=desc,
+                        parameters=parameters
+                    )
+                    group.elements.append(step)
+            return group
+
+        root_item = self.model.invisibleRootItem()
+        elements = []
+        for row in range(root_item.rowCount()):
+            desc_item = root_item.child(row, 0)
+            if desc_item is None or desc_item.get_item_type() != "Description":
+                continue
+            desc = desc_item.get_item_data()
+            if desc == "Group" and desc_item.hasChildren():
+                elements.append(parse_group(desc_item, [row]))
+            else:
+                parameters = {}
+                try:
+                    parameters["Repetitions"] = int(root_item.child(row, 1).text())
+                    parameters["Duration"] = float(root_item.child(row, 2).text())
+                    parameters["Voltage"] = float(root_item.child(row, 3).text())
+                    parameters["Frequency"] = float(root_item.child(row, 4).text())
+                except Exception:
+                    parameters = {}
+                elements.append(ProtocolStep(
+                    idx=[row],
+                    name=desc,
+                    parameters=parameters
+                ))
+        return ProtocolGroup(
+            group_idx=[0],
+            name="Root Group",
+            elements=elements
+        )
+
+    def export_to_json(self):
+        protocol_data = self.to_protocol_model()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
+        if file_name:
+            with open(file_name, 'w') as f:
+                f.write(protocol_data.model_dump_json(indent=4))
+            logger.debug(f"Protocol exported to {file_name}")
+
+    def export_to_png(self):
+        protocol_data = self.to_protocol_model()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as PNG", "protocol_grid_ui_export.png", "PNG Files (*.png)")
+        if file_name:
+            visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
+            logger.debug(f"Protocol PNG exported as {file_name}")
 
 
 from PySide6.QtWidgets import QApplication, QMainWindow
