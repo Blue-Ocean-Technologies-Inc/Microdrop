@@ -73,20 +73,15 @@ class ElectrodeScene(QGraphicsScene):
 
                 # Check if this channel differs from the last visited channel.
                 if self.electrode_channels_visited[-1] != channel_:
-                    # Append new channel and electrode ID to their respective lists.
-                    self.electrode_channels_visited.append(channel_)
-                    self.electrode_ids_visited.append(electrode_view.id)
+                    found_connection_item = find_path_item(self, (self.electrode_ids_visited[-1], electrode_view.id))
+                    if found_connection_item is not None:
+                        # Append new channel and electrode ID to their respective lists.
+                        self.electrode_channels_visited.append(channel_)
+                        self.electrode_ids_visited.append(electrode_view.id)
 
-                    # Determine the key for path lookup based on the last two visited electrodes.
-                    src_key = self.electrode_ids_visited[-2]
-                    dst_key = self.electrode_ids_visited[-1]
-                    key = (src_key, dst_key)
-                    
-                    # Find the corresponding path item and update its visual representation.
-                    found_item = find_path_item(self, key)
-                    if found_item is not None:
-                        found_item.update_color()
-                        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
+                        if found_connection_item is not None:
+                            found_connection_item.update_color()
+                            logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
 
                 # Update the electrode pressed to the current electrode view.
                 self.electrode_pressed = electrode_view
