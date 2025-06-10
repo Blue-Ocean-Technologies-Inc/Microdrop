@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtWidgets import QGraphicsScene
 
 from .electrode_view_helpers import find_path_item
@@ -30,6 +30,15 @@ class ElectrodeScene(QGraphicsScene):
     def interaction_service(self, interaction_service):
         self._interaction_service = interaction_service
 
+    def get_item_under_mouse(self, coordinates: QPointF):
+        # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
+        # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
+        items = self.items(coordinates)
+        for item in items:
+            if isinstance(item, ElectrodeView):
+                return item
+        return None
+
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
@@ -40,18 +49,9 @@ class ElectrodeScene(QGraphicsScene):
 
     def mouseLeftClickEvent(self, event):
         # Get the item under the mouse click using the scene's coordinates.
-        item = self.itemAt(event.scenePos(), self.views()[0].transform())
+        electrode_view = self.get_item_under_mouse(event.scenePos())
 
-        # Try to get the parent electrode view if available
-        parent = getattr(item, "parentItem", lambda: None)()
-
-        # Determine the electrode view: either the parent or the item itself.
-        if isinstance(parent, ElectrodeView):
-            electrode_view = parent
-        elif isinstance(item, ElectrodeView):
-            electrode_view = item
-        else:
-            # Neither the item nor its parent is an ElectrodeView, so exit.
+        if electrode_view is None:
             return
 
         # Record the clicked electrode view and initialize route tracking.
@@ -65,19 +65,7 @@ class ElectrodeScene(QGraphicsScene):
         """Handle the dragging motion."""
         if self.electrode_pressed:
             # Identify the new item under the mouse cursor using the scene's transform.
-            new_item = self.itemAt(event.scenePos(), self.views()[0].transform())
-
-            # Safely attempt to get the parent of the new item if it exists.
-            parent = getattr(new_item, "parentItem", lambda: None)()
-
-            # Determine which item to use: prefer the parent if it's an ElectrodeView,
-            # otherwise use the new_item itself if it's an ElectrodeView.
-            if isinstance(parent, ElectrodeView):
-                electrode_view = parent
-            elif isinstance(new_item, ElectrodeView):
-                electrode_view = new_item
-            else:
-                electrode_view = None
+            electrode_view = self.get_item_under_mouse(event.scenePos())
 
             # Only proceed if we have a valid electrode view.
             if electrode_view:
