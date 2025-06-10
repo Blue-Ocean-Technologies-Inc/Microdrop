@@ -110,6 +110,8 @@ class PGCWidget(QWidget):
         self.export_json_button.clicked.connect(self.export_to_json)
         self.export_png_button = QPushButton("Export to PNG")
         self.export_png_button.clicked.connect(self.export_to_png)
+        self.import_json_button = QPushButton("Import from JSON")
+        self.import_json_button.clicked.connect(self.import_from_json)
         
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.add_group_button)
@@ -120,6 +122,7 @@ class PGCWidget(QWidget):
         export_layout = QHBoxLayout()
         export_layout.addWidget(self.export_json_button)
         export_layout.addWidget(self.export_png_button)
+        export_layout.addWidget(self.import_json_button)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tree)
@@ -240,35 +243,50 @@ class PGCWidget(QWidget):
             visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
             logger.debug(f"Protocol PNG exported as {file_name}")
 
-    def populate_treeview(self, protocol_sequence): # to be used to reload protocol grid based on json import (need to implement import)
+    def populate_treeview(self, protocol_sequence):
         self.clear_view()
         def add_seq(parent, seq):
             for obj in seq:
                 if isinstance(obj, dict):
-                    obj_type = obj.get("parameters", None)
                     is_group = "elements" in obj
                 else:
-                    is_group = isinstance(obj, ProtocolGroup)
+                    is_group = hasattr(obj, "elements")
                 if is_group:
-                    group_obj = obj if isinstance(obj, ProtocolGroup) else ProtocolGroup(**obj)
+                    group_obj = obj if not isinstance(obj, dict) else ProtocolGroup(**obj)
                     group_item = PGCItem(item_type="Description", item_data="Group")
-                    rep_item = PGCItem(item_type="Repetitions", item_data="")
-                    group_data = [group_item, rep_item, PGCItem(), PGCItem(), PGCItem()]
-                    parent.appendRow(group_data)
+                    rep_item = PGCItem(item_type="Repetitions", item_data="1")
+                    dur_item = PGCItem(item_type="Duration", item_data="")
+                    volt_item = PGCItem(item_type="Voltage", item_data="")
+                    freq_item = PGCItem(item_type="Frequency", item_data="")
+                    group_row = [group_item, rep_item, dur_item, volt_item, freq_item]
+                    parent.appendRow(group_row)
                     add_seq(group_item, group_obj.elements)
                 else:
-                    step_obj = obj if isinstance(obj, ProtocolStep) else ProtocolStep(**obj)
-                    step_data = [
+                    step_obj = obj if not isinstance(obj, dict) else ProtocolStep(**obj)
+                    step_row = [
                         PGCItem(item_type="Description", item_data=step_obj.name),
                         PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", ""))),
                         PGCItem(item_type="Duration", item_data=str(step_obj.parameters.get("Duration", ""))),
                         PGCItem(item_type="Voltage", item_data=str(step_obj.parameters.get("Voltage", ""))),
                         PGCItem(item_type="Frequency", item_data=str(step_obj.parameters.get("Frequency", ""))),
                     ]
-                    parent.appendRow(step_data)
+                    parent.appendRow(step_row)
         root_item = self.model.invisibleRootItem()
         add_seq(root_item, protocol_sequence)
         self.tree.expandAll()
+
+    def import_from_json(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
+        if file_name:
+            with open(file_name, "r") as f:
+                data = json.load(f)
+            protocol_sequence = []
+            for obj in data:
+                if "elements" in obj:
+                    protocol_sequence.append(ProtocolGroup(**obj))
+                else:
+                    protocol_sequence.append(ProtocolStep(**obj))
+            self.populate_treeview(protocol_sequence)
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
