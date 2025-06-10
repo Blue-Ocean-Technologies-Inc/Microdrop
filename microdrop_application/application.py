@@ -1,5 +1,4 @@
 # sys imports
-import os
 from pathlib import Path
 
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
@@ -56,11 +55,13 @@ class MicrodropApplication(TasksApplication):
     splash_screen = Instance(SplashScreen)
 
     def _icon_default(self):
-        return ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
+        icon_path = Path(__file__).parent / 'microdrop.ico'
+        return ImageResource(str(icon_path))
 
     def _splash_screen_default(self):
+        splash_image_path = Path(__file__).parent / 'scibots.jpg'
         return SplashScreen(
-            image=ImageResource(f'{os.path.dirname(__file__)}{os.sep}scibots.jpg'),
+            image=ImageResource(str(splash_image_path)),
             text="Microdrop-Next-Gen v.alpha"
         )
 
