@@ -1,4 +1,4 @@
-from traits.api import provides, HasTraits, Bool, Float
+from traits.api import provides, HasTraits, Bool, Float, Str
 
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -17,8 +17,8 @@ class DropbotStatesSettingMixinService(HasTraits):
     A mixin Class that adds methods to set states for a dropbot connection and get some dropbot information.
     """
 
-    id = "dropbot_states_setting_mixin_service"
-    name = 'Dropbot States Setting Mixin'
+    id = Str('dropbot_states_setting_mixin_service')
+    name = Str('Dropbot States Setting Mixin')
     realtime_mode = Bool(False)
     # TODO: Get these from a config file
     voltage = Float(30)

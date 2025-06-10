@@ -18,7 +18,6 @@ from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEV
 
 from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
-from traits.api import HasTraits, Range, Bool
 
 logger = get_logger(__name__, level="DEBUG")
 

@@ -4,7 +4,7 @@ import traceback
 
 import dropbot
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE
-from traits.api import provides, HasTraits, Bool, Instance
+from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -30,8 +30,8 @@ class DropbotMonitorMixinService(HasTraits):
     A mixin Class that adds methods to monitor a dropbot connection and get some dropbot information.
     """
 
-    id = "dropbot_monitor_mixin_service"
-    name = 'Dropbot Monitor Mixin'
+    id = Str("dropbot_monitor_mixin_service")
+    name = Str('Dropbot Monitor Mixin')
     monitor_scheduler = Instance(BackgroundScheduler,
                                  desc="An AP scheduler job to periodically look for dropbot connected ports."
                                  )

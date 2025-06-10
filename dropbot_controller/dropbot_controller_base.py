@@ -18,7 +18,7 @@ from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEV
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
-from traits.api import HasTraits, provides, Bool
+from traits.api import HasTraits, provides, Bool, Str
 from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -43,7 +43,7 @@ class DropbotControllerBase(HasTraits):
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
-    listener_name = f"{PKG}_listener"
+    listener_name = Str(f"{PKG}_listener")
     
     timestamps = Dict(str, datetime)
 

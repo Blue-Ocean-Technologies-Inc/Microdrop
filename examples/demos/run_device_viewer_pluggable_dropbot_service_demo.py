@@ -6,7 +6,7 @@ import time
 # enthought imports
 from envisage.api import CorePlugin, Plugin, SERVICE_OFFERS, ServiceOffer
 from envisage.application import Application
-from traits.api import provides, HasTraits, List, observe
+from traits.api import provides, HasTraits, List, observe, Str
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -31,8 +31,8 @@ class DropbotDummyMixinService(HasTraits):
     A mixin Class that adds methods to monitor a dropbot connection and get some dropbot information.
     """
 
-    id = "dummy_dropbot_control"
-    name = 'Dummy Dropbot Control'
+    id = Str('dummy_dropbot_control')
+    name = Str('Dummy Dropbot Control')
 
     ######################################## Methods to Expose #############################################
     def print_test(self):

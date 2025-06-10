@@ -1,5 +1,5 @@
 # library imports
-from traits.api import provides, HasTraits
+from traits.api import provides, HasTraits, Str
 
 # interface imports from microdrop plugins
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -22,8 +22,8 @@ class ElectrodeStateChangeMixinService(HasTraits):
     So we should have access to the dropbot proxy object here, per the IDropbotControllerBase.
     """
 
-    id = "electrode_state_change_mixin_service"
-    name = 'Electrode state change Mixin'
+    id = Str('electrode_state_change_mixin_service')
+    name = Str('Electrode state change Mixin')
 
     ######################################## Methods to Expose #############################################
     def on_electrodes_state_change_request(self, message):
