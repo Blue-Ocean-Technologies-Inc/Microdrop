@@ -1,3 +1,4 @@
+import json
 import pygraphviz as pgv
 from typing import Union
 
@@ -59,19 +60,61 @@ def format_steps_param_as_string(step):
         params_string += param_line + "\n"
     return params_string
 
+def get_protocol_graph(protocol_sequence):
+    G = pgv.AGraph(directed=True, rankdir="TB")
 
-def get_protocol_graph(ProtocolGroup) -> pgv.AGraph:
-    G = pgv.AGraph(
-        directed=True,
-        strict=True,
-        rankdir="TB",
-    )
+    node_id = [0]
+    prev_node = None
 
-    G.add_node(ProtocolGroup.idx, label=f"IDX: {str(ProtocolGroup.idx)}\nName: {ProtocolGroup.name}", type="root")
-    add_nodes_edges(G, ProtocolGroup)
+    def add_seq(seq, graph, parent_cluster=None):
+        local_prev = None
+        for obj in seq:
+            if isinstance(obj, ProtocolGroup):
+                cluster_name = f"cluster_{id(obj)}"
+                with graph.subgraph(name=cluster_name) as c:
+                    c.graph_attr.update(style="dashed", label=f"Group: {obj.name}")
+                    first_in_group = add_seq(obj.elements, c, parent_cluster=cluster_name) # recursion here
+                    # return the FIRST AND LAST node id in the group
+                    if first_in_group is not None:
+                        if local_prev is not None:
+                            graph.add_edge(local_prev, first_in_group)
+                        local_prev = get_last_node(obj.elements, c)
+            elif isinstance(obj, ProtocolStep):
+                step_id = f"step_{node_id[0]}"
+                node_id[0] += 1
+                label = f"{obj.name}\n" + "\n".join(f"{k}: {v}" for k, v in obj.parameters.items())
+                graph.add_node(step_id, label=label, shape="box", style="filled")
+                if local_prev is not None:
+                    graph.add_edge(local_prev, step_id)
+                local_prev = step_id
+                if parent_cluster is None and prev_node is not None:
+                    graph.add_edge(prev_node, step_id)
+        return get_first_node(seq, graph)
 
+    def get_first_node(seq, graph):
+        for obj in seq:
+            if isinstance(obj, ProtocolGroup):
+                return get_first_node(obj.elements, graph) # recursion: to find first node inside a group
+            elif isinstance(obj, ProtocolStep):
+                return [n for n in graph.nodes() if graph.get_node(n).attr['label'].startswith(obj.name)][0]
+        return None
+
+    def get_last_node(seq, graph):
+        for obj in reversed(seq):
+            if isinstance(obj, ProtocolGroup):
+                return get_last_node(obj.elements, graph) # recursion: to find first node inside a group
+            elif isinstance(obj, ProtocolStep):
+                return [n for n in graph.nodes() if graph.get_node(n).attr['label'].startswith(obj.name)][0]
+        return None
+
+    add_seq(protocol_sequence, G)
     return G
 
+def visualize_protocol_from_model(protocol_sequence, base_name = "protocol_chain"):
+    G = get_protocol_graph(protocol_sequence)
+    G.layout(prog="dot")
+    G.draw(f"{base_name}.png")
+    G.write(f"{base_name}.dot")
 
 def visualize_protocol_graph(protocol_graph, save_file_name="tree_data.png") -> pgv.AGraph:
     # Base styles
@@ -98,3 +141,7 @@ def convert_json_protocol_to_graph(json_input: Union[str, dict]) -> pgv.AGraph:
     protocol_graph = get_protocol_graph(protocol_group)
 
     return protocol_graph
+
+def save_protocol_sequence_to_json(seq, filename="protocol_seq.json"):
+    with open(filename, "w") as f:
+        json.dump([item.dict() for item in seq], f, indent=4)

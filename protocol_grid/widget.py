@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+import json
 import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
@@ -11,7 +12,9 @@ from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
-from protocol_grid.model.example_tree_data import visualize_protocol_from_model
+from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
+                                                   save_protocol_sequence_to_json)
+
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -191,106 +194,43 @@ class PGCWidget(QWidget):
         self.model.clear()
         self.model.setHorizontalHeaderLabels(["Description", "Repetitions", "Duration", "Voltage", "Frequency"])
 
-    def populate_treeview(self, protocol):
-        self.clear_view()
-
-        def add_items(parent, items):
-            for key, value in items.items():
-                if "Type" in value and value["Type"] == "Group":
-                    group_item = PGCItem(item_type="Description", item_data=key)
-                    rep_item = PGCItem(item_type="Repetitions", item_data=str(value.get("Repetitions", "")))
-                    group_data = [group_item, rep_item, PGCItem(), PGCItem(), PGCItem()]
-                    parent.appendRow(group_data)
-
-                    # Add steps within the group
-                    add_items(group_item, {k: v for k, v in value.items() if k not in ["Type", "Repetitions"]})
-                else:
-                    step_data = [
-                        PGCItem(item_type="Description", item_data=key),
-                        PGCItem(item_type="Repetitions", item_data="1"),
-                        PGCItem(item_type="Duration", item_data=f'{value["Duration"]:.2f}'),
-                        PGCItem(item_type="Voltage", item_data=f'{value["Voltage"]:.2f}'),
-                        PGCItem(item_type="Frequency", item_data=f'{value["Frequency"]:.2f}')
-                    ]
-                    parent.appendRow(step_data)
-
-        root_item = self.model.invisibleRootItem()
-        add_items(root_item, protocol)
-        self.tree.expandAll()
-
     def to_protocol_model(self):
         """
-        Walk the QTreeView/QStandardItemModel and reconstruct ProtocolGroup/ProtocolStep tree.
+        Walks the QTreeView and builds a sequential list of ProtocolStep/ProtocolGroup.
         """
-        def parse_group(item, idx_path=None):
-            if idx_path is None:
-                idx_path = [0]
-            group_name = item.text() # group name is the header (column 0) of this item
-            group = ProtocolGroup(
-                group_idx=idx_path,
-                name=group_name,
-                elements=[]
-            )
-            for row in range(item.rowCount()):
-                desc_item = item.child(row, 0)
-                if desc_item is None or desc_item.get_item_type() != "Description":
-                    continue
+        def parse_seq(parent_item):
+            sequence = []
+            for row in range(parent_item.rowCount()):
+                desc_item = parent_item.child(row, 0)
+                # if desc_item is None or desc_item.get_item_type() != "Description":
+                #     continue
                 desc = desc_item.get_item_data()
-                # if the row is a group (has children)
-                if desc == "Group" and desc_item.hasChildren():                   
-                    group.elements.append(parse_group(desc_item, idx_path + [row]))  # recursion
-                else:
-                    parameters = {} # step (leaf)
+                if desc == "Group" and parent_item.child(row, 0).hasChildren():
+                    group_elements = parse_seq(desc_item)
+                    sequence.append(ProtocolGroup(name="Group", elements=group_elements))
+                else: # step
                     try:
-                        parameters["Repetitions"] = int(item.child(row, 1).text())
-                        parameters["Duration"] = float(item.child(row, 2).text())
-                        parameters["Voltage"] = float(item.child(row, 3).text())
-                        parameters["Frequency"] = float(item.child(row, 4).text())
+                        parameters = {
+                            "Repetitions": int(parent_item.child(row, 1).text()),
+                            "Duration": float(parent_item.child(row, 2).text()),
+                            "Voltage": float(parent_item.child(row, 3).text()),
+                            "Frequency": float(parent_item.child(row, 4).text())
+                        }
                     except Exception:
                         parameters = {}
-                    step = ProtocolStep(
-                        idx=idx_path + [row],
-                        name=desc,
-                        parameters=parameters
-                    )
-                    group.elements.append(step)
-            return group
+                    sequence.append(ProtocolStep(name=desc, parameters=parameters))
+            return sequence
 
         root_item = self.model.invisibleRootItem()
-        elements = []
-        for row in range(root_item.rowCount()):
-            desc_item = root_item.child(row, 0)
-            if desc_item is None or desc_item.get_item_type() != "Description":
-                continue
-            desc = desc_item.get_item_data()
-            if desc == "Group" and desc_item.hasChildren():
-                elements.append(parse_group(desc_item, [row]))
-            else:
-                parameters = {}
-                try:
-                    parameters["Repetitions"] = int(root_item.child(row, 1).text())
-                    parameters["Duration"] = float(root_item.child(row, 2).text())
-                    parameters["Voltage"] = float(root_item.child(row, 3).text())
-                    parameters["Frequency"] = float(root_item.child(row, 4).text())
-                except Exception:
-                    parameters = {}
-                elements.append(ProtocolStep(
-                    idx=[row],
-                    name=desc,
-                    parameters=parameters
-                ))
-        return ProtocolGroup(
-            group_idx=[0],
-            name="Root Group",
-            elements=elements
-        )
+        return parse_seq(root_item)
 
     def export_to_json(self):
         protocol_data = self.to_protocol_model()
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
         if file_name:
             with open(file_name, 'w') as f:
-                f.write(protocol_data.model_dump_json(indent=4))
+                f.write(json.dumps([item.dict() for item in protocol_data], indent=4))
+            save_protocol_sequence_to_json(protocol_data, file_name)
             logger.debug(f"Protocol exported to {file_name}")
 
     def export_to_png(self):
@@ -300,6 +240,35 @@ class PGCWidget(QWidget):
             visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
             logger.debug(f"Protocol PNG exported as {file_name}")
 
+    def populate_treeview(self, protocol_sequence): # to be used to reload protocol grid based on json import (need to implement import)
+        self.clear_view()
+        def add_seq(parent, seq):
+            for obj in seq:
+                if isinstance(obj, dict):
+                    obj_type = obj.get("parameters", None)
+                    is_group = "elements" in obj
+                else:
+                    is_group = isinstance(obj, ProtocolGroup)
+                if is_group:
+                    group_obj = obj if isinstance(obj, ProtocolGroup) else ProtocolGroup(**obj)
+                    group_item = PGCItem(item_type="Description", item_data="Group")
+                    rep_item = PGCItem(item_type="Repetitions", item_data="")
+                    group_data = [group_item, rep_item, PGCItem(), PGCItem(), PGCItem()]
+                    parent.appendRow(group_data)
+                    add_seq(group_item, group_obj.elements)
+                else:
+                    step_obj = obj if isinstance(obj, ProtocolStep) else ProtocolStep(**obj)
+                    step_data = [
+                        PGCItem(item_type="Description", item_data=step_obj.name),
+                        PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", ""))),
+                        PGCItem(item_type="Duration", item_data=str(step_obj.parameters.get("Duration", ""))),
+                        PGCItem(item_type="Voltage", item_data=str(step_obj.parameters.get("Voltage", ""))),
+                        PGCItem(item_type="Frequency", item_data=str(step_obj.parameters.get("Frequency", ""))),
+                    ]
+                    parent.appendRow(step_data)
+        root_item = self.model.invisibleRootItem()
+        add_seq(root_item, protocol_sequence)
+        self.tree.expandAll()
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
