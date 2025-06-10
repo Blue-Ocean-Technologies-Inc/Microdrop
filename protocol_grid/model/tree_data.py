@@ -1,4 +1,4 @@
-from pydantic.v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
 
 
@@ -11,4 +11,4 @@ class ProtocolGroup(BaseModel):
     name: str
     elements: List[Union['ProtocolStep', 'ProtocolGroup']] = Field(default_factory=list)
 
-ProtocolGroup.update_forward_refs()
+ProtocolGroup.model_rebuild()
