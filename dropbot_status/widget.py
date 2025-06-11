@@ -113,7 +113,7 @@ class DropBotStatusLabel(QLabel):
         self.setLayout(self.main_layout)
         self.dropbot_connected = False
 
-    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
+    def update_status_icon(self, dropbot_connected=False, chip_inserted=False):
         """
         Update status based on if device connected and chip inserted or not. Follows this flowchart:
 
@@ -133,10 +133,8 @@ class DropBotStatusLabel(QLabel):
         This is to avoid updating the status if the message is older than the most recent status message.
         """
         
-        if dropbot_connected is not None:
-            self.dropbot_connected = dropbot_connected
-        else:
-            dropbot_connected = self.dropbot_connected
+        if chip_inserted:
+            dropbot_connected = True # If chip is inserted dropbot must be connected
         
         if dropbot_connected:
             logger.info("Dropbot Connected")
@@ -274,7 +272,6 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
         if body == 'True':
             chip_inserted = True
-            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
         elif body == 'False':
             chip_inserted = False
         else:
