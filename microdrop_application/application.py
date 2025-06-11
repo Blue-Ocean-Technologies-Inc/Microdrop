@@ -16,7 +16,9 @@ from traits.api import Bool, Instance, List, Property, observe, Directory
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
-from PySide6.QtWidgets import QStatusBar
+from PySide6.QtWidgets import QStatusBar, QToolBar
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, level="DEBUG")
@@ -138,3 +140,26 @@ class MicrodropApplication(TasksApplication):
 
                     window.control.setStatusBar(status_bar)
                     window.control._statusbar = status_bar
+                    
+                if not hasattr(window.control, "_left_toolbar"):
+                    # TODO: Move Pane from views to here
+                    left_toolbar = QToolBar("PermanentToolbar", window.control)
+                    left_toolbar.setOrientation(Qt.Vertical)
+                    left_toolbar.setMovable(False)
+                    left_toolbar.setFloatable(False)
+                    left_toolbar.setAllowedAreas(Qt.LeftToolBarArea)
+                    left_toolbar.setFixedWidth(100)
+                    left_toolbar.setObjectName("PermanentLeftToolbar")
+
+                    # Example: add an action or button
+                    example_action = QAction("Example", window.control)
+                    left_toolbar.addAction(example_action)
+
+                    # Add to the left of the main window
+                    window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
+
+                    # Optionally, prevent closing the toolbar
+                    left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
+
+                    # Store a reference so it's not re-added
+                    window.control._left_toolbar = left_toolbar
