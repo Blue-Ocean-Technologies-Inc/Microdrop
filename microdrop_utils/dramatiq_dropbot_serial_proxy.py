@@ -1,6 +1,6 @@
 from .dramatiq_pub_sub_helpers import publish_message
 from dropbot.proxy import SerialProxy
-from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, CHIP_INSERTED
 import base_node_rpc as bnr
 import functools as ft
 
@@ -23,28 +23,32 @@ class DramatiqDropbotSerialProxy(SerialProxy):
 
         _connection_state = { 'connected': False }
         # define the dramatiq pub sub wrappers
-        def publish_wrapper(f, signal_name, *args, **kwargs):
+        def connected_wrapper(f, *args, **kwargs):
             f(*args, **kwargs)
             
             # are we already in the state you're about to report?
-            if signal_name == 'connected':
-                if _connection_state['connected']:
-                    return    # already connected, skip
-                _connection_state['connected'] = True
-            else:  # 'disconnected'
-                if not _connection_state['connected']:
-                    return    # already disconnected, skip
-                _connection_state['connected'] = False
-            publish_message(f'dropbot_{signal_name}', connection_flags[signal_name])
+            if _connection_state['connected']:
+                return    # already connected, skip
+            _connection_state['connected'] = True
+            publish_message(f'dropbot_connected', DROPBOT_CONNECTED)
 
+        def disconnected_wrapper(f, *args, **kwargs):
+            f(*args, **kwargs)
+            
+            # are we already in the state you're about to report?
+            if not _connection_state['connected']:
+                return    # already disconnected, skip
+            _connection_state['connected'] = False
+            publish_message(f'dropbot_disconnected', DROPBOT_DISCONNECTED)
+            publish_message('False', CHIP_INSERTED)
+
+        
         monitor = bnr.ser_async.BaseNodeSerialMonitor(port=self.port)
 
-        monitor.connected_event.set = ft.partial(publish_wrapper,
-                                                 monitor.connected_event.set,
-                                                 'connected')
-        monitor.disconnected_event.set = ft.partial(publish_wrapper, 
-                                                    monitor.disconnected_event.set, 
-                                                    'disconnected')
+        monitor.connected_event.set = ft.partial(connected_wrapper,
+                                                 monitor.connected_event.set)
+        monitor.disconnected_event.set = ft.partial(disconnected_wrapper, 
+                                                    monitor.disconnected_event.set)
 
         monitor.start()
 

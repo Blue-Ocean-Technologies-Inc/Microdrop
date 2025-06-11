@@ -16,7 +16,7 @@ from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialP
 from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import DROPBOT_SETUP_SUCCESS, NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
+from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
     OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED
 
 logger = get_logger(__name__, level="DEBUG")
@@ -38,11 +38,6 @@ class DropbotMonitorMixinService(HasTraits):
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
     _no_power = Bool(False) 
 
-    def publish_status(self):
-        if self.dropbot_connection_active:
-            publish_message(topic=DROPBOT_SETUP_SUCCESS, message=f'dropbot_setup_success')
-        
-        self.on_chip_check_request(message="")
 
     ######################################## Methods to Expose #############################################
     def on_start_device_monitoring_request(self, hwids_to_check):
@@ -51,7 +46,7 @@ class DropbotMonitorMixinService(HasTraits):
         If dropbot already connected, publishes dropbot connected signal.
         """
         if self.dropbot_connection_active:
-            self.publish_status()
+            self.on_chip_check_request("")
             return
 
         if not hwids_to_check:
@@ -127,6 +122,10 @@ class DropbotMonitorMixinService(HasTraits):
                     logger.info("Sending Signal to Resumed DropBot monitor")
                     self.on_retry_connection_request(message="")
 
+    def on_connected_signal(self, message):
+        # Conduct a chip check
+        self.on_chip_check_request("")
+
     ################################# Protected methods ######################################
     def _on_dropbot_port_found(self, event):
         """
@@ -176,7 +175,7 @@ class DropbotMonitorMixinService(HasTraits):
                 # once dropbot setup, set connection to active
                 self.dropbot_connection_active = True
 
-                self.publish_status()
+                self.on_chip_check_request()
                 
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))

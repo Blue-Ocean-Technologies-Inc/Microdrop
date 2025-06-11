@@ -269,10 +269,6 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=True)
-
-    @timestamped_value('connected_message')
-    def _on_setup_success_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=True)
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):

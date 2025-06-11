@@ -1,16 +1,11 @@
 from pathlib import Path
 
-from dropbot_controller.consts import DROPBOT_SETUP_SUCCESS
-
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 # Topics actor declared by plugin subscribes to
-ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [
-                                 DROPBOT_SETUP_SUCCESS,
-    ]}
+ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent/ "resources" / "scibots-icon.png"
 menu_options_icons_path = Path(__file__).parent / "resources"

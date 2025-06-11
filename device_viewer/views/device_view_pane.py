@@ -90,8 +90,8 @@ class DeviceViewerDockPane(DockPane):
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Dramatiq handlers ---------------------------
-    def _on_setup_success_triggered(self, message):
-        if self.electrodes_model:
+    def _on_chip_inserted(self, message):
+        if message == "True" and self.electrodes_model:
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Device View class methods -------------------------
