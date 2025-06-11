@@ -78,10 +78,9 @@ class ElectrodeScene(QGraphicsScene):
                         # Append new channel and electrode ID to their respective lists.
                         self.electrode_channels_visited.append(channel_)
                         self.electrode_ids_visited.append(electrode_view.id)
-
-                        if found_connection_item is not None:
-                            found_connection_item.update_color()
-                            logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
+                        
+                        found_connection_item.update_color()
+                        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
 
                 # Update the electrode pressed to the current electrode view.
                 self.electrode_pressed = electrode_view
