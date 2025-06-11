@@ -16,7 +16,7 @@ class ElectrodeScene(QGraphicsScene):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.electrode_pressed = None
+        self.left_mouse_pressed = False
         self.electrode_channels_visited = []
         self.electrode_ids_visited = []
         self._interaction_service = None
@@ -39,6 +39,13 @@ class ElectrodeScene(QGraphicsScene):
                 return item
         return None
 
+    def add_electrode_to_path(self, electrode_view):
+        # Append new channel and electrode ID to their respective lists.
+        self.electrode_channels_visited.append(electrode_view.electrode.channel)
+        self.electrode_ids_visited.append(electrode_view.id)
+
+        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
+
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
@@ -49,41 +56,32 @@ class ElectrodeScene(QGraphicsScene):
 
     def mouseLeftClickEvent(self, event):
         # Get the item under the mouse click using the scene's coordinates.
+        self.left_mouse_pressed = True
+
         electrode_view = self.get_item_under_mouse(event.scenePos())
 
-        if electrode_view is None:
-            return
+        if electrode_view:
+            # Track the visited electrode IDs and channels.
+            self.electrode_channels_visited = [electrode_view.electrode.channel]
+            self.electrode_ids_visited = [electrode_view.id]
 
-        # Record the clicked electrode view and initialize route tracking.
-        self.electrode_pressed = electrode_view
-
-        # Track the visited electrode IDs and channels.
-        self.electrode_channels_visited = [electrode_view.electrode.channel]
-        self.electrode_ids_visited = [electrode_view.id]
 
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
-        if self.electrode_pressed:
+        if self.left_mouse_pressed:
             # Identify the new item under the mouse cursor using the scene's transform.
             electrode_view = self.get_item_under_mouse(event.scenePos())
 
             # Only proceed if we have a valid electrode view.
             if electrode_view:
-                channel_ = electrode_view.electrode.channel
-
-                # Check if this channel differs from the last visited channel.
-                if self.electrode_channels_visited[-1] != channel_:
+                if len(self.electrode_ids_visited) == 0: # Electrode list is empty (for example, first click was not on electrode)
+                    self.add_electrode_to_path(electrode_view)
+                else:
                     found_connection_item = find_path_item(self, (self.electrode_ids_visited[-1], electrode_view.id))
-                    if found_connection_item is not None:
-                        # Append new channel and electrode ID to their respective lists.
-                        self.electrode_channels_visited.append(channel_)
-                        self.electrode_ids_visited.append(electrode_view.id)
-                        
+                    if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
+                        self.add_electrode_to_path(electrode_view)
                         found_connection_item.update_color()
-                        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
-
-                # Update the electrode pressed to the current electrode view.
-                self.electrode_pressed = electrode_view
+                    
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
@@ -101,6 +99,7 @@ class ElectrodeScene(QGraphicsScene):
             # TODO: Implement the logic to handle the mouse release event. Add header to the path and indicate CW & CCW rotation for closed loops
             
 
-        self.electrode_pressed = None
+        self.left_mouse_pressed = False
         self.electrode_channels_visited = []
+        self.electrode_ids_visited = []
         super().mouseReleaseEvent(event)
