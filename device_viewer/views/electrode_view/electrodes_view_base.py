@@ -24,13 +24,19 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
 
         # Add a new variable specific to this class
         self.key = key
+        self.set_inactive()
 
-    def update_color(self):
+    def set_active(self, color=Qt.green):
         """
-        Method to update the color of the electrode connection.
-        This could depend on the state or other properties of the item.
+        Set connection item to visually active
         """
-        self.setPen(QPen(Qt.green, 5))  # Example: Set pen color to green with thickness 5
+        self.setPen(QPen(color, 5))  # Example: Set pen color to green with thickness 5
+
+    def set_inactive(self):
+        """
+        Set connection item to visually inactive. This is default.
+        """
+        self.setPen(QPen(QColor(default_colors['connection']), 1))
 
 
 # electrode polygons

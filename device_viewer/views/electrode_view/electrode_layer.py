@@ -38,12 +38,8 @@ class ElectrodeLayer():
 
         for key, (src, dst) in self.connections.items():
 
-            # Set up the color
-            color = QColor(default_colors['connection'])
-            color.setAlphaF(1.0)
-
             # Generate connection line
-            connection_item = generate_connection_line(key, src, dst, color=color)
+            connection_item = generate_connection_line(key, src, dst)
 
             # Store the generated connection item
             self.connection_items.append(connection_item)

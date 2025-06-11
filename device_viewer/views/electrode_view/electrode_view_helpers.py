@@ -1,7 +1,9 @@
 import numpy as np
 from PySide6.QtGui import QColor, QPainterPath, QPen
+from pyface.qt.QtCore import Qt
 
 from .electrodes_view_base import ElectrodeConnectionItem
+from .default_settings import default_colors
 
 
 def find_path_item(scene, connected_electrodes_keys):
@@ -14,7 +16,7 @@ def find_path_item(scene, connected_electrodes_keys):
     return None  # No match found
 
 
-def generate_connection_line(key, src: tuple, dst: tuple, color: QColor = None):
+def generate_connection_line(key, src: tuple, dst: tuple):
     """
     Paints a line based on src and dst coordinates.
     """
@@ -23,8 +25,6 @@ def generate_connection_line(key, src: tuple, dst: tuple, color: QColor = None):
     path.lineTo(dst[0], dst[1])
     connection_item = ElectrodeConnectionItem(key, path)
 
-    if color is not None:
-        connection_item.setPen(QPen(color, 1))
     return connection_item
 
 
