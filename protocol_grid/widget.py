@@ -131,6 +131,9 @@ class PGCWidget(QWidget):
         self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
 
+        if self.model.invisibleRootItem().rowCount() == 0:
+            self.add_step(into=False)
+
     def add_group(self, into=False):
         """
         Add a group to the tree view. If into is True, the group is added as a child of the selected item.
