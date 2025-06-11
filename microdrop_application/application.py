@@ -16,9 +16,17 @@ from traits.api import Bool, Instance, List, Property, observe, Directory
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
-from PySide6.QtWidgets import QStatusBar, QToolBar
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
+                               QPushButton, QSizePolicy, QVBoxLayout,
+                               QWidget)
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QPixmap, QIcon, QFont
+
+from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
+from dropbot_tools_menu.menus import dropbot_tools_menu_factory
+from .consts import (scibots_icon_path, menu_options_icons_path,
+                     sidebar_menu_options, sidebar_stylesheet,
+                     hamburger_btn_stylesheet)
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, level="DEBUG")
@@ -142,18 +150,7 @@ class MicrodropApplication(TasksApplication):
                     window.control._statusbar = status_bar
                     
                 if not hasattr(window.control, "_left_toolbar"):
-                    # TODO: Move Pane from views to here
-                    left_toolbar = QToolBar("PermanentToolbar", window.control)
-                    left_toolbar.setOrientation(Qt.Vertical)
-                    left_toolbar.setMovable(False)
-                    left_toolbar.setFloatable(False)
-                    left_toolbar.setAllowedAreas(Qt.LeftToolBarArea)
-                    left_toolbar.setFixedWidth(100)
-                    left_toolbar.setObjectName("PermanentLeftToolbar")
-
-                    # Example: add an action or button
-                    example_action = QAction("Example", window.control)
-                    left_toolbar.addAction(example_action)
+                    left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
 
                     # Add to the left of the main window
                     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
@@ -163,3 +160,97 @@ class MicrodropApplication(TasksApplication):
 
                     # Store a reference so it's not re-added
                     window.control._left_toolbar = left_toolbar
+
+
+class MicrodropSidebar(QToolBar):
+    def __init__(self, parent=None, task=None):
+        super().__init__("Permanent Sidebar", parent)
+        self.task = task
+        
+        self.setOrientation(Qt.Vertical)
+        self.setMovable(False)
+        self.setFloatable(False)
+        self.setAllowedAreas(Qt.LeftToolBarArea)
+        self.setFixedWidth(140)
+        self.setObjectName("PermanentLeftToolbar")
+
+        container = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 10, 0, 10) 
+        layout.setSpacing(15) 
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        # Logo
+        self.logo_label = QLabel()
+        pixmap = QPixmap(scibots_icon_path)
+        if not pixmap.isNull():
+            self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
+        self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
+
+        # Hamburger button
+        self.hamburger_btn = QPushButton()
+        self.hamburger_btn.setFixedSize(QSize(40, 40))
+        self.hamburger_btn.setText("☰")
+        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
+        self.hamburger_btn.setCursor(Qt.PointingHandCursor)
+        self.hamburger_btn.clicked.connect(self.toggle_menu)
+        layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
+
+        self.menu_widget = QWidget()
+        self.menu_layout = QVBoxLayout()
+        self.menu_layout.setContentsMargins(0, 0, 0, 0)
+        self.menu_layout.setSpacing(26)
+        self.menu_widget.setLayout(self.menu_layout)
+
+        # Menu buttons
+        self.menu_buttons = []
+        menu_options = sidebar_menu_options
+        icon_dir = menu_options_icons_path
+        icon_size = QSize(22, 22)
+        font = QFont()
+        font.setBold(True)
+        for option, icon in menu_options:
+            label = "\n\t\t".join(option.split(" "))
+            btn = QPushButton("\t\t"+label)
+            btn.setFont(font)
+            btn.setFixedWidth(140)
+            btn.setIcon(QIcon(str(icon_dir / icon)))
+            btn.setIconSize(icon_size)
+            btn.setStyleSheet(sidebar_stylesheet)
+            btn.setCursor(Qt.PointingHandCursor)
+             
+            self.menu_layout.addWidget(btn)
+            self.menu_buttons.append(btn)
+        
+        self.menu_widget.setVisible(False)
+        layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
+
+        # connections
+        button_names = [name for name, _ in menu_options]
+        self.menu_buttons[button_names.index("Exit")].clicked.connect(self._handle_exit)
+        self.menu_buttons[button_names.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
+
+        container.setLayout(layout)
+        self.addWidget(container)
+
+    def toggle_menu(self):
+        self.menu_widget.setVisible(not self.menu_widget.isVisible())
+
+    def _handle_diagnostics(self):
+        app = self.task.window.application
+        dropbot_plugin = None
+        for plugin in app.plugin_manager._plugins:
+            if isinstance(plugin, DropbotToolsMenuPlugin):
+                dropbot_plugin = plugin
+                break
+        if dropbot_plugin is None:
+            print("DropbotToolsMenuPlugin not found.")
+            return
+
+        dropbot_menu = dropbot_tools_menu_factory(dropbot_plugin)
+        run_all_tests_action = dropbot_menu.items[0]
+        run_all_tests_action.perform(self)
+
+    def _handle_exit(self):
+        self.task.window.application.exit()
