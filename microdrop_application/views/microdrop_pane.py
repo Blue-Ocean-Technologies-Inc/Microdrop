@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget
 from pyface.tasks.task_pane import TaskPane
 
 
-class MicrodropPane(TaskPane):
+class MicrodropCentralCanvas(TaskPane):
     id = "white_canvas.pane"
     name = "White Canvas Pane"
 

@@ -1,25 +1,25 @@
 # system imports.
 import json
-import os
 import dramatiq
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
-from pyface.tasks.api import Task, TaskLayout, Tabbed
-from pyface.api import FileDialog, OK, GUI
-from traits.api import Instance, Str, provides
+from pyface.tasks.api import Task, TaskLayout, Tabbed, PaneItem
+from pyface.api import GUI
+from traits.api import Instance, provides
 
-from microdrop_application.views.microdrop_pane import MicrodropPane
+from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
+from microdrop_utils.status_bar_utils import set_status_bar_message
 # Local imports.
 from .consts import PKG
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils._logger import get_logger
-from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, \
-    basic_listener_actor_routine
+from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
+                                                      basic_listener_actor_routine)
 
-from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction, ResultsDialogAction
+from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -81,7 +81,7 @@ class MicrodropTask(Task):
         """Create the central pane with the device viewer widget with a default view.
         """
 
-        return MicrodropPane()
+        return MicrodropCentralCanvas()
 
     def create_dock_panes(self):
         """Create any dock panes needed for the task."""
@@ -101,9 +101,8 @@ class MicrodropTask(Task):
 
     def _default_layout_default(self):
         return TaskLayout(
-            left=Tabbed(
-            )
-
+            left=PaneItem("microdrop.central_canvas"),
+            right=Tabbed()
         )
 
     ##########################################################
@@ -127,6 +126,7 @@ class MicrodropTask(Task):
         current_test_id = message.get('current_test_id')
         total_tests = message.get('total_tests')
         report_path = message.get('report_path')
+        cancelled = message.get('cancelled', False)
         
         def show_dialog():
             self.wait_for_test_dialog = WaitForTestDialogAction()
@@ -162,3 +162,7 @@ class MicrodropTask(Task):
         # Close the dialog when the test is done
         if not active_state:
             GUI.invoke_later(self.wait_for_test_dialog.close)
+            if cancelled:
+                GUI.invoke_later(set_status_bar_message, "Self test cancelled.", self.window)
+            else:
+                GUI.invoke_later(set_status_bar_message, "Self test completed.", self.window)

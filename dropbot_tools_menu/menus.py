@@ -7,6 +7,7 @@ from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.status_bar_utils import set_status_bar_message
 
 from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING
@@ -19,7 +20,6 @@ from .consts import PKG
 from .self_test_dialogs import ShowSelfTestIntroDialogAction, DropbotDisconnectedDialogAction
 
 
-
 class DramatiqMessagePublishAction(TaskWindowAction):
     topic = Str(desc="topic this action connects to")
     message = Any(desc="message to publish")
@@ -28,21 +28,22 @@ class DramatiqMessagePublishAction(TaskWindowAction):
         publish_message(topic=self.topic, message=self.message)
 
 
-
 class RunTests(DramatiqMessagePublishAction):
     num_tests = Int(1, desc="number of tests run")
     message = Property(Directory, observe="object.application.app_data_dir")
     plugin = Any()
 
-    def _get_message(self):
-        if self.object.application:
+    def _get_message(self, event=None):
+        if self.object and hasattr(self.object, "application"):
             return self.object.application.app_data_dir
         return None
 
     def perform(self, event=None):
+        window = event.task.window
+        
         dropbot_connected = self.plugin.dropbot_connected
-
         if not dropbot_connected:
+            set_status_bar_message("Warning: Cannot start test, Dropbot is disconnected", window)
             disconnected_dialog = DropbotDisconnectedDialogAction()
             return disconnected_dialog.perform(event)
 
@@ -51,9 +52,12 @@ class RunTests(DramatiqMessagePublishAction):
       
         # only show the intro dialog for the tests that require the test board
         if self.topic != TEST_VOLTAGE and self.topic != TEST_ON_BOARD_FEEDBACK_CALIBRATION:
+            set_status_bar_message("Click OK to continue", window)
             if self_test_intro_dialog.perform(event):
+                set_status_bar_message("Running self tests...", window, 15000)
                 super().perform(event)
         else:
+            set_status_bar_message("Running self tests...", window, 30000)
             super().perform(event)
 
 
