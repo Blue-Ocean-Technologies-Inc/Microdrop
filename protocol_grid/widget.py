@@ -13,7 +13,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
 from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
-                                                   save_protocol_sequence_to_json)
+                                                   save_protocol_sequence_to_json,
+                                                   visualize_protocol_with_swimlanes)
 
 
 logger = get_logger(__name__, level="DEBUG")
@@ -232,7 +233,7 @@ class PGCWidget(QWidget):
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
         if file_name:
             with open(file_name, 'w') as f:
-                f.write(json.dumps([item.dict() for item in protocol_data], indent=4))
+                f.write(json.dumps([item.model_dump() for item in protocol_data], indent=4))
             save_protocol_sequence_to_json(protocol_data, file_name)
             logger.debug(f"Protocol exported to {file_name}")
 
@@ -240,7 +241,8 @@ class PGCWidget(QWidget):
         protocol_data = self.to_protocol_model()
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as PNG", "protocol_grid_ui_export.png", "PNG Files (*.png)")
         if file_name:
-            visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
+            # visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
+            visualize_protocol_with_swimlanes(protocol_data, file_name.replace(".png", ""), 5)
             logger.debug(f"Protocol PNG exported as {file_name}")
 
     def populate_treeview(self, protocol_sequence):
