@@ -1,4 +1,5 @@
 # enthought imports
+from traits.api import Str
 from pyface.tasks.dock_pane import DockPane
 
 # local imports
@@ -13,8 +14,8 @@ class PGCDockPane(DockPane):
     """
     #### 'ITaskPane' interface ################################################
 
-    id = PKG + ".widget"
-    name = PKG_name
+    id = Str(PKG + ".widget")
+    name = Str(PKG_name)
 
     def create_contents(self, parent):
         return PGCWidget()

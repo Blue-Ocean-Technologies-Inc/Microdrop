@@ -20,7 +20,6 @@ from .consts import PKG
 from .self_test_dialogs import ShowSelfTestIntroDialogAction, DropbotDisconnectedDialogAction
 
 
-
 class DramatiqMessagePublishAction(TaskWindowAction):
     topic = Str(desc="topic this action connects to")
     message = Any(desc="message to publish")
@@ -29,26 +28,19 @@ class DramatiqMessagePublishAction(TaskWindowAction):
         publish_message(topic=self.topic, message=self.message)
 
 
-
 class RunTests(DramatiqMessagePublishAction):
     num_tests = Int(1, desc="number of tests run")
     message = Property(Directory, observe="object.application.app_data_dir")
     plugin = Any()
 
-    def _get_message(self, event = None):
-        # if event and hasattr(event, "task") and hasattr(event.task, "application"):
-        #     return event.task.application.app_data_dir
+    def _get_message(self, event=None):
         if self.object and hasattr(self.object, "application"):
             return self.object.application.app_data_dir
         return None
 
     def perform(self, event=None):
-        window = getattr(event, "task", None)
-        if window is not None and hasattr(window, "window"):
-            window = window.window
-        else:
-            window = None
-
+        window = event.task.window
+        
         dropbot_connected = self.plugin.dropbot_connected
         if not dropbot_connected:
             set_status_bar_message("Warning: Cannot start test, Dropbot is disconnected", window)
