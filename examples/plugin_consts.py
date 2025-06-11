@@ -22,8 +22,8 @@ FRONTEND_PLUGINS = [
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,
     ManualControlsPlugin,
-    ProtocolGridControllerUIPlugin
-    DeviceViewerPlugin,
+    ProtocolGridControllerUIPlugin,
+    DeviceViewerPlugin
 ]
 
 BACKEND_PLUGINS = [
