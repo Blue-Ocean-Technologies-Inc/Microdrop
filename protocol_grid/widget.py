@@ -20,6 +20,10 @@ from protocol_grid.consts import protocol_grid_fields
 
 logger = get_logger(__name__, level="DEBUG")
 
+GROUP_TYPE = "group"
+STEP_TYPE = "step"
+ROW_TYPE_ROLE = Qt.UserRole + 1
+
 
 class SpinBoxDelegate(QStyledItemDelegate):
     def __init__(self, parent=None, integer=True):
@@ -284,14 +288,14 @@ class PGCWidget(QWidget):
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
             # If Group
-            #TODO: Remove reliance on Group always being called "Group" in Description
-            if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
+            if into and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
         #TODO: implement remaining fields
         group_name = PGCItem(item_type="Description", item_data="Group")
+        group_name.setData(GROUP_TYPE, ROW_TYPE_ROLE)
         group_id = PGCItem(item_type="ID", item_data="")
         self.group_id += 1
         group_rep = PGCItem(item_type="Repetitions", item_data="1")
@@ -314,14 +318,14 @@ class PGCWidget(QWidget):
         if selected_indexes:
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
-            #TODO: Remove reliance on Group always being called "Group" in Description
-            if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
+            if into and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
         #TODO: implement remaining fields
         step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
+        step_name.setData(STEP_TYPE, ROW_TYPE_ROLE)
         step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
         self.step_id += 1
         step_rep = PGCItem(item_type="Repetitions", item_data="1")
@@ -352,16 +356,20 @@ class PGCWidget(QWidget):
             sequence = []
             for row in range(parent_item.rowCount()):
                 desc_item = parent_item.child(row, 0)
+                row_type = desc_item.data(ROW_TYPE_ROLE)
                 desc = desc_item.get_item_data()
-                #TODO: Remove reliance on Group always being called "Group" in Description
-                if "Group" in desc:
-                    group_elements = []
-                    if parent_item.child(row, 0).hasChildren():
-                        group_elements = parse_seq(desc_item)
-                    #TODO: Remove reliance on Group always being called "Group" in Description
-                    #TODO: Export Group "Description" and "Repititions" as parameters
-                    sequence.append(ProtocolGroup(name="Group", elements=group_elements))
-                else: # step
+                if row_type == GROUP_TYPE:
+                    group_name = desc_item.text()
+                    group_rep = parent_item.child(row, 2).text()
+                    group_elements = parse_seq(desc_item)                    
+                    sequence.append(
+                        ProtocolGroup(
+                            name=group_name,
+                            elements=group_elements,
+                            parameters={"Repetitions": int(group_rep)}
+                        )
+                    )
+                elif row_type == STEP_TYPE:
                     try:
                         #TODO: implement remaining fields
                         parameters = {
@@ -406,12 +414,18 @@ class PGCWidget(QWidget):
                 if is_group:
                     group_obj = obj if not isinstance(obj, dict) else ProtocolGroup(**obj)
 
-                    #TODO: Import Group "Description" and "Repititions" as parameters
+                    group_name_val = getattr(group_obj, "name", "Group")
+                    group_rep_val = (
+                        str(getattr(group_obj, "parameters", {}).get("Repetitions", "1"))
+                        if hasattr(group_obj, "parameters") else "1"
+                    )
+
                     #TODO: implement remaining fields
-                    group_desc = PGCItem(item_type="Description", item_data=group_obj.name)
+                    group_desc = PGCItem(item_type="Description", item_data=group_name_val)
+                    group_desc.setData(GROUP_TYPE, ROW_TYPE_ROLE)
                     group_id = PGCItem(item_type="ID", item_data="")
                     self.group_id += 1
-                    group_rep = PGCItem(item_type="Repetitions", item_data="1")
+                    group_rep = PGCItem(item_type="Repetitions", item_data=group_rep_val)
                     group_dur = PGCItem(item_type="Duration", item_data="")
                     group_voltage = PGCItem(item_type="Voltage", item_data="")
                     group_frequency = PGCItem(item_type="Frequency", item_data="")
@@ -427,6 +441,7 @@ class PGCWidget(QWidget):
 
                     #TODO: implement remaining fields
                     step_desc = PGCItem(item_type="Description", item_data=step_obj.name)
+                    step_desc.setData(STEP_TYPE, ROW_TYPE_ROLE)
                     step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
                     self.step_id += 1
                     step_rep = PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", "")))

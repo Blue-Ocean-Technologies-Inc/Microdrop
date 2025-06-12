@@ -10,5 +10,6 @@ class ProtocolStep(BaseModel):
 class ProtocolGroup(BaseModel):
     name: str
     elements: List[Union['ProtocolStep', 'ProtocolGroup']] = Field(default_factory=list)
+    parameters: Dict[str, Any] = Field(default_factory=dict)
 
 ProtocolGroup.model_rebuild()
