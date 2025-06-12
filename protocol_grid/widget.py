@@ -68,6 +68,9 @@ class PGCItem(QStandardItem):
 class PGCWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.step_id = 1
+        self.group_id = 1
+
         self.tree = QTreeView()
         self.tree.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
 
@@ -78,7 +81,11 @@ class PGCWidget(QWidget):
         self.tree.setModel(self.model)
 
         # set Headers for columns
-        self.model.setHorizontalHeaderLabels(["Description", "Repetitions", "Duration", "Voltage", "Frequency"])
+        self.model.setHorizontalHeaderLabels(["Description", "ID", "Repetitions", 
+                                              "Duration", "Voltage", "Frequency", 
+                                              "Message", "Repeat Duration",
+                                              "Trail Length", "Video", "Volume Threshold" 
+                                             ])
 
         # Set delegates
         repetition_delegate = SpinBoxDelegate(self, integer=True)
@@ -86,10 +93,10 @@ class PGCWidget(QWidget):
         voltage_delegate = SpinBoxDelegate(self, integer=False)
         frequency_delegate = SpinBoxDelegate(self, integer=False)
 
-        self.tree.setItemDelegateForColumn(1, repetition_delegate)
-        self.tree.setItemDelegateForColumn(2, duration_delegate)
-        self.tree.setItemDelegateForColumn(3, voltage_delegate)
-        self.tree.setItemDelegateForColumn(4, frequency_delegate)
+        self.tree.setItemDelegateForColumn(2, repetition_delegate)
+        self.tree.setItemDelegateForColumn(3, duration_delegate)
+        self.tree.setItemDelegateForColumn(4, voltage_delegate)
+        self.tree.setItemDelegateForColumn(5, frequency_delegate)
 
         # Set edit trigger to single click
         self.tree.setEditTriggers(QTreeView.EditTrigger.CurrentChanged)
@@ -153,17 +160,19 @@ class PGCWidget(QWidget):
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
             # If Group
-            if into and selected_item.get_item_type() == "Description" and selected_item.get_item_data() == "Group":
+            if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
         group_name = PGCItem(item_type="Description", item_data="Group")
+        group_id = PGCItem(item_type="ID", item_data="")
+        self.group_id += 1
         group_rep = PGCItem(item_type="Repetitions", item_data="1")
         group_dur = PGCItem(item_type="Duration", item_data="")
         group_voltage = PGCItem(item_type="Voltage", item_data="")
         group_frequency = PGCItem(item_type="Frequency", item_data="")
-        group = [group_name, group_rep, group_dur, group_voltage, group_frequency]
+        group = [group_name, group_id, group_rep, group_dur, group_voltage, group_frequency]
         # make calculate order function
         for group_member in group:
             if group_member.get_item_type() in ["Repetitions", "Description"]:
@@ -179,28 +188,38 @@ class PGCWidget(QWidget):
         if selected_indexes:
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
-            if into and selected_item.get_item_type() == "Description" and selected_item.get_item_data() == "Group":
+            if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
-        step_index = parent_item.rowCount() + 1
-        step_name = PGCItem(item_type="Description", item_data=f"Step {step_index}")
+        step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
+        step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+        self.step_id += 1
         step_rep = PGCItem(item_type="Repetitions", item_data="1")
         step_dur = PGCItem(item_type="Duration", item_data="1.00")
         step_voltage = PGCItem(item_type="Voltage", item_data="0.00")
         step_frequency = PGCItem(item_type="Frequency", item_data="0.00")
-        step = [step_name, step_rep, step_dur, step_voltage, step_frequency]
+        step = [step_name, step_id, step_rep, step_dur, step_voltage, step_frequency]
 
         for step_member in step:
-            step_member.setEditable(True)
+            if step_member.get_item_type() == "ID":
+                step_member.setEditable(False)
+            else:
+                step_member.setEditable(True)
         parent_item.appendRow(step)
         self.tree.expandAll()
 
     def clear_view(self):
         self.model.clear()
-        self.model.setHorizontalHeaderLabels(["Description", "Repetitions", "Duration", "Voltage", "Frequency"])
-
+        self.model.setHorizontalHeaderLabels(["Description", "ID", "Repetitions", 
+                                              "Duration", "Voltage", "Frequency", 
+                                              "Message", "Repeat Duration",
+                                              "Trail Length", "Video", "Volume Threshold" 
+                                             ])
+        self.step_id = 1
+        self.group_id = 1
+        
     def to_protocol_model(self):
         """
         Walks the QTreeView and builds a sequential list of ProtocolStep/ProtocolGroup.
@@ -209,19 +228,19 @@ class PGCWidget(QWidget):
             sequence = []
             for row in range(parent_item.rowCount()):
                 desc_item = parent_item.child(row, 0)
-                # if desc_item is None or desc_item.get_item_type() != "Description":
-                #     continue
                 desc = desc_item.get_item_data()
-                if desc == "Group" and parent_item.child(row, 0).hasChildren():
-                    group_elements = parse_seq(desc_item)
+                if "Group" in desc:
+                    group_elements = []
+                    if parent_item.child(row, 0).hasChildren():
+                        group_elements = parse_seq(desc_item)
                     sequence.append(ProtocolGroup(name="Group", elements=group_elements))
                 else: # step
                     try:
                         parameters = {
-                            "Repetitions": int(parent_item.child(row, 1).text()),
-                            "Duration": float(parent_item.child(row, 2).text()),
-                            "Voltage": float(parent_item.child(row, 3).text()),
-                            "Frequency": float(parent_item.child(row, 4).text())
+                            "Repetitions": int(parent_item.child(row, 2).text()),
+                            "Duration": float(parent_item.child(row, 3).text()),
+                            "Voltage": float(parent_item.child(row, 4).text()),
+                            "Frequency": float(parent_item.child(row, 5).text())
                         }
                     except Exception:
                         parameters = {}
@@ -258,23 +277,36 @@ class PGCWidget(QWidget):
                     is_group = hasattr(obj, "elements")
                 if is_group:
                     group_obj = obj if not isinstance(obj, dict) else ProtocolGroup(**obj)
-                    group_item = PGCItem(item_type="Description", item_data="Group")
-                    rep_item = PGCItem(item_type="Repetitions", item_data="1")
-                    dur_item = PGCItem(item_type="Duration", item_data="")
-                    volt_item = PGCItem(item_type="Voltage", item_data="")
-                    freq_item = PGCItem(item_type="Frequency", item_data="")
-                    group_row = [group_item, rep_item, dur_item, volt_item, freq_item]
+
+                    group_desc = PGCItem(item_type="Description", item_data=group_obj.name)
+                    group_id = PGCItem(item_type="ID", item_data="")
+                    self.group_id += 1
+                    group_rep = PGCItem(item_type="Repetitions", item_data=str(group_obj.elements.get("Repetitions", "")))
+                    group_dur = PGCItem(item_type="Duration", item_data="")
+                    group_voltage = PGCItem(item_type="Voltage", item_data="")
+                    group_frequency = PGCItem(item_type="Frequency", item_data="")
+
+                    # hardcoded for now
+                    remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
+                    
+                    group_row = [group_desc, group_id, group_rep, group_dur, group_voltage, group_frequency] + remaining_cols
                     parent.appendRow(group_row)
-                    add_seq(group_item, group_obj.elements)
+                    add_seq(group_desc, group_obj.elements)
                 else:
                     step_obj = obj if not isinstance(obj, dict) else ProtocolStep(**obj)
-                    step_row = [
-                        PGCItem(item_type="Description", item_data=step_obj.name),
-                        PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", ""))),
-                        PGCItem(item_type="Duration", item_data=str(step_obj.parameters.get("Duration", ""))),
-                        PGCItem(item_type="Voltage", item_data=str(step_obj.parameters.get("Voltage", ""))),
-                        PGCItem(item_type="Frequency", item_data=str(step_obj.parameters.get("Frequency", ""))),
-                    ]
+
+                    step_desc = PGCItem(item_type="Description", item_data=step_obj.name)
+                    step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+                    self.step_id += 1
+                    step_rep = PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", "")))
+                    step_dur = PGCItem(item_type="Duration", item_data=str(step_obj.parameters.get("Duration", "")))
+                    step_voltage = PGCItem(item_type="Voltage", item_data=str(step_obj.parameters.get("Voltage", "")))
+                    step_frequency = PGCItem(item_type="Frequency", item_data=str(step_obj.parameters.get("Frequency", "")))
+                    
+                    #hardcoded for now
+                    remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
+                    
+                    step_row = [step_desc, step_id, step_rep, step_dur, step_voltage, step_frequency] + remaining_cols
                     parent.appendRow(step_row)
         root_item = self.model.invisibleRootItem()
         add_seq(root_item, protocol_sequence)
