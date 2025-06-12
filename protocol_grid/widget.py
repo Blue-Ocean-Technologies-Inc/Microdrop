@@ -15,6 +15,7 @@ from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
 from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
                                                    save_protocol_sequence_to_json,
                                                    visualize_protocol_with_swimlanes)
+from protocol_grid.consts import protocol_grid_fields
 
 
 logger = get_logger(__name__, level="DEBUG")
@@ -64,15 +65,29 @@ class PGCItem(QStandardItem):
     def set_item_data(self, item_data):
         self.item_data = item_data
 
+    def clone(self):
+        new_item = PGCItem(self.item_type, self.item_data)
+        new_item.setEditable(self.isEditable())
+        for role in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole]:
+            new_item.setData(self.data(role), role)
+
+        for row in range(self.rowCount()):
+            # recursion
+            child_row = [self.child(row, col).clone() for col in range(self.columnCount())]
+            new_item.appendRow(child_row)
+        return new_item
+
 
 class PGCWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.step_id = 1
+        #TODO: Implement Group IDs as alphabets
         self.group_id = 1
 
         self.tree = QTreeView()
         self.tree.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
+        self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
 
         # create Model
         self.model = QStandardItemModel()
@@ -81,11 +96,7 @@ class PGCWidget(QWidget):
         self.tree.setModel(self.model)
 
         # set Headers for columns
-        self.model.setHorizontalHeaderLabels(["Description", "ID", "Repetitions", 
-                                              "Duration", "Voltage", "Frequency", 
-                                              "Message", "Repeat Duration",
-                                              "Trail Length", "Video", "Volume Threshold" 
-                                             ])
+        self.model.setHorizontalHeaderLabels(protocol_grid_fields)
 
         # Set delegates
         repetition_delegate = SpinBoxDelegate(self, integer=True)
@@ -114,6 +125,21 @@ class PGCWidget(QWidget):
         self.add_step_into_button = QPushButton("Add Step Into")
         self.add_step_into_button.clicked.connect(lambda: self.add_step(into=True))
 
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.clicked.connect(self.delete_selected)
+
+        self.insert_below_button = QPushButton("Insert Below")
+        self.insert_below_button.clicked.connect(self.insert_below_selected)
+
+        self.copy_button = QPushButton("Copy")
+        self.copy_button.clicked.connect(self.copy_selected)
+
+        self.cut_button = QPushButton("Cut")
+        self.cut_button.clicked.connect(self.cut_selected)
+
+        self.paste_below_button = QPushButton("Paste Below")
+        self.paste_below_button.clicked.connect(self.paste_below_selected)
+
         self.export_json_button = QPushButton("Export to JSON")
         self.export_json_button.clicked.connect(self.export_to_json)
         self.export_png_button = QPushButton("Export to PNG")
@@ -127,6 +153,13 @@ class PGCWidget(QWidget):
         button_layout.addWidget(self.add_step_button)
         button_layout.addWidget(self.add_step_into_button)
 
+        edit_layout = QHBoxLayout()
+        edit_layout.addWidget(self.delete_button)
+        edit_layout.addWidget(self.insert_below_button)
+        edit_layout.addWidget(self.copy_button)
+        edit_layout.addWidget(self.cut_button)
+        edit_layout.addWidget(self.paste_below_button)
+
         export_layout = QHBoxLayout()
         export_layout.addWidget(self.export_json_button)
         export_layout.addWidget(self.export_png_button)
@@ -135,11 +168,102 @@ class PGCWidget(QWidget):
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tree)
         self.layout.addLayout(button_layout)
+        self.layout.addLayout(edit_layout)
         self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
 
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
+
+    def get_selected_row(self):
+        """
+        Return parent item and row index of selected row, 
+        or (None, None) if nothing is selected.
+        """
+        selected_indexes = self.tree.selectionModel().selectedIndexes()
+        if not selected_indexes:
+            return None, None
+        selected_index = selected_indexes[0]
+        item = self.model.itemFromIndex(selected_index)
+        parent = item.parent() or self.model.invisibleRootItem()
+        row = item.row()
+        return parent, row
+    
+    def copy_selected(self):
+        parent, row = self.get_selected_row()
+        if parent is None:
+            self._copied_row = None
+            return
+        # uses custom .clone() from PGCItem class
+        items = [parent.child(row, col).clone() for col in range(self.model.columnCount())]
+        self._copied_row = items
+
+    def cut_selected(self):
+        self.copy_selected()
+        self.delete_selected()
+
+    def paste_below_selected(self):
+        if not hasattr(self, '_copied_row') or self._copied_row is None:
+            return
+        parent, row = self.get_selected_row()
+        if parent is None:
+            return
+        new_items = [item.clone() for item in self._copied_row]
+        parent.insertRow(row + 1, new_items)
+        self.reassign_step_ids()
+
+    def delete_selected(self):
+        parent, row = self.get_selected_row()
+        if parent is not None:
+            parent.removeRow(row)
+            self.reassign_step_ids()
+
+    def insert_below_selected(self):
+        """ Insert a new step before selected item """
+        parent, row = self.get_selected_row()
+        if parent is None:
+            return
+        
+        #TODO: implement remaining fields
+        step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
+        step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+        self.step_id += 1
+        step_rep = PGCItem(item_type="Repetitions", item_data="1")
+        step_dur = PGCItem(item_type="Duration", item_data="1.00")
+        step_voltage = PGCItem(item_type="Voltage", item_data="0.00")
+        step_frequency = PGCItem(item_type="Frequency", item_data="0.00")
+
+        # hardcoded for now
+        remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
+                    
+        step = [step_name, step_id, step_rep, step_dur, step_voltage, step_frequency] + remaining_cols
+
+        for step_member in step:
+            if step_member.get_item_type() == "ID":
+                step_member.setEditable(False)
+            else:
+                step_member.setEditable(True)
+        parent.insertRow(row + 1, step)
+        self.reassign_step_ids()
+                
+    def reassign_step_ids(self):
+        """
+        Reassign step IDs. (groups have no IDs for now)
+        """ 
+        self.step_id = 1
+        def assign(parent):
+            for row in range(parent.rowCount()):
+                desc_item = parent.child(row, 0)
+                id_item = parent.child(row, 1)
+                if "Step" in desc_item.get_item_data(): # assuming step names contain "Step" for now
+                    id_item.setText(str(self.step_id))
+                    self.step_id += 1
+                else: # group
+                    id_item.setText("")
+                if desc_item.hasChildren():
+                    assign(desc_item)
+        assign(self.model.invisibleRootItem())
+
 
     def add_group(self, into=False):
         """
@@ -160,11 +284,13 @@ class PGCWidget(QWidget):
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
             # If Group
+            #TODO: Remove reliance on Group always being called "Group" in Description
             if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
+        #TODO: implement remaining fields
         group_name = PGCItem(item_type="Description", item_data="Group")
         group_id = PGCItem(item_type="ID", item_data="")
         self.group_id += 1
@@ -188,11 +314,13 @@ class PGCWidget(QWidget):
         if selected_indexes:
             selected_index = selected_indexes[0]
             selected_item = self.model.itemFromIndex(selected_index)
+            #TODO: Remove reliance on Group always being called "Group" in Description
             if into and selected_item.get_item_type() == "Description" and "Group" in selected_item.get_item_data():
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
+        #TODO: implement remaining fields
         step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
         step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
         self.step_id += 1
@@ -212,11 +340,7 @@ class PGCWidget(QWidget):
 
     def clear_view(self):
         self.model.clear()
-        self.model.setHorizontalHeaderLabels(["Description", "ID", "Repetitions", 
-                                              "Duration", "Voltage", "Frequency", 
-                                              "Message", "Repeat Duration",
-                                              "Trail Length", "Video", "Volume Threshold" 
-                                             ])
+        self.model.setHorizontalHeaderLabels(protocol_grid_fields)
         self.step_id = 1
         self.group_id = 1
         
@@ -229,13 +353,17 @@ class PGCWidget(QWidget):
             for row in range(parent_item.rowCount()):
                 desc_item = parent_item.child(row, 0)
                 desc = desc_item.get_item_data()
+                #TODO: Remove reliance on Group always being called "Group" in Description
                 if "Group" in desc:
                     group_elements = []
                     if parent_item.child(row, 0).hasChildren():
                         group_elements = parse_seq(desc_item)
+                    #TODO: Remove reliance on Group always being called "Group" in Description
+                    #TODO: Export Group "Description" and "Repititions" as parameters
                     sequence.append(ProtocolGroup(name="Group", elements=group_elements))
                 else: # step
                     try:
+                        #TODO: implement remaining fields
                         parameters = {
                             "Repetitions": int(parent_item.child(row, 2).text()),
                             "Duration": float(parent_item.child(row, 3).text()),
@@ -278,10 +406,12 @@ class PGCWidget(QWidget):
                 if is_group:
                     group_obj = obj if not isinstance(obj, dict) else ProtocolGroup(**obj)
 
+                    #TODO: Import Group "Description" and "Repititions" as parameters
+                    #TODO: implement remaining fields
                     group_desc = PGCItem(item_type="Description", item_data=group_obj.name)
                     group_id = PGCItem(item_type="ID", item_data="")
                     self.group_id += 1
-                    group_rep = PGCItem(item_type="Repetitions", item_data=str(group_obj.elements.get("Repetitions", "")))
+                    group_rep = PGCItem(item_type="Repetitions", item_data="1")
                     group_dur = PGCItem(item_type="Duration", item_data="")
                     group_voltage = PGCItem(item_type="Voltage", item_data="")
                     group_frequency = PGCItem(item_type="Frequency", item_data="")
@@ -295,6 +425,7 @@ class PGCWidget(QWidget):
                 else:
                     step_obj = obj if not isinstance(obj, dict) else ProtocolStep(**obj)
 
+                    #TODO: implement remaining fields
                     step_desc = PGCItem(item_type="Description", item_data=step_obj.name)
                     step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
                     self.step_id += 1
