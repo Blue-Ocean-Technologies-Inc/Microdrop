@@ -3,6 +3,7 @@ import json
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.electrodes import Electrodes
+from device_viewer.models.route import Route, Routes
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 
@@ -17,6 +18,16 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     #: The current electrode layer view
     electrode_view_layer = Instance(ElectrodeLayer)
+
+    #: The current route
+    route = Instance(Route)
+
+    # -------------------- Trait Initializers ------------------
+
+    def _route_default(self):
+        return Route()
+
+    # -------------------- Handlers -----------------------
 
     def handle_electrode_click(self, _electrode_id: Str):
         """Handle an electrode click event."""
@@ -52,3 +63,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         # publish event to all interested. Mainly to backend actors who need to know user has requested the electrode
         # to be actuated / unactuated.
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(updated_channels_states_map))
+
+    def handle_route_draw(self, from_channel, to_channel, connection_item):
+        '''Handle a route segment being drawn or first electrode being added'''
+        # For now we assume there is only one route since we havent initiliased multiple layers yet
+
+        logger.critical(f"{self.route.route} {from_channel}->{to_channel}")
+
+        if self.route.can_add_segment(from_channel, to_channel):
+            self.route.add_segment(from_channel, to_channel)
+            connection_item.set_active()
+

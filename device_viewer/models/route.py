@@ -1,16 +1,23 @@
 from traits.api import HasTraits, List, Int
 
 # Abstract pathing object class
-class Route():
-    route = []
+class Route(HasTraits):
+    route = List(Int)
 
-    def __init__(self, route: list[int]):
+    def _route_default(self):
+        return []
+
+    def __init__(self, route: list[int] = []):
         self.route = route
 
     def can_add_segment(self, from_channel: int, to_channel: int):
         '''Returns if this path can accept a given segment'''
         # We can currently only add to the ends of routes
-        return len(self.route) == 0 or from_channel == self.route[-1] or to_channel == self.route[0]
+        if len(self.route) == 0:
+            return True
+        
+        endpoints = (self.route[-1], self.route[0])
+        return from_channel in endpoints or to_channel in endpoints
     
     def add_segment(self, from_channel: int, to_channel: int):
         '''Adds segment to path'''
@@ -18,9 +25,15 @@ class Route():
             self.route.append(from_channel)
             self.route.append(to_channel)
         elif to_channel == self.route[0]: # Append to start
+            self.route.insert(0, from_channel)
+        elif from_channel == self.route[0]:
+            # We want it so that extending a path in the opposite direction
+            # that its going still expands it, but in the right direction
             self.route.insert(0, to_channel)
-        elif from_channel == self.path[-1]: # Append to end
+        elif to_channel == self.route[-1]: # Append to end
             self.route.append(from_channel)
+        elif from_channel == self.route[-1]: # Similar to second case
+            self.route.append(to_channel)
 
     def remove_segment(self, from_channel: int, to_channel: int):
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
