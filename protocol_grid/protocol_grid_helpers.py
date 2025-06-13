@@ -55,8 +55,10 @@ class PGCItem(QStandardItem):
     def clone(self):
         new_item = PGCItem(self.item_type, self.item_data)
         new_item.setEditable(self.isEditable())
-        for role in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole]:
-            new_item.setData(self.data(role), role)
+        for role in range(Qt.UserRole + 100):
+            value = self.data(role)
+            if value is not None:
+                new_item.setData(value, role)
 
         for row in range(self.rowCount()):
             # recursion
