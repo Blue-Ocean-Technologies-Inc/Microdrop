@@ -31,6 +31,9 @@ class PGCWidget(QWidget):
         #TODO: Implement Group IDs as alphabets
         self.group_id = 1
 
+        self.undo_stack = []
+        self.redo_stack = []
+
         self.tree = QTreeView()
         self.tree.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
         self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
@@ -94,6 +97,12 @@ class PGCWidget(QWidget):
         self.paste_below_button = QPushButton("Paste Below")
         self.paste_below_button.clicked.connect(self.paste_below_selected)
 
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.clicked.connect(self.undo_last)
+
+        self.redo_button = QPushButton("Redo")
+        self.redo_button.clicked.connect(self.redo_last)
+
         self.export_json_button = QPushButton("Export to JSON")
         self.export_json_button.clicked.connect(self.export_to_json)
         self.export_png_button = QPushButton("Export to PNG")
@@ -113,6 +122,8 @@ class PGCWidget(QWidget):
         edit_layout.addWidget(self.copy_button)
         edit_layout.addWidget(self.cut_button)
         edit_layout.addWidget(self.paste_below_button)
+        edit_layout.addWidget(self.undo_button)
+        edit_layout.addWidget(self.redo_button)
 
         export_layout = QHBoxLayout()
         export_layout.addWidget(self.export_json_button)
@@ -170,6 +181,56 @@ class PGCWidget(QWidget):
         for i, visible in enumerate(visibility_list):
             self.tree.setColumnHidden(i, not visible)
 
+    def snapshot_for_undo(self):
+        """
+        Save a deep copy of the current model to the undo stack.
+        """
+        root_item = self.model.invisibleRootItem()
+        clone = [
+            [root_item.child(row, col).clone() for col in range(self.model.columnCount())] 
+            for  row in range(root_item.rowCount())
+        ]
+        self.undo_stack.append(clone)
+        if len(self.undo_stack) > 6: # limit stack size to 6
+            self.undo_stack = self.undo_stack[-6:] 
+
+        self.redo_stack.clear()  
+
+    def undo_last(self):
+        if not self.undo_stack:
+            return
+        
+        current_state = [
+            [self.model.invisibleRootItem().child(row, col).clone() 
+            for col in range(self.model.columnCount())] 
+            for row in range(self.model.invisibleRootItem().rowCount())
+        ]
+        self.redo_stack.append(current_state)
+
+        last_state = self.undo_stack.pop()
+        self.clear_view()
+        for row_items in last_state:
+            self.model.invisibleRootItem().appendRow([item.clone() for item in row_items])
+        self.reassign_step_ids()
+        self.tree.expandAll()
+
+    def redo_last(self):
+        if not self.redo_stack:
+            return
+        current_state = [
+            [self.model.invisibleRootItem().child(row, col).clone() 
+            for col in range(self.model.columnCount())] 
+            for row in range(self.model.invisibleRootItem().rowCount())
+        ]
+        self.undo_stack.append(current_state)
+
+        next_state = self.redo_stack.pop()
+        self.clear_view()
+        for row_items in next_state:
+            self.model.invisibleRootItem().appendRow([item.clone() for item in row_items])
+        self.reassign_step_ids()
+        self.tree.expandAll()
+
     def get_selected_row(self):
         """
         Return parent item and row index of selected row, 
@@ -194,10 +255,12 @@ class PGCWidget(QWidget):
         self._copied_row = items
 
     def cut_selected(self):
+        self.snapshot_for_undo()
         self.copy_selected()
         self.delete_selected()
 
     def paste_below_selected(self):
+        self.snapshot_for_undo()
         if not hasattr(self, '_copied_row') or self._copied_row is None:
             return
         parent, row = self.get_selected_row()
@@ -208,6 +271,7 @@ class PGCWidget(QWidget):
         self.reassign_step_ids()
 
     def delete_selected(self):
+        self.snapshot_for_undo()
         parent, row = self.get_selected_row()
         if parent is not None:
             parent.removeRow(row)
@@ -215,6 +279,7 @@ class PGCWidget(QWidget):
 
     def insert_below_selected(self):
         """ Insert a new step before selected item """
+        self.snapshot_for_undo()
         parent, row = self.get_selected_row()
         if parent is None:
             return
@@ -263,6 +328,7 @@ class PGCWidget(QWidget):
         Removes necessity to deselect a direct child of root and setting focus on root to add a group as a
         sibling in the uppermost level.
         """
+        self.snapshot_for_undo() 
         # Get the selected items' indices
         selected_indexes = self.tree.selectionModel().selectedIndexes()
 
@@ -290,6 +356,7 @@ class PGCWidget(QWidget):
         self.tree.expandAll()
 
     def add_step(self, into=False):
+        self.snapshot_for_undo()
         selected_indexes = self.tree.selectionModel().selectedIndexes()
         parent_item = self.model.invisibleRootItem()
         if selected_indexes:
