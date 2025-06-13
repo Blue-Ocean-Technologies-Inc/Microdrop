@@ -15,14 +15,33 @@ from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
 from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
                                                    save_protocol_sequence_to_json,
                                                    visualize_protocol_with_swimlanes)
-from protocol_grid.consts import protocol_grid_fields
-
+from protocol_grid.consts import (protocol_grid_fields,
+                                  step_defaults,
+                                  group_defaults) 
 
 logger = get_logger(__name__, level="DEBUG")
 
 GROUP_TYPE = "group"
 STEP_TYPE = "step"
 ROW_TYPE_ROLE = Qt.UserRole + 1
+
+def make_row(defaults, overrides=None, row_type=None):
+    """
+    Create row (Step/Group) using default values defined in consts.py
+    """
+    overrides = overrides or {}
+    items = []
+    for i, field in enumerate(protocol_grid_fields):
+        value = overrides.get(field, defaults.get(field, ""))
+        item = PGCItem(item_type=field, item_data=value)
+        if field == "Description" and row_type:
+            item.setData(row_type, ROW_TYPE_ROLE)
+        if field == "ID":
+            item.setEditable(False)
+        else:
+            item.setEditable(True)
+        items.append(item)
+    return items
 
 
 class SpinBoxDelegate(QStyledItemDelegate):
@@ -229,25 +248,17 @@ class PGCWidget(QWidget):
             return
         
         #TODO: implement remaining fields
-        step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
-        step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+        step_number = self.step_id
         self.step_id += 1
-        step_rep = PGCItem(item_type="Repetitions", item_data="1")
-        step_dur = PGCItem(item_type="Duration", item_data="1.00")
-        step_voltage = PGCItem(item_type="Voltage", item_data="0.00")
-        step_frequency = PGCItem(item_type="Frequency", item_data="0.00")
-
-        # hardcoded for now
-        remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
-                    
-        step = [step_name, step_id, step_rep, step_dur, step_voltage, step_frequency] + remaining_cols
-
-        for step_member in step:
-            if step_member.get_item_type() == "ID":
-                step_member.setEditable(False)
-            else:
-                step_member.setEditable(True)
-        parent.insertRow(row + 1, step)
+        step_items = make_row(
+            step_defaults,
+            overrides={
+                "Description": f"Step {step_number}",
+                "ID": str(step_number)
+            },
+            row_type=STEP_TYPE
+        )
+        parent.insertRow(row + 1, step_items)
         self.reassign_step_ids()
                 
     def reassign_step_ids(self):
@@ -294,22 +305,12 @@ class PGCWidget(QWidget):
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
         #TODO: implement remaining fields
-        group_name = PGCItem(item_type="Description", item_data="Group")
-        group_name.setData(GROUP_TYPE, ROW_TYPE_ROLE)
-        group_id = PGCItem(item_type="ID", item_data="")
-        self.group_id += 1
-        group_rep = PGCItem(item_type="Repetitions", item_data="1")
-        group_dur = PGCItem(item_type="Duration", item_data="")
-        group_voltage = PGCItem(item_type="Voltage", item_data="")
-        group_frequency = PGCItem(item_type="Frequency", item_data="")
-        group = [group_name, group_id, group_rep, group_dur, group_voltage, group_frequency]
-        # make calculate order function
-        for group_member in group:
-            if group_member.get_item_type() in ["Repetitions", "Description"]:
-                group_member.setEditable(True)
-            else:
-                group_member.setEditable(False)
-        parent_item.appendRow(group)
+        group_items = make_row(
+            group_defaults,
+            overrides={"Description": "Group"},
+            row_type=GROUP_TYPE
+        )
+        parent_item.appendRow(group_items)
         self.tree.expandAll()
 
     def add_step(self, into=False):
@@ -324,22 +325,17 @@ class PGCWidget(QWidget):
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
         #TODO: implement remaining fields
-        step_name = PGCItem(item_type="Description", item_data=f"Step {self.step_id}")
-        step_name.setData(STEP_TYPE, ROW_TYPE_ROLE)
-        step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+        step_number = self.step_id
         self.step_id += 1
-        step_rep = PGCItem(item_type="Repetitions", item_data="1")
-        step_dur = PGCItem(item_type="Duration", item_data="1.00")
-        step_voltage = PGCItem(item_type="Voltage", item_data="0.00")
-        step_frequency = PGCItem(item_type="Frequency", item_data="0.00")
-        step = [step_name, step_id, step_rep, step_dur, step_voltage, step_frequency]
-
-        for step_member in step:
-            if step_member.get_item_type() == "ID":
-                step_member.setEditable(False)
-            else:
-                step_member.setEditable(True)
-        parent_item.appendRow(step)
+        step_items = make_row(
+            step_defaults,
+            overrides={
+                "Description": f"Step {step_number}",
+                "ID": str(step_number)
+            },
+            row_type=STEP_TYPE
+        )
+        parent_item.appendRow(step_items)
         self.tree.expandAll()
 
     def clear_view(self):
@@ -357,7 +353,6 @@ class PGCWidget(QWidget):
             for row in range(parent_item.rowCount()):
                 desc_item = parent_item.child(row, 0)
                 row_type = desc_item.data(ROW_TYPE_ROLE)
-                desc = desc_item.get_item_data()
                 if row_type == GROUP_TYPE:
                     group_name = desc_item.text()
                     group_rep = parent_item.child(row, 2).text()
@@ -380,7 +375,7 @@ class PGCWidget(QWidget):
                         }
                     except Exception:
                         parameters = {}
-                    sequence.append(ProtocolStep(name=desc, parameters=parameters))
+                    sequence.append(ProtocolStep(name=desc_item.text(), parameters=parameters))
             return sequence
 
         root_item = self.model.invisibleRootItem()
@@ -421,39 +416,34 @@ class PGCWidget(QWidget):
                     )
 
                     #TODO: implement remaining fields
-                    group_desc = PGCItem(item_type="Description", item_data=group_name_val)
-                    group_desc.setData(GROUP_TYPE, ROW_TYPE_ROLE)
-                    group_id = PGCItem(item_type="ID", item_data="")
-                    self.group_id += 1
-                    group_rep = PGCItem(item_type="Repetitions", item_data=group_rep_val)
-                    group_dur = PGCItem(item_type="Duration", item_data="")
-                    group_voltage = PGCItem(item_type="Voltage", item_data="")
-                    group_frequency = PGCItem(item_type="Frequency", item_data="")
-
-                    # hardcoded for now
-                    remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
-                    
-                    group_row = [group_desc, group_id, group_rep, group_dur, group_voltage, group_frequency] + remaining_cols
-                    parent.appendRow(group_row)
-                    add_seq(group_desc, group_obj.elements)
+                    group_items = make_row(
+                        group_defaults,
+                        overrides={
+                            "Description": group_name_val,
+                            "Repetitions": group_rep_val
+                        },
+                        row_type=GROUP_TYPE
+                    )
+                    parent.appendRow(group_items)
+                    add_seq(group_items[0], group_obj.elements)
                 else:
                     step_obj = obj if not isinstance(obj, dict) else ProtocolStep(**obj)
 
                     #TODO: implement remaining fields
-                    step_desc = PGCItem(item_type="Description", item_data=step_obj.name)
-                    step_desc.setData(STEP_TYPE, ROW_TYPE_ROLE)
-                    step_id = PGCItem(item_type="ID", item_data=str(self.step_id))
+                    step_items = make_row(
+                        step_defaults,
+                        overrides={
+                            "Description": step_obj.name,
+                            "ID": str(self.step_id),
+                            "Repetitions": str(step_obj.parameters.get("Repetitions", "")),
+                            "Duration": str(step_obj.parameters.get("Duration", "")),
+                            "Voltage": str(step_obj.parameters.get("Voltage", "")),
+                            "Frequency": str(step_obj.parameters.get("Frequency", "")),
+                        },
+                        row_type=STEP_TYPE
+                    )
                     self.step_id += 1
-                    step_rep = PGCItem(item_type="Repetitions", item_data=str(step_obj.parameters.get("Repetitions", "")))
-                    step_dur = PGCItem(item_type="Duration", item_data=str(step_obj.parameters.get("Duration", "")))
-                    step_voltage = PGCItem(item_type="Voltage", item_data=str(step_obj.parameters.get("Voltage", "")))
-                    step_frequency = PGCItem(item_type="Frequency", item_data=str(step_obj.parameters.get("Frequency", "")))
-                    
-                    #hardcoded for now
-                    remaining_cols = [PGCItem(item_type="", item_data="") for _ in range(self.model.columnCount() - 6)]
-                    
-                    step_row = [step_desc, step_id, step_rep, step_dur, step_voltage, step_frequency] + remaining_cols
-                    parent.appendRow(step_row)
+                    parent.appendRow(step_items)
         root_item = self.model.invisibleRootItem()
         add_seq(root_item, protocol_sequence)
         self.tree.expandAll()
