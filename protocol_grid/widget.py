@@ -5,9 +5,11 @@ import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout,QFileDialog, 
-                               QDialog, QDialogButtonBox, QCheckBox)
+                               QDialog, QDialogButtonBox, QCheckBox,
+                               QMenu)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QStandardItemModel
+from PySide6.QtGui import (QStandardItemModel, QAction, 
+                           QKeySequence, QShortcut)
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -36,6 +38,15 @@ class PGCWidget(QWidget):
         self.tree = QTreeView()
         self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
         self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_edit_context_menu)
+
+        QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_X), self, self.cut_selected)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_V), self, self.paste_below_selected)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Z), self, self.undo_last)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Y), self, self.redo_last)
 
         header = self.tree.header()
         header.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -70,43 +81,19 @@ class PGCWidget(QWidget):
 
         # Group and Step creation buttons
         self.add_group_button = QPushButton("Add Group")
-        self.add_group_button.clicked.connect(lambda: self.add_group(into=False))
-
         self.add_group_into_button = QPushButton("Add Group Into")
-        self.add_group_into_button.clicked.connect(lambda: self.add_group(into=True))
-
         self.add_step_button = QPushButton("Add Step")
-        self.add_step_button.clicked.connect(lambda: self.add_step(into=False))
-
         self.add_step_into_button = QPushButton("Add Step Into")
+        self.add_group_button.clicked.connect(lambda: self.add_group(into=False))        
+        self.add_group_into_button.clicked.connect(lambda: self.add_group(into=True))        
+        self.add_step_button.clicked.connect(lambda: self.add_step(into=False))        
         self.add_step_into_button.clicked.connect(lambda: self.add_step(into=True))
 
-        self.delete_button = QPushButton("Delete")
-        self.delete_button.clicked.connect(self.delete_selected)
-
-        self.insert_below_button = QPushButton("Insert Below")
-        self.insert_below_button.clicked.connect(self.insert_below_selected)
-
-        self.copy_button = QPushButton("Copy")
-        self.copy_button.clicked.connect(self.copy_selected)
-
-        self.cut_button = QPushButton("Cut")
-        self.cut_button.clicked.connect(self.cut_selected)
-
-        self.paste_below_button = QPushButton("Paste Below")
-        self.paste_below_button.clicked.connect(self.paste_below_selected)
-
-        self.undo_button = QPushButton("Undo")
-        self.undo_button.clicked.connect(self.undo_last)
-
-        self.redo_button = QPushButton("Redo")
-        self.redo_button.clicked.connect(self.redo_last)
-
         self.export_json_button = QPushButton("Export to JSON")
-        self.export_json_button.clicked.connect(self.export_to_json)
         self.export_png_button = QPushButton("Export to PNG")
-        self.export_png_button.clicked.connect(self.export_to_png)
         self.import_json_button = QPushButton("Import from JSON")
+        self.export_json_button.clicked.connect(self.export_to_json)        
+        self.export_png_button.clicked.connect(self.export_to_png)        
         self.import_json_button.clicked.connect(self.import_from_json)
         
         button_layout = QHBoxLayout()
@@ -114,15 +101,6 @@ class PGCWidget(QWidget):
         button_layout.addWidget(self.add_group_into_button)
         button_layout.addWidget(self.add_step_button)
         button_layout.addWidget(self.add_step_into_button)
-
-        edit_layout = QHBoxLayout()
-        edit_layout.addWidget(self.delete_button)
-        edit_layout.addWidget(self.insert_below_button)
-        edit_layout.addWidget(self.copy_button)
-        edit_layout.addWidget(self.cut_button)
-        edit_layout.addWidget(self.paste_below_button)
-        edit_layout.addWidget(self.undo_button)
-        edit_layout.addWidget(self.redo_button)
 
         export_layout = QHBoxLayout()
         export_layout.addWidget(self.export_json_button)
@@ -132,12 +110,31 @@ class PGCWidget(QWidget):
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tree)
         self.layout.addLayout(button_layout)
-        self.layout.addLayout(edit_layout)
         self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
 
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
+
+    def show_edit_context_menu(self, pos):
+        index = self.tree.indexAt(pos)
+        if not index.isValid():
+            return
+        menu = QMenu(self)
+        actions = [
+            ("Delete", self.delete_selected),
+            ("Insert Step Below", self.insert_below_selected),
+            ("Copy", self.copy_selected),
+            ("Cut", self.cut_selected),
+            ("Paste Below", self.paste_below_selected),
+            ("Undo", self.undo_last),
+            ("Redo", self.redo_last),
+        ]
+        for name, slot in actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            menu.addAction(action)
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def show_column_toggle_dialog(self, pos):
         dialog = QDialog(self)
