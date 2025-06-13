@@ -28,14 +28,13 @@ class PGCWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.step_id = 1
-        #TODO: Implement Group IDs as alphabets
         self.group_id = 1
 
         self.undo_stack = []
         self.redo_stack = []
 
         self.tree = QTreeView()
-        self.tree.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
+        self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
         self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
 
         header = self.tree.header()
@@ -231,28 +230,35 @@ class PGCWidget(QWidget):
         self.reassign_step_ids()
         self.tree.expandAll()
 
-    def get_selected_row(self):
+    def get_selected_rows(self):
         """
-        Return parent item and row index of selected row, 
-        or (None, None) if nothing is selected.
+        Return list of (parent, row) for each unique row with at least one selected cell.
+        Sorted in reverse order so that row indices remain valid when removing.
         """
         selected_indexes = self.tree.selectionModel().selectedIndexes()
-        if not selected_indexes:
-            return None, None
-        selected_index = selected_indexes[0]
-        item = self.model.itemFromIndex(selected_index)
-        parent = item.parent() or self.model.invisibleRootItem()
-        row = item.row()
-        return parent, row
+        seen = set()
+        row_refs = []
+        for index in selected_indexes:
+            item = self.model.itemFromIndex(index)
+            parent = item.parent() or self.model.invisibleRootItem()
+            row = item.row()
+            key = (id(parent), row)
+            if key not in seen:
+                seen.add(key)
+                row_refs.append((parent, row))
+        row_refs.sort(key=lambda pr: (id(pr[0]), -pr[1])) 
+        # descending order used because normal way would cause issues when removing scattered rows
+        return row_refs
     
     def copy_selected(self):
-        parent, row = self.get_selected_row()
-        if parent is None:
-            self._copied_row = None
+        row_refs = self.get_selected_rows()
+        if not row_refs:
+            self._copied_rows = None
             return
-        # uses custom .clone() from PGCItem class
-        items = [parent.child(row, col).clone() for col in range(self.model.columnCount())]
-        self._copied_row = items
+        self._copied_rows = [
+            [parent.child(row, col).clone() for col in range(self.model.columnCount())]
+            for parent, row in row_refs
+        ]
 
     def cut_selected(self):
         self.snapshot_for_undo()
@@ -261,30 +267,33 @@ class PGCWidget(QWidget):
 
     def paste_below_selected(self):
         self.snapshot_for_undo()
-        if not hasattr(self, '_copied_row') or self._copied_row is None:
+        if not hasattr(self, '_copied_rows') or self._copied_rows is None:
             return
-        parent, row = self.get_selected_row()
-        if parent is None:
+        row_refs = self.get_selected_rows()
+        if not row_refs:
             return
-        new_items = [item.clone() for item in self._copied_row]
-        parent.insertRow(row + 1, new_items)
+        parent, row = row_refs[-1]
+        for r, row_items in enumerate(self._copied_rows):
+            parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
         self.reassign_step_ids()
 
     def delete_selected(self):
         self.snapshot_for_undo()
-        parent, row = self.get_selected_row()
-        if parent is not None:
-            parent.removeRow(row)
-            self.reassign_step_ids()
+        row_refs = self.get_selected_rows()
+        if not row_refs:
+            return
+        for parent, row in row_refs:
+            parent.removeRow(row)        
+        self.reassign_step_ids()
 
     def insert_below_selected(self):
         """ Insert a new step before selected item """
         self.snapshot_for_undo()
-        parent, row = self.get_selected_row()
-        if parent is None:
-            return
-        
+        row_refs = self.get_selected_rows()
+        if not row_refs:
+            return   
         #TODO: implement remaining fields
+        parent, row = row_refs[-1]  
         step_number = self.step_id
         self.step_id += 1
         step_items = make_row(
