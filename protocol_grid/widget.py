@@ -4,8 +4,9 @@ import json
 import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
-                               QPushButton, QHBoxLayout, QStyledItemDelegate, QSpinBox, QDoubleSpinBox,
-                               QStyle, QSizePolicy, QFileDialog)
+                               QPushButton, QHBoxLayout, QStyledItemDelegate, 
+                               QSpinBox, QDoubleSpinBox, QFileDialog, 
+                               QDialog, QDialogButtonBox, QCheckBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from microdrop_utils._logger import get_logger
@@ -112,6 +113,10 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
         self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
 
+        header = self.tree.header()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
+
         # create Model
         self.model = QStandardItemModel()
 
@@ -120,6 +125,10 @@ class PGCWidget(QWidget):
 
         # set Headers for columns
         self.model.setHorizontalHeaderLabels(protocol_grid_fields)
+
+        initial_column_widths = [120, 30, 80, 80, 80, 80, 80, 80, 80, 30, 120]
+        for i, width in enumerate(initial_column_widths):
+            self.tree.setColumnWidth(i, width)
 
         # Set delegates
         repetition_delegate = SpinBoxDelegate(self, integer=True)
@@ -197,6 +206,47 @@ class PGCWidget(QWidget):
 
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
+
+    def show_column_toggle_dialog(self, pos):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Options")
+        layout = QVBoxLayout(dialog)
+        checkboxes = []
+        column_indices = []
+        header = self.tree.header()
+
+        for i, field in enumerate(protocol_grid_fields):
+            if field in ("Description", "ID"):
+
+                continue
+            cb = QCheckBox(field)
+            cb.setChecked(not self.tree.isColumnHidden(i))
+            layout.addWidget(cb)
+            checkboxes.append(cb)
+            column_indices.append(i)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(button_box)
+
+        def apply_changes():
+            for cb, i in zip(checkboxes, column_indices):
+                self.tree.setColumnHidden(i, not cb.isChecked())
+            dialog.accept()
+        
+        button_box.accepted.connect(apply_changes)
+        button_box.rejected.connect(dialog.reject)
+
+        dialog.exec()
+
+    def get_column_visibility(self):
+        """
+        Returns a list of bools showing which columns are visible.
+        """
+        return [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
+
+    def set_column_visibility(self, visibility_list):
+        for i, visible in enumerate(visibility_list):
+            self.tree.setColumnHidden(i, not visible)
 
     def get_selected_row(self):
         """
@@ -459,7 +509,9 @@ class PGCWidget(QWidget):
                     protocol_sequence.append(ProtocolGroup(**obj))
                 else:
                     protocol_sequence.append(ProtocolStep(**obj))
+            prev_visibility = self.get_column_visibility()
             self.populate_treeview(protocol_sequence)
+            self.set_column_visibility(prev_visibility)
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
