@@ -41,19 +41,25 @@ class Route(HasTraits):
     
     def add_segment(self, from_id, to_id):
         '''Adds segment to path'''
+
+        print(self.route, f", gotten segment: {from_id, to_id}")
+
+        # The order of these cases is *very* important! We prioritize appending to end and in-direction, in that order!
+        # Changing the order will add the segment in a technically valid but strange place
         if len(self.route) == 0: # Path is empty
             self.route.append(from_id)
             self.route.append(to_id)
-        elif to_id == self.route[0]: # Append to start
+        elif from_id == self.route[-1]: # Append to end, in-direction
+            self.route.append(to_id)
+        elif to_id == self.route[0]: # Append to start, in-direction
             self.route.insert(0, from_id)
-        elif from_id == self.route[0]:
+        elif from_id == self.route[0]: # Append to start, out-of-direction
             # We want it so that extending a path in the opposite direction
             # that its going still expands it, but in the right direction
             self.route.insert(0, to_id)
-        elif to_id == self.route[-1]: # Append to end
-            self.route.append(from_id)
-        elif from_id == self.route[-1]: # Similar to second case
-            self.route.append(to_id)
+
+        print(self.route)
+        
 
     def remove_segment(self, from_id, to_id):
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
