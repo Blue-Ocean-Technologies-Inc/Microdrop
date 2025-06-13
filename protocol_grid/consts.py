@@ -1,9 +1,16 @@
 import os
+
+from PySide6.QtCore import Qt
+
 # # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
+
+GROUP_TYPE = "group"
+STEP_TYPE = "step"
+ROW_TYPE_ROLE = Qt.UserRole + 1
 
 protocol_grid_fields = ["Description", "ID", "Repetitions", 
                         "Duration", "Voltage", "Frequency", 
@@ -11,8 +18,6 @@ protocol_grid_fields = ["Description", "ID", "Repetitions",
                         "Trail Length", "Video", "Volume Threshold" 
                     ]
 
-#TODO add utility function(s) in widget.py to make new step/group
-#using these defaults
 step_defaults = {
     "Description": "Step",
     "ID": "", 

@@ -4,11 +4,10 @@ import json
 import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
-                               QPushButton, QHBoxLayout, QStyledItemDelegate, 
-                               QSpinBox, QDoubleSpinBox, QFileDialog, 
+                               QPushButton, QHBoxLayout,QFileDialog, 
                                QDialog, QDialogButtonBox, QCheckBox)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtGui import QStandardItemModel
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -17,89 +16,12 @@ from protocol_grid.model.protocol_visualization_helpers import (visualize_protoc
                                                    save_protocol_sequence_to_json,
                                                    visualize_protocol_with_swimlanes)
 from protocol_grid.consts import (protocol_grid_fields,
-                                  step_defaults,
-                                  group_defaults) 
+                                  step_defaults, group_defaults, 
+                                  GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
+from protocol_grid.protocol_grid_helpers import (make_row, SpinBoxDelegate,
+                                                 int_to_letters)
 
 logger = get_logger(__name__, level="DEBUG")
-
-GROUP_TYPE = "group"
-STEP_TYPE = "step"
-ROW_TYPE_ROLE = Qt.UserRole + 1
-
-def make_row(defaults, overrides=None, row_type=None):
-    """
-    Create row (Step/Group) using default values defined in consts.py
-    """
-    overrides = overrides or {}
-    items = []
-    for i, field in enumerate(protocol_grid_fields):
-        value = overrides.get(field, defaults.get(field, ""))
-        item = PGCItem(item_type=field, item_data=value)
-        if field == "Description" and row_type:
-            item.setData(row_type, ROW_TYPE_ROLE)
-        if field == "ID":
-            item.setEditable(False)
-        else:
-            item.setEditable(True)
-        items.append(item)
-    return items
-
-
-class SpinBoxDelegate(QStyledItemDelegate):
-    def __init__(self, parent=None, integer=True):
-        super().__init__(parent)
-        self.integer = integer
-
-    def createEditor(self, parent, option, index):
-        if self.integer:
-            editor = QSpinBox(parent)
-        else:
-            editor = QDoubleSpinBox(parent)
-            editor.setDecimals(2)
-            editor.setSingleStep(0.01)
-        editor.setMinimum(0)
-        editor.setMaximum(10000)  # Set as per your requirement
-        editor.installEventFilter(self)
-        return editor
-
-    def setEditorData(self, editor, index):
-        value = index.model().data(index, Qt.ItemDataRole.EditRole)
-        editor.setValue(int(value) if self.integer else float(value))
-
-    def setModelData(self, editor, model, index):
-        value = editor.value()
-        model.setData(index, value, Qt.ItemDataRole.EditRole)
-
-
-class PGCItem(QStandardItem):
-    def __init__(self, item_type=None, item_data=None):
-        super().__init__(item_data)
-        self.item_type = item_type
-        self.item_data = item_data
-
-    def get_item_type(self):
-        return self.item_type
-
-    def get_item_data(self):
-        return self.item_data
-
-    def set_item_type(self, item_type):
-        self.item_type = item_type
-
-    def set_item_data(self, item_data):
-        self.item_data = item_data
-
-    def clone(self):
-        new_item = PGCItem(self.item_type, self.item_data)
-        new_item.setEditable(self.isEditable())
-        for role in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole]:
-            new_item.setData(self.data(role), role)
-
-        for row in range(self.rowCount()):
-            # recursion
-            child_row = [self.child(row, col).clone() for col in range(self.columnCount())]
-            new_item.appendRow(child_row)
-        return new_item
 
 
 class PGCWidget(QWidget):
@@ -316,15 +238,18 @@ class PGCWidget(QWidget):
         Reassign step IDs. (groups have no IDs for now)
         """ 
         self.step_id = 1
+        self.group_id = 1
         def assign(parent):
             for row in range(parent.rowCount()):
                 desc_item = parent.child(row, 0)
                 id_item = parent.child(row, 1)
-                if "Step" in desc_item.get_item_data(): # assuming step names contain "Step" for now
+                row_type = desc_item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
                     id_item.setText(str(self.step_id))
                     self.step_id += 1
-                else: # group
-                    id_item.setText("")
+                elif row_type == GROUP_TYPE:
+                    id_item.setText(int_to_letters(self.group_id))
+                    self.group_id += 1
                 if desc_item.hasChildren():
                     assign(desc_item)
         assign(self.model.invisibleRootItem())
@@ -361,6 +286,7 @@ class PGCWidget(QWidget):
             row_type=GROUP_TYPE
         )
         parent_item.appendRow(group_items)
+        self.reassign_step_ids()
         self.tree.expandAll()
 
     def add_step(self, into=False):
@@ -496,6 +422,7 @@ class PGCWidget(QWidget):
                     parent.appendRow(step_items)
         root_item = self.model.invisibleRootItem()
         add_seq(root_item, protocol_sequence)
+        self.reassign_step_ids()
         self.tree.expandAll()
 
     def import_from_json(self):
