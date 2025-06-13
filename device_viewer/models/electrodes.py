@@ -58,6 +58,7 @@ class Electrodes(HasTraits):
     electrode_states = Property(List(Bool), observe='_electrodes:items:state')
 
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
+    # Note that channel-electride_id is one-to-many! So there is meaningful difference in acting on one or the other
     channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='_electrodes')
 
     #: Map of the unique channels and their states, True means actuated.

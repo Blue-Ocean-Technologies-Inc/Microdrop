@@ -3,7 +3,7 @@ import json
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.electrodes import Electrodes
-from device_viewer.models.route import Route, Routes
+from device_viewer.models.route import Route
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 
@@ -20,12 +20,19 @@ class ElectrodeInteractionControllerService(HasTraits):
     electrode_view_layer = Instance(ElectrodeLayer)
 
     #: The current route
-    route = Instance(Route)
+    routes = []
 
-    # -------------------- Trait Initializers ------------------
+    # Selected route
+    selected_route = 0
 
-    def _route_default(self):
-        return Route()
+    def get_route(self, index: int):
+        if 0 <= index < len(self.routes):
+            return self.routes[index]
+        else:
+            return None
+        
+    def get_selected_route(self):
+        return self.get_route(self.selected_route)
 
     # -------------------- Handlers -----------------------
 
@@ -64,13 +71,31 @@ class ElectrodeInteractionControllerService(HasTraits):
         # to be actuated / unactuated.
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(updated_channels_states_map))
 
-    def handle_route_draw(self, from_channel, to_channel, connection_item):
+    def handle_route_draw(self, from_id, to_id, connection_item):
         '''Handle a route segment being drawn or first electrode being added'''
-        # For now we assume there is only one route since we havent initiliased multiple layers yet
+        if len(self.routes) == 0:
+            self.routes.append(Route())
 
-        logger.critical(f"{self.route.route} {from_channel}->{to_channel}")
+        current_route = self.get_selected_route()
+        if current_route == None: return
 
-        if self.route.can_add_segment(from_channel, to_channel):
-            self.route.add_segment(from_channel, to_channel)
-            connection_item.set_active()
+        if current_route.can_add_segment(from_id, to_id):
+            current_route.add_segment(from_id, to_id)
+            
+            self.electrode_view_layer.redraw_connections_to_scene(self.routes)
+
+    def handle_route_erase(self, from_id, to_id, connection_item):
+        '''Handle a route segment being drawn or first electrode being added'''
+
+        current_route = self.get_selected_route()
+        if current_route == None: return
+
+        new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
+
+        self.routes.pop(self.selected_route) # Delete the current route
+
+        for route in new_routes: # Add in new routes in the same place the old route was, so one if the new routes is already selected
+            self.routes.insert(self.selected_route, route)
+
+        self.electrode_view_layer.redraw_connections_to_scene(self.routes)
 

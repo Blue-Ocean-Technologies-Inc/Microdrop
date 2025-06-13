@@ -91,13 +91,14 @@ class ElectrodeScene(QGraphicsScene):
                 else:
                     found_connection_item = find_path_item(self, (self.electrode_ids_visited[-1], electrode_view.id))
                     if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
-                        self.interaction_service.handle_route_draw(self.electrode_channels_visited[-1], electrode_view.electrode.channel, found_connection_item)
+                        self.interaction_service.handle_route_draw(self.electrode_ids_visited[-1], electrode_view.id, found_connection_item)
                         self.add_electrode_to_path(electrode_view)
                         
         if self.right_mouse_pressed:
             connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
             if connection_item:
-                connection_item.set_inactive()
+                (from_id, to_id) = connection_item.key
+                self.interaction_service.handle_route_erase(from_id, to_id, connection_item)
                 
                     
 

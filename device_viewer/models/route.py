@@ -2,46 +2,65 @@ from traits.api import HasTraits, List, Int
 
 # Abstract pathing object class
 class Route(HasTraits):
-    route = List(Int)
+    route = List()
 
     def _route_default(self):
         return []
 
-    def __init__(self, route: list[int] = []):
+    def __init__(self, route: list = []):
         self.route = route
 
-    def can_add_segment(self, from_channel: int, to_channel: int):
+    def get_segments(self):
+        '''Returns list of segments from current route'''
+        return list(zip(self.route, self.route[1:]))
+
+    def is_loop(self):
+        '''Return True if the path is a loop'''
+        return len(self.route) >= 2 and self.route[0] == self.route[-1]
+
+    @staticmethod
+    def is_segment(from_a, to_a, from_b, to_b):
+        '''Returns if segment a is equivalent to segment b (equal or equal reversed)'''
+        return (from_a == from_b and to_a == to_b) or (from_a == to_b and to_a == from_b)
+    
+    def has_segment(self, from_id, to_id):
+        '''Checks if the route has a particular segment'''
+        for i in range(len(self.route)-1):
+            if Route.is_segment(from_id, to_id, self.route[i], self.route[i+1]):
+                return True
+        return False
+    
+    def can_add_segment(self, from_id, to_id):
         '''Returns if this path can accept a given segment'''
         # We can currently only add to the ends of routes
         if len(self.route) == 0:
             return True
         
         endpoints = (self.route[-1], self.route[0])
-        return from_channel in endpoints or to_channel in endpoints
+        return from_id in endpoints or to_id in endpoints
     
-    def add_segment(self, from_channel: int, to_channel: int):
+    def add_segment(self, from_id, to_id):
         '''Adds segment to path'''
         if len(self.route) == 0: # Path is empty
-            self.route.append(from_channel)
-            self.route.append(to_channel)
-        elif to_channel == self.route[0]: # Append to start
-            self.route.insert(0, from_channel)
-        elif from_channel == self.route[0]:
+            self.route.append(from_id)
+            self.route.append(to_id)
+        elif to_id == self.route[0]: # Append to start
+            self.route.insert(0, from_id)
+        elif from_id == self.route[0]:
             # We want it so that extending a path in the opposite direction
             # that its going still expands it, but in the right direction
-            self.route.insert(0, to_channel)
-        elif to_channel == self.route[-1]: # Append to end
-            self.route.append(from_channel)
-        elif from_channel == self.route[-1]: # Similar to second case
-            self.route.append(to_channel)
+            self.route.insert(0, to_id)
+        elif to_id == self.route[-1]: # Append to end
+            self.route.append(from_id)
+        elif from_id == self.route[-1]: # Similar to second case
+            self.route.append(to_id)
 
-    def remove_segment(self, from_channel: int, to_channel: int):
+    def remove_segment(self, from_id, to_id):
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
         if len(self.route) == 0:
             return [[]]
         
         new_routes = [[]] # Where route pieces are stored
-        deleted_segment = (from_channel, to_channel)
 
         # First, we partition the route into the deleted segment and routes in between
         # Example: Deleting segment (1,2) for route 0-1-2-3-1-2-4-0
@@ -49,13 +68,10 @@ class Route(HasTraits):
         # Note that the order and count of channels do not change, so the first and last element being equal still indicates a loop
         for i in range(len(self.route)-1):
             new_routes[-1].append(self.route[i])
-
-            cur_segment = (self.route[i], self.route[i+1])
-            if cur_segment == deleted_segment or cur_segment == deleted_segment[::-1]: # Check both ways from -> to, to -> from
+            if Route.is_segment(from_id, to_id, self.route[i], self.route[i+1]): # Check both ways from -> to, to -> from
                 # Terminate current segment and create new one
                 new_routes.append([])
         new_routes[-1].append(self.route[-1]) # Add final element
-        print(new_routes)
 
         # Now we do the merge phase. We'll merge (concatonate) new_routes A and B on the following conditions:
         # 1. B is the closest mergable with A *after it* in the list (with loopbacks)
@@ -77,8 +93,6 @@ class Route(HasTraits):
                         break
             
         return list(filter(lambda route: len(route) > 1, new_routes)) # Remove empty/singular routes
-
-    def is_loop(self):
-        '''Return True if the path is a loop'''
-        return len(self.path) >= 2 and self.path[0] == self.path[-1]
     
+    def __repr__(self):
+        return f"<Route path={self.route}>"
