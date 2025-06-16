@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout,QFileDialog, 
                                QDialog, QDialogButtonBox, QCheckBox,
                                QMenu)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import (QStandardItemModel, QAction, 
                            QKeySequence, QShortcut)
 from microdrop_utils._logger import get_logger
@@ -44,7 +44,8 @@ class PGCWidget(QWidget):
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_X), self, self.cut_selected)
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_V), self, self.paste_below_selected)
+        QShortcut(QKeySequence(Qt.CTRL | Qt.SHIFT | Qt.Key_V), self, lambda: self.paste_selected(above=True))
+        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_V), self, lambda: self.paste_selected(above=False))
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Z), self, self.undo_last)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Y), self, self.redo_last)
 
@@ -121,19 +122,40 @@ class PGCWidget(QWidget):
         if not index.isValid():
             return
         menu = QMenu(self)
+
+        action_select_fields = QAction("Select Fields", self)
+        action_select_fields.triggered.connect(self.show_column_toggle_dialog)
+        menu.addAction(action_select_fields)
+
+        menu.addSeparator()
+
         actions = [
             ("Delete", self.delete_selected),
-            ("Insert Step Below", self.insert_below_selected),
+            # ("Insert Step Below", self.insert_below_selected),
             ("Copy", self.copy_selected),
             ("Cut", self.cut_selected),
-            ("Paste Below", self.paste_below_selected),
+            ("Paste Above", lambda: self.paste_selected(above=True)),
+            ("Paste Below", lambda: self.paste_selected(above=False)),
             ("Undo", self.undo_last),
-            ("Redo", self.redo_last),
+            ("Redo", self.redo_last)
         ]
         for name, slot in actions:
             action = QAction(name, self)
             action.triggered.connect(slot)
             menu.addAction(action)
+
+        menu.addSeparator()
+
+        next_actions = [
+            ("Select all rows", self.select_all),
+            ("Deselect rows", self.deselect_rows),
+            ("Invert row selection", self.invert_row_selection)
+        ]
+        for name, slot in next_actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            menu.addAction(action)
+
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def show_column_toggle_dialog(self, pos):
@@ -142,11 +164,9 @@ class PGCWidget(QWidget):
         layout = QVBoxLayout(dialog)
         checkboxes = []
         column_indices = []
-        header = self.tree.header()
 
         for i, field in enumerate(protocol_grid_fields):
             if field in ("Description", "ID"):
-
                 continue
             cb = QCheckBox(field)
             cb.setChecked(not self.tree.isColumnHidden(i))
@@ -164,7 +184,6 @@ class PGCWidget(QWidget):
         
         button_box.accepted.connect(apply_changes)
         button_box.rejected.connect(dialog.reject)
-
         dialog.exec()
 
     def get_column_visibility(self):
@@ -227,10 +246,11 @@ class PGCWidget(QWidget):
         self.reassign_step_ids()
         self.tree.expandAll()
 
-    def get_selected_rows(self):
+    def get_selected_rows(self, sort_descending=True):
         """
-        Return list of (parent, row) for each unique row with at least one selected cell.
-        Sorted in reverse order so that row indices remain valid when removing.
+        - Return list of (parent, row) for each unique row with at least one selected cell.
+        - Sorted in reverse order (only for deleting/cut multiple rows) 
+          so that row indices remain valid when removing.
         """
         selected_indexes = self.tree.selectionModel().selectedIndexes()
         seen = set()
@@ -243,12 +263,44 @@ class PGCWidget(QWidget):
             if key not in seen:
                 seen.add(key)
                 row_refs.append((parent, row))
-        row_refs.sort(key=lambda pr: (id(pr[0]), -pr[1])) 
-        # descending order used because normal way would cause issues when removing scattered rows
+        if sort_descending:
+            row_refs.sort(key=lambda pr: (id(pr[0]), -pr[1])) 
+            # descending order used because normal way would cause issues when removing multiple scattered rows
+        else:
+            row_refs.sort(key=lambda pr: (id(pr[0]), pr[1]))         
         return row_refs
     
+    def select_all(self):
+        self.tree.selectAll()
+    
+    def deselect_rows(self):
+        self.tree.clearSelection()
+
+    def invert_row_selection(self):
+        model = self.model
+        selection_model = self.tree.selectionModel()
+
+        def collect_all_row_indexes(parent_item):
+            indexes = []
+            for row in range(parent_item.rowCount()):
+                index = self.model.index(row, 0, parent_item.index())
+                indexes.append(index)
+                child_item = parent_item.child(row, 0)
+                if child_item and child_item.hasChildren():
+                    indexes.extend(collect_all_row_indexes(child_item))
+            return indexes
+    
+        all_indexes = collect_all_row_indexes(model.invisibleRootItem())
+        selected_rows = set(idx for idx in selection_model.selectedRows(0))
+
+        selection_model.clearSelection()
+
+        for idx in all_indexes:
+            if idx not in selected_rows:
+                selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+
     def copy_selected(self):
-        row_refs = self.get_selected_rows()
+        row_refs = self.get_selected_rows(sort_descending=False)
         if not row_refs:
             self._copied_rows = None
             return
@@ -262,16 +314,20 @@ class PGCWidget(QWidget):
         self.copy_selected()
         self.delete_selected()
 
-    def paste_below_selected(self):
+    def paste_selected(self, above=True):
         self.snapshot_for_undo()
         if not hasattr(self, '_copied_rows') or self._copied_rows is None:
             return
-        row_refs = self.get_selected_rows()
+        row_refs = self.get_selected_rows(sort_descending=False)
         if not row_refs:
             return
-        parent, row = row_refs[-1]
-        for r, row_items in enumerate(self._copied_rows):
-            parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
+        parent, row = row_refs[0] 
+        if above:
+            for r, row_items in enumerate(self._copied_rows):
+                parent.insertRow(row + r, [item.clone() for item in row_items])
+        else:
+            for r, row_items in enumerate(self._copied_rows):
+                parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
         self.reassign_step_ids()
 
     def delete_selected(self):
@@ -290,7 +346,7 @@ class PGCWidget(QWidget):
         if not row_refs:
             return   
         #TODO: implement remaining fields
-        parent, row = row_refs[-1]  
+        parent, row = row_refs[0]  
         step_number = self.step_id
         self.step_id += 1
         step_items = make_row(
@@ -385,6 +441,7 @@ class PGCWidget(QWidget):
             row_type=STEP_TYPE
         )
         parent_item.appendRow(step_items)
+        self.reassign_step_ids()
         self.tree.expandAll()
 
     def clear_view(self):
