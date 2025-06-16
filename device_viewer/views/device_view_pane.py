@@ -5,7 +5,9 @@ from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout
 from pyface.qt.QtCore import Qt
+from pyface.tasks.api import TraitsDockPane
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
@@ -20,12 +22,13 @@ from device_viewer.services.electrode_interaction_service import ElectrodeIntera
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
+from ..route_selection_view.route_selection_view import RouteLayerManager, RouteLayerView
 import json
 
 logger = get_logger(__name__)
 
 
-class DeviceViewerDockPane(DockPane):
+class DeviceViewerDockPane(TraitsDockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
     """
@@ -38,7 +41,7 @@ class DeviceViewerDockPane(DockPane):
     name = PKG_name + " Dock Pane"
 
     scene = Instance(QGraphicsScene)
-    view = Instance(AutoFitGraphicsView)
+    device_view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
@@ -49,7 +52,7 @@ class DeviceViewerDockPane(DockPane):
 
     # --------- Device View trait initializers -------------
     def traits_init(self):
-        logger.info("Starting ManualControls listener")
+        logger.info("Starting DeviceViewer listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
@@ -62,7 +65,7 @@ class DeviceViewerDockPane(DockPane):
     def _scene_default(self):
         return ElectrodeScene()
 
-    def _view_default(self):
+    def _device_view_default(self):
         view = AutoFitGraphicsView(self.scene)
         view.setObjectName('device_view')
         view.setViewport(QOpenGLWidget())
@@ -109,15 +112,31 @@ class DeviceViewerDockPane(DockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self._electrodes_model_changed(self.electrodes_model)
 
-        self.view.setParent(parent)
-        return self.view
+        # Layout init
+        container = QWidget(parent)
+        layout = QHBoxLayout(container)
+
+        # device_view code
+        self.device_view.setParent(container)
+
+        # layer_view code
+        layer_model = RouteLayerManager()
+        layer_view = RouteLayerView
+        ui = layer_model.edit_traits(view=layer_view, kind='subpanel')
+        ui.control.setFixedWidth(230) # Set widget to fixed width
+
+        # Add widgets to layout
+        layout.addWidget(self.device_view)
+        layout.addWidget(ui.control)
+
+        return container
 
     def set_view_from_model(self, new_model):
         self.remove_current_layer()
         self.current_electrode_layer = ElectrodeLayer(new_model)
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
-        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def open_file_dialog(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
