@@ -131,7 +131,8 @@ class PGCWidget(QWidget):
 
         actions = [
             ("Delete", self.delete_selected),
-            # ("Insert Step Below", self.insert_below_selected),
+            ("Insert Step Above", self.insert_step),
+            ("Insert Group Above", self.insert_group),
             ("Copy", self.copy_selected),
             ("Cut", self.cut_selected),
             ("Paste Above", lambda: self.paste_selected(above=True)),
@@ -299,7 +300,7 @@ class PGCWidget(QWidget):
         self.reassign_step_ids()
         self.tree.expandAll()
 
-    def get_selected_rows(self, sort_descending=True):
+    def get_selected_rows(self, sort_descending=None):
         """
         - Return list of (parent, row) for each unique row with at least one selected cell.
         - Sorted in reverse order (only for deleting/cut multiple rows) 
@@ -392,7 +393,7 @@ class PGCWidget(QWidget):
             parent.removeRow(row)        
         self.reassign_step_ids()
 
-    def insert_below_selected(self):
+    def insert_step(self):
         """ Insert a new step before selected item """
         self.snapshot_for_undo()
         row_refs = self.get_selected_rows()
@@ -410,7 +411,23 @@ class PGCWidget(QWidget):
             },
             row_type=STEP_TYPE
         )
-        parent.insertRow(row + 1, step_items)
+        parent.insertRow(row, step_items)
+        self.reassign_step_ids()
+
+    def insert_group(self):
+        """ Insert a new group before selected item """
+        self.snapshot_for_undo()
+        row_refs = self.get_selected_rows()
+        if not row_refs:
+            return   
+        #TODO: implement remaining fields
+        parent, row = row_refs[0]  
+        group_items = make_row(
+            group_defaults,
+            overrides={"Description": "Group"},
+            row_type=GROUP_TYPE
+        )
+        parent.insertRow(row, group_items)
         self.reassign_step_ids()
                 
     def reassign_step_ids(self):
