@@ -14,9 +14,21 @@ ROW_TYPE_ROLE = Qt.UserRole + 1
 
 protocol_grid_fields = ["Description", "ID", "Repetitions", 
                         "Duration", "Voltage", "Frequency", 
-                        "Message", "Repeat Duration",
+                        "Label", "Message", "Repeat Duration",
                         "Trail Length", "Video", "Volume Threshold" 
                     ]
+fixed_fields = {"Description", "ID"}
+field_groupings = [
+            (None, [f for f in protocol_grid_fields if f not in [
+                "Label", "Message", "Repeat Duration", "Repetitions", "Trail Length", "Video", "Volume Threshold"
+            ] and f not in fixed_fields]),
+
+            ("step_label_plugin:", ["Label"]),
+            ("user_prompt_plugin:", ["Message"]),
+            ("droplet_planning_plugin:", ["Repeat Duration", "Repetitions", "Trail Length"]),
+            ("dmf_device_ui_plugin:", ["Video"]),
+            ("dropbot_plugin:", ["Volume Threshold"])
+        ]
 
 step_defaults = {
     "Description": "Step",
@@ -25,6 +37,7 @@ step_defaults = {
     "Duration": "1.00",
     "Voltage": "0.00",
     "Frequency": "0.00",
+    "Label": "",
     "Message": "",
     "Repeat Duration": "",
     "Trail Length": "",
@@ -39,6 +52,7 @@ group_defaults = {
     "Duration": "",
     "Voltage": "",
     "Frequency": "",
+    "Label": "",
     "Message": "",
     "Repeat Duration": "",
     "Trail Length": "",

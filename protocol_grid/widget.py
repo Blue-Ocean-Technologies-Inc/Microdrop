@@ -6,7 +6,7 @@ import dramatiq
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout,QFileDialog, 
                                QDialog, QDialogButtonBox, QCheckBox,
-                               QMenu)
+                               QMenu, QFrame, QToolButton)
 from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import (QStandardItemModel, QAction, 
                            QKeySequence, QShortcut)
@@ -17,8 +17,8 @@ from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
 from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
                                                    save_protocol_sequence_to_json,
                                                    visualize_protocol_with_swimlanes)
-from protocol_grid.consts import (protocol_grid_fields,
-                                  step_defaults, group_defaults, 
+from protocol_grid.consts import (protocol_grid_fields, field_groupings,
+                                  fixed_fields, step_defaults, group_defaults, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
 from protocol_grid.protocol_grid_helpers import (make_row, SpinBoxDelegate,
                                                  int_to_letters)
@@ -164,15 +164,65 @@ class PGCWidget(QWidget):
         layout = QVBoxLayout(dialog)
         checkboxes = []
         column_indices = []
+        field_to_idx = {field: i for i, field in enumerate(protocol_grid_fields)}
+        first = True
+        group_containers = []
 
-        for i, field in enumerate(protocol_grid_fields):
-            if field in ("Description", "ID"):
+        for group_label, fields in field_groupings:
+            fields = [f for f in fields if f not in fixed_fields]
+            if not fields:
                 continue
-            cb = QCheckBox(field)
-            cb.setChecked(not self.tree.isColumnHidden(i))
-            layout.addWidget(cb)
-            checkboxes.append(cb)
-            column_indices.append(i)
+            if not first:
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                layout.addWidget(sep)
+            first = False
+            if group_label is not None:
+                tool_btn = QToolButton() # clickable label
+                tool_btn.setText(f"  {group_label}")
+                tool_btn.setCheckable(True)
+                tool_btn.setChecked(True)
+                tool_btn.setStyleSheet("QToolButton { font-weight: bold; border: none; }")
+                tool_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+                tool_btn.setArrowType(Qt.DownArrow)  # to start as expanded
+
+                container = QWidget()
+                container_layout = QVBoxLayout(container)
+                container_layout.setContentsMargins(0, 0, 0, 0)
+                container_layout.setSpacing(0)
+                group_cbs = []
+
+                for field in fields:
+                    idx = field_to_idx[field]
+                    cb = QCheckBox(field)
+                    cb.setChecked(not self.tree.isColumnHidden(idx))
+                    container_layout.addWidget(cb)
+                    checkboxes.append(cb)
+                    column_indices.append(idx)
+                    group_cbs.append(cb)
+                layout.addWidget(tool_btn)
+                layout.addWidget(container)
+
+                def make_toggle_func(btn=tool_btn, cont=container):
+                    def toggle():
+                        expanded = btn.isChecked()
+                        cont.setVisible(expanded)
+                        btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+                        dialog.adjustSize()
+                    return toggle
+
+                tool_btn.toggled.connect(make_toggle_func())
+                container.setVisible(True)
+                tool_btn.setArrowType(Qt.DownArrow)
+                group_containers.append((tool_btn, container))
+            else:
+                for field in fields:
+                    idx = field_to_idx[field]
+                    cb = QCheckBox(field)
+                    cb.setChecked(not self.tree.isColumnHidden(idx))
+                    layout.addWidget(cb)
+                    checkboxes.append(cb)
+                    column_indices.append(idx)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         layout.addWidget(button_box)
@@ -180,8 +230,11 @@ class PGCWidget(QWidget):
         def apply_changes():
             for cb, i in zip(checkboxes, column_indices):
                 self.tree.setColumnHidden(i, not cb.isChecked())
-            dialog.accept()
-        
+            for field in fixed_fields:
+                idx = field_to_idx[field]
+                self.tree.setColumnHidden(idx, False)
+            dialog.accept() 
+
         button_box.accepted.connect(apply_changes)
         button_box.rejected.connect(dialog.reject)
         dialog.exec()
