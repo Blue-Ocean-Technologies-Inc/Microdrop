@@ -300,29 +300,36 @@ class PGCWidget(QWidget):
         self.reassign_step_ids()
         self.tree.expandAll()
 
-    def get_selected_rows(self, sort_descending=None):
+    def get_selected_rows(self, for_deletion=False):
         """
-        - Return list of (parent, row) for each unique row with at least one selected cell.
+        Returns list of (parent, row) for each unique row with at least one selected cell.
+        - if for_deletion: sort by depth and descending row, for safe deletion.
+        - else: preserve selection order (as returned by selectedRows(0)).
         """
         selection_model = self.tree.selectionModel()
         selected = selection_model.selectedRows(0)
+        seen = set()
         row_refs = []
         for idx in selected:
             item = self.model.itemFromIndex(idx)
             parent = item.parent() or self.model.invisibleRootItem()
             row = item.row()
-            depth = 0
-            p = parent
-            while p != self.model.invisibleRootItem() and p is not None:
-                depth += 1
-                p = p.parent() or self.model.invisibleRootItem()
-            row_refs.append((parent, row, depth))
-        row_refs = list({(id(p), r): (p, r, d) for p, r, d in row_refs}.values())
-        if sort_descending:
-            row_refs.sort(key=lambda prd: (-prd[2], -prd[1]))
-        else:
-            row_refs.sort(key=lambda prd: (prd[2], prd[1]))
-        return [(p, r) for p, r, d in row_refs]
+            key = (id(parent), row)
+            if key not in seen:
+                seen.add(key)
+                row_refs.append((parent, row))
+        if for_deletion:
+            def get_depth(item):
+                depth = 0 # depth needed for correct deletion order
+                p = item.parent() or self.model.invisibleRootItem()
+                while p != self.model.invisibleRootItem():
+                    depth += 1
+                    p = p.parent() or self.model.invisibleRootItem()
+                return depth
+            row_refs_with_depth = [((parent, row), get_depth(parent.child(row, 0))) for parent, row in row_refs]
+            row_refs_with_depth.sort(key=lambda prd: (-prd[1], -prd[0][1]))  # deepest, then largest row index first
+            return [pr for pr, _ in row_refs_with_depth]
+        return row_refs
     
     def select_all(self):
         self.tree.selectAll()
@@ -354,15 +361,15 @@ class PGCWidget(QWidget):
                 selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
     def copy_selected(self):
-        row_refs = self.get_selected_rows(sort_descending=None)
+        row_refs = self.get_selected_rows(for_deletion=False)
         if not row_refs:
             self._copied_rows = None
             return
         self._copied_rows = [
-            (parent.child(row, 1).text(), [parent.child(row, col).clone() for col in range(self.model.columnCount())])
+            [parent.child(row, col).clone() for col in range(self.model.columnCount())]
             for parent, row in row_refs
         ]
-        
+
     def cut_selected(self):
         self.snapshot_for_undo()
         self.copy_selected()
@@ -372,25 +379,21 @@ class PGCWidget(QWidget):
         self.snapshot_for_undo()
         if not hasattr(self, '_copied_rows') or self._copied_rows is None:
             return
-        row_refs = self.get_selected_rows(sort_descending=False)
+        row_refs = self.get_selected_rows(for_deletion=False)
         if not row_refs:
             return
-        parent, row = row_refs[0] 
-        try:
-            sorted_rows = sorted(self._copied_rows, key=lambda pair: int(pair[0]))
-        except ValueError:
-            sorted_rows = sorted(self._copied_rows, key=lambda pair: pair[0])
+        parent, row = row_refs[0]
         if above:
-            for r, (_, row_items) in enumerate(sorted_rows):
+            for r, row_items in enumerate(self._copied_rows):
                 parent.insertRow(row + r, [item.clone() for item in row_items])
         else:
-            for r, (_, row_items) in enumerate(sorted_rows):
+            for r, row_items in enumerate(self._copied_rows):
                 parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
         self.reassign_step_ids()
 
     def delete_selected(self):
         self.snapshot_for_undo()
-        row_refs = self.get_selected_rows(sort_descending=True)
+        row_refs = self.get_selected_rows(for_deletion=True)
         if not row_refs:
             return
         for parent, row in row_refs:
