@@ -303,26 +303,26 @@ class PGCWidget(QWidget):
     def get_selected_rows(self, sort_descending=None):
         """
         - Return list of (parent, row) for each unique row with at least one selected cell.
-        - Sorted in reverse order (only for deleting/cut multiple rows) 
-          so that row indices remain valid when removing.
         """
-        selected_indexes = self.tree.selectionModel().selectedIndexes()
-        seen = set()
+        selection_model = self.tree.selectionModel()
+        selected = selection_model.selectedRows(0)
         row_refs = []
-        for index in selected_indexes:
-            item = self.model.itemFromIndex(index)
+        for idx in selected:
+            item = self.model.itemFromIndex(idx)
             parent = item.parent() or self.model.invisibleRootItem()
             row = item.row()
-            key = (id(parent), row)
-            if key not in seen:
-                seen.add(key)
-                row_refs.append((parent, row))
+            depth = 0
+            p = parent
+            while p != self.model.invisibleRootItem() and p is not None:
+                depth += 1
+                p = p.parent() or self.model.invisibleRootItem()
+            row_refs.append((parent, row, depth))
+        row_refs = list({(id(p), r): (p, r, d) for p, r, d in row_refs}.values())
         if sort_descending:
-            row_refs.sort(key=lambda pr: (id(pr[0]), -pr[1])) 
-            # descending order used because normal way would cause issues when removing multiple scattered rows
+            row_refs.sort(key=lambda prd: (-prd[2], -prd[1]))
         else:
-            row_refs.sort(key=lambda pr: (id(pr[0]), pr[1]))         
-        return row_refs
+            row_refs.sort(key=lambda prd: (prd[2], prd[1]))
+        return [(p, r) for p, r, d in row_refs]
     
     def select_all(self):
         self.tree.selectAll()
@@ -354,15 +354,15 @@ class PGCWidget(QWidget):
                 selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
     def copy_selected(self):
-        row_refs = self.get_selected_rows(sort_descending=False)
+        row_refs = self.get_selected_rows(sort_descending=None)
         if not row_refs:
             self._copied_rows = None
             return
         self._copied_rows = [
-            [parent.child(row, col).clone() for col in range(self.model.columnCount())]
+            (parent.child(row, 1).text(), [parent.child(row, col).clone() for col in range(self.model.columnCount())])
             for parent, row in row_refs
         ]
-
+        
     def cut_selected(self):
         self.snapshot_for_undo()
         self.copy_selected()
@@ -376,17 +376,21 @@ class PGCWidget(QWidget):
         if not row_refs:
             return
         parent, row = row_refs[0] 
+        try:
+            sorted_rows = sorted(self._copied_rows, key=lambda pair: int(pair[0]))
+        except ValueError:
+            sorted_rows = sorted(self._copied_rows, key=lambda pair: pair[0])
         if above:
-            for r, row_items in enumerate(self._copied_rows):
+            for r, (_, row_items) in enumerate(sorted_rows):
                 parent.insertRow(row + r, [item.clone() for item in row_items])
         else:
-            for r, row_items in enumerate(self._copied_rows):
+            for r, (_, row_items) in enumerate(sorted_rows):
                 parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
         self.reassign_step_ids()
 
     def delete_selected(self):
         self.snapshot_for_undo()
-        row_refs = self.get_selected_rows()
+        row_refs = self.get_selected_rows(sort_descending=True)
         if not row_refs:
             return
         for parent, row in row_refs:
