@@ -111,8 +111,8 @@ class ElectrodeLayer():
             
             for (route_from, route_to) in route_layer.route.get_segments():
                 if route_layer.visible:
-                    connection_map[(route_from, route_to)] = color
-                    connection_map[(route_to, route_from)] = color # We want either possible keys to be true
+                    connection_map[(route_from, route_to)] = color if connection_map.get((route_from, route_to), None) != Qt.yellow else Qt.yellow
+                    connection_map[(route_to, route_from)] = color if connection_map.get((route_to, route_from)) != Qt.yellow else Qt.yellow # We want either possible keys to be true
         
         # Apply map
         for key, connection_item in self.connection_items.items():

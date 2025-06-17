@@ -3,13 +3,23 @@ import random
 
 # Abstract pathing object class
 class Route(HasTraits):
-    route = List()
+    route = List() # List of ids - ids can be anything! In this case they are most likely strings or ints though
 
     def _route_default(self):
         return []
 
-    def __init__(self, route: list = []):
+    def __init__(self, route: list = [], channel_map=None):
         self.route = route
+        if channel_map:
+            self.channel_map = channel_map
+        else:
+            self.channel_map = {}
+
+    def get_channel_from_id(self, id):
+        for key, value in self.channel_map.items():
+            if id in value:
+                return key
+        return None
 
     def get_segments(self):
         '''Returns list of segments from current route'''
@@ -19,13 +29,21 @@ class Route(HasTraits):
         '''Return True if the path is a loop'''
         return len(self.route) >= 2 and self.route[0] == self.route[-1]
     
+    def count_loops(self):
+        '''Count how many times a path loops'''
+        return self.route.count(self.route[0])-1
+    
     def get_name(self):
         if len(self.route) == 0:
             return "Empty route"
         elif self.is_loop():
-            return f"Loop at {self.route[0]}"
+            loop_count = self.count_loops()
+            if loop_count > 1:
+                return f"{loop_count}x loop at {self.get_channel_from_id(self.route[0])}"
+            else:
+                return f"Loop at {self.get_channel_from_id(self.route[0])}"
         else:
-            return f"Path from {self.route[0]} to {self.route[-1]}"
+            return f"Path from {self.get_channel_from_id(self.route[0])} to {self.get_channel_from_id(self.route[-1])}"
 
     @staticmethod
     def is_segment(from_a, to_a, from_b, to_b):
@@ -113,7 +131,6 @@ class Route(HasTraits):
         return f"<Route path={self.route}>"
 
 class RouteLayer(HasTraits):
-    index = Int(0)
     visible = Bool(True)
     color = String()
     name = String()
@@ -169,7 +186,7 @@ class RouteLayerManager(HasTraits):
     
     @observe('layers.items')
     def _layers_items_changed(self, event):
-        if self.selected_layer == None and len(event.new) > 0:
+        if self.selected_layer == None and len(event.new) > 0: # If we have no routes and a route is added, select it
             self.selected_layer = event.new[0]
     
     @observe('selected_layer')

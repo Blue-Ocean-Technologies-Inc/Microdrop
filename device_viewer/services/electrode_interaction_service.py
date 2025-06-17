@@ -61,7 +61,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_route_draw(self, from_id, to_id, connection_item):
         '''Handle a route segment being drawn or first electrode being added'''
         if len(self.route_layer_manager.layers) == 0:
-            self.route_layer_manager.layers = [RouteLayer(route=Route())]
+            self.route_layer_manager.layers = [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map))]
 
         current_route = self.route_layer_manager.get_selected_route()
         if current_route == None: return
@@ -76,7 +76,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         current_route = self.route_layer_manager.get_selected_route()
         if current_route == None: return
 
-        new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
+        new_routes = [Route(route_list, channel_map=current_route.channel_map) for route_list in current_route.remove_segment(from_id, to_id)]
         self.route_layer_manager.replace_layer(self.route_layer_manager.selected_layer, new_routes)
 
         self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
@@ -84,5 +84,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("route_layer_manager.layers.items.visible")
     @observe("route_layer_manager.selected_layer")
     def route_redraw(self, event):
-        self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
 

@@ -64,13 +64,6 @@ class Electrodes(HasTraits):
 
     #: Map of the unique channels and their states, True means actuated.
     channels_states_map = Property(Dict(Int, Bool), observe='_electrodes:items:channel, _electrodes:items:state')
-    
-    route_manager = Instance(RouteLayerManager)
-
-    # ------------------ Trait Defaults ---------------------------------------------------------------------
-
-    def _route_manager_default(self):
-        return RouteLayerManager()
 
     # -------------------Magic methods ----------------------------------------------------------------------
     def __getitem__(self, item: Str) -> Electrode:
