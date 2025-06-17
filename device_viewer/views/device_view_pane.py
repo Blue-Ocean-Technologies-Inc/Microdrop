@@ -130,7 +130,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         layer_model = self.route_layer_manager
         layer_view = RouteLayerView
         self.layer_ui = layer_model.edit_traits(view=layer_view)
-        self.layer_ui.control.setFixedWidth(230) # Set widget to fixed width
+        self.layer_ui.control.setFixedWidth(300) # Set widget to fixed width
         self.layer_ui.control.setParent(container)
 
         # Add widgets to layout

@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Int, Bool, Instance, String
+from traits.api import HasTraits, List, Int, Bool, Instance, String, observe
 import random
 
 # Abstract pathing object class
@@ -117,6 +117,7 @@ class RouteLayer(HasTraits):
     visible = Bool(True)
     color = String()
     name = String()
+    is_selected = Bool(False)
 
     # Needs to be passed
     route = Instance(Route) # Actual route model
@@ -127,28 +128,32 @@ class RouteLayer(HasTraits):
     def _color_default(self):
         return random.choice(["pink", "blue", "green", "purple"])
 
+    @observe("route.route.items")
+    def _route_path_updated(self, event):
+        self.name = self.route.get_name()
+
 class RouteLayerManager(HasTraits):
-    layers = List(RouteLayer)
+    layers = List(RouteLayer, [])
 
-    selected_route = Int(-1) # No route selected
-
-    def _layers_default(self):
-        return []
+    selected_layer = Instance(RouteLayer)
     
-    def replace_route(self, index, new_routes: list[Route]):
-        old_route_layer = self.layers.pop(index) # Delete the current route
-        
+    def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
+        index = self.layers.index(old_route_layer)
+        self.layers.pop(index) # Delete the current layer
+
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
             if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
                 self.layers.insert(index, RouteLayer(route=new_routes[i], color=old_route_layer.color))
             else:
                 self.layers.insert(index, RouteLayer(route=new_routes[i]))
-    
-    def select_route(self, index):
-        if 0 <= index < len(self.layers):
-            self.selected_route = index
+
+        if index < len(self.layers):
+            self.selected_layer = self.layers[index]
+        elif len(self.layers) == 0:
+            self.selected_layer = None
         else:
-            self.seleced_route = None
+            self.selected_layer = self.layers[-1] # Set it to the last layer
+
 
     def get_route(self, index: int):
         if 0 <= index < len(self.layers):
@@ -157,4 +162,19 @@ class RouteLayerManager(HasTraits):
             return None
         
     def get_selected_route(self):
-        return self.get_route(self.selected_route)
+        if self.selected_layer:
+            return self.selected_layer.route
+        else:
+            return None
+    
+    @observe('layers.items')
+    def _layers_items_changed(self, event):
+        if self.selected_layer == None and len(event.new) > 0:
+            self.selected_layer = event.new[0]
+    
+    @observe('selected_layer')
+    def _selected_layer_changed(self, event):
+        # Mark only the selected layer
+        for layer in self.layers:
+            layer.is_selected = (layer is self.selected_layer)
+
