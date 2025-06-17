@@ -11,3 +11,6 @@
 **/results.txt
 **/*.log
 **/*test*.html
+demo*.json
+demo*.png
+demo*.dot

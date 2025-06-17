@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
                                QPushButton, QSizePolicy, QVBoxLayout,
                                QWidget)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QFont
+from PySide6.QtGui import QPixmap, QIcon, QFont, QPainter, QColor
 
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
@@ -167,6 +167,18 @@ class MicrodropApplication(TasksApplication):
                     window.control._left_toolbar = left_toolbar
 
 
+def colorize_pixmap(pixmap, color):
+    colored = QPixmap(pixmap.size())
+    colored.fill(Qt.transparent)
+    painter = QPainter(colored)
+    painter.setCompositionMode(QPainter.CompositionMode_Source)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    painter.fillRect(colored.rect(), color)
+    painter.end()
+    return colored
+
+
 class MicrodropSidebar(QToolBar):
     def __init__(self, parent=None, task=None):
         super().__init__("Permanent Sidebar", parent)
@@ -220,19 +232,19 @@ class MicrodropSidebar(QToolBar):
             btn = QPushButton("\t\t"+label)
             btn.setFont(font)
             btn.setFixedWidth(140)
-            icon = QIcon(str(icon_dir / icon))
-            icon.setIsMask(True)
-            btn.setIcon(icon)
+
+            icon_pixmap = QPixmap(str(icon_dir / icon)).scaled(icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            btn._icon_pixmap = icon_pixmap 
+            btn.setIcon(QIcon(icon_pixmap))
+            
             btn.setIconSize(icon_size)
             btn.setStyleSheet(sidebar_stylesheet)
-            btn.setCursor(Qt.PointingHandCursor)
-             
+            btn.setCursor(Qt.PointingHandCursor)             
             self.menu_layout.addWidget(btn)
             self.menu_buttons.append((btn, icon))
         
         self.menu_widget.setVisible(False)
         layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
-
         # connections
         button_names = [name for name, _ in menu_options]
         self.menu_buttons[button_names.index("Exit")][0].clicked.connect(self._handle_exit)
@@ -274,8 +286,8 @@ class MicrodropSidebar(QToolBar):
             color_str = "white"
         else:
             color_str = "black"
-        for btn, icon in self.menu_buttons:
-            btn.setIcon(icon)
+        for btn, _ in self.menu_buttons:
+            btn.setIcon(QIcon(colorize_pixmap(btn._icon_pixmap, color_str)))
             btn.setStyleSheet(sidebar_stylesheet % color_str)
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % color_str)
     
@@ -320,3 +332,14 @@ def is_dark_mode():
             except Exception:
                 pass
         return False
+
+def colorize_pixmap(pixmap, color):
+    colored = QPixmap(pixmap.size())
+    colored.fill(Qt.transparent)
+    painter = QPainter(colored)
+    # painter.setCompositionMode(QPainter.CompositionMode_Source)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    painter.fillRect(colored.rect(), color)
+    painter.end()
+    return colored
