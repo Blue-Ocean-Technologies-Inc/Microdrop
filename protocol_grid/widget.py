@@ -396,8 +396,12 @@ class PGCWidget(QWidget):
                 continue 
             selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
-        # step 3
+        # step 3 (bottom-up approach: first process children, and then the group)
+        # doing this because expected behaviour was not observed for certain cases involving subgroups.
         def fix_group_selection(item):
+            for row in range(item.rowCount()):
+                child = item.child(row, 0)
+                fix_group_selection(child)
             if item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 group_idx = item.index()
                 descendant_indexes = collect_all_descendant_indexes(item)
@@ -409,10 +413,7 @@ class PGCWidget(QWidget):
                     selection_model.select(group_idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
                 else:
                     selection_model.select(group_idx, QItemSelectionModel.Deselect | QItemSelectionModel.Rows)
-            for row in range(item.rowCount()):
-                child = item.child(row, 0)
-                fix_group_selection(child) # recursion to handle subgroups
-
+        
         fix_group_selection(root_item)
 
     def copy_selected(self):
