@@ -338,27 +338,82 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
 
     def invert_row_selection(self):
+        """
+        Fix used: After the initial invert, for each group, 
+        check if any of its children are selected.
+        
+        Step 1: Find selected groups and their children (to be inverted).
+        Clear selection.
+
+        Step 2: Select all rows not selected,
+        except children of groups identified in step 1
+
+        Step 3: Now go through each group, 
+        select the group only if any of its children are selected.
+
+        """
         model = self.model
         selection_model = self.tree.selectionModel()
 
         def collect_all_row_indexes(parent_item):
             indexes = []
             for row in range(parent_item.rowCount()):
-                index = self.model.index(row, 0, parent_item.index())
+                index = model.index(row, 0, parent_item.index())
                 indexes.append(index)
                 child_item = parent_item.child(row, 0)
                 if child_item and child_item.hasChildren():
                     indexes.extend(collect_all_row_indexes(child_item))
             return indexes
-    
-        all_indexes = collect_all_row_indexes(model.invisibleRootItem())
-        selected_rows = set(idx for idx in selection_model.selectedRows(0))
 
+        def collect_all_descendant_indexes(item):
+            indexes = []
+            for row in range(item.rowCount()):
+                child = item.child(row, 0)
+                indexes.append(child.index())
+                if child.hasChildren():
+                    indexes.extend(collect_all_descendant_indexes(child))
+            return indexes
+
+        root_item = model.invisibleRootItem()
+        all_indexes = collect_all_row_indexes(root_item)
+        old_selected_indexes = set(selection_model.selectedRows(0))
+
+        # step 1
+        selected_group_indexes = []
+        selected_group_descendants = set()
+        for idx in old_selected_indexes:
+            item = model.itemFromIndex(idx)
+            row_type = item.data(ROW_TYPE_ROLE)
+            if row_type == GROUP_TYPE:
+                selected_group_indexes.append(idx)
+                selected_group_descendants.update(collect_all_descendant_indexes(item))
         selection_model.clearSelection()
-
+        # step 2
         for idx in all_indexes:
-            if idx not in selected_rows:
-                selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+            if idx in old_selected_indexes:
+                continue 
+            if idx in selected_group_descendants:
+                continue 
+            selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+
+        # step 3
+        def fix_group_selection(item):
+            if item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                group_idx = item.index()
+                descendant_indexes = collect_all_descendant_indexes(item)
+                any_child_selected = any(
+                    selection_model.isRowSelected(idx.row(), idx.parent())
+                    for idx in descendant_indexes
+                )
+                if any_child_selected:
+                    selection_model.select(group_idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+                else:
+                    selection_model.select(group_idx, QItemSelectionModel.Deselect | QItemSelectionModel.Rows)
+            for row in range(item.rowCount()):
+                child = item.child(row, 0)
+                fix_group_selection(child) # recursion to handle subgroups
+
+        fix_group_selection(root_item)
 
     def copy_selected(self):
         row_refs = self.get_selected_rows(for_deletion=False)
@@ -399,6 +454,8 @@ class PGCWidget(QWidget):
         for parent, row in row_refs:
             parent.removeRow(row)        
         self.reassign_step_ids()
+        if self.model.invisibleRootItem().rowCount() == 0:
+            self.add_step(into=False)
 
     def insert_step(self):
         """ Insert a new step before selected item """
