@@ -1,4 +1,6 @@
 # sys imports
+import os
+import sys
 from pathlib import Path
 
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
@@ -218,21 +220,23 @@ class MicrodropSidebar(QToolBar):
             btn = QPushButton("\t\t"+label)
             btn.setFont(font)
             btn.setFixedWidth(140)
-            btn.setIcon(QIcon(str(icon_dir / icon)))
+            icon = QIcon(str(icon_dir / icon))
+            icon.setIsMask(True)
+            btn.setIcon(icon)
             btn.setIconSize(icon_size)
             btn.setStyleSheet(sidebar_stylesheet)
             btn.setCursor(Qt.PointingHandCursor)
              
             self.menu_layout.addWidget(btn)
-            self.menu_buttons.append(btn)
+            self.menu_buttons.append((btn, icon))
         
         self.menu_widget.setVisible(False)
         layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
 
         # connections
         button_names = [name for name, _ in menu_options]
-        self.menu_buttons[button_names.index("Exit")].clicked.connect(self._handle_exit)
-        self.menu_buttons[button_names.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
+        self.menu_buttons[button_names.index("Exit")][0].clicked.connect(self._handle_exit)
+        self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(self._handle_diagnostics)
 
         container.setLayout(layout)
         self.addWidget(container)
@@ -266,11 +270,53 @@ class MicrodropSidebar(QToolBar):
         return super().event(event)
 
     def update_menu_colors(self):
-        palette = self.palette()
-        text_color = palette.color(self.foregroundRole())
-        color_str = text_color.name()
-        for btn in self.menu_buttons:
-            btn.setStyleSheet(
-                sidebar_stylesheet + f"color: {color_str};"
+        if is_dark_mode():
+            color_str = "white"
+        else:
+            color_str = "black"
+        for btn, icon in self.menu_buttons:
+            btn.setIcon(icon)
+            btn.setStyleSheet(sidebar_stylesheet % color_str)
+        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % color_str)
+    
+    
+def is_dark_mode():
+    if sys.platform == "darwin":
+        import subprocess
+        try:
+            mode = subprocess.check_output(
+                "defaults read -g AppleInterfaceStyle",
+                shell=True
+            ).strip()
+            return mode == b"Dark"
+        except Exception:
+            return False
+    elif sys.platform.startswith("win"):
+        try:
+            import winreg
+            reg = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+            key = winreg.OpenKey(
+                reg,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
             )
-        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet + f"color: {color_str};")
+            apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return apps_use_light_theme == 0
+        except Exception:
+            return False
+    else:
+        gtk_theme = os.environ.get("GTK_THEME", "").lower()
+        if "dark" in gtk_theme:
+            return True
+        qt_theme = os.environ.get("QT_QPA_PLATFORMTHEME", "").lower()
+        if "dark" in qt_theme:
+            return True
+        # KDE check
+        kde_globals = os.path.expanduser("~/.config/kdeglobals")
+        if os.path.isfile(kde_globals):
+            try:
+                with open(kde_globals, "r") as f:
+                    if "ColorScheme=Dark" in f.read():
+                        return True
+            except Exception:
+                pass
+        return False

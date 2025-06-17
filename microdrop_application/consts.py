@@ -26,12 +26,13 @@ sidebar_menu_options = [
             ("Exit", "exit.png"),
         ]
 
-hamburger_btn_stylesheet = "font-size: 24px; background: none; border: none;"
+hamburger_btn_stylesheet = "QPushButton { font-size: 24px; background: none; border: none; color: %s;}"
 
-sidebar_stylesheet = """
+sidebar_stylesheet = """QPushButton {
                 background: none;
                 border: none;
                 font-size:2em;
                 text-align: left;
                 padding-left: 8px;
+                color: %s; }
                 """
