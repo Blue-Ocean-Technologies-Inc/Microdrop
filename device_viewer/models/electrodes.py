@@ -4,6 +4,7 @@ from collections import defaultdict
 # local
 from ..utils.dmf_utils import SvgUtil
 from microdrop_utils._logger import get_logger
+from ..models.route import RouteLayerManager
 
 # enthought
 from traits.api import HasTraits, Int, Bool, Array, Float, Any, Dict, Str, Instance, Property, File, cached_property, List, observe
@@ -63,6 +64,13 @@ class Electrodes(HasTraits):
 
     #: Map of the unique channels and their states, True means actuated.
     channels_states_map = Property(Dict(Int, Bool), observe='_electrodes:items:channel, _electrodes:items:state')
+    
+    route_manager = Instance(RouteLayerManager)
+
+    # ------------------ Trait Defaults ---------------------------------------------------------------------
+
+    def _route_manager_default(self):
+        return RouteLayerManager()
 
     # -------------------Magic methods ----------------------------------------------------------------------
     def __getitem__(self, item: Str) -> Electrode:

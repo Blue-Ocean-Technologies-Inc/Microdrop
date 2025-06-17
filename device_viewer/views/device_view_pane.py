@@ -17,12 +17,13 @@ from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routin
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from microdrop_utils._logger import get_logger
 from device_viewer.models.electrodes import Electrodes
+from device_viewer.models.route import RouteLayerManager
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
-from ..route_selection_view.route_selection_view import RouteLayerManager, RouteLayerView
+from device_viewer.route_selection_view.route_selection_view import RouteLayerView
 import json
 
 logger = get_logger(__name__)
@@ -36,6 +37,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # ----------- Device View Pane traits ---------------------
 
     electrodes_model = Instance(Electrodes)
+    route_layer_manager = Instance(RouteLayerManager)
 
     id = PKG + ".pane"
     name = PKG_name + " Dock Pane"
@@ -43,6 +45,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     scene = Instance(QGraphicsScene)
     device_view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
+    layer_ui = None
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -61,6 +64,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         electrodes = Electrodes()
         electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
         return electrodes
+    
+    def _route_layer_manager_default(self):
+        return RouteLayerManager()
 
     def _scene_default(self):
         return ElectrodeScene()
@@ -83,6 +89,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
             electrodes_model=new_model,
+            route_layer_manager=self.route_layer_manager,
             electrode_view_layer=self.current_electrode_layer
         )
 
@@ -120,14 +127,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.setParent(container)
 
         # layer_view code
-        layer_model = RouteLayerManager()
+        layer_model = self.route_layer_manager
         layer_view = RouteLayerView
-        ui = layer_model.edit_traits(view=layer_view, kind='subpanel')
-        ui.control.setFixedWidth(230) # Set widget to fixed width
+        self.layer_ui = layer_model.edit_traits(view=layer_view)
+        self.layer_ui.control.setFixedWidth(230) # Set widget to fixed width
+        self.layer_ui.control.setParent(container)
 
         # Add widgets to layout
         layout.addWidget(self.device_view)
-        layout.addWidget(ui.control)
+        layout.addWidget(self.layer_ui.control)
 
         return container
 

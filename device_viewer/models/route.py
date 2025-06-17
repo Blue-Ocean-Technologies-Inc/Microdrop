@@ -1,4 +1,5 @@
-from traits.api import HasTraits, List, Int
+from traits.api import HasTraits, List, Int, Bool, Instance, String
+import random
 
 # Abstract pathing object class
 class Route(HasTraits):
@@ -17,6 +18,14 @@ class Route(HasTraits):
     def is_loop(self):
         '''Return True if the path is a loop'''
         return len(self.route) >= 2 and self.route[0] == self.route[-1]
+    
+    def get_name(self):
+        if len(self.route) == 0:
+            return "Empty route"
+        elif self.is_loop():
+            return f"Loop at {self.route[0]}"
+        else:
+            return f"Path from {self.route[0]} to {self.route[-1]}"
 
     @staticmethod
     def is_segment(from_a, to_a, from_b, to_b):
@@ -102,3 +111,50 @@ class Route(HasTraits):
     
     def __repr__(self):
         return f"<Route path={self.route}>"
+
+class RouteLayer(HasTraits):
+    index = Int(0)
+    visible = Bool(True)
+    color = String()
+    name = String()
+
+    # Needs to be passed
+    route = Instance(Route) # Actual route model
+    
+    def _name_default(self):
+        return self.route.get_name()
+    
+    def _color_default(self):
+        return random.choice(["pink", "blue", "green", "purple"])
+
+class RouteLayerManager(HasTraits):
+    layers = List(RouteLayer)
+
+    selected_route = Int(-1) # No route selected
+
+    def _layers_default(self):
+        return []
+    
+    def replace_route(self, index, new_routes: list[Route]):
+        old_route_layer = self.layers.pop(index) # Delete the current route
+        
+        for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
+            if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
+                self.layers.insert(index, RouteLayer(route=new_routes[i], color=old_route_layer.color))
+            else:
+                self.layers.insert(index, RouteLayer(route=new_routes[i]))
+    
+    def select_route(self, index):
+        if 0 <= index < len(self.layers):
+            self.selected_route = index
+        else:
+            self.seleced_route = None
+
+    def get_route(self, index: int):
+        if 0 <= index < len(self.layers):
+            return self.layers[index].route
+        else:
+            return None
+        
+    def get_selected_route(self):
+        return self.get_route(self.selected_route)

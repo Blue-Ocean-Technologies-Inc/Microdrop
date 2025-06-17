@@ -6,7 +6,7 @@ from .electrodes_view_base import ElectrodeView
 from .electrode_view_helpers import generate_connection_line
 from .default_settings import default_colors
 from microdrop_utils._logger import get_logger
-from device_viewer.models.route import Route
+from device_viewer.models.route import RouteLayer
 
 logger = get_logger(__name__)
 
@@ -95,15 +95,15 @@ class ElectrodeLayer():
         self.remove_connections_to_scene(parent_scene)
 
     ######################## Redraw connctions based on list of routes ###########################
-    def redraw_connections_to_scene(self, routes: list[Route]):
+    def redraw_connections_to_scene(self, route_layers: list[RouteLayer]):
         # Routes are applied in order, so later routes will apply on top
         # To minimize the number of overlapping Qt calls, we'll apply changes to a dictionary then transfer it to the view at the end
 
         connection_map = {} # Temporary map to superimpose routes
 
-        for route in routes:
-            color = Qt.red if route.is_loop() else Qt.green
-            for (route_from, route_to) in route.get_segments():
+        for route_layer in route_layers:
+            color = Qt.red if route_layer.route.is_loop() else QColor(route_layer.color)
+            for (route_from, route_to) in route_layer.route.get_segments():
                 connection_map[(route_from, route_to)] = color
                 connection_map[(route_to, route_from)] = color # We want either possible keys to be true
         
