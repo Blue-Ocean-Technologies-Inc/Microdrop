@@ -26,12 +26,11 @@ sidebar_menu_options = [
             ("Exit", "exit.png"),
         ]
 
-hamburger_btn_stylesheet = "font-size: 24px; color: green; background: none; border: none;"
+hamburger_btn_stylesheet = "font-size: 24px; background: none; border: none;"
 
 sidebar_stylesheet = """
                 background: none;
                 border: none;
-                color: green;
                 font-size:2em;
                 text-align: left;
                 padding-left: 8px;

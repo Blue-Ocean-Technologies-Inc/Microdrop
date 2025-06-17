@@ -3,6 +3,8 @@ from pathlib import Path
 
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 
+from PySide6.QtCore import QEvent
+
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 # Local imports.
@@ -234,6 +236,7 @@ class MicrodropSidebar(QToolBar):
 
         container.setLayout(layout)
         self.addWidget(container)
+        self.update_menu_colors()
 
     def toggle_menu(self):
         self.menu_widget.setVisible(not self.menu_widget.isVisible())
@@ -255,3 +258,19 @@ class MicrodropSidebar(QToolBar):
 
     def _handle_exit(self):
         self.task.window.application.exit()
+
+    def event(self, event):
+        if event.type() == QEvent.PaletteChange:
+            self.update_menu_colors()
+            self.toggle_menu
+        return super().event(event)
+
+    def update_menu_colors(self):
+        palette = self.palette()
+        text_color = palette.color(self.foregroundRole())
+        color_str = text_color.name()
+        for btn in self.menu_buttons:
+            btn.setStyleSheet(
+                sidebar_stylesheet + f"color: {color_str};"
+            )
+        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet + f"color: {color_str};")
