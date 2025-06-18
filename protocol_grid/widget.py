@@ -17,8 +17,11 @@ from protocol_grid.model.protocol_visualization_helpers import (visualize_protoc
 from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_defaults, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
-                                                 int_to_letters)
-from protocol_grid.extra_ui_elements import edit_context_menu, column_toggle_dialog
+                                                 get_selected_rows, invert_row_selection,
+                                                 snapshot_for_undo, undo_last, redo_last,
+                                                 reassign_step_ids, to_protocol_model, 
+                                                 populate_treeview)
+from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -104,14 +107,17 @@ class PGCWidget(QWidget):
         self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
 
+        self.action_show_edit_context_menu = ShowEditContextMenuAction(self)
+        self.action_show_column_toggle_dialog = ShowColumnToggleDialogAction(self)
+
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
 
     def show_edit_context_menu(self, pos):
-        edit_context_menu(self, pos)
+        self.action_show_edit_context_menu.perform(pos=pos)
 
     def show_column_toggle_dialog(self, pos):
-        column_toggle_dialog(self, pos)
+        self.action_show_column_toggle_dialog.perform()
 
     def get_column_visibility(self):
         """
@@ -124,85 +130,18 @@ class PGCWidget(QWidget):
             self.tree.setColumnHidden(i, not visible)
 
     def snapshot_for_undo(self):
-        """
-        Save a deep copy of the current model to the undo stack.
-        """
-        root_item = self.model.invisibleRootItem()
-        clone = [
-            [root_item.child(row, col).clone() for col in range(self.model.columnCount())] 
-            for  row in range(root_item.rowCount())
-        ]
-        self.undo_stack.append(clone)
-        if len(self.undo_stack) > 6: # limit stack size to 6
-            self.undo_stack = self.undo_stack[-6:] 
-
-        self.redo_stack.clear()  
+        snapshot_for_undo(self.model, self.undo_stack, self.redo_stack) 
 
     def undo_last(self):
-        if not self.undo_stack:
-            return
-        
-        current_state = [
-            [self.model.invisibleRootItem().child(row, col).clone() 
-            for col in range(self.model.columnCount())] 
-            for row in range(self.model.invisibleRootItem().rowCount())
-        ]
-        self.redo_stack.append(current_state)
-
-        last_state = self.undo_stack.pop()
-        self.clear_view()
-        for row_items in last_state:
-            self.model.invisibleRootItem().appendRow([item.clone() for item in row_items])
-        self.reassign_step_ids()
-        self.tree.expandAll()
+        undo_last(self.model, self.undo_stack, self.redo_stack, 
+                  lambda: reassign_step_ids(self.model))
 
     def redo_last(self):
-        if not self.redo_stack:
-            return
-        current_state = [
-            [self.model.invisibleRootItem().child(row, col).clone() 
-            for col in range(self.model.columnCount())] 
-            for row in range(self.model.invisibleRootItem().rowCount())
-        ]
-        self.undo_stack.append(current_state)
-
-        next_state = self.redo_stack.pop()
-        self.clear_view()
-        for row_items in next_state:
-            self.model.invisibleRootItem().appendRow([item.clone() for item in row_items])
-        self.reassign_step_ids()
-        self.tree.expandAll()
+        redo_last(self.model, self.undo_stack, self.redo_stack, 
+                  lambda: reassign_step_ids(self.model))
 
     def get_selected_rows(self, for_deletion=False):
-        """
-        Returns list of (parent, row) for each unique row with at least one selected cell.
-        - if for_deletion: sort by depth and descending row, for safe deletion.
-        - else: preserve selection order (as returned by selectedRows(0)).
-        """
-        selection_model = self.tree.selectionModel()
-        selected = selection_model.selectedRows(0)
-        seen = set()
-        row_refs = []
-        for idx in selected:
-            item = self.model.itemFromIndex(idx)
-            parent = item.parent() or self.model.invisibleRootItem()
-            row = item.row()
-            key = (id(parent), row)
-            if key not in seen:
-                seen.add(key)
-                row_refs.append((parent, row))
-        if for_deletion:
-            def get_depth(item):
-                depth = 0 # depth needed for correct deletion order
-                p = item.parent() or self.model.invisibleRootItem()
-                while p != self.model.invisibleRootItem():
-                    depth += 1
-                    p = p.parent() or self.model.invisibleRootItem()
-                return depth
-            row_refs_with_depth = [((parent, row), get_depth(parent.child(row, 0))) for parent, row in row_refs]
-            row_refs_with_depth.sort(key=lambda prd: (-prd[1], -prd[0][1]))  # deepest, then largest row index first
-            return [pr for pr, _ in row_refs_with_depth]
-        return row_refs
+        return get_selected_rows(self.tree, self.model, for_deletion)
     
     def select_all(self):
         self.tree.selectAll()
@@ -211,83 +150,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
 
     def invert_row_selection(self):
-        """
-        Fix used: After the initial invert, for each group, 
-        check if any of its children are selected.
-        
-        Step 1: Find selected groups and their children (to be inverted).
-        Clear selection.
-
-        Step 2: Select all rows not selected,
-        except children of groups identified in step 1
-
-        Step 3: Now go through each group, 
-        select the group only if any of its children are selected.
-
-        """
-        model = self.model
-        selection_model = self.tree.selectionModel()
-
-        def collect_all_row_indexes(parent_item):
-            indexes = []
-            for row in range(parent_item.rowCount()):
-                index = model.index(row, 0, parent_item.index())
-                indexes.append(index)
-                child_item = parent_item.child(row, 0)
-                if child_item and child_item.hasChildren():
-                    indexes.extend(collect_all_row_indexes(child_item))
-            return indexes
-
-        def collect_all_descendant_indexes(item):
-            indexes = []
-            for row in range(item.rowCount()):
-                child = item.child(row, 0)
-                indexes.append(child.index())
-                if child.hasChildren():
-                    indexes.extend(collect_all_descendant_indexes(child))
-            return indexes
-
-        root_item = model.invisibleRootItem()
-        all_indexes = collect_all_row_indexes(root_item)
-        old_selected_indexes = set(selection_model.selectedRows(0))
-
-        # step 1
-        selected_group_indexes = []
-        selected_group_descendants = set()
-        for idx in old_selected_indexes:
-            item = model.itemFromIndex(idx)
-            row_type = item.data(ROW_TYPE_ROLE)
-            if row_type == GROUP_TYPE:
-                selected_group_indexes.append(idx)
-                selected_group_descendants.update(collect_all_descendant_indexes(item))
-        selection_model.clearSelection()
-        # step 2
-        for idx in all_indexes:
-            if idx in old_selected_indexes:
-                continue 
-            if idx in selected_group_descendants:
-                continue 
-            selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
-
-        # step 3 (bottom-up approach: first process children, and then the group)
-        # doing this because expected behaviour was not observed for certain cases involving subgroups.
-        def fix_group_selection(item):
-            for row in range(item.rowCount()):
-                child = item.child(row, 0)
-                fix_group_selection(child)
-            if item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                group_idx = item.index()
-                descendant_indexes = collect_all_descendant_indexes(item)
-                any_child_selected = any(
-                    selection_model.isRowSelected(idx.row(), idx.parent())
-                    for idx in descendant_indexes
-                )
-                if any_child_selected:
-                    selection_model.select(group_idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
-                else:
-                    selection_model.select(group_idx, QItemSelectionModel.Deselect | QItemSelectionModel.Rows)
-        
-        fix_group_selection(root_item)
+        invert_row_selection(self.tree, self.model)
 
     def copy_selected(self):
         row_refs = self.get_selected_rows(for_deletion=False)
@@ -318,7 +181,7 @@ class PGCWidget(QWidget):
         else:
             for r, row_items in enumerate(self._copied_rows):
                 parent.insertRow(row + 1 + r, [item.clone() for item in row_items])
-        self.reassign_step_ids()
+        reassign_step_ids(self.model)
 
     def delete_selected(self):
         self.snapshot_for_undo()
@@ -327,7 +190,7 @@ class PGCWidget(QWidget):
             return
         for parent, row in row_refs:
             parent.removeRow(row)        
-        self.reassign_step_ids()
+        reassign_step_ids(self.model)
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
 
@@ -349,7 +212,7 @@ class PGCWidget(QWidget):
             row_type=STEP_TYPE
         )
         parent.insertRow(row, step_items)
-        self.reassign_step_ids()
+        reassign_step_ids(self.model)
 
     def insert_group(self):
         """ Insert a new group before selected item """
@@ -364,29 +227,7 @@ class PGCWidget(QWidget):
             row_type=GROUP_TYPE
         )
         parent.insertRow(row, group_items)
-        self.reassign_step_ids()
-                
-    def reassign_step_ids(self):
-        """
-        Reassign step IDs. (groups have no IDs for now)
-        """ 
-        self.step_id = 1
-        self.group_id = 1
-        def assign(parent):
-            for row in range(parent.rowCount()):
-                desc_item = parent.child(row, 0)
-                id_item = parent.child(row, 1)
-                row_type = desc_item.data(ROW_TYPE_ROLE)
-                if row_type == STEP_TYPE:
-                    id_item.setText(str(self.step_id))
-                    self.step_id += 1
-                elif row_type == GROUP_TYPE:
-                    id_item.setText(int_to_letters(self.group_id))
-                    self.group_id += 1
-                if desc_item.hasChildren():
-                    assign(desc_item)
-        assign(self.model.invisibleRootItem())
-
+        reassign_step_ids(self.model)
 
     def add_group(self, into=False):
         """
@@ -419,7 +260,7 @@ class PGCWidget(QWidget):
             row_type=GROUP_TYPE
         )
         parent_item.appendRow(group_items)
-        self.reassign_step_ids()
+        reassign_step_ids(self.model)
         self.tree.expandAll()
 
     def add_step(self, into=False):
@@ -444,66 +285,11 @@ class PGCWidget(QWidget):
             row_type=STEP_TYPE
         )
         parent_item.appendRow(step_items)
-        self.reassign_step_ids()
+        reassign_step_ids(self.model)
         self.tree.expandAll()
 
-    def clear_view(self):
-        self.model.clear()
-        self.model.setHorizontalHeaderLabels(protocol_grid_fields)
-        self.step_id = 1
-        self.group_id = 1
-        
     def to_protocol_model(self):
-        """
-        Walks the QTreeView and builds a sequential list of ProtocolStep/ProtocolGroup.
-        """
-        def parse_seq(parent_item):
-            sequence = []
-            for row in range(parent_item.rowCount()):
-                desc_item = parent_item.child(row, 0)
-                row_type = desc_item.data(ROW_TYPE_ROLE)
-                if row_type == GROUP_TYPE:
-                    group_name = desc_item.text()
-                    fields = {}
-                    for i, field in enumerate(protocol_grid_fields):
-                        item = parent_item.child(row, i)
-                        if item:
-                            value = item.text() if field != "Video" else (
-                                1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                            )
-                            fields[field] = value
-                    group_rep = fields.get("Repetitions", step_defaults["Repetitions"])
-                    group_elements = parse_seq(desc_item)      
-                    group_dict = {
-                        "name": group_name,
-                        "elements": [e for e in group_elements],
-                        "parameters": {k: fields.get(k, step_defaults.get(k, "")) 
-                                       for k in protocol_grid_fields if k not in (
-                                           "Description", "ID", "elements", "name")
-                        }
-                    }              
-                    sequence.append(group_dict)
-                elif row_type == STEP_TYPE:
-                    fields = {}
-                    for i, field in enumerate(protocol_grid_fields):
-                        item = parent_item.child(row, i)
-                        if item:
-                            value = item.text() if field != "Video" else (
-                                1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                            )
-                            fields[field] = value
-                    step_dict = {
-                        "name": fields.get("Description", step_defaults["Description"]),
-                        "parameters": {k: fields.get(k, step_defaults.get(k, "")) 
-                                       for k in protocol_grid_fields if k not in (
-                                           "Description", "ID", "elements", "name")
-                        }
-                    }
-                    sequence.append(step_dict)
-            return sequence
-
-        root_item = self.model.invisibleRootItem()
-        return parse_seq(root_item)
+        return to_protocol_model(self.model)
 
     def export_to_json(self):
         protocol_data = self.to_protocol_model()
@@ -521,53 +307,8 @@ class PGCWidget(QWidget):
             logger.debug(f"Protocol PNG exported as {file_name}")
 
     def populate_treeview(self, protocol_sequence):
-        self.clear_view()
-        def add_seq(parent, seq):
-            for obj in seq:
-                is_group = "elements" in obj
-                if is_group:
-                    group_obj = obj
-                    group_name_val = group_obj.get("name", group_defaults["Description"])
-                    group_params = group_obj.get("parameters", {})
-                    group_data = {**group_defaults, **group_params, "Description": group_name_val}
-                    for k in group_data:
-                        if k == "Video":
-                            try:
-                                group_data[k] = int(group_data[k])
-                            except Exception:
-                                group_data[k] = 0
-                        else:
-                            group_data[k] = str(group_data[k]) if group_data[k] is not None else ""
-                    group_items = make_row(
-                        group_defaults,
-                        overrides=group_data,
-                        row_type=GROUP_TYPE
-                    )
-                    parent.appendRow(group_items)
-                    add_seq(group_items[0], group_obj.get("elements", []))
-                else:
-                    step_obj = obj
-                    step_name = step_obj.get("name", step_defaults["Description"])
-                    step_params = step_obj.get("parameters", {})
-                    step_data = {**step_defaults, **step_params, "Description": step_name}
-                    for k in step_data:
-                        if k == "Video":
-                            try:
-                                step_data[k] = int(step_data[k])
-                            except Exception:
-                                step_data[k] = 0
-                        else:
-                            step_data[k] = str(step_data[k]) if step_data[k] is not None else ""
-                    step_items = make_row(
-                        step_defaults,
-                        overrides=step_data,
-                        row_type=STEP_TYPE
-                    )
-                    self.step_id += 1
-                    parent.appendRow(step_items)
-        root_item = self.model.invisibleRootItem()
-        add_seq(root_item, protocol_sequence)
-        self.reassign_step_ids()
+        populate_treeview(self.model, protocol_sequence, make_row, step_defaults, group_defaults)
+        reassign_step_ids(self.model)
         self.tree.expandAll()
 
     def import_from_json(self):
