@@ -36,7 +36,7 @@ class SvgUtil:
         self.neighbours: dict[str, list[str]] = {}
         self.roi: list[NDArray[Shape['*, 1, 1'], Float]] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
-        self.connections: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.connections = {}
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -64,7 +64,7 @@ class SvgUtil:
                 pass
                 # self.connections = self.svg_to_points(child)
 
-        if len(self.connections) == 0 and len(self.electrodes) > 0:
+        if len(self.connections.items()) == 0 and len(self.electrodes) > 0:
             self.neighbours = self.find_neighbours_all()
             self.neighbours_to_points()
 
@@ -148,20 +148,6 @@ class SvgUtil:
                 element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
-
-    def svg_to_points(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
-        """
-        Converts the svg file to points
-        """
-
-        paths = []
-        for path in obj:
-            points = [(path.attrib["x1"], path.attrib["y1"]),
-                      (path.attrib["x2"], path.attrib["y2"])]
-
-            paths.append(np.array(points).reshape((-1, 1, 2)).astype(float))
-
-        return paths
 
     def svg_to_paths(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
         """

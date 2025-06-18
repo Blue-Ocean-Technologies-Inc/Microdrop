@@ -36,7 +36,8 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         """
         Set connection item to visually inactive. This is default.
         """
-        self.setPen(QPen(QColor(default_colors['connection']), 1))
+        #self.setPen(QPen(QColor(default_colors['connection']), 1))
+        self.setPen(Qt.NoPen)
 
 
 # electrode polygons
