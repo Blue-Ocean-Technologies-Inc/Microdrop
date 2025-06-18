@@ -18,7 +18,12 @@ logger = get_logger(__name__, level='DEBUG')
 
 # electrode connection lines
 class ElectrodeConnectionItem(QGraphicsPathItem):
-    def __init__(self, key, path):
+    def __init__(self, key, src, dst):
+        # Generate path
+        path = QPainterPath()
+        path.moveTo(src[0], src[1])
+        path.lineTo(dst[0], dst[1])
+
         # Initialize the parent class constructor
         super().__init__(path)
 

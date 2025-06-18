@@ -2,7 +2,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsScene
 from pyface.qt.QtCore import Qt
 
-from .electrodes_view_base import ElectrodeView
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem
 from .electrode_view_helpers import generate_connection_line
 from .default_settings import default_colors
 from microdrop_utils._logger import get_logger
@@ -35,19 +35,14 @@ class ElectrodeLayer():
                                                                modifier * electrode.path)
 
         # Create the connections between the electrodes
-        self.connections = {
+        connections = {
             key: ((coord1[0] * modifier, coord1[1] * modifier), (coord2[0] * modifier, coord2[1] * modifier))
             for key, (coord1, coord2) in svg.connections.items()
             # key here is form dmf_utils.SvgUtil (see neighbours_to_points), and is a tuple of 2 electrode_ids. if (id1, id2) exists in the dict, then (id2, id1) wont, and viice versa
         }
 
-        for key, (src, dst) in self.connections.items():
-
-            # Generate connection line
-            connection_item = generate_connection_line(key, src, dst)
-
-            # Store the generated connection item
-            self.connection_items[key] = connection_item
+        for key, (src, dst) in connections.items():
+            self.connection_items[key] = ElectrodeConnectionItem(key, src, dst)
 
     def get_connection_item(self, from_id, to_id):
         '''Returns tuple of key, value from connection_items if found'''
