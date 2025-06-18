@@ -142,9 +142,9 @@ def convert_json_protocol_to_graph(json_input: Union[str, dict]) -> pgv.AGraph:
 
     return protocol_graph
 
-def save_protocol_sequence_to_json(seq, filename="protocol_seq.json"):
+def save_protocol_sequence_to_json(protocol_data, filename="protocol.json"):
     with open(filename, "w") as f:
-        json.dump([item.dict() for item in seq], f, indent=4)
+        f.write(json.dumps(protocol_data, indent=4))
 
 def visualize_protocol_with_swimlanes(protocol_sequence, base_name="protocol_chain", max_nodes_per_column=5):
     G = pgv.AGraph(directed=True, rankdir="TB", strict=False)

@@ -337,7 +337,6 @@ class PGCWidget(QWidget):
         row_refs = self.get_selected_rows()
         if not row_refs:
             return   
-        #TODO: implement remaining fields
         parent, row = row_refs[0]  
         step_number = self.step_id
         self.step_id += 1
@@ -358,7 +357,6 @@ class PGCWidget(QWidget):
         row_refs = self.get_selected_rows()
         if not row_refs:
             return   
-        #TODO: implement remaining fields
         parent, row = row_refs[0]  
         group_items = make_row(
             group_defaults,
@@ -415,7 +413,6 @@ class PGCWidget(QWidget):
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
 
-        #TODO: implement remaining fields
         group_items = make_row(
             group_defaults,
             overrides={"Description": "Group"},
@@ -436,8 +433,6 @@ class PGCWidget(QWidget):
                 parent_item = selected_item
             else:
                 parent_item = selected_item.parent() or self.model.invisibleRootItem()
-
-        #TODO: implement remaining fields
         step_number = self.step_id
         self.step_id += 1
         step_items = make_row(
@@ -469,27 +464,42 @@ class PGCWidget(QWidget):
                 row_type = desc_item.data(ROW_TYPE_ROLE)
                 if row_type == GROUP_TYPE:
                     group_name = desc_item.text()
-                    group_rep = parent_item.child(row, 2).text()
-                    group_elements = parse_seq(desc_item)                    
-                    sequence.append(
-                        ProtocolGroup(
-                            name=group_name,
-                            elements=group_elements,
-                            parameters={"Repetitions": int(group_rep)}
-                        )
-                    )
-                elif row_type == STEP_TYPE:
-                    try:
-                        #TODO: implement remaining fields
-                        parameters = {
-                            "Repetitions": int(parent_item.child(row, 2).text()),
-                            "Duration": float(parent_item.child(row, 3).text()),
-                            "Voltage": float(parent_item.child(row, 4).text()),
-                            "Frequency": float(parent_item.child(row, 5).text())
+                    fields = {}
+                    for i, field in enumerate(protocol_grid_fields):
+                        item = parent_item.child(row, i)
+                        if item:
+                            value = item.text() if field != "Video" else (
+                                1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
+                            )
+                            fields[field] = value
+                    group_rep = fields.get("Repetitions", step_defaults["Repetitions"])
+                    group_elements = parse_seq(desc_item)      
+                    group_dict = {
+                        "name": group_name,
+                        "elements": [e for e in group_elements],
+                        "parameters": {k: fields.get(k, step_defaults.get(k, "")) 
+                                       for k in protocol_grid_fields if k not in (
+                                           "Description", "ID", "elements", "name")
                         }
-                    except Exception:
-                        parameters = {}
-                    sequence.append(ProtocolStep(name=desc_item.text(), parameters=parameters))
+                    }              
+                    sequence.append(group_dict)
+                elif row_type == STEP_TYPE:
+                    fields = {}
+                    for i, field in enumerate(protocol_grid_fields):
+                        item = parent_item.child(row, i)
+                        if item:
+                            value = item.text() if field != "Video" else (
+                                1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
+                            )
+                            fields[field] = value
+                    step_dict = {
+                        "name": fields.get("Description", step_defaults["Description"]),
+                        "parameters": {k: fields.get(k, step_defaults.get(k, "")) 
+                                       for k in protocol_grid_fields if k not in (
+                                           "Description", "ID", "elements", "name")
+                        }
+                    }
+                    sequence.append(step_dict)
             return sequence
 
         root_item = self.model.invisibleRootItem()
@@ -499,15 +509,13 @@ class PGCWidget(QWidget):
         protocol_data = self.to_protocol_model()
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
         if file_name:
-            with open(file_name, 'w') as f:
-                f.write(json.dumps([item.model_dump() for item in protocol_data], indent=4))
-            save_protocol_sequence_to_json(protocol_data, file_name)
-            logger.debug(f"Protocol exported to {file_name}")
+           save_protocol_sequence_to_json(protocol_data, file_name)
 
     def export_to_png(self):
         protocol_data = self.to_protocol_model()
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as PNG", "protocol_grid_ui_export.png", "PNG Files (*.png)")
         if file_name:
+            #TODO fix export as PNG with swim lanes
             # visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
             visualize_protocol_with_swimlanes(protocol_data, file_name.replace(".png", ""), 5)
             logger.debug(f"Protocol PNG exported as {file_name}")
@@ -516,44 +524,43 @@ class PGCWidget(QWidget):
         self.clear_view()
         def add_seq(parent, seq):
             for obj in seq:
-                if isinstance(obj, dict):
-                    is_group = "elements" in obj
-                else:
-                    is_group = hasattr(obj, "elements")
+                is_group = "elements" in obj
                 if is_group:
-                    group_obj = obj if not isinstance(obj, dict) else ProtocolGroup(**obj)
-
-                    group_name_val = getattr(group_obj, "name", "Group")
-                    group_rep_val = (
-                        str(getattr(group_obj, "parameters", {}).get("Repetitions", "1"))
-                        if hasattr(group_obj, "parameters") else "1"
-                    )
-
-                    #TODO: implement remaining fields
+                    group_obj = obj
+                    group_name_val = group_obj.get("name", group_defaults["Description"])
+                    group_params = group_obj.get("parameters", {})
+                    group_data = {**group_defaults, **group_params, "Description": group_name_val}
+                    for k in group_data:
+                        if k == "Video":
+                            try:
+                                group_data[k] = int(group_data[k])
+                            except Exception:
+                                group_data[k] = 0
+                        else:
+                            group_data[k] = str(group_data[k]) if group_data[k] is not None else ""
                     group_items = make_row(
                         group_defaults,
-                        overrides={
-                            "Description": group_name_val,
-                            "Repetitions": group_rep_val
-                        },
+                        overrides=group_data,
                         row_type=GROUP_TYPE
                     )
                     parent.appendRow(group_items)
-                    add_seq(group_items[0], group_obj.elements)
+                    add_seq(group_items[0], group_obj.get("elements", []))
                 else:
-                    step_obj = obj if not isinstance(obj, dict) else ProtocolStep(**obj)
-
-                    #TODO: implement remaining fields
+                    step_obj = obj
+                    step_name = step_obj.get("name", step_defaults["Description"])
+                    step_params = step_obj.get("parameters", {})
+                    step_data = {**step_defaults, **step_params, "Description": step_name}
+                    for k in step_data:
+                        if k == "Video":
+                            try:
+                                step_data[k] = int(step_data[k])
+                            except Exception:
+                                step_data[k] = 0
+                        else:
+                            step_data[k] = str(step_data[k]) if step_data[k] is not None else ""
                     step_items = make_row(
                         step_defaults,
-                        overrides={
-                            "Description": step_obj.name,
-                            "ID": str(self.step_id),
-                            "Repetitions": str(step_obj.parameters.get("Repetitions", "")),
-                            "Duration": str(step_obj.parameters.get("Duration", "")),
-                            "Voltage": str(step_obj.parameters.get("Voltage", "")),
-                            "Frequency": str(step_obj.parameters.get("Frequency", "")),
-                        },
+                        overrides=step_data,
                         row_type=STEP_TYPE
                     )
                     self.step_id += 1
@@ -570,10 +577,7 @@ class PGCWidget(QWidget):
                 data = json.load(f)
             protocol_sequence = []
             for obj in data:
-                if "elements" in obj:
-                    protocol_sequence.append(ProtocolGroup(**obj))
-                else:
-                    protocol_sequence.append(ProtocolStep(**obj))
+                protocol_sequence.append(obj)
             prev_visibility = self.get_column_visibility()
             self.populate_treeview(protocol_sequence)
             self.set_column_visibility(prev_visibility)
