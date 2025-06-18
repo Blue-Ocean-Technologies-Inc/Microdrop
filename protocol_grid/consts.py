@@ -35,14 +35,14 @@ step_defaults = {
     "ID": "", 
     "Repetitions": "1",
     "Duration": "1.00",
-    "Voltage": "0.00",
-    "Frequency": "0.00",
+    "Voltage": "100.00",
+    "Frequency": "10000.00",
     "Label": "",
     "Message": "",
-    "Repeat Duration": "",
-    "Trail Length": "",
-    "Video": "",
-    "Volume Threshold": "",
+    "Repeat Duration": "0",
+    "Trail Length": "1",
+    "Video": "1",
+    "Volume Threshold": "0.0",
 }
 
 group_defaults = {
