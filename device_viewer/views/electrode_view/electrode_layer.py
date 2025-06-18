@@ -1,6 +1,6 @@
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsScene
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem
 from .electrode_view_helpers import generate_connection_line
@@ -36,25 +36,13 @@ class ElectrodeLayer():
 
         # Create the connections between the electrodes
         connections = {
-            key: ((coord1[0] * modifier, coord1[1] * modifier), (coord2[0] * modifier, coord2[1] * modifier))
+            key: (QPointF(coord1[0] * modifier, coord1[1] * modifier), QPointF(coord2[0] * modifier, coord2[1] * modifier))
             for key, (coord1, coord2) in svg.connections.items()
             # key here is form dmf_utils.SvgUtil (see neighbours_to_points), and is a tuple of 2 electrode_ids. if (id1, id2) exists in the dict, then (id2, id1) wont, and viice versa
         }
 
         for key, (src, dst) in connections.items():
             self.connection_items[key] = ElectrodeConnectionItem(key, src, dst)
-
-    def get_connection_item(self, from_id, to_id):
-        '''Returns tuple of key, value from connection_items if found'''
-        item = self.connection_items.get((from_id, to_id), None)
-        if item:
-            return ((from_id, to_id), item)
-
-        item = self.connection_items.get((to_id, from_id), None) # Try other way
-        if item:
-            return ((to_id, from_id), item)
-        
-        return (None, None)
 
     ################# add electrodes/connections from scene ############################################
     def add_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
@@ -96,24 +84,27 @@ class ElectrodeLayer():
 
         connection_map = {} # Temporary map to superimpose routes
 
-        for route_layer in route_layer_manager.layers:
+        layers = route_layer_manager.layers
+        for i in range(len(layers)):
+            route_layer = layers[i]
             color = QColor(route_layer.color)
-            
+            z = i # Make sure each route is it own layer. Prevents weird overlap patterns
             if route_layer.is_selected:
                 color = Qt.yellow
+                z = len(layers) # Highest
             elif route_layer.route.is_loop():
                 color = Qt.red
-            
-            for (route_from, route_to) in route_layer.route.get_segments():
-                if route_layer.visible:
-                    connection_map[(route_from, route_to)] = color if connection_map.get((route_from, route_to), None) != Qt.yellow else Qt.yellow
-                    connection_map[(route_to, route_from)] = color if connection_map.get((route_to, route_from)) != Qt.yellow else Qt.yellow # We want either possible keys to be true
+            if route_layer.visible:
+                for (route_from, route_to) in route_layer.route.get_segments():
+                    if connection_map.get((route_from, route_to), (None, None))[0] != Qt.yellow: # Don't downgrade selected conncetions
+                        connection_map[(route_from, route_to)] = (color, z)
         
         # Apply map
         for key, connection_item in self.connection_items.items():
-            color = connection_map.get(key, False)
+            (color, z) = connection_map.get(key, (False, False))
             if color:
                 connection_item.set_active(color)
+                connection_item.setZValue(z)
             else:
                 connection_item.set_inactive()
                 

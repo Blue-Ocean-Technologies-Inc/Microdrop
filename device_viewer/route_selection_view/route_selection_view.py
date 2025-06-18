@@ -35,8 +35,9 @@ layer_table_editor = TableEditor(
     ],
     show_lines=False,
     selected="selected_layer",
-    sortable=False
-
+    sortable=False,
+    editable=True,
+    reorderable=True
 )
 
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)

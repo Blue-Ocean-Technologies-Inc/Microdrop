@@ -1,4 +1,5 @@
 # library imports
+import math
 import numpy as np
 
 # local imports
@@ -6,7 +7,7 @@ from microdrop_utils._logger import get_logger
 
 # enthought imports
 from traits.api import Instance, Array, Str
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QPointF
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
                              QGraphicsItem)
 
@@ -18,15 +19,45 @@ logger = get_logger(__name__, level='DEBUG')
 
 # electrode connection lines
 class ElectrodeConnectionItem(QGraphicsPathItem):
-    def __init__(self, key, src, dst):
+    def __init__(self, key, src: QPointF, dst: QPointF):
+        super().__init__()
+
         # Generate path
         path = QPainterPath()
-        path.moveTo(src[0], src[1])
-        path.lineTo(dst[0], dst[1])
 
-        # Initialize the parent class constructor
-        super().__init__(path)
+        
+        # Generate line
+        path.moveTo(src)
+        path.lineTo(dst)
 
+        # Arrow start point (2/3 of the way along the line)
+        start = QPointF(
+            src.x() + ((dst.x() - src.x()) / (3/2)),
+            src.y() + ((dst.y() - src.y()) / (3/2))
+        )
+
+        # Arrow end 'level' (along the line, 8 pixels behind start)
+        end_diff = src - dst # Backwards! 
+        end_diff /= math.hypot(end_diff.x(), end_diff.y()) # Normalize
+        end_diff *= 4 # Scale
+        end = start + end_diff
+        
+        # Generate ticks
+        con_vec = dst - src
+        perp_vec = QPointF(con_vec.y(), -con_vec.x())
+        perp_vec /= math.hypot(perp_vec.x(), perp_vec.y()) # Normalize
+        perp_vec *= 4 # Scale
+
+        first_tick = end + perp_vec
+        second_tick = end - perp_vec
+
+        # Build arrowhead triangle
+        path.moveTo(first_tick)
+        path.lineTo(start)
+        path.lineTo(second_tick)
+
+        self.setPath(path)
+   
         # Add a new variable specific to this class
         self.key = key
         self.set_inactive()
@@ -35,7 +66,7 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         """
         Set connection item to visually active
         """
-        self.setPen(QPen(color, 5))  # Example: Set pen color to green with thickness 5
+        self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
 
     def set_inactive(self):
         """

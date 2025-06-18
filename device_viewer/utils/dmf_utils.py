@@ -136,6 +136,7 @@ class SvgUtil:
 
                     # Store electrode pair (sorted for uniqueness) and their coordinates
                     self.connections[(k, n)] = (coord_k, coord_n)
+                    self.connections[(n, k)] = (coord_n, coord_k) # Because of the arrow connections are not reverse-equivalent, so we need a connection for either direction
 
     @staticmethod
     def set_fill_black(obj: ET.Element) -> None:
