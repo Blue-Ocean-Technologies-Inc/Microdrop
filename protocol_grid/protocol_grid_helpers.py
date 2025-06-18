@@ -60,6 +60,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             checked = int(editor.isChecked())
             model.setData(index, checked, Qt.ItemDataRole.EditRole)
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            model.setData(index, "", Qt.DisplayRole)
         else:
             super().setModelData(editor, model, index)
 
@@ -117,7 +118,10 @@ def make_row(defaults, overrides=None, row_type=None):
             item.setEditable(True)
         if field == "Video":
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setData(Qt.Checked if str(value) in ("1", "True", "true") else Qt.Unchecked, Qt.CheckStateRole)
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable) # prevent editing anywhere else
+                                                             # on the cell around the actual checkbox
+            item.setData(Qt.Checked if str(value) in ("1", "True", "true")
+                          else Qt.Unchecked, Qt.CheckStateRole)
         items.append(item)
     return items
 
