@@ -1,16 +1,35 @@
 from traitsui.api import View, Group, Item, BasicEditorFactory, Controller, ObjectColumn, TableEditor
 from traitsui.extras.checkbox_column import CheckboxColumn
 from pyface.qt.QtGui import QColor
-from traitsui.toolkit_traits import Color
+from pyface.qt.QtWidgets import QStyledItemDelegate
 
-class ColorColumn(ObjectColumn):
-    def get_cell_color(self, object):
-        return QColor(object.color)
+class ColorRenderer(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        value = index.data()
+        color = QColor(value)
+
+        painter.save()
+
+        # Draw the rectangle with the given color
+        rect = option.rect
+        painter.setBrush(color)
+        painter.setPen(color)
+        painter.drawRect(rect)
+
+        painter.restore()
+
+class ColorColumn(ObjectColumn): 
+    def __init__(self, **traits): # Stolen from traitsui/extra/checkbox_column.py
+        """Initializes the object."""
+        super().__init__(**traits)
+
+        # force the renderer to be our color renderer
+        self.renderer = ColorRenderer()
 
 layer_table_editor = TableEditor(
     columns=[
-        ColorColumn(format_func=lambda obj: '', width=1, editable=False), # Smallest possible width
-        ObjectColumn(name='name', label='Layer Name', width=150, editable=False),
+        ColorColumn(name='color', width=20, editable=False),
+        ObjectColumn(name='name', label='Label', width=150, editable=False),
         CheckboxColumn(name='visible', label='Vis', width=20),
         CheckboxColumn(name='is_selected', label='Sel', width=20, editable=False)
     ],
