@@ -5,7 +5,7 @@ import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout,QFileDialog)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -129,6 +129,97 @@ class PGCWidget(QWidget):
     def show_column_toggle_dialog(self, pos):
         self.action_show_column_toggle_dialog.perform()
 
+    # --------- Functions to Maintain Row Selection -----------
+    def get_selected_paths(self):
+        selection_model = self.tree.selectionModel()
+        selected = selection_model.selectedRows(0)
+        paths = []
+        for idx in selected:
+            path = []
+            item = self.model.itemFromIndex(idx)
+            while item is not None:
+                parent = item.parent()
+                row = item.row()
+                path.insert(0, row)
+                item = parent
+            paths.append(path)
+        return paths
+
+    def get_item_by_path(self, path):
+        """
+        Given a path (list of row indices), return the QStandardItem at column 0.
+        Returns None if not found.
+        """
+        item = self.model.invisibleRootItem()
+        for row in path:
+            if row < 0 or row >= item.rowCount():
+                return None
+            item = item.child(row, 0)
+            if item is None:
+                return None
+        return item
+
+    def restore_row_selection_by_paths(self, paths):
+        selection_model = self.tree.selectionModel()
+        selection_model.clearSelection()
+        for path in paths:
+            item = self.get_item_by_path(path)
+            if item is not None:
+                idx = item.index()
+                selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+
+    def get_extreme_path(self, paths, extreme="min"):
+        """
+        Returns the smallest or largest path from a list of paths.
+        """
+        if not paths:
+            return None
+        return min(paths) if extreme == "min" else max(paths)
+    
+    def get_post_delete_selection_path(self, selected_paths):
+        """
+        Given a row(s) at its path(s) to be deleted, returns the path to select after deletion.
+        - If the deleted rows are not at the end, select the row that takes their place (the row that was immediately after the last deleted row).
+        - If the deleted rows are at the end, select the last remaining row (the row above the deleted group).
+        """
+        if not selected_paths:
+            return None
+        sorted_paths = sorted(selected_paths)
+        first_path = sorted_paths[0]
+        last_path = sorted_paths[-1]
+        parent_path = last_path[:-1]
+        parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+        row_after = last_path[-1] 
+        if parent.rowCount() > row_after:
+            return parent_path + [row_after]
+        elif parent.rowCount() > 0:
+            return parent_path + [parent.rowCount() - 1]
+        else:
+            return None
+        
+    def filter_top_level_row_refs(self, row_refs):
+        """
+        Given a list of (parent, row) tuples, return only those that are not children of any other selected row.
+        """
+        # Convert to paths for easy comparison
+        def get_path(parent, row):
+            path = []
+            item = parent.child(row, 0)
+            while item is not None:
+                p = item.parent()
+                r = item.row()
+                path.insert(0, r)
+                item = p
+            return path
+
+        paths = [get_path(parent, row) for parent, row in row_refs]
+        top_level = []
+        for i, path in enumerate(paths):
+            if not any(path[:len(other)] == other for j, other in enumerate(paths) if j != i):
+                top_level.append(row_refs[i])
+        return top_level
+    # ---------- ----------------------------------- ----------
+
     def get_column_visibility(self):
         """
         Returns a list of bools showing which columns are visible.
@@ -162,20 +253,14 @@ class PGCWidget(QWidget):
 
     def copy_selected(self):
         row_refs = self.get_selected_rows()
+        row_refs = self.filter_top_level_row_refs(row_refs)
         if not row_refs:
             self._copied_rows = None
             return
         self._copied_rows = []
         for parent, row in row_refs:
+            # Only column 0 needs recursive clone, others are just data
             items = [parent.child(row, col).clone() for col in range(self.model.columnCount())]
-            def clone_children(src_item, tgt_item): # used recursively
-                for i in range(src_item.rowCount()):
-                    child_row = [src_item.child(i, c).clone() for c in range(self.model.columnCount())]
-                    tgt_item.appendRow(child_row)
-                    for c in range(self.model.columnCount()):
-                        clone_children(src_item.child(i, c), tgt_item.child(i, c))
-            for col, item in enumerate(items):
-                clone_children(parent.child(row, col), item)
             self._copied_rows.append(items)
 
     def cut_selected(self):
@@ -184,59 +269,98 @@ class PGCWidget(QWidget):
         self.delete_selected()
 
     def paste_selected(self, above=True):
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        if not self._copied_rows:
-            return
-        row_refs = self.get_selected_rows()
-        if not row_refs:
+        if not selected_paths:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
+            target_path = []
         else:
-            parent, row = row_refs[0]
+            if above:
+                target_path = self.get_extreme_path(selected_paths, "min")
+                parent_path = target_path[:-1]
+                row = target_path[-1]
+            else:
+                target_path = self.get_extreme_path(selected_paths, "max")
+                parent_path = target_path[:-1]
+                row = target_path[-1] + 1
+            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+        if not self._copied_rows:
+            return
         for r, items in enumerate(self._copied_rows):
-            parent.insertRow(row + r if above else row + 1 + r, [item.clone() for item in items])
+            parent.insertRow(row + r, [item.clone() for item in items])
         self.save_to_state()
         reassign_ids(self.model)
         self.tree.expandAll()
+        if target_path:
+            self.restore_row_selection_by_paths([target_path])
+        else:
+            self.restore_row_selection_by_paths([])
 
     def delete_selected(self):
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
         row_refs = self.get_selected_rows(for_deletion=True)
+        row_refs = self.filter_top_level_row_refs(row_refs)
         for parent, row in row_refs:
             parent.removeRow(row)
         self.save_to_state()
         reassign_ids(self.model)
+        post_delete_path = self.get_post_delete_selection_path(selected_paths)
+        if post_delete_path:
+            self.restore_row_selection_by_paths([post_delete_path])
+        else:
+            self.restore_row_selection_by_paths([])
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
 
     def insert_step(self):
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        row_refs = self.get_selected_rows()
-        if not row_refs:
+        top_path = self.get_extreme_path(selected_paths, "min")
+        if top_path is None:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
         else:
-            parent, row = row_refs[0]
-        step_number = 1
+            parent_path = top_path[:-1]
+            row = top_path[-1]
+            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
         step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
         parent.insertRow(row, step_items)
         self.save_to_state()
         reassign_ids(self.model)
         self.tree.expandAll()
+        # after insert, the original top_path is now at last index + 1
+        if top_path:
+            new_path = top_path.copy()
+            new_path[-1] += 1
+            self.restore_row_selection_by_paths([new_path])
+        else:
+            self.restore_row_selection_by_paths([])
 
     def insert_group(self):
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        row_refs = self.get_selected_rows()
-        if not row_refs:
+        top_path = self.get_extreme_path(selected_paths, "min")
+        if top_path is None:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
         else:
-            parent, row = row_refs[0]
+            parent_path = top_path[:-1]
+            row = top_path[-1]
+            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
         group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
         parent.insertRow(row, group_items)
         self.save_to_state()
         reassign_ids(self.model)
         self.tree.expandAll()
+        # after insert, the original top_path is now at last index + 1
+        if top_path:
+            new_path = top_path.copy()
+            new_path[-1] += 1
+            self.restore_row_selection_by_paths([new_path])
+        else:
+            self.restore_row_selection_by_paths([])
 
     def add_group(self, into=False):
         """
@@ -246,36 +370,43 @@ class PGCWidget(QWidget):
         Removes necessity to deselect a direct child of root and setting focus on root to add a group as a
         sibling in the uppermost level.
         """
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        sel = self.tree.selectedIndexes()
+        # Find the bottommost selected row (lexicographically largest path)
+        bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
-        if sel:
-            selected = self.model.itemFromIndex(sel[0])
-            if into and selected.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                parent = selected
+        if bottom_path is not None:
+            selected_item = self.get_item_by_path(bottom_path)
+            if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                parent = selected_item
             else:
-                parent = selected.parent() or self.model.invisibleRootItem()
+                parent_path = bottom_path[:-1]
+                parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
         group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
         parent.appendRow(group_items)
         self.save_to_state()
         reassign_ids(self.model)
         self.tree.expandAll()
+        self.restore_row_selection_by_paths(selected_paths)
 
     def add_step(self, into=False):
+        selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        sel = self.tree.selectedIndexes()
+        bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
-        if sel:
-            selected = self.model.itemFromIndex(sel[0])
-            if into and selected.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                parent = selected
+        if bottom_path is not None:
+            selected_item = self.get_item_by_path(bottom_path)
+            if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                parent = selected_item
             else:
-                parent = selected.parent() or self.model.invisibleRootItem()
+                parent_path = bottom_path[:-1]
+                parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
         step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
         parent.appendRow(step_items)
         self.save_to_state()
         reassign_ids(self.model)
         self.tree.expandAll()
+        self.restore_row_selection_by_paths(selected_paths)
 
     def export_to_json(self):
         self.save_to_state()

@@ -92,11 +92,13 @@ class PGCItem(QStandardItem):
             value = self.data(role)
             if value is not None:
                 new_item.setData(value, role)
-
-        for row in range(self.rowCount()):
-            # recursion
-            child_row = [self.child(row, col).clone() for col in range(self.columnCount())]
-            new_item.appendRow(child_row)
+        # Only clone children for root (-1) and column 0
+        if self.column() in (-1, 0):
+            for row in range(self.rowCount()):
+                # Only clone if the first column child exists
+                if self.child(row, 0) is not None:
+                    child_row = [self.child(row, col).clone() if self.child(row, col) is not None else None for col in range(self.columnCount())]
+                    new_item.appendRow(child_row)
         return new_item
     
 
