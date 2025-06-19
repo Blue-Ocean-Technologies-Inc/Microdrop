@@ -1,3 +1,5 @@
+from PySide6.QtCore import Qt
+
 from protocol_grid.protocol_grid_helpers import make_row, int_to_letters
 from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, group_defaults
 
@@ -33,7 +35,8 @@ def model_to_state(model, state):
                 if item:
                     if item.item_type == "Video":
                         fields[item.item_type] = (
-                            1 if item.data(2) == 2 else 0  # Qt.Checked == 2
+                            1 if item.data(Qt.CheckStateRole) == Qt.Checked
+                            else 0
                         )
                     else:
                         fields[item.item_type] = item.text()

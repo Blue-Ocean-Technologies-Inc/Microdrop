@@ -122,6 +122,11 @@ def make_row(defaults, overrides=None, row_type=None):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable) # prevent editing anywhere else
                                                              # on the cell around the actual checkbox
+            checked = (
+                value == 1 or
+                value == "1" or
+                str(value).lower() in ("true")
+            )
             item.setData(Qt.Checked if str(value) in ("1", "True", "true")
                           else Qt.Unchecked, Qt.CheckStateRole)
         items.append(item)
