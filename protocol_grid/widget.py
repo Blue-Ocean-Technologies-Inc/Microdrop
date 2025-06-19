@@ -14,8 +14,7 @@ from protocol_grid.model.protocol_visualization_helpers import (visualize_protoc
 from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_defaults, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
-                                                 get_selected_rows, invert_row_selection,
-                                                 snapshot_for_undo)
+                                                 get_selected_rows, invert_row_selection)
 from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
 from protocol_grid.state.protocol_state import ProtocolState
 from protocol_grid.protocol_state_helpers import state_to_model, model_to_state, reassign_ids
@@ -230,9 +229,6 @@ class PGCWidget(QWidget):
                 top_level.append(row_refs[i])
         return top_level
     # ---------- ----------------------------------- ----------
-
-    def snapshot_for_undo(self):
-        snapshot_for_undo(self.model, self.undo_stack, self.redo_stack) 
 
     def undo_last(self):
         self.state.undo()

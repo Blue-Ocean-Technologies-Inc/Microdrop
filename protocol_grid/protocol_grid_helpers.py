@@ -129,14 +129,6 @@ def make_row(defaults, overrides=None, row_type=None):
         items.append(item)
     return items
 
-def int_to_letters(n):
-    result=''
-    while n > 0:
-        n -= 1
-        result = chr(65 + (n % 26)) + result
-        n //= 26
-    return result
-
 def get_selected_rows(tree, model, for_deletion=False):
     """
     Returns list of (parent, row) for each unique row with at least one selected cell.
@@ -241,74 +233,6 @@ def invert_row_selection(tree, model):
                 selection_model.select(group_idx, QItemSelectionModel.Deselect | QItemSelectionModel.Rows)
     fix_group_selection(root_item)
 
-def snapshot_for_undo(model, undo_stack, redo_stack, max_undo=6):
-    """
-    Save a deep copy of the current model to the undo stack.
-    """
-    root_item = model.invisibleRootItem()
-    clone = [
-        [root_item.child(row, col).clone() for col in range(model.columnCount())]
-        for row in range(root_item.rowCount())
-    ]
-    undo_stack.append(clone)
-    if len(undo_stack) > max_undo:
-        undo_stack[:] = undo_stack[-max_undo:]
-    redo_stack.clear()
-
-def undo_last(model, undo_stack, redo_stack, reassign_step_ids_callback):
-    if not undo_stack:
-        return
-    current_state = [
-        [model.invisibleRootItem().child(row, col).clone()
-         for col in range(model.columnCount())]
-        for row in range(model.invisibleRootItem().rowCount())
-    ]
-    redo_stack.append(current_state)
-    last_state = undo_stack.pop()
-    clear_view(model)
-    for row_items in last_state:
-        model.invisibleRootItem().appendRow([item.clone() for item in row_items])
-    reassign_step_ids_callback()
-    # If you want: tree.expandAll()  # pass the tree if you want to do this
-
-def redo_last(model, undo_stack, redo_stack, reassign_step_ids_callback):
-    if not redo_stack:
-        return
-    current_state = [
-        [model.invisibleRootItem().child(row, col).clone()
-         for col in range(model.columnCount())]
-        for row in range(model.invisibleRootItem().rowCount())
-    ]
-    undo_stack.append(current_state)
-    next_state = redo_stack.pop()
-    clear_view(model)
-    for row_items in next_state:
-        model.invisibleRootItem().appendRow([item.clone() for item in row_items])
-    reassign_step_ids_callback()
-
-def clear_view(model):
-    model.clear()
-    model.setHorizontalHeaderLabels(protocol_grid_fields)
-
-def reassign_step_ids(model):
-    step_id = 1
-    group_id = 1
-    def assign(parent):
-        nonlocal step_id, group_id
-        for row in range(parent.rowCount()):
-            desc_item = parent.child(row, 0)
-            id_item = parent.child(row, 1)
-            row_type = desc_item.data(ROW_TYPE_ROLE)
-            if row_type == STEP_TYPE:
-                id_item.setText(str(step_id))
-                step_id += 1
-            elif row_type == GROUP_TYPE:
-                id_item.setText(int_to_letters(group_id))
-                group_id += 1
-            if desc_item.hasChildren():
-                assign(desc_item)
-    assign(model.invisibleRootItem())
-
 def to_protocol_model(model):
     """
     Walks the QTreeView and builds a sequential list of ProtocolStep/ProtocolGroup.
@@ -360,49 +284,3 @@ def to_protocol_model(model):
     root_item = model.invisibleRootItem()
     return parse_seq(root_item)
 
-def populate_treeview(model, protocol_sequence, make_row_func, step_defaults, group_defaults):
-    clear_view(model)
-    def add_seq(parent, seq):
-        for obj in seq:
-            is_group = "elements" in obj
-            if is_group:
-                group_obj = obj
-                group_name_val = group_obj.get("name", group_defaults["Description"])
-                group_params = group_obj.get("parameters", {})
-                group_data = {**group_defaults, **group_params, "Description": group_name_val}
-                for k in group_data:
-                    if k == "Video":
-                        try:
-                            group_data[k] = int(group_data[k])
-                        except Exception:
-                            group_data[k] = 0
-                    else:
-                        group_data[k] = str(group_data[k]) if group_data[k] is not None else ""
-                group_items = make_row_func(
-                    group_defaults,
-                    overrides=group_data,
-                    row_type=GROUP_TYPE
-                )
-                parent.appendRow(group_items)
-                add_seq(group_items[0], group_obj.get("elements", []))
-            else:
-                step_obj = obj
-                step_name = step_obj.get("name", step_defaults["Description"])
-                step_params = step_obj.get("parameters", {})
-                step_data = {**step_defaults, **step_params, "Description": step_name}
-                for k in step_data:
-                    if k == "Video":
-                        try:
-                            step_data[k] = int(step_data[k])
-                        except Exception:
-                            step_data[k] = 0
-                    else:
-                        step_data[k] = str(step_data[k]) if step_data[k] is not None else ""
-                step_items = make_row_func(
-                    step_defaults,
-                    overrides=step_data,
-                    row_type=STEP_TYPE
-                )
-                parent.appendRow(step_items)
-    root_item = model.invisibleRootItem()
-    add_seq(root_item, protocol_sequence)
