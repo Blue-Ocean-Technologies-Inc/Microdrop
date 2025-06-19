@@ -96,7 +96,7 @@ class PGCWidget(QWidget):
 
         export_layout = QHBoxLayout()
         export_layout.addWidget(self.export_json_button)
-        export_layout.addWidget(self.export_png_button)
+        # export_layout.addWidget(self.export_png_button)
         export_layout.addWidget(self.import_json_button)
 
         self.layout = QVBoxLayout()
@@ -114,13 +114,17 @@ class PGCWidget(QWidget):
 
     # ---------- State <-> Model sync ----------
     def load_from_state(self):
+        col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
         reassign_ids(self.model)
         self.tree.expandAll()
+        self.set_column_state(col_vis, col_widths)
 
     def save_to_state(self):
+        col_vis, col_widths = self.get_column_state()
         model_to_state(self.model, self.state)
         reassign_ids(self.model)
+        self.set_column_state(col_vis, col_widths)
 
     # ---------- UI Actions ----------
     def show_edit_context_menu(self, pos):
@@ -128,6 +132,28 @@ class PGCWidget(QWidget):
 
     def show_column_toggle_dialog(self, pos):
         self.action_show_column_toggle_dialog.perform()
+
+    # ---------- Column Management ----------
+    def get_column_visibility(self):
+        """
+        Returns a list of bools showing which columns are visible.
+        """
+        return [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
+
+    def set_column_visibility(self, visibility_list):
+        for i, visible in enumerate(visibility_list):
+            self.tree.setColumnHidden(i, not visible)
+
+    def get_column_state(self):
+        visibility = [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
+        widths = [self.tree.columnWidth(i) for i in range(self.model.columnCount())]
+        return visibility, widths
+
+    def set_column_state(self, visibility, widths):
+        for i, visible in enumerate(visibility):
+            self.tree.setColumnHidden(i, not visible)
+        for i, width in enumerate(widths):
+            self.tree.setColumnWidth(i, width)
 
     # --------- Functions to Maintain Row Selection -----------
     def get_selected_paths(self):
@@ -219,16 +245,6 @@ class PGCWidget(QWidget):
                 top_level.append(row_refs[i])
         return top_level
     # ---------- ----------------------------------- ----------
-
-    def get_column_visibility(self):
-        """
-        Returns a list of bools showing which columns are visible.
-        """
-        return [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
-
-    def set_column_visibility(self, visibility_list):
-        for i, visible in enumerate(visibility_list):
-            self.tree.setColumnHidden(i, not visible)
 
     def snapshot_for_undo(self):
         snapshot_for_undo(self.model, self.undo_stack, self.redo_stack) 
