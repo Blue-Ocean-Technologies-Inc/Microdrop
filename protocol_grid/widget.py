@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import json
 import dramatiq
 # import h5py
@@ -12,15 +10,12 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
 from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
-                                                   save_protocol_sequence_to_json,
                                                    visualize_protocol_with_swimlanes)
 from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_defaults, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                  get_selected_rows, invert_row_selection,
-                                                 snapshot_for_undo, undo_last, redo_last,
-                                                 reassign_step_ids, to_protocol_model, 
-                                                 populate_treeview)
+                                                 snapshot_for_undo)
 from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
 from protocol_grid.state.protocol_state import ProtocolState
 from protocol_grid.protocol_state_helpers import state_to_model, model_to_state, reassign_ids
@@ -134,16 +129,6 @@ class PGCWidget(QWidget):
         self.action_show_column_toggle_dialog.perform()
 
     # ---------- Column Management ----------
-    def get_column_visibility(self):
-        """
-        Returns a list of bools showing which columns are visible.
-        """
-        return [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
-
-    def set_column_visibility(self, visibility_list):
-        for i, visible in enumerate(visibility_list):
-            self.tree.setColumnHidden(i, not visible)
-
     def get_column_state(self):
         visibility = [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
         widths = [self.tree.columnWidth(i) for i in range(self.model.columnCount())]
@@ -415,7 +400,7 @@ class PGCWidget(QWidget):
         """
         selected_paths = self.get_selected_paths()
         self.state.snapshot_for_undo()
-        # Find the bottommost selected row (lexicographically largest path)
+        # Find the bottommost selected row
         bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
         if bottom_path is not None:

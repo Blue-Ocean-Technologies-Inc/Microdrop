@@ -4,8 +4,7 @@ from PySide6.QtWidgets import (QStyledItemDelegate, QSpinBox, QDoubleSpinBox,
                                QLineEdit, QCheckBox)
 
 from protocol_grid.consts import (protocol_grid_fields, ROW_TYPE_ROLE,
-                                  GROUP_TYPE, STEP_TYPE, step_defaults, 
-                                  group_defaults)
+                                  GROUP_TYPE, STEP_TYPE, step_defaults)
 
 
 class ProtocolGridDelegate(QStyledItemDelegate):
@@ -92,10 +91,9 @@ class PGCItem(QStandardItem):
             value = self.data(role)
             if value is not None:
                 new_item.setData(value, role)
-        # Only clone children for root (-1) and column 0
+        # only clone children for root (-1) and column 0
         if self.column() in (-1, 0):
             for row in range(self.rowCount()):
-                # Only clone if the first column child exists
                 if self.child(row, 0) is not None:
                     child_row = [self.child(row, col).clone() if self.child(row, col) is not None else None for col in range(self.columnCount())]
                     new_item.appendRow(child_row)
@@ -127,8 +125,7 @@ def make_row(defaults, overrides=None, row_type=None):
                 value == "1" or
                 str(value).lower() in ("true")
             )
-            item.setData(Qt.Checked if str(value) in ("1", "True", "true")
-                          else Qt.Unchecked, Qt.CheckStateRole)
+            item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
         items.append(item)
     return items
 
@@ -184,7 +181,6 @@ def invert_row_selection(tree, model):
 
     Step 3: Now go through each group, 
     select the group only if any of its children are selected.
-
     """
     selection_model = tree.selectionModel()
 
@@ -210,7 +206,6 @@ def invert_row_selection(tree, model):
     root_item = model.invisibleRootItem()
     all_indexes = collect_all_row_indexes(root_item)
     old_selected_indexes = set(selection_model.selectedRows(0))
-
     # step 1
     selected_group_indexes = []
     selected_group_descendants = set()
@@ -228,7 +223,6 @@ def invert_row_selection(tree, model):
         if idx in selected_group_descendants:
             continue 
         selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
-
     # step 3
     def fix_group_selection(item):
         for row in range(item.rowCount()):

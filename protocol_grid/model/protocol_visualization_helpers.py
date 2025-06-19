@@ -1,4 +1,3 @@
-import json
 import pygraphviz as pgv
 from typing import Union
 
@@ -24,7 +23,6 @@ base_node_attr = {
     "labelloc": "t",
     "labeljust": "l"
 }
-
 
 def add_nodes_edges(graph, parent):
     # Add steps
@@ -130,21 +128,6 @@ def visualize_protocol_graph(protocol_graph, save_file_name="tree_data.png") -> 
     # Layout and render
     protocol_graph.layout(prog="dot")
     protocol_graph.draw(save_file_name)
-
-
-def convert_json_protocol_to_graph(json_input: Union[str, dict]) -> pgv.AGraph:
-    # Construct the ProtocolGroup object
-    protocol_dict = load_python_object_from_json(json_input)
-    protocol_group = ProtocolGroup.model_validate(protocol_dict)
-
-    # Generate and visualize the graph
-    protocol_graph = get_protocol_graph(protocol_group)
-
-    return protocol_graph
-
-def save_protocol_sequence_to_json(protocol_data, filename="protocol.json"):
-    with open(filename, "w") as f:
-        f.write(json.dumps(protocol_data, indent=4))
 
 def visualize_protocol_with_swimlanes(protocol_sequence, base_name="protocol_chain", max_nodes_per_column=5):
     G = pgv.AGraph(directed=True, rankdir="TB", strict=False)
