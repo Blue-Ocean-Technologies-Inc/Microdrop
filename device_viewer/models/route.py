@@ -25,6 +25,13 @@ class Route(HasTraits):
         '''Returns list of segments from current route'''
         return list(zip(self.route, self.route[1:]))
 
+    def get_endpoints(self):
+        '''Returns a list of endpoints or the empty list'''
+        if len(self.route) == 0:
+            return []
+        else:
+            return [self.route[0], self.route[-1]]        
+
     def is_loop(self):
         '''Return True if the path is a loop'''
         return len(self.route) >= 2 and self.route[0] == self.route[-1]

@@ -2,7 +2,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsScene
 from pyface.qt.QtCore import Qt, QPointF
 
-from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import generate_connection_line
 from .default_settings import default_colors
 from microdrop_utils._logger import get_logger
@@ -23,6 +23,7 @@ class ElectrodeLayer():
         # Create the connection and electrode items
         self.connection_items = {}
         self.electrode_views = {}
+        self.electrode_endpoints = {}
 
         svg = electrodes.svg_model
 
@@ -33,6 +34,8 @@ class ElectrodeLayer():
         for electrode_id, electrode in electrodes.electrodes.items():
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
                                                                modifier * electrode.path)
+            self.electrode_endpoints[electrode_id] = ElectrodeEndpointItem(electrode_id,
+                    QPointF(svg.electrode_centers[electrode_id][0] * modifier, svg.electrode_centers[electrode_id][1] * modifier), 2 * modifier)
 
         # Create the connections between the electrodes
         connections = {
@@ -56,6 +59,10 @@ class ElectrodeLayer():
         for key, item in self.connection_items.items():
             parent_scene.addItem(item)
 
+    def add_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
+        for electrode_id, endpoint_view in self.electrode_endpoints.items():
+            parent_scene.addItem(endpoint_view)
+
     ######################## remove electrodes/connections from scene ###################################
     def remove_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
         for electrode_id, electrode_view in self.electrode_views.items():
@@ -68,21 +75,28 @@ class ElectrodeLayer():
         for key, item in self.connection_items.items():
             parent_scene.removeItem(item)
 
+    def remove_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
+        for electrode_id, endpoint_view in self.electrode_views.items():
+            parent_scene.removeItem(endpoint_view)
+
     ######################## catch all methods to add / remove all elements from scene ###################
     def add_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.add_electrodes_to_scene(parent_scene)
         self.add_connections_to_scene(parent_scene)
+        self.add_endpoints_to_scene(parent_scene)
 
     def remove_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
+        self.remove_endpoints_to_scene(parent_scene)
 
-    ######################## Redraw connctions based on list of routes ###########################
+    ######################## Redraw connections based on list of routes ###########################
     def redraw_connections_to_scene(self, route_layer_manager: RouteLayerManager):
         # Routes are applied in order, so later routes will apply on top
         # To minimize the number of overlapping Qt calls, we'll apply changes to a dictionary then transfer it to the view at the end
 
         connection_map = {} # Temporary map to superimpose routes
+        endpoint_map = {} # Temporary map to superimpose endpoints
 
         layers = route_layer_manager.layers
         for i in range(len(layers)):
@@ -95,16 +109,27 @@ class ElectrodeLayer():
             elif route_layer.route.is_loop():
                 color = Qt.red
             if route_layer.visible:
-                for (route_from, route_to) in route_layer.route.get_segments():
+                for endpoint_id in route_layer.route.get_endpoints():
+                    if endpoint_map.get(endpoint_id, None) != Qt.yellow:
+                        endpoint_map[endpoint_id] = (color, z)
+
+                for (route_from, route_to) in route_layer.route.get_segments(): # Connections 
                     if connection_map.get((route_from, route_to), (None, None))[0] != Qt.yellow: # Don't downgrade selected conncetions
                         connection_map[(route_from, route_to)] = (color, z)
         
         # Apply map
         for key, connection_item in self.connection_items.items():
-            (color, z) = connection_map.get(key, (False, False))
+            (color, z) = connection_map.get(key, (None, None))
             if color:
                 connection_item.set_active(color)
-                connection_item.setZValue(z)
+                connection_item.setZValue(z) # We want to make sure the whole route is on the same z value
             else:
                 connection_item.set_inactive()
-                
+        
+        for endpoint_id, endpoint_view in self.electrode_endpoints.items():
+            (color, z) = endpoint_map.get(endpoint_id, (None, None))
+            if color:
+                endpoint_view.set_active(color)
+                connection_item.setZValue(z)
+            else:
+                endpoint_view.set_inactive()

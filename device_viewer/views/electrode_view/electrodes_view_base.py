@@ -19,6 +19,15 @@ logger = get_logger(__name__, level='DEBUG')
 
 # electrode connection lines
 class ElectrodeConnectionItem(QGraphicsPathItem):
+    """
+    Class defining an Elecrode connection view. These are the small segments that connect neighboring electrodes, visually
+    appearing to be a line segment with an arrow pointing to is directionality
+
+    Parameters:
+    - key: The connection item's id/key. A unique and addressable identifier. In electrode_layer.py, this is the tuple (from_id, to_id), where ids are for electrodes
+    - src: A (relative) coordinate for where the line starts
+    - dst: A (relative) coordinate for where the line ends
+    """
     def __init__(self, key, src: QPointF, dst: QPointF):
         super().__init__()
 
@@ -37,6 +46,7 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         )
 
         # Arrow end 'level' (along the line, 8 pixels behind start)
+        # We abuse the fact that QPointF addition/scaling works exactly as vector addition/scaling for a bit cleaner computation
         end_diff = src - dst # Backwards! 
         end_diff /= math.hypot(end_diff.x(), end_diff.y()) # Normalize
         end_diff *= 4 # Scale
@@ -74,6 +84,52 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         """
         #self.setPen(QPen(QColor(default_colors['connection']), 1))
         self.setPen(Qt.NoPen)
+
+class ElectrodeEndpointItem(QGraphicsPathItem):
+    """
+    Class defining an endpoint view item. Visually, appears to be a small square situated in the center of an electrode.
+
+    Parameters:
+    - electrode_id: The id of the electrode it is situated on. Also serves as an id for itself
+    - centerpoint: The centerpoint of the electrode it is situated on
+    - size: The size of one of the sides of the square, in the same coordinate system as centerpoint
+    """
+    def __init__(self, electrode_id, centerpoint: QPointF, size=5):
+        super().__init__()
+
+        # Generate path
+        path = QPainterPath()
+        
+        current_point = centerpoint + QPointF(size/2, size/2) # First corner, top right
+
+        path.moveTo(current_point)
+        current_point += QPointF(0, -size) # Bottom right
+        path.lineTo(current_point)
+        current_point += QPointF(-size, 0) # Bottom left
+        path.lineTo(current_point)
+        current_point += QPointF(0, size) # Top left
+        path.lineTo(current_point)
+        path.closeSubpath()
+
+        self.setPath(path)
+   
+        # Add a new variable specific to this class
+        self.electrode_id = id
+        self.set_inactive()
+
+    def set_active(self, color=Qt.green):
+        """
+        Set connection item to visually active
+        """
+        self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
+        self.setBrush(QBrush(color))
+
+    def set_inactive(self):
+        """
+        Set connection item to visually inactive. This is default.
+        """
+        self.setPen(Qt.NoPen)
+        self.setBrush(Qt.NoBrush)
 
 
 # electrode polygons
