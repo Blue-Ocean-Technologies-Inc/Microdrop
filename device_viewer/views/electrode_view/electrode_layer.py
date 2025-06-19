@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QGraphicsScene
 from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
-from .electrode_view_helpers import generate_connection_line
+from .electrode_view_helpers import loop_is_ccw
 from .default_settings import default_colors
 from microdrop_utils._logger import get_logger
 from device_viewer.models.route import RouteLayer, RouteLayerManager
@@ -25,22 +25,22 @@ class ElectrodeLayer():
         self.electrode_views = {}
         self.electrode_endpoints = {}
 
-        svg = electrodes.svg_model
+        self.svg = electrodes.svg_model
 
         # # Scale to approx 360p resolution for display
-        modifier = max(640 / (svg.max_x - svg.min_x), 360 / (svg.max_y - svg.min_y))
+        modifier = max(640 / (self.svg.max_x - self.svg.min_x), 360 / (self.svg.max_y - self.svg.min_y))
 
         # Create the electrode views for each electrode from the electrodes model and add them to the group
         for electrode_id, electrode in electrodes.electrodes.items():
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
                                                                modifier * electrode.path)
             self.electrode_endpoints[electrode_id] = ElectrodeEndpointItem(electrode_id,
-                    QPointF(svg.electrode_centers[electrode_id][0] * modifier, svg.electrode_centers[electrode_id][1] * modifier), 2 * modifier)
+                    QPointF(self.svg.electrode_centers[electrode_id][0] * modifier, self.svg.electrode_centers[electrode_id][1] * modifier), 2 * modifier)
 
         # Create the connections between the electrodes
         connections = {
             key: (QPointF(coord1[0] * modifier, coord1[1] * modifier), QPointF(coord2[0] * modifier, coord2[1] * modifier))
-            for key, (coord1, coord2) in svg.connections.items()
+            for key, (coord1, coord2) in self.svg.connections.items()
             # key here is form dmf_utils.SvgUtil (see neighbours_to_points), and is a tuple of 2 electrode_ids. if (id1, id2) exists in the dict, then (id2, id1) wont, and viice versa
         }
 
@@ -107,7 +107,10 @@ class ElectrodeLayer():
                 color = Qt.yellow
                 z = len(layers) # Highest
             elif route_layer.route.is_loop():
-                color = Qt.red
+                if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
+                    color = Qt.red
+                else:
+                    color = QColor("orange")
             if route_layer.visible:
                 for endpoint_id in route_layer.route.get_endpoints():
                     if endpoint_map.get(endpoint_id, None) != Qt.yellow:
