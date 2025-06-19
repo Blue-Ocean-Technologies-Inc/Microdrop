@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QItemSelectionModel
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import (QStyledItemDelegate, QSpinBox, QDoubleSpinBox,
                                QLineEdit, QCheckBox)
@@ -11,14 +11,33 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         col = index.column()
         field = protocol_grid_fields[col]
-        if field in ("Label", "Message"):            
+        model = index.model()
+        row = index.row()
+        if field == "Trail Overlay":
+            trail_length_col = protocol_grid_fields.index("Trail Length")
+            trail_length_item = model.item(index.row(), trail_length_col)
+            max_val = 0
+            try:
+                max_val = max(0, int(trail_length_item.text()) - 1)
+            except Exception:
+                max_val = 0
+            editor = QSpinBox(parent)
+            editor.setMinimum(0)
+            editor.setMaximum(max_val)
+            return editor
+        if field == "Magnet Height":
+            editor = QSpinBox(parent)
+            editor.setMinimum(0)
+            editor.setMaximum(10)
+            return editor
+        if field in ("Label", "Message"):
             return QLineEdit(parent)
         elif field in ("Repetitions", "Repeat Duration", "Trail Length"):
             editor = QSpinBox(parent)
             editor.setMinimum(1)
             editor.setMaximum(10000)
             return editor
-        elif field == "Video":
+        elif field in ("Magnet", "Video"):
             cb = QCheckBox(parent)
             cb.setText("")
             cb.setTristate(False)
@@ -60,6 +79,19 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             model.setData(index, checked, Qt.ItemDataRole.EditRole)
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             model.setData(index, "", Qt.DisplayRole)
+            # # if Magnet is toggled, enable/disable Magnet Height
+            # if field == "Magnet":
+            #     row = index.row()
+            #     magnet_height_col = protocol_grid_fields.index("Magnet Height")
+            #     magnet_height_idx = model.index(row, magnet_height_col)
+            #     magnet_height_item = model.itemFromIndex(magnet_height_idx)
+            #     def update_magnet_height():
+            #         if checked:
+            #             magnet_height_item.setEditable(True)
+            #         else:
+            #             magnet_height_item.setEditable(False)
+            #             magnet_height_item.setText("")
+            #     QTimer.singleShot(0, update_magnet_height)
         else:
             super().setModelData(editor, model, index)
 
@@ -111,7 +143,7 @@ def make_row(defaults, overrides=None, row_type=None):
             continue
 
         value = overrides.get(field, defaults.get(field, ""))
-        display_value = "" if field == "Video" else value
+        display_value = "" if field in ("Video", "Magnet") else value
         item = PGCItem(item_type=field, item_data=display_value)
         if field == "Description" and row_type:
             item.setData(row_type, ROW_TYPE_ROLE)
@@ -119,7 +151,7 @@ def make_row(defaults, overrides=None, row_type=None):
             item.setEditable(False)
         else:
             item.setEditable(True)
-        if field == "Video":
+        if field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = (

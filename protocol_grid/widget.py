@@ -39,6 +39,9 @@ class PGCWidget(QWidget):
         self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_edit_context_menu)
+        
+        # self._programmatic_change = False
+        # self.model.itemChanged.connect(self.on_item_changed)
 
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
@@ -108,17 +111,25 @@ class PGCWidget(QWidget):
 
     # ---------- State <-> Model sync ----------
     def load_from_state(self):
+        self.model.blockSignals(True)
         col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
         reassign_ids(self.model)
         self.tree.expandAll()
         self.set_column_state(col_vis, col_widths)
+        self.model.blockSignals(False)
 
     def save_to_state(self):
         col_vis, col_widths = self.get_column_state()
         model_to_state(self.model, self.state)
         reassign_ids(self.model)
         self.set_column_state(col_vis, col_widths)
+
+    def on_item_changed(self, item):
+        # to save if user changed a value outside of model rebuild
+        if self._programmatic_change or self.model.signalsBlocked():
+            return
+        self.save_to_state()
 
     # ---------- UI Actions ----------
     def show_edit_context_menu(self, pos):

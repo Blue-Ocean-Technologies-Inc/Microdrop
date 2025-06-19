@@ -33,7 +33,7 @@ def model_to_state(model, state):
             for col in range(parent_item.columnCount()):
                 item = parent_item.child(row, col)
                 if item:
-                    if item.item_type == "Video":
+                    if item.item_type in ("Video", "Magnet"):
                         fields[item.item_type] = (
                             1 if item.data(Qt.CheckStateRole) == Qt.Checked
                             else 0
