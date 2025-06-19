@@ -27,6 +27,7 @@ class EditContextMenu(QMenu):
             ("Cut", self.widget.cut_selected),
             ("Paste Above", lambda: self.widget.paste_selected(above=True)),
             ("Paste Below", lambda: self.widget.paste_selected(above=False)),
+            ("Paste into", self.widget.paste_into),
             ("Undo", self.widget.undo_last),
             ("Redo", self.widget.redo_last)
         ]

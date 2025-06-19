@@ -296,6 +296,33 @@ class PGCWidget(QWidget):
             self.restore_row_selection_by_paths([target_path])
         else:
             self.restore_row_selection_by_paths([])
+    
+    def paste_into(self):
+        """
+        Paste copied/cut rows into selected group.
+        If selected item is a step, then paste below it. 
+        """
+        selected_paths = self.get_selected_paths()
+        self.state.snapshot_for_undo()
+        if not selected_paths or not  self._copied_rows:
+            return 
+        target_path = selected_paths[0]
+        target_item = self.get_item_by_path(target_path)
+        if target_item and target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            parent = target_item
+            row = parent.rowCount()
+            for r, items in enumerate(self._copied_rows):
+                parent.insertRow(row + r, [item.clone() for item in items])
+            self.save_to_state()
+            reassign_ids(self.model)
+            self.tree.expandAll()
+            if parent.rowCount() > 0:
+                new_child_path = target_path + [row]
+                self.restore_row_selection_by_paths([new_child_path])
+            else:
+                self.restore_row_selection_by_paths([])
+        else:
+            self.paste_selected(above=False)
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
