@@ -54,7 +54,7 @@ class PGCWidget(QWidget):
 
         # set Headers for columns
         self.model.setHorizontalHeaderLabels(protocol_grid_fields)
-        initial_column_widths = [120, 30, 80, 80, 80, 80, 80, 80, 80, 30, 120]
+        initial_column_widths = [120, 40, 80, 80, 80, 80, 80, 80, 80, 30, 120]
         for i, width in enumerate(initial_column_widths):
             self.tree.setColumnWidth(i, width)
 

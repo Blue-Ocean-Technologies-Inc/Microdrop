@@ -86,12 +86,12 @@ def reassign_ids(model):
             id_item = parent.child(row, 1)
             row_type = desc_item.data(ROW_TYPE_ROLE)
             if row_type == GROUP_TYPE:
-                group_id = prefix + int_to_letters(group_count)
+                group_id = (prefix + "_" if prefix else "") + int_to_letters(group_count)
                 id_item.setText(group_id)
                 group_count += 1
                 assign(desc_item, group_id)
             elif row_type == STEP_TYPE:
-                step_id = prefix + str(step_count)
+                step_id = (prefix + "_" if prefix else "") + str(step_count)
                 id_item.setText(step_id)
                 step_count += 1
 

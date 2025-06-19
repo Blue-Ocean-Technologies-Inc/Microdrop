@@ -101,12 +101,15 @@ class PGCItem(QStandardItem):
     
 
 def make_row(defaults, overrides=None, row_type=None):
-    """
-    Create row (Step/Group) using default values defined in consts.py
-    """
     overrides = overrides or {}
     items = []
     for i, field in enumerate(protocol_grid_fields):
+        if row_type == GROUP_TYPE and field not in ("Description", "ID"):
+            item = PGCItem(item_type=field, item_data="")
+            item.setEditable(False)
+            items.append(item)
+            continue
+
         value = overrides.get(field, defaults.get(field, ""))
         display_value = "" if field == "Video" else value
         item = PGCItem(item_type=field, item_data=display_value)
@@ -118,8 +121,7 @@ def make_row(defaults, overrides=None, row_type=None):
             item.setEditable(True)
         if field == "Video":
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setFlags(item.flags() & ~Qt.ItemIsEditable) # prevent editing anywhere else
-                                                             # on the cell around the actual checkbox
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = (
                 value == 1 or
                 value == "1" or
