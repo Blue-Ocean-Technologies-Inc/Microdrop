@@ -1,0 +1,42 @@
+PRIMARY_SHADE = {
+    50:  "#E6F4E9",
+    100: "#C3E4C9",
+    200: "#9DD3A8",
+    300: "#75C285",
+    400: "#57B66C",
+    500: "#37A953",
+    600: "#2F9A4A",
+    700: "#25883F",
+    800: "#1B7734",
+    900: "#085822"
+}
+
+PRIMARY_COLOR = PRIMARY_SHADE[600]
+
+SECONDARY_SHADE = {
+    50:  "#E7E9EF",
+    100: "#CED3E0",
+    200: "#B6BDD0",
+    300: "#9DA7C1",
+    400: "#8592B1",
+    500: "#6C7CA1",
+    600: "#546692",
+    700: "#3B5082",
+    800: "#233A73",
+    900: "#0A2463"
+}
+
+SECONDARY_COLOR = SECONDARY_SHADE[500]
+
+INFO_COLOR = "#2F80ED"
+SUCCESS_COLOR = "#37A953"
+ERROR_COLOR = "#B00020"
+WARNING_COLOR = "#F5A623"
+
+GREY = {
+    "light": "#D1D1D1",
+    "dark":  "#575757"
+}
+
+BLACK = "#000000"
+WHITE = "#FFFFFF"
