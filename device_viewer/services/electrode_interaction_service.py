@@ -68,8 +68,6 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if current_route.can_add_segment(from_id, to_id):
             current_route.add_segment(from_id, to_id)
-            
-            self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
 
     def handle_route_erase(self, from_id, to_id, connection_item):
         '''Handle a route segment being drawn or first electrode being added'''
@@ -79,10 +77,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         new_routes = [Route(route_list, channel_map=current_route.channel_map) for route_list in current_route.remove_segment(from_id, to_id)]
         self.route_layer_manager.replace_layer(self.route_layer_manager.selected_layer, new_routes)
 
-        self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
-
     @observe("route_layer_manager.layers.items.visible")
     @observe("route_layer_manager.selected_layer")
+    @observe("route_layer_manager.layers.items.route.route.items")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
