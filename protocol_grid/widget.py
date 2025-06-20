@@ -17,7 +17,7 @@ from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                  get_selected_rows, invert_row_selection)
 from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
 from protocol_grid.state.protocol_state import ProtocolState
-from protocol_grid.protocol_state_helpers import state_to_model, model_to_state, reassign_ids
+from protocol_grid.protocol_state_helpers import state_to_model, model_to_state, reassign_ids, clamp_trail_overlay
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -114,6 +114,7 @@ class PGCWidget(QWidget):
         self.model.blockSignals(True)
         col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
+        clamp_trail_overlay(self.model)
         reassign_ids(self.model)
         self.tree.expandAll()
         self.set_column_state(col_vis, col_widths)

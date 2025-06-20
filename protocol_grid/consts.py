@@ -16,8 +16,8 @@ protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
     "Duration", "Voltage", "Frequency", 
     "Label", "Message", "Repeat Duration",
-    "Trail Length", "Video", "Volume Threshold",
-    "Magnet", "Magnet Height", "Trail Overlay"
+    "Trail Length", "Trail Overlay", "Video", 
+    "Volume Threshold", "Magnet", "Magnet Height"
 ]
 fixed_fields = {"Description", "ID"}
 field_groupings = [
@@ -44,26 +44,26 @@ step_defaults = {
     "Message": "",
     "Repeat Duration": "0",
     "Trail Length": "1",
+    "Trail Overlay": "0",
     "Video": "1",
     "Volume Threshold": "0.0",
     "Magnet": "0",
-    "Magnet Height": "",
-    "Trail Overlay": "0"
+    "Magnet Height": "0",    
 }
 group_defaults = {
     "Description": "Group",
     "ID": "",
     "Repetitions": "1",
-    "Duration": "",
+    "Duration": "1.00",
     "Voltage": "",
     "Frequency": "",
     "Label": "",
     "Message": "",
     "Repeat Duration": "",
     "Trail Length": "",
+    "Trail Overlay": "",
     "Video": "",
     "Volume Threshold": "",
     "Magnet": "",
-    "Magnet Height": "",
-    "Trail Overlay": ""
+    "Magnet Height": ""    
 }

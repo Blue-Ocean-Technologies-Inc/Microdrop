@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt
 
 from protocol_grid.protocol_grid_helpers import make_row
-from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, group_defaults
+from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, group_defaults, protocol_grid_fields
 
 def state_to_model(state, model):
     
@@ -96,5 +96,34 @@ def reassign_ids(model):
                 step_count += 1
 
     assign(model.invisibleRootItem())
+
+def clamp_trail_overlay(parent):
+    """
+    Ensure that the Trail Overlay value is not greater than Trail Length - 1 for all steps.
+    """
+    if hasattr(parent, "rowCount") and hasattr(parent, "columnCount"):
+        row_count = parent.rowCount()
+        item_getter = (lambda r, c: parent.item(r, c)) if hasattr(parent, "item") else (lambda r, c: parent.child(r, c))
+    else:
+        return
+    for row in range(row_count):
+        desc_item = item_getter(row, 0)
+        if desc_item is None:
+            continue
+        if desc_item.hasChildren():
+            clamp_trail_overlay(desc_item)
+        else:
+            try:
+                trail_length_col = protocol_grid_fields.index("Trail Length")
+                overlay_col = protocol_grid_fields.index("Trail Overlay")
+                trail_length_item = item_getter(row, trail_length_col)
+                overlay_item = item_getter(row, overlay_col)
+                trail_length = int(trail_length_item.text())
+                max_overlay = max(0, trail_length - 1)
+                overlay_val = int(overlay_item.text())
+                if overlay_val > max_overlay:
+                    overlay_item.setText(str(max_overlay))
+            except Exception:
+                pass
 
     

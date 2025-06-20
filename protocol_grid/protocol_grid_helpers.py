@@ -15,7 +15,11 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         row = index.row()
         if field == "Trail Overlay":
             trail_length_col = protocol_grid_fields.index("Trail Length")
-            trail_length_item = model.item(index.row(), trail_length_col)
+            item_parent = index.model().itemFromIndex(index.parent()) if index.parent().isValid() else None
+            if item_parent:
+                trail_length_item = item_parent.child(index.row(), trail_length_col)
+            else:
+                trail_length_item = model.item(index.row(), trail_length_col)
             max_val = 0
             try:
                 max_val = max(0, int(trail_length_item.text()) - 1)
@@ -71,7 +75,33 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         if isinstance(editor, QLineEdit):
             model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
         elif isinstance(editor, QSpinBox):
-            model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
+            value = editor.value()
+            current_value = index.model().data(index, Qt.ItemDataRole.EditRole)
+            if value != current_value:
+                model.setData(index, value, Qt.ItemDataRole.EditRole)
+                field = protocol_grid_fields[index.column()]
+                if field == "Trail Length":
+                    row = index.row()
+                    overlay_col = protocol_grid_fields.index("Trail Overlay")
+                    overlay_idx = model.index(row, overlay_col)
+                    overlay_item = model.itemFromIndex(overlay_idx)
+                    try:
+                        max_overlay = max(0, int(value) - 1)
+                    except Exception:
+                        max_overlay = 0
+                    try:
+                        overlay_val = int(overlay_item.text())
+                    except Exception:
+                        overlay_val = 0
+                    if overlay_val > max_overlay:
+                        overlay_item.setText(str(max_overlay))
+                    if overlay_val < 0:
+                        overlay_item.setText("0")
+                    view = self.parent().tree if hasattr(self.parent(), "tree") else None
+                    if view:
+                        view.closePersistentEditor(overlay_idx)
+            else:
+                pass 
         elif isinstance(editor, QDoubleSpinBox):
             model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
         elif isinstance(editor, QCheckBox):
@@ -79,19 +109,6 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             model.setData(index, checked, Qt.ItemDataRole.EditRole)
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             model.setData(index, "", Qt.DisplayRole)
-            # # if Magnet is toggled, enable/disable Magnet Height
-            # if field == "Magnet":
-            #     row = index.row()
-            #     magnet_height_col = protocol_grid_fields.index("Magnet Height")
-            #     magnet_height_idx = model.index(row, magnet_height_col)
-            #     magnet_height_item = model.itemFromIndex(magnet_height_idx)
-            #     def update_magnet_height():
-            #         if checked:
-            #             magnet_height_item.setEditable(True)
-            #         else:
-            #             magnet_height_item.setEditable(False)
-            #             magnet_height_item.setText("")
-            #     QTimer.singleShot(0, update_magnet_height)
         else:
             super().setModelData(editor, model, index)
 
@@ -136,7 +153,7 @@ def make_row(defaults, overrides=None, row_type=None):
     overrides = overrides or {}
     items = []
     for i, field in enumerate(protocol_grid_fields):
-        if row_type == GROUP_TYPE and field not in ("Description", "ID"):
+        if row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration"):
             item = PGCItem(item_type=field, item_data="")
             item.setEditable(False)
             items.append(item)
