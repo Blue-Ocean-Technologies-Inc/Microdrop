@@ -113,7 +113,7 @@ class ElectrodeLayer():
                     color = QColor("orange")
             if route_layer.visible:
                 for endpoint_id in route_layer.route.get_endpoints():
-                    if endpoint_map.get(endpoint_id, None) != Qt.yellow:
+                    if endpoint_map.get(endpoint_id, (None, None))[0] != Qt.yellow:
                         endpoint_map[endpoint_id] = (color, z)
 
                 for (route_from, route_to) in route_layer.route.get_segments(): # Connections 
@@ -133,6 +133,6 @@ class ElectrodeLayer():
             (color, z) = endpoint_map.get(endpoint_id, (None, None))
             if color:
                 endpoint_view.set_active(color)
-                connection_item.setZValue(z)
+                endpoint_view.setZValue(z)
             else:
                 endpoint_view.set_inactive()
