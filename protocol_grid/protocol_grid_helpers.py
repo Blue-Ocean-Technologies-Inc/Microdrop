@@ -30,10 +30,16 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setMaximum(max_val)
             return editor
         if field == "Magnet Height":
-            editor = QSpinBox(parent)
-            editor.setMinimum(0)
-            editor.setMaximum(10)
-            return editor
+            parent_item = model.itemFromIndex(index.parent()) if index.parent().isValid() else model.invisibleRootItem()
+            magnet_col = protocol_grid_fields.index("Magnet")
+            magnet_item = parent_item.child(index.row(), magnet_col)
+            if magnet_item and magnet_item.data(Qt.CheckStateRole):
+                editor = QSpinBox(parent)
+                editor.setMinimum(0)
+                editor.setMaximum(10)
+                return editor
+            else:
+                return None
         if field in ("Label", "Message"):
             return QLineEdit(parent)
         elif field in ("Repetitions", "Repeat Duration", "Trail Length"):
@@ -73,6 +79,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         col = index.column()
         field = protocol_grid_fields[col]
+        row = index.row()
         if isinstance(editor, QLineEdit):
             model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
         elif isinstance(editor, QSpinBox):
@@ -80,9 +87,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             current_value = index.model().data(index, Qt.ItemDataRole.EditRole)
             if value != current_value:
                 model.setData(index, value, Qt.ItemDataRole.EditRole)
-                field = protocol_grid_fields[index.column()]
                 if field == "Trail Length":
-                    row = index.row()
                     overlay_col = protocol_grid_fields.index("Trail Overlay")
                     overlay_idx = model.index(row, overlay_col)
                     overlay_item = model.itemFromIndex(overlay_idx)
@@ -101,8 +106,6 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                     view = self.parent().tree if hasattr(self.parent(), "tree") else None
                     if view:
                         view.closePersistentEditor(overlay_idx)
-            else:
-                pass 
         elif isinstance(editor, QDoubleSpinBox):
             model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
         elif isinstance(editor, QCheckBox):
@@ -158,6 +161,13 @@ class PGCItem(QStandardItem):
 def make_row(defaults, overrides=None, row_type=None):
     overrides = overrides or {}
     items = []
+    magnet_checked = False
+    for i, field in enumerate(protocol_grid_fields):
+        value = overrides.get(field, defaults.get(field, ""))
+        if field == "Magnet":
+            checked = bool(int(value)) if str(value).strip() not in ("", "None", "") else False
+            magnet_checked = checked
+            break  # only check once
     for i, field in enumerate(protocol_grid_fields):
         if row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration"):
             item = PGCItem(item_type=field, item_data="")
@@ -177,8 +187,17 @@ def make_row(defaults, overrides=None, row_type=None):
         if field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            checked = bool(int(value)) if str(value).strip() not in ("", "None") else False
+            checked = str(value).strip().lower() in ("1", "true", "yes", "on")
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            if field == "Magnet":
+                magnet_checked = checked
+        if field == "Magnet Height":
+            if not magnet_checked:
+                item.setEditable(False)
+                item.setData("", Qt.DisplayRole)
+            else:
+                item.setEditable(True)
+                item.setData(value, Qt.DisplayRole)
         items.append(item)
     return items
 
@@ -320,9 +339,10 @@ def to_protocol_model(model):
                 for i, field in enumerate(protocol_grid_fields):
                     item = parent_item.child(row, i)
                     if item:
-                        value = item.text() if field != "Video" else (
-                            1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                        )
+                        if field in ("Video", "Magnet"):
+                            value = 1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
+                        else:
+                            value = item.text()
                         fields[field] = value
                 step_dict = {
                     "name": fields.get("Description", step_defaults["Description"]),

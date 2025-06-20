@@ -35,10 +35,8 @@ def model_to_state(model, state):
                 field = protocol_grid_fields[col]
                 if item:
                     if field in ("Video", "Magnet"):
-                        fields[field] = (
-                            1 if item.data(Qt.CheckStateRole) == Qt.Checked
-                            else 0
-                        )
+                        state = item.data(Qt.CheckStateRole)
+                        fields[field] = "1" if state == Qt.Checked else "0"
                     else:
                         fields[field] = item.text()
             if row_type == GROUP_TYPE:

@@ -126,7 +126,28 @@ class PGCWidget(QWidget):
         self.set_column_state(col_vis, col_widths)
 
     def on_item_changed(self, item):
-        model_to_state(self.model, self.state)
+        col = item.column()
+        field = protocol_grid_fields[col]
+        row = item.row()
+        if field == "Magnet":
+            checked = bool(item.data(Qt.CheckStateRole))
+            parent = item.parent() or self.model.invisibleRootItem()
+            magnet_height_col = protocol_grid_fields.index("Magnet Height")
+            magnet_height_item = parent.child(row, magnet_height_col)
+            idx = magnet_height_item.index()
+            if not checked:
+                last_value = magnet_height_item.text()
+                magnet_height_item.setData(last_value, Qt.UserRole + 2)
+                magnet_height_item.setEditable(False)
+                magnet_height_item.setText("")
+            else:
+                last_value = magnet_height_item.data(Qt.UserRole + 2)
+                if last_value is None or last_value == "":
+                    last_value = "0"
+                magnet_height_item.setEditable(True)
+                magnet_height_item.setText(str(last_value))
+        self.save_to_state()
+        print(f"Item changed: {item.text()} at row {row}, column {col} ({field})")
 
     # ---------- UI Actions ----------
     def show_edit_context_menu(self, pos):
