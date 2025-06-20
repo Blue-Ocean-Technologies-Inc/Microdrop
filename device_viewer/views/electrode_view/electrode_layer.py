@@ -99,13 +99,16 @@ class ElectrodeLayer():
         endpoint_map = {} # Temporary map to superimpose endpoints
 
         layers = route_layer_manager.layers
+
+        if route_layer_manager.selected_layer:
+            layers = layers + [route_layer_manager.selected_layer] # Paint the selected layer again last so its always on top
+        
         for i in range(len(layers)):
             route_layer = layers[i]
             color = QColor(route_layer.color)
             z = i # Make sure each route is it own layer. Prevents weird overlap patterns
             if route_layer.is_selected:
                 color = Qt.yellow
-                z = len(layers) # Highest
             elif route_layer.route.is_loop():
                 if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
                     color = Qt.red
@@ -113,12 +116,10 @@ class ElectrodeLayer():
                     color = QColor("orange")
             if route_layer.visible:
                 for endpoint_id in route_layer.route.get_endpoints():
-                    if endpoint_map.get(endpoint_id, (None, None))[0] != Qt.yellow:
-                        endpoint_map[endpoint_id] = (color, z)
+                    endpoint_map[endpoint_id] = (color, z)
 
                 for (route_from, route_to) in route_layer.route.get_segments(): # Connections 
-                    if connection_map.get((route_from, route_to), (None, None))[0] != Qt.yellow: # Don't downgrade selected conncetions
-                        connection_map[(route_from, route_to)] = (color, z)
+                    connection_map[(route_from, route_to)] = (color, z)
         
         # Apply map
         for key, connection_item in self.connection_items.items():
