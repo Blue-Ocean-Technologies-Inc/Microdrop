@@ -32,14 +32,15 @@ def model_to_state(model, state):
             fields = {}
             for col in range(parent_item.columnCount()):
                 item = parent_item.child(row, col)
+                field = protocol_grid_fields[col]
                 if item:
-                    if item.item_type in ("Video", "Magnet"):
-                        fields[item.item_type] = (
+                    if field in ("Video", "Magnet"):
+                        fields[field] = (
                             1 if item.data(Qt.CheckStateRole) == Qt.Checked
                             else 0
                         )
                     else:
-                        fields[item.item_type] = item.text()
+                        fields[field] = item.text()
             if row_type == GROUP_TYPE:
                 group_obj = {
                     "type": GROUP_TYPE,
@@ -58,7 +59,6 @@ def model_to_state(model, state):
         return seq
     root = model.invisibleRootItem()
     state.sequence = parse_items(root)
-    state.notify_observers()
 
 def reassign_ids(model):
     """

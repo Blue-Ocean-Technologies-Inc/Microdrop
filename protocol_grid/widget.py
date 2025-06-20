@@ -2,7 +2,8 @@ import json
 import dramatiq
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
-                               QPushButton, QHBoxLayout,QFileDialog)
+                               QPushButton, QHBoxLayout,QFileDialog,
+                               QAbstractItemDelegate)
 from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
 from microdrop_utils._logger import get_logger
@@ -41,7 +42,7 @@ class PGCWidget(QWidget):
         self.tree.customContextMenuRequested.connect(self.show_edit_context_menu)
         
         # self._programmatic_change = False
-        # self.model.itemChanged.connect(self.on_item_changed)
+        self.model.itemChanged.connect(self.on_item_changed)
 
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
@@ -65,8 +66,8 @@ class PGCWidget(QWidget):
         self.delegate = ProtocolGridDelegate(self)
         self.tree.setItemDelegate(self.delegate)
 
-        # Set edit trigger to single click
-        self.tree.setEditTriggers(QTreeView.EditTrigger.CurrentChanged)
+        # Set edit trigger to allow editing of all cells
+        self.tree.setEditTriggers(QTreeView.EditTrigger.AllEditTriggers)
 
         # Group and Step creation buttons
         self.add_group_button = QPushButton("Add Group")
@@ -111,14 +112,12 @@ class PGCWidget(QWidget):
 
     # ---------- State <-> Model sync ----------
     def load_from_state(self):
-        self.model.blockSignals(True)
         col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
         clamp_trail_overlay(self.model)
         reassign_ids(self.model)
         self.tree.expandAll()
         self.set_column_state(col_vis, col_widths)
-        self.model.blockSignals(False)
 
     def save_to_state(self):
         col_vis, col_widths = self.get_column_state()
@@ -127,10 +126,7 @@ class PGCWidget(QWidget):
         self.set_column_state(col_vis, col_widths)
 
     def on_item_changed(self, item):
-        # to save if user changed a value outside of model rebuild
-        if self._programmatic_change or self.model.signalsBlocked():
-            return
-        self.save_to_state()
+        model_to_state(self.model, self.state)
 
     # ---------- UI Actions ----------
     def show_edit_context_menu(self, pos):

@@ -65,7 +65,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         elif isinstance(editor, QDoubleSpinBox):
             editor.setValue(float(value) if value else 0.0)
         elif isinstance(editor, QCheckBox):
-            editor.setChecked(bool(int(value)) if value not in (None, "") else False)
+            checked = index.model().data(index, Qt.CheckStateRole) == Qt.Checked
+            editor.setChecked(checked)
         else:
             super().setEditorData(editor, index)
 
@@ -109,13 +110,16 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             model.setData(index, checked, Qt.ItemDataRole.EditRole)
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             model.setData(index, "", Qt.DisplayRole)
+            widget = self.parent()
+            if hasattr(widget, "save_to_state"):
+                widget.save_to_state()
         else:
             super().setModelData(editor, model, index)
 
 
 class PGCItem(QStandardItem):
     def __init__(self, item_type=None, item_data=None):
-        if item_type == "Video":
+        if item_type in ("Video", "Magnet"):
             item_data = ""
         super().__init__(item_data)
         self.item_type = item_type
@@ -140,6 +144,8 @@ class PGCItem(QStandardItem):
             value = self.data(role)
             if value is not None:
                 new_item.setData(value, role)
+        check_state = self.data(Qt.CheckStateRole)
+        new_item.setData(check_state, Qt.CheckStateRole)
         # only clone children for root (-1) and column 0
         if self.column() in (-1, 0):
             for row in range(self.rowCount()):
@@ -171,11 +177,7 @@ def make_row(defaults, overrides=None, row_type=None):
         if field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            checked = (
-                value == 1 or
-                value == "1" or
-                str(value).lower() in ("true")
-            )
+            checked = bool(int(value)) if str(value).strip() not in ("", "None") else False
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
         items.append(item)
     return items
@@ -299,9 +301,9 @@ def to_protocol_model(model):
                 for i, field in enumerate(protocol_grid_fields):
                     item = parent_item.child(row, i)
                     if item:
-                        value = item.text() if field != "Video" else (
+                        value = (
                             1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                        )
+                        ) if field in ("Video", "Magnet") else item.text()
                         fields[field] = value
                 group_elements = parse_seq(desc_item)
                 group_dict = {
