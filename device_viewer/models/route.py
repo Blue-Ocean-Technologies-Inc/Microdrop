@@ -134,6 +134,9 @@ class Route(HasTraits):
             
         return list(filter(lambda route: len(route) > 1, new_routes)) # Remove empty/singular routes
     
+    def invert(self):
+        self.route.reverse()
+    
     def __repr__(self):
         return f"<Route path={self.route}>"
 

@@ -3,6 +3,8 @@ from traitsui.extras.checkbox_column import CheckboxColumn
 from pyface.qt.QtGui import QColor
 from pyface.qt.QtWidgets import QStyledItemDelegate
 
+from device_viewer.route_selection_view.menu import RouteLayerMenu, RouteLayerMenuHandler
+
 class ColorRenderer(QStyledItemDelegate):
     def paint(self, painter, option, index):
         value = index.data()
@@ -33,6 +35,7 @@ layer_table_editor = TableEditor(
         CheckboxColumn(name='visible', label='Vis', width=20),
         CheckboxColumn(name='is_selected', label='Sel', width=20, editable=False)
     ],
+    menu=RouteLayerMenu,
     show_lines=False,
     selected="selected_layer",
     sortable=False,
@@ -44,5 +47,6 @@ layer_table_editor = TableEditor(
 RouteLayerView = View(
         Item('layers', editor=layer_table_editor, show_label=False), 
         resizable=True,
-        title="Route Layer Selector"
+        title="Route Layer Selector",
+        handler=RouteLayerMenuHandler
 )
