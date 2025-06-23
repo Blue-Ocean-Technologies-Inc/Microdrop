@@ -21,18 +21,31 @@ from pyface.splash_screen import SplashScreen
 
 from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
                                QPushButton, QSizePolicy, QVBoxLayout,
-                               QWidget)
+                               QHBoxLayout, QWidget, QFrame)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QFont, QPainter, QColor
+from PySide6.QtGui import QPixmap, QFont, QFontDatabase
 
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
-from .consts import (scibots_icon_path, menu_options_icons_path,
-                     sidebar_menu_options, sidebar_stylesheet,
-                     hamburger_btn_stylesheet)
+from .consts import (scibots_icon_path, sidebar_menu_options, 
+                     sidebar_stylesheet, hamburger_btn_stylesheet)
 
 from microdrop_utils._logger import get_logger
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__, level="CRITICAL")
+
+def load_font_family(font_path):
+    if Path(font_path).exists():
+        id_ = QFontDatabase.addApplicationFont(str(font_path))
+        families = QFontDatabase.applicationFontFamilies(id_)
+        if families:            
+            return families[0]
+    return None
+
+MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
+ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
+
+INTER_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
+LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
 
 
 class MicrodropApplication(TasksApplication):
@@ -167,18 +180,6 @@ class MicrodropApplication(TasksApplication):
                     window.control._left_toolbar = left_toolbar
 
 
-def colorize_pixmap(pixmap, color):
-    colored = QPixmap(pixmap.size())
-    colored.fill(Qt.transparent)
-    painter = QPainter(colored)
-    painter.setCompositionMode(QPainter.CompositionMode_Source)
-    painter.drawPixmap(0, 0, pixmap)
-    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
-    painter.fillRect(colored.rect(), color)
-    painter.end()
-    return colored
-
-
 class MicrodropSidebar(QToolBar):
     def __init__(self, parent=None, task=None):
         super().__init__("Permanent Sidebar", parent)
@@ -188,14 +189,14 @@ class MicrodropSidebar(QToolBar):
         self.setMovable(False)
         self.setFloatable(False)
         self.setAllowedAreas(Qt.LeftToolBarArea)
-        self.setFixedWidth(140)
+        self.setFixedWidth(160)
         self.setObjectName("PermanentLeftToolbar")
 
         container = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 10, 0, 10) 
-        layout.setSpacing(15) 
-        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 10, 0, 10) 
+        self.layout.setSpacing(15) 
+        self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # Logo
         self.logo_label = QLabel()
@@ -203,7 +204,7 @@ class MicrodropSidebar(QToolBar):
         if not pixmap.isNull():
             self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
         self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
+        self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
 
         # Hamburger button
         self.hamburger_btn = QPushButton()
@@ -212,45 +213,35 @@ class MicrodropSidebar(QToolBar):
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
         self.hamburger_btn.setCursor(Qt.PointingHandCursor)
         self.hamburger_btn.clicked.connect(self.toggle_menu)
-        layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
+        self.layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
 
         self.menu_widget = QWidget()
         self.menu_layout = QVBoxLayout()
         self.menu_layout.setContentsMargins(0, 0, 0, 0)
-        self.menu_layout.setSpacing(26)
+        self.menu_layout.setSpacing(15)
         self.menu_widget.setLayout(self.menu_layout)
 
         # Menu buttons
         self.menu_buttons = []
-        menu_options = sidebar_menu_options
-        icon_dir = menu_options_icons_path
-        icon_size = QSize(22, 22)
-        font = QFont()
-        font.setBold(True)
-        for option, icon in menu_options:
-            label = "\n\t\t".join(option.split(" "))
-            btn = QPushButton("\t\t"+label)
-            btn.setFont(font)
-            btn.setFixedWidth(140)
+        icon_font = QFont(ICON_FONT_FAMILY)
+        icon_font.setPointSize(22)
+        text_font = QFont(LABEL_FONT_FAMILY)
+        text_font.setPointSize(10)
+        color_str = "white" if is_dark_mode() else "black"
 
-            icon_pixmap = QPixmap(str(icon_dir / icon)).scaled(icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            btn._icon_pixmap = icon_pixmap 
-            btn.setIcon(QIcon(icon_pixmap))
-            
-            btn.setIconSize(icon_size)
-            btn.setStyleSheet(sidebar_stylesheet)
-            btn.setCursor(Qt.PointingHandCursor)             
+        for option, icon_code in sidebar_menu_options:
+            btn = SidebarMenuButton(icon_code, option, icon_font, text_font, color_str)
             self.menu_layout.addWidget(btn)
-            self.menu_buttons.append((btn, icon))
+            self.menu_buttons.append((btn, option))
         
         self.menu_widget.setVisible(False)
-        layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
+        self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
         # connections
-        button_names = [name for name, _ in menu_options]
+        button_names = [name for name, _ in sidebar_menu_options]
         self.menu_buttons[button_names.index("Exit")][0].clicked.connect(self._handle_exit)
         self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(self._handle_diagnostics)
 
-        container.setLayout(layout)
+        container.setLayout(self.layout)
         self.addWidget(container)
         self.update_menu_colors()
 
@@ -287,9 +278,43 @@ class MicrodropSidebar(QToolBar):
         else:
             color_str = "black"
         for btn, _ in self.menu_buttons:
-            btn.setIcon(QIcon(colorize_pixmap(btn._icon_pixmap, color_str)))
-            btn.setStyleSheet(sidebar_stylesheet % color_str)
+            btn.set_color(color_str)
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % color_str)
+
+
+class SidebarMenuButton(QFrame):
+    def __init__(self, icon_code, label, icon_font, text_font, color_str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SidebarMenuButton")
+        self.setStyleSheet(f"QFrame#SidebarMenuButton {{ background: none; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        self.icon_label = QLabel(icon_code)
+        self.icon_label.setFont(icon_font)
+        self.icon_label.setStyleSheet(f"color: {color_str};")
+        self.icon_label.setFixedWidth(28)
+        self.text_label = QLabel(label)
+        self.text_label.setFont(text_font)
+        self.text_label.setStyleSheet(f"color: {color_str};")
+        self.text_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        hbox = QHBoxLayout(self)
+        hbox.setContentsMargins(8, 0, 0, 0)
+        hbox.setSpacing(12)
+        hbox.addWidget(self.icon_label)
+        hbox.addWidget(self.text_label)
+        self.setLayout(hbox)
+        self.setFixedHeight(37)
+        self.setMinimumWidth(140)
+
+    def set_color(self, color_str):
+        self.icon_label.setStyleSheet(f"color: {color_str};")
+        self.text_label.setStyleSheet(f"color: {color_str};")
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+    from PySide6.QtCore import Signal
+    clicked = Signal()
     
     
 def is_dark_mode():
@@ -332,14 +357,3 @@ def is_dark_mode():
             except Exception:
                 pass
         return False
-
-def colorize_pixmap(pixmap, color):
-    colored = QPixmap(pixmap.size())
-    colored.fill(Qt.transparent)
-    painter = QPainter(colored)
-    # painter.setCompositionMode(QPainter.CompositionMode_Source)
-    painter.drawPixmap(0, 0, pixmap)
-    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
-    painter.fillRect(colored.rect(), color)
-    painter.end()
-    return colored
