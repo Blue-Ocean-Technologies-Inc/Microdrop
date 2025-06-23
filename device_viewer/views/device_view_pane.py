@@ -5,7 +5,7 @@ from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
 from pyface.qt.QtCore import Qt
 from pyface.tasks.api import TraitsDockPane
 
@@ -24,6 +24,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
+from device_viewer.views.mode_picker.widget import ModePicker
 import json
 
 logger = get_logger(__name__)
@@ -46,6 +47,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     device_view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
     layer_ui = None
+    mode_picker_view = None
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -122,6 +124,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Layout init
         container = QWidget(parent)
         layout = QHBoxLayout(container)
+        left_stack = QVBoxLayout()
 
         # device_view code
         self.device_view.setParent(container)
@@ -134,9 +137,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.layer_ui.control.setFixedWidth(300) # Set widget to fixed width
         self.layer_ui.control.setParent(container)
 
-        # Add widgets to layout
+        # mode_picker_view code
+        self.mode_picker_view = ModePicker(layer_model)
+        self.mode_picker_view.setParent(container)
+
+        # Add widgets to layouts
+        left_stack.addWidget(self.layer_ui.control)
+        left_stack.addWidget(self.mode_picker_view)
+        
         layout.addWidget(self.device_view)
-        layout.addWidget(self.layer_ui.control)
+        layout.addLayout(left_stack)
 
         return container
 

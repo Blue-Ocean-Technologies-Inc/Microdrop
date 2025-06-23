@@ -175,7 +175,7 @@ class RouteLayerManager(HasTraits):
 
     layer_to_merge = Instance(RouteLayer)
 
-    edit_mode = Enum("draw", "edit", "auto")
+    mode = Enum("draw", "edit", "auto", "merge")
 
     message = Str("")
 

@@ -43,17 +43,6 @@ class ElectrodeScene(QGraphicsScene):
                 return item
         return None
 
-    def add_electrode_to_path(self, electrode_view):
-        '''
-        Add an electrode to our pathing variables/log
-        '''
-
-        # Append new channel and electrode ID to their respective lists.
-        self.electrode_channels_visited.append(electrode_view.electrode.channel)
-        self.electrode_ids_visited.append(electrode_view.id)
-
-        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
-
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
@@ -82,7 +71,7 @@ class ElectrodeScene(QGraphicsScene):
                 else:
                     found_connection_item = find_path_item(self, (self.last_electrode_id_visited, electrode_view.id))
                     if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
-                        self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id, found_connection_item)
+                        self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id)
                         self.last_electrode_id_visited = electrode_view.id
                         self.is_drag = True # Since more than one electrode is left clicked, its a drag, not a single electrode click
                         
@@ -90,7 +79,7 @@ class ElectrodeScene(QGraphicsScene):
             connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
             if connection_item:
                 (from_id, to_id) = connection_item.key
-                self.interaction_service.handle_route_erase(from_id, to_id, connection_item)
+                self.interaction_service.handle_route_erase(from_id, to_id)
                 
                     
 

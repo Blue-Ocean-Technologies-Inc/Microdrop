@@ -58,18 +58,21 @@ class ElectrodeInteractionControllerService(HasTraits):
         # to be actuated / unactuated.
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(updated_channels_states_map))
 
-    def handle_route_draw(self, from_id, to_id, connection_item):
+    def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
-        if len(self.route_layer_manager.layers) == 0:
-            self.route_layer_manager.layers = [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map))]
+        if self.route_layer_manager.mode in ("edit", "draw"):
+            if self.route_layer_manager.mode == "draw":
+                self.route_layer_manager.layers = self.route_layer_manager.layers + [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map))]
+                self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select the route we just added
+                self.route_layer_manager.mode = "edit" # We now want to extend the route we just made
 
-        current_route = self.route_layer_manager.get_selected_route()
-        if current_route == None: return
+            current_route = self.route_layer_manager.get_selected_route()
+            if current_route == None: return
 
-        if current_route.can_add_segment(from_id, to_id):
-            current_route.add_segment(from_id, to_id)
+            if current_route.can_add_segment(from_id, to_id):
+                current_route.add_segment(from_id, to_id)
 
-    def handle_route_erase(self, from_id, to_id, connection_item):
+    def handle_route_erase(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
         current_route = self.route_layer_manager.get_selected_route()
         if current_route == None: return
@@ -77,9 +80,13 @@ class ElectrodeInteractionControllerService(HasTraits):
         new_routes = [Route(route_list, channel_map=current_route.channel_map) for route_list in current_route.remove_segment(from_id, to_id)]
         self.route_layer_manager.replace_layer(self.route_layer_manager.selected_layer, new_routes)
 
+    def get_mode(self):
+        return self.route_layer_manager.mode
+
     @observe("route_layer_manager.layers.items.visible")
     @observe("route_layer_manager.selected_layer")
     @observe("route_layer_manager.layers.items.route.route.items")
+    @observe("route_layer_manager.layers.items.*")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)

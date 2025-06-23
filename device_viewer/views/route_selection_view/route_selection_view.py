@@ -59,6 +59,7 @@ class RouteLayerHandler(Handler):
     def start_merge_layer(self, info, rows):
         info.object.layer_to_merge = rows[0]
         info.object.message = "Route merging: " + rows[0].route.get_name()
+        info.object.mode = "merge"
 
     def merge_layer(self, info, rows): 
         if info.object.layer_to_merge == None: # Sanity check
@@ -69,12 +70,13 @@ class RouteLayerHandler(Handler):
         route_to_merge = info.object.layer_to_merge.route
         if route_to_merge.can_merge(selected_route) and selected_route != route_to_merge:
             route_to_merge.merge(selected_route)
-            info.object.message = "Route merging: " + selected_route.get_name()
+            info.object.message = "Route merging: " + route_to_merge.get_name()
             self.delete_layer(info, rows) # Delete selected route
 
     def cancel_merge_layer(self, info, rows):
         info.object.layer_to_merge = None
         info.object.message = ""
+        info.object.mode = "edit"
 
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
 RouteLayerView = View(
