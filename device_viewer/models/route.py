@@ -73,6 +73,17 @@ class Route(HasTraits):
         endpoints = (self.route[-1], self.route[0])
         return from_id in endpoints or to_id in endpoints
     
+    def can_merge(self, other: "Route"):
+        '''Returns if other can be merged with the current route'''
+        return bool(set(self.get_endpoints()) & set(other.get_endpoints())) # Juct check for endpoint overlap
+    
+    def merge(self, other: "Route"):
+        '''Merge with other route. Does this in place and does not modify the other route. Prioritizes putting other at end in ambigous cases. Assumes can_merge returns True'''
+        if self.route[-1] == other.route[0]:
+            self.route = self.route + other.route[1:]
+        elif self.route[0] == other.route[-1]:
+            self.route = other.route[:-1] + self.route
+
     def add_segment(self, from_id, to_id):
         '''Adds segment to path'''
 
@@ -144,7 +155,10 @@ class RouteLayer(HasTraits):
     visible = Bool(True)
     color = String()
     name = String()
-    is_selected = Bool(False)
+    
+    # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
+    is_selected = Bool(False) # Needed to show selectedness in the TableEditor
+    merge_in_progress = Bool(False)
 
     # Needs to be passed
     route = Instance(Route) # Actual route model
@@ -163,6 +177,8 @@ class RouteLayerManager(HasTraits):
     layers = List(RouteLayer, [])
 
     selected_layer = Instance(RouteLayer)
+
+    layer_to_merge = Instance(RouteLayer)
     
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)
@@ -203,5 +219,10 @@ class RouteLayerManager(HasTraits):
     def _selected_layer_changed(self, event):
         # Mark only the selected layer
         for layer in self.layers:
-            layer.is_selected = (layer is self.selected_layer)
+            layer.is_selected = (layer is event.new)
+
+    @observe('layer_to_merge')
+    def _layer_to_merge_changed(self, event):
+        for layer in self.layers:
+            layer.merge_in_progress = (event.new != None)
 
