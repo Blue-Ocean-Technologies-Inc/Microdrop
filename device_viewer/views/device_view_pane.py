@@ -129,7 +129,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # layer_view code
         layer_model = self.route_layer_manager
         layer_view = RouteLayerView
-        self.layer_ui = layer_model.edit_traits(view=layer_view, context={'object': layer_model, 'window': self.task.window})
+        self.layer_ui = layer_model.edit_traits(view=layer_view)
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
         self.layer_ui.control.setFixedWidth(300) # Set widget to fixed width
         self.layer_ui.control.setParent(container)

@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Int, Bool, Instance, String, observe
+from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str
 import random
 
 # Abstract pathing object class
@@ -168,11 +168,18 @@ class RouteLayer(HasTraits):
         self.name = self.route.get_name()
 
 class RouteLayerManager(HasTraits):
+    # ---------------- Model Traits -----------------------
     layers = List(RouteLayer, [])
 
     selected_layer = Instance(RouteLayer)
 
     layer_to_merge = Instance(RouteLayer)
+
+    edit_mode = Enum("draw", "edit", "auto")
+
+    message = Str("")
+
+    # --------------------------- Model Helpers --------------------------
     
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)
@@ -204,6 +211,7 @@ class RouteLayerManager(HasTraits):
         else:
             return None
     
+    # --------------------- Observers ------------------------------
     @observe('layers.items')
     def _layers_items_changed(self, event):
         if self.selected_layer == None and len(event.new) > 0: # If we have no routes and a route is added, select it
