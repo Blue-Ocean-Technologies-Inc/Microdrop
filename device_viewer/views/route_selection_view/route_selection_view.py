@@ -5,7 +5,7 @@ from traits.api import Button
 from pyface.qt.QtGui import QColor
 from pyface.qt.QtWidgets import QStyledItemDelegate
 
-from device_viewer.route_selection_view.menu import RouteLayerMenu
+from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
 
 class ColorRenderer(QStyledItemDelegate):

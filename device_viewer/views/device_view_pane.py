@@ -23,7 +23,7 @@ from device_viewer.services.electrode_interaction_service import ElectrodeIntera
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
-from device_viewer.route_selection_view.route_selection_view import RouteLayerView
+from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 import json
 
 logger = get_logger(__name__)
