@@ -4,6 +4,7 @@ import sys
 import contextlib
 import signal
 import time
+from pathlib import Path
 
 # Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
 if "pi" in platform.uname().node.lower():
@@ -11,6 +12,8 @@ if "pi" in platform.uname().node.lower():
         print(f"running with environment variables: {os.environ['QT_SCALE_FACTOR']}")
 
 from envisage.ui.tasks.tasks_application import TasksApplication
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QFont
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -18,10 +21,17 @@ from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_
                                     FRONTEND_CONTEXT, BACKEND_CONTEXT, REQUIRED_CONTEXT, 
                                     DEFAULT_APPLICATION)
 from microdrop_utils._logger import get_logger
+from microdrop_utils.status_bar_utils import load_font_family
 logger = get_logger(__name__)
+
+INTER_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
+LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
 
 def main(args, plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""
+
+    app_instance = QApplication.instance() or QApplication(sys.argv)
+    app_instance.setFont(QFont(LABEL_FONT_FAMILY, 10))
 
     if plugins is None:
         plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS

@@ -23,29 +23,19 @@ from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
                                QPushButton, QSizePolicy, QVBoxLayout,
                                QHBoxLayout, QWidget, QFrame)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QFont, QFontDatabase
+from PySide6.QtGui import QPixmap, QFont
 
+from microdrop_utils.status_bar_utils import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
-                     sidebar_stylesheet, hamburger_btn_stylesheet)
+                     hamburger_btn_stylesheet)
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, level="CRITICAL")
 
-def load_font_family(font_path):
-    if Path(font_path).exists():
-        id_ = QFontDatabase.addApplicationFont(str(font_path))
-        families = QFontDatabase.applicationFontFamilies(id_)
-        if families:            
-            return families[0]
-    return None
-
 MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
 ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
-
-INTER_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
-LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
 
 
 class MicrodropApplication(TasksApplication):
@@ -225,12 +215,10 @@ class MicrodropSidebar(QToolBar):
         self.menu_buttons = []
         icon_font = QFont(ICON_FONT_FAMILY)
         icon_font.setPointSize(22)
-        text_font = QFont(LABEL_FONT_FAMILY)
-        text_font.setPointSize(10)
         color_str = "white" if is_dark_mode() else "black"
 
         for option, icon_code in sidebar_menu_options:
-            btn = SidebarMenuButton(icon_code, option, icon_font, text_font, color_str)
+            btn = SidebarMenuButton(icon_code, option, icon_font, color_str)
             self.menu_layout.addWidget(btn)
             self.menu_buttons.append((btn, option))
         
@@ -283,7 +271,7 @@ class MicrodropSidebar(QToolBar):
 
 
 class SidebarMenuButton(QFrame):
-    def __init__(self, icon_code, label, icon_font, text_font, color_str, parent=None):
+    def __init__(self, icon_code, label, icon_font, color_str, text_font=None, parent=None):
         super().__init__(parent)
         self.setObjectName("SidebarMenuButton")
         self.setStyleSheet(f"QFrame#SidebarMenuButton {{ background: none; }}")
@@ -293,6 +281,8 @@ class SidebarMenuButton(QFrame):
         self.icon_label.setStyleSheet(f"color: {color_str};")
         self.icon_label.setFixedWidth(28)
         self.text_label = QLabel(label)
+        text_font = QFont()
+        text_font.setPointSize(11)
         self.text_label.setFont(text_font)
         self.text_label.setStyleSheet(f"color: {color_str};")
         self.text_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)

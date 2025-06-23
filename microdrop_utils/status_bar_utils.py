@@ -1,5 +1,7 @@
-from pyface.api import GUI
+from pathlib import Path
 
+from pyface.api import GUI
+from PySide6.QtGui import QFontDatabase
 
 def set_status_bar_message(text: str, window=None, timeout=3000):
     if window is not None:
@@ -20,3 +22,10 @@ def set_status_bar_message(text: str, window=None, timeout=3000):
     except Exception:
         pass     
  
+def load_font_family(font_path):
+    if Path(font_path).exists():
+        id_ = QFontDatabase.addApplicationFont(str(font_path))
+        families = QFontDatabase.applicationFontFamilies(id_)
+        if families:            
+            return families[0]
+    return None

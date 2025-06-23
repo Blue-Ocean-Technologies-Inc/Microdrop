@@ -15,15 +15,16 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 
 from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
+from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
 
 from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
 
 logger = get_logger(__name__, level="DEBUG")
 
-red = '#f15854'
-yellow = '#decf3f'
-green = '#60bd68'
+red = ERROR_COLOR
+yellow = WARNING_COLOR
+green = SUCCESS_COLOR
 
 
 class DropBotStatusLabel(QLabel):
