@@ -21,17 +21,16 @@ class RouteLayerMenuHandler(Handler):
         if window:
             set_status_bar_message("Select route to merge with", window, 0)
 
-    def end_merge_layer(self, info, rows): 
+    def merge_layer(self, info, rows): 
         if info.object.layer_to_merge == None: # Sanity check
             self.cancel_merge_route(info, rows)
             return
 
         selected_route = rows[0].route
         route_to_merge = info.object.layer_to_merge.route
-        if route_to_merge.can_merge(selected_route):
+        if route_to_merge.can_merge(selected_route) and selected_route != route_to_merge:
             route_to_merge.merge(selected_route)
             self.delete_layer(info, rows) # Delete selected route
-            self.cancel_merge_layer(info, rows) # Remove the message and reset layer_to_merge
 
     def cancel_merge_layer(self, info, rows):
         info.object.layer_to_merge = None
@@ -43,6 +42,6 @@ RouteLayerMenu = Menu(
     Action(name="Invert", action="invert_layer"),
     Action(name="Delete", action="delete_layer"),
     Action(name="Start Merge", action="start_merge_layer", visible_when="not object.merge_in_progress"), # Note that object in this case refers to the RouteLayer clicked on! No easy way to access main model
-    Action(name="Finalize Merge", action="end_merge_layer", visible_when="object.merge_in_progress"),
-    Action(name="Cancel Merge", action="cancel_merge_layer", visible_when="object.merge_in_progress")
+    Action(name="Merge With", action="merge_layer", visible_when="object.merge_in_progress"),
+    Action(name="Stop Merging", action="cancel_merge_layer", visible_when="object.merge_in_progress")
 )
