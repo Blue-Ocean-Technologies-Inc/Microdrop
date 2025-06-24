@@ -1,6 +1,8 @@
 from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str
 import random
 from queue import Queue
+from collections import Counter
+from microdrop_style.colors import PRIMARY_SHADE
 
 # Abstract pathing object class
 class Route(HasTraits):
@@ -98,6 +100,10 @@ class Route(HasTraits):
             # We want it so that extending a path in the opposite direction
             # that its going still expands it, but in the right direction
             self.route.insert(0, to_id)
+
+    def can_remove(self, from_id, to_id):
+        '''Returns true if the segment (from_id, to_id) can be removed'''
+        return (from_id, to_id) in self.get_segments()
 
     def remove_segment(self, from_id, to_id):
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
@@ -205,7 +211,6 @@ class Route(HasTraits):
 
 class RouteLayer(HasTraits):
     visible = Bool(True)
-    color = String()
     name = String()
     
     # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
@@ -214,12 +219,11 @@ class RouteLayer(HasTraits):
 
     # Needs to be passed
     route = Instance(Route) # Actual route model
+    color = String() # String that can be passed to QColor
     
     def _name_default(self):
         return self.route.get_name()
     
-    def _color_default(self):
-        return random.choice(["pink", "blue", "green", "purple"])
 
     @observe("route.route.items")
     def _route_path_updated(self, event):
@@ -239,15 +243,26 @@ class RouteLayerManager(HasTraits):
 
     # --------------------------- Model Helpers --------------------------
     
+    def get_available_color(self):
+        color_counts = {}
+        shades = [300, 800, 400, 700, 500, 600] 
+        for shade in shades:
+            color = PRIMARY_SHADE[shade]
+            color_counts[color] = 0
+        for layer in self.layers:
+            if layer.color in color_counts.keys():
+                color_counts[layer.color] += 1
+        return Counter(color_counts).most_common()[-1][0] # Return least common color
+    
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)
         self.layers.pop(index) # Delete the current layer
 
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
             if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
-                self.layers.insert(index, RouteLayer(route=new_routes[i], color=old_route_layer.color))
+                self.add_layer(new_routes[i], index, old_route_layer.color)
             else:
-                self.layers.insert(index, RouteLayer(route=new_routes[i]))
+                self.add_layer(new_routes[i], index)
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
@@ -255,6 +270,14 @@ class RouteLayerManager(HasTraits):
             self.selected_layer = None
         else:
             self.selected_layer = self.layers[-1] # Set it to the last layer
+
+    def add_layer(self, route: Route, index=None, color=None):
+        if color == None:
+            color = self.get_available_color()
+        if index == None:
+            self.layers.append(RouteLayer(route=route, color=color))
+        else:
+            self.layers.insert(index, RouteLayer(route=route, color=color))
 
     def reset(self):
         self.layers = []
@@ -278,7 +301,7 @@ class RouteLayerManager(HasTraits):
     # --------------------- Observers ------------------------------
     @observe('layers.items')
     def _layers_items_changed(self, event):
-        if self.selected_layer == None and len(event.new) > 0: # If we have no routes and a route is added, select it
+        if self.selected_layer == None and hasattr(event, "new") and len(event.new) > 0: # If we have no routes and a route is added, select it
             self.selected_layer = event.new[0]
     
     @observe('selected_layer')
