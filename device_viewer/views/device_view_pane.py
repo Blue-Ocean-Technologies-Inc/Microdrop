@@ -79,27 +79,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         view.setViewport(QOpenGLWidget())
 
         return view
-    
-    # --------- Trait change handlers ----------------------------
-    def _electrodes_model_changed(self, new_model):
-        """Handle when the electrodes model changes."""
-
-        # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
-        self.set_view_from_model(new_model)
-        logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
-
-        # Initialize the electrode mouse interaction service with the new model and layer
-        interaction_service = ElectrodeInteractionControllerService(
-            electrodes_model=new_model,
-            route_layer_manager=self.route_layer_manager,
-            electrode_view_layer=self.current_electrode_layer
-        )
-
-        # Update the scene with the interaction service
-        self.scene.interaction_service = interaction_service
-
-        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
@@ -107,6 +86,30 @@ class DeviceViewerDockPane(TraitsDockPane):
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
     # ------- Device View class methods -------------------------
+    def set_electrodes_model(self, new_electrodes_model):
+        """Handle when the electrodes model changes."""
+
+        # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
+        self.set_view_from_model(new_electrodes_model)
+        logger.debug(f"New Electrode Layer added --> {new_electrodes_model.svg_model.filename}")
+
+        # Since were using traitsui for the layer viewer, its really difficult to simply reassign the model
+        self.route_layer_manager.reset() # So we just reset internal state
+
+        # Initialize the electrode mouse interaction service with the new model and layer
+        interaction_service = ElectrodeInteractionControllerService(
+            electrodes_model=new_electrodes_model,
+            route_layer_manager=self.route_layer_manager,
+            electrode_view_layer=self.current_electrode_layer
+        )
+
+        # Update the scene with the interaction service
+        self.scene.interaction_service = interaction_service
+
+        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_electrodes_model}")
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
+
+
     def remove_current_layer(self):
         """
         Utility methods to remove current scene's electrode layer.
@@ -119,7 +122,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
-        self._electrodes_model_changed(self.electrodes_model)
+        self.set_electrodes_model(self.electrodes_model)
 
         # Layout init
         container = QWidget(parent)
@@ -168,5 +171,5 @@ class DeviceViewerDockPane(TraitsDockPane):
             new_model.set_electrodes_from_svg_file(svg_file)
             logger.debug(f"Created electrodes from SVG file: {new_model.svg_model.filename}")
 
-            self.electrodes_model = new_model
+            self.set_electrodes_model(new_model)
             logger.info(f"Electrodes model set to {new_model}")

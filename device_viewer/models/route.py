@@ -256,6 +256,12 @@ class RouteLayerManager(HasTraits):
         else:
             self.selected_layer = self.layers[-1] # Set it to the last layer
 
+    def reset(self):
+        self.layers = []
+        self.selected_layer = None
+        self.layer_to_merge = None
+        self.mode = "draw"
+        self.message = ""
 
     def get_route(self, index: int):
         if 0 <= index < len(self.layers):

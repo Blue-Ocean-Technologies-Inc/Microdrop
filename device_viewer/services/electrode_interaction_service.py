@@ -65,7 +65,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         '''Handle a route segment being drawn or first electrode being added'''
         if self.route_layer_manager.mode in ("edit", "draw"):
             if self.route_layer_manager.mode == "draw":
-                self.route_layer_manager.layers = self.route_layer_manager.layers + [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map, neighbors=self.electrodes_model.svg_model.neighbours))]
+                self.route_layer_manager.layers = self.route_layer_manager.layers + [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map))]
                 self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select the route we just added
                 self.route_layer_manager.mode = "edit" # We now want to extend the route we just made
 
@@ -76,7 +76,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 current_route.add_segment(from_id, to_id)
 
     def handle_route_erase(self, from_id, to_id):
-        '''Handle a route segment being drawn or first electrode being added'''
+        '''Handle a route segment being erased'''
         current_route = self.route_layer_manager.get_selected_route()
         if current_route == None: return
 
@@ -86,7 +86,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_autoroute_start(self, from_id):
         routes = [layer.route for layer in self.route_layer_manager.layers]
         self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.electrodes_model.svg_model.neighbours)
-        self.route_layer_manager.layers = self.route_layer_manager.layers + [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map, neighbors=self.electrodes_model.svg_model.neighbours))]
+        self.route_layer_manager.layers = self.route_layer_manager.layers + [RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map))]
         self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select just created layer
 
     def handle_autoroute(self, to_id):
