@@ -52,10 +52,16 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             cb.setText("")
             cb.setTristate(False)
             return cb
-        elif field in ("Duration", "Voltage", "Frequency", "Volume Threshold"):
+        elif field in ("Duration", "Voltage", "Frequency"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(10000.0)
+            editor.setDecimals(2)
+            return editor
+        elif field in ("Volume Threshold"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(0.0)
+            editor.setMaximum(1.00)
             editor.setDecimals(2)
             return editor
         return super().createEditor(parent, option, index)
@@ -158,29 +164,44 @@ class PGCItem(QStandardItem):
         return new_item
     
 
-def make_row(defaults, overrides=None, row_type=None):
+def make_row(defaults, overrides=None, row_type=None, children=None):
     overrides = overrides or {}
     items = []
     magnet_checked = False
-    for i, field in enumerate(protocol_grid_fields):
-        value = overrides.get(field, defaults.get(field, ""))
-        if field == "Magnet":
-            checked = bool(int(value)) if str(value).strip() not in ("", "None", "") else False
-            magnet_checked = checked
-            break  # only check once
-    for i, field in enumerate(protocol_grid_fields):
-        if row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration"):
-            item = PGCItem(item_type=field, item_data="")
-            item.setEditable(False)
-            items.append(item)
-            continue
 
+    # For group rows, check children for aggregation
+    group_agg_fields = ("Voltage", "Frequency", "Trail Length")
+    group_agg_values = {}
+    if row_type == GROUP_TYPE and children:
+        for field in group_agg_fields:
+            values = set()
+            for child in children:
+                idx = protocol_grid_fields.index(field)
+                val = child[idx].text()
+                values.add(val)
+            if len(values) == 1:
+                group_agg_values[field] = values.pop()
+            else:
+                group_agg_values[field] = None
+
+    for i, field in enumerate(protocol_grid_fields):
         value = overrides.get(field, defaults.get(field, ""))
         display_value = "" if field in ("Video", "Magnet") else value
         item = PGCItem(item_type=field, item_data=display_value)
         if field == "Description" and row_type:
             item.setData(row_type, ROW_TYPE_ROLE)
         if field == "ID":
+            item.setEditable(False)
+        elif row_type == GROUP_TYPE and field in group_agg_fields:
+            agg_val = group_agg_values.get(field)
+            if agg_val is not None:
+                item.setText(agg_val)
+                item.setEditable(True)
+            else:
+                item.setText("")
+                item.setEditable(False)
+        elif row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration") and field not in group_agg_fields:
+            item.setText("")
             item.setEditable(False)
         else:
             item.setEditable(True)

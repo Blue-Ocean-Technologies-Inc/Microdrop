@@ -14,7 +14,7 @@ from protocol_grid.model.protocol_visualization_helpers import (visualize_protoc
                                                    visualize_protocol_with_swimlanes)
 from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_defaults, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
-from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
+from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, PGCItem, 
                                                  get_selected_rows, invert_row_selection)
 from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
 from protocol_grid.state.protocol_state import ProtocolState
@@ -118,6 +118,7 @@ class PGCWidget(QWidget):
         reassign_ids(self.model)
         self.tree.expandAll()
         self.set_column_state(col_vis, col_widths)
+        self.update_all_group_aggregations()
 
     def save_to_state(self):
         col_vis, col_widths = self.get_column_state()
@@ -134,20 +135,90 @@ class PGCWidget(QWidget):
             parent = item.parent() or self.model.invisibleRootItem()
             magnet_height_col = protocol_grid_fields.index("Magnet Height")
             magnet_height_item = parent.child(row, magnet_height_col)
-            idx = magnet_height_item.index()
-            if not checked:
-                last_value = magnet_height_item.text()
-                magnet_height_item.setData(last_value, Qt.UserRole + 2)
-                magnet_height_item.setEditable(False)
-                magnet_height_item.setText("")
-            else:
-                last_value = magnet_height_item.data(Qt.UserRole + 2)
-                if last_value is None or last_value == "":
-                    last_value = "0"
-                magnet_height_item.setEditable(True)
-                magnet_height_item.setText(str(last_value))
+            if magnet_height_item is not None:
+                if not checked:
+                    last_value = magnet_height_item.text()
+                    magnet_height_item.setData(last_value, Qt.UserRole + 2)
+                    magnet_height_item.setEditable(False)
+                    magnet_height_item.setText("")
+                else:
+                    last_value = magnet_height_item.data(Qt.UserRole + 2)
+                    if last_value is None or last_value == "":
+                        last_value = "0"
+                    magnet_height_item.setEditable(True)
+                    magnet_height_item.setText(str(last_value))
+
+        if field in ("Voltage", "Frequency", "Trail Length"):
+            parent = item.parent() or self.model.invisibleRootItem()
+            desc_item = parent.child(row, 0)
+            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE and item == parent.child(row, col):
+                new_value = item.text()
+                if new_value != "":
+                    def set_value_recursive(group_item):
+                        for r in range(group_item.rowCount()):
+                            child_desc = group_item.child(r, 0)
+                            if child_desc is None:
+                                continue
+                            child_type = child_desc.data(ROW_TYPE_ROLE)
+                            child_item = group_item.child(r, col)
+                            if child_type == GROUP_TYPE:
+                                if child_item is not None:
+                                    child_item.setText(new_value)
+                                    child_item.setEditable(True)
+                                set_value_recursive(child_desc)
+                            elif child_type == STEP_TYPE:
+                                if child_item is not None:
+                                    child_item.setText(new_value)
+                    set_value_recursive(desc_item)
+            self.update_all_group_aggregations()
         self.save_to_state()
-        print(f"Item changed: {item.text()} at row {row}, column {col} ({field})")
+
+    def update_all_group_aggregations(self):
+        def update_group(group_item):
+            if group_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                if group_item.rowCount() == 0:
+                    return
+                for col, field in enumerate(protocol_grid_fields):
+                    if field in ("Voltage", "Frequency", "Trail Length"):
+                        values = set()
+                        def collect_step_values(item):
+                            for r in range(item.rowCount()):
+                                child_desc = item.child(r, 0)
+                                if child_desc is None:
+                                    continue
+                                child_type = child_desc.data(ROW_TYPE_ROLE)
+                                child_item = item.child(r, col)
+                                if child_type == STEP_TYPE:
+                                    if child_item is not None:
+                                        values.add(child_item.text())
+                                elif child_type == GROUP_TYPE:
+                                    if child_item is not None:
+                                        values.add(child_item.text())
+                                    collect_step_values(child_desc)
+                        collect_step_values(group_item)
+                        parent = group_item.parent() or self.model.invisibleRootItem()
+                        row = group_item.row()
+                        group_cell = parent.child(row, col)
+                        if group_cell is None:
+                            group_cell = PGCItem(item_type=field, item_data="")
+                            parent.setChild(row, col, group_cell)
+                        if len(values) == 1 and list(values)[0] != "":
+                            group_cell.setText(next(iter(values)))
+                            group_cell.setEditable(True)
+                        else:
+                            group_cell.setText("")
+                            group_cell.setEditable(False)
+            # recursion for sub-groups 
+            for r in range(group_item.rowCount()):
+                child_desc = group_item.child(r, 0)
+                if child_desc is not None and child_desc.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    update_group(child_desc)
+        # start actual function from root item
+        root = self.model.invisibleRootItem()
+        for row in range(root.rowCount()):
+            desc_item = root.child(row, 0)
+            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                update_group(desc_item)                        
 
     # ---------- UI Actions ----------
     def show_edit_context_menu(self, pos):
@@ -322,6 +393,7 @@ class PGCWidget(QWidget):
             self.restore_row_selection_by_paths([target_path])
         else:
             self.restore_row_selection_by_paths([])
+        self.update_all_group_aggregations()
     
     def paste_into(self):
         """
@@ -349,6 +421,7 @@ class PGCWidget(QWidget):
                 self.restore_row_selection_by_paths([])
         else:
             self.paste_selected(above=False)
+        self.update_all_group_aggregations()
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
@@ -366,6 +439,7 @@ class PGCWidget(QWidget):
             self.restore_row_selection_by_paths([])
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
+        self.update_all_group_aggregations()
 
     def insert_step(self):
         selected_paths = self.get_selected_paths()
@@ -390,6 +464,7 @@ class PGCWidget(QWidget):
             self.restore_row_selection_by_paths([new_path])
         else:
             self.restore_row_selection_by_paths([])
+        self.update_all_group_aggregations()
 
     def insert_group(self):
         selected_paths = self.get_selected_paths()
@@ -414,6 +489,7 @@ class PGCWidget(QWidget):
             self.restore_row_selection_by_paths([new_path])
         else:
             self.restore_row_selection_by_paths([])
+        self.update_all_group_aggregations()
 
     def add_group(self, into=False):
         """
@@ -441,6 +517,7 @@ class PGCWidget(QWidget):
         reassign_ids(self.model)
         self.tree.expandAll()
         self.restore_row_selection_by_paths(selected_paths)
+        self.update_all_group_aggregations()
 
     def add_step(self, into=False):
         selected_paths = self.get_selected_paths()
@@ -460,6 +537,7 @@ class PGCWidget(QWidget):
         reassign_ids(self.model)
         self.tree.expandAll()
         self.restore_row_selection_by_paths(selected_paths)
+        self.update_all_group_aggregations()
 
     def export_to_json(self):
         self.save_to_state()
