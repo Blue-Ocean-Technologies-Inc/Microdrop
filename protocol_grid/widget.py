@@ -151,24 +151,25 @@ class PGCWidget(QWidget):
         if field in ("Voltage", "Frequency", "Trail Length"):
             parent = item.parent() or self.model.invisibleRootItem()
             desc_item = parent.child(row, 0)
-            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE and item == parent.child(row, col):
                 new_value = item.text()
-                def set_value_recursive(group_item):
-                    for r in range(group_item.rowCount()):
-                        child_desc = group_item.child(r, 0)
-                        if child_desc is None:
-                            continue
-                        child_type = child_desc.data(ROW_TYPE_ROLE)
-                        child_item = group_item.child(r, col)
-                        if child_type == GROUP_TYPE:
-                            if child_item is not None:
-                                child_item.setText(new_value)
-                                child_item.setEditable(True)
-                            set_value_recursive(child_desc)
-                        elif child_type == STEP_TYPE:
-                            if child_item is not None:
-                                child_item.setText(new_value)
-                set_value_recursive(desc_item)
+                if new_value != "":
+                    def set_value_recursive(group_item):
+                        for r in range(group_item.rowCount()):
+                            child_desc = group_item.child(r, 0)
+                            if child_desc is None:
+                                continue
+                            child_type = child_desc.data(ROW_TYPE_ROLE)
+                            child_item = group_item.child(r, col)
+                            if child_type == GROUP_TYPE:
+                                if child_item is not None:
+                                    child_item.setText(new_value)
+                                    child_item.setEditable(True)
+                                set_value_recursive(child_desc)
+                            elif child_type == STEP_TYPE:
+                                if child_item is not None:
+                                    child_item.setText(new_value)
+                    set_value_recursive(desc_item)
             self.update_all_group_aggregations()
         self.save_to_state()
 
