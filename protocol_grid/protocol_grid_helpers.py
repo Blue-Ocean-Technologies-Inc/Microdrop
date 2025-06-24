@@ -186,7 +186,6 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
 
     for i, field in enumerate(protocol_grid_fields):
         value = overrides.get(field, defaults.get(field, ""))
-        print(f"make_row: row_type={row_type}, field={field}, value='{value}'")
         display_value = "" if field in ("Video", "Magnet") else value
         item = PGCItem(item_type=field, item_data=display_value)
         if field == "Description" and row_type:

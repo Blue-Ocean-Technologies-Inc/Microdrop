@@ -190,15 +190,12 @@ class PGCWidget(QWidget):
                                 child_item = item.child(r, col)
                                 if child_type == STEP_TYPE:
                                     if child_item is not None:
-                                        print(f"  Step value for {field} at row {r}: '{child_item.text()}'")
                                         values.add(child_item.text())
                                 elif child_type == GROUP_TYPE:
                                     if child_item is not None:
-                                        print(f"  Subgroup value for {field} at row {r}: '{child_item.text()}'")
                                         values.add(child_item.text())
                                     collect_step_values(child_desc)
                         collect_step_values(group_item)
-                        print(f"Group '{group_item.text()}' aggregation for {field}: values={values}")
                         parent = group_item.parent() or self.model.invisibleRootItem()
                         row = group_item.row()
                         group_cell = parent.child(row, col)
@@ -208,11 +205,9 @@ class PGCWidget(QWidget):
                         if len(values) == 1 and list(values)[0] != "":
                             group_cell.setText(next(iter(values)))
                             group_cell.setEditable(True)
-                            print(f"  -> Setting group cell for {field} to '{next(iter(values))}' (editable)")
                         else:
                             group_cell.setText("")
                             group_cell.setEditable(False)
-                            print(f"  -> Clearing group cell for {field} (not editable)")
             # recursion for sub-groups 
             for r in range(group_item.rowCount()):
                 child_desc = group_item.child(r, 0)
