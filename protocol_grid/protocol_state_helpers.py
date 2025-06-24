@@ -4,19 +4,49 @@ from protocol_grid.protocol_grid_helpers import make_row
 from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, group_defaults, protocol_grid_fields
 
 def state_to_model(state, model):
-    
+
     def add_items(parent, seq):
         for obj in seq:
             if obj.get("type") == GROUP_TYPE:
                 group_data = {**group_defaults, **obj.get("parameters", {}), "Description": obj.get("name", "Group")}
-                group_items = make_row(group_defaults, overrides=group_data, row_type=GROUP_TYPE)
+                # build children first, for aggregation
+                child_items = []
+                if "elements" in obj:
+                    for child_obj in obj["elements"]:
+                        if child_obj.get("type") == GROUP_TYPE:
+                            # build children recursively, dont add to model yet
+                            sub_child_items = []
+                            add_items_collect(sub_child_items, [child_obj])
+                            child_items.extend(sub_child_items)
+                        elif child_obj.get("type") == STEP_TYPE:
+                            step_data = {**step_defaults, **child_obj.get("parameters", {}), "Description": child_obj.get("name", "Step")}
+                            print(f"state_to_model: Adding group '{obj.get('name', 'Group')}', parameters={obj.get('parameters', {})}")
+                            step_items = make_row(step_defaults, overrides=step_data, row_type=STEP_TYPE)
+                            child_items.append(step_items)
+                group_items = make_row(group_defaults, overrides=group_data, row_type=GROUP_TYPE, children=child_items)
                 parent.appendRow(group_items)
+                # now add children to model
                 if "elements" in obj:
                     add_items(group_items[0], obj["elements"])
             elif obj.get("type") == STEP_TYPE:
                 step_data = {**step_defaults, **obj.get("parameters", {}), "Description": obj.get("name", "Step")}
                 step_items = make_row(step_defaults, overrides=step_data, row_type=STEP_TYPE)
                 parent.appendRow(step_items)
+
+    def add_items_collect(child_items, seq):
+        for obj in seq:
+            if obj.get("type") == GROUP_TYPE:
+                group_data = {**group_defaults, **obj.get("parameters", {}), "Description": obj.get("name", "Group")}
+                sub_child_items = []
+                if "elements" in obj:
+                    add_items_collect(sub_child_items, obj["elements"])
+                group_items = make_row(group_defaults, overrides=group_data, row_type=GROUP_TYPE, children=sub_child_items)
+                child_items.append(group_items)
+            elif obj.get("type") == STEP_TYPE:
+                step_data = {**step_defaults, **obj.get("parameters", {}), "Description": obj.get("name", "Step")}
+                step_items = make_row(step_defaults, overrides=step_data, row_type=STEP_TYPE)
+                child_items.append(step_items)
+
     model.clear()
     model.setHorizontalHeaderLabels(state.fields)
     add_items(model.invisibleRootItem(), state.sequence)
@@ -34,6 +64,7 @@ def model_to_state(model, state):
                 item = parent_item.child(row, col)
                 field = protocol_grid_fields[col]
                 if item:
+                    print(f"model_to_state: row={row}, field={field}, value='{item.text()}'")
                     if field in ("Video", "Magnet"):
                         state = item.data(Qt.CheckStateRole)
                         fields[field] = "1" if state == Qt.Checked else "0"
