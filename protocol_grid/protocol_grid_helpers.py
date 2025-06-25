@@ -73,7 +73,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         if isinstance(editor, QLineEdit):
             editor.setText(str(value) if value is not None else "")
         elif isinstance(editor, QSpinBox):
-            editor.setValue(int(value) if value else 0)
+            editor.setValue(float(value) if value else 0)
         elif isinstance(editor, QDoubleSpinBox):
             editor.setValue(float(value) if value else 0.0)
         elif isinstance(editor, QCheckBox):
@@ -183,6 +183,17 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
                 group_agg_values[field] = values.pop()
             else:
                 group_agg_values[field] = None
+    
+    if row_type == STEP_TYPE:
+        try:
+            repetitions = float(overrides.get("Repetitions", defaults.get("Repetitions", 1)))
+            duration = float(overrides.get("Duration", defaults.get("Duration", 1)))
+            min_repeat_duration = repetitions * duration
+            repeat_duration = float(overrides.get("Repeat Duration", defaults.get("Repeat Duration", 0)))
+            if repeat_duration < min_repeat_duration:
+                overrides["Repeat Duration"] = f"{min_repeat_duration:.2f}"
+        except Exception:
+            pass
 
     for i, field in enumerate(protocol_grid_fields):
         value = overrides.get(field, defaults.get(field, ""))

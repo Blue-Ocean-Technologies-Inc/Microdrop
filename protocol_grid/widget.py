@@ -133,9 +133,35 @@ class PGCWidget(QWidget):
         col = item.column()
         field = protocol_grid_fields[col]
         row = item.row()
+        parent = item.parent() or self.model.invisibleRootItem()
+
+        if field in ("Repeat Duration", "Repetitions", "Duration"):
+            desc_item = parent.child(row, 0)
+            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                rep_col = protocol_grid_fields.index("Repetitions")
+                dur_col = protocol_grid_fields.index("Duration")
+                repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
+                try:
+                    repetitions = float(parent.child(row, rep_col).text())
+                except Exception:
+                    repetitions = 0
+                try:
+                    duration = float(parent.child(row, dur_col).text())
+                except Exception:
+                    duration = 0
+                min_repeat_duration = repetitions * duration
+                repeat_duration_item = parent.child(row, repeat_dur_col)
+                try:
+                    repeat_duration = float(repeat_duration_item.text())
+                except Exception:
+                    repeat_duration = 0
+                if repeat_duration < min_repeat_duration:
+                    self._programmatic_change = True
+                    repeat_duration_item.setText(f"{min_repeat_duration:.2f}")
+                    self._programmatic_change = False
+
         if field == "Magnet":
             checked = bool(item.data(Qt.CheckStateRole))
-            parent = item.parent() or self.model.invisibleRootItem()
             magnet_height_col = protocol_grid_fields.index("Magnet Height")
             magnet_height_item = parent.child(row, magnet_height_col)
             if magnet_height_item is not None:
@@ -152,7 +178,6 @@ class PGCWidget(QWidget):
                     magnet_height_item.setText(str(last_value))
 
         if field in ("Voltage", "Frequency", "Trail Length"):
-            parent = item.parent() or self.model.invisibleRootItem()
             desc_item = parent.child(row, 0)
             if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE and item == parent.child(row, col):
                 new_value = item.text()
