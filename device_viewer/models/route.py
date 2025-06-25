@@ -72,8 +72,8 @@ class Route(HasTraits):
         if len(self.route) == 0:
             return True
         
-        endpoints = (self.route[-1], self.route[0])
-        return from_id in endpoints or to_id in endpoints
+        endpoints = self.get_endpoints()
+        return to_id == endpoints[0] or from_id in self.route
     
     def can_merge(self, other: "Route"):
         '''Returns if other can be merged with the current route'''
@@ -103,6 +103,17 @@ class Route(HasTraits):
             # We want it so that extending a path in the opposite direction
             # that its going still expands it, but in the right direction
             self.route.insert(0, to_id)
+        else:
+            # We're extending from the middle! We actually add 2 segments: the segment and its reverse,
+            # and use it to extend every part of the path that has from_id
+            new_route = []
+            for electrode_id in self.route:
+                new_route.append(electrode_id)
+                if electrode_id == from_id:
+                    new_route.append(to_id)
+                    new_route.append(from_id)
+            
+            self.route = new_route
 
     def can_remove(self, from_id, to_id):
         '''Returns true if the segment (from_id, to_id) can be removed'''
