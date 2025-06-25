@@ -94,6 +94,6 @@ def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
 
     # Get the named logger
     logger = logging.getLogger(name)
-    logger.setLevel(LEVELS[level])
+    logger.setLevel(max(LEVELS[LOGLEVEL], LEVELS[level]))
 
     return logger
