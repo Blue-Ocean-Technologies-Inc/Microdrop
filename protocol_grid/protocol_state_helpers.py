@@ -20,7 +20,6 @@ def state_to_model(state, model):
                             child_items.extend(sub_child_items)
                         elif child_obj.get("type") == STEP_TYPE:
                             step_data = {**step_defaults, **child_obj.get("parameters", {}), "Description": child_obj.get("name", "Step")}
-                            print(f"state_to_model: Adding group '{obj.get('name', 'Group')}', parameters={obj.get('parameters', {})}")
                             step_items = make_row(step_defaults, overrides=step_data, row_type=STEP_TYPE)
                             child_items.append(step_items)
                 group_items = make_row(group_defaults, overrides=group_data, row_type=GROUP_TYPE, children=child_items)
@@ -64,7 +63,6 @@ def model_to_state(model, state):
                 item = parent_item.child(row, col)
                 field = protocol_grid_fields[col]
                 if item:
-                    print(f"model_to_state: row={row}, field={field}, value='{item.text()}'")
                     if field in ("Video", "Magnet"):
                         state = item.data(Qt.CheckStateRole)
                         fields[field] = "1" if state == Qt.Checked else "0"
