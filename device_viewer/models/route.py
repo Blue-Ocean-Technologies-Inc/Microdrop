@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str
+from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Property, DelegatesTo
 import random
 from queue import Queue
 from collections import Counter
@@ -320,7 +320,19 @@ class RouteLayerManager(HasTraits):
             layer.is_selected = (layer is event.new)
 
     @observe('layer_to_merge')
+    @observe('layer_to_merge.name')
     def _layer_to_merge_changed(self, event):
-        for layer in self.layers:
-            layer.merge_in_progress = (event.new != None)
-
+        if event.name == "layer_to_merge": # event.new is the layer
+            for layer in self.layers:
+                layer.merge_in_progress = (event.new != None)
+            if event.new:
+                self.message = f"Route merging: {event.new.name}"
+        elif event.name == "name": # event.new is the new name
+            self.message = f"Route merging: {event.new}"
+    
+    @observe('mode')
+    def mode_change(self, event):
+        if event.old == 'merge' and event.new != 'merge': # We left merge mode
+            self.message = ""
+            self.layer_to_merge = None
+        

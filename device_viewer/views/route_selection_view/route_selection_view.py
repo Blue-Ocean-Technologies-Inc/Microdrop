@@ -1,7 +1,6 @@
-from traitsui.api import View, VGroup, HGroup, ButtonEditor, Editor, Item, ObjectColumn, TableEditor, Label, Handler, Action
+from traitsui.api import View, VGroup, Item, ObjectColumn, TableEditor, Label, Handler, Action
 from traitsui.extras.checkbox_column import CheckboxColumn
 from traitsui.ui import UIInfo
-from traits.api import Button
 from pyface.qt.QtGui import QColor
 from pyface.qt.QtWidgets import QStyledItemDelegate
 
@@ -58,7 +57,6 @@ class RouteLayerHandler(Handler):
 
     def start_merge_layer(self, info, rows):
         info.object.layer_to_merge = rows[0]
-        info.object.message = "Route merging: " + rows[0].route.get_name()
         info.object.mode = "merge"
 
     def merge_layer(self, info, rows): 
@@ -70,12 +68,9 @@ class RouteLayerHandler(Handler):
         route_to_merge = info.object.layer_to_merge.route
         if route_to_merge.can_merge(selected_route) and selected_route != route_to_merge:
             route_to_merge.merge(selected_route)
-            info.object.message = "Route merging: " + route_to_merge.get_name()
             self.delete_layer(info, rows) # Delete selected route
 
     def cancel_merge_layer(self, info, rows):
-        info.object.layer_to_merge = None
-        info.object.message = ""
         info.object.mode = "edit"
 
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
