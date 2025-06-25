@@ -54,7 +54,7 @@ class RouteLayerHandler(Handler):
         rows[0].route.invert()
     
     def delete_layer(self, info, rows):
-        info.object.replace_layer(rows[0], []) # Just delete row
+        info.object.delete_layer(rows[0])
 
     def start_merge_layer(self, info, rows):
         info.object.layer_to_merge = rows[0]

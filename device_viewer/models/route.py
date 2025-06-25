@@ -6,6 +6,7 @@ from microdrop_style.colors import PRIMARY_SHADE
 
 # Abstract pathing object class
 class Route(HasTraits):
+    # Note that route should be able to be edited directly (i.e. layer.route = [1,2,3])
     route = List() # List of ids - ids can be anything! In this case they are most likely strings or ints though
 
     def _route_default(self):
@@ -223,11 +224,13 @@ class RouteLayer(HasTraits):
     
     def _name_default(self):
         return self.route.get_name()
-    
 
     @observe("route.route.items")
     def _route_path_updated(self, event):
         self.name = self.route.get_name()
+
+    def __repr__(self) -> str:
+        return f"<RouteLayer route={self.route} name={self.name}>"
 
 class RouteLayerManager(HasTraits):
     # ---------------- Model Traits -----------------------
@@ -268,8 +271,12 @@ class RouteLayerManager(HasTraits):
             self.selected_layer = self.layers[index]
         elif len(self.layers) == 0:
             self.selected_layer = None
+            self.mode = 'draw' # Nothing to edit, so set to draw
         else:
             self.selected_layer = self.layers[-1] # Set it to the last layer
+
+    def delete_layer(self, layer: RouteLayer):
+        self.replace_layer(layer, [])
 
     def add_layer(self, route: Route, index=None, color=None):
         if color == None:

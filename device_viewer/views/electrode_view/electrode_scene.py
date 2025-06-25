@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtWidgets import QGraphicsScene
 
 from .electrode_view_helpers import find_path_item
-from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, level='DEBUG')
@@ -81,19 +81,21 @@ class ElectrodeScene(QGraphicsScene):
                         found_connection_item = find_path_item(self, (self.last_electrode_id_visited, electrode_view.id))
                         if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
                             self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id)
-                            self.last_electrode_id_visited = electrode_view.id
+                            self.last_electrode_id_visited = electrode_view.id # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
                             self.is_drag = True # Since more than one electrode is left clicked, its a drag, not a single electrode click
+                        
             elif mode == "auto":
                 if electrode_view:
                     self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
                         
         if self.right_mouse_pressed:
             connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+            endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
             if connection_item:
                 (from_id, to_id) = connection_item.key
                 self.interaction_service.handle_route_erase(from_id, to_id)
-                
-                    
+            elif endpoint_item:
+                self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)

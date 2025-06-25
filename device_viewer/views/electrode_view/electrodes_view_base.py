@@ -114,7 +114,7 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         self.setPath(path)
    
         # Add a new variable specific to this class
-        self.electrode_id = id
+        self.electrode_id = electrode_id
         self.set_inactive()
 
     def set_active(self, color=Qt.green):

@@ -83,6 +83,20 @@ class ElectrodeInteractionControllerService(HasTraits):
         if current_route.can_remove(from_id, to_id):
             new_routes = [Route(route_list, channel_map=current_route.channel_map) for route_list in current_route.remove_segment(from_id, to_id)]
             self.route_layer_manager.replace_layer(self.route_layer_manager.selected_layer, new_routes)
+    
+    def handle_endpoint_erase(self, electrode_id):
+        '''Handle the erase being triggered by hovering an endpoint'''
+        current_route = self.route_layer_manager.get_selected_route()
+        if current_route == None: return
+
+        endpoints = current_route.get_endpoints()
+        segments = current_route.get_segments()
+        if len(endpoints) == 0 or len(segments) == 0: # Path of length 0 or path length of 1
+            self.route_layer_manager.delete_layer(self.route_layer_manager.selected_layer) # Delete layer
+        elif electrode_id == endpoints[0]: # Starting endpoint erased
+            self.handle_route_erase(*segments[0]) # Delete the first segment
+        elif electrode_id == endpoints[1]: # Ending endpoint erased
+            self.handle_route_erase(*segments[-1]) # Delete last segment
 
     def handle_autoroute_start(self, from_id):
         routes = [layer.route for layer in self.route_layer_manager.layers]
