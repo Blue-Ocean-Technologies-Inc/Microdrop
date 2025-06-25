@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 
 class ModePicker(QWidget):
-    def __init__(self, model):
+    def __init__(self, route_model, electrodes_model):
         super().__init__()
-        self.model = model
+        self.route_model = route_model
+        self.electrodes_model = electrodes_model
 
         # Make checkable buttons
         self.button_draw = QPushButton("Draw")
@@ -24,18 +25,22 @@ class ModePicker(QWidget):
         self.button_draw.clicked.connect(lambda: self.set_mode("draw"))
         self.button_edit.clicked.connect(lambda: self.set_mode("edit"))
         self.button_autoroute.clicked.connect(lambda: self.set_mode("auto"))
-        self.button_reset.clicked.connect(lambda: self.model.reset())
+        self.button_reset.clicked.connect(lambda: self.reset())
 
-        self.model.observe(self.on_mode_changed, "mode")
+        self.route_model.observe(self.on_mode_changed, "mode")
 
     def sync_buttons(self):
         """Set checked states and label based on model.mode."""
-        self.button_draw.setChecked(self.model.mode == "draw")
-        self.button_edit.setChecked(self.model.mode == "edit")
-        self.button_autoroute.setChecked(self.model.mode == "auto")
+        self.button_draw.setChecked(self.route_model.mode == "draw")
+        self.button_edit.setChecked(self.route_model.mode == "edit")
+        self.button_autoroute.setChecked(self.route_model.mode == "auto")
 
     def set_mode(self, mode):
-        self.model.mode = mode
+        self.route_model.mode = mode
 
     def on_mode_changed(self, event):
         self.sync_buttons()
+
+    def reset(self):
+        self.electrodes_model.reset_states()
+        self.route_model.reset()

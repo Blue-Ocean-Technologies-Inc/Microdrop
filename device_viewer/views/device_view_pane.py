@@ -141,7 +141,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.layer_ui.control.setParent(container)
 
         # mode_picker_view code
-        self.mode_picker_view = ModePicker(layer_model)
+        self.mode_picker_view = ModePicker(layer_model, self.electrodes_model)
         self.mode_picker_view.setParent(container)
 
         # Add widgets to layouts

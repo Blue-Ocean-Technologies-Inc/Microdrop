@@ -7,7 +7,7 @@ from microdrop_utils._logger import get_logger
 from ..models.route import RouteLayerManager
 
 # enthought
-from traits.api import HasTraits, Int, Bool, Array, Float, Any, Dict, Str, Instance, Property, File, cached_property, List, observe
+from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe
 
 logger = get_logger(__name__)
 
@@ -19,6 +19,9 @@ class Electrode(HasTraits):
 
     #: Channel number
     channel = Int()
+
+    #: Electrode id
+    id = String()
 
     #: NDArray path to electrode
     path = Array(dtype=Float, shape=(None, 2))
@@ -109,7 +112,7 @@ class Electrodes(HasTraits):
     def _svg_model_changed(self, new_model: SvgUtil):
         logger.debug(f"Setting new electrode models based on new svg model {new_model}")
         for k, v in new_model.electrodes.items():
-            self.electrodes[k] = Electrode(channel=v['channel'], path=v['path'])
+            self.electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
 
@@ -123,3 +126,7 @@ class Electrodes(HasTraits):
 
         self.svg_model = SvgUtil(svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
+    
+    def reset_states(self):
+        for electrode_id, electrode in self.electrodes.items():
+            electrode.state = False

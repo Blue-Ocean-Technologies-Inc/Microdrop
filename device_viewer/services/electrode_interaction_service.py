@@ -48,10 +48,6 @@ class ElectrodeInteractionControllerService(HasTraits):
             # update electrode model for electrode clicked and all electrodes with same channel affected by this click.
             _electrode.state = not _electrode.state
 
-            # update electrode view for electrode clicked and all electrodes with same channel affected by this click.
-            _electrode_view = self.electrode_view_layer.electrode_views[affected_electrode_id]
-            _electrode_view.update_color(_electrode.state)
-
         updated_channels_states_map = self.electrodes_model.channels_states_map
 
         logger.info(f"New electrode channels states map: {updated_channels_states_map}")
@@ -124,4 +120,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
+    
+    @observe("electrodes_model._electrodes.items.state")
+    def electrode_recolor(self, event):
+        if event.name == "state": # State change
+            electrode_view = self.electrode_view_layer.electrode_views[event.object.id]
+            electrode_view.update_color(event.new)
 
