@@ -77,7 +77,9 @@ class Route(HasTraits):
     
     def can_merge(self, other: "Route"):
         '''Returns if other can be merged with the current route'''
-        return bool(set(self.get_endpoints()) & set(other.get_endpoints())) # Juct check for endpoint overlap
+        self_endpoints = self.get_endpoints()
+        other_endpoints = other.get_endpoints()
+        return self_endpoints[0] == other_endpoints[1] or self_endpoints[1] == other_endpoints[0]
     
     def merge(self, other: "Route"):
         '''Merge with other route. Does this in place and does not modify the other route. Prioritizes putting other at end in ambigous cases. Assumes can_merge returns True'''
