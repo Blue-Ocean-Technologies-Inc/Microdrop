@@ -199,13 +199,13 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
                 item.setEditable(True)
             else:
                 item.setText("")
-                item.setEditable(False)
-        elif row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration") and field not in group_agg_fields:
+                item.setEditable(True)
+        elif row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration"):
             item.setText("")
             item.setEditable(False)
         else:
             item.setEditable(True)
-        if field in ("Video", "Magnet"):
+        if row_type == STEP_TYPE and field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = str(value).strip().lower() in ("1", "true", "yes", "on")
@@ -213,7 +213,7 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
             if field == "Magnet":
                 magnet_checked = checked
         if field == "Magnet Height":
-            if not magnet_checked:
+            if not magnet_checked or row_type == GROUP_TYPE :
                 item.setEditable(False)
                 item.setData("", Qt.DisplayRole)
             else:

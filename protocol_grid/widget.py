@@ -41,7 +41,7 @@ class PGCWidget(QWidget):
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_edit_context_menu)
         
-        # self._programmatic_change = False
+        self._programmatic_change = False
         self.model.itemChanged.connect(self.on_item_changed)
 
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
@@ -58,7 +58,7 @@ class PGCWidget(QWidget):
 
         # set Headers for columns
         self.model.setHorizontalHeaderLabels(protocol_grid_fields)
-        initial_column_widths = [120, 40, 80, 80, 80, 80, 80, 80, 80, 30, 120]
+        initial_column_widths = [120, 40, 80, 80, 80, 80, 60, 60, 80, 80, 80, 40, 80, 40, 80]
         for i, width in enumerate(initial_column_widths):
             self.tree.setColumnWidth(i, width)
 
@@ -127,6 +127,9 @@ class PGCWidget(QWidget):
         self.set_column_state(col_vis, col_widths)
 
     def on_item_changed(self, item):
+        if self._programmatic_change:
+            return
+        self.state.snapshot_for_undo()
         col = item.column()
         field = protocol_grid_fields[col]
         row = item.row()
@@ -163,12 +166,16 @@ class PGCWidget(QWidget):
                             child_item = group_item.child(r, col)
                             if child_type == GROUP_TYPE:
                                 if child_item is not None:
+                                    self._programmatic_change = True
                                     child_item.setText(new_value)
                                     child_item.setEditable(True)
+                                    self._programmatic_change = False
                                 set_value_recursive(child_desc)
                             elif child_type == STEP_TYPE:
                                 if child_item is not None:
+                                    self._programmatic_change = True
                                     child_item.setText(new_value)
+                                    self._programmatic_change = False
                     set_value_recursive(desc_item)
             self.update_all_group_aggregations()
         self.save_to_state()
@@ -207,7 +214,7 @@ class PGCWidget(QWidget):
                             group_cell.setEditable(True)
                         else:
                             group_cell.setText("")
-                            group_cell.setEditable(False)
+                            group_cell.setEditable(True)
             # recursion for sub-groups 
             for r in range(group_item.rowCount()):
                 child_desc = group_item.child(r, 0)
@@ -563,6 +570,8 @@ class PGCWidget(QWidget):
             with open(file_name, "r") as f:
                 data = json.load(f)
             self.state.from_json(data)
+            self.state.undo_stack.clear()
+            self.state.redo_stack.clear()
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
@@ -572,6 +581,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Protocol Editor Demo")
         self.setCentralWidget(PGCWidget())
+        self.resize(1300, 500)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
