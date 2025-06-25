@@ -242,7 +242,12 @@ class RouteLayerManager(HasTraits):
 
     layer_to_merge = Instance(RouteLayer)
 
-    mode = Enum("draw", "edit", "auto", "merge")
+    # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
+    # Edit: User can only extend selected segment
+    # Edit-Draw: Same as edit except we switch to draw on mouserelease
+    # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
+    # Merge: User can only merge paths. They cannot edit.
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge")
 
     message = Str("")
 

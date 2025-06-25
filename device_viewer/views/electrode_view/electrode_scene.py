@@ -52,7 +52,7 @@ class ElectrodeScene(QGraphicsScene):
         if button == Qt.LeftButton:
             self.left_mouse_pressed = True
             electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-            if mode in ("edit", "draw"):
+            if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     self.last_electrode_id_visited = electrode_view.id
             elif mode == "auto":
@@ -73,7 +73,7 @@ class ElectrodeScene(QGraphicsScene):
             # Only proceed if we have a valid electrode view.
             electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
             mode = self.interaction_service.get_mode()
-            if mode in ("edit", "draw"):
+            if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
                         self.last_electrode_id_visited = electrode_view.id
@@ -107,7 +107,7 @@ class ElectrodeScene(QGraphicsScene):
         if button == Qt.LeftButton:
             self.left_mouse_pressed = False
             mode = self.interaction_service.get_mode()
-            if mode in ["edit", "draw"]:
+            if mode in ["edit", "draw", "edit-draw"]:
                 # If it's a click (not a drag) since only one electrode selected:
                 if not self.is_drag:
                     if self.interaction_service:
@@ -115,6 +115,9 @@ class ElectrodeScene(QGraphicsScene):
                 
                 # Reset left-click related vars
                 self.is_drag = False
+
+                if mode == "edit-draw": # Go back to draw
+                    self.interaction_service.set_mode("draw")
             elif mode == "auto":
                 self.interaction_service.handle_autoroute_end()
         elif button == Qt.RightButton:
