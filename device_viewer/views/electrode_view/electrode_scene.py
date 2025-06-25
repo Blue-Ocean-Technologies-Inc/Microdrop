@@ -108,10 +108,10 @@ class ElectrodeScene(QGraphicsScene):
             self.left_mouse_pressed = False
             mode = self.interaction_service.get_mode()
             if mode in ["edit", "draw", "edit-draw"]:
+                electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
                 # If it's a click (not a drag) since only one electrode selected:
-                if not self.is_drag:
-                    if self.interaction_service:
-                        self.interaction_service.handle_electrode_click(self.last_electrode_id_visited)
+                if not self.is_drag and electrode_view:
+                    self.interaction_service.handle_electrode_click(electrode_view.id)
                 
                 # Reset left-click related vars
                 self.is_drag = False
