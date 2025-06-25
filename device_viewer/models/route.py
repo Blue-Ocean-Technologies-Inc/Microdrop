@@ -260,7 +260,20 @@ class RouteLayerManager(HasTraits):
     # Merge: User can only merge paths. They cannot edit.
     mode = Enum("draw", "edit", "edit-draw", "auto", "merge")
 
+    mode_name = Property(Str, observe="mode")
+
     message = Str("")
+
+    # ------------------------- Properties ------------------------
+
+    def _get_mode_name(self):
+        return {
+            "draw": "Draw",
+            "edit-draw": "Draw",
+            "edit": "Edit",
+            "auto": "Autoroute",
+            "merge": "Merge"
+        }.get(self.mode, "Error")
 
     # --------------------------- Model Helpers --------------------------
     
