@@ -95,6 +95,10 @@ class DropbotControllerBase(HasTraits):
 
             # 2. Handle the connected / disconnected signals
             if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
+                if topic == DROPBOT_CONNECTED:
+                    self.dropbot_connection_active = True
+                else:
+                    self.dropbot_connection_active = False
                 requested_method = f"on_{specific_sub_topic}_signal"
             elif topic == CHIP_INSERTED and timestamped_message == 'True':
                 self.dropbot_connection_active = True

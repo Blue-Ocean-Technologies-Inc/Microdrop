@@ -124,6 +124,7 @@ class DropbotMonitorMixinService(HasTraits):
 
     def on_connected_signal(self, message):
         # Conduct a chip check
+        self.dropbot_connection_active = True
         self.on_chip_check_request("")
 
     ################################# Protected methods ######################################
@@ -175,7 +176,7 @@ class DropbotMonitorMixinService(HasTraits):
                 # once dropbot setup, set connection to active
                 self.dropbot_connection_active = True
 
-                self.on_chip_check_request()
+                # self.on_chip_check_request("")
                 
             except (IOError, AttributeError) as e:
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))

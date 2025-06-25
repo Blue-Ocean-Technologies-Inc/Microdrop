@@ -1,9 +1,11 @@
 from .dramatiq_pub_sub_helpers import publish_message
 from dropbot.proxy import SerialProxy
-from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, CHIP_INSERTED
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, CHIP_INSERTED, CHIP_CHECK
 import base_node_rpc as bnr
 import functools as ft
 
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
 connection_flags = {"connected": DROPBOT_CONNECTED, "disconnected": DROPBOT_DISCONNECTED}
 
@@ -31,6 +33,7 @@ class DramatiqDropbotSerialProxy(SerialProxy):
                 return    # already connected, skip
             _connection_state['connected'] = True
             publish_message(f'dropbot_connected', DROPBOT_CONNECTED)
+            publish_message('', CHIP_CHECK)
 
         def disconnected_wrapper(f, *args, **kwargs):
             f(*args, **kwargs)
@@ -41,7 +44,6 @@ class DramatiqDropbotSerialProxy(SerialProxy):
             _connection_state['connected'] = False
             publish_message(f'dropbot_disconnected', DROPBOT_DISCONNECTED)
             publish_message('False', CHIP_INSERTED)
-
         
         monitor = bnr.ser_async.BaseNodeSerialMonitor(port=self.port)
 

@@ -113,7 +113,7 @@ class DropBotStatusLabel(QLabel):
         self.setLayout(self.main_layout)
         self.dropbot_connected = False
 
-    def update_status_icon(self, dropbot_connected=False, chip_inserted=False):
+    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
         """
         Update status based on if device connected and chip inserted or not. Follows this flowchart:
 
@@ -132,11 +132,14 @@ class DropBotStatusLabel(QLabel):
         If the timestamp is provided, we only update the status if the timestamp is after the most recent status message.
         This is to avoid updating the status if the message is older than the most recent status message.
         """
-        
+        if dropbot_connected is None:
+            dropbot_connected = self.dropbot_connected
+
         if chip_inserted:
             dropbot_connected = True # If chip is inserted dropbot must be connected
         
         if dropbot_connected:
+            self.dropbot_connected = True
             logger.info("Dropbot Connected")
             self.dropbot_connection_status.setText("Connected")
 
@@ -156,7 +159,8 @@ class DropBotStatusLabel(QLabel):
 
         else:
             # dropbot not there. Red light.
-            logger.info("Dropbot Disconnected")
+            self.dropbot_connected = False
+            logger.critical("Dropbot Disconnected")
             img_path = DROPBOT_IMAGE
             status_color = red
             self.dropbot_connection_status.setText("Disconnected")
