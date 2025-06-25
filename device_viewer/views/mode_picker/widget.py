@@ -5,16 +5,18 @@ class ModePicker(QWidget):
         super().__init__()
         self.model = model
 
-        # Make three checkable buttons
+        # Make checkable buttons
         self.button_draw = QPushButton("Draw")
         self.button_edit = QPushButton("Edit")
         self.button_autoroute = QPushButton("Autoroute")
+        self.button_reset = QPushButton("Reset")
 
         # Layout
         layout = QHBoxLayout()
         for btn in (self.button_draw, self.button_edit, self.button_autoroute):
             btn.setCheckable(True)
             layout.addWidget(btn)
+        layout.addWidget(self.button_reset) # Isn't checkable
         self.setLayout(layout)
 
         self.sync_buttons()
@@ -22,6 +24,7 @@ class ModePicker(QWidget):
         self.button_draw.clicked.connect(lambda: self.set_mode("draw"))
         self.button_edit.clicked.connect(lambda: self.set_mode("edit"))
         self.button_autoroute.clicked.connect(lambda: self.set_mode("auto"))
+        self.button_reset.clicked.connect(lambda: self.model.reset())
 
         self.model.observe(self.on_mode_changed, "mode")
 
