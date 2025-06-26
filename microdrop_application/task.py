@@ -114,6 +114,8 @@ class MicrodropTask(Task):
 
     ##########################################################
     # Including below function permanently this class, so no need to dynamically attach it in dropbot_tools_menu/plugin.py
+    # This callback is registered in ACTOR_TOPIC_DICT of dropbot_tools_menu and does nothing if that plugin is not loaded
+    # The relevant code has to be here since the dialogs need to be manipulated from the main task
     ##########################################################
 
     def _on_self_tests_progress_triggered(self, current_message):

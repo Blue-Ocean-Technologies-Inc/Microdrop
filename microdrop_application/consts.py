@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from dropbot_controller.consts import DROPBOT_SETUP_SUCCESS
 from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
                                          ICON_HEADSET_MIC, ICON_INFO,
                                          ICON_TROUBLESHOOT, ICON_EXTENSION,
@@ -11,10 +10,7 @@ PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 # Topics actor declared by plugin subscribes to
-ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [
-                                 DROPBOT_SETUP_SUCCESS,
-    ]}
+ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent/ "resources" / "scibots-icon.png"
 

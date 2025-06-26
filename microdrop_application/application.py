@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QFont
 
-from microdrop_utils.status_bar_utils import load_font_family
+from microdrop_utils.font_helpers import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
@@ -33,10 +33,6 @@ from .consts import (scibots_icon_path, sidebar_menu_options,
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, level="CRITICAL")
-
-MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
-ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
-
 
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
@@ -213,7 +209,7 @@ class MicrodropSidebar(QToolBar):
 
         # Menu buttons
         self.menu_buttons = []
-        icon_font = QFont(ICON_FONT_FAMILY)
+        icon_font = QFont("Material Symbols Outlined")
         icon_font.setPointSize(22)
         color_str = "white" if is_dark_mode() else "black"
 

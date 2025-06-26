@@ -133,13 +133,14 @@ class DropBotStatusLabel(QLabel):
         If the timestamp is provided, we only update the status if the timestamp is after the most recent status message.
         This is to avoid updating the status if the message is older than the most recent status message.
         """
-        
-        if dropbot_connected is not None:
-            self.dropbot_connected = dropbot_connected
-        else:
+        if dropbot_connected is None:
             dropbot_connected = self.dropbot_connected
+
+        if chip_inserted:
+            dropbot_connected = True # If chip is inserted dropbot must be connected
         
         if dropbot_connected:
+            self.dropbot_connected = True
             logger.info("Dropbot Connected")
             self.dropbot_connection_status.setText("Connected")
 
@@ -159,7 +160,8 @@ class DropBotStatusLabel(QLabel):
 
         else:
             # dropbot not there. Red light.
-            logger.info("Dropbot Disconnected")
+            self.dropbot_connected = False
+            logger.critical("Dropbot Disconnected")
             img_path = DROPBOT_IMAGE
             status_color = red
             self.dropbot_connection_status.setText("Disconnected")
@@ -270,16 +272,11 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
         self.status_label.update_status_icon(dropbot_connected=True)
-
-    @timestamped_value('connected_message')
-    def _on_setup_success_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=True)
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
         if body == 'True':
             chip_inserted = True
-            self.dropbot_connected = True # If the chip is inserted, the dropbot must connected already
         elif body == 'False':
             chip_inserted = False
         else:

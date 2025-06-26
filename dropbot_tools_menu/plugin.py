@@ -12,7 +12,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 
-from dropbot_controller.consts import DROPBOT_SETUP_SUCCESS, DROPBOT_DISCONNECTED
+from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -77,14 +77,18 @@ class DropbotToolsMenuPlugin(Plugin):
             self.application.on_trait_change(self._on_window_created, 'active_window', remove=True)     
 
     def _listener_actor_routine(self, message, topic):
-        if topic == DROPBOT_SETUP_SUCCESS:
+        if topic == CHIP_INSERTED:
             logger.debug(f"Received {topic} signal")
             self.dropbot_connected = True
-            print(f"Dropbot connected: {self.dropbot_connected}")
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
         elif topic == DROPBOT_DISCONNECTED:
             logger.debug(f"Received {topic} signal")
             self.dropbot_connected = False   
-            print(f"Dropbot connected: {self.dropbot_connected}")
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
+        elif topic == DROPBOT_CONNECTED:
+            logger.debug(f"Received {topic} signal")
+            self.dropbot_connected = True
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
     
     def _setup_listener_actor(self):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
