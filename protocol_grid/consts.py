@@ -22,16 +22,14 @@ protocol_grid_fields = [
 fixed_fields = {"Description", "ID"}
 field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
-                "Label", "Message", "Repeat Duration", "Repetitions", 
+                "Repeat Duration", "Repetitions", 
                 "Trail Length", "Video", "Volume Threshold", 
                 "Magnet", "Magnet Height", "Trail Overlay"
             ] and f not in fixed_fields]),
-            ("step_label_plugin:", ["Label"]),
-            ("user_prompt_plugin:", ["Message"]),
-            ("droplet_planning_plugin:", ["Repeat Duration", "Repetitions", "Trail Length", "Trail Overlay"]),
-            ("dmf_device_ui_plugin:", ["Video"]),
-            ("dropbot_plugin:", ["Volume Threshold"]),
-            ("magnet_plugin:", ["Magnet", "Magnet Height"]),
+            ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length", 
+                                "Trail Overlay", "Video"]),
+            ("Dropbot:", ["Volume Threshold"]),
+            ("Magnet:", ["Magnet", "Magnet Height"]),
         ]
 step_defaults = {
     "Description": "Step",
