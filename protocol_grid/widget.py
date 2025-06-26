@@ -159,6 +159,7 @@ class PGCWidget(QWidget):
                     self._programmatic_change = True
                     repeat_duration_item.setText(f"{min_repeat_duration:.2f}")
                     self._programmatic_change = False
+            self.update_all_group_aggregations()
 
         if field == "Magnet":
             checked = bool(item.data(Qt.CheckStateRole))
@@ -240,6 +241,51 @@ class PGCWidget(QWidget):
                         else:
                             group_cell.setText("")
                             group_cell.setEditable(True)
+                    
+                    elif field == "Duration":
+                        
+                        def sum_child_durations(item):
+                            total = 0.0
+                            for r in range(item.rowCount()):
+                                child_desc = item.child(r, 0)
+                                child_type = child_desc.data(ROW_TYPE_ROLE)
+                                if child_type == STEP_TYPE:
+                                    rep_col = protocol_grid_fields.index("Repetitions")
+                                    dur_col = protocol_grid_fields.index("Duration")
+                                    repetitions = float(item.child(r, rep_col).text())
+                                    duration = float(item.child(r, dur_col).text())
+                                    total += repetitions * duration
+                                elif child_type == GROUP_TYPE:
+                                    update_group(child_desc)
+                                    dur_col = protocol_grid_fields.index("Duration")
+                                    subgroup_duration = float(item.child(r, dur_col).text())
+                                    total += subgroup_duration
+                            return total
+
+                        rep_col = protocol_grid_fields.index("Repetitions")
+                        try:
+                            group_repetitions = float(group_item.child(group_item.row(), rep_col).text())
+                        except Exception:
+                            try:
+                            #try to get from parent
+                                group_repetitions = float(group_item.parent().child(group_item.row(), rep_col).text())
+                            except Exception:    
+                                group_repetitions = 1
+
+                        parent = group_item.parent() or self.model.invisibleRootItem()
+                        row = group_item.row()                        
+                        group_repetitions = float(parent.child(row, rep_col).text())
+                        total_duration = sum_child_durations(group_item) * group_repetitions   
+
+                        parent = group_item.parent() or self.model.invisibleRootItem()
+                        row = group_item.row()
+                        dur_col = protocol_grid_fields.index("Duration")
+                        group_duration_cell = parent.child(row, dur_col)
+                        if group_duration_cell is None:
+                            group_duration_cell = PGCItem(item_type="Duration", item_data="")
+                            parent.setChild(row, dur_col, group_duration_cell)
+                        group_duration_cell.setText(f"{total_duration:.2f}")
+                        group_duration_cell.setEditable(False)
             # recursion for sub-groups 
             for r in range(group_item.rowCount()):
                 child_desc = group_item.child(r, 0)
