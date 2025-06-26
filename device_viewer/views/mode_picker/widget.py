@@ -1,4 +1,13 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
+from PySide6.QtGui import QFont
+from pathlib import Path
+
+from microdrop_utils.font_helpers import load_font_family
+from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT, ICON_RESET_WRENCH
+from microdrop_style.colors import SECONDARY_SHADE, WHITE
+
+MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent.parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
+ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class ModePicker(QWidget):
     def __init__(self, route_model, electrodes_model):
@@ -6,18 +15,24 @@ class ModePicker(QWidget):
         self.route_model = route_model
         self.electrodes_model = electrodes_model
 
+        self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
+
         # Make checkable buttons
-        self.button_draw = QPushButton("Draw")
-        self.button_edit = QPushButton("Edit")
-        self.button_autoroute = QPushButton("Autoroute")
-        self.button_reset = QPushButton("Reset")
+        self.button_draw = QPushButton(ICON_DRAW)
+        self.button_draw.setToolTip("Draw")
+        self.button_edit = QPushButton(ICON_EDIT)
+        self.button_edit.setToolTip("Edit")
+        self.button_autoroute = QPushButton(ICON_AUTOMATION)
+        self.button_autoroute.setToolTip("Autoroute")
+        self.button_reset = QPushButton(ICON_RESET_WRENCH)
+        self.button_reset.setToolTip("Reset Routes/Electrodes")
 
         # btn_layout
         btn_layout = QHBoxLayout()
         for btn in (self.button_draw, self.button_edit, self.button_autoroute):
             btn.setCheckable(True)
             btn_layout.addWidget(btn)
-        btn_layout.addWidget(self.button_reset) # Isn't checkable
+        btn_layout.addWidget(self.button_reset)
         
         # Main layout
         layout = QVBoxLayout()
