@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from dropbot_controller.consts import DROPBOT_SETUP_SUCCESS
 from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
                                          ICON_HEADSET_MIC, ICON_INFO,
                                          ICON_TROUBLESHOOT, ICON_EXTENSION,
