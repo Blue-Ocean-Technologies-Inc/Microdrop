@@ -37,7 +37,7 @@ class ElectrodeScene(QGraphicsScene):
         '''
         # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
         # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
-        items = self.items(coordinates)
+        items = self.items(coordinates, deviceTransform=self.views()[0].transform())
         for item in items:
             if isinstance(item, object_type):
                 return item
