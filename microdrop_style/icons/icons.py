@@ -6,3 +6,7 @@ ICON_TROUBLESHOOT    = "\ue1d2"  # troubleshoot (from Material Symbols)
 ICON_EXTENSION       = "\ue87b"  # extension
 ICON_DESCRIPTION     = "\ue873"  # description
 ICON_CANCEL          = "\ue5c9"  # cancel
+ICON_RESET_WRENCH    = "\uf56c"  # reset with a wrench
+ICON_DRAW            = "\ue746"  # draw
+ICON_EDIT            = "\ue3c9"  # edit
+ICON_AUTOMATION      = "\uf421"  # automation

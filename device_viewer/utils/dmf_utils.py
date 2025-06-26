@@ -36,7 +36,8 @@ class SvgUtil:
         self.neighbours: dict[str, list[str]] = {}
         self.roi: list[NDArray[Shape['*, 1, 1'], Float]] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
-        self.connections: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.connections = {}
+        self.electrode_centers = {}
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -64,9 +65,12 @@ class SvgUtil:
                 pass
                 # self.connections = self.svg_to_points(child)
 
-        if len(self.connections) == 0 and len(self.electrodes) > 0:
-            self.neighbours = self.find_neighbours_all()
-            self.neighbours_to_points()
+        
+        if len(self.electrodes) > 0:
+            self.find_electrode_centers()
+            if len(self.connections.items()) == 0:
+                self.neighbours = self.find_neighbours_all()
+                self.neighbours_to_points()
 
         if modify:
             tree.write(filename)
@@ -76,6 +80,12 @@ class SvgUtil:
         Get the center of an electrode
         """
         return np.mean(self.electrodes[electrode]['path'], axis=0)
+
+    def find_electrode_centers(self):
+        self.electrode_centers = {}
+
+        for id, _ in self.electrodes.items():
+            self.electrode_centers[id] = self.get_electrode_center(id)
 
     def find_neighbours(self, path: NDArray[Shape['*, 1, 1'], Float], threshold: float = 10) -> list[str]:
         """
@@ -131,11 +141,12 @@ class SvgUtil:
         for k, v in self.neighbours.items():
             for n in v:
                 if (n, k) not in self.connections and (k, n) not in self.connections:
-                    coord_k = self.get_electrode_center(k)
-                    coord_n = self.get_electrode_center(n)
+                    coord_k = self.electrode_centers[k]
+                    coord_n = self.electrode_centers[n]
 
                     # Store electrode pair (sorted for uniqueness) and their coordinates
                     self.connections[(k, n)] = (coord_k, coord_n)
+                    self.connections[(n, k)] = (coord_n, coord_k) # Because of the arrow connections are not reverse-equivalent, so we need a connection for either direction
 
     @staticmethod
     def set_fill_black(obj: ET.Element) -> None:
@@ -148,20 +159,6 @@ class SvgUtil:
                 element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
-
-    def svg_to_points(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
-        """
-        Converts the svg file to points
-        """
-
-        paths = []
-        for path in obj:
-            points = [(path.attrib["x1"], path.attrib["y1"]),
-                      (path.attrib["x2"], path.attrib["y2"])]
-
-            paths.append(np.array(points).reshape((-1, 1, 2)).astype(float))
-
-        return paths
 
     def svg_to_paths(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
         """

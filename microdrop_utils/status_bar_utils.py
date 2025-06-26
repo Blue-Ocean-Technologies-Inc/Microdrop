@@ -1,15 +1,14 @@
 from pathlib import Path
 
 from pyface.api import GUI
-from PySide6.QtGui import QFontDatabase
 
-def set_status_bar_message(text: str, window=None, timeout=3000):
+def get_status_bar(window=None):
     if window is not None:
         if hasattr(window, "control"):
             window = window.control
         if hasattr(window, "_statusbar"):
-            window._statusbar.showMessage(text, timeout=timeout)
-        return 
+            return window._statusbar
+        return None
     
     try:
         app = getattr(GUI, "application", None)
@@ -18,14 +17,16 @@ def set_status_bar_message(text: str, window=None, timeout=3000):
             if hasattr(window, "control"):
                 window = window.control
             if hasattr(window, "_statusbar"):
-                window._statusbar.showMessage(text, timeout=timeout)
+                return window._statusbar
     except Exception:
-        pass     
- 
-def load_font_family(font_path):
-    if Path(font_path).exists():
-        id_ = QFontDatabase.addApplicationFont(str(font_path))
-        families = QFontDatabase.applicationFontFamilies(id_)
-        if families:            
-            return families[0]
-    return None
+        return None
+
+def set_status_bar_message(text: str, window=None, timeout=3000):
+    statusbar = get_status_bar(window)
+    if statusbar:
+        statusbar.showMessage(text, timeout=timeout)
+
+def clear_status_bar_message(window=None):
+    statusbar = get_status_bar(window)
+    if statusbar:
+        statusbar.clearMessage()

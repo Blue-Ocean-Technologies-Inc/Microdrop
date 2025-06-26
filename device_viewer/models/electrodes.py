@@ -4,9 +4,10 @@ from collections import defaultdict
 # local
 from ..utils.dmf_utils import SvgUtil
 from microdrop_utils._logger import get_logger
+from ..models.route import RouteLayerManager
 
 # enthought
-from traits.api import HasTraits, Int, Bool, Array, Float, Any, Dict, Str, Instance, Property, File, cached_property, List, observe
+from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,9 @@ class Electrode(HasTraits):
 
     #: Channel number
     channel = Int()
+
+    #: Electrode id
+    id = String()
 
     #: NDArray path to electrode
     path = Array(dtype=Float, shape=(None, 2))
@@ -58,6 +62,7 @@ class Electrodes(HasTraits):
     electrode_states = Property(List(Bool), observe='_electrodes:items:state')
 
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
+    # Note that channel-electride_id is one-to-many! So there is meaningful difference in acting on one or the other
     channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='_electrodes')
 
     #: Map of the unique channels and their states, True means actuated.
@@ -107,7 +112,7 @@ class Electrodes(HasTraits):
     def _svg_model_changed(self, new_model: SvgUtil):
         logger.debug(f"Setting new electrode models based on new svg model {new_model}")
         for k, v in new_model.electrodes.items():
-            self.electrodes[k] = Electrode(channel=v['channel'], path=v['path'])
+            self.electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
 
@@ -121,3 +126,7 @@ class Electrodes(HasTraits):
 
         self.svg_model = SvgUtil(svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
+    
+    def reset_states(self):
+        for electrode_id, electrode in self.electrodes.items():
+            electrode.state = False

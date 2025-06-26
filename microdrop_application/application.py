@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QFont
 
-from microdrop_utils.status_bar_utils import load_font_family
+from microdrop_utils.font_helpers import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
@@ -37,6 +37,8 @@ logger = get_logger(__name__, level="CRITICAL")
 MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
 ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
 
+MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
+ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
 
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""

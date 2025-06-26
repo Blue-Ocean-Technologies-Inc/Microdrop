@@ -1,8 +1,8 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtWidgets import QGraphicsScene
 
 from .electrode_view_helpers import find_path_item
-from .electrodes_view_base import ElectrodeView
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, level='DEBUG')
@@ -16,9 +16,10 @@ class ElectrodeScene(QGraphicsScene):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.electrode_pressed = None
-        self.electrode_channels_visited = []
-        self.electrode_ids_visited = []
+        self.left_mouse_pressed = False
+        self.right_mouse_pressed = False
+        self.is_drag = False
+        self.last_electrode_id_visited = None
         self._interaction_service = None
 
     @property
@@ -30,95 +31,96 @@ class ElectrodeScene(QGraphicsScene):
     def interaction_service(self, interaction_service):
         self._interaction_service = interaction_service
 
+    def get_item_under_mouse(self, coordinates: QPointF, object_type):
+        '''
+        Searches for an object with type object_type in the scene at coordinates. This will be able to find items at lower z indexes. 
+        '''
+        # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
+        # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
+        items = self.items(coordinates)
+        for item in items:
+            if isinstance(item, object_type):
+                return item
+        return None
+
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
-        if event.button() == Qt.LeftButton:
-            self.mouseLeftClickEvent(event)
+        button = event.button()
+        mode = self.interaction_service.get_mode()
 
-            super().mousePressEvent(event)
+        if button == Qt.LeftButton:
+            self.left_mouse_pressed = True
+            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    self.last_electrode_id_visited = electrode_view.id
+            elif mode == "auto":
+                if electrode_view:
+                    self.interaction_service.handle_autoroute_start(electrode_view.id)
+                else: # No electrode clicked, exit autoroute mode
+                    self.interaction_service.set_mode("edit")
 
-    def mouseLeftClickEvent(self, event):
-        # Get the item under the mouse click using the scene's coordinates.
-        item = self.itemAt(event.scenePos(), self.views()[0].transform())
+        elif button == Qt.RightButton:
+            self.right_mouse_pressed = True
 
-        # Try to get the parent electrode view if available
-        parent = getattr(item, "parentItem", lambda: None)()
-
-        # Determine the electrode view: either the parent or the item itself.
-        if isinstance(parent, ElectrodeView):
-            electrode_view = parent
-        elif isinstance(item, ElectrodeView):
-            electrode_view = item
-        else:
-            # Neither the item nor its parent is an ElectrodeView, so exit.
-            return
-
-        # Record the clicked electrode view and initialize route tracking.
-        self.electrode_pressed = electrode_view
-
-        # Track the visited electrode IDs and channels.
-        self.electrode_channels_visited = [electrode_view.electrode.channel]
-        self.electrode_ids_visited = [electrode_view.id]
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
-        if self.electrode_pressed:
-            # Identify the new item under the mouse cursor using the scene's transform.
-            new_item = self.itemAt(event.scenePos(), self.views()[0].transform())
 
-            # Safely attempt to get the parent of the new item if it exists.
-            parent = getattr(new_item, "parentItem", lambda: None)()
-
-            # Determine which item to use: prefer the parent if it's an ElectrodeView,
-            # otherwise use the new_item itself if it's an ElectrodeView.
-            if isinstance(parent, ElectrodeView):
-                electrode_view = parent
-            elif isinstance(new_item, ElectrodeView):
-                electrode_view = new_item
-            else:
-                electrode_view = None
-
+        if self.left_mouse_pressed:
             # Only proceed if we have a valid electrode view.
-            if electrode_view:
-                channel_ = electrode_view.electrode.channel
-
-                # Check if this channel differs from the last visited channel.
-                if self.electrode_channels_visited[-1] != channel_:
-                    # Append new channel and electrode ID to their respective lists.
-                    self.electrode_channels_visited.append(channel_)
-                    self.electrode_ids_visited.append(electrode_view.id)
-
-                    # Determine the key for path lookup based on the last two visited electrodes.
-                    src_key = self.electrode_ids_visited[-2]
-                    dst_key = self.electrode_ids_visited[-1]
-                    key = (src_key, dst_key)
-                    
-                    # Find the corresponding path item and update its visual representation.
-                    found_item = find_path_item(self, key)
-                    if found_item is not None:
-                        found_item.update_color()
-                        logger.debug(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
-
-                # Update the electrode pressed to the current electrode view.
-                self.electrode_pressed = electrode_view
+            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+            mode = self.interaction_service.get_mode()
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
+                        self.last_electrode_id_visited = electrode_view.id
+                    else:
+                        found_connection_item = find_path_item(self, (self.last_electrode_id_visited, electrode_view.id))
+                        if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
+                            self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id)
+                            self.last_electrode_id_visited = electrode_view.id # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
+                            self.is_drag = True # Since more than one electrode is left clicked, its a drag, not a single electrode click
+                        
+            elif mode == "auto":
+                if electrode_view:
+                    self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
+                        
+        if self.right_mouse_pressed:
+            connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+            endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+            if connection_item:
+                (from_id, to_id) = connection_item.key
+                self.interaction_service.handle_route_erase(from_id, to_id)
+            elif endpoint_item:
+                self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         """Finalize the drag operation."""
+        button = event.button()
 
-        # If it's a click (not a drag) since only one electrode selected:
-        if len(self.electrode_channels_visited) == 1:
-            if self.interaction_service:
-                self.interaction_service.handle_electrode_click(self.electrode_ids_visited[0])
+        if button == Qt.LeftButton:
+            self.left_mouse_pressed = False
+            mode = self.interaction_service.get_mode()
+            if mode in ["edit", "draw", "edit-draw"]:
+                electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+                # If it's a click (not a drag) since only one electrode selected:
+                if not self.is_drag and electrode_view:
+                    self.interaction_service.handle_electrode_click(electrode_view.id)
+                
+                # Reset left-click related vars
+                self.is_drag = False
 
-        else:
-            logger.info(self.electrode_channels_visited)
-            # TODO: Implement the logic to handle the mouse release event. Add header to the path and indicate CW & CCW rotation for closed loops
-            
-
-        self.electrode_pressed = None
-        self.electrode_channels_visited = []
+                if mode == "edit-draw": # Go back to draw
+                    self.interaction_service.set_mode("draw")
+            elif mode == "auto":
+                self.interaction_service.handle_autoroute_end()
+        elif button == Qt.RightButton:
+            self.right_mouse_pressed = False
+        
         super().mouseReleaseEvent(event)
