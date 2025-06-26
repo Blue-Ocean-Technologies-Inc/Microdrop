@@ -55,7 +55,7 @@ class ModePicker(QWidget):
 
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
-        self.button_draw.setChecked(self.route_model.mode == "draw")
+        self.button_draw.setChecked(self.route_model.mode in ("draw", "edit-draw"))
         self.button_edit.setChecked(self.route_model.mode == "edit")
         self.button_autoroute.setChecked(self.route_model.mode == "auto")
         self.mode_label.setText(f"Mode: {self.route_model.mode_name}")
