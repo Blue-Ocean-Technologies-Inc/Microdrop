@@ -4,7 +4,7 @@ from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
-from .default_settings import default_colors
+from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED
 from microdrop_utils._logger import get_logger
 from device_viewer.models.route import RouteLayer, RouteLayerManager
 
@@ -108,12 +108,12 @@ class ElectrodeLayer():
             color = QColor(route_layer.color)
             z = i # Make sure each route is it own layer. Prevents weird overlap patterns
             if route_layer.is_selected:
-                color = Qt.yellow
+                color = QColor(ROUTE_SELECTED)
             elif route_layer.route.is_loop():
                 if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
-                    color = Qt.red
+                    color = QColor(ROUTE_CCW_LOOP)
                 else:
-                    color = QColor("orange")
+                    color = QColor(ROUTE_CW_LOOP)
             if route_layer.visible:
                 for endpoint_id in route_layer.route.get_endpoints():
                     endpoint_map[endpoint_id] = (color, z)

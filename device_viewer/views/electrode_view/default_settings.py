@@ -1,3 +1,17 @@
-default_colors = {True: '#8d99ae', False: '#0a2463', 'no-channel': '#fc8eac',
-                  'droplet': '#06d6a0', 'line': '#3e92cc', 'connection': '#ffffff'}
+from microdrop_style.colors import PRIMARY_SHADE, SECONDARY_SHADE, WHITE, PRIMARY_COLOR
+
+ELECTRODE_ON =  SECONDARY_SHADE[600]
+ELECTRODE_OFF = SECONDARY_SHADE[900]
+ELECTRODE_NO_CHANNEL = PRIMARY_SHADE[500]
+ELECTRODE_LINE = SECONDARY_SHADE[400]
+ELECTRODE_TEXT_COLOR = WHITE
+
+CONNECTION_LINE_OFF = WHITE
+CONNECTION_LINE_ON_DEFAULT = PRIMARY_COLOR
+
+ROUTE_SELECTED = "yellow"
+ROUTE_CW_LOOP = "red"
+ROUTE_CCW_LOOP = "orange"
+ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], PRIMARY_SHADE[600])
+
 default_alphas = {'line': 1.0, 'fill': 1.0, 'text': 1.0}

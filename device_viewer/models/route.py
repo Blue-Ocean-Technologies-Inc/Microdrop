@@ -2,7 +2,7 @@ from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, S
 import random
 from queue import Queue
 from collections import Counter
-from microdrop_style.colors import PRIMARY_SHADE
+from ..views.electrode_view.default_settings import ROUTE_COLOR_POOL
 
 # Abstract pathing object class
 class Route(HasTraits):
@@ -279,9 +279,8 @@ class RouteLayerManager(HasTraits):
     
     def get_available_color(self):
         color_counts = {}
-        shades = [300, 800, 400, 700, 500, 600] 
-        for shade in shades:
-            color = PRIMARY_SHADE[shade]
+        color_pool = ROUTE_COLOR_POOL
+        for color in color_pool:
             color_counts[color] = 0
         for layer in self.layers:
             if layer.color in color_counts.keys():

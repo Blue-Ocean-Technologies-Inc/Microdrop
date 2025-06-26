@@ -1,14 +1,11 @@
 import numpy as np
-from PySide6.QtGui import QColor, QPainterPath, QPen
-from pyface.qt.QtCore import Qt
-
+from PySide6.QtWidgets import QGraphicsScene
 from .electrodes_view_base import ElectrodeConnectionItem
-from .default_settings import default_colors
 from device_viewer.models.route import Route
 from shapely.geometry import LinearRing
 
 
-def find_path_item(scene, connected_electrodes_keys):
+def find_path_item(scene: QGraphicsScene, connected_electrodes_keys):
     """Find a QGraphicsPathItem with the exact path sequence"""
     for item in scene.items():
         if isinstance(item, ElectrodeConnectionItem):
