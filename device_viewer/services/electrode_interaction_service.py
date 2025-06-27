@@ -48,15 +48,6 @@ class ElectrodeInteractionControllerService(HasTraits):
             # update electrode model for electrode clicked and all electrodes with same channel affected by this click.
             _electrode.state = not _electrode.state
 
-        updated_channels_states_map = self.electrodes_model.channels_states_map
-
-        logger.info(f"New electrode channels states map: {updated_channels_states_map}")
-        logger.info(f"Number of electrodes actuated now: {sum(self.electrodes_model.electrode_states)}")
-
-        # publish event to all interested. Mainly to backend actors who need to know user has requested the electrode
-        # to be actuated / unactuated.
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(updated_channels_states_map))
-
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
         if self.route_layer_manager.mode in ("edit", "edit-draw", "draw"):
@@ -116,7 +107,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("route_layer_manager.layers.items.visible")
     @observe("route_layer_manager.selected_layer")
     @observe("route_layer_manager.layers.items.route.route.items")
-    @observe("route_layer_manager.layers.items.*")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)

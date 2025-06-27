@@ -1,12 +1,12 @@
 # enthought imports
 import dramatiq
-from traits.api import Instance
+from traits.api import Instance, observe
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QTimer
 from pyface.tasks.api import TraitsDockPane
 
 # local imports
@@ -15,6 +15,7 @@ from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
+from ..utils.message_utils import gui_models_to_message_model
 from microdrop_utils._logger import get_logger
 from device_viewer.models.electrodes import Electrodes
 from device_viewer.models.route import RouteLayerManager
@@ -61,6 +62,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
+        self.publish_model_message() # First message when all models are initialised
 
     def _electrodes_model_default(self):
         electrodes = Electrodes()
@@ -82,8 +84,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
-        if message == "True" and self.electrodes_model:
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
+        if message == "True" and self.electrodes_model and self.route_layer_manager:
+            self.publish_model_message()
 
     # ------- Device View class methods -------------------------
     def set_electrodes_model(self, new_electrodes_model):
@@ -107,7 +109,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scene.interaction_service = interaction_service
 
         logger.debug(f"Setting up handlers for new layer for new electrodes model {new_electrodes_model}")
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.electrodes_model.channels_states_map))
 
 
     def remove_current_layer(self):
@@ -119,10 +120,26 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scene.clear()
             self.scene.update()
 
+    @observe("electrodes_model._electrodes.items.state") # When an electrode changes state
+    @observe("route_layer_manager.layers.items.route.route.items") # When a route is modified
+    @observe("electrodes_model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    def model_change_handler(self, event=None):
+        self.debounce_timer.start(1000) # Start timeout for sending message
+
+    def publish_model_message(self):
+        message_model = gui_models_to_message_model(self.electrodes_model, self.route_layer_manager)
+        message = message_model.serialize()
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=message) # TODO: Change topic to UI topic protocol_grid expects
+
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self.set_electrodes_model(self.electrodes_model)
+
+        # Create debouce timer
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self.publish_model_message)
 
         # Layout init
         container = QWidget(parent)
