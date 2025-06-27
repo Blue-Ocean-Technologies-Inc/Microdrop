@@ -69,10 +69,11 @@ class ElectrodeScene(QGraphicsScene):
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
 
+        mode = self.interaction_service.get_mode()
+
         if self.left_mouse_pressed:
             # Only proceed if we have a valid electrode view.
             electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-            mode = self.interaction_service.get_mode()
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
@@ -89,13 +90,14 @@ class ElectrodeScene(QGraphicsScene):
                     self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
                         
         if self.right_mouse_pressed:
-            connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
-            endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
-            if connection_item:
-                (from_id, to_id) = connection_item.key
-                self.interaction_service.handle_route_erase(from_id, to_id)
-            elif endpoint_item:
-                self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
+            if mode in ("edit", "draw", "edit-draw"):
+                connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+                endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+                if connection_item:
+                    (from_id, to_id) = connection_item.key
+                    self.interaction_service.handle_route_erase(from_id, to_id)
+                elif endpoint_item:
+                    self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
