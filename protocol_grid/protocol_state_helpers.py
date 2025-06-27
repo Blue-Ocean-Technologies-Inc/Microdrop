@@ -178,18 +178,4 @@ def clamp_trail_overlay(parent):
                     overlay_item.setText(str(max_overlay))
             except Exception:
                 pass
-
-
-# def calculate_step_dev_fields(protocol_state, step_id, repetitions, duration, repeat_duration):
-#     """
-#     Calculate max path length and run time for a step
-#     """
-#     device_state = protocol_state.get_device_state(step_id)
-#     max_path_length = device_state.longest_path_length()
-#     run_time = device_state.calculated_duration(duration, repetitions, repeat_duration)
-#     return max_path_length, run_time
-
-# def update_device_state_from_viewer(protocol_state, step_id, activated_electrodes_json, paths):
-#     device_state = protocol_state.get_device_state(step_id)
-#     device_state.update_from_device_viewer(activated_electrodes_json, paths)
     

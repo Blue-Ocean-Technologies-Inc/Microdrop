@@ -148,9 +148,9 @@ class PGCWidget(QWidget):
                     dur_col = protocol_grid_fields.index("Duration")
                     repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
                     try:
-                        repetitions = float(parent.child(row, rep_col).text())
+                        repetitions = int(parent.child(row, rep_col).text())
                     except (ValueError, AttributeError):
-                        repetitions = 1.0
+                        repetitions = 1
                     try:
                         duration = float(parent.child(row, dur_col).text())
                     except (ValueError, AttributeError):
@@ -209,22 +209,22 @@ class PGCWidget(QWidget):
                 dur_col = protocol_grid_fields.index("Duration")
                 repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
                 try:
-                    repetitions = float(parent.child(row, rep_col).text())
+                    repetitions = int(parent.child(row, rep_col).text())
                 except Exception:
-                    repetitions = 0
+                    repetitions = 1
                 try:
                     duration = float(parent.child(row, dur_col).text())
                 except Exception:
-                    duration = 0
+                    duration = 1.0
                 min_repeat_duration = repetitions * duration
                 repeat_duration_item = parent.child(row, repeat_dur_col)
                 try:
                     repeat_duration = float(repeat_duration_item.text())
                 except Exception:
-                    repeat_duration = 0
+                    repeat_duration = 1.0
                 if repeat_duration < min_repeat_duration:
                     self._programmatic_change = True
-                    repeat_duration_item.setText(f"{min_repeat_duration:.2f}")
+                    repeat_duration_item.setText(f"{min_repeat_duration:.1f}")
                     self._programmatic_change = False
             self.update_step_dev_fields()
             self.update_all_group_aggregations()
@@ -777,17 +777,17 @@ class PGCWidget(QWidget):
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
         if file_name:
-            try: 
-                with open(file_name, "r") as f:
-                    data = json.load(f)
-                self.state.from_json(data)
-                self.state.undo_stack.clear()
-                self.state.redo_stack.clear()
-                self.load_from_state()
+            # try: 
+            with open(file_name, "r") as f:
+                data = json.load(f)
+            self.state.from_json(data)
+            self.state.undo_stack.clear()
+            self.state.redo_stack.clear()
+            self.load_from_state()
 
-            except Exception as e:
-                print(f"Error importing protocol: {e}")
-                logger.error(f"Error importing protocol: {e}")
+            # except Exception as e:
+                # print(f"Error importing protocol: {e}")
+                # logger.error(f"Error importing protocol: {e}")
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
