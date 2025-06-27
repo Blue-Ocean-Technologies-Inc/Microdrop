@@ -154,7 +154,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         layer_view = RouteLayerView
         self.layer_ui = layer_model.edit_traits(view=layer_view)
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
-        self.layer_ui.control.setFixedWidth(300) # Set widget to fixed width
+        self.layer_ui.control.setFixedWidth(250) # Set widget to fixed width
         self.layer_ui.control.setParent(container)
 
         # mode_picker_view code

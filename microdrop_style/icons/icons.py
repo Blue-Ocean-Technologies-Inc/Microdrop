@@ -10,3 +10,5 @@ ICON_RESET_WRENCH    = "\uf56c"  # reset with a wrench
 ICON_DRAW            = "\ue746"  # draw
 ICON_EDIT            = "\ue3c9"  # edit
 ICON_AUTOMATION      = "\uf421"  # automation
+ICON_VISIBILITY      = "\ue8f4"  # eye open
+ICON_VISIBILITY_OFF  = "\ue8f5"  # eye closed
