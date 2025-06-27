@@ -203,6 +203,8 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
             item.setData(row_type, ROW_TYPE_ROLE)
         if field == "ID":
             item.setEditable(False)
+        elif field in ("Max. Path Length", "Run Time"): 
+            item.setEditable(False)
         elif row_type == GROUP_TYPE and field in group_agg_fields:
             agg_val = group_agg_values.get(field)
             if agg_val is not None:
