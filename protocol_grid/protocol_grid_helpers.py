@@ -40,7 +40,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                 return editor
             else:
                 return None
-        if field in ("Label", "Message"):
+        if field in ("Message"):
             return QLineEdit(parent)
         elif field in ("Repetitions", "Trail Length"):
             editor = QSpinBox(parent)
@@ -67,10 +67,9 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setSingleStep(0.5)
             return editor
         elif field in ("Frequency"):
-            editor = QDoubleSpinBox(parent)
+            editor = QSpinBox(parent)
             editor.setMinimum(100.0)
             editor.setMaximum(20000.0)
-            editor.setDecimals(1)
             editor.setSingleStep(100)
             return editor
         elif field in ("Volume Threshold"):

@@ -15,7 +15,7 @@ ROW_TYPE_ROLE = Qt.UserRole + 1
 protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
     "Duration", "Voltage", "Frequency", 
-    "Label", "Message", "Repeat Duration",
+    "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay", "Video", 
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
@@ -39,7 +39,6 @@ step_defaults = {
     "Duration": "1.0",
     "Voltage": "100.0",
     "Frequency": "10000",
-    "Label": "",
     "Message": "",
     "Repeat Duration": "0.0",
     "Trail Length": "1",
@@ -58,7 +57,6 @@ group_defaults = {
     "Duration": "1.0",
     "Voltage": "",
     "Frequency": "",
-    "Label": "",
     "Message": "",
     "Repeat Duration": "",
     "Trail Length": "",
