@@ -177,7 +177,6 @@ class PGCWidget(QWidget):
 
     # ---------- State <-> Model sync ----------
     def load_from_state(self):
-        print("LOAD_FROM_STATE: sequence length =", len(self.state.sequence))
         self._programmatic_change = True
         col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
@@ -196,10 +195,9 @@ class PGCWidget(QWidget):
         self.set_column_state(col_vis, col_widths)
 
     def on_item_changed(self, item):
-        print("ON_ITEM_CHANGED CALLED")
         if self._programmatic_change:
             return
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         col = item.column()
         field = protocol_grid_fields[col]
         row = item.row()
@@ -480,12 +478,16 @@ class PGCWidget(QWidget):
     # ---------- ----------------------------------- ----------
 
     def undo_last(self):
+        self._programmatic_change = True
         self.state.undo()
         self.load_from_state()
+        self._programmatic_change = False
 
     def redo_last(self):
+        self._programmatic_change = True
         self.state.redo()
         self.load_from_state()
+        self._programmatic_change = False
 
     def get_selected_rows(self, for_deletion=False):
         return get_selected_rows(self.tree, self.model, for_deletion)
@@ -541,9 +543,8 @@ class PGCWidget(QWidget):
         self.delete_selected()
 
     def paste_selected(self, above=True):
-        print("PASTE_SELECTED called")
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         if not selected_paths:
             parent = self.model.invisibleRootItem()
@@ -562,7 +563,6 @@ class PGCWidget(QWidget):
             parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
             parent_elements = self._find_elements_by_path(parent_path)
         if not self._copied_rows or not self._copied_protocol_objects:
-            print("PASTE_SELECTED: nothing to paste")
             self._programmatic_change = False
             return
         for r, items in enumerate(self._copied_rows):
@@ -570,7 +570,6 @@ class PGCWidget(QWidget):
             proto_obj = copy.deepcopy(self._copied_protocol_objects[r])
             if proto_obj is not None:
                 parent_elements.insert(row + r, proto_obj)
-        print("PASTE_SELECTED: sequence length after paste =", len(self.state.sequence))
         reassign_ids(self.model, self.state)
         self.tree.expandAll()
         if target_path:
@@ -582,7 +581,7 @@ class PGCWidget(QWidget):
     
     def paste_into(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         if not selected_paths or not self._copied_rows or not self._copied_protocol_objects:
             self._programmatic_change = False
@@ -612,7 +611,7 @@ class PGCWidget(QWidget):
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         row_refs = self.get_selected_rows(for_deletion=True)
         row_refs = self.filter_top_level_row_refs(row_refs)
@@ -631,7 +630,7 @@ class PGCWidget(QWidget):
 
     def insert_step(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         top_path = self.get_extreme_path(selected_paths, "min")
         if top_path is None:
@@ -660,7 +659,7 @@ class PGCWidget(QWidget):
 
     def insert_group(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         top_path = self.get_extreme_path(selected_paths, "min")
         if top_path is None:
@@ -696,7 +695,7 @@ class PGCWidget(QWidget):
         sibling in the uppermost level.
         """
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
@@ -722,10 +721,9 @@ class PGCWidget(QWidget):
         self._programmatic_change = False
 
     def add_step(self, into=False):
-        print("ADD_STEP called")
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
-        self._programmatic_change = True  # <--- Set before any model changes
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
         parent_elements = self.state.sequence
@@ -742,7 +740,6 @@ class PGCWidget(QWidget):
         parent.appendRow(step_items)
         new_step = ProtocolStep()
         parent_elements.append(new_step)
-        print("ADD_STEP: sequence length after add =", len(self.state.sequence))
         reassign_ids(self.model, self.state)
         self.tree.expandAll()
         self.restore_row_selection_by_paths(selected_paths)
@@ -818,7 +815,7 @@ class PGCWidget(QWidget):
         imported_state = ProtocolState()
         imported_state.from_json(data)
         imported_sequence = imported_state.sequence
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
         if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE: # if group is selected, import as its children
             parent = target_item

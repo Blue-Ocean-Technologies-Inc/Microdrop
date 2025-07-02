@@ -70,38 +70,26 @@ class ProtocolState:
     def from_json(self, data: dict):
         self.from_dict(data)
 
-    def snapshot_for_undo(self):
-        print("SNAPSHOT: sequence length =", len(self.sequence))
+    def snapshot_for_undo(self, programmatic=False):
         snap = copy.deepcopy((self.sequence, list(self.fields)))
-        print("SNAPSHOT: id(self.sequence) =", id(self.sequence), "id(snap[0]) =", id(snap[0]))
-        if self.sequence:
-            print("SNAPSHOT: id(self.sequence[0]) =", id(self.sequence[0]), "id(snap[0][0]) =", id(snap[0][0]))
         self.undo_stack.append(snap)
-        print("UNDO STACK SIZE:", len(self.undo_stack))
         if len(self.undo_stack) > 20:
             self.undo_stack = self.undo_stack[-20:]
-        self.redo_stack.clear()        
+        if not programmatic:
+            self.redo_stack.clear()        
 
     def undo(self):
-        print("UNDO called. Undo stack size:", len(self.undo_stack))
         if not self.undo_stack:
-            print("UNDO: Nothing to undo.")
             return
         current = copy.deepcopy((self.sequence, list(self.fields)))
         self.redo_stack.append(current)
-        print("Before undo: id(self.sequence) =", id(self.sequence))
         last = self.undo_stack.pop()
         self.sequence, self.fields = copy.deepcopy(last)
-        print("After undo: id(self.sequence) =", id(self.sequence))
-        print("UNDO: sequence length after undo =", len(self.sequence))
 
     def redo(self):
-        print("REDO called. Redo stack size:", len(self.redo_stack))
         if not self.redo_stack:
-            print("REDO: Nothing to redo.")
             return
         current = copy.deepcopy((self.sequence, list(self.fields)))
         self.undo_stack.append(current)
         next_ = self.redo_stack.pop()
         self.sequence, self.fields = copy.deepcopy(next_)
-        print("REDO: sequence length after redo =", len(self.sequence))
