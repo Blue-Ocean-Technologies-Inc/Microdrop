@@ -5,7 +5,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.electrodes import Electrodes
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from device_viewer.views.electrode_view.default_settings import AUTOROUTE_COLOR
 
 logger = get_logger(__name__)
 
@@ -88,14 +88,17 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_autoroute_start(self, from_id):
         routes = [layer.route for layer in self.route_layer_manager.layers]
         self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.electrodes_model.svg_model.neighbours)
-        self.route_layer_manager.add_layer(Route(channel_map=self.electrodes_model.channels_electrode_ids_map))
-        self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select just created layer
+        self.route_layer_manager.autoroute_layer = RouteLayer(route=Route(channel_map=self.electrodes_model.channels_electrode_ids_map), color=AUTOROUTE_COLOR)
+        self.saved_mode = self.get_mode()
 
     def handle_autoroute(self, to_id):
-        self.route_layer_manager.layers[-1].route.route = self.autoroute_paths.get(to_id, []).copy()
+        self.route_layer_manager.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy()
 
     def handle_autoroute_end(self):
         self.autoroute_paths = {}
+        self.route_layer_manager.add_layer(self.route_layer_manager.autoroute_layer.route) # Keep the route, generate a normal color
+        self.route_layer_manager.autoroute_layer = None
+        self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select just created layer
         self.route_layer_manager.mode = 'edit'
 
     def get_mode(self):
@@ -108,6 +111,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("route_layer_manager.selected_layer")
     @observe("route_layer_manager.layers.items.route.route.items")
     @observe("route_layer_manager.layers.items")
+    @observe("route_layer_manager.autoroute_layer.route.route.items")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)

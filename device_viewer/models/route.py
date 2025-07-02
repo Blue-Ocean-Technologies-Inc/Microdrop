@@ -253,6 +253,8 @@ class RouteLayerManager(HasTraits):
 
     layer_to_merge = Instance(RouteLayer)
 
+    autoroute_layer = Instance(RouteLayer)
+
     undo_manager = Instance(UndoManager)
 
     # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately

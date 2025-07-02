@@ -102,6 +102,9 @@ class ElectrodeLayer():
 
         if route_layer_manager.selected_layer:
             layers = layers + [route_layer_manager.selected_layer] # Paint the selected layer again last so its always on top
+
+        if route_layer_manager.autoroute_layer:
+            layers = layers + [route_layer_manager.autoroute_layer]
         
         for i in range(len(layers)):
             route_layer = layers[i]

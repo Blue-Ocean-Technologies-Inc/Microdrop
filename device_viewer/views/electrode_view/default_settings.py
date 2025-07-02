@@ -13,5 +13,6 @@ ROUTE_SELECTED = "yellow"
 ROUTE_CW_LOOP = "red"
 ROUTE_CCW_LOOP = "orange"
 ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], PRIMARY_SHADE[600])
+AUTOROUTE_COLOR = "pink"
 
 default_alphas = {'line': 1.0, 'fill': 1.0, 'text': 1.0}
