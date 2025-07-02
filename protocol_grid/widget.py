@@ -789,6 +789,62 @@ class PGCWidget(QWidget):
                 # print(f"Error importing protocol: {e}")
                 # logger.error(f"Error importing protocol: {e}")
 
+    def import_into_json(self):
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+        target_path = selected_paths[0]
+        target_item = self.get_item_by_path(target_path)
+        if target_item is None:
+            return
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
+        if not file_name:
+            return
+        try:
+            with open(file_name, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Error reading JSON: {e}")
+            return
+        imported_state = ProtocolState()
+        imported_state.from_json(data)
+        imported_sequence = imported_state.sequence
+        self.state.snapshot_for_undo()
+        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE: # if group is selected, import as its children
+            parent = target_item
+            parent_elements = self._find_elements_by_path(target_path)
+            row = parent.rowCount()
+            for obj in imported_sequence:
+                if isinstance(obj, ProtocolGroup):
+                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
+                    parent.appendRow(group_items)
+                    parent_elements.append(obj)
+                    # add children using recursion
+                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
+                elif isinstance(obj, ProtocolStep):
+                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
+                    parent.appendRow(step_items)
+                    parent_elements.append(obj)
+        elif target_item.data(ROW_TYPE_ROLE) == STEP_TYPE: # else import below it 
+            parent = target_item.parent() or self.model.invisibleRootItem()
+            parent_path = target_path[:-1]
+            parent_elements = self._find_elements_by_path(parent_path)
+            row = target_item.row() + 1
+            for i, obj in enumerate(imported_sequence):
+                if isinstance(obj, ProtocolGroup):
+                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
+                    parent.insertRow(row + i, group_items)
+                    parent_elements.insert(row + i, obj)
+                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
+                elif isinstance(obj, ProtocolStep):
+                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
+                    parent.insertRow(row + i, step_items)
+                    parent_elements.insert(row + i, obj)
+        reassign_ids(self.model, self.state)
+        self.tree.expandAll()
+        self.update_all_group_aggregations()
+        self.update_step_dev_fields()
+
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys
 

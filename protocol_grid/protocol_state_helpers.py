@@ -66,10 +66,12 @@ def state_to_model(state, model):
                 step_data = {**step_defaults, **obj.parameters, "Description": obj.name}
                 step_items = make_row(step_defaults, overrides=step_data, row_type=STEP_TYPE)
                 child_items.append(step_items)
-
-    model.clear()
-    model.setHorizontalHeaderLabels(state.fields)
-    add_items(model.invisibleRootItem(), state.sequence)
+    if hasattr(model, 'clear') and hasattr(model, 'setHorizontalHeaderLabels'):
+        model.clear()
+        model.setHorizontalHeaderLabels(state.fields)
+        add_items(model.invisibleRootItem(), state.sequence)
+    else:
+        add_items(model, state.sequence)
 
 def model_to_state(model, state):
 

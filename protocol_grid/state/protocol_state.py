@@ -43,8 +43,8 @@ class ProtocolGroup:
         return cls(parameters=data.get("parameters", {}), name=data.get("name", "Group"), elements=elements)
 
 class ProtocolState:
-    def __init__(self):
-        self.sequence = []
+    def __init__(self, sequence=None):
+        self.sequence = sequence if sequence is not None else []
         self.fields = list(protocol_grid_fields)
         self.undo_stack = []
         self.redo_stack = []
