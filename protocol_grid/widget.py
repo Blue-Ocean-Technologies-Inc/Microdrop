@@ -134,6 +134,8 @@ class PGCWidget(QWidget):
         self._copied_rows = None
         if not self.state.sequence:
             self.add_step(into=False)
+        else:
+            self.load_from_state()
 
     # ---------- For Testing ----------
     def assign_test_device_states(self):
