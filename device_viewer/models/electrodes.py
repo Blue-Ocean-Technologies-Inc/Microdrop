@@ -27,20 +27,7 @@ class Electrode(HasTraits):
     path = Array(dtype=Float, shape=(None, 2))
 
     #: State of the electrode (On or Off)
-    _state = Bool(False)
-
-    #: Property for state
-    state = Property(Bool, observe='_state')
-
-    # -------------- property trait handlers ----------------------
-
-    def _get_state(self) -> Bool:
-        return self._state
-
-    def _set_state(self, state: Bool):
-        if state != self._state and self.channel is not None:
-            self._state = state
-            logger.debug("State changed to %s for %s", self.state, self.channel)
+    state = Bool(False)
 
 
 class Electrodes(HasTraits):

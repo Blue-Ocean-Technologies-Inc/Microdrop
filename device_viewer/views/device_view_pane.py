@@ -1,6 +1,7 @@
 # enthought imports
 import dramatiq
 from traits.api import Instance, observe, Any, Str, provides
+from traits.observation.events import ListChangeEvent, TraitChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
@@ -28,7 +29,7 @@ from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
-from device_viewer.utils.device_viewer_state_command import DeviceViewerStateCommand
+from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand
 import json
 
 logger = get_logger(__name__)
@@ -132,12 +133,18 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("electrodes_model._electrodes.items.state") # When an electrode changes state
     @observe("route_layer_manager.layers.items.route.route.items") # When a route is modified
+    @observe("route_layer_manager.layers.items")
     @observe("electrodes_model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
     def model_change_handler(self, event=None):
         self.debounce_timer.start(1000) # Start timeout for sending message
 
         if not self._undoing:
-            self.undo_manager.active_stack.push(DeviceViewerStateCommand(data=self))
+            command = None
+            if isinstance(event, TraitChangeEvent):
+                command = TraitChangeCommand(event=event)
+            elif isinstance(event, ListChangeEvent):
+                command = ListChangeCommand(event=event)
+            self.undo_manager.active_stack.push(command)
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack

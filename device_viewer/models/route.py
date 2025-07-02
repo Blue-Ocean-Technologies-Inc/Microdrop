@@ -1,5 +1,5 @@
 from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Property, DelegatesTo
-import random
+from pyface.undo.api import UndoManager
 from queue import Queue
 from collections import Counter
 from ..views.electrode_view.default_settings import ROUTE_COLOR_POOL
@@ -253,6 +253,8 @@ class RouteLayerManager(HasTraits):
 
     layer_to_merge = Instance(RouteLayer)
 
+    undo_manager = Instance(UndoManager)
+
     # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
     # Edit: User can only extend selected segment
     # Edit-Draw: Same as edit except we switch to draw on mouserelease
@@ -288,25 +290,23 @@ class RouteLayerManager(HasTraits):
         return Counter(color_counts).most_common()[-1][0] # Return least common color
     
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
+        if len(new_routes) == 0:
+            self.delete_layer(old_route_layer)
+            return
+        
         index = self.layers.index(old_route_layer)
-        self.layers.pop(index) # Delete the current layer
 
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
-            if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
-                self.add_layer(new_routes[i], index, old_route_layer.color)
+            if i == 0: # Modify existing route for first case
+                old_route_layer.route.route = new_routes[i].route
             else:
                 self.add_layer(new_routes[i], index)
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
-        elif len(self.layers) == 0:
-            self.selected_layer = None
-            self.mode = 'draw' # Nothing to edit, so set to draw
-        else:
-            self.selected_layer = self.layers[-1] # Set it to the last layer
 
     def delete_layer(self, layer: RouteLayer):
-        self.replace_layer(layer, [])
+        self.layers.remove(layer)
 
     def add_layer(self, route: Route, index=None, color=None):
         if color == None:
@@ -338,8 +338,16 @@ class RouteLayerManager(HasTraits):
     # --------------------- Observers ------------------------------
     @observe('layers.items')
     def _layers_items_changed(self, event):
-        if self.selected_layer == None and hasattr(event, "new") and len(event.new) > 0: # If we have no routes and a route is added, select it
-            self.selected_layer = event.new[0]
+        if self.layer_to_merge != None and self.layer_to_merge not in self.layers: # Clean up merge reference
+            self.layer_to_merge = None
+            self.mode = "edit"
+        
+        if self.selected_layer not in self.layers: # Clean up selected reference
+            if len(self.layers) == 0:
+                self.selected_layer = None
+                self.mode = 'draw' # Nothing to edit, so set to draw
+            else:
+                self.selected_layer = self.layers[-1] # Set it to the last layer
     
     @observe('selected_layer')
     def _selected_layer_changed(self, event):
