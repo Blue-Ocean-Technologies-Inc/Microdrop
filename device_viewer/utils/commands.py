@@ -9,7 +9,7 @@ class TraitChangeCommand(AbstractCommand):
     event = Instance(TraitChangeEvent)
 
     def do(self):
-        print(f"{self.event} added to the stack!")
+        pass
 
     def undo(self):
         setattr(self.event.object, self.event.name, self.event.old)
@@ -21,7 +21,7 @@ class ListChangeCommand(AbstractCommand):
     event = Instance(ListChangeEvent)
 
     def do(self):
-        print(f"{self.event} added to the stack!")
+        pass
 
     def undo(self):
         for _ in self.event.added:

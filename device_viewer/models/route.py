@@ -298,7 +298,7 @@ class RouteLayerManager(HasTraits):
 
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
             if i == 0: # Modify existing route for first case
-                old_route_layer.route.route = new_routes[i].route
+                self.layers[index].route = new_routes[i]
             else:
                 self.add_layer(new_routes[i], index)
 
@@ -317,7 +317,7 @@ class RouteLayerManager(HasTraits):
             self.layers.insert(index, RouteLayer(route=route, color=color))
 
     def reset(self):
-        self.layers = []
+        self.layers.clear()
         self.selected_layer = None
         self.layer_to_merge = None
         self.mode = "draw"
