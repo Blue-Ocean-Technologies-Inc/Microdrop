@@ -41,6 +41,13 @@ class DeviceViewerMessageModel():
             return DeviceViewerMessageModel(obj["channels_activated"], obj["routes"], obj["id_to_channel"])
         except KeyError:
             raise ValueError("Provided string is not a valid Device Viewer message")
+        
+    def __repr__(self):
+        number_of_channels_activated = 0
+        for _, activated in self.channels_activated.items():
+            if activated:
+                number_of_channels_activated += 1
+        return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} number_of_channels_activated={number_of_channels_activated}>"
 
 if __name__ == "__main__":
     test = DeviceViewerMessageModel({1: True}, [(["a", "a"], "red")], {"a": 1})
