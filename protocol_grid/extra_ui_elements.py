@@ -45,6 +45,10 @@ class EditContextMenu(QMenu):
             action = QAction(name, self)
             action.triggered.connect(slot)
             self.addAction(action)
+        self.addSeparator()
+        action_import_into = QAction("Import Into", self)
+        action_import_into.triggered.connect(self.widget.import_into_json)
+        self.addAction(action_import_into)
 
     def popup_at(self, pos: QPoint):
         self.exec(self.widget.tree.viewport().mapToGlobal(pos))

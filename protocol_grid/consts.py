@@ -15,9 +15,10 @@ ROW_TYPE_ROLE = Qt.UserRole + 1
 protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
     "Duration", "Voltage", "Frequency", 
-    "Label", "Message", "Repeat Duration",
+    "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay", "Video", 
-    "Volume Threshold", "Magnet", "Magnet Height"
+    "Volume Threshold", "Magnet", "Magnet Height",
+    "Max. Path Length", "Run Time"
 ]
 fixed_fields = {"Description", "ID"}
 field_groupings = [
@@ -35,27 +36,27 @@ step_defaults = {
     "Description": "Step",
     "ID": "", 
     "Repetitions": "1",
-    "Duration": "1.00",
-    "Voltage": "100.00",
-    "Frequency": "10000.00",
-    "Label": "",
+    "Duration": "1.0",
+    "Voltage": "100.0",
+    "Frequency": "10000",
     "Message": "",
-    "Repeat Duration": "0",
+    "Repeat Duration": "0.0",
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Video": "1",
-    "Volume Threshold": "0.0",
+    "Volume Threshold": "0.00",
     "Magnet": "0",
     "Magnet Height": "0",    
+    "Max. Path Length": "0",
+    "Run Time": "0.0"
 }
 group_defaults = {
     "Description": "Group",
     "ID": "",
     "Repetitions": "1",
-    "Duration": "1.00",
+    "Duration": "1.0",
     "Voltage": "",
     "Frequency": "",
-    "Label": "",
     "Message": "",
     "Repeat Duration": "",
     "Trail Length": "",
@@ -63,5 +64,7 @@ group_defaults = {
     "Video": "",
     "Volume Threshold": "",
     "Magnet": "",
-    "Magnet Height": ""    
+    "Magnet Height": "",   
+    "Max. Path Length": "",
+    "Run Time": "" 
 }

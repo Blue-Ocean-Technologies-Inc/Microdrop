@@ -1,5 +1,6 @@
 import json
 import dramatiq
+import copy
 # import h5py
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
                                QPushButton, QHBoxLayout,QFileDialog,
@@ -17,19 +18,36 @@ from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_def
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, PGCItem, 
                                                  get_selected_rows, invert_row_selection)
 from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
-from protocol_grid.state.protocol_state import ProtocolState
-from protocol_grid.protocol_state_helpers import state_to_model, model_to_state, reassign_ids, clamp_trail_overlay
+from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
+from protocol_grid.state.device_state import DeviceState
+from protocol_grid.protocol_state_helpers import (state_to_model, model_to_state, reassign_ids, 
+                                                  clamp_trail_overlay, make_test_steps, flatten_steps, 
+                                                  calculate_step_dev_fields)
 
 logger = get_logger(__name__, level="DEBUG")
+
+def make_electrode_dict(active_ids, total=120):
+    return {str(i): (str(i) in active_ids) for i in range(total)}
+
+TEST_DEVICE_STATES = [
+    DeviceState(make_electrode_dict([]), []),
+    DeviceState(make_electrode_dict(["5", "10", "50"]), []),
+    DeviceState(make_electrode_dict([]), [["1", "2", "3", "4"]]),
+    DeviceState(make_electrode_dict([]), [["10", "11"], ["20", "21", "22", "23", "24"], ["30", "31", "32"]]),
+    DeviceState(make_electrode_dict(["2", "3", "4"]), [["5", "6", "7"], ["8", "9"]]),
+    DeviceState(make_electrode_dict(["1", "2"]), []),
+    DeviceState(make_electrode_dict([]), [[], []]),
+    DeviceState(make_electrode_dict([str(i) for i in range(120)]), []),
+]
 
 
 class PGCWidget(QWidget):
     def __init__(self, parent=None, state: ProtocolState=None):
         super().__init__(parent)
         self.state = state or ProtocolState()
-        if not self.state.fields:
-            self.state.fields = list(protocol_grid_fields)
-        self.state.add_observer(self.load_from_state)
+        # if not self.state.fields:
+        #     self.state.fields = list(protocol_grid_fields)
+        # self.state.add_observer(self.load_from_state)
 
         # create Model
         self.model = QStandardItemModel()
@@ -43,6 +61,8 @@ class PGCWidget(QWidget):
         
         self._programmatic_change = False
         self.model.itemChanged.connect(self.on_item_changed)
+
+        self._test_device_state_idx = 0
 
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
         QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
@@ -110,26 +130,74 @@ class PGCWidget(QWidget):
         if not self.state.sequence:
             self.add_step(into=False)
 
+        # self.state.sequence = make_test_steps()
+        # self.update_step_dev_fields()
+
+    # ---------- For Testing ----------
+    def update_step_dev_fields(self):
+        def update_steps_recursive(parent, elements):
+            for row in range(parent.rowCount()):
+                desc_item = parent.child(row, 0)
+                if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                    id_item = parent.child(row, protocol_grid_fields.index("ID"))
+                    step_id = id_item.text() or str(row)
+                    step = elements[row] if row < len(elements) else None
+                    if not isinstance(step, ProtocolStep):
+                        continue
+                    rep_col = protocol_grid_fields.index("Repetitions")
+                    dur_col = protocol_grid_fields.index("Duration")
+                    repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
+                    try:
+                        repetitions = int(parent.child(row, rep_col).text())
+                    except (ValueError, AttributeError):
+                        repetitions = 1
+                    try:
+                        duration = float(parent.child(row, dur_col).text())
+                    except (ValueError, AttributeError):
+                        duration = 1.0
+                    try:
+                        repeat_duration = float(parent.child(row, repeat_dur_col).text())
+                    except (ValueError, AttributeError):
+                        repeat_duration = 0.0
+                    max_path_length, run_time = calculate_step_dev_fields(
+                        step, repetitions, duration, repeat_duration
+                    )
+                    max_path_col = protocol_grid_fields.index("Max. Path Length")
+                    run_time_col = protocol_grid_fields.index("Run Time")
+                    self._programmatic_change = True
+                    parent.child(row, max_path_col).setText(str(max_path_length))
+                    parent.child(row, run_time_col).setText(f"{run_time:.2f}")
+                    self._programmatic_change = False
+                elif desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    group = elements[row] if row < len(elements) else None
+                    if isinstance(group, ProtocolGroup):
+                        update_steps_recursive(desc_item, group.elements)
+        root = self.model.invisibleRootItem()
+        update_steps_recursive(root, self.state.sequence)
+
     # ---------- State <-> Model sync ----------
     def load_from_state(self):
+        self._programmatic_change = True
         col_vis, col_widths = self.get_column_state()
         state_to_model(self.state, self.model)
         clamp_trail_overlay(self.model)
-        reassign_ids(self.model)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
         self.set_column_state(col_vis, col_widths)
         self.update_all_group_aggregations()
+        self.update_step_dev_fields()
+        self._programmatic_change = False
 
     def save_to_state(self):
         col_vis, col_widths = self.get_column_state()
         model_to_state(self.model, self.state)
-        reassign_ids(self.model)
+        reassign_ids(self.model, self.state)
         self.set_column_state(col_vis, col_widths)
 
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
         col = item.column()
         field = protocol_grid_fields[col]
         row = item.row()
@@ -142,23 +210,24 @@ class PGCWidget(QWidget):
                 dur_col = protocol_grid_fields.index("Duration")
                 repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
                 try:
-                    repetitions = float(parent.child(row, rep_col).text())
+                    repetitions = int(parent.child(row, rep_col).text())
                 except Exception:
-                    repetitions = 0
+                    repetitions = 1
                 try:
                     duration = float(parent.child(row, dur_col).text())
                 except Exception:
-                    duration = 0
+                    duration = 1.0
                 min_repeat_duration = repetitions * duration
                 repeat_duration_item = parent.child(row, repeat_dur_col)
                 try:
                     repeat_duration = float(repeat_duration_item.text())
                 except Exception:
-                    repeat_duration = 0
+                    repeat_duration = 1.0
                 if repeat_duration < min_repeat_duration:
                     self._programmatic_change = True
-                    repeat_duration_item.setText(f"{min_repeat_duration:.2f}")
+                    repeat_duration_item.setText(f"{min_repeat_duration:.1f}")
                     self._programmatic_change = False
+            self.update_step_dev_fields()
             self.update_all_group_aggregations()
 
         if field == "Magnet":
@@ -203,8 +272,8 @@ class PGCWidget(QWidget):
                                     child_item.setText(new_value)
                                     self._programmatic_change = False
                     set_value_recursive(desc_item)
+            self.update_step_dev_fields()
             self.update_all_group_aggregations()
-        self.save_to_state()
 
     def update_all_group_aggregations(self):
         def update_group(group_item):
@@ -409,10 +478,16 @@ class PGCWidget(QWidget):
     # ---------- ----------------------------------- ----------
 
     def undo_last(self):
+        self._programmatic_change = True
         self.state.undo()
+        self.load_from_state()
+        self._programmatic_change = False
 
     def redo_last(self):
+        self._programmatic_change = True
         self.state.redo()
+        self.load_from_state()
+        self._programmatic_change = False
 
     def get_selected_rows(self, for_deletion=False):
         return get_selected_rows(self.tree, self.model, for_deletion)
@@ -431,12 +506,36 @@ class PGCWidget(QWidget):
         row_refs = self.filter_top_level_row_refs(row_refs)
         if not row_refs:
             self._copied_rows = None
+            self._copied_protocol_objects = None
             return
         self._copied_rows = []
+        self._copied_protocol_objects = []
         for parent, row in row_refs:
-            # Only column 0 needs recursive clone, others are just data
+            # only column 0 needs recursive clone, others are just data
             items = [parent.child(row, col).clone() for col in range(self.model.columnCount())]
             self._copied_rows.append(items)
+            path = []
+            item = parent.child(row, 0)
+            while item is not None:
+                p = item.parent()
+                r = item.row()
+                path.insert(0, r)
+                item = p
+            elements = self.state.sequence
+            obj = None
+            for idx in path:
+                if idx < 0 or idx >= len(elements):
+                    obj = None
+                    break
+                obj = elements[idx]
+                if isinstance(obj, ProtocolGroup):
+                    elements = obj.elements
+                else:
+                    elements = []
+            if obj is not None:
+                self._copied_protocol_objects.append(copy.deepcopy(obj))
+            else:
+                self._copied_protocol_objects.append(None)
 
     def cut_selected(self):
         self.state.snapshot_for_undo()
@@ -445,10 +544,12 @@ class PGCWidget(QWidget):
 
     def paste_selected(self, above=True):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         if not selected_paths:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
+            parent_elements = self.state.sequence
             target_path = []
         else:
             if above:
@@ -460,37 +561,43 @@ class PGCWidget(QWidget):
                 parent_path = target_path[:-1]
                 row = target_path[-1] + 1
             parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-        if not self._copied_rows:
+            parent_elements = self._find_elements_by_path(parent_path)
+        if not self._copied_rows or not self._copied_protocol_objects:
+            self._programmatic_change = False
             return
         for r, items in enumerate(self._copied_rows):
             parent.insertRow(row + r, [item.clone() for item in items])
-        self.save_to_state()
-        reassign_ids(self.model)
+            proto_obj = copy.deepcopy(self._copied_protocol_objects[r])
+            if proto_obj is not None:
+                parent_elements.insert(row + r, proto_obj)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
         if target_path:
             self.restore_row_selection_by_paths([target_path])
         else:
             self.restore_row_selection_by_paths([])
         self.update_all_group_aggregations()
+        self._programmatic_change = False
     
     def paste_into(self):
-        """
-        Paste copied/cut rows into selected group.
-        If selected item is a step, then paste below it. 
-        """
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
-        if not selected_paths or not  self._copied_rows:
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
+        if not selected_paths or not self._copied_rows or not self._copied_protocol_objects:
+            self._programmatic_change = False
             return 
         target_path = selected_paths[0]
         target_item = self.get_item_by_path(target_path)
         if target_item and target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
             parent = target_item
             row = parent.rowCount()
+            parent_elements = self._find_elements_by_path(target_path)
             for r, items in enumerate(self._copied_rows):
                 parent.insertRow(row + r, [item.clone() for item in items])
-            self.save_to_state()
-            reassign_ids(self.model)
+                proto_obj = copy.deepcopy(self._copied_protocol_objects[r])
+                if proto_obj is not None:
+                    parent_elements.insert(row + r, proto_obj)
+            reassign_ids(self.model, self.state)
             self.tree.expandAll()
             if parent.rowCount() > 0:
                 new_child_path = target_path + [row]
@@ -500,16 +607,17 @@ class PGCWidget(QWidget):
         else:
             self.paste_selected(above=False)
         self.update_all_group_aggregations()
+        self._programmatic_change = False
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         row_refs = self.get_selected_rows(for_deletion=True)
         row_refs = self.filter_top_level_row_refs(row_refs)
         for parent, row in row_refs:
             parent.removeRow(row)
-        self.save_to_state()
-        reassign_ids(self.model)
+        reassign_ids(self.model, self.state)
         post_delete_path = self.get_post_delete_selection_path(selected_paths)
         if post_delete_path:
             self.restore_row_selection_by_paths([post_delete_path])
@@ -518,24 +626,28 @@ class PGCWidget(QWidget):
         if self.model.invisibleRootItem().rowCount() == 0:
             self.add_step(into=False)
         self.update_all_group_aggregations()
+        self._programmatic_change = False
 
     def insert_step(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         top_path = self.get_extreme_path(selected_paths, "min")
         if top_path is None:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
+            parent_elements = self.state.sequence
         else:
             parent_path = top_path[:-1]
             row = top_path[-1]
             parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+            parent_elements = self._find_elements_by_path(parent_path)
         step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
         parent.insertRow(row, step_items)
-        self.save_to_state()
-        reassign_ids(self.model)
+        new_step = ProtocolStep()
+        parent_elements.insert(row, new_step)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
-        # after insert, the original top_path is now at last index + 1
         if top_path:
             new_path = top_path.copy()
             new_path[-1] += 1
@@ -543,24 +655,28 @@ class PGCWidget(QWidget):
         else:
             self.restore_row_selection_by_paths([])
         self.update_all_group_aggregations()
+        self._programmatic_change = False
 
     def insert_group(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         top_path = self.get_extreme_path(selected_paths, "min")
         if top_path is None:
             parent = self.model.invisibleRootItem()
             row = parent.rowCount()
+            parent_elements = self.state.sequence
         else:
             parent_path = top_path[:-1]
             row = top_path[-1]
             parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+            parent_elements = self._find_elements_by_path(parent_path)
         group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
         parent.insertRow(row, group_items)
-        self.save_to_state()
-        reassign_ids(self.model)
+        new_group = ProtocolGroup()
+        parent_elements.insert(row, new_group)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
-        # after insert, the original top_path is now at last index + 1
         if top_path:
             new_path = top_path.copy()
             new_path[-1] += 1
@@ -568,6 +684,7 @@ class PGCWidget(QWidget):
         else:
             self.restore_row_selection_by_paths([])
         self.update_all_group_aggregations()
+        self._programmatic_change = False
 
     def add_group(self, into=False):
         """
@@ -578,44 +695,72 @@ class PGCWidget(QWidget):
         sibling in the uppermost level.
         """
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
-        # Find the bottommost selected row
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
+        parent_elements = self.state.sequence
         if bottom_path is not None:
             selected_item = self.get_item_by_path(bottom_path)
             if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 parent = selected_item
+                parent_elements = self._find_elements_by_path(bottom_path)
             else:
                 parent_path = bottom_path[:-1]
                 parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+                parent_elements = self._find_elements_by_path(parent_path)
         group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
         parent.appendRow(group_items)
-        self.save_to_state()
-        reassign_ids(self.model)
+        new_group = ProtocolGroup()
+        parent_elements.append(new_group)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
         self.restore_row_selection_by_paths(selected_paths)
         self.update_all_group_aggregations()
+        self.update_step_dev_fields()
+        self._programmatic_change = False
 
     def add_step(self, into=False):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo()
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
         bottom_path = self.get_extreme_path(selected_paths, "max")
         parent = self.model.invisibleRootItem()
+        parent_elements = self.state.sequence
         if bottom_path is not None:
             selected_item = self.get_item_by_path(bottom_path)
             if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 parent = selected_item
+                parent_elements = self._find_elements_by_path(bottom_path)
             else:
                 parent_path = bottom_path[:-1]
                 parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
+                parent_elements = self._find_elements_by_path(parent_path)
         step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
         parent.appendRow(step_items)
-        self.save_to_state()
-        reassign_ids(self.model)
+        new_step = ProtocolStep()
+        parent_elements.append(new_step)
+        reassign_ids(self.model, self.state)
         self.tree.expandAll()
         self.restore_row_selection_by_paths(selected_paths)
         self.update_all_group_aggregations()
+        self.update_step_dev_fields()
+        self._programmatic_change = False
+
+    def _find_elements_by_path(self, path):
+        """
+        Given a path (list of row indices), return the elements list in ProtocolState for that node.
+        """
+        elements = self.state.sequence
+        for idx in path:
+            if idx < 0 or idx >= len(elements):
+                return elements
+            obj = elements[idx]
+            if isinstance(obj, ProtocolGroup):
+                elements = obj.elements
+            else:
+                return elements
+        return elements
 
     def export_to_json(self):
         self.save_to_state()
@@ -638,11 +783,75 @@ class PGCWidget(QWidget):
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
         if file_name:
+            # try: 
             with open(file_name, "r") as f:
                 data = json.load(f)
             self.state.from_json(data)
             self.state.undo_stack.clear()
             self.state.redo_stack.clear()
+            self.load_from_state()
+
+            # except Exception as e:
+                # print(f"Error importing protocol: {e}")
+                # logger.error(f"Error importing protocol: {e}")
+
+    def import_into_json(self):
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+        target_path = selected_paths[0]
+        target_item = self.get_item_by_path(target_path)
+        if target_item is None:
+            return
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
+        if not file_name:
+            return
+        try:
+            with open(file_name, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Error reading JSON: {e}")
+            return
+        imported_state = ProtocolState()
+        imported_state.from_json(data)
+        imported_sequence = imported_state.sequence
+        self.state.snapshot_for_undo(programmatic=False)
+        self._programmatic_change = True
+        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE: # if group is selected, import as its children
+            parent = target_item
+            parent_elements = self._find_elements_by_path(target_path)
+            row = parent.rowCount()
+            for obj in imported_sequence:
+                if isinstance(obj, ProtocolGroup):
+                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
+                    parent.appendRow(group_items)
+                    parent_elements.append(obj)
+                    # add children using recursion
+                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
+                elif isinstance(obj, ProtocolStep):
+                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
+                    parent.appendRow(step_items)
+                    parent_elements.append(obj)
+        elif target_item.data(ROW_TYPE_ROLE) == STEP_TYPE: # else import below it 
+            parent = target_item.parent() or self.model.invisibleRootItem()
+            parent_path = target_path[:-1]
+            parent_elements = self._find_elements_by_path(parent_path)
+            row = target_item.row() + 1
+            for i, obj in enumerate(imported_sequence):
+                if isinstance(obj, ProtocolGroup):
+                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
+                    parent.insertRow(row + i, group_items)
+                    parent_elements.insert(row + i, obj)
+                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
+                elif isinstance(obj, ProtocolStep):
+                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
+                    parent.insertRow(row + i, step_items)
+                    parent_elements.insert(row + i, obj)
+        reassign_ids(self.model, self.state)
+        self.tree.expandAll()
+        self.update_all_group_aggregations()
+        self.update_step_dev_fields()
+        self._programmatic_change = False
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import sys

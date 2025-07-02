@@ -40,9 +40,9 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                 return editor
             else:
                 return None
-        if field in ("Label", "Message"):
+        if field in ("Message"):
             return QLineEdit(parent)
-        elif field in ("Repetitions", "Repeat Duration", "Trail Length"):
+        elif field in ("Repetitions", "Trail Length"):
             editor = QSpinBox(parent)
             editor.setMinimum(1)
             editor.setMaximum(10000)
@@ -52,17 +52,39 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             cb.setText("")
             cb.setTristate(False)
             return cb
-        elif field in ("Duration", "Voltage", "Frequency"):
+        elif field in ("Duration"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(10000.0)
-            editor.setDecimals(2)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.1)
+            return editor
+        elif field in ("Voltage"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(30.0)
+            editor.setMaximum(150.0)
+            editor.setDecimals(1) 
+            editor.setSingleStep(0.5)
+            return editor
+        elif field in ("Frequency"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(100.0)
+            editor.setMaximum(20000.0)
+            editor.setSingleStep(100)
             return editor
         elif field in ("Volume Threshold"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(1.00)
             editor.setDecimals(2)
+            editor.setSingleStep(0.1)
+            return editor
+        elif field in ("Repeat Duration"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(0.0)
+            editor.setMaximum(10000.0)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.1)
             return editor
         return super().createEditor(parent, option, index)
 
@@ -88,11 +110,15 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         row = index.row()
         if isinstance(editor, QLineEdit):
             model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
-        elif isinstance(editor, QSpinBox):
+        elif isinstance(editor, QSpinBox) or isinstance(editor, QDoubleSpinBox):
             value = editor.value()
             current_value = index.model().data(index, Qt.ItemDataRole.EditRole)
             if value != current_value:
-                model.setData(index, value, Qt.ItemDataRole.EditRole)
+                if field in ("Duration", "Voltage", "Repeat Duration", "Volume Threshold"):
+                    formatted = "{:.1f}".format(float(value))
+                    model.setData(index, formatted, Qt.ItemDataRole.EditRole)
+                else:
+                    model.setData(index, value, Qt.ItemDataRole.EditRole)
                 if field == "Trail Length":
                     overlay_col = protocol_grid_fields.index("Trail Overlay")
                     overlay_idx = model.index(row, overlay_col)
@@ -112,8 +138,6 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                     view = self.parent().tree if hasattr(self.parent(), "tree") else None
                     if view:
                         view.closePersistentEditor(overlay_idx)
-        elif isinstance(editor, QDoubleSpinBox):
-            model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
         elif isinstance(editor, QCheckBox):
             checked = int(editor.isChecked())
             model.setData(index, checked, Qt.ItemDataRole.EditRole)
@@ -186,22 +210,29 @@ def make_row(defaults, overrides=None, row_type=None, children=None):
     
     if row_type == STEP_TYPE:
         try:
-            repetitions = float(overrides.get("Repetitions", defaults.get("Repetitions", 1)))
-            duration = float(overrides.get("Duration", defaults.get("Duration", 1)))
+            repetitions = int(overrides.get("Repetitions", defaults.get("Repetitions", 1)))
+            duration = float(overrides.get("Duration", defaults.get("Duration", 1.0)))
             min_repeat_duration = repetitions * duration
-            repeat_duration = float(overrides.get("Repeat Duration", defaults.get("Repeat Duration", 0)))
+            repeat_duration = float(overrides.get("Repeat Duration", defaults.get("Repeat Duration", 0.0)))
             if repeat_duration < min_repeat_duration:
-                overrides["Repeat Duration"] = f"{min_repeat_duration:.2f}"
+                overrides["Repeat Duration"] = f"{min_repeat_duration:.1f}"
         except Exception:
             pass
 
     for i, field in enumerate(protocol_grid_fields):
         value = overrides.get(field, defaults.get(field, ""))
+        if field in ("Duration", "Voltage", "Repeat Duration", "Volume Threshold"):
+            try:
+                value = "{:.1f}".format(float(value))
+            except Exception:
+                pass
         display_value = "" if field in ("Video", "Magnet") else value
         item = PGCItem(item_type=field, item_data=display_value)
         if field == "Description" and row_type:
             item.setData(row_type, ROW_TYPE_ROLE)
         if field == "ID":
+            item.setEditable(False)
+        elif field in ("Max. Path Length", "Run Time"): 
             item.setEditable(False)
         elif row_type == GROUP_TYPE and field in group_agg_fields:
             agg_val = group_agg_values.get(field)
