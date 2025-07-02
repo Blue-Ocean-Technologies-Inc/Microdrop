@@ -107,6 +107,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("route_layer_manager.layers.items.visible")
     @observe("route_layer_manager.selected_layer")
     @observe("route_layer_manager.layers.items.route.route.items")
+    @observe("route_layer_manager.layers.items")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
