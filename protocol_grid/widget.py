@@ -119,6 +119,11 @@ class PGCWidget(QWidget):
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.tree)
+
+        self.assign_test_states_button = QPushButton("Assign Test Device States")
+        self.assign_test_states_button.clicked.connect(self.assign_test_device_states)
+        self.layout.addWidget(self.assign_test_states_button)
+
         self.layout.addLayout(button_layout)
         self.layout.addLayout(export_layout)
         self.setLayout(self.layout)
@@ -130,10 +135,24 @@ class PGCWidget(QWidget):
         if not self.state.sequence:
             self.add_step(into=False)
 
-        # self.state.sequence = make_test_steps()
-        # self.update_step_dev_fields()
-
     # ---------- For Testing ----------
+    def assign_test_device_states(self):
+        test_steps = make_test_steps()
+        test_states = [step.device_state for step in test_steps]
+
+        def assign_recursive(elements):
+            idx = 0
+            for obj in elements:
+                if isinstance(obj, ProtocolStep):
+                    obj.device_state = copy.deepcopy(test_states[idx % len(test_states)])
+                    idx += 1
+                elif isinstance(obj, ProtocolGroup):
+                    assign_recursive(obj.elements)
+            return idx
+        
+        assign_recursive(self.state.sequence)
+        self.update_step_dev_fields()
+
     def update_step_dev_fields(self):
         def update_steps_recursive(parent, elements):
             for row in range(parent.rowCount()):
