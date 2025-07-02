@@ -72,11 +72,15 @@ class ProtocolState:
 
     def snapshot_for_undo(self):
         print("SNAPSHOT: sequence length =", len(self.sequence))
-        self.undo_stack.append(copy.deepcopy((self.sequence, list(self.fields))))
+        snap = copy.deepcopy((self.sequence, list(self.fields)))
+        print("SNAPSHOT: id(self.sequence) =", id(self.sequence), "id(snap[0]) =", id(snap[0]))
+        if self.sequence:
+            print("SNAPSHOT: id(self.sequence[0]) =", id(self.sequence[0]), "id(snap[0][0]) =", id(snap[0][0]))
+        self.undo_stack.append(snap)
         print("UNDO STACK SIZE:", len(self.undo_stack))
         if len(self.undo_stack) > 20:
             self.undo_stack = self.undo_stack[-20:]
-        self.redo_stack.clear()
+        self.redo_stack.clear()        
 
     def undo(self):
         print("UNDO called. Undo stack size:", len(self.undo_stack))
@@ -85,8 +89,10 @@ class ProtocolState:
             return
         current = copy.deepcopy((self.sequence, list(self.fields)))
         self.redo_stack.append(current)
+        print("Before undo: id(self.sequence) =", id(self.sequence))
         last = self.undo_stack.pop()
         self.sequence, self.fields = copy.deepcopy(last)
+        print("After undo: id(self.sequence) =", id(self.sequence))
         print("UNDO: sequence length after undo =", len(self.sequence))
 
     def redo(self):
