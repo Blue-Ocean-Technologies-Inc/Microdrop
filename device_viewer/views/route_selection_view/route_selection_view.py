@@ -77,11 +77,7 @@ class RouteLayerHandler(Handler):
             self.cancel_merge_route(info, rows)
             return
 
-        selected_route = rows[0].route
-        route_to_merge = info.object.layer_to_merge.route
-        if route_to_merge.can_merge(selected_route) and selected_route != route_to_merge:
-            route_to_merge.merge(selected_route)
-            self.delete_layer(info, rows) # Delete selected route
+        info.object.merge_layer(rows[0])
 
     def cancel_merge_layer(self, info, rows):
         info.object.mode = "edit"

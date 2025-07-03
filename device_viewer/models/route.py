@@ -318,6 +318,14 @@ class RouteLayerManager(HasTraits):
         else:
             self.layers.insert(index, RouteLayer(route=route, color=color))
 
+    def merge_layer(self, other_layer) -> bool:
+        '''Try to merge other_layer with layer_to_merge. Returns boolean indicating operation's success'''
+        if self.layer_to_merge.route.can_merge(other_layer.route):
+            self.layer_to_merge.route.merge(other_layer.route)
+            self.delete_layer(other_layer)
+        else:
+            return False
+
     def reset(self):
         self.layers.clear()
         self.selected_layer = None
