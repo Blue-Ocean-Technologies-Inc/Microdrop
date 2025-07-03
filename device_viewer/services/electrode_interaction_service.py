@@ -52,15 +52,15 @@ class ElectrodeInteractionControllerService(HasTraits):
         '''Handle a route segment being drawn or first electrode being added'''
         if self.route_layer_manager.mode in ("edit", "edit-draw", "draw"):
             if self.route_layer_manager.mode == "draw":
-                self.route_layer_manager.add_layer(Route(channel_map=self.electrodes_model.channels_electrode_ids_map))
+                self.route_layer_manager.add_layer(Route(route=[from_id, to_id], channel_map=self.electrodes_model.channels_electrode_ids_map))
                 self.route_layer_manager.selected_layer = self.route_layer_manager.layers[-1] # Select the route we just added
                 self.route_layer_manager.mode = "edit-draw" # We now want to extend the route we just made
+            else: # In some edit mode
+                current_route = self.route_layer_manager.get_selected_route()
+                if current_route == None: return
 
-            current_route = self.route_layer_manager.get_selected_route()
-            if current_route == None: return
-
-            if current_route.can_add_segment(from_id, to_id):
-                current_route.add_segment(from_id, to_id)
+                if current_route.can_add_segment(from_id, to_id):
+                    current_route.add_segment(from_id, to_id)
 
     def handle_route_erase(self, from_id, to_id):
         '''Handle a route segment being erased'''
