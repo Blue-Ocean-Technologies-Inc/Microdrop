@@ -13,7 +13,7 @@ class TraitChangeCommand(AbstractCommand):
     event = Instance(TraitChangeEvent)
 
     def do(self):
-        self.timestamp = time.time()
+        pass
 
     def undo(self):
         logger.info(f"Undoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
@@ -33,6 +33,7 @@ class ListChangeCommand(AbstractCommand):
     def merge(self, other):
         merge_timestamp = time.time()
         
+        # Merge edits to the same list within 1.5 seconds of each other. Could possibly cause weird side effects in the undo system, but this seems like an easy general case
         if isinstance(other, ListChangeCommand) and other.event.object == self.event.object and merge_timestamp - self.timestamp <= 1.5:
             if len(self.event.removed) == 0 and len(other.event.removed) == 0: # Only added
                 self.event.added.extend(other.event.added)
