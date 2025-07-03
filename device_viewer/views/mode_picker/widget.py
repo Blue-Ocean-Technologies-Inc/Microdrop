@@ -29,6 +29,8 @@ class ModePicker(QWidget):
         self.button_reset.setToolTip("Reset Routes/Electrodes")
         self.button_undo = QPushButton("Undo")
         self.button_undo.setToolTip("Undo")
+        self.button_redo = QPushButton("Redo")
+        self.button_redo.setToolTip("Redo")
 
         # btn_layout
         btn_layout = QHBoxLayout()
@@ -37,6 +39,7 @@ class ModePicker(QWidget):
             btn_layout.addWidget(btn)
         btn_layout.addWidget(self.button_reset)
         btn_layout.addWidget(self.button_undo)
+        btn_layout.addWidget(self.button_redo)
         
         # Main layout
         layout = QVBoxLayout()
@@ -55,6 +58,7 @@ class ModePicker(QWidget):
         self.button_autoroute.clicked.connect(lambda: self.set_mode("auto"))
         self.button_reset.clicked.connect(lambda: self.reset())
         self.button_undo.clicked.connect(lambda: self.undo())
+        self.button_redo.clicked.connect(lambda: self.redo())
         self.route_model.observe(self.on_mode_changed, "mode")
 
     def sync_buttons_and_label(self):
@@ -69,6 +73,9 @@ class ModePicker(QWidget):
 
     def undo(self):
         self.pane.undo()
+    
+    def redo(self):
+        self.pane.redo()
 
     def on_mode_changed(self, event):
         self.sync_buttons_and_label()

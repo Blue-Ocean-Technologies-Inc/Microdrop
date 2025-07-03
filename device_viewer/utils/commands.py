@@ -18,6 +18,10 @@ class TraitChangeCommand(AbstractCommand):
     def undo(self):
         logger.info(f"Undoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
         setattr(self.event.object, self.event.name, self.event.old)
+    
+    def redo(self):
+        logger.info(f"Redoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
+        setattr(self.event.object, self.event.name, self.event.new)
 
 class ListChangeCommand(AbstractCommand):
 
@@ -48,6 +52,13 @@ class ListChangeCommand(AbstractCommand):
         for item in reversed(self.event.removed):
             self.event.object.insert(self.event.index, item)
 
+    def redo(self):
+        logger.info(f"Redoing list mod {self.event.object}, added {self.event.added}, removed {self.event.removed} at {self.event.index}")
+        for _ in self.event.removed:
+            self.event.object.pop(self.event.index)
+        for item in reversed(self.event.added):
+            self.event.object.insert(self.event.index, item)
+
 class DictChangeCommand(AbstractCommand):
 
     name = Str("Restore Dict state")
@@ -62,4 +73,11 @@ class DictChangeCommand(AbstractCommand):
         for key in self.event.added.keys():
             self.event.object.pop(key)
         for key, value in self.event.removed.items():
+            self.event.object[key] = value
+
+    def redo(self):
+        logger.info(f"Redoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
+        for key in self.event.removed.keys():
+            self.event.object.pop(key)
+        for key, value in self.event.added.items():
             self.event.object[key] = value

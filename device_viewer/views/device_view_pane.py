@@ -153,6 +153,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.undo()
         self._undoing = False
 
+    def redo(self):
+        self._undoing = True # We need to prevent the changes made in redo() from being added to the undo stack
+        self.undo_manager.redo()
+        self._undoing = False
+
     def apply_message_model(self, message_model: DeviceViewerMessageModel, fullreset=False):
         # Apply electrode on/off states
         for electrode_id, electrode in self.electrodes_model.electrodes.items():
