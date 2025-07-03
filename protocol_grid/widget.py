@@ -142,17 +142,25 @@ class PGCWidget(QWidget):
         test_steps = make_test_steps()
         test_states = [step.device_state for step in test_steps]
 
-        def assign_recursive(elements):
-            idx = 0
-            for obj in elements:
+        def assign_recursive(elements, parent_item, idx_ref):
+            for i, obj in enumerate(elements):
                 if isinstance(obj, ProtocolStep):
-                    obj.device_state = copy.deepcopy(test_states[idx % len(test_states)])
-                    idx += 1
+                    obj.device_state = copy.deepcopy(test_states[idx_ref[0] % len(test_states)])
+                    if parent_item is not None:
+                        desc_item = parent_item.child(i, 0)
+                        if desc_item is not None:
+                            desc_item.setData(obj.device_state, Qt.UserRole + 100)
+                    idx_ref[0] += 1
                 elif isinstance(obj, ProtocolGroup):
-                    assign_recursive(obj.elements)
-            return idx
-        
-        assign_recursive(self.state.sequence)
+                    group_idx = i
+                    if parent_item is not None:
+                        group_item = parent_item.child(group_idx, 0)
+                    else:
+                        group_item = None
+                    assign_recursive(obj.elements, group_item, idx_ref)
+
+        root_item = self.model.invisibleRootItem()
+        assign_recursive(self.state.sequence, root_item, [0])
         self.update_step_dev_fields()
 
     def update_step_dev_fields(self):
@@ -785,7 +793,7 @@ class PGCWidget(QWidget):
 
     def export_to_json(self):
         self.save_to_state()
-        protocol_data = self.state.to_json()
+        protocol_data = self.state.to_flat_export()
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
         if file_name:
             with open(file_name, "w") as f:

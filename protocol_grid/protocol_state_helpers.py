@@ -1,3 +1,5 @@
+import copy
+
 from PySide6.QtCore import Qt
 
 from protocol_grid.protocol_grid_helpers import make_row
@@ -103,6 +105,9 @@ def model_to_state(model, state):
                     parameters=fields,
                     name=name
                 )
+                device_state_data = desc_item.data(Qt.UserRole + 100)
+                if isinstance(device_state_data, DeviceState):
+                    step_obj.device_state = copy.deepcopy(device_state_data)
                 seq.append(step_obj)
         return seq
     root = model.invisibleRootItem()

@@ -64,6 +64,43 @@ class ProtocolState:
                 self.sequence.append(ProtocolGroup.from_dict(e))
         self.fields = data.get("fields", list(protocol_grid_fields))
 
+    def to_flat_export(self):
+        """
+        Returns a dict with:
+        - 'steps': list of step dicts (including device_state as a dict)
+        - 'groups': list of {'id': group_id, 'description': group_description}
+        - 'fields': list of field names
+        """
+        steps = []
+        groups = []
+
+        def recurse(seq, prefix=""):
+            group_counter = 1
+            step_counter = 1
+            for obj in seq:
+                if isinstance(obj, ProtocolGroup):
+                    group_id = (prefix + "_" if prefix else "") + chr(64 + group_counter)
+                    groups.append({
+                        "ID": group_id,
+                        "Description": obj.parameters.get("Description", obj.name)
+                    })
+                    recurse(obj.elements, group_id)
+                    group_counter += 1
+                elif isinstance(obj, ProtocolStep):
+                    step_id = (prefix + "_" if prefix else "") + str(step_counter)
+                    step_dict = dict(obj.parameters)
+                    step_dict["ID"] = step_id
+                    step_dict["device_state"] = obj.device_state.to_dict() if hasattr(obj.device_state, "to_dict") else {}
+                    steps.append(step_dict)
+                    step_counter += 1
+
+        recurse(self.sequence)
+        return {
+            "steps": steps,
+            "groups": groups,
+            "fields": list(self.fields)
+        }
+
     def to_json(self):
         return self.to_dict()
     
