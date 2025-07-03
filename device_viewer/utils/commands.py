@@ -1,6 +1,6 @@
 from traits.api import Instance, Str, Float
 from pyface.undo.abstract_command import AbstractCommand
-from traits.observation.events import ListChangeEvent, TraitChangeEvent
+from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 import time
 from microdrop_utils._logger import get_logger
 
@@ -47,3 +47,19 @@ class ListChangeCommand(AbstractCommand):
             self.event.object.pop(self.event.index)
         for item in reversed(self.event.removed):
             self.event.object.insert(self.event.index, item)
+
+class DictChangeCommand(AbstractCommand):
+
+    name = Str("Restore Dict state")
+
+    event = Instance(DictChangeEvent)
+
+    def do(self):
+        pass
+
+    def undo(self):
+        logger.info(f"Undoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
+        for key in self.event.added.keys():
+            self.event.object.pop(key)
+        for key, value in self.event.removed.items():
+            self.event.object[key] = value

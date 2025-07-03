@@ -1,7 +1,7 @@
 # enthought imports
 import dramatiq
 from traits.api import Instance, observe, Any, Str, provides
-from traits.observation.events import ListChangeEvent, TraitChangeEvent
+from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
 from pyface.qt.QtGui import QGraphicsScene
@@ -29,7 +29,7 @@ from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
-from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand
+from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 import json
 
 logger = get_logger(__name__)
@@ -131,7 +131,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scene.clear()
             self.scene.update()
 
-    @observe("electrodes_model._electrodes.items.state") # When an electrode changes state
+    @observe("electrodes_model.channels_states_map.items") # When an electrode changes state
     @observe("route_layer_manager.layers.items.route.route.items") # When a route is modified
     @observe("route_layer_manager.layers.items")
     @observe("electrodes_model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
@@ -144,6 +144,8 @@ class DeviceViewerDockPane(TraitsDockPane):
                 command = TraitChangeCommand(event=event)
             elif isinstance(event, ListChangeEvent):
                 command = ListChangeCommand(event=event)
+            elif isinstance(event, DictChangeEvent):
+                command = DictChangeCommand(event=event)
             self.undo_manager.active_stack.push(command)
 
     def undo(self):

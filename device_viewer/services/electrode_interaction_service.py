@@ -26,22 +26,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     # -------------------- Handlers -----------------------
 
-    def handle_electrode_click(self, _electrode_id: Str):
+    def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
 
         # get electrode model for current electrode clicked
-        _clicked_electrode_channel = self.electrodes_model[_electrode_id].channel
+        clicked_electrode_channel = self.electrodes_model[electrode_id].channel
 
-        affected_electrode_ids = self.electrodes_model.channels_electrode_ids_map[_clicked_electrode_channel]
-
-        logger.debug(f"Affected electrodes {affected_electrode_ids} with same channel as clicked electrode")
-
-        for affected_electrode_id in affected_electrode_ids:
-            # obtain affected electrode object
-            _electrode = self.electrodes_model[affected_electrode_id]
-
-            # update electrode model for electrode clicked and all electrodes with same channel affected by this click.
-            _electrode.state = not _electrode.state
+        self.electrodes_model.channels_states_map[clicked_electrode_channel] = not self.electrodes_model.channels_states_map.get(clicked_electrode_channel, False)
 
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
@@ -110,9 +101,15 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.route_layer_manager)
     
-    @observe("electrodes_model._electrodes.items.state")
+    @observe("electrodes_model.channels_states_map.items")
     def electrode_recolor(self, event):
-        if event.name == "state": # State change
-            electrode_view = self.electrode_view_layer.electrode_views[event.object.id]
-            electrode_view.update_color(event.new)
+        if hasattr(event, "added"): # Dict Change Event
+            for channel in event.removed.keys():
+                for affected_electrode_id in self.electrodes_model.channels_electrode_ids_map[channel]:
+                    self.electrode_view_layer.electrode_views[affected_electrode_id].update_color(False)
+
+            for channel, state in event.added.items():
+                for affected_electrode_id in self.electrodes_model.channels_electrode_ids_map[channel]:
+                    self.electrode_view_layer.electrode_views[affected_electrode_id].update_color(state)
+
 
