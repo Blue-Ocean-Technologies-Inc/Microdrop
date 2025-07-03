@@ -1,4 +1,5 @@
 import copy
+from collections import defaultdict
 
 from PySide6.QtCore import Qt
 
@@ -200,3 +201,68 @@ def clamp_trail_overlay(parent):
             except Exception:
                 pass
     
+def import_flat_protocol(flat_json):
+    steps = flat_json["steps"]
+    groups = {g["ID"]: g.get("Description", g.get("description", "")) for g in flat_json.get("groups", [])}
+    fields = flat_json.get("fields", [])
+
+    group_ids = set(groups.keys())
+
+    def get_parent_id(step_id):
+        return "_".join(step_id.split("_")[:-1]) if "_" in step_id else ""
+
+    def parse_steps(step_list, parent_prefix="", depth=0):
+        elements = []
+        i = 0
+        indent = "  " * depth
+        while i < len(step_list):
+            step = step_list[i]
+            step_id = step["ID"]
+            parent_id = get_parent_id(step_id)
+            print("step_id, parent_id: ", step_id, ", ", parent_id)
+            if parent_id in group_ids:
+                print(f"{indent}[GROUP] Creating group '{groups[parent_id]}' (ID: {parent_id}) at index {i}")
+                group_steps = []
+                group_prefix = parent_id
+                j = i + 1
+                while j < len(step_list):
+                    next_step_id = step_list[j]["ID"]
+                    next_parent_id = get_parent_id(next_step_id)
+                    print("next_parent_id: ", next_parent_id)
+                    if next_parent_id.startswith(group_prefix):
+                        group_steps.append(step_list[j])
+                        j += 1
+                    else:
+                        break
+                group_elements = parse_steps(group_steps, parent_prefix=group_prefix, depth=depth+1)
+                group = ProtocolGroup(
+                    parameters={"Description": groups[parent_id]},
+                    name=groups[parent_id],
+                    elements=group_elements
+                )
+                elements.append(group)
+                i = j  
+            else:
+                print(f"{indent}[STEP] Adding step '{step.get('Description', '')}' (ID: {step_id}) at index {i}")
+                params = {k: v for k, v in step.items() if k not in ("device_state",)}
+                step_obj = ProtocolStep(parameters=params, name=step.get("Description", "Step"))
+                if "device_state" in step:
+                    step_obj.device_state.from_dict(step["device_state"])
+                elements.append(step_obj)
+                i += 1
+            if parent_id != parent_prefix:
+                i += 1
+                continue
+        return elements
+
+    sequence = parse_steps(steps, parent_prefix="", depth=0)
+    print("==== DEBUG: Final sequence ====")
+    def print_tree(elements, depth=0):
+        for e in elements:
+            if hasattr(e, "elements"):
+                print("  " * depth + f"[GROUP] {getattr(e, 'name', '')}")
+                print_tree(e.elements, depth+1)
+            else:
+                print("  " * depth + f"[STEP] {getattr(e, 'parameters', {}).get('Description', '')} ({getattr(e, 'parameters', {}).get('ID', '')})")
+    print_tree(sequence)
+    return sequence, fields

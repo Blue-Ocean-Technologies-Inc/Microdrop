@@ -107,6 +107,12 @@ class ProtocolState:
             "groups": groups,
             "fields": list(self.fields)
         }
+    
+    def from_flat_export(self, flat_json):
+        from protocol_grid.protocol_state_helpers import import_flat_protocol
+        sequence, fields = import_flat_protocol(flat_json)
+        self.sequence = sequence
+        self.fields = fields
 
     def to_json(self):
         return self.to_dict()

@@ -812,17 +812,12 @@ class PGCWidget(QWidget):
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
         if file_name:
-            # try: 
             with open(file_name, "r") as f:
                 data = json.load(f)
-            self.state.from_json(data)
+            self.state.from_flat_export(data)
             self.state.undo_stack.clear()
             self.state.redo_stack.clear()
             self.load_from_state()
-
-            # except Exception as e:
-                # print(f"Error importing protocol: {e}")
-                # logger.error(f"Error importing protocol: {e}")
 
     def import_into_json(self):
         selected_paths = self.get_selected_paths()
@@ -842,11 +837,11 @@ class PGCWidget(QWidget):
             print(f"Error reading JSON: {e}")
             return
         imported_state = ProtocolState()
-        imported_state.from_json(data)
+        imported_state.from_flat_export(data)
         imported_sequence = imported_state.sequence
         self.state.snapshot_for_undo(programmatic=False)
         self._programmatic_change = True
-        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE: # if group is selected, import as its children
+        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
             parent = target_item
             parent_elements = self._find_elements_by_path(target_path)
             row = parent.rowCount()
@@ -855,13 +850,12 @@ class PGCWidget(QWidget):
                     group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
                     parent.appendRow(group_items)
                     parent_elements.append(obj)
-                    # add children using recursion
                     state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
                 elif isinstance(obj, ProtocolStep):
                     step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
                     parent.appendRow(step_items)
                     parent_elements.append(obj)
-        elif target_item.data(ROW_TYPE_ROLE) == STEP_TYPE: # else import below it 
+        elif target_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
             parent = target_item.parent() or self.model.invisibleRootItem()
             parent_path = target_path[:-1]
             parent_elements = self._find_elements_by_path(parent_path)
