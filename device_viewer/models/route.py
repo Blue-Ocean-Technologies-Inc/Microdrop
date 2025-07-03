@@ -281,10 +281,10 @@ class RouteLayerManager(HasTraits):
 
     # --------------------------- Model Helpers --------------------------
     
-    def get_available_color(self):
+    def get_available_color(self, exclude=()):
         color_counts = {}
         color_pool = ROUTE_COLOR_POOL
-        for color in color_pool:
+        for color in color_pool + exclude:
             color_counts[color] = 0
         for layer in self.layers:
             if layer.color in color_counts.keys():
@@ -292,17 +292,17 @@ class RouteLayerManager(HasTraits):
         return Counter(color_counts).most_common()[-1][0] # Return least common color
     
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
-        if len(new_routes) == 0:
-            self.delete_layer(old_route_layer)
-            return
-        
         index = self.layers.index(old_route_layer)
 
+        layers_to_add = []
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
-            if i == 0: # Modify existing route for first case
-                self.layers[index].route = new_routes[i]
+            if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
+                layers_to_add.append(RouteLayer(route=new_routes[i], color=old_route_layer.color))
             else:
-                self.add_layer(new_routes[i], index)
+                new_colors = tuple([layer.color for layer in layers_to_add])
+                layers_to_add.append(RouteLayer(route=new_routes[i], color=self.get_available_color(exclude=new_colors)))
+
+        self.layers[index:index+1] = reversed(layers_to_add) # Delete and replace in single operation for easy undo
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
