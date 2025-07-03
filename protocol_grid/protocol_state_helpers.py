@@ -90,7 +90,21 @@ def model_to_state(model, state):
                 if item:
                     if field in ("Video", "Magnet"):
                         state_val = item.data(Qt.CheckStateRole)
-                        fields[field] = "1" if state_val == Qt.Checked else "0"
+                        if state_val is None:
+                            val = item.data(Qt.ItemDataRole.EditRole)
+                            if val in ("1", 1, True):
+                                fields[field] = "1"
+                            else:
+                                fields[field] = "0"
+                        else:
+                            fields[field] = "1" if state_val == Qt.Checked else "0"
+                        fields[field] = str(fields[field])
+                    elif field == "Magnet Height":
+                        last_value = item.data(Qt.UserRole + 2)
+                        if last_value is not None and last_value != "":
+                            fields[field] = str(last_value)
+                        else:
+                            fields[field] = item.text()
                     else:
                         fields[field] = item.text()
             if row_type == GROUP_TYPE:

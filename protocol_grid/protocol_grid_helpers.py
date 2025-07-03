@@ -139,10 +139,13 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                     if view:
                         view.closePersistentEditor(overlay_idx)
         elif isinstance(editor, QCheckBox):
-            checked = int(editor.isChecked())
-            model.setData(index, checked, Qt.ItemDataRole.EditRole)
+            checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            model.setData(index, "", Qt.ItemDataRole.EditRole)
             model.setData(index, "", Qt.DisplayRole)
+            item = model.itemFromIndex(index)
+            if item is not None:
+                item.emitDataChanged()
             widget = self.parent()
             if hasattr(widget, "save_to_state"):
                 widget.save_to_state()

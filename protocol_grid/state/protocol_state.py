@@ -6,6 +6,13 @@ class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
         self.name = name
         self.parameters = parameters or {}
+        for field in ("Magnet", "Video"):
+            if field in self.parameters:
+                val = self.parameters[field]
+                if str(val).strip().lower() in ("1", "true", "yes", "on"):
+                    self.parameters[field] = "1"
+                else:
+                    self.parameters[field] = "0"
         self.device_state = DeviceState()
 
     def to_dict(self):
