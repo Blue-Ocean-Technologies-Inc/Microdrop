@@ -90,6 +90,6 @@ class Electrodes(HasTraits):
         self.svg_model = SvgUtil(svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
     
-    def reset_states(self):
+    def reset_electrode_states(self):
         for electrode_id, electrode in self.electrodes.items():
             electrode.state = False

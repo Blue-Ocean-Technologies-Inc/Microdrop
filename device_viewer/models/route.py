@@ -255,30 +255,6 @@ class RouteLayerManager(HasTraits):
 
     autoroute_layer = Instance(RouteLayer)
 
-    undo_manager = Instance(UndoManager)
-
-    # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
-    # Edit: User can only extend selected segment
-    # Edit-Draw: Same as edit except we switch to draw on mouserelease
-    # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
-    # Merge: User can only merge paths. They cannot edit.
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge")
-
-    mode_name = Property(Str, observe="mode")
-
-    message = Str("")
-
-    # ------------------------- Properties ------------------------
-
-    def _get_mode_name(self):
-        return {
-            "draw": "Draw",
-            "edit-draw": "Draw",
-            "edit": "Edit",
-            "auto": "Autoroute",
-            "merge": "Merge"
-        }.get(self.mode, "Error")
-
     # --------------------------- Model Helpers --------------------------
     
     def get_available_color(self, exclude=()):
@@ -326,7 +302,7 @@ class RouteLayerManager(HasTraits):
         else:
             return False
 
-    def reset(self):
+    def reset_route_manager(self):
         self.layers.clear()
         self.selected_layer = None
         self.layer_to_merge = None
@@ -360,10 +336,11 @@ class RouteLayerManager(HasTraits):
                 self.selected_layer = self.layers[-1] # Set it to the last layer
     
     @observe('selected_layer')
-    def _selected_layer_changed(self, event):
+    @observe('layers.items')
+    def update_selected_layers(self, event):
         # Mark only the selected layer
         for layer in self.layers:
-            layer.is_selected = (layer is event.new)
+            layer.is_selected = (layer is self.selected_layer)
 
     @observe('layer_to_merge')
     @observe('layer_to_merge.name')

@@ -21,6 +21,7 @@ from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
 from device_viewer.models.electrodes import Electrodes
+from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
@@ -43,8 +44,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     undo_manager = Instance(UndoManager)
 
-    electrodes_model = Instance(Electrodes)
-    route_layer_manager = Instance(RouteLayerManager)
+    model = Instance(MainModel)
 
     id = PKG + ".pane"
     name = PKG_name + " Dock Pane"
@@ -70,13 +70,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             class_method=self.listener_actor_routine)
         self.publish_model_message() # First message when all models are initialised
 
-    def _electrodes_model_default(self):
-        electrodes = Electrodes()
-        electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
-        return electrodes
-    
-    def _route_layer_manager_default(self):
-        return RouteLayerManager()
+    def _model_default(self):
+        model = MainModel()
+        model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+        return model
 
     def _scene_default(self):
         return ElectrodeScene()
@@ -95,31 +92,30 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
-        if message == "True" and self.electrodes_model and self.route_layer_manager:
+        if message == "True" and self.model:
             self.publish_model_message()
 
     # ------- Device View class methods -------------------------
-    def set_electrodes_model(self, new_electrodes_model):
+    def set_model(self, new_model):
         """Handle when the electrodes model changes."""
 
         # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
-        self.set_view_from_model(new_electrodes_model)
-        logger.debug(f"New Electrode Layer added --> {new_electrodes_model.svg_model.filename}")
+        self.set_view_from_model(new_model)
+        logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
 
         # Since were using traitsui for the layer viewer, its really difficult to simply reassign the model
-        self.route_layer_manager.reset() # So we just reset internal state
+        self.model.reset() # So we just reset internal state
 
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
-            electrodes_model=new_electrodes_model,
-            route_layer_manager=self.route_layer_manager,
+            model=new_model,
             electrode_view_layer=self.current_electrode_layer
         )
 
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
 
-        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_electrodes_model}")
+        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
 
 
     def remove_current_layer(self):
@@ -131,10 +127,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scene.clear()
             self.scene.update()
 
-    @observe("electrodes_model.channels_states_map.items") # When an electrode changes state
-    @observe("route_layer_manager.layers.items.route.route.items") # When a route is modified
-    @observe("route_layer_manager.layers.items")
-    @observe("electrodes_model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.layers.items.route.route.items") # When a route is modified
+    @observe("model.layers.items")
+    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
     def model_change_handler(self, event=None):
         self.debounce_timer.start(1000) # Start timeout for sending message
 
@@ -160,32 +156,32 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def apply_message_model(self, message_model: DeviceViewerMessageModel, fullreset=False):
         # Apply electrode on/off states
-        for electrode_id, electrode in self.electrodes_model.electrodes.items():
+        for electrode_id, electrode in self.model.electrodes.items():
             electrode.state = message_model.channels_activated[electrode.channel]
         
         # Apply routes
         if fullreset:
-            self.route_layer_manager.reset()
+            self.model.reset()
         else:
-            self.route_layer_manager.layers.clear() # Clear all layers
-            self.route_layer_manager.selected_layer = None # Deselect all layers
-            self.route_layer_manager.layer_to_merge = None # Reset merge layer
-            if self.route_layer_manager.mode == "merge":
-                self.route_layer_manager.mode = "edit" # Reset mode to edit if we were in merge mode
+            self.model.layers.clear() # Clear all layers
+            self.model.selected_layer = None # Deselect all layers
+            self.model.layer_to_merge = None # Reset merge layer
+            if self.model.mode == "merge":
+                self.model.mode = "edit" # Reset mode to edit if we were in merge mode
         
         for route, color in message_model.routes:
-            self.route_layer_manager.add_layer(Route(route), None, color)
+            self.model.add_layer(Route(route), None, color)
 
 
     def publish_model_message(self):
-        message_model = gui_models_to_message_model(self.electrodes_model, self.route_layer_manager)
+        message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=message) # TODO: Change topic to UI topic protocol_grid expects
 
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
-        self.set_electrodes_model(self.electrodes_model)
+        self.set_model(self.model)
 
         # Create debouce timer
         self.debounce_timer = QTimer()
@@ -201,15 +197,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.setParent(container)
 
         # layer_view code
-        layer_model = self.route_layer_manager
         layer_view = RouteLayerView
-        self.layer_ui = layer_model.edit_traits(view=layer_view)
+        self.layer_ui = self.model.edit_traits(view=layer_view)
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
         self.layer_ui.control.setFixedWidth(250) # Set widget to fixed width
         self.layer_ui.control.setParent(container)
 
         # mode_picker_view code
-        self.mode_picker_view = ModePicker(layer_model, self.electrodes_model, self)
+        self.mode_picker_view = ModePicker(self.model, self)
         self.mode_picker_view.setParent(container)
 
         # Add widgets to layouts
@@ -235,9 +230,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             svg_file = dialog.path
             logger.info(f"Selected SVG file: {svg_file}")
 
-            new_model = Electrodes()
+            new_model = MainModel()
             new_model.set_electrodes_from_svg_file(svg_file)
             logger.debug(f"Created electrodes from SVG file: {new_model.svg_model.filename}")
 
-            self.set_electrodes_model(new_model)
+            self.set_model(new_model)
             logger.info(f"Electrodes model set to {new_model}")

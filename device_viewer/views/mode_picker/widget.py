@@ -10,11 +10,10 @@ MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent.parent.parent / "micro
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class ModePicker(QWidget):
-    def __init__(self, route_model, electrodes_model, pane):
+    def __init__(self, model, pane):
         super().__init__()
         self.pane = pane
-        self.route_model = route_model
-        self.electrodes_model = electrodes_model
+        self.model = model
 
         self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
 
@@ -59,17 +58,17 @@ class ModePicker(QWidget):
         self.button_reset.clicked.connect(lambda: self.reset())
         self.button_undo.clicked.connect(lambda: self.undo())
         self.button_redo.clicked.connect(lambda: self.redo())
-        self.route_model.observe(self.on_mode_changed, "mode")
+        self.model.observe(self.on_mode_changed, "mode")
 
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
-        self.button_draw.setChecked(self.route_model.mode in ("draw", "edit-draw"))
-        self.button_edit.setChecked(self.route_model.mode == "edit")
-        self.button_autoroute.setChecked(self.route_model.mode == "auto")
-        self.mode_label.setText(f"Mode: {self.route_model.mode_name}")
+        self.button_draw.setChecked(self.model.mode in ("draw", "edit-draw"))
+        self.button_edit.setChecked(self.model.mode == "edit")
+        self.button_autoroute.setChecked(self.model.mode == "auto")
+        self.mode_label.setText(f"Mode: {self.model.mode_name}")
 
     def set_mode(self, mode):
-        self.route_model.mode = mode
+        self.model.mode = mode
 
     def undo(self):
         self.pane.undo()
@@ -81,5 +80,4 @@ class ModePicker(QWidget):
         self.sync_buttons_and_label()
 
     def reset(self):
-        self.electrodes_model.reset_states()
-        self.route_model.reset()
+        self.model.reset()
