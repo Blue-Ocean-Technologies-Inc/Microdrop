@@ -158,13 +158,6 @@ class ElectrodeView(QGraphicsPathItem):
         self.id = id_
         self.alphas = default_alphas
 
-        if str(self.electrode.channel) == 'None':
-            self.state_map = { # Maps electrode states to colors
-            None: ELECTRODE_NO_CHANNEL,
-            False: ELECTRODE_NO_CHANNEL,
-            True: ELECTRODE_NO_CHANNEL
-        }
-
         self.path = QPainterPath()
         self.path.moveTo(path_data[0][0], path_data[0][1])
         for x, y in path_data:
@@ -179,10 +172,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.setPen(self.pen)
 
         # Brush for the fill
-        self.color = QColor(ELECTRODE_OFF)
-        self.color.setAlphaF(self.alphas['fill'])
-        self.brush = QBrush(self.color)  # Default fill color
-        self.setBrush(self.brush)
+        self.update_color(False)
 
         # Text item
         self.text_path = QGraphicsTextItem(parent=self)
@@ -233,13 +223,22 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def update_color(self, state):
+    def update_color(self, state=False, color=None):
         """
         Method to update the color of the electrode based on the state
         """
-        self.color = QColor(self.state_map.get(state, self.state_map[False]))
+        
+        if color:
+            self.color = QColor(color)
+        elif self.electrode.channel == None:
+            self.color = QColor(ELECTRODE_NO_CHANNEL)
+        else:
+            self.color = QColor(self.state_map.get(state, self.state_map[False]))
         self.color.setAlphaF(self.alphas['fill'])
         self.setBrush(QBrush(self.color))
         self.update()
+
+    def update_label(self):
+        self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
 
 

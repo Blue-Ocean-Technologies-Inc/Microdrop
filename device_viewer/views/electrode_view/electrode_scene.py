@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QGraphicsScene
 
 from .electrode_view_helpers import find_path_item
@@ -42,6 +43,19 @@ class ElectrodeScene(QGraphicsScene):
             if isinstance(item, object_type):
                 return item
         return None
+    
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        char = event.text()
+        key = event.key()
+
+        if char.isprintable(): # If an actual char was inputted
+            if char.isdigit(): # It's a digit
+                self.interaction_service.handle_digit_input(char)
+        else:
+            if key == Qt.Key_Backspace:
+                self.interaction_service.handle_backspace()
+
+        super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
@@ -108,8 +122,10 @@ class ElectrodeScene(QGraphicsScene):
 
         if button == Qt.LeftButton:
             self.left_mouse_pressed = False
-            mode = self.interaction_service.get_mode()
-            if mode in ["edit", "draw", "edit-draw"]:
+            mode = self.interaction_service.get_mode()  
+            if mode == "auto":
+                self.interaction_service.handle_autoroute_end()
+            else:
                 electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
                 # If it's a click (not a drag) since only one electrode selected:
                 if not self.is_drag and electrode_view:
@@ -120,8 +136,6 @@ class ElectrodeScene(QGraphicsScene):
 
                 if mode == "edit-draw": # Go back to draw
                     self.interaction_service.set_mode("draw")
-            elif mode == "auto":
-                self.interaction_service.handle_autoroute_end()
         elif button == Qt.RightButton:
             self.right_mouse_pressed = False
         

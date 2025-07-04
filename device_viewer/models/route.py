@@ -352,10 +352,3 @@ class RouteLayerManager(HasTraits):
                 self.message = f"Route merging: {event.new.name}"
         elif event.name == "name": # event.new is the new name
             self.message = f"Route merging: {event.new}"
-    
-    @observe('mode')
-    def mode_change(self, event):
-        if event.old == 'merge' and event.new != 'merge': # We left merge mode
-            self.message = ""
-            self.layer_to_merge = None
-        

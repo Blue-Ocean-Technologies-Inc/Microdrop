@@ -4,9 +4,9 @@ from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
-from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED
+from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING
 from microdrop_utils._logger import get_logger
-from device_viewer.models.route import RouteLayer, RouteLayerManager
+from device_viewer.models.main_model import MainModel
 
 logger = get_logger(__name__)
 
@@ -90,27 +90,27 @@ class ElectrodeLayer():
         self.remove_connections_to_scene(parent_scene)
         self.remove_endpoints_to_scene(parent_scene)
 
-    ######################## Redraw connections based on list of routes ###########################
-    def redraw_connections_to_scene(self, route_layer_manager: RouteLayerManager):
+    ######################## Redraw functions ###########################
+    def redraw_connections_to_scene(self, model: MainModel):
         # Routes are applied in order, so later routes will apply on top
         # To minimize the number of overlapping Qt calls, we'll apply changes to a dictionary then transfer it to the view at the end
 
         connection_map = {} # Temporary map to superimpose routes
         endpoint_map = {} # Temporary map to superimpose endpoints
 
-        layers = route_layer_manager.layers
+        layers = model.layers
 
-        if route_layer_manager.selected_layer:
-            layers = layers + [route_layer_manager.selected_layer] # Paint the selected layer again last so its always on top
+        if model.selected_layer:
+            layers = layers + [model.selected_layer] # Paint the selected layer again so its always on top
 
-        if route_layer_manager.autoroute_layer:
-            layers = layers + [route_layer_manager.autoroute_layer]
+        if model.autoroute_layer:
+            layers = layers + [model.autoroute_layer] # Paint autoroute layer on top
         
         for i in range(len(layers)):
             route_layer = layers[i]
             color = QColor(route_layer.color)
             z = i # Make sure each route is it own layer. Prevents weird overlap patterns
-            if route_layer.is_selected:
+            if route_layer == model.selected_layer:
                 color = QColor(ROUTE_SELECTED)
             elif route_layer.route.is_loop():
                 if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
@@ -140,3 +140,13 @@ class ElectrodeLayer():
                 endpoint_view.setZValue(z)
             else:
                 endpoint_view.set_inactive()
+    
+    def redraw_electrode_colors(self, model: MainModel):
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.update_color(model.channels_states_map.get(electrode_view.electrode.channel, False))
+            if electrode_view.electrode == model.electrode_editing:
+                electrode_view.update_color(color=ELECTRODE_CHANNEL_EDITING)
+
+    def redraw_electrode_labels(self, model: MainModel):
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.update_label()

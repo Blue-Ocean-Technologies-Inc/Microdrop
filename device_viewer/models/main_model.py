@@ -1,4 +1,4 @@
-from traits.api import Property, Str, Enum
+from traits.api import Property, Str, Enum, observe
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 
@@ -34,3 +34,13 @@ class MainModel(RouteLayerManager, Electrodes):
     def reset(self):
         self.reset_electrode_states()
         self.reset_route_manager()
+    
+    # ------------------ Observers ------------------------------------
+
+    @observe('mode')
+    def mode_change(self, event):
+        if event.old == 'merge' and event.new != 'merge': # We left merge mode
+            self.message = ""
+            self.layer_to_merge = None
+        if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
+            self.electrode_editing = None

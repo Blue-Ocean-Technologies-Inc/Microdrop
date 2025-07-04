@@ -5,7 +5,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from device_viewer.views.electrode_view.default_settings import AUTOROUTE_COLOR
+from device_viewer.views.electrode_view.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
 
 logger = get_logger(__name__)
 
@@ -21,15 +21,44 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     autoroute_paths = Dict({})
 
+    # -------------------- Helpers ------------------------
+
+    def remove_last_digit(self, number: int | None) -> int | None:
+        if number == None: return None
+        
+        string = str(number)[:-1]
+        if string == "":
+            return None
+        else:
+            return int(string)
+    
+    def add_digit(self, number: int | None, digit: str) -> int:
+        if number == None:
+            return int(digit)
+        else:
+            return int(str(number) + digit)
+
     # -------------------- Handlers -----------------------
+
+    def handle_digit_input(self, digit: str):
+        if self.model.mode == "channel-edit":
+            new_channel = self.add_digit(self.model.electrode_editing.channel, digit)
+            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+                self.model.electrode_editing.channel = new_channel
+    
+    def handle_backspace(self):
+        if self.model.mode == "channel-edit":
+            new_channel = self.remove_last_digit(self.model.electrode_editing.channel)
+            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+                self.model.electrode_editing.channel = new_channel
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
-
-        # get electrode model for current electrode clicked
-        clicked_electrode_channel = self.model[electrode_id].channel
-
-        self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
+        if self.model.mode == "channel-edit":
+            self.model.electrode_editing = self.model.electrodes[electrode_id]
+        else:
+            clicked_electrode_channel = self.model[electrode_id].channel
+            self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
 
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
@@ -99,14 +128,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
     
     @observe("model.channels_states_map.items")
-    def electrode_recolor(self, event):
-        if hasattr(event, "added"): # Dict Change Event
-            for channel in event.removed.keys():
-                for affected_electrode_id in self.model.channels_electrode_ids_map[channel]:
-                    self.electrode_view_layer.electrode_views[affected_electrode_id].update_color(False)
+    @observe("model.electrode_editing")
+    @observe("model.electrodes.items.channel")
+    def electrode_state_recolor(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_electrode_colors(self.model)
 
-            for channel, state in event.added.items():
-                for affected_electrode_id in self.model.channels_electrode_ids_map[channel]:
-                    self.electrode_view_layer.electrode_views[affected_electrode_id].update_color(state)
+    @observe("model.electrodes.items.channel")
+    def electrode_channel_change(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_electrode_labels(self.model)
+
 
 

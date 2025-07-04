@@ -26,6 +26,8 @@ class ModePicker(QWidget):
         self.button_autoroute.setToolTip("Autoroute")
         self.button_reset = QPushButton(ICON_RESET_WRENCH)
         self.button_reset.setToolTip("Reset Routes/Electrodes")
+        self.button_channel_edit = QPushButton("Numbers")
+        self.button_channel_edit.setToolTip("Edit Electrode Channels")
         self.button_undo = QPushButton("Undo")
         self.button_undo.setToolTip("Undo")
         self.button_redo = QPushButton("Redo")
@@ -33,7 +35,7 @@ class ModePicker(QWidget):
 
         # btn_layout
         btn_layout = QHBoxLayout()
-        for btn in (self.button_draw, self.button_edit, self.button_autoroute):
+        for btn in (self.button_draw, self.button_edit, self.button_autoroute, self.button_channel_edit):
             btn.setCheckable(True)
             btn_layout.addWidget(btn)
         btn_layout.addWidget(self.button_reset)
@@ -55,6 +57,7 @@ class ModePicker(QWidget):
         self.button_draw.clicked.connect(lambda: self.set_mode("draw"))
         self.button_edit.clicked.connect(lambda: self.set_mode("edit"))
         self.button_autoroute.clicked.connect(lambda: self.set_mode("auto"))
+        self.button_channel_edit.clicked.connect(lambda: self.set_mode("channel-edit"))
         self.button_reset.clicked.connect(lambda: self.reset())
         self.button_undo.clicked.connect(lambda: self.undo())
         self.button_redo.clicked.connect(lambda: self.redo())
@@ -65,6 +68,7 @@ class ModePicker(QWidget):
         self.button_draw.setChecked(self.model.mode in ("draw", "edit-draw"))
         self.button_edit.setChecked(self.model.mode == "edit")
         self.button_autoroute.setChecked(self.model.mode == "auto")
+        self.button_channel_edit.setChecked(self.model.mode == "channel-edit")
         self.mode_label.setText(f"Mode: {self.model.mode_name}")
 
     def set_mode(self, mode):

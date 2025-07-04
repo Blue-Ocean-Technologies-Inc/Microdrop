@@ -18,7 +18,7 @@ class Electrode(HasTraits):
     """
 
     #: Channel number
-    channel = Int()
+    channel = Instance(int, allow_none=True) # Int() doesn't seem to follow allow_none for some reason
 
     #: Electrode id
     id = String()
@@ -36,6 +36,7 @@ class Electrodes(HasTraits):
     #: Dictionary of electrodes with keys being an electrode id and values being the electrode object
     electrodes = Dict(Str, Electrode, desc="Dictionary of electrodes with keys being an electrode id and values "
                                             "being the electrode object")
+    electrode_editing = Instance(Electrode)
 
     svg_model = Instance(SvgUtil, allow_none=True, desc="Model for the SVG file if given")
 
