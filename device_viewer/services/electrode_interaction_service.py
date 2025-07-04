@@ -64,7 +64,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.model.electrode_editing = self.model.electrodes[electrode_id]
         else:
             clicked_electrode_channel = self.model[electrode_id].channel
-            self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
+            if clicked_electrode_channel != None: # The channel can be unassigned!
+                self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
 
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''

@@ -148,7 +148,7 @@ class ElectrodeLayer():
             elif electrode_view.electrode.channel == None:
                 color = ELECTRODE_NO_CHANNEL
             else:
-                color =  ELECTRODE_ON if model.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
+                color = ELECTRODE_ON if model.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
             
             if electrode_hovered == electrode_view:
                 color = QColor(color).lighter(120).name()

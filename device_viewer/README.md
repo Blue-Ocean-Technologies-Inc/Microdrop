@@ -38,3 +38,13 @@ is **not** the same as
 a.trait = True
 ```
 as the former would require 3 different undo calls to undo (which won't break anything, but is very annoying). Thus, when you can, try to have each logical action (like the actions defined in the controller) have around 1 modification to each of the traits it needs to modify. I decided to implement it this way since its really generalized, so adding another "undoable" value is as simple as adding an observer to model_change_handler.
+
+Additionally, for model lists/dictionaries, do not reassign them to a new list like
+```
+model.list = []
+```
+Since this triggers a TraitChangeEvent, which might not trigger the correct callbacks (though I have tried my best to have the handlers listen to them). Use
+```
+model.list.clear()
+```
+which is muct more reliable (triggers a ListChangeEvent)

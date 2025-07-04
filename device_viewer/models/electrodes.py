@@ -92,5 +92,4 @@ class Electrodes(HasTraits):
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
     
     def reset_electrode_states(self):
-        for electrode_id, electrode in self.electrodes.items():
-            electrode.state = False
+        self.channels_states_map.clear()
