@@ -114,6 +114,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
+        self.scene.interaction_service.electrode_state_recolor(None)
 
         logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
 
@@ -131,6 +132,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.layers.items.route.route.items") # When a route is modified
     @observe("model.layers.items")
     @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
     def model_change_handler(self, event=None):
         self.debounce_timer.start(1000) # Start timeout for sending message
 

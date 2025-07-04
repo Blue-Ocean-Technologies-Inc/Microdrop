@@ -84,10 +84,11 @@ class ElectrodeScene(QGraphicsScene):
         """Handle the dragging motion."""
 
         mode = self.interaction_service.get_mode()
+        electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+        self.interaction_service.handle_electrode_hover(electrode_view)
 
         if self.left_mouse_pressed:
             # Only proceed if we have a valid electrode view.
-            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)

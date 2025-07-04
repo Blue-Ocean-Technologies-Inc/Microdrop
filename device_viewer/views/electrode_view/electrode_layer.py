@@ -4,7 +4,7 @@ from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
-from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING
+from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL
 from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import MainModel
 
@@ -141,11 +141,19 @@ class ElectrodeLayer():
             else:
                 endpoint_view.set_inactive()
     
-    def redraw_electrode_colors(self, model: MainModel):
+    def redraw_electrode_colors(self, model: MainModel, electrode_hovered: ElectrodeView):
         for electrode_id, electrode_view in self.electrode_views.items():
-            electrode_view.update_color(model.channels_states_map.get(electrode_view.electrode.channel, False))
             if electrode_view.electrode == model.electrode_editing:
-                electrode_view.update_color(color=ELECTRODE_CHANNEL_EDITING)
+                color = ELECTRODE_CHANNEL_EDITING
+            elif electrode_view.electrode.channel == None:
+                color = ELECTRODE_NO_CHANNEL
+            else:
+                color =  ELECTRODE_ON if model.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
+            
+            if electrode_hovered == electrode_view:
+                color = QColor(color).lighter(120).name()
+
+            electrode_view.update_color(color)
 
     def redraw_electrode_labels(self, model: MainModel):
         for electrode_id, electrode_view in self.electrode_views.items():

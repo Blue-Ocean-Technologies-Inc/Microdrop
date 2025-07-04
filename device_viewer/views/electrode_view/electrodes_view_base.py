@@ -223,19 +223,13 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def update_color(self, state=False, color=None):
+    def update_color(self, color_str: str):
         """
         Method to update the color of the electrode based on the state
         """
-        
-        if color:
-            self.color = QColor(color)
-        elif self.electrode.channel == None:
-            self.color = QColor(ELECTRODE_NO_CHANNEL)
-        else:
-            self.color = QColor(self.state_map.get(state, self.state_map[False]))
-        self.color.setAlphaF(self.alphas['fill'])
-        self.setBrush(QBrush(self.color))
+        color = QColor(color_str)
+        color.setAlphaF(self.alphas['fill'])
+        self.setBrush(QBrush(color))
         self.update()
 
     def update_label(self):

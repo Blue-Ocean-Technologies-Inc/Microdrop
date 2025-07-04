@@ -5,6 +5,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
+from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
 from device_viewer.views.electrode_view.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
 
 logger = get_logger(__name__)
@@ -20,6 +21,8 @@ class ElectrodeInteractionControllerService(HasTraits):
     electrode_view_layer = Instance(ElectrodeLayer)
 
     autoroute_paths = Dict({})
+
+    electrode_hovered = Instance(ElectrodeView)
 
     # -------------------- Helpers ------------------------
 
@@ -39,6 +42,9 @@ class ElectrodeInteractionControllerService(HasTraits):
             return int(str(number) + digit)
 
     # -------------------- Handlers -----------------------
+
+    def handle_electrode_hover(self, electrode_view: ElectrodeView):
+        self.electrode_hovered = electrode_view
 
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
@@ -130,9 +136,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.channels_states_map.items")
     @observe("model.electrode_editing")
     @observe("model.electrodes.items.channel")
+    @observe("electrode_hovered")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
-            self.electrode_view_layer.redraw_electrode_colors(self.model)
+            self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
 
     @observe("model.electrodes.items.channel")
     def electrode_channel_change(self, event):
