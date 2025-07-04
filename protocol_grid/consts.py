@@ -20,26 +20,6 @@ protocol_grid_fields = [
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
 ]
-
-default_column_widths = {
-    "Description": 150,
-    "ID": 80,
-    "Repetitions": 90,
-    "Duration": 80,
-    "Voltage": 80,
-    "Frequency": 90,
-    "Message": 200,
-    "Repeat Duration": 120,
-    "Trail Length": 100,
-    "Trail Overlay": 100,
-    "Video": 60,
-    "Volume Threshold": 120,
-    "Magnet": 70,
-    "Magnet Height": 110,
-    "Max. Path Length": 130,
-    "Run Time": 80
-}
-
 fixed_fields = {"Description", "ID"}
 field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [

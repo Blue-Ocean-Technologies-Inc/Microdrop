@@ -10,8 +10,12 @@ from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                calculate_group_aggregation)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
-                                group_defaults, protocol_grid_fields, default_column_widths)
+                                group_defaults, protocol_grid_fields)
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
+
+protocol_grid_column_widths = [
+    180, 80, 90, 90, 90, 90, 200, 110, 90, 90, 60, 120, 60, 90, 110, 90
+]
 
 
 class PGCWidget(QWidget):
@@ -119,8 +123,8 @@ class PGCWidget(QWidget):
         for i, field in enumerate(protocol_grid_fields):
             if field in self._column_visibility:
                 self.tree.setColumnHidden(i, not self._column_visibility[field])
-            if field in self._column_widths:
-                self.tree.header().resizeSection(i, self._column_widths[field])
+            if field in self._column_widths and self._column_widths[field] > 0:
+                self.tree.setColumnWidth(i, self._column_widths[field])
         
     def ensure_minimum_protocol(self):
         if not self.state.sequence:
@@ -271,8 +275,7 @@ class PGCWidget(QWidget):
         
     def load_from_state(self):
         saved_selection = self.save_selection()
-        self.save_column_settings()
-        
+        self.save_column_settings()        
         self._programmatic_change = True
         try:
             self.state_to_model()
@@ -287,36 +290,27 @@ class PGCWidget(QWidget):
         self.restore_selection(saved_selection)
             
     def state_to_model(self):
-        self.model.clear()
-        
+        self.model.clear()        
         self.model.setHorizontalHeaderLabels(protocol_grid_fields)
         
         def add_recursive(elements, parent_item):
             for element in elements:
                 if isinstance(element, ProtocolStep):
-                    # Use step parameters directly - they already contain the updated values
                     row_items = make_row(step_defaults, element.parameters, STEP_TYPE)
-                    # Store device state in description item
                     row_items[0].setData(element.device_state, Qt.UserRole + 100)
-                    parent_item.appendRow(row_items)
-                    
+                    parent_item.appendRow(row_items)                    
                 elif isinstance(element, ProtocolGroup):
-                    # Use group parameters directly - they already contain the updated values
                     row_items = make_row(group_defaults, element.parameters, GROUP_TYPE)
                     parent_item.appendRow(row_items)
                     # Recursively add children
                     add_recursive(element.elements, row_items[0])
                     
         add_recursive(self.state.sequence, self.model.invisibleRootItem())
+        self.setup_headers()
         
     def setup_headers(self):
-        header = self.tree.header()
-        header.setSectionResizeMode(QHeaderView.Interactive)
-        
-        for i, field in enumerate(protocol_grid_fields):
-            if field not in self._column_widths:
-                default_width = default_column_widths.get(field, 120)
-                header.resizeSection(i, default_width)
+        for i, width in enumerate(protocol_grid_column_widths):
+            self.tree.setColumnWidth(i, width)
             
     def on_item_changed(self, item):
         """Handle item changes and sync to state immediately."""
@@ -615,14 +609,9 @@ class PGCWidget(QWidget):
             target_item = self.get_item_by_path(target_path)
             if not target_item:
                 return
-                
-            if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                target_elements = self._find_elements_by_path(target_path)
-                row = len(target_elements)
-            else:
-                parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
-                row = target_path[-1] + 1
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
                 
         self.state.snapshot_for_undo()
         
@@ -684,14 +673,9 @@ class PGCWidget(QWidget):
             target_item = self.get_item_by_path(target_path)
             if not target_item:
                 return
-                
-            if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                target_elements = self._find_elements_by_path(target_path)
-                row = len(target_elements)
-            else:
-                parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
-                row = target_path[-1] + 1
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
                 
         self.state.snapshot_for_undo()
         
@@ -978,7 +962,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = QMainWindow()
     window.setWindowTitle("Protocol Grid Widget")
-    window.setGeometry(100, 100, 1400, 500)    
+    window.setGeometry(50, 50, 1400, 500)    
     widget = PGCWidget()
     window.setCentralWidget(widget)    
     window.show()    

@@ -1,7 +1,6 @@
 import copy
 from protocol_grid.consts import protocol_grid_fields
 from protocol_grid.logic.device_state_manager import DeviceStateManager
-from protocol_grid.logic.import_export_manager import ImportExportManager
 
 class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
@@ -112,7 +111,8 @@ class ProtocolState:
             "fields": list(self.fields)
         }
     
-    def from_flat_export(self, flat_json):        
+    def from_flat_export(self, flat_json):  
+        from protocol_grid.logic.import_export_manager import ImportExportManager      
         sequence, fields = ImportExportManager.import_flat_protocol(flat_json)
         self.sequence = sequence
         self.fields = fields

@@ -115,7 +115,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                 item.setEditable(True)
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
-        elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time"):
+        elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time", "ID"):
             item.setEditable(False)
             item.setText("")
             
