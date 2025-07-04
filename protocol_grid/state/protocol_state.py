@@ -1,6 +1,7 @@
 import copy
 from protocol_grid.consts import protocol_grid_fields
-from protocol_grid.state.device_state import DeviceState
+from protocol_grid.logic.device_state_manager import DeviceStateManager
+from protocol_grid.logic.import_export_manager import ImportExportManager
 
 class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
@@ -12,8 +13,9 @@ class ProtocolStep:
                 if str(val).strip().lower() in ("1", "true", "yes", "on"):
                     self.parameters[field] = "1"
                 else:
-                    self.parameters[field] = "0"
-        self.device_state = DeviceState()
+                    self.parameters[field] = "0"        
+        
+        self.device_state = DeviceStateManager.create_random_device_state()
 
     def to_dict(self):
         return {
@@ -28,6 +30,7 @@ class ProtocolStep:
         obj = cls(parameters=data.get("parameters", {}), name=data.get("name", "Step"))
         obj.device_state.from_dict(data.get("device_state", {}))
         return obj
+
 
 class ProtocolGroup:
     def __init__(self, parameters=None, name="Group", elements=None):
@@ -48,6 +51,7 @@ class ProtocolGroup:
         elements = [ProtocolStep.from_dict(e) if e.get("type") == "step" else ProtocolGroup.from_dict(e)
                     for e in data.get("elements", [])]
         return cls(parameters=data.get("parameters", {}), name=data.get("name", "Group"), elements=elements)
+
 
 class ProtocolState:
     def __init__(self, sequence=None):
@@ -75,7 +79,7 @@ class ProtocolState:
         """
         Returns a dict with:
         - 'steps': list of step dicts (including device_state as a dict)
-        - 'groups': list of {'id': group_id, 'description': group_description}
+        - 'groups': list of {'ID': group_id, 'Description': group_description}
         - 'fields': list of field names
         """
         steps = []
@@ -108,9 +112,8 @@ class ProtocolState:
             "fields": list(self.fields)
         }
     
-    def from_flat_export(self, flat_json):
-        from protocol_grid.protocol_state_helpers import import_flat_protocol
-        sequence, fields = import_flat_protocol(flat_json)
+    def from_flat_export(self, flat_json):        
+        sequence, fields = ImportExportManager.import_flat_protocol(flat_json)
         self.sequence = sequence
         self.fields = fields
 
@@ -121,7 +124,7 @@ class ProtocolState:
         self.from_dict(data)
 
     def snapshot_for_undo(self, programmatic=False):
-        snap = copy.deepcopy((self.sequence, list(self.fields)))
+        snap = copy.deepcopy(self.to_dict())
         self.undo_stack.append(snap)
         if len(self.undo_stack) > 20:
             self.undo_stack = self.undo_stack[-20:]
@@ -131,15 +134,15 @@ class ProtocolState:
     def undo(self):
         if not self.undo_stack:
             return
-        current = copy.deepcopy((self.sequence, list(self.fields)))
+        current = copy.deepcopy(self.to_dict())
         self.redo_stack.append(current)
         last = self.undo_stack.pop()
-        self.sequence, self.fields = copy.deepcopy(last)
+        self.from_dict(last)
 
     def redo(self):
         if not self.redo_stack:
             return
-        current = copy.deepcopy((self.sequence, list(self.fields)))
+        current = copy.deepcopy(self.to_dict())
         self.undo_stack.append(current)
         next_ = self.redo_stack.pop()
-        self.sequence, self.fields = copy.deepcopy(next_)
+        self.from_dict(next_)

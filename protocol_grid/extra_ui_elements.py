@@ -19,39 +19,74 @@ class EditContextMenu(QMenu):
         action_select_fields.triggered.connect(self.widget.show_column_toggle_dialog)
         self.addAction(action_select_fields)
         self.addSeparator()
-        actions = [
-            ("Delete", self.widget.delete_selected),
+        
+        structural_actions = [
             ("Insert Step Above", self.widget.insert_step),
             ("Insert Group Above", self.widget.insert_group),
+            ("Delete", self.widget.delete_selected),
+        ]
+        for name, slot in structural_actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            self.addAction(action)
+            
+        self.addSeparator()
+        
+        clipboard_actions = [
             ("Copy", self.widget.copy_selected),
             ("Cut", self.widget.cut_selected),
             ("Paste Above", lambda: self.widget.paste_selected(above=True)),
             ("Paste Below", lambda: self.widget.paste_selected(above=False)),
-            ("Paste into", self.widget.paste_into),
+            ("Paste Into", self.widget.paste_into),
+        ]
+        for name, slot in clipboard_actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            self.addAction(action)
+            
+        self.addSeparator()
+        
+        undo_actions = [
             ("Undo", self.widget.undo_last),
             ("Redo", self.widget.redo_last)
         ]
-        for name, slot in actions:
+        for name, slot in undo_actions:
             action = QAction(name, self)
             action.triggered.connect(slot)
             self.addAction(action)
         self.addSeparator()
-        next_actions = [
-            ("Select all rows", self.widget.select_all),
-            ("Deselect rows", self.widget.deselect_rows),
-            ("Invert row selection", self.widget.invert_row_selection)
+        
+        selection_actions = [
+            ("Select All", self.widget.select_all),
+            ("Deselect All", self.widget.deselect_rows),
+            ("Invert Selection", self.widget.invert_row_selection)
         ]
-        for name, slot in next_actions:
+        for name, slot in selection_actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            self.addAction(action) 
+        self.addSeparator()
+        
+        import_export_actions = [
+            ("Import Into", self.widget.import_into_json),
+            ("Export to JSON", self.widget.export_to_json),
+            ("Import from JSON", self.widget.import_from_json),
+        ]
+        for name, slot in import_export_actions:
             action = QAction(name, self)
             action.triggered.connect(slot)
             self.addAction(action)
+            
         self.addSeparator()
-        action_import_into = QAction("Import Into", self)
-        action_import_into.triggered.connect(self.widget.import_into_json)
-        self.addAction(action_import_into)
-
-    def popup_at(self, pos: QPoint):
-        self.exec(self.widget.tree.viewport().mapToGlobal(pos))
+        
+        device_actions = [
+            ("Assign Test Device States", self.widget.assign_test_device_states),
+            ("Edit Device State", self.widget.open_device_editor),
+        ]
+        for name, slot in device_actions:
+            action = QAction(name, self)
+            action.triggered.connect(slot)
+            self.addAction(action)
 
 
 class ShowEditContextMenuAction(Action):
@@ -74,7 +109,8 @@ class ColumnToggleDialog(QDialog):
     def __init__(self, parent_widget):
         super().__init__(parent_widget)
         self.widget = parent_widget
-        self.setWindowTitle("Options")
+        self.setWindowTitle("Select Fields")
+        self.setModal(True)
         self.checkboxes = []
         self.column_indices = []
         self.setup_ui()
