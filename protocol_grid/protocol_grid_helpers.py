@@ -45,8 +45,12 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         field = protocol_grid_fields[index.column()]
         
-        if field in ("Video", "Magnet"):
+        if field in ("Video"):
             checked = index.model().data(index, Qt.CheckStateRole) == Qt.Checked
+            editor.setChecked(checked)
+        elif field in ("Magnet"):
+            checked = index.model().data(index, Qt.CheckStateRole) == 2
+            print("setEditorData: Magnet cell set to checked:", checked)
             editor.setChecked(checked)
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             try:
@@ -64,9 +68,6 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         if isinstance(editor, QCheckBox):
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
-            model.setData(index, "", Qt.ItemDataRole.EditRole)
-            model.setData(index, "", Qt.DisplayRole)
-            # Force itemChanged signal
             item = model.itemFromIndex(index)
             if item is not None:
                 item.emitDataChanged()
@@ -89,41 +90,47 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
     overrides = overrides or {}
     items = []
     magnet_checked = False
-    
+
     for field in protocol_grid_fields:
         value = overrides.get(field, defaults.get(field, ""))
         item = PGCItem(str(value))
-        
+
         if field == "Description":
             item.setData(row_type, ROW_TYPE_ROLE)
-            
+
         if row_type == STEP_TYPE and field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = str(value).strip().lower() in ("1", "true", "yes", "on")
+            if field == "Magnet":
+                print("make_row: Magnet value: ", value, " checked: ", checked)
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
-            item.setText("") 
+            item.setText("")
             if field == "Magnet":
                 magnet_checked = checked
         elif row_type == STEP_TYPE and field == "Magnet Height":
+            if value:
+                item.setData(str(value), Qt.UserRole + 2)
             if not magnet_checked:
                 item.setEditable(False)
-                if value:
-                    item.setData(str(value), Qt.UserRole + 2)
                 item.setText("")
             else:
                 item.setEditable(True)
+                last_value = item.data(Qt.UserRole + 2)
+                if last_value is not None and last_value != "":
+                    item.setText(str(last_value))
+                print(f"make_row: Magnet Height cell created as editable, value: '{item.text()}'")
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time", "ID"):
             item.setEditable(False)
             item.setText("")
-            
+
         items.append(item)
-        
+
     if row_type == GROUP_TYPE and children:
         calculate_group_aggregation_from_children(items, children)
-        
+
     return items
 
 

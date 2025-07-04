@@ -44,7 +44,7 @@ class StateManager:
                                 val = item.data(Qt.ItemDataRole.EditRole)
                                 fields[field] = "1" if val in ("1", 1, True) else "0"
                             else:
-                                fields[field] = "1" if state_val == Qt.Checked else "0"
+                                fields[field] = "1" if state_val == Qt.Checked or state_val == 2 else "0"
                         elif field == "Magnet Height":
                             last_value = item.data(Qt.UserRole + 2)
                             if last_value is not None and last_value != "":

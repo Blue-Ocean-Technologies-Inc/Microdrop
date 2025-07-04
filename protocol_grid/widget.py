@@ -14,7 +14,7 @@ from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_def
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
 
 protocol_grid_column_widths = [
-    180, 80, 90, 90, 90, 90, 200, 110, 90, 90, 60, 120, 60, 90, 110, 90
+    120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
 ]
 
 
@@ -221,7 +221,16 @@ class PGCWidget(QWidget):
                 for col, field in enumerate(protocol_grid_fields):
                     item = parent_item.child(row, col)
                     if item:
-                        if field in ("Video", "Magnet"):
+                        if field == "Magnet":
+                            checked = item.data(Qt.CheckStateRole) == 2 # == Qt.Checked
+                            parameters[field] = "1" if checked else "0"
+                        elif field == "Magnet Height":
+                            last_value = item.data(Qt.UserRole + 2)
+                            if last_value is not None and last_value != "":
+                                parameters[field] = str(last_value)
+                            else:   
+                                parameters[field] = item.text()
+                        elif field == "Video":
                             checked = item.data(Qt.CheckStateRole) == Qt.Checked
                             parameters[field] = "1" if checked else "0"
                         else:
@@ -327,7 +336,9 @@ class PGCWidget(QWidget):
         field = protocol_grid_fields[col]
         
         if field == "Magnet":
+            print("Magnet checkbox edited")
             self._handle_magnet_change(parent, row)
+            return 
             
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
@@ -348,26 +359,35 @@ class PGCWidget(QWidget):
     def _handle_magnet_change(self, parent, row):
         magnet_col = protocol_grid_fields.index("Magnet")
         magnet_height_col = protocol_grid_fields.index("Magnet Height")
-        
         magnet_item = parent.child(row, magnet_col)
         magnet_height_item = parent.child(row, magnet_height_col)
-        
         if not magnet_item or not magnet_height_item:
+            print(f"Magnet or Magnet Height item missing at row {row}")
             return
-            
-        checked = magnet_item.data(Qt.CheckStateRole) == Qt.Checked
-        
-        if not checked:
-            last_value = magnet_height_item.text()
-            magnet_height_item.setData(last_value, Qt.UserRole + 2)
-            magnet_height_item.setEditable(False)
-            magnet_height_item.setText("")
-        else:
+
+        raw_check_state = magnet_item.data(Qt.CheckStateRole)
+        checked = raw_check_state == Qt.Checked or raw_check_state == 2
+        print(f"Magnet change handled for row: {row}, raw_check_state: {raw_check_state}, checked: {checked}, current Magnet Height editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
+
+        if checked:
             last_value = magnet_height_item.data(Qt.UserRole + 2)
+            print(f"Magnet checked. Last stored Magnet Height value: {last_value}")
             if last_value is None or last_value == "":
                 last_value = "0"
             magnet_height_item.setEditable(True)
             magnet_height_item.setText(str(last_value))
+            print(f"Magnet Height cell set to editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
+            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+        else:
+            last_value = magnet_height_item.text()
+            print(f"Magnet unchecked. Storing Magnet Height value: {last_value}")
+            magnet_height_item.setData(last_value, Qt.UserRole + 2)
+            magnet_height_item.setEditable(False)
+            magnet_height_item.setText("")
+            print(f"Magnet Height cell set to not editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
+            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+
+        self.model.itemChanged.emit(magnet_height_item)
             
     def _validate_numeric_field(self, item, field):
         """Validate numeric fields."""
