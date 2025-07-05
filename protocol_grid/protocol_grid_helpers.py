@@ -28,12 +28,49 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         if field in ("Video", "Magnet"):
             editor = QCheckBox(parent)
             return editor
-        elif field in ("Repetitions", "Trail Length", "Trail Overlay", "Max. Path Length"):
+        elif field in ("Magnet Height"):
             editor = QSpinBox(parent)
             editor.setMinimum(0)
-            editor.setMaximum(99999)
+            editor.setMaximum(10)
             return editor
-        elif field in ("Duration", "Voltage", "Frequency", "Repeat Duration", "Volume Threshold", "Run Time", "Magnet Height"):
+        elif field in ("Repetitions", "Trail Length"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(1)
+            editor.setMaximum(10000)
+            return editor
+        elif field in ("Frequency"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(100)
+            editor.setMaximum(20000)
+            editor.setSingleStep(100)
+            return editor
+        elif field in ("Trail Overlay", "Max. Path Length"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(0)
+            editor.setMaximum(1000)
+            return editor
+        elif field in ("Duration"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(0.0)
+            editor.setMaximum(10000.0)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.1)
+            return editor
+        elif field in ("Voltage"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(30.0)
+            editor.setMaximum(150.0)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.5)
+            return editor        
+        elif field in ("Volume Threshold"):
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(0.00)
+            editor.setMaximum(1.00)
+            editor.setDecimals(2)
+            editor.setSingleStep(0.01)
+            return editor
+        elif field in ("Repeat Duration", "Run Time"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(99999.9)
