@@ -325,6 +325,7 @@ class PGCWidget(QWidget):
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
+        self.state.snapshot_for_undo()
         parent = item.parent() or self.model.invisibleRootItem()
         row = item.row()
         col = item.column()
