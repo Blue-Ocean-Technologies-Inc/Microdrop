@@ -760,9 +760,22 @@ class PGCWidget(QWidget):
         selected_paths = self.get_selected_paths()
         if not selected_paths:
             return
+        
+        def is_descendant(path, other_path):
+            return len(path) > len(other_path) and path[:len(other_path)] == other_path
+
+        filtered_paths = []
+        for path in selected_paths:
+            is_child = False
+            for i in selected_paths:
+                if i != path and is_descendant(path, i):
+                    is_child = True
+                    break
+            if not is_child:
+                filtered_paths.append(path)
             
         copied_items = []
-        for path in selected_paths:
+        for path in filtered_paths:
             if len(path) == 1:
                 if path[0] < len(self.state.sequence):
                     copied_items.append(copy.deepcopy(self.state.sequence[path[0]]))
