@@ -87,7 +87,6 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setChecked(checked)
         elif field in ("Magnet"):
             checked = index.model().data(index, Qt.CheckStateRole) == 2
-            print("setEditorData: Magnet cell set to checked:", checked)
             editor.setChecked(checked)
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             try:
@@ -101,23 +100,26 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             
     def setModelData(self, editor, model, index):
         field = protocol_grid_fields[index.column()]
-        
-        if isinstance(editor, QCheckBox):
+        if isinstance(editor, QCheckBox) and field != "Magnet":
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             item = model.itemFromIndex(index)
             if item is not None:
                 item.emitDataChanged()
-        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
+        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)) and field != "Magnet Height":
             value = editor.value()
             if isinstance(editor, QDoubleSpinBox):
                 model.setData(index, f"{value:.1f}", Qt.EditRole)
             else:
                 model.setData(index, str(int(value)), Qt.EditRole)
+        elif field == "Magnet Height":
+            value = editor.value() if hasattr(editor, "value") else editor.text()
+            model.setData(index, str(value), Qt.EditRole)
+            model.setData(index, str(value), Qt.UserRole + 2)
         else:
             text = editor.text()
             model.setData(index, text, Qt.EditRole)
-            
+
         widget = self.parent()
         if hasattr(widget, "sync_to_state"):
             widget.sync_to_state()
@@ -139,15 +141,12 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = str(value).strip().lower() in ("1", "true", "yes", "on")
-            if field == "Magnet":
-                print("make_row: Magnet value: ", value, " checked: ", checked)
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             item.setText("")
             if field == "Magnet":
                 magnet_checked = checked
         elif row_type == STEP_TYPE and field == "Magnet Height":
-            if value:
-                item.setData(str(value), Qt.UserRole + 2)
+            item.setData(str(value), Qt.UserRole + 2)
             if not magnet_checked:
                 item.setEditable(False)
                 item.setText("")
@@ -156,7 +155,6 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                 last_value = item.data(Qt.UserRole + 2)
                 if last_value is not None and last_value != "":
                     item.setText(str(last_value))
-                print(f"make_row: Magnet Height cell created as editable, value: '{item.text()}'")
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time", "ID"):

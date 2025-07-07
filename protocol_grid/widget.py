@@ -9,6 +9,7 @@ from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
+from protocol_grid.protocol_state_helpers import make_test_steps
 from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                 group_defaults, protocol_grid_fields)
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
@@ -322,39 +323,29 @@ class PGCWidget(QWidget):
             self.tree.setColumnWidth(i, width)
             
     def on_item_changed(self, item):
-        """Handle item changes and sync to state immediately."""
         if self._programmatic_change:
             return
-            
         parent = item.parent() or self.model.invisibleRootItem()
         row = item.row()
         col = item.column()
-        
         if col >= len(protocol_grid_fields):
             return
-            
         field = protocol_grid_fields[col]
-        
         if field == "Magnet":
-            print("Magnet checkbox edited")
             self._handle_magnet_change(parent, row)
-            return 
-            
+            return
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
-            
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
-            
         desc_item = parent.child(row, 0)
         if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
             self.update_single_step_dev_fields(desc_item)
-            
         if field in ("Duration", "Repeat Duration", "Repetitions"):
             self._update_parent_aggregations(parent)
-            
-        # Immediate sync to state
+        # self.touch_all_checked_magnets()
         self.sync_to_state()
+        
         
     def _handle_magnet_change(self, parent, row):
         magnet_col = protocol_grid_fields.index("Magnet")
@@ -362,29 +353,23 @@ class PGCWidget(QWidget):
         magnet_item = parent.child(row, magnet_col)
         magnet_height_item = parent.child(row, magnet_height_col)
         if not magnet_item or not magnet_height_item:
-            print(f"Magnet or Magnet Height item missing at row {row}")
             return
 
         raw_check_state = magnet_item.data(Qt.CheckStateRole)
         checked = raw_check_state == Qt.Checked or raw_check_state == 2
-        print(f"Magnet change handled for row: {row}, raw_check_state: {raw_check_state}, checked: {checked}, current Magnet Height editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
 
         if checked:
             last_value = magnet_height_item.data(Qt.UserRole + 2)
-            print(f"Magnet checked. Last stored Magnet Height value: {last_value}")
             if last_value is None or last_value == "":
                 last_value = "0"
             magnet_height_item.setEditable(True)
             magnet_height_item.setText(str(last_value))
-            print(f"Magnet Height cell set to editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
             self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
         else:
             last_value = magnet_height_item.text()
-            print(f"Magnet unchecked. Storing Magnet Height value: {last_value}")
             magnet_height_item.setData(last_value, Qt.UserRole + 2)
             magnet_height_item.setEditable(False)
             magnet_height_item.setText("")
-            print(f"Magnet Height cell set to not editable: {magnet_height_item.isEditable()}, text: '{magnet_height_item.text()}'")
             self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
 
         self.model.itemChanged.emit(magnet_height_item)
@@ -582,7 +567,7 @@ class PGCWidget(QWidget):
         
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -613,7 +598,7 @@ class PGCWidget(QWidget):
         
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -643,7 +628,7 @@ class PGCWidget(QWidget):
         
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -677,7 +662,7 @@ class PGCWidget(QWidget):
             
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -707,7 +692,7 @@ class PGCWidget(QWidget):
         
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -741,7 +726,7 @@ class PGCWidget(QWidget):
             
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -768,7 +753,7 @@ class PGCWidget(QWidget):
         
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
     def copy_selected(self):
         selected_paths = self.get_selected_paths()
@@ -819,7 +804,7 @@ class PGCWidget(QWidget):
             
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
@@ -850,19 +835,23 @@ class PGCWidget(QWidget):
             
         self.reassign_ids()
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
         self.restore_selection(saved_selection)
         
     def undo_last(self):
+        self._programmatic_change = True
         if self.state.undo_stack:
             self.state.undo()
             self.load_from_state()
+        self._programmatic_change = False
             
     def redo_last(self):
+        self._programmatic_change = True
         if self.state.redo_stack:
             self.state.redo()
             self.load_from_state()
+        self._programmatic_change = False
             
     def undo(self):
         self.undo_last()
@@ -870,9 +859,7 @@ class PGCWidget(QWidget):
     def redo(self):
         self.redo_last()
         
-    def export_to_json(self):
-        self.sync_to_state()
-        
+    def export_to_json(self):        
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", "", "JSON Files (*.json)")
         if file_name:
             flat_data = self.state.to_flat_export()
@@ -943,7 +930,7 @@ class PGCWidget(QWidget):
                     
             self.reassign_ids()
             self.load_from_state()
-            self.sync_to_state()
+            # self.sync_to_state()
             
             self.restore_selection(saved_selection)
             
@@ -951,9 +938,7 @@ class PGCWidget(QWidget):
             QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
             
     def assign_test_device_states(self):
-        """Assign test device states to steps."""
-        from protocol_grid.protocol_state_helpers import make_test_steps
-        
+        """Assign test device states to steps."""    
         test_steps = make_test_steps()
         test_states = [step.device_state for step in test_steps]
         
@@ -971,7 +956,7 @@ class PGCWidget(QWidget):
         assign_recursive(self.state.sequence)
         
         self.load_from_state()
-        self.sync_to_state()
+        # self.sync_to_state()
         
     def open_device_editor(self):
         QMessageBox.information(self, "Device Editor", "Device state editor not yet implemented.")
