@@ -342,6 +342,9 @@ class PGCWidget(QWidget):
 
         desc_item = parent.child(row, 0)
 
+        if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            self.update_single_step_dev_fields(desc_item)
+
         if field in ("Voltage", "Frequency", "Trail Length"):
             if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 value = item.text()
@@ -350,14 +353,14 @@ class PGCWidget(QWidget):
             if not self._block_aggregation:
                 self._update_parent_aggregations(parent)
 
+        if field in ("Duration", "Run Time"):
+            self._update_parent_aggregations(parent)
+
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
 
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
-
-        if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-            self.update_single_step_dev_fields(desc_item)
 
         self.sync_to_state()
         

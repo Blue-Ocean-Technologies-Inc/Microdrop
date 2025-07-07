@@ -126,8 +126,8 @@ class ProtocolState:
     def snapshot_for_undo(self, programmatic=False):
         snap = copy.deepcopy(self.to_dict())
         self.undo_stack.append(snap)
-        if len(self.undo_stack) > 20:
-            self.undo_stack = self.undo_stack[-20:]
+        if len(self.undo_stack) > 20000:
+            self.undo_stack = self.undo_stack[-20000:]
         if not programmatic:
             self.redo_stack.clear()        
 

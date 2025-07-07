@@ -157,9 +157,11 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                     item.setText(str(last_value))
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
-        elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time", "ID"):
-            if field in ("Voltage", "Frequency", "Trail Length"):
+        elif row_type == GROUP_TYPE:
+            if field in ("Description", "Voltage", "Frequency", "Trail Length"):
                 item.setEditable(True)
+            elif field in ("Duration", "Run Time", "Repetitions", "ID"):
+                item.setEditable(False)
             else:
                 item.setEditable(False)
                 item.setText("")
@@ -235,8 +237,11 @@ def calculate_group_aggregation_from_children(group_items, children):
     agg_consistent = {field: True for field in agg_fields}
     agg_found = {field: False for field in agg_fields}
 
+    total_duration = 0.0
+    total_run_time = 0.0
+
     def collect_from_items(child_rows):
-        nonlocal agg_values, agg_consistent, agg_found
+        nonlocal agg_values, agg_consistent, agg_found, total_duration, total_run_time
 
         for child_row in child_rows:
             if not child_row or not isinstance(child_row, list):
@@ -256,7 +261,32 @@ def calculate_group_aggregation_from_children(group_items, children):
                         elif agg_values[field] != val:
                             agg_consistent[field] = False
 
+                    dur_idx = protocol_grid_fields.index("Duration")
+                    rep_idx = protocol_grid_fields.index("Repetitions")
+                    run_idx = protocol_grid_fields.index("Run Time")
+                    try:
+                        duration = float(child_row[dur_idx].text() or "0")
+                        repetitions = int(child_row[rep_idx].text() or "1")
+                        run_time = float(child_row[run_idx].text() or "0")
+                    except ValueError:
+                        duration = 0.0
+                        repetitions = 1
+                        run_time = 0.0
+                    total_duration += duration * repetitions
+                    total_run_time += run_time
+
                 elif child_type == GROUP_TYPE:
+                    dur_idx = protocol_grid_fields.index("Duration")
+                    run_idx = protocol_grid_fields.index("Run Time")
+                    try:
+                        duration = float(child_row[dur_idx].text() or "0")
+                        run_time = float(child_row[run_idx].text() or "0")
+                    except ValueError:
+                        duration = 0.0
+                        run_time = 0.0
+                    total_duration += duration
+                    total_run_time += run_time
+
                     sub_rows = [
                         [desc_item.child(r, c) for c in range(desc_item.columnCount())]
                         for r in range(desc_item.rowCount())
@@ -275,6 +305,11 @@ def calculate_group_aggregation_from_children(group_items, children):
                 item.setText(agg_values[field])
             else:
                 item.setText("")
+
+        dur_idx = protocol_grid_fields.index("Duration")
+        run_idx = protocol_grid_fields.index("Run Time")
+        group_items[dur_idx].setText(f"{total_duration:.1f}")
+        group_items[run_idx].setText(f"{total_run_time:.2f}")
     except IndexError:
         pass
 
