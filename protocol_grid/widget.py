@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
 
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
-                                               calculate_group_aggregation)
+                                               calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import make_test_steps
 from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
@@ -49,6 +49,7 @@ class PGCWidget(QWidget):
         self.setLayout(layout)
         
         self._programmatic_change = False
+        self._block_aggregation = False
         self._sync_timer = QTimer()
         self._sync_timer.setSingleShot(True)
         self._sync_timer.timeout.connect(self._delayed_sync)
@@ -325,28 +326,65 @@ class PGCWidget(QWidget):
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
+
         self.state.snapshot_for_undo()
         parent = item.parent() or self.model.invisibleRootItem()
         row = item.row()
         col = item.column()
         if col >= len(protocol_grid_fields):
             return
+
         field = protocol_grid_fields[col]
+
         if field == "Magnet":
             self._handle_magnet_change(parent, row)
             return
+
+        desc_item = parent.child(row, 0)
+
+        if field in ("Voltage", "Frequency", "Trail Length"):
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                value = item.text()
+                if value != "":
+                    self._set_field_for_group(desc_item, field, value)
+            if not self._block_aggregation:
+                self._update_parent_aggregations(parent)
+
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
+
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
-        desc_item = parent.child(row, 0)
+
         if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
             self.update_single_step_dev_fields(desc_item)
-        if field in ("Duration", "Repeat Duration", "Repetitions"):
-            self._update_parent_aggregations(parent)
-        # self.touch_all_checked_magnets()
+
         self.sync_to_state()
         
+    def _set_field_for_group(self, group_item, field, value):
+        """Recursively set a field for all steps and subgroups under a group, and set the group row's own value."""
+        self._block_aggregation = True
+        try:
+            idx = protocol_grid_fields.index(field)
+            parent_item = group_item.parent()
+            if parent_item is None:
+                parent_item = self.model.invisibleRootItem()
+            group_row_item = parent_item.child(group_item.row(), idx)
+            if group_row_item:
+                group_row_item.setText(value)
+            for row in range(group_item.rowCount()):
+                desc_item = group_item.child(row, 0)
+                if not desc_item:
+                    continue
+                row_type = desc_item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
+                    item = group_item.child(row, idx)
+                    if item:
+                        item.setText(value)
+                elif row_type == GROUP_TYPE:
+                    self._set_field_for_group(desc_item, field, value)
+        finally:
+            self._block_aggregation = False
         
     def _handle_magnet_change(self, parent, row):
         magnet_col = protocol_grid_fields.index("Magnet")
@@ -405,7 +443,14 @@ class PGCWidget(QWidget):
         current = parent
         while current and current != self.model.invisibleRootItem():
             if current.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                calculate_group_aggregation(current)
+                row = current.row()
+                parent_item = current.parent() or current.model().invisibleRootItem()
+                group_items = [parent_item.child(row, c) for c in range(parent_item.columnCount())]
+                children_rows = [
+                    [current.child(r, c) for c in range(current.columnCount())]
+                    for r in range(current.rowCount())
+                ]
+                calculate_group_aggregation_from_children(group_items, children_rows)
             current = current.parent()
             
     def update_single_step_dev_fields(self, desc_item):
@@ -471,10 +516,14 @@ class PGCWidget(QWidget):
             for row in range(parent.rowCount()):
                 item = parent.child(row, 0)
                 if item and item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                    calculate_group_aggregation(item)
+                    group_items = [parent.child(row, c) for c in range(parent.columnCount())]
+                    children_rows = [
+                        [item.child(r, c) for c in range(item.columnCount())]
+                        for r in range(item.rowCount())
+                    ]
+                    calculate_group_aggregation_from_children(group_items, children_rows)
                     if item.hasChildren():
                         update_recursive(item)
-                        
         update_recursive(self.model.invisibleRootItem())
         
     def get_selected_paths(self):

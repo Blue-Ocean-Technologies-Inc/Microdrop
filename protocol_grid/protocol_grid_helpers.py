@@ -158,8 +158,11 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE and field not in ("Description", "Repetitions", "Duration", "Run Time", "ID"):
-            item.setEditable(False)
-            item.setText("")
+            if field in ("Voltage", "Frequency", "Trail Length"):
+                item.setEditable(True)
+            else:
+                item.setEditable(False)
+                item.setText("")
 
         items.append(item)
 
@@ -227,48 +230,51 @@ def calculate_group_aggregation(group_item):
 
 
 def calculate_group_aggregation_from_children(group_items, children):
-    total_repetitions = 0
-    total_duration = 0.0
-    total_run_time = 0.0
-    
-    def collect_from_items(child_items):
-        nonlocal total_repetitions, total_duration, total_run_time
-        
-        for child_row in child_items:
-            if not child_row:
+    agg_fields = ["Voltage", "Frequency", "Trail Length"]
+    agg_values = {field: None for field in agg_fields}
+    agg_consistent = {field: True for field in agg_fields}
+    agg_found = {field: False for field in agg_fields}
+
+    def collect_from_items(child_rows):
+        nonlocal agg_values, agg_consistent, agg_found
+
+        for child_row in child_rows:
+            if not child_row or not isinstance(child_row, list):
                 continue
-                
+
             try:
                 desc_item = child_row[0]
                 child_type = desc_item.data(ROW_TYPE_ROLE)
-                
+
                 if child_type == STEP_TYPE:
-                    rep_item = child_row[protocol_grid_fields.index("Repetitions")]
-                    dur_item = child_row[protocol_grid_fields.index("Duration")]
-                    run_item = child_row[protocol_grid_fields.index("Run Time")]
-                    
-                    reps = int(rep_item.text() or "1")
-                    dur = float(dur_item.text() or "1.0")
-                    run = float(run_item.text() or "0.0")
-                    
-                    total_repetitions += reps
-                    total_duration += dur
-                    total_run_time += run
+                    for field in agg_fields:
+                        idx = protocol_grid_fields.index(field)
+                        val = child_row[idx].text()
+                        if not agg_found[field]:
+                            agg_values[field] = val
+                            agg_found[field] = True
+                        elif agg_values[field] != val:
+                            agg_consistent[field] = False
+
                 elif child_type == GROUP_TYPE:
-                    pass
+                    sub_rows = [
+                        [desc_item.child(r, c) for c in range(desc_item.columnCount())]
+                        for r in range(desc_item.rowCount())
+                    ]
+                    collect_from_items(sub_rows)
             except (ValueError, IndexError, AttributeError):
                 pass
-                
+
     collect_from_items(children)
-    
+
     try:
-        rep_item = group_items[protocol_grid_fields.index("Repetitions")]
-        dur_item = group_items[protocol_grid_fields.index("Duration")]
-        run_item = group_items[protocol_grid_fields.index("Run Time")]
-        
-        rep_item.setText(str(total_repetitions))
-        dur_item.setText(f"{total_duration:.1f}")
-        run_item.setText(f"{total_run_time:.2f}")
+        for field in agg_fields:
+            idx = protocol_grid_fields.index(field)
+            item = group_items[idx]
+            if agg_found[field] and agg_consistent[field]:
+                item.setText(agg_values[field])
+            else:
+                item.setText("")
     except IndexError:
         pass
 
