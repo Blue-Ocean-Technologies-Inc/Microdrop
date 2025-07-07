@@ -356,6 +356,13 @@ class PGCWidget(QWidget):
         if field in ("Duration", "Run Time"):
             self._update_parent_aggregations(parent)
 
+        if field == "Repetitions":
+            desc_item = parent.child(row, 0)
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                self._update_parent_aggregations(desc_item)
+            else:
+                self._update_parent_aggregations(parent)
+
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
 

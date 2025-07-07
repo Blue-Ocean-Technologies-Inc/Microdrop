@@ -158,9 +158,9 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE:
-            if field in ("Description", "Voltage", "Frequency", "Trail Length"):
+            if field in ("Description", "Voltage", "Frequency", "Trail Length", "Repetitions"):
                 item.setEditable(True)
-            elif field in ("Duration", "Run Time", "Repetitions", "ID"):
+            elif field in ("Duration", "Run Time", "ID"):
                 item.setEditable(False)
             else:
                 item.setEditable(False)
@@ -308,8 +308,13 @@ def calculate_group_aggregation_from_children(group_items, children):
 
         dur_idx = protocol_grid_fields.index("Duration")
         run_idx = protocol_grid_fields.index("Run Time")
-        group_items[dur_idx].setText(f"{total_duration:.1f}")
-        group_items[run_idx].setText(f"{total_run_time:.2f}")
+        rep_idx = protocol_grid_fields.index("Repetitions")
+        try:
+            group_reps = int(group_items[rep_idx].text() or "1")
+        except ValueError:
+            group_reps = 1
+        group_items[dur_idx].setText(f"{total_duration * group_reps:.1f}")
+        group_items[run_idx].setText(f"{total_run_time * group_reps:.2f}")
     except IndexError:
         pass
 
