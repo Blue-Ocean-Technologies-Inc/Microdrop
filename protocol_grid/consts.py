@@ -8,6 +8,14 @@ PKG_name = PKG.title().replace("_", " ")
 
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
 
+DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
+
+ACTOR_TOPIC_DICT = {
+    "protocol_grid_listener": [
+        DEVICE_VIEWER_STATE_CHANGED,
+    ]
+}
+
 GROUP_TYPE = "group"
 STEP_TYPE = "step"
 ROW_TYPE_ROLE = Qt.UserRole + 1

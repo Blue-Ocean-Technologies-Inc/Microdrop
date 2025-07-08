@@ -10,9 +10,11 @@ from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import make_test_steps
-from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
+from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                 group_defaults, protocol_grid_fields)
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
+from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
+from protocol_grid.state.messages import DeviceViewerMessageModel
 
 protocol_grid_column_widths = [
     120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
@@ -25,7 +27,10 @@ class PGCWidget(QWidget):
     
     def __init__(self, parent=None, state=None):
         super().__init__(parent)
-        
+
+        self.device_viewer_listener = DeviceViewerListenerController()
+        self.device_viewer_listener.signal_emitter.device_viewer_message_received.connect(self.on_device_viewer_message)
+                
         self.state = state or ProtocolState()
         
         self._column_visibility = {}
@@ -64,6 +69,25 @@ class PGCWidget(QWidget):
         
         self.ensure_minimum_protocol()
         self.load_from_state()
+
+    def on_device_viewer_message(self, message, topic):
+        if topic != DEVICE_VIEWER_STATE_CHANGED:
+            return
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+        path = selected_paths[0]
+        item = self.get_item_by_path(path)
+        if not item or item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+        # parse message and update DeviceState
+        try:
+            dv_msg = DeviceViewerMessageModel.deserialize(message)
+            item.setData(dv_msg, Qt.UserRole + 100)
+            self.model_to_state()
+            self.state_to_model()
+        except Exception as e:
+            print(f"Failed to update DeviceState from device_viewer message: {e}")
         
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()
