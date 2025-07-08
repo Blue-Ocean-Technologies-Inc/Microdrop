@@ -7,7 +7,13 @@ class ImportExportManager:
     @staticmethod
     def import_flat_protocol(flat_json):
         steps = flat_json["steps"]
-        groups_meta = {g["ID"]: g.get("Description", g.get("description", "")) for g in flat_json.get("groups", [])}
+        groups_meta = {
+            g["ID"]: {
+                "Description": g.get("Description", g.get("description", "")),
+                "Repetitions": g.get("Repetitions", "1")
+            }
+            for g in flat_json.get("groups", [])
+        }       
         fields = flat_json.get("fields", [])
         group_objs = {}
 
@@ -21,9 +27,14 @@ class ImportExportManager:
             if group_id in group_objs:
                 return group_objs[group_id]
             parent_id = get_parent_group_id(group_id)
+            meta = groups_meta.get(group_id, {})
             group = ProtocolGroup(
-                parameters={"Description": groups_meta.get(group_id, group_id), "ID": group_id},
-                name=groups_meta.get(group_id, group_id),
+                parameters={
+                    "Description": meta.get("Description", group_id),
+                    "ID": group_id,
+                    "Repetitions": meta.get("Repetitions", "1")
+                },
+                name=meta.get("Description", group_id),
                 elements=[]
             )
             group_objs[group_id] = group

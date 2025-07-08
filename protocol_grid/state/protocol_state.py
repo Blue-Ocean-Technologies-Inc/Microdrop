@@ -92,7 +92,8 @@ class ProtocolState:
                     group_id = (prefix + "_" if prefix else "") + chr(64 + group_counter)
                     groups.append({
                         "ID": group_id,
-                        "Description": obj.parameters.get("Description", obj.name)
+                        "Description": obj.parameters.get("Description", obj.name),
+                        "Repetitions": obj.parameters.get("Repetitions", "1")
                     })
                     recurse(obj.elements, group_id)
                     group_counter += 1
