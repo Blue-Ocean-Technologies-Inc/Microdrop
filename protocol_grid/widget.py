@@ -1013,7 +1013,7 @@ class PGCWidget(QWidget):
                 
                 self.reassign_ids()
                 self.load_from_state()
-                
+                QTimer.singleShot(0, self.update_all_group_aggregations)
             except Exception as e:
                 QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
                 
@@ -1059,6 +1059,7 @@ class PGCWidget(QWidget):
                     
             self.reassign_ids()
             self.load_from_state()
+            QTimer.singleShot(0, self.update_all_group_aggregations)
             # self.sync_to_state()
             self.restore_scroll_positions(scroll_pos)
             self.restore_selection(saved_selection)
