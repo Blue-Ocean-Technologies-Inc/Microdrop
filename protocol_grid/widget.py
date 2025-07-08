@@ -1,870 +1,1052 @@
-import json
-import dramatiq
+import sys
 import copy
-# import h5py
-from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget,
-                               QPushButton, QHBoxLayout,QFileDialog,
-                               QAbstractItemDelegate)
-from PySide6.QtCore import Qt, QItemSelectionModel
+import json
+from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
+                               QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
-from microdrop_utils._logger import get_logger
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from protocol_grid.model.tree_data import ProtocolGroup, ProtocolStep
-from protocol_grid.model.protocol_visualization_helpers import (visualize_protocol_from_model, 
-                                                   visualize_protocol_with_swimlanes)
-from protocol_grid.consts import (protocol_grid_fields, step_defaults, group_defaults, 
-                                  GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE) 
-from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, PGCItem, 
-                                                 get_selected_rows, invert_row_selection)
-from protocol_grid.extra_ui_elements import ShowEditContextMenuAction, ShowColumnToggleDialogAction
+from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
+                                               calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
-from protocol_grid.state.device_state import DeviceState
-from protocol_grid.protocol_state_helpers import (state_to_model, model_to_state, reassign_ids, 
-                                                  clamp_trail_overlay, make_test_steps, flatten_steps, 
-                                                  calculate_step_dev_fields)
+from protocol_grid.protocol_state_helpers import make_test_steps
+from protocol_grid.consts import (GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
+                                group_defaults, protocol_grid_fields)
+from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
 
-logger = get_logger(__name__, level="DEBUG")
-
-def make_electrode_dict(active_ids, total=120):
-    return {str(i): (str(i) in active_ids) for i in range(total)}
-
-TEST_DEVICE_STATES = [
-    DeviceState(make_electrode_dict([]), []),
-    DeviceState(make_electrode_dict(["5", "10", "50"]), []),
-    DeviceState(make_electrode_dict([]), [["1", "2", "3", "4"]]),
-    DeviceState(make_electrode_dict([]), [["10", "11"], ["20", "21", "22", "23", "24"], ["30", "31", "32"]]),
-    DeviceState(make_electrode_dict(["2", "3", "4"]), [["5", "6", "7"], ["8", "9"]]),
-    DeviceState(make_electrode_dict(["1", "2"]), []),
-    DeviceState(make_electrode_dict([]), [[], []]),
-    DeviceState(make_electrode_dict([str(i) for i in range(120)]), []),
+protocol_grid_column_widths = [
+    120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
 ]
 
 
 class PGCWidget(QWidget):
-    def __init__(self, parent=None, state: ProtocolState=None):
+    
+    protocolChanged = Signal()
+    
+    def __init__(self, parent=None, state=None):
         super().__init__(parent)
-        self.state = state or ProtocolState()
-        # if not self.state.fields:
-        #     self.state.fields = list(protocol_grid_fields)
-        # self.state.add_observer(self.load_from_state)
-
-        # create Model
-        self.model = QStandardItemModel()
-        self.tree = QTreeView()
-        # set Model
-        self.tree.setModel(self.model)
-        self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
-        self.tree.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
-        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self.show_edit_context_menu)
         
-        self._programmatic_change = False
-        self.model.itemChanged.connect(self.on_item_changed)
-
-        self._test_device_state_idx = 0
-
-        QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_selected)
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_C), self, self.copy_selected)
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_X), self, self.cut_selected)
-        QShortcut(QKeySequence(Qt.CTRL | Qt.SHIFT | Qt.Key_V), self, lambda: self.paste_selected(above=True))
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_V), self, lambda: self.paste_selected(above=False))
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Z), self, self.undo_last)
-        QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Y), self, self.redo_last)
-
-        header = self.tree.header()
-        header.setContextMenuPolicy(Qt.CustomContextMenu)
-        header.customContextMenuRequested.connect(self.show_column_toggle_dialog) 
-
-        # set Headers for columns
-        self.model.setHorizontalHeaderLabels(protocol_grid_fields)
-        initial_column_widths = [120, 40, 80, 80, 80, 80, 60, 60, 80, 80, 80, 40, 80, 40, 80]
-        for i, width in enumerate(initial_column_widths):
-            self.tree.setColumnWidth(i, width)
-
-        # Set delegates
+        self.state = state or ProtocolState()
+        
+        self._column_visibility = {}
+        self._column_widths = {}
+        
+        self.tree = QTreeView()
+        self.model = QStandardItemModel()
+        self.tree.setModel(self.model)
         self.delegate = ProtocolGridDelegate(self)
         self.tree.setItemDelegate(self.delegate)
-
-        # Set edit trigger to allow editing of all cells
-        self.tree.setEditTriggers(QTreeView.EditTrigger.AllEditTriggers)
-
-        # Group and Step creation buttons
-        self.add_group_button = QPushButton("Add Group")
-        self.add_group_into_button = QPushButton("Add Group Into")
-        self.add_step_button = QPushButton("Add Step")
-        self.add_step_into_button = QPushButton("Add Step Into")
-        self.add_group_button.clicked.connect(lambda: self.add_group(into=False))        
-        self.add_group_into_button.clicked.connect(lambda: self.add_group(into=True))        
-        self.add_step_button.clicked.connect(lambda: self.add_step(into=False))        
-        self.add_step_into_button.clicked.connect(lambda: self.add_step(into=True))
-
-        self.export_json_button = QPushButton("Export to JSON")
-        self.export_png_button = QPushButton("Export to PNG")
-        self.import_json_button = QPushButton("Import from JSON")
-        self.export_json_button.clicked.connect(self.export_to_json)        
-        self.export_png_button.clicked.connect(self.export_to_png)        
-        self.import_json_button.clicked.connect(self.import_from_json)
         
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.add_group_button)
-        button_layout.addWidget(self.add_group_into_button)
-        button_layout.addWidget(self.add_step_button)
-        button_layout.addWidget(self.add_step_into_button)
-
-        export_layout = QHBoxLayout()
-        export_layout.addWidget(self.export_json_button)
-        # export_layout.addWidget(self.export_png_button)
-        export_layout.addWidget(self.import_json_button)
-
-        self.layout = QVBoxLayout()
-        self.layout.addWidget(self.tree)
-        self.layout.addLayout(button_layout)
-        self.layout.addLayout(export_layout)
-        self.setLayout(self.layout)
-
-        self.action_show_edit_context_menu = ShowEditContextMenuAction(self)
-        self.action_show_column_toggle_dialog = ShowColumnToggleDialogAction(self)
-
-        self._copied_rows = None
-        if not self.state.sequence:
-            self.add_step(into=False)
-
-        # self.state.sequence = make_test_steps()
-        # self.update_step_dev_fields()
-
-    # ---------- For Testing ----------
-    def update_step_dev_fields(self):
-        def update_steps_recursive(parent, elements):
-            for row in range(parent.rowCount()):
-                desc_item = parent.child(row, 0)
-                if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                    id_item = parent.child(row, protocol_grid_fields.index("ID"))
-                    step_id = id_item.text() or str(row)
-                    step = elements[row] if row < len(elements) else None
-                    if not isinstance(step, ProtocolStep):
-                        continue
-                    rep_col = protocol_grid_fields.index("Repetitions")
-                    dur_col = protocol_grid_fields.index("Duration")
-                    repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
-                    try:
-                        repetitions = int(parent.child(row, rep_col).text())
-                    except (ValueError, AttributeError):
-                        repetitions = 1
-                    try:
-                        duration = float(parent.child(row, dur_col).text())
-                    except (ValueError, AttributeError):
-                        duration = 1.0
-                    try:
-                        repeat_duration = float(parent.child(row, repeat_dur_col).text())
-                    except (ValueError, AttributeError):
-                        repeat_duration = 0.0
-                    max_path_length, run_time = calculate_step_dev_fields(
-                        step, repetitions, duration, repeat_duration
-                    )
-                    max_path_col = protocol_grid_fields.index("Max. Path Length")
-                    run_time_col = protocol_grid_fields.index("Run Time")
-                    self._programmatic_change = True
-                    parent.child(row, max_path_col).setText(str(max_path_length))
-                    parent.child(row, run_time_col).setText(f"{run_time:.2f}")
-                    self._programmatic_change = False
-                elif desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                    group = elements[row] if row < len(elements) else None
-                    if isinstance(group, ProtocolGroup):
-                        update_steps_recursive(desc_item, group.elements)
-        root = self.model.invisibleRootItem()
-        update_steps_recursive(root, self.state.sequence)
-
-    # ---------- State <-> Model sync ----------
-    def load_from_state(self):
-        self._programmatic_change = True
-        col_vis, col_widths = self.get_column_state()
-        state_to_model(self.state, self.model)
-        clamp_trail_overlay(self.model)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        self.set_column_state(col_vis, col_widths)
-        self.update_all_group_aggregations()
-        self.update_step_dev_fields()
+        self.tree.setSelectionBehavior(QTreeView.SelectRows)
+        self.tree.setSelectionMode(QTreeView.ExtendedSelection)
+        
+        self.create_buttons()
+        
+        layout = QVBoxLayout()
+        layout.addWidget(self.tree)
+        layout.addLayout(self.button_layout_1)  # Add/Insert buttons
+        layout.addLayout(self.button_layout_2)  # Import/Export buttons
+        self.setLayout(layout)
+        
         self._programmatic_change = False
-
-    def save_to_state(self):
-        col_vis, col_widths = self.get_column_state()
-        model_to_state(self.model, self.state)
-        reassign_ids(self.model, self.state)
-        self.set_column_state(col_vis, col_widths)
-
+        self._block_aggregation = False
+        self._sync_timer = QTimer()
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.timeout.connect(self._delayed_sync)
+        self._clipboard = []
+        
+        self.model.itemChanged.connect(self.on_item_changed)
+        self.tree.selectionModel().selectionChanged.connect(self.on_selection_changed)
+        
+        self.setup_context_menu()
+        self.setup_shortcuts()
+        self.setup_header_context_menu()
+        
+        self.ensure_minimum_protocol()
+        self.load_from_state()
+        
+    def create_buttons(self):
+        self.button_layout_1 = QHBoxLayout()
+        
+        self.btn_add_step = QPushButton("Add Step")
+        self.btn_add_step_into = QPushButton("Add Step Into")
+        self.btn_add_group = QPushButton("Add Group")
+        self.btn_add_group_into = QPushButton("Add Group Into")
+        
+        self.btn_add_step.clicked.connect(self.add_step)
+        self.btn_add_step_into.clicked.connect(self.add_step_into)
+        self.btn_add_group.clicked.connect(self.add_group)
+        self.btn_add_group_into.clicked.connect(self.add_group_into)
+        
+        self.button_layout_1.addWidget(self.btn_add_step)
+        self.button_layout_1.addWidget(self.btn_add_step_into)
+        self.button_layout_1.addWidget(self.btn_add_group)
+        self.button_layout_1.addWidget(self.btn_add_group_into)
+        self.button_layout_1.addStretch()
+        
+        self.button_layout_2 = QHBoxLayout()
+        
+        self.btn_import = QPushButton("Import from JSON")
+        self.btn_import_into = QPushButton("Import Into")
+        self.btn_export = QPushButton("Export to JSON")
+        
+        self.btn_import.clicked.connect(self.import_from_json)
+        self.btn_import_into.clicked.connect(self.import_into_json)
+        self.btn_export.clicked.connect(self.export_to_json)
+        
+        self.button_layout_2.addWidget(self.btn_import)
+        self.button_layout_2.addWidget(self.btn_import_into)
+        self.button_layout_2.addWidget(self.btn_export)
+        self.button_layout_2.addStretch()
+        
+    def setup_header_context_menu(self):
+        header = self.tree.header()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self.show_header_context_menu)
+        
+    def show_header_context_menu(self, pos):
+        dialog = ColumnToggleDialog(self)
+        dialog.exec()
+        
+    def on_selection_changed(self):
+        selected_paths = self.get_selected_paths()
+        
+        has_selection = len(selected_paths) > 0
+        self.btn_add_step_into.setEnabled(has_selection)
+        self.btn_add_group_into.setEnabled(has_selection)
+        self.btn_import_into.setEnabled(has_selection)
+        
+    def save_column_settings(self):
+        for i, field in enumerate(protocol_grid_fields):
+            self._column_visibility[field] = not self.tree.isColumnHidden(i)
+            self._column_widths[field] = self.tree.header().sectionSize(i)
+            
+    def restore_column_settings(self):
+        for i, field in enumerate(protocol_grid_fields):
+            if field in self._column_visibility:
+                self.tree.setColumnHidden(i, not self._column_visibility[field])
+            if field in self._column_widths and self._column_widths[field] > 0:
+                self.tree.setColumnWidth(i, self._column_widths[field])
+        
+    def ensure_minimum_protocol(self):
+        if not self.state.sequence:
+            default_step = ProtocolStep(
+                parameters=dict(step_defaults),
+                name="Step"
+            )
+            self.state.sequence.append(default_step)
+            self.reassign_ids()
+            
+    def reassign_ids(self):
+        def assign_ids_recursive(elements, parent_prefix=""):
+            step_counter = 1
+            group_counter = ord('A')
+            
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    if parent_prefix:
+                        element.parameters["ID"] = f"{parent_prefix}_{step_counter}"
+                    else:
+                        element.parameters["ID"] = str(step_counter)
+                    step_counter += 1
+                    
+                elif isinstance(element, ProtocolGroup):
+                    if parent_prefix:
+                        group_id = f"{parent_prefix}_{chr(group_counter)}"
+                    else:
+                        group_id = chr(group_counter)
+                    
+                    element.parameters["ID"] = group_id
+                    group_counter += 1
+                    
+                    assign_ids_recursive(element.elements, group_id)
+                    
+        assign_ids_recursive(self.state.sequence)
+        
+    def setup_context_menu(self):
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_context_menu)
+        
+    def show_context_menu(self, pos):
+        menu = EditContextMenu(self)
+        global_pos = self.tree.mapToGlobal(pos)
+        menu.exec(global_pos)
+        
+    def setup_shortcuts(self):
+        shortcuts = [
+            (QKeySequence.Delete, self.delete_selected),
+            (QKeySequence("Ctrl+C"), self.copy_selected),
+            (QKeySequence("Ctrl+X"), self.cut_selected),
+            (QKeySequence("Ctrl+V"), self.paste_selected),
+            (QKeySequence("Ctrl+Z"), self.undo_last),
+            (QKeySequence("Ctrl+Y"), self.redo_last),
+            (QKeySequence("Ctrl+Shift+Y"), self.redo_last),
+            (QKeySequence("Ctrl+A"), self.select_all),
+            (QKeySequence("Ctrl+D"), self.deselect_rows),
+            (QKeySequence("Ctrl+I"), self.invert_row_selection),
+            (QKeySequence("Insert"), self.insert_step),
+            (QKeySequence("Ctrl+Insert"), self.insert_group),
+            (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+        ]
+        
+        for key_seq, slot in shortcuts:
+            shortcut = QShortcut(key_seq, self)
+            shortcut.activated.connect(slot)
+            
+    def show_column_toggle_dialog(self):
+        dialog = ColumnToggleDialog(self)
+        dialog.exec()
+        
+    def _delayed_sync(self):
+        """Delayed synchronization to avoid excessive updates."""
+        if not self._programmatic_change:
+            self.sync_to_state()
+            
+    def sync_to_state(self):
+        """Immediately sync model to state."""
+        if not self._programmatic_change:
+            self.model_to_state()
+            self.protocolChanged.emit()
+            
+    def model_to_state(self):
+        self.state.sequence.clear()
+        
+        def convert_recursive(parent_item, target_list):
+            for row in range(parent_item.rowCount()):
+                desc_item = parent_item.child(row, 0)
+                if not desc_item:
+                    continue
+                    
+                row_type = desc_item.data(ROW_TYPE_ROLE)
+                
+                parameters = {}
+                for col, field in enumerate(protocol_grid_fields):
+                    item = parent_item.child(row, col)
+                    if item:
+                        if field == "Magnet":
+                            checked = item.data(Qt.CheckStateRole) == 2 # == Qt.Checked
+                            parameters[field] = "1" if checked else "0"
+                        elif field == "Magnet Height":
+                            last_value = item.data(Qt.UserRole + 2)
+                            if last_value is not None and last_value != "":
+                                parameters[field] = str(last_value)
+                            else:   
+                                parameters[field] = item.text()
+                        elif field == "Video":
+                            checked = item.data(Qt.CheckStateRole) == Qt.Checked
+                            parameters[field] = "1" if checked else "0"
+                        else:
+                            parameters[field] = item.text()
+                            
+                if row_type == STEP_TYPE:
+                    step = ProtocolStep(
+                        parameters=parameters,
+                        name=parameters.get("Description", "Step")
+                    )
+                    # Get device state from model
+                    device_state = desc_item.data(Qt.UserRole + 100)
+                    if device_state:
+                        step.device_state = device_state
+                    target_list.append(step)
+                    
+                elif row_type == GROUP_TYPE:
+                    group = ProtocolGroup(
+                        parameters=parameters,
+                        name=parameters.get("Description", "Group")
+                    )
+                    # Recursively convert children
+                    convert_recursive(desc_item, group.elements)
+                    target_list.append(group)
+                    
+        convert_recursive(self.model.invisibleRootItem(), self.state.sequence)
+        
+    def save_selection(self):
+        """Save current selection state."""
+        selected_paths = self.get_selected_paths()
+        return selected_paths
+        
+    def restore_selection(self, saved_paths):
+        """Restore selection state."""
+        if not saved_paths:
+            return
+            
+        selection_model = self.tree.selectionModel()
+        selection_model.clear()
+        
+        for path in saved_paths:
+            index = self.model.index(path[0], 0)
+            for row in path[1:]:
+                if index.isValid():
+                    index = self.model.index(row, 0, index)
+                else:
+                    break
+                    
+            if index.isValid():
+                selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+        
+    def load_from_state(self):
+        saved_selection = self.save_selection()
+        self.save_column_settings()        
+        self._programmatic_change = True
+        try:
+            self.state_to_model()
+            self.setup_headers()
+            self.tree.expandAll()
+            self.update_all_group_aggregations()
+            self.update_step_dev_fields()
+        finally:
+            self._programmatic_change = False
+            
+        self.restore_column_settings()
+        self.restore_selection(saved_selection)
+            
+    def state_to_model(self):
+        self.model.clear()        
+        self.model.setHorizontalHeaderLabels(protocol_grid_fields)
+        
+        def add_recursive(elements, parent_item):
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    row_items = make_row(step_defaults, element.parameters, STEP_TYPE)
+                    row_items[0].setData(element.device_state, Qt.UserRole + 100)
+                    parent_item.appendRow(row_items)                    
+                elif isinstance(element, ProtocolGroup):
+                    row_items = make_row(group_defaults, element.parameters, GROUP_TYPE)
+                    parent_item.appendRow(row_items)
+                    # Recursively add children
+                    add_recursive(element.elements, row_items[0])
+                    
+        add_recursive(self.state.sequence, self.model.invisibleRootItem())
+        self.setup_headers()
+        
+    def setup_headers(self):
+        for i, width in enumerate(protocol_grid_column_widths):
+            self.tree.setColumnWidth(i, width)
+            
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
-        self.state.snapshot_for_undo(programmatic=False)
-        col = item.column()
-        field = protocol_grid_fields[col]
-        row = item.row()
+        if not getattr(self, "_undo_snapshotted", False):
+            self.state.snapshot_for_undo()
+            self._undo_snapshotted = True
         parent = item.parent() or self.model.invisibleRootItem()
+        row = item.row()
+        col = item.column()
+        if col >= len(protocol_grid_fields):
+            return
 
-        if field in ("Repeat Duration", "Repetitions", "Duration"):
-            desc_item = parent.child(row, 0)
-            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                rep_col = protocol_grid_fields.index("Repetitions")
-                dur_col = protocol_grid_fields.index("Duration")
-                repeat_dur_col = protocol_grid_fields.index("Repeat Duration")
-                try:
-                    repetitions = int(parent.child(row, rep_col).text())
-                except Exception:
-                    repetitions = 1
-                try:
-                    duration = float(parent.child(row, dur_col).text())
-                except Exception:
-                    duration = 1.0
-                min_repeat_duration = repetitions * duration
-                repeat_duration_item = parent.child(row, repeat_dur_col)
-                try:
-                    repeat_duration = float(repeat_duration_item.text())
-                except Exception:
-                    repeat_duration = 1.0
-                if repeat_duration < min_repeat_duration:
-                    self._programmatic_change = True
-                    repeat_duration_item.setText(f"{min_repeat_duration:.1f}")
-                    self._programmatic_change = False
-            self.update_step_dev_fields()
-            self.update_all_group_aggregations()
+        field = protocol_grid_fields[col]
 
         if field == "Magnet":
-            checked = bool(item.data(Qt.CheckStateRole))
-            magnet_height_col = protocol_grid_fields.index("Magnet Height")
-            magnet_height_item = parent.child(row, magnet_height_col)
-            if magnet_height_item is not None:
-                if not checked:
-                    last_value = magnet_height_item.text()
-                    magnet_height_item.setData(last_value, Qt.UserRole + 2)
-                    magnet_height_item.setEditable(False)
-                    magnet_height_item.setText("")
-                else:
-                    last_value = magnet_height_item.data(Qt.UserRole + 2)
-                    if last_value is None or last_value == "":
-                        last_value = "0"
-                    magnet_height_item.setEditable(True)
-                    magnet_height_item.setText(str(last_value))
+            self._handle_magnet_change(parent, row)
+            return
+
+        desc_item = parent.child(row, 0)
+
+        if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            self.update_single_step_dev_fields(desc_item)
 
         if field in ("Voltage", "Frequency", "Trail Length"):
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                value = item.text()
+                if value != "":
+                    self._set_field_for_group(desc_item, field, value)
+            if not self._block_aggregation:
+                self._update_parent_aggregations(parent)
+
+        if field in ("Duration", "Run Time"):
+            self._update_parent_aggregations(parent)
+
+        if field == "Repetitions":
             desc_item = parent.child(row, 0)
-            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE and item == parent.child(row, col):
-                new_value = item.text()
-                if new_value != "":
-                    def set_value_recursive(group_item):
-                        for r in range(group_item.rowCount()):
-                            child_desc = group_item.child(r, 0)
-                            if child_desc is None:
-                                continue
-                            child_type = child_desc.data(ROW_TYPE_ROLE)
-                            child_item = group_item.child(r, col)
-                            if child_type == GROUP_TYPE:
-                                if child_item is not None:
-                                    self._programmatic_change = True
-                                    child_item.setText(new_value)
-                                    child_item.setEditable(True)
-                                    self._programmatic_change = False
-                                set_value_recursive(child_desc)
-                            elif child_type == STEP_TYPE:
-                                if child_item is not None:
-                                    self._programmatic_change = True
-                                    child_item.setText(new_value)
-                                    self._programmatic_change = False
-                    set_value_recursive(desc_item)
-            self.update_step_dev_fields()
-            self.update_all_group_aggregations()
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                self._update_parent_aggregations(desc_item)
+            else:
+                self._update_parent_aggregations(parent)
 
-    def update_all_group_aggregations(self):
-        def update_group(group_item):
-            if group_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                if group_item.rowCount() == 0:
-                    return
-                for col, field in enumerate(protocol_grid_fields):
-                    if field in ("Voltage", "Frequency", "Trail Length"):
-                        values = set()
-                        def collect_step_values(item):
-                            for r in range(item.rowCount()):
-                                child_desc = item.child(r, 0)
-                                if child_desc is None:
-                                    continue
-                                child_type = child_desc.data(ROW_TYPE_ROLE)
-                                child_item = item.child(r, col)
-                                if child_type == STEP_TYPE:
-                                    if child_item is not None:
-                                        values.add(child_item.text())
-                                elif child_type == GROUP_TYPE:
-                                    if child_item is not None:
-                                        values.add(child_item.text())
-                                    collect_step_values(child_desc)
-                        collect_step_values(group_item)
-                        parent = group_item.parent() or self.model.invisibleRootItem()
-                        row = group_item.row()
-                        group_cell = parent.child(row, col)
-                        if group_cell is None:
-                            group_cell = PGCItem(item_type=field, item_data="")
-                            parent.setChild(row, col, group_cell)
-                        if len(values) == 1 and list(values)[0] != "":
-                            group_cell.setText(next(iter(values)))
-                            group_cell.setEditable(True)
-                        else:
-                            group_cell.setText("")
-                            group_cell.setEditable(True)
-                    
-                    elif field == "Duration":
+        if field in ("Duration", "Repeat Duration", "Volume Threshold"):
+            self._validate_numeric_field(item, field)
+
+        if field in ("Trail Length", "Trail Overlay"):
+            self._handle_trail_fields(parent, row)
+
+        self.sync_to_state()
+        QTimer.singleShot(0, self._reset_undo_snapshotted)
+        
+    def _set_field_for_group(self, group_item, field, value):
+        """Recursively set a field for all steps and subgroups under a group, and set the group row's own value."""
+        self._block_aggregation = True
+        try:
+            idx = protocol_grid_fields.index(field)
+            parent_item = group_item.parent()
+            if parent_item is None:
+                parent_item = self.model.invisibleRootItem()
+            group_row_item = parent_item.child(group_item.row(), idx)
+            if group_row_item:
+                group_row_item.setText(value)
+            for row in range(group_item.rowCount()):
+                desc_item = group_item.child(row, 0)
+                if not desc_item:
+                    continue
+                row_type = desc_item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
+                    item = group_item.child(row, idx)
+                    if item:
+                        item.setText(value)
+                elif row_type == GROUP_TYPE:
+                    self._set_field_for_group(desc_item, field, value)
+        finally:
+            self._block_aggregation = False
+        
+    def _handle_magnet_change(self, parent, row):
+        magnet_col = protocol_grid_fields.index("Magnet")
+        magnet_height_col = protocol_grid_fields.index("Magnet Height")
+        magnet_item = parent.child(row, magnet_col)
+        magnet_height_item = parent.child(row, magnet_height_col)
+        if not magnet_item or not magnet_height_item:
+            return
+
+        raw_check_state = magnet_item.data(Qt.CheckStateRole)
+        checked = raw_check_state == Qt.Checked or raw_check_state == 2
+
+        if checked:
+            last_value = magnet_height_item.data(Qt.UserRole + 2)
+            if last_value is None or last_value == "":
+                last_value = "0"
+            magnet_height_item.setEditable(True)
+            magnet_height_item.setText(str(last_value))
+            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+        else:
+            last_value = magnet_height_item.text()
+            magnet_height_item.setData(last_value, Qt.UserRole + 2)
+            magnet_height_item.setEditable(False)
+            magnet_height_item.setText("")
+            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+
+        self.model.itemChanged.emit(magnet_height_item)
+            
+    def _validate_numeric_field(self, item, field):
+        """Validate numeric fields."""
+        try:
+            value = float(item.text())
+            item.setText(f"{value:.1f}")
+        except ValueError:
+            item.setText("0.0")
+            
+    def _handle_trail_fields(self, parent, row):
+        try:
+            trail_length_col = protocol_grid_fields.index("Trail Length")
+            overlay_col = protocol_grid_fields.index("Trail Overlay")
+            
+            trail_length_item = parent.child(row, trail_length_col)
+            overlay_item = parent.child(row, overlay_col)
+            
+            if trail_length_item and overlay_item:
+                trail_length = int(trail_length_item.text())
+                max_overlay = max(0, trail_length - 1)
+                overlay_val = int(overlay_item.text())
+                
+                if overlay_val > max_overlay:
+                    overlay_item.setText(str(max_overlay))
+        except (ValueError, IndexError):
+            pass
+            
+    def _update_parent_aggregations(self, parent):
+        current = parent
+        while current and current != self.model.invisibleRootItem():
+            if current.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                row = current.row()
+                parent_item = current.parent() or current.model().invisibleRootItem()
+                group_items = [parent_item.child(row, c) for c in range(parent_item.columnCount())]
+                children_rows = [
+                    [current.child(r, c) for c in range(current.columnCount())]
+                    for r in range(current.rowCount())
+                ]
+                calculate_group_aggregation_from_children(group_items, children_rows)
+            current = current.parent()
+            
+    def update_single_step_dev_fields(self, desc_item):
+        if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+            
+        parent = desc_item.parent() or self.model.invisibleRootItem()
+        row = desc_item.row()
+        
+        try:
+            repetitions_col = protocol_grid_fields.index("Repetitions")
+            duration_col = protocol_grid_fields.index("Duration")
+            repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+            max_path_col = protocol_grid_fields.index("Max. Path Length")
+            run_time_col = protocol_grid_fields.index("Run Time")
+            
+            repetitions_item = parent.child(row, repetitions_col)
+            duration_item = parent.child(row, duration_col)
+            repeat_duration_item = parent.child(row, repeat_duration_col)
+            max_path_item = parent.child(row, max_path_col)
+            run_time_item = parent.child(row, run_time_col)
+            
+            if not all([repetitions_item, duration_item, repeat_duration_item, max_path_item, run_time_item]):
+                return
+                
+            device_state = desc_item.data(Qt.UserRole + 100)
+            if not device_state:
+                from protocol_grid.logic.device_state_manager import DeviceStateManager
+                device_state = DeviceStateManager.create_default_device_state()
+                desc_item.setData(device_state, Qt.UserRole + 100)
+                
+            repetitions = int(repetitions_item.text() or "1")
+            duration = float(duration_item.text() or "1.0")
+            repeat_duration = float(repeat_duration_item.text() or "1.0")
+            
+            max_path_length = device_state.longest_path_length()
+            run_time = device_state.calculated_duration(duration, repetitions, repeat_duration)
+            
+            self._programmatic_change = True
+            try:
+                max_path_item.setText(str(max_path_length))
+                run_time_item.setText(f"{run_time:.2f}")
+            finally:
+                self._programmatic_change = False
+                
+        except (ValueError, IndexError):
+            pass
+            
+    def update_step_dev_fields(self):
+        def update_recursive(parent):
+            for row in range(parent.rowCount()):
+                desc_item = parent.child(row, 0)
+                if desc_item:
+                    if desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                        self.update_single_step_dev_fields(desc_item)
+                    elif desc_item.hasChildren():
+                        update_recursive(desc_item)
                         
-                        def sum_child_durations(item):
-                            total = 0.0
-                            for r in range(item.rowCount()):
-                                child_desc = item.child(r, 0)
-                                child_type = child_desc.data(ROW_TYPE_ROLE)
-                                if child_type == STEP_TYPE:
-                                    rep_col = protocol_grid_fields.index("Repetitions")
-                                    dur_col = protocol_grid_fields.index("Duration")
-                                    repetitions = float(item.child(r, rep_col).text())
-                                    duration = float(item.child(r, dur_col).text())
-                                    total += repetitions * duration
-                                elif child_type == GROUP_TYPE:
-                                    update_group(child_desc)
-                                    dur_col = protocol_grid_fields.index("Duration")
-                                    subgroup_duration = float(item.child(r, dur_col).text())
-                                    total += subgroup_duration
-                            return total
-
-                        rep_col = protocol_grid_fields.index("Repetitions")
-                        try:
-                            group_repetitions = float(group_item.child(group_item.row(), rep_col).text())
-                        except Exception:
-                            try:
-                            #try to get from parent
-                                group_repetitions = float(group_item.parent().child(group_item.row(), rep_col).text())
-                            except Exception:    
-                                group_repetitions = 1
-
-                        parent = group_item.parent() or self.model.invisibleRootItem()
-                        row = group_item.row()                        
-                        group_repetitions = float(parent.child(row, rep_col).text())
-                        total_duration = sum_child_durations(group_item) * group_repetitions   
-
-                        parent = group_item.parent() or self.model.invisibleRootItem()
-                        row = group_item.row()
-                        dur_col = protocol_grid_fields.index("Duration")
-                        group_duration_cell = parent.child(row, dur_col)
-                        if group_duration_cell is None:
-                            group_duration_cell = PGCItem(item_type="Duration", item_data="")
-                            parent.setChild(row, dur_col, group_duration_cell)
-                        group_duration_cell.setText(f"{total_duration:.2f}")
-                        group_duration_cell.setEditable(False)
-            # recursion for sub-groups 
-            for r in range(group_item.rowCount()):
-                child_desc = group_item.child(r, 0)
-                if child_desc is not None and child_desc.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                    update_group(child_desc)
-        # start actual function from root item
-        root = self.model.invisibleRootItem()
-        for row in range(root.rowCount()):
-            desc_item = root.child(row, 0)
-            if desc_item is not None and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                update_group(desc_item)                        
-
-    # ---------- UI Actions ----------
-    def show_edit_context_menu(self, pos):
-        self.action_show_edit_context_menu.perform(pos=pos)
-
-    def show_column_toggle_dialog(self, pos):
-        self.action_show_column_toggle_dialog.perform()
-
-    # ---------- Column Management ----------
-    def get_column_state(self):
-        visibility = [not self.tree.isColumnHidden(i) for i in range(self.model.columnCount())]
-        widths = [self.tree.columnWidth(i) for i in range(self.model.columnCount())]
-        return visibility, widths
-
-    def set_column_state(self, visibility, widths):
-        for i, visible in enumerate(visibility):
-            self.tree.setColumnHidden(i, not visible)
-        for i, width in enumerate(widths):
-            self.tree.setColumnWidth(i, width)
-
-    # --------- Functions to Maintain Row Selection -----------
+        update_recursive(self.model.invisibleRootItem())
+        
+    def update_all_group_aggregations(self):
+        def update_recursive(parent):
+            for row in range(parent.rowCount()):
+                item = parent.child(row, 0)
+                if item and item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    group_items = [parent.child(row, c) for c in range(parent.columnCount())]
+                    children_rows = [
+                        [item.child(r, c) for c in range(item.columnCount())]
+                        for r in range(item.rowCount())
+                    ]
+                    calculate_group_aggregation_from_children(group_items, children_rows)
+                    if item.hasChildren():
+                        update_recursive(item)
+        update_recursive(self.model.invisibleRootItem())
+        
     def get_selected_paths(self):
-        selection_model = self.tree.selectionModel()
-        selected = selection_model.selectedRows(0)
         paths = []
-        for idx in selected:
+        selection = self.tree.selectionModel().selectedRows(0)
+        for index in selection:
             path = []
-            item = self.model.itemFromIndex(idx)
-            while item is not None:
-                parent = item.parent()
-                row = item.row()
-                path.insert(0, row)
-                item = parent
+            current = index
+            while current.isValid():
+                path.insert(0, current.row())
+                current = current.parent()
             paths.append(path)
         return paths
-
+        
     def get_item_by_path(self, path):
-        """
-        Given a path (list of row indices), return the QStandardItem at column 0.
-        Returns None if not found.
-        """
         item = self.model.invisibleRootItem()
         for row in path:
-            if row < 0 or row >= item.rowCount():
-                return None
-            item = item.child(row, 0)
-            if item is None:
+            if row < item.rowCount():
+                item = item.child(row, 0)
+            else:
                 return None
         return item
-
-    def restore_row_selection_by_paths(self, paths):
-        selection_model = self.tree.selectionModel()
-        selection_model.clearSelection()
-        for path in paths:
-            item = self.get_item_by_path(path)
-            if item is not None:
-                idx = item.index()
-                selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
-
-    def get_extreme_path(self, paths, extreme="min"):
-        """
-        Returns the smallest or largest path from a list of paths.
-        """
-        if not paths:
-            return None
-        return min(paths) if extreme == "min" else max(paths)
-    
-    def get_post_delete_selection_path(self, selected_paths):
-        """
-        Given a row(s) at its path(s) to be deleted, returns the path to select after deletion.
-        - If the deleted rows are not at the end, select the row that takes their place (the row that was immediately after the last deleted row).
-        - If the deleted rows are at the end, select the last remaining row (the row above the deleted group).
-        """
-        if not selected_paths:
-            return None
-        sorted_paths = sorted(selected_paths)
-        first_path = sorted_paths[0]
-        last_path = sorted_paths[-1]
-        parent_path = last_path[:-1]
-        parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-        row_after = last_path[-1] 
-        if parent.rowCount() > row_after:
-            return parent_path + [row_after]
-        elif parent.rowCount() > 0:
-            return parent_path + [parent.rowCount() - 1]
-        else:
-            return None
         
-    def filter_top_level_row_refs(self, row_refs):
-        """
-        Given a list of (parent, row) tuples, return only those that are not children of any other selected row.
-        """
-        # Convert to paths for easy comparison
-        def get_path(parent, row):
-            path = []
-            item = parent.child(row, 0)
-            while item is not None:
-                p = item.parent()
-                r = item.row()
-                path.insert(0, r)
-                item = p
-            return path
-
-        paths = [get_path(parent, row) for parent, row in row_refs]
-        top_level = []
-        for i, path in enumerate(paths):
-            if not any(path[:len(other)] == other for j, other in enumerate(paths) if j != i):
-                top_level.append(row_refs[i])
-        return top_level
-    # ---------- ----------------------------------- ----------
-
-    def undo_last(self):
-        self._programmatic_change = True
-        self.state.undo()
-        self.load_from_state()
-        self._programmatic_change = False
-
-    def redo_last(self):
-        self._programmatic_change = True
-        self.state.redo()
-        self.load_from_state()
-        self._programmatic_change = False
-
-    def get_selected_rows(self, for_deletion=False):
-        return get_selected_rows(self.tree, self.model, for_deletion)
-    
+    def _find_elements_by_path(self, path):
+        elements = self.state.sequence
+        for i in path:
+            if i < len(elements):
+                if isinstance(elements[i], ProtocolGroup):
+                    elements = elements[i].elements
+                else:
+                    return elements
+            else:
+                return []
+        return elements
+        
     def select_all(self):
         self.tree.selectAll()
-    
+        
     def deselect_rows(self):
         self.tree.clearSelection()
-
+        
     def invert_row_selection(self):
-        invert_row_selection(self.tree, self.model)
-
-    def copy_selected(self):
-        row_refs = self.get_selected_rows()
-        row_refs = self.filter_top_level_row_refs(row_refs)
-        if not row_refs:
-            self._copied_rows = None
-            self._copied_protocol_objects = None
-            return
-        self._copied_rows = []
-        self._copied_protocol_objects = []
-        for parent, row in row_refs:
-            # only column 0 needs recursive clone, others are just data
-            items = [parent.child(row, col).clone() for col in range(self.model.columnCount())]
-            self._copied_rows.append(items)
-            path = []
-            item = parent.child(row, 0)
-            while item is not None:
-                p = item.parent()
-                r = item.row()
-                path.insert(0, r)
-                item = p
-            elements = self.state.sequence
-            obj = None
-            for idx in path:
-                if idx < 0 or idx >= len(elements):
-                    obj = None
-                    break
-                obj = elements[idx]
-                if isinstance(obj, ProtocolGroup):
-                    elements = obj.elements
-                else:
-                    elements = []
-            if obj is not None:
-                self._copied_protocol_objects.append(copy.deepcopy(obj))
-            else:
-                self._copied_protocol_objects.append(None)
-
-    def cut_selected(self):
-        self.state.snapshot_for_undo()
-        self.copy_selected()
-        self.delete_selected()
-
-    def paste_selected(self, above=True):
+        selection_model = self.tree.selectionModel()
+        all_indexes = []
+        
+        def collect_indexes(parent_index):
+            for row in range(self.model.rowCount(parent_index)):
+                index = self.model.index(row, 0, parent_index)
+                all_indexes.append(index)
+                if self.model.hasChildren(index):
+                    collect_indexes(index)
+                    
+        collect_indexes(self.model.index(-1, -1))  # Root
+        
+        # Get currently selected rows
+        selected_rows = set()
+        for index in selection_model.selectedRows(0):
+            selected_rows.add((index.row(), index.parent()))
+            
+        selection_model.clear()
+        
+        # Select all non-selected rows
+        for index in all_indexes:
+            if (index.row(), index.parent()) not in selected_rows:
+                selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+                
+    def insert_step(self):
+        saved_selection = self.save_selection()
+        
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
         if not selected_paths:
-            parent = self.model.invisibleRootItem()
-            row = parent.rowCount()
-            parent_elements = self.state.sequence
-            target_path = []
+            target_elements = self.state.sequence
+            row = 0
         else:
-            if above:
-                target_path = self.get_extreme_path(selected_paths, "min")
-                parent_path = target_path[:-1]
-                row = target_path[-1]
+            target_path = selected_paths[0]
+            if len(target_path) == 1:
+                target_elements = self.state.sequence
+                row = target_path[0]
             else:
-                target_path = self.get_extreme_path(selected_paths, "max")
                 parent_path = target_path[:-1]
-                row = target_path[-1] + 1
-            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-            parent_elements = self._find_elements_by_path(parent_path)
-        if not self._copied_rows or not self._copied_protocol_objects:
-            self._programmatic_change = False
-            return
-        for r, items in enumerate(self._copied_rows):
-            parent.insertRow(row + r, [item.clone() for item in items])
-            proto_obj = copy.deepcopy(self._copied_protocol_objects[r])
-            if proto_obj is not None:
-                parent_elements.insert(row + r, proto_obj)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        if target_path:
-            self.restore_row_selection_by_paths([target_path])
-        else:
-            self.restore_row_selection_by_paths([])
-        self.update_all_group_aggregations()
-        self._programmatic_change = False
-    
-    def paste_into(self):
+                target_elements = self._find_elements_by_path(parent_path)
+                row = target_path[-1]
+                
+        self.state.snapshot_for_undo()
+        
+        new_step = ProtocolStep(
+            parameters=dict(step_defaults),
+            name="Step"
+        )
+        target_elements.insert(row, new_step)
+        
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def insert_group(self):
+        saved_selection = self.save_selection()
+        
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        if not selected_paths or not self._copied_rows or not self._copied_protocol_objects:
-            self._programmatic_change = False
-            return 
+        if not selected_paths:
+            target_elements = self.state.sequence
+            row = 0
+        else:
+            target_path = selected_paths[0]
+            if len(target_path) == 1:
+                target_elements = self.state.sequence
+                row = target_path[0]
+            else:
+                parent_path = target_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                row = target_path[-1]
+                
+        self.state.snapshot_for_undo()
+        
+        new_group = ProtocolGroup(
+            parameters=dict(group_defaults),
+            name="Group"
+        )
+        target_elements.insert(row, new_group)
+        
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def add_step(self):
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            target_elements = self.state.sequence
+            row = len(target_elements)
+        else:
+            target_path = selected_paths[0]
+            target_item = self.get_item_by_path(target_path)
+            if not target_item:
+                return
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
+                
+        self.state.snapshot_for_undo()
+        
+        new_step = ProtocolStep(
+            parameters=dict(step_defaults),
+            name="Step"
+        )
+        target_elements.insert(row, new_step)
+        
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def add_step_into(self):
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+            
         target_path = selected_paths[0]
         target_item = self.get_item_by_path(target_path)
-        if target_item and target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-            parent = target_item
-            row = parent.rowCount()
-            parent_elements = self._find_elements_by_path(target_path)
-            for r, items in enumerate(self._copied_rows):
-                parent.insertRow(row + r, [item.clone() for item in items])
-                proto_obj = copy.deepcopy(self._copied_protocol_objects[r])
-                if proto_obj is not None:
-                    parent_elements.insert(row + r, proto_obj)
-            reassign_ids(self.model, self.state)
-            self.tree.expandAll()
-            if parent.rowCount() > 0:
-                new_child_path = target_path + [row]
-                self.restore_row_selection_by_paths([new_child_path])
-            else:
-                self.restore_row_selection_by_paths([])
+        if not target_item:
+            return
+            
+        self.state.snapshot_for_undo()
+        
+        new_step = ProtocolStep(
+            parameters=dict(step_defaults),
+            name="Step"
+        )
+        
+        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            target_elements = self._find_elements_by_path(target_path)
+            target_elements.append(new_step)
         else:
-            self.paste_selected(above=False)
-        self.update_all_group_aggregations()
-        self._programmatic_change = False
-
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
+            target_elements.insert(row, new_step)
+            
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def add_group(self):
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            target_elements = self.state.sequence
+            row = len(target_elements)
+        else:
+            target_path = selected_paths[0]
+            target_item = self.get_item_by_path(target_path)
+            if not target_item:
+                return
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
+                
+        self.state.snapshot_for_undo()
+        
+        new_group = ProtocolGroup(
+            parameters=dict(group_defaults),
+            name="Group"
+        )
+        target_elements.insert(row, new_group)
+        
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def add_group_into(self):
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+            
+        target_path = selected_paths[0]
+        target_item = self.get_item_by_path(target_path)
+        if not target_item:
+            return
+            
+        self.state.snapshot_for_undo()
+        
+        new_group = ProtocolGroup(
+            parameters=dict(group_defaults),
+            name="Group"
+        )
+        
+        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            target_elements = self._find_elements_by_path(target_path)
+            target_elements.append(new_group)
+        else:
+            parent_path = target_path[:-1]
+            target_elements = self._find_elements_by_path(parent_path)
+            row = target_path[-1] + 1
+            target_elements.insert(row, new_group)
+            
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        row_refs = self.get_selected_rows(for_deletion=True)
-        row_refs = self.filter_top_level_row_refs(row_refs)
-        for parent, row in row_refs:
-            parent.removeRow(row)
-        reassign_ids(self.model, self.state)
-        post_delete_path = self.get_post_delete_selection_path(selected_paths)
-        if post_delete_path:
-            self.restore_row_selection_by_paths([post_delete_path])
-        else:
-            self.restore_row_selection_by_paths([])
-        if self.model.invisibleRootItem().rowCount() == 0:
-            self.add_step(into=False)
-        self.update_all_group_aggregations()
-        self._programmatic_change = False
-
-    def insert_step(self):
-        selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        top_path = self.get_extreme_path(selected_paths, "min")
-        if top_path is None:
-            parent = self.model.invisibleRootItem()
-            row = parent.rowCount()
-            parent_elements = self.state.sequence
-        else:
-            parent_path = top_path[:-1]
-            row = top_path[-1]
-            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-            parent_elements = self._find_elements_by_path(parent_path)
-        step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
-        parent.insertRow(row, step_items)
-        new_step = ProtocolStep()
-        parent_elements.insert(row, new_step)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        if top_path:
-            new_path = top_path.copy()
-            new_path[-1] += 1
-            self.restore_row_selection_by_paths([new_path])
-        else:
-            self.restore_row_selection_by_paths([])
-        self.update_all_group_aggregations()
-        self._programmatic_change = False
-
-    def insert_group(self):
-        selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        top_path = self.get_extreme_path(selected_paths, "min")
-        if top_path is None:
-            parent = self.model.invisibleRootItem()
-            row = parent.rowCount()
-            parent_elements = self.state.sequence
-        else:
-            parent_path = top_path[:-1]
-            row = top_path[-1]
-            parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-            parent_elements = self._find_elements_by_path(parent_path)
-        group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
-        parent.insertRow(row, group_items)
-        new_group = ProtocolGroup()
-        parent_elements.insert(row, new_group)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        if top_path:
-            new_path = top_path.copy()
-            new_path[-1] += 1
-            self.restore_row_selection_by_paths([new_path])
-        else:
-            self.restore_row_selection_by_paths([])
-        self.update_all_group_aggregations()
-        self._programmatic_change = False
-
-    def add_group(self, into=False):
-        """
-        Add a group to the tree view. If into is True, the group is added as a child of the selected item.
-        Otherwise, the group is added as a sibling of the selected item.
-
-        Removes necessity to deselect a direct child of root and setting focus on root to add a group as a
-        sibling in the uppermost level.
-        """
-        selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        bottom_path = self.get_extreme_path(selected_paths, "max")
-        parent = self.model.invisibleRootItem()
-        parent_elements = self.state.sequence
-        if bottom_path is not None:
-            selected_item = self.get_item_by_path(bottom_path)
-            if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                parent = selected_item
-                parent_elements = self._find_elements_by_path(bottom_path)
+        if not selected_paths:
+            return
+            
+        self.state.snapshot_for_undo()
+        
+        selected_paths.sort(reverse=True)
+        
+        for path in selected_paths:
+            if len(path) == 1:
+                if path[0] < len(self.state.sequence):
+                    del self.state.sequence[path[0]]
             else:
-                parent_path = bottom_path[:-1]
-                parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-                parent_elements = self._find_elements_by_path(parent_path)
-        group_items = make_row(group_defaults, overrides={"Description": "Group"}, row_type=GROUP_TYPE)
-        parent.appendRow(group_items)
-        new_group = ProtocolGroup()
-        parent_elements.append(new_group)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        self.restore_row_selection_by_paths(selected_paths)
-        self.update_all_group_aggregations()
-        self.update_step_dev_fields()
-        self._programmatic_change = False
-
-    def add_step(self, into=False):
+                parent_path = path[:-1]
+                elements = self._find_elements_by_path(parent_path)
+                if path[-1] < len(elements):
+                    del elements[path[-1]]
+                    
+        self.ensure_minimum_protocol()
+        
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+    def copy_selected(self):
         selected_paths = self.get_selected_paths()
-        self.state.snapshot_for_undo(programmatic=False)
+        if not selected_paths:
+            return
+        
+        def is_descendant(path, other_path):
+            return len(path) > len(other_path) and path[:len(other_path)] == other_path
+
+        filtered_paths = []
+        for path in selected_paths:
+            is_child = False
+            for i in selected_paths:
+                if i != path and is_descendant(path, i):
+                    is_child = True
+                    break
+            if not is_child:
+                filtered_paths.append(path)
+            
+        copied_items = []
+        for path in filtered_paths:
+            if len(path) == 1:
+                if path[0] < len(self.state.sequence):
+                    copied_items.append(copy.deepcopy(self.state.sequence[path[0]]))
+            else:
+                parent_path = path[:-1]
+                elements = self._find_elements_by_path(parent_path)
+                if path[-1] < len(elements):
+                    copied_items.append(copy.deepcopy(elements[path[-1]]))
+                    
+        self._clipboard = copied_items
+        
+    def cut_selected(self):
+        self.copy_selected()
+        self.delete_selected()
+        
+    def paste_selected(self, above=True):
+        if not hasattr(self, '_clipboard') or not self._clipboard:
+            return
+            
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            target_elements = self.state.sequence
+            row = 0 if above else len(target_elements)
+        else:
+            target_path = selected_paths[0]
+            if len(target_path) == 1:
+                target_elements = self.state.sequence
+                row = target_path[0] if above else target_path[0] + 1
+            else:
+                parent_path = target_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                row = target_path[-1] if above else target_path[-1] + 1
+                
+        self.state.snapshot_for_undo()
+        
+        for i, item in enumerate(copy.deepcopy(self._clipboard)):
+            target_elements.insert(row + i, item)
+            
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def paste(self):
+        self.paste_selected(above=False)
+        
+    def paste_into(self):
+        if not hasattr(self, '_clipboard') or not self._clipboard:
+            return
+            
+        saved_selection = self.save_selection()
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+            
+        target_path = selected_paths[0]
+        target_item = self.get_item_by_path(target_path)
+        if not target_item or target_item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
+            return
+            
+        target_elements = self._find_elements_by_path(target_path)
+        
+        self.state.snapshot_for_undo()
+        
+        for item in copy.deepcopy(self._clipboard):
+            target_elements.append(item)
+            
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        
+        self.restore_selection(saved_selection)
+        
+    def undo_last(self):
         self._programmatic_change = True
-        bottom_path = self.get_extreme_path(selected_paths, "max")
-        parent = self.model.invisibleRootItem()
-        parent_elements = self.state.sequence
-        if bottom_path is not None:
-            selected_item = self.get_item_by_path(bottom_path)
-            if into and selected_item and selected_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                parent = selected_item
-                parent_elements = self._find_elements_by_path(bottom_path)
-            else:
-                parent_path = bottom_path[:-1]
-                parent = self.get_item_by_path(parent_path) or self.model.invisibleRootItem()
-                parent_elements = self._find_elements_by_path(parent_path)
-        step_items = make_row(step_defaults, overrides={"Description": f"Step", "ID": ""}, row_type=STEP_TYPE)
-        parent.appendRow(step_items)
-        new_step = ProtocolStep()
-        parent_elements.append(new_step)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        self.restore_row_selection_by_paths(selected_paths)
-        self.update_all_group_aggregations()
-        self.update_step_dev_fields()
+        if self.state.undo_stack:
+            self.state.undo()
+            self.load_from_state()
         self._programmatic_change = False
+            
+    def redo_last(self):
+        self._programmatic_change = True
+        if self.state.redo_stack:
+            self.state.redo()
+            self.load_from_state()
+        self._programmatic_change = False
+            
+    def undo(self):
+        self.undo_last()
+        
+    def redo(self):
+        self.redo_last()
 
-    def _find_elements_by_path(self, path):
-        """
-        Given a path (list of row indices), return the elements list in ProtocolState for that node.
-        """
-        elements = self.state.sequence
-        for idx in path:
-            if idx < 0 or idx >= len(elements):
-                return elements
-            obj = elements[idx]
-            if isinstance(obj, ProtocolGroup):
-                elements = obj.elements
-            else:
-                return elements
-        return elements
-
-    def export_to_json(self):
-        self.save_to_state()
-        protocol_data = self.state.to_json()
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as JSON", "protocol_export.json", "JSON Files (*.json)")
+    def _reset_undo_snapshotted(self):
+        self._undo_snapshotted = False
+        
+    def export_to_json(self):        
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", "", "JSON Files (*.json)")
         if file_name:
+            flat_data = self.state.to_flat_export()
             with open(file_name, "w") as f:
-                json.dump(protocol_data, f, indent=2)
-
-    # ---------- Export to PNG under development (in ICEBOX) ----------
-    def export_to_png(self):
-        protocol_data = self.to_protocol_model()
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol as PNG", "protocol_grid_ui_export.png", "PNG Files (*.png)")
-        if file_name:
-            #TODO fix export as PNG with swim lanes
-            # visualize_protocol_from_model(protocol_data, file_name.replace(".png", ""))
-            visualize_protocol_with_swimlanes(protocol_data, file_name.replace(".png", ""), 5)
-            logger.debug(f"Protocol PNG exported as {file_name}")
-
+                json.dump(flat_data, f, indent=2)
+                
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
         if file_name:
-            # try: 
-            with open(file_name, "r") as f:
-                data = json.load(f)
-            self.state.from_json(data)
-            self.state.undo_stack.clear()
-            self.state.redo_stack.clear()
-            self.load_from_state()
-
-            # except Exception as e:
-                # print(f"Error importing protocol: {e}")
-                # logger.error(f"Error importing protocol: {e}")
-
+            try:
+                with open(file_name, "r") as f:
+                    data = json.load(f)
+                    
+                self.state.snapshot_for_undo()
+                
+                if "steps" in data and "fields" in data:
+                    self.state.from_flat_export(data)
+                else:
+                    self.state.from_json(data)
+                    
+                self.state.undo_stack.clear()
+                self.state.redo_stack.clear()
+                
+                self.reassign_ids()
+                self.load_from_state()
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
+                
     def import_into_json(self):
+        saved_selection = self.save_selection()
+        
         selected_paths = self.get_selected_paths()
         if not selected_paths:
             return
+            
         target_path = selected_paths[0]
         target_item = self.get_item_by_path(target_path)
         if target_item is None:
             return
+            
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
         if not file_name:
             return
+            
         try:
             with open(file_name, "r") as f:
                 data = json.load(f)
+                
+            imported_state = ProtocolState()
+            if "steps" in data and "fields" in data:
+                imported_state.from_flat_export(data)
+            else:
+                imported_state.from_json(data)
+                
+            self.state.snapshot_for_undo()
+            
+            if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                target_elements = self._find_elements_by_path(target_path)
+                for obj in imported_state.sequence:
+                    target_elements.append(copy.deepcopy(obj))
+            else:
+                parent_path = target_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                row = target_path[-1] + 1
+                for i, obj in enumerate(imported_state.sequence):
+                    target_elements.insert(row + i, copy.deepcopy(obj))
+                    
+            self.reassign_ids()
+            self.load_from_state()
+            # self.sync_to_state()
+            
+            self.restore_selection(saved_selection)
+            
         except Exception as e:
-            print(f"Error reading JSON: {e}")
-            return
-        imported_state = ProtocolState()
-        imported_state.from_json(data)
-        imported_sequence = imported_state.sequence
-        self.state.snapshot_for_undo(programmatic=False)
-        self._programmatic_change = True
-        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE: # if group is selected, import as its children
-            parent = target_item
-            parent_elements = self._find_elements_by_path(target_path)
-            row = parent.rowCount()
-            for obj in imported_sequence:
-                if isinstance(obj, ProtocolGroup):
-                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
-                    parent.appendRow(group_items)
-                    parent_elements.append(obj)
-                    # add children using recursion
-                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
-                elif isinstance(obj, ProtocolStep):
-                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
-                    parent.appendRow(step_items)
-                    parent_elements.append(obj)
-        elif target_item.data(ROW_TYPE_ROLE) == STEP_TYPE: # else import below it 
-            parent = target_item.parent() or self.model.invisibleRootItem()
-            parent_path = target_path[:-1]
-            parent_elements = self._find_elements_by_path(parent_path)
-            row = target_item.row() + 1
-            for i, obj in enumerate(imported_sequence):
-                if isinstance(obj, ProtocolGroup):
-                    group_items = make_row(group_defaults, overrides={"Description": obj.name}, row_type=GROUP_TYPE)
-                    parent.insertRow(row + i, group_items)
-                    parent_elements.insert(row + i, obj)
-                    state_to_model(ProtocolState(sequence=obj.elements), group_items[0])
-                elif isinstance(obj, ProtocolStep):
-                    step_items = make_row(step_defaults, overrides={"Description": obj.name}, row_type=STEP_TYPE)
-                    parent.insertRow(row + i, step_items)
-                    parent_elements.insert(row + i, obj)
-        reassign_ids(self.model, self.state)
-        self.tree.expandAll()
-        self.update_all_group_aggregations()
-        self.update_step_dev_fields()
-        self._programmatic_change = False
+            QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
+            
+    def assign_test_device_states(self):
+        """Assign test device states to steps."""    
+        test_steps = make_test_steps()
+        test_states = [step.device_state for step in test_steps]
+        
+        def assign_recursive(elements):
+            idx = 0
+            for obj in elements:
+                if isinstance(obj, ProtocolStep):
+                    obj.device_state = copy.deepcopy(test_states[idx % len(test_states)])
+                    idx += 1
+                elif isinstance(obj, ProtocolGroup):
+                    idx += assign_recursive(obj.elements)
+            return idx
+            
+        self.state.snapshot_for_undo()
+        assign_recursive(self.state.sequence)
+        
+        self.load_from_state()
+        # self.sync_to_state()
+        
+    def open_device_editor(self):
+        QMessageBox.information(self, "Device Editor", "Device state editor not yet implemented.")
+        pass
 
-from PySide6.QtWidgets import QApplication, QMainWindow
-import sys
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Protocol Editor Demo")
-        self.setCentralWidget(PGCWidget())
-        self.resize(1300, 500)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    window = QMainWindow()
+    window.setWindowTitle("Protocol Grid Widget")
+    window.setGeometry(50, 50, 1400, 500)    
+    widget = PGCWidget()
+    window.setCentralWidget(widget)    
+    window.show()    
     sys.exit(app.exec())

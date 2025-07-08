@@ -1,57 +1,54 @@
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer
+from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox
 from PySide6.QtGui import QStandardItem
-from PySide6.QtWidgets import (QStyledItemDelegate, QSpinBox, QDoubleSpinBox,
-                               QLineEdit, QCheckBox)
+from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
 
-from protocol_grid.consts import (protocol_grid_fields, ROW_TYPE_ROLE,
-                                  GROUP_TYPE, STEP_TYPE, step_defaults)
+
+class PGCItem(QStandardItem):
+    def __init__(self, text=""):
+        super().__init__(text)
+        
+    def setEditable(self, editable):
+        flags = self.flags()
+        if editable:
+            flags |= Qt.ItemIsEditable
+        else:
+            flags &= ~Qt.ItemIsEditable
+        self.setFlags(flags)
 
 
 class ProtocolGridDelegate(QStyledItemDelegate):
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
     def createEditor(self, parent, option, index):
-        col = index.column()
-        field = protocol_grid_fields[col]
-        model = index.model()
-        row = index.row()
-        if field == "Trail Overlay":
-            trail_length_col = protocol_grid_fields.index("Trail Length")
-            item_parent = index.model().itemFromIndex(index.parent()) if index.parent().isValid() else None
-            if item_parent:
-                trail_length_item = item_parent.child(index.row(), trail_length_col)
-            else:
-                trail_length_item = model.item(index.row(), trail_length_col)
-            max_val = 0
-            try:
-                max_val = max(0, int(trail_length_item.text()) - 1)
-            except Exception:
-                max_val = 0
+        field = protocol_grid_fields[index.column()]
+        
+        if field in ("Video", "Magnet"):
+            editor = QCheckBox(parent)
+            return editor
+        elif field in ("Magnet Height"):
             editor = QSpinBox(parent)
             editor.setMinimum(0)
-            editor.setMaximum(max_val)
+            editor.setMaximum(10)
             return editor
-        if field == "Magnet Height":
-            parent_item = model.itemFromIndex(index.parent()) if index.parent().isValid() else model.invisibleRootItem()
-            magnet_col = protocol_grid_fields.index("Magnet")
-            magnet_item = parent_item.child(index.row(), magnet_col)
-            if magnet_item and magnet_item.data(Qt.CheckStateRole):
-                editor = QSpinBox(parent)
-                editor.setMinimum(0)
-                editor.setMaximum(10)
-                return editor
-            else:
-                return None
-        if field in ("Message"):
-            return QLineEdit(parent)
         elif field in ("Repetitions", "Trail Length"):
             editor = QSpinBox(parent)
             editor.setMinimum(1)
             editor.setMaximum(10000)
             return editor
-        elif field in ("Magnet", "Video"):
-            cb = QCheckBox(parent)
-            cb.setText("")
-            cb.setTristate(False)
-            return cb
+        elif field in ("Frequency"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(100)
+            editor.setMaximum(20000)
+            editor.setSingleStep(100)
+            return editor
+        elif field in ("Trail Overlay", "Max. Path Length"):
+            editor = QSpinBox(parent)
+            editor.setMinimum(0)
+            editor.setMaximum(1000)
+            return editor
         elif field in ("Duration"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
@@ -63,360 +60,291 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(30.0)
             editor.setMaximum(150.0)
-            editor.setDecimals(1) 
+            editor.setDecimals(1)
             editor.setSingleStep(0.5)
-            return editor
-        elif field in ("Frequency"):
-            editor = QSpinBox(parent)
-            editor.setMinimum(100.0)
-            editor.setMaximum(20000.0)
-            editor.setSingleStep(100)
-            return editor
+            return editor        
         elif field in ("Volume Threshold"):
             editor = QDoubleSpinBox(parent)
-            editor.setMinimum(0.0)
+            editor.setMinimum(0.00)
             editor.setMaximum(1.00)
             editor.setDecimals(2)
-            editor.setSingleStep(0.1)
+            editor.setSingleStep(0.01)
             return editor
-        elif field in ("Repeat Duration"):
+        elif field in ("Repeat Duration", "Run Time"):
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
-            editor.setMaximum(10000.0)
+            editor.setMaximum(99999.9)
             editor.setDecimals(1)
-            editor.setSingleStep(0.1)
             return editor
-        return super().createEditor(parent, option, index)
-
+        else:
+            return QLineEdit(parent)
+            
     def setEditorData(self, editor, index):
-        value = index.model().data(index, Qt.ItemDataRole.EditRole)
-        col = index.column()
-        field = protocol_grid_fields[col]
-        if isinstance(editor, QLineEdit):
-            editor.setText(str(value) if value is not None else "")
-        elif isinstance(editor, QSpinBox):
-            editor.setValue(float(value) if value else 0)
-        elif isinstance(editor, QDoubleSpinBox):
-            editor.setValue(float(value) if value else 0.0)
-        elif isinstance(editor, QCheckBox):
+        field = protocol_grid_fields[index.column()]
+        
+        if field in ("Video"):
             checked = index.model().data(index, Qt.CheckStateRole) == Qt.Checked
             editor.setChecked(checked)
+        elif field in ("Magnet"):
+            checked = index.model().data(index, Qt.CheckStateRole) == 2
+            editor.setChecked(checked)
+        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
+            try:
+                value = float(index.model().data(index, Qt.DisplayRole) or 0)
+                editor.setValue(value)
+            except (ValueError, TypeError):
+                editor.setValue(0)
         else:
-            super().setEditorData(editor, index)
-
+            text = index.model().data(index, Qt.DisplayRole) or ""
+            editor.setText(str(text))
+            
     def setModelData(self, editor, model, index):
-        col = index.column()
-        field = protocol_grid_fields[col]
-        row = index.row()
-        if isinstance(editor, QLineEdit):
-            model.setData(index, editor.text(), Qt.ItemDataRole.EditRole)
-        elif isinstance(editor, QSpinBox) or isinstance(editor, QDoubleSpinBox):
-            value = editor.value()
-            current_value = index.model().data(index, Qt.ItemDataRole.EditRole)
-            if value != current_value:
-                if field in ("Duration", "Voltage", "Repeat Duration", "Volume Threshold"):
-                    formatted = "{:.1f}".format(float(value))
-                    model.setData(index, formatted, Qt.ItemDataRole.EditRole)
-                else:
-                    model.setData(index, value, Qt.ItemDataRole.EditRole)
-                if field == "Trail Length":
-                    overlay_col = protocol_grid_fields.index("Trail Overlay")
-                    overlay_idx = model.index(row, overlay_col)
-                    overlay_item = model.itemFromIndex(overlay_idx)
-                    try:
-                        max_overlay = max(0, int(value) - 1)
-                    except Exception:
-                        max_overlay = 0
-                    try:
-                        overlay_val = int(overlay_item.text())
-                    except Exception:
-                        overlay_val = 0
-                    if overlay_val > max_overlay:
-                        overlay_item.setText(str(max_overlay))
-                    if overlay_val < 0:
-                        overlay_item.setText("0")
-                    view = self.parent().tree if hasattr(self.parent(), "tree") else None
-                    if view:
-                        view.closePersistentEditor(overlay_idx)
-        elif isinstance(editor, QCheckBox):
-            checked = int(editor.isChecked())
-            model.setData(index, checked, Qt.ItemDataRole.EditRole)
+        field = protocol_grid_fields[index.column()]
+        if isinstance(editor, QCheckBox) and field != "Magnet":
+            checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
-            model.setData(index, "", Qt.DisplayRole)
-            widget = self.parent()
-            if hasattr(widget, "save_to_state"):
-                widget.save_to_state()
+            item = model.itemFromIndex(index)
+            if item is not None:
+                item.emitDataChanged()
+        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)) and field != "Magnet Height":
+            value = editor.value()
+            if isinstance(editor, QDoubleSpinBox):
+                model.setData(index, f"{value:.1f}", Qt.EditRole)
+            else:
+                model.setData(index, str(int(value)), Qt.EditRole)
+        elif field == "Magnet Height":
+            value = editor.value() if hasattr(editor, "value") else editor.text()
+            model.setData(index, str(value), Qt.EditRole)
+            model.setData(index, str(value), Qt.UserRole + 2)
         else:
-            super().setModelData(editor, model, index)
+            text = editor.text()
+            model.setData(index, text, Qt.EditRole)
+
+        widget = self.parent()
+        if hasattr(widget, "sync_to_state"):
+            widget.sync_to_state()
 
 
-class PGCItem(QStandardItem):
-    def __init__(self, item_type=None, item_data=None):
-        if item_type in ("Video", "Magnet"):
-            item_data = ""
-        super().__init__(item_data)
-        self.item_type = item_type
-        self.item_data = item_data
-
-    def get_item_type(self):
-        return self.item_type
-
-    def get_item_data(self):
-        return self.item_data
-
-    def set_item_type(self, item_type):
-        self.item_type = item_type
-
-    def set_item_data(self, item_data):
-        self.item_data = item_data
-
-    def clone(self):
-        new_item = PGCItem(self.item_type, self.item_data)
-        new_item.setEditable(self.isEditable())
-        for role in range(Qt.UserRole + 100):
-            value = self.data(role)
-            if value is not None:
-                new_item.setData(value, role)
-        check_state = self.data(Qt.CheckStateRole)
-        new_item.setData(check_state, Qt.CheckStateRole)
-        # only clone children for root (-1) and column 0
-        if self.column() in (-1, 0):
-            for row in range(self.rowCount()):
-                if self.child(row, 0) is not None:
-                    child_row = [self.child(row, col).clone() if self.child(row, col) is not None else None for col in range(self.columnCount())]
-                    new_item.appendRow(child_row)
-        return new_item
-    
-
-def make_row(defaults, overrides=None, row_type=None, children=None):
+def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
     overrides = overrides or {}
     items = []
     magnet_checked = False
 
-    # For group rows, check children for aggregation
-    group_agg_fields = ("Voltage", "Frequency", "Trail Length")
-    group_agg_values = {}
-    if row_type == GROUP_TYPE and children:
-        for field in group_agg_fields:
-            values = set()
-            for child in children:
-                idx = protocol_grid_fields.index(field)
-                val = child[idx].text()
-                values.add(val)
-            if len(values) == 1:
-                group_agg_values[field] = values.pop()
-            else:
-                group_agg_values[field] = None
-    
-    if row_type == STEP_TYPE:
-        try:
-            repetitions = int(overrides.get("Repetitions", defaults.get("Repetitions", 1)))
-            duration = float(overrides.get("Duration", defaults.get("Duration", 1.0)))
-            min_repeat_duration = repetitions * duration
-            repeat_duration = float(overrides.get("Repeat Duration", defaults.get("Repeat Duration", 0.0)))
-            if repeat_duration < min_repeat_duration:
-                overrides["Repeat Duration"] = f"{min_repeat_duration:.1f}"
-        except Exception:
-            pass
-
-    for i, field in enumerate(protocol_grid_fields):
+    for field in protocol_grid_fields:
         value = overrides.get(field, defaults.get(field, ""))
-        if field in ("Duration", "Voltage", "Repeat Duration", "Volume Threshold"):
-            try:
-                value = "{:.1f}".format(float(value))
-            except Exception:
-                pass
-        display_value = "" if field in ("Video", "Magnet") else value
-        item = PGCItem(item_type=field, item_data=display_value)
-        if field == "Description" and row_type:
+        item = PGCItem(str(value))
+
+        if field == "Description":
             item.setData(row_type, ROW_TYPE_ROLE)
-        if field == "ID":
-            item.setEditable(False)
-        elif field in ("Max. Path Length", "Run Time"): 
-            item.setEditable(False)
-        elif row_type == GROUP_TYPE and field in group_agg_fields:
-            agg_val = group_agg_values.get(field)
-            if agg_val is not None:
-                item.setText(agg_val)
-                item.setEditable(True)
-            else:
-                item.setText("")
-                item.setEditable(True)
-        elif row_type == GROUP_TYPE and field not in ("Description", "ID", "Repetitions", "Duration"):
-            item.setText("")
-            item.setEditable(False)
-        else:
-            item.setEditable(True)
+
         if row_type == STEP_TYPE and field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             checked = str(value).strip().lower() in ("1", "true", "yes", "on")
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            item.setText("")
             if field == "Magnet":
                 magnet_checked = checked
-        if field == "Magnet Height":
-            if not magnet_checked or row_type == GROUP_TYPE :
+        elif row_type == STEP_TYPE and field == "Magnet Height":
+            item.setData(str(value), Qt.UserRole + 2)
+            if not magnet_checked:
                 item.setEditable(False)
-                item.setData("", Qt.DisplayRole)
+                item.setText("")
             else:
                 item.setEditable(True)
-                item.setData(value, Qt.DisplayRole)
+                last_value = item.data(Qt.UserRole + 2)
+                if last_value is not None and last_value != "":
+                    item.setText(str(last_value))
+        elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
+            item.setEditable(False)
+        elif row_type == GROUP_TYPE:
+            if field in ("Description", "Voltage", "Frequency", "Trail Length", "Repetitions"):
+                item.setEditable(True)
+            elif field in ("Duration", "Run Time", "ID"):
+                item.setEditable(False)
+            else:
+                item.setEditable(False)
+                item.setText("")
+
         items.append(item)
+
+    if row_type == GROUP_TYPE and children:
+        calculate_group_aggregation_from_children(items, children)
+
     return items
 
-def get_selected_rows(tree, model, for_deletion=False):
-    """
-    Returns list of (parent, row) for each unique row with at least one selected cell.
-    - if for_deletion: sort by depth and descending row, for safe deletion.
-    - else: preserve selection order (as returned by selectedRows(0)).
-    """
-    selection_model = tree.selectionModel()
-    selected = selection_model.selectedRows(0)
-    seen = set()
-    row_refs = []
-    for idx in selected:
-        item = model.itemFromIndex(idx)
-        parent = item.parent() or model.invisibleRootItem()
-        row = item.row()
-        key = (id(parent), row)
-        if key not in seen:
-            seen.add(key)
-            row_refs.append((parent, row))
-    if for_deletion:
-        def get_depth(item):
-            depth = 0  # depth needed for correct deletion order
-            p = item.parent() or model.invisibleRootItem()
-            while p != model.invisibleRootItem():
-                depth += 1
-                p = p.parent() or model.invisibleRootItem()
-            return depth
-        row_refs_with_depth = [((parent, row), get_depth(parent.child(row, 0))) for parent, row in row_refs]
-        row_refs_with_depth.sort(key=lambda prd: (-prd[1], -prd[0][1]))  # deepest, then largest row index first
-        return [pr for pr, _ in row_refs_with_depth]
-    return row_refs
 
-def invert_row_selection(tree, model):
-    """
-    Fix used: After the initial invert, for each group, 
-    check if any of its children are selected.
+def calculate_group_aggregation(group_item):
+    if not group_item or not group_item.hasChildren():
+        return
+        
+    parent = group_item.parent() or group_item.model().invisibleRootItem()
+    row = group_item.row()
     
-    Step 1: Find selected groups and their children (to be inverted).
-    Clear selection.
+    total_repetitions = 0
+    total_duration = 0.0
+    total_run_time = 0.0
+    
+    def collect_from_children(parent_item):
+        nonlocal total_repetitions, total_duration, total_run_time
+        
+        for child_row in range(parent_item.rowCount()):
+            child_desc = parent_item.child(child_row, 0)
+            if not child_desc:
+                continue
+                
+            child_type = child_desc.data(ROW_TYPE_ROLE)
+            
+            if child_type == STEP_TYPE:
+                try:
+                    rep_item = parent_item.child(child_row, protocol_grid_fields.index("Repetitions"))
+                    dur_item = parent_item.child(child_row, protocol_grid_fields.index("Duration"))
+                    run_item = parent_item.child(child_row, protocol_grid_fields.index("Run Time"))
+                    
+                    if rep_item and dur_item and run_item:
+                        reps = int(rep_item.text() or "1")
+                        dur = float(dur_item.text() or "1.0")
+                        run = float(run_item.text() or "0.0")
+                        
+                        total_repetitions += reps
+                        total_duration += dur
+                        total_run_time += run
+                except (ValueError, IndexError):
+                    pass
+            elif child_type == GROUP_TYPE and child_desc.hasChildren():
+                collect_from_children(child_desc)
+                
+    collect_from_children(group_item)
+    
+    try:
+        rep_item = parent.child(row, protocol_grid_fields.index("Repetitions"))
+        dur_item = parent.child(row, protocol_grid_fields.index("Duration"))
+        run_item = parent.child(row, protocol_grid_fields.index("Run Time"))
+        
+        if rep_item:
+            rep_item.setText(str(total_repetitions))
+        if dur_item:
+            dur_item.setText(f"{total_duration:.1f}")
+        if run_item:
+            run_item.setText(f"{total_run_time:.2f}")
+    except IndexError:
+        pass
 
-    Step 2: Select all rows not selected,
-    except children of groups identified in step 1
 
-    Step 3: Now go through each group, 
-    select the group only if any of its children are selected.
-    """
-    selection_model = tree.selectionModel()
+def calculate_group_aggregation_from_children(group_items, children):
+    agg_fields = ["Voltage", "Frequency", "Trail Length"]
+    agg_values = {field: None for field in agg_fields}
+    agg_consistent = {field: True for field in agg_fields}
+    agg_found = {field: False for field in agg_fields}
 
-    def collect_all_row_indexes(parent_item):
-        indexes = []
-        for row in range(parent_item.rowCount()):
-            index = model.index(row, 0, parent_item.index())
-            indexes.append(index)
-            child_item = parent_item.child(row, 0)
-            if child_item and child_item.hasChildren():
-                indexes.extend(collect_all_row_indexes(child_item))
-        return indexes
+    total_duration = 0.0
+    total_run_time = 0.0
 
-    def collect_all_descendant_indexes(item):
-        indexes = []
-        for row in range(item.rowCount()):
-            child = item.child(row, 0)
-            indexes.append(child.index())
-            if child.hasChildren():
-                indexes.extend(collect_all_descendant_indexes(child))
-        return indexes
+    def collect_from_items(child_rows):
+        nonlocal agg_values, agg_consistent, agg_found, total_duration, total_run_time
 
-    root_item = model.invisibleRootItem()
-    all_indexes = collect_all_row_indexes(root_item)
-    old_selected_indexes = set(selection_model.selectedRows(0))
-    # step 1
-    selected_group_indexes = []
-    selected_group_descendants = set()
-    for idx in old_selected_indexes:
-        item = model.itemFromIndex(idx)
-        row_type = item.data(ROW_TYPE_ROLE)
-        if row_type == GROUP_TYPE:
-            selected_group_indexes.append(idx)
-            selected_group_descendants.update(collect_all_descendant_indexes(item))
-    selection_model.clearSelection()
-    # step 2
-    for idx in all_indexes:
-        if idx in old_selected_indexes:
-            continue 
-        if idx in selected_group_descendants:
-            continue 
-        selection_model.select(idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
-    # step 3
-    def fix_group_selection(item):
-        for row in range(item.rowCount()):
-            child = item.child(row, 0)
-            fix_group_selection(child)
-        if item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-            group_idx = item.index()
-            descendant_indexes = collect_all_descendant_indexes(item)
-            any_child_selected = any(
-                selection_model.isRowSelected(idx.row(), idx.parent())
-                for idx in descendant_indexes
-            )
-            if any_child_selected:
-                selection_model.select(group_idx, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+        for child_row in child_rows:
+            if not child_row or not isinstance(child_row, list):
+                continue
+
+            try:
+                desc_item = child_row[0]
+                child_type = desc_item.data(ROW_TYPE_ROLE)
+
+                if child_type == STEP_TYPE:
+                    for field in agg_fields:
+                        idx = protocol_grid_fields.index(field)
+                        val = child_row[idx].text()
+                        if not agg_found[field]:
+                            agg_values[field] = val
+                            agg_found[field] = True
+                        elif agg_values[field] != val:
+                            agg_consistent[field] = False
+
+                    dur_idx = protocol_grid_fields.index("Duration")
+                    rep_idx = protocol_grid_fields.index("Repetitions")
+                    run_idx = protocol_grid_fields.index("Run Time")
+                    try:
+                        duration = float(child_row[dur_idx].text() or "0")
+                        repetitions = int(child_row[rep_idx].text() or "1")
+                        run_time = float(child_row[run_idx].text() or "0")
+                    except ValueError:
+                        duration = 0.0
+                        repetitions = 1
+                        run_time = 0.0
+                    total_duration += duration * repetitions
+                    total_run_time += run_time
+
+                elif child_type == GROUP_TYPE:
+                    dur_idx = protocol_grid_fields.index("Duration")
+                    run_idx = protocol_grid_fields.index("Run Time")
+                    try:
+                        duration = float(child_row[dur_idx].text() or "0")
+                        run_time = float(child_row[run_idx].text() or "0")
+                    except ValueError:
+                        duration = 0.0
+                        run_time = 0.0
+                    total_duration += duration
+                    total_run_time += run_time
+
+                    sub_rows = [
+                        [desc_item.child(r, c) for c in range(desc_item.columnCount())]
+                        for r in range(desc_item.rowCount())
+                    ]
+                    collect_from_items(sub_rows)
+            except (ValueError, IndexError, AttributeError):
+                pass
+
+    collect_from_items(children)
+
+    try:
+        for field in agg_fields:
+            idx = protocol_grid_fields.index(field)
+            item = group_items[idx]
+            if agg_found[field] and agg_consistent[field]:
+                item.setText(agg_values[field])
             else:
-                selection_model.select(group_idx, QItemSelectionModel.Deselect | QItemSelectionModel.Rows)
-    fix_group_selection(root_item)
+                item.setText("")
 
-def to_protocol_model(model):
-    """
-    Walks the QTreeView and builds a sequential list of ProtocolStep/ProtocolGroup.
-    """
-    def parse_seq(parent_item):
-        sequence = []
-        for row in range(parent_item.rowCount()):
-            desc_item = parent_item.child(row, 0)
-            row_type = desc_item.data(ROW_TYPE_ROLE)
-            if row_type == GROUP_TYPE:
-                group_name = desc_item.text()
-                fields = {}
-                for i, field in enumerate(protocol_grid_fields):
-                    item = parent_item.child(row, i)
-                    if item:
-                        value = (
-                            1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                        ) if field in ("Video", "Magnet") else item.text()
-                        fields[field] = value
-                group_elements = parse_seq(desc_item)
-                group_dict = {
-                    "name": group_name,
-                    "elements": [e for e in group_elements],
-                    "parameters": {k: fields.get(k, step_defaults.get(k, ""))
-                                   for k in protocol_grid_fields if k not in (
-                                       "Description", "ID", "elements", "name")
-                    }
-                }
-                sequence.append(group_dict)
-            elif row_type == STEP_TYPE:
-                fields = {}
-                for i, field in enumerate(protocol_grid_fields):
-                    item = parent_item.child(row, i)
-                    if item:
-                        if field in ("Video", "Magnet"):
-                            value = 1 if item.data(Qt.CheckStateRole) == Qt.Checked else 0
-                        else:
-                            value = item.text()
-                        fields[field] = value
-                step_dict = {
-                    "name": fields.get("Description", step_defaults["Description"]),
-                    "parameters": {k: fields.get(k, step_defaults.get(k, ""))
-                                   for k in protocol_grid_fields if k not in (
-                                       "Description", "ID", "elements", "name")
-                    }
-                }
-                sequence.append(step_dict)
-        return sequence
+        dur_idx = protocol_grid_fields.index("Duration")
+        run_idx = protocol_grid_fields.index("Run Time")
+        rep_idx = protocol_grid_fields.index("Repetitions")
+        try:
+            group_reps = int(group_items[rep_idx].text() or "1")
+        except ValueError:
+            group_reps = 1
+        group_items[dur_idx].setText(f"{total_duration * group_reps:.1f}")
+        group_items[run_idx].setText(f"{total_run_time * group_reps:.2f}")
+    except IndexError:
+        pass
 
-    root_item = model.invisibleRootItem()
-    return parse_seq(root_item)
 
+def clamp_trail_overlay(parent):
+    if hasattr(parent, "rowCount") and hasattr(parent, "columnCount"):
+        row_count = parent.rowCount()
+        item_getter = (lambda r, c: parent.item(r, c)) if hasattr(parent, "item") else (lambda r, c: parent.child(r, c))
+    else:
+        return
+        
+    for row in range(row_count):
+        desc_item = item_getter(row, 0)
+        if desc_item is None:
+            continue
+            
+        if desc_item.hasChildren():
+            clamp_trail_overlay(desc_item)
+        else:
+            try:
+                trail_length_col = protocol_grid_fields.index("Trail Length")
+                overlay_col = protocol_grid_fields.index("Trail Overlay")
+                trail_length_item = item_getter(row, trail_length_col)
+                overlay_item = item_getter(row, overlay_col)
+                
+                trail_length = int(trail_length_item.text())
+                max_overlay = max(0, trail_length - 1)
+                overlay_val = int(overlay_item.text())
+                
+                if overlay_val > max_overlay:
+                    overlay_item.setText(str(max_overlay))
+            except Exception:
+                pass

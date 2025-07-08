@@ -1,12 +1,20 @@
 import copy
 from protocol_grid.consts import protocol_grid_fields
-from protocol_grid.state.device_state import DeviceState
+from protocol_grid.logic.device_state_manager import DeviceStateManager
 
 class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
         self.name = name
         self.parameters = parameters or {}
-        self.device_state = DeviceState()
+        for field in ("Magnet", "Video"):
+            if field in self.parameters:
+                val = self.parameters[field]
+                if str(val).strip().lower() in ("1", "true", "yes", "on"):
+                    self.parameters[field] = "1"
+                else:
+                    self.parameters[field] = "0"        
+        
+        self.device_state = DeviceStateManager.create_random_device_state()
 
     def to_dict(self):
         return {
@@ -21,6 +29,7 @@ class ProtocolStep:
         obj = cls(parameters=data.get("parameters", {}), name=data.get("name", "Step"))
         obj.device_state.from_dict(data.get("device_state", {}))
         return obj
+
 
 class ProtocolGroup:
     def __init__(self, parameters=None, name="Group", elements=None):
@@ -41,6 +50,7 @@ class ProtocolGroup:
         elements = [ProtocolStep.from_dict(e) if e.get("type") == "step" else ProtocolGroup.from_dict(e)
                     for e in data.get("elements", [])]
         return cls(parameters=data.get("parameters", {}), name=data.get("name", "Group"), elements=elements)
+
 
 class ProtocolState:
     def __init__(self, sequence=None):
@@ -64,6 +74,49 @@ class ProtocolState:
                 self.sequence.append(ProtocolGroup.from_dict(e))
         self.fields = data.get("fields", list(protocol_grid_fields))
 
+    def to_flat_export(self):
+        """
+        Returns a dict with:
+        - 'steps': list of step dicts (including device_state as a dict)
+        - 'groups': list of {'ID': group_id, 'Description': group_description}
+        - 'fields': list of field names
+        """
+        steps = []
+        groups = []
+
+        def recurse(seq, prefix=""):
+            group_counter = 1
+            step_counter = 1
+            for obj in seq:
+                if isinstance(obj, ProtocolGroup):
+                    group_id = (prefix + "_" if prefix else "") + chr(64 + group_counter)
+                    groups.append({
+                        "ID": group_id,
+                        "Description": obj.parameters.get("Description", obj.name)
+                    })
+                    recurse(obj.elements, group_id)
+                    group_counter += 1
+                elif isinstance(obj, ProtocolStep):
+                    step_id = (prefix + "_" if prefix else "") + str(step_counter)
+                    step_dict = dict(obj.parameters)
+                    step_dict["ID"] = step_id
+                    step_dict["device_state"] = obj.device_state.to_dict() if hasattr(obj.device_state, "to_dict") else {}
+                    steps.append(step_dict)
+                    step_counter += 1
+
+        recurse(self.sequence)
+        return {
+            "steps": steps,
+            "groups": groups,
+            "fields": list(self.fields)
+        }
+    
+    def from_flat_export(self, flat_json):  
+        from protocol_grid.logic.import_export_manager import ImportExportManager      
+        sequence, fields = ImportExportManager.import_flat_protocol(flat_json)
+        self.sequence = sequence
+        self.fields = fields
+
     def to_json(self):
         return self.to_dict()
     
@@ -71,25 +124,25 @@ class ProtocolState:
         self.from_dict(data)
 
     def snapshot_for_undo(self, programmatic=False):
-        snap = copy.deepcopy((self.sequence, list(self.fields)))
+        snap = copy.deepcopy(self.to_dict())
         self.undo_stack.append(snap)
-        if len(self.undo_stack) > 20:
-            self.undo_stack = self.undo_stack[-20:]
+        if len(self.undo_stack) > 20000:
+            self.undo_stack = self.undo_stack[-20000:]
         if not programmatic:
             self.redo_stack.clear()        
 
     def undo(self):
         if not self.undo_stack:
             return
-        current = copy.deepcopy((self.sequence, list(self.fields)))
+        current = copy.deepcopy(self.to_dict())
         self.redo_stack.append(current)
         last = self.undo_stack.pop()
-        self.sequence, self.fields = copy.deepcopy(last)
+        self.from_dict(last)
 
     def redo(self):
         if not self.redo_stack:
             return
-        current = copy.deepcopy((self.sequence, list(self.fields)))
+        current = copy.deepcopy(self.to_dict())
         self.undo_stack.append(current)
         next_ = self.redo_stack.pop()
-        self.sequence, self.fields = copy.deepcopy(next_)
+        self.from_dict(next_)
