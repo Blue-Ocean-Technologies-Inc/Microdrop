@@ -18,29 +18,13 @@ class Electrode(HasTraits):
     """
 
     #: Channel number
-    channel = Int()
+    channel = Instance(int, allow_none=True) # Int() doesn't seem to follow allow_none for some reason
 
     #: Electrode id
     id = String()
 
     #: NDArray path to electrode
     path = Array(dtype=Float, shape=(None, 2))
-
-    #: State of the electrode (On or Off)
-    _state = Bool(False)
-
-    #: Property for state
-    state = Property(Bool, observe='_state')
-
-    # -------------- property trait handlers ----------------------
-
-    def _get_state(self) -> Bool:
-        return self._state
-
-    def _set_state(self, state: Bool):
-        if state != self._state and self.channel is not None:
-            self._state = state
-            logger.debug("State changed to %s for %s", self.state, self.channel)
 
 
 class Electrodes(HasTraits):
@@ -50,53 +34,33 @@ class Electrodes(HasTraits):
     """
 
     #: Dictionary of electrodes with keys being an electrode id and values being the electrode object
-    _electrodes = Dict(Str, Electrode, desc="Dictionary of electrodes with keys being an electrode id and values "
+    electrodes = Dict(Str, Electrode, desc="Dictionary of electrodes with keys being an electrode id and values "
                                             "being the electrode object")
-
-    electrodes = Property(Dict(Str, Electrode), observe='_electrodes')
+    electrode_editing = Instance(Electrode)
 
     svg_model = Instance(SvgUtil, allow_none=True, desc="Model for the SVG file if given")
 
-    #: Properties of the contained electrode objects. Will update dynamically observing each electrode object traits.
-    electrode_channels = Property(List(Int), observe='_electrodes:items:channel')
-    electrode_states = Property(List(Bool), observe='_electrodes:items:state')
-
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
     # Note that channel-electride_id is one-to-many! So there is meaningful difference in acting on one or the other
-    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='_electrodes')
+    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes')
 
-    #: Map of the unique channels and their states, True means actuated.
-    channels_states_map = Property(Dict(Int, Bool), observe='_electrodes:items:channel, _electrodes:items:state')
+    #: Map of the unique channels and their states, True means actuated, anything else means not actuated
+    channels_states_map = Dict(Int, Bool, {})
 
-    # -------------------Magic methods ----------------------------------------------------------------------
+    # ------------------- Magic methods ----------------------------------------------------------------------
     def __getitem__(self, item: Str) -> Electrode:
-        return self._electrodes[item]
+        return self.electrodes[item]
 
     def __setitem__(self, key, value):
-        self._electrodes[key] = value
+        self.electrodes[key] = value
 
     def __iter__(self):
-        return iter(self._electrodes.values())
+        return iter(self.electrodes.values())
 
     def __len__(self):
-        return len(self._electrodes)
+        return len(self.electrodes)
 
     # -------------------Trait Property getters and setters --------------------------------------------------
-    def _get_electrodes(self) -> Dict(Str, Electrode):
-        return self._electrodes
-
-    def _set_electrodes(self, electrodes: Dict(Str, Electrode)):
-        self._electrodes = electrodes
-
-    @cached_property
-    def _get_electrode_channels(self) -> List(Int):
-        return [electrode.channel for electrode in self._electrodes.values()]
-
-    def _get_electrode_states(self) -> List(Int):
-        return [electrode.state for electrode in self._electrodes.values()]
-
-    def _get_channels_states_map(self):
-        return dict(zip(self.electrode_channels, self.electrode_states))
 
     @cached_property
     def _get_channels_electrode_ids_map(self):
@@ -127,6 +91,5 @@ class Electrodes(HasTraits):
         self.svg_model = SvgUtil(svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
     
-    def reset_states(self):
-        for electrode_id, electrode in self.electrodes.items():
-            electrode.state = False
+    def reset_electrode_states(self):
+        self.channels_states_map.clear()

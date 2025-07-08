@@ -1,8 +1,8 @@
 from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Property, DelegatesTo
-import random
+from pyface.undo.api import UndoManager
 from queue import Queue
 from collections import Counter
-from microdrop_style.colors import PRIMARY_SHADE
+from ..views.electrode_view.default_settings import ROUTE_COLOR_POOL
 
 # Abstract pathing object class
 class Route(HasTraits):
@@ -81,12 +81,12 @@ class Route(HasTraits):
         other_endpoints = other.get_endpoints()
         return self_endpoints[0] == other_endpoints[1] or self_endpoints[1] == other_endpoints[0]
     
-    def merge(self, other: "Route"):
+    def merge(self, other: "Route") -> list:
         '''Merge with other route. Does this in place and does not modify the other route. Prioritizes putting other at end in ambigous cases. Assumes can_merge returns True'''
         if self.route[-1] == other.route[0]:
-            self.route = self.route + other.route[1:]
+            return self.route + other.route[1:]
         elif self.route[0] == other.route[-1]:
-            self.route = other.route[:-1] + self.route
+            return other.route[:-1] + self.route
 
     def add_segment(self, from_id, to_id):
         '''Adds segment to path'''
@@ -253,35 +253,14 @@ class RouteLayerManager(HasTraits):
 
     layer_to_merge = Instance(RouteLayer)
 
-    # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
-    # Edit: User can only extend selected segment
-    # Edit-Draw: Same as edit except we switch to draw on mouserelease
-    # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
-    # Merge: User can only merge paths. They cannot edit.
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge")
-
-    mode_name = Property(Str, observe="mode")
-
-    message = Str("")
-
-    # ------------------------- Properties ------------------------
-
-    def _get_mode_name(self):
-        return {
-            "draw": "Draw",
-            "edit-draw": "Draw",
-            "edit": "Edit",
-            "auto": "Autoroute",
-            "merge": "Merge"
-        }.get(self.mode, "Error")
+    autoroute_layer = Instance(RouteLayer)
 
     # --------------------------- Model Helpers --------------------------
     
-    def get_available_color(self):
+    def get_available_color(self, exclude=()):
         color_counts = {}
-        shades = [300, 800, 400, 700, 500, 600] 
-        for shade in shades:
-            color = PRIMARY_SHADE[shade]
+        color_pool = ROUTE_COLOR_POOL
+        for color in color_pool + exclude:
             color_counts[color] = 0
         for layer in self.layers:
             if layer.color in color_counts.keys():
@@ -290,24 +269,24 @@ class RouteLayerManager(HasTraits):
     
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)
-        self.layers.pop(index) # Delete the current layer
 
+        layers_to_add = []
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
             if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
-                self.add_layer(new_routes[i], index, old_route_layer.color)
+                layers_to_add.append(RouteLayer(route=new_routes[i], color=old_route_layer.color))
             else:
-                self.add_layer(new_routes[i], index)
+                new_colors = tuple([layer.color for layer in layers_to_add])
+                layers_to_add.append(RouteLayer(route=new_routes[i], color=self.get_available_color(exclude=new_colors)))
+
+        self.layers[index:index+1] = reversed(layers_to_add) # Delete and replace in single operation for easy undo
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
-        elif len(self.layers) == 0:
-            self.selected_layer = None
-            self.mode = 'draw' # Nothing to edit, so set to draw
-        else:
-            self.selected_layer = self.layers[-1] # Set it to the last layer
+    
+        return index
 
     def delete_layer(self, layer: RouteLayer):
-        self.replace_layer(layer, [])
+        self.layers.remove(layer)
 
     def add_layer(self, route: Route, index=None, color=None):
         if color == None:
@@ -317,8 +296,19 @@ class RouteLayerManager(HasTraits):
         else:
             self.layers.insert(index, RouteLayer(route=route, color=color))
 
-    def reset(self):
-        self.layers = []
+    def merge_layer(self, other_layer) -> bool:
+        '''Try to merge other_layer with layer_to_merge. Returns boolean indicating operation's success'''
+        if self.layer_to_merge.route.can_merge(other_layer.route):
+            new_route = Route(route=self.layer_to_merge.route.merge(other_layer.route), channel_map=self.layer_to_merge.route.channel_map)
+            index = self.replace_layer(self.layer_to_merge, [new_route]) # This should set layer_to_merge to None (for consistency) and mode to something else
+            self.layer_to_merge = self.layers[index] # ...so set it back
+            self.mode = 'merge'
+            self.delete_layer(other_layer)
+        else:
+            return False
+
+    def reset_route_manager(self):
+        self.layers.clear()
         self.selected_layer = None
         self.layer_to_merge = None
         self.mode = "draw"
@@ -339,14 +329,23 @@ class RouteLayerManager(HasTraits):
     # --------------------- Observers ------------------------------
     @observe('layers.items')
     def _layers_items_changed(self, event):
-        if self.selected_layer == None and hasattr(event, "new") and len(event.new) > 0: # If we have no routes and a route is added, select it
-            self.selected_layer = event.new[0]
+        if self.layer_to_merge != None and self.layer_to_merge not in self.layers: # Clean up merge reference
+            self.layer_to_merge = None
+            self.mode = "edit"
+        
+        if self.selected_layer not in self.layers: # Clean up selected reference
+            if len(self.layers) == 0:
+                self.selected_layer = None
+                self.mode = 'draw' # Nothing to edit, so set to draw
+            else:
+                self.selected_layer = self.layers[-1] # Set it to the last layer
     
     @observe('selected_layer')
-    def _selected_layer_changed(self, event):
+    @observe('layers.items')
+    def update_selected_layers(self, event):
         # Mark only the selected layer
         for layer in self.layers:
-            layer.is_selected = (layer is event.new)
+            layer.is_selected = (layer is self.selected_layer)
 
     @observe('layer_to_merge')
     @observe('layer_to_merge.name')
@@ -358,10 +357,3 @@ class RouteLayerManager(HasTraits):
                 self.message = f"Route merging: {event.new.name}"
         elif event.name == "name": # event.new is the new name
             self.message = f"Route merging: {event.new}"
-    
-    @observe('mode')
-    def mode_change(self, event):
-        if event.old == 'merge' and event.new != 'merge': # We left merge mode
-            self.message = ""
-            self.layer_to_merge = None
-        

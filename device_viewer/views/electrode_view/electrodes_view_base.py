@@ -11,7 +11,7 @@ from pyface.qt.QtCore import Qt, QPointF
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
                              QGraphicsItem)
 
-from .default_settings import default_colors, default_alphas
+from .default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
 from device_viewer.models.electrodes import Electrode
 
 logger = get_logger(__name__, level='DEBUG')
@@ -72,7 +72,7 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         self.key = key
         self.set_inactive()
 
-    def set_active(self, color=Qt.green):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT)):
         """
         Set connection item to visually active
         """
@@ -82,7 +82,6 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         """
         Set connection item to visually inactive. This is default.
         """
-        #self.setPen(QPen(QColor(default_colors['connection']), 1))
         self.setPen(Qt.NoPen)
 
 class ElectrodeEndpointItem(QGraphicsPathItem):
@@ -117,7 +116,7 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         self.electrode_id = electrode_id
         self.set_inactive()
 
-    def set_active(self, color=Qt.green):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT)):
         """
         Set connection item to visually active
         """
@@ -149,17 +148,15 @@ class ElectrodeView(QGraphicsPathItem):
     def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, parent=None):
         super().__init__(parent)
 
-        self.state_map = {k: v for k, v in default_colors.items()}
-        self.state_map[None] = self.state_map[False]
+        self.state_map = { # Maps electrode states to colors
+            None: ELECTRODE_OFF,
+            False: ELECTRODE_OFF,
+            True: ELECTRODE_ON
+        }
 
         self.electrode = electrode
         self.id = id_
         self.alphas = default_alphas
-
-        if str(self.electrode.channel) == 'None':
-            self.state_map[False] = default_colors['no-channel']
-            self.state_map[True] = default_colors['no-channel']
-            self.state_map[None] = default_colors['no-channel']
 
         self.path = QPainterPath()
         self.path.moveTo(path_data[0][0], path_data[0][1])
@@ -169,20 +166,17 @@ class ElectrodeView(QGraphicsPathItem):
         self.setPath(self.path)
 
         # Pen for the outline
-        self.pen_color = QColor(self.state_map['line'])
+        self.pen_color = QColor(ELECTRODE_LINE)
         self.pen_color.setAlphaF(self.alphas['line'])
         self.pen = QPen(self.pen_color, 1)  # line color outline
         self.setPen(self.pen)
 
         # Brush for the fill
-        self.color = QColor(self.state_map[False])
-        self.color.setAlphaF(self.alphas['fill'])
-        self.brush = QBrush(self.color)  # Default fill color
-        self.setBrush(self.brush)
+        self.update_color(False)
 
         # Text item
         self.text_path = QGraphicsTextItem(parent=self)
-        self.text_color = QColor(Qt.white)
+        self.text_color = QColor(ELECTRODE_TEXT_COLOR)
         self.text_color.setAlphaF(self.alphas['text'])
         self.text_path.setDefaultTextColor(self.text_color)
         self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
@@ -201,16 +195,8 @@ class ElectrodeView(QGraphicsPathItem):
         """
         Method to fit the text in the center of the electrode path
         """
-        if text == 'None':
-            self.text_path.setPlainText('')
-            self.state_map[False] = default_colors['no-channel']
-            self.state_map[True] = default_colors['no-channel']
-            self.state_map[None] = default_colors['no-channel']
-        else:
-            self.text_path.setPlainText(text)
-            self.state_map[False] = default_colors[False]
-            self.state_map[True] = default_colors[True]
-            self.state_map[None] = default_colors[False]
+        self.text_path.setPlainText(text if text != "None" else "")
+
         # Determine the font size based on the path size
         left, right, top, bottom = path_extremes
         range_x = right - left
@@ -224,7 +210,9 @@ class ElectrodeView(QGraphicsPathItem):
             if font_size < default_font_size:
                 font_size = default_font_size
 
-        self.text_path.setFont(QFont('Arial', font_size))
+        resized_font = QFont("Arial") # Get the default font
+        resized_font.setPointSize(font_size)
+        self.text_path.setFont(resized_font)
         # Adjust the font size to fit the text in the path
         text_size = self.text_path.document().size()
         # center the text to the path
@@ -235,13 +223,16 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def update_color(self, state):
+    def update_color(self, color_str: str):
         """
         Method to update the color of the electrode based on the state
         """
-        self.color = QColor(self.state_map.get(state, self.state_map[False]))
-        self.color.setAlphaF(self.alphas['fill'])
-        self.setBrush(QBrush(self.color))
+        color = QColor(color_str)
+        color.setAlphaF(self.alphas['fill'])
+        self.setBrush(QBrush(color))
         self.update()
+
+    def update_label(self):
+        self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
 
 

@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QGraphicsScene
 
 from .electrode_view_helpers import find_path_item
@@ -37,11 +38,24 @@ class ElectrodeScene(QGraphicsScene):
         '''
         # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
         # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
-        items = self.items(coordinates)
+        items = self.items(coordinates, deviceTransform=self.views()[0].transform())
         for item in items:
             if isinstance(item, object_type):
                 return item
         return None
+    
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        char = event.text()
+        key = event.key()
+
+        if char.isprintable(): # If an actual char was inputted
+            if char.isdigit(): # It's a digit
+                self.interaction_service.handle_digit_input(char)
+        else:
+            if key == Qt.Key_Backspace:
+                self.interaction_service.handle_backspace()
+
+        super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
@@ -69,10 +83,12 @@ class ElectrodeScene(QGraphicsScene):
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
 
+        mode = self.interaction_service.get_mode()
+        electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+        self.interaction_service.handle_electrode_hover(electrode_view)
+
         if self.left_mouse_pressed:
             # Only proceed if we have a valid electrode view.
-            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-            mode = self.interaction_service.get_mode()
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
@@ -89,13 +105,14 @@ class ElectrodeScene(QGraphicsScene):
                     self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
                         
         if self.right_mouse_pressed:
-            connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
-            endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
-            if connection_item:
-                (from_id, to_id) = connection_item.key
-                self.interaction_service.handle_route_erase(from_id, to_id)
-            elif endpoint_item:
-                self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
+            if mode in ("edit", "draw", "edit-draw"):
+                connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+                endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+                if connection_item:
+                    (from_id, to_id) = connection_item.key
+                    self.interaction_service.handle_route_erase(from_id, to_id)
+                elif endpoint_item:
+                    self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
@@ -106,8 +123,10 @@ class ElectrodeScene(QGraphicsScene):
 
         if button == Qt.LeftButton:
             self.left_mouse_pressed = False
-            mode = self.interaction_service.get_mode()
-            if mode in ["edit", "draw", "edit-draw"]:
+            mode = self.interaction_service.get_mode()  
+            if mode == "auto":
+                self.interaction_service.handle_autoroute_end()
+            else:
                 electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
                 # If it's a click (not a drag) since only one electrode selected:
                 if not self.is_drag and electrode_view:
@@ -118,8 +137,6 @@ class ElectrodeScene(QGraphicsScene):
 
                 if mode == "edit-draw": # Go back to draw
                     self.interaction_service.set_mode("draw")
-            elif mode == "auto":
-                self.interaction_service.handle_autoroute_end()
         elif button == Qt.RightButton:
             self.right_mouse_pressed = False
         
