@@ -7,63 +7,75 @@ class ImportExportManager:
     @staticmethod
     def import_flat_protocol(flat_json):
         steps = flat_json["steps"]
-        groups = {g["ID"]: g.get("Description", g.get("description", "")) for g in flat_json.get("groups", [])}
+        groups_meta = {g["ID"]: g.get("Description", g.get("description", "")) for g in flat_json.get("groups", [])}
         fields = flat_json.get("fields", [])
-        group_ids = set(groups.keys())
+        group_objs = {}
 
-        def get_parent_id(step_id):
-            return "_".join(step_id.split("_")[:-1]) if "_" in step_id else ""
+        def get_parent_group_id(step_id):
+            parts = step_id.split("_")
+            if len(parts) == 1:
+                return None
+            return "_".join(parts[:-1]) 
+        
+        def get_or_create_group(group_id):
+            if group_id in group_objs:
+                return group_objs[group_id]
+            parent_id = get_parent_group_id(group_id)
+            group = ProtocolGroup(
+                parameters={"Description": groups_meta.get(group_id, group_id), "ID": group_id},
+                name=groups_meta.get(group_id, group_id),
+                elements=[]
+            )
+            group_objs[group_id] = group
+            if parent_id:
+                parent_group = get_or_create_group(parent_id)
+                parent_group.elements.append(group)
+            return group
 
-        def parse_steps(step_list, parent_prefix="", depth=0):
-            elements = []
-            i = 0
+        steps_by_id = {step["ID"]: step for step in steps}
+        groups_by_id = {g["ID"]: g for g in flat_json.get("groups", [])}
+        combined = []
+        step_ids = set()
+        group_ids = set()
+        for step in steps:
+            combined.append(step)
+            step_ids.add(step["ID"])
+        for group in flat_json.get("groups", []):
+            combined.append(("group", group["ID"]))
+            group_ids.add(group["ID"])
+
+        root_sequence = []
+        inserted_groups = set()
+
+        def insert_group_in_parent(group_id):
+            if group_id in inserted_groups:
+                return
+            group = get_or_create_group(group_id)
+            parent_id = get_parent_group_id(group_id)
+            if parent_id is None:
+                if group not in root_sequence:
+                    root_sequence.append(group)
+            inserted_groups.add(group_id)            
+
+        for step in steps:
+            step_id = step["ID"]
+            parent_group_id = get_parent_group_id(step_id)
+            params = {k: v for k, v in step.items() if k != "device_state"}
+            step_obj = ProtocolStep(
+                parameters=params,
+                name=step.get("Description", "Step")
+            )
+            if "device_state" in step:
+                step_obj.device_state.from_dict(step["device_state"])
+            if parent_group_id:
+                group = get_or_create_group(parent_group_id)
+                group.elements.append(step_obj)
+                insert_group_in_parent(parent_group_id)
+            else:
+                root_sequence.append(step_obj)
             
-            while i < len(step_list):
-                step = step_list[i]
-                step_id = step["ID"]
-                parent_id = get_parent_id(step_id)
-                
-                # Only process steps whose parent matches current prefix
-                if parent_id != parent_prefix:
-                    i += 1
-                    continue
-                
-                # Check if we need to create a group for steps with this parent
-                if parent_id in group_ids and parent_id not in [g.parameters.get("ID", "") for g in elements if isinstance(g, ProtocolGroup)]:
-                    # Create group and collect all its children
-                    group_steps = []
-                    j = i
-                    while j < len(step_list):
-                        next_step = step_list[j]
-                        next_parent_id = get_parent_id(next_step["ID"])
-                        if next_parent_id == parent_id:
-                            group_steps.append(next_step)
-                            j += 1
-                        else:
-                            break
-                    
-                    # Recursively parse group children
-                    group_elements = parse_steps(group_steps, parent_prefix=parent_id, depth=depth+1)
-                    group = ProtocolGroup(
-                        parameters={"Description": groups[parent_id], "ID": parent_id},
-                        name=groups[parent_id],
-                        elements=group_elements
-                    )
-                    elements.append(group)
-                    i = j  # Skip processed steps
-                else:
-                    # Regular step
-                    params = {k: v for k, v in step.items() if k not in ("device_state",)}
-                    step_obj = ProtocolStep(parameters=params, name=step.get("Description", "Step"))
-                    
-                    # Set device state
-                    if "device_state" in step:
-                        step_obj.device_state.from_dict(step["device_state"])
-                    
-                    elements.append(step_obj)
-                    i += 1
-            
-            return elements
+        for group in flat_json.get("groups", []):
+            group_id = group["ID"]
+            insert_group_in_parent(group_id)
 
-        sequence = parse_steps(steps)
-        return sequence, fields
+        return root_sequence, fields
