@@ -1,6 +1,6 @@
 import copy
 from protocol_grid.consts import protocol_grid_fields
-from protocol_grid.logic.device_state_manager import DeviceStateManager
+from protocol_grid.state.device_state import DeviceState
 
 class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
@@ -14,7 +14,7 @@ class ProtocolStep:
                 else:
                     self.parameters[field] = "0"        
         
-        self.device_state = DeviceStateManager.create_random_device_state()
+        self.device_state = DeviceState()
 
     def to_dict(self):
         return {

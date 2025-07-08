@@ -15,7 +15,7 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.state.messages import DeviceViewerMessageModel
-from protocol_grid.state.device_state import device_state_from_device_viewer_message
+from protocol_grid.state.device_state import DeviceState, device_state_from_device_viewer_message
 
 protocol_grid_column_widths = [
     120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
@@ -74,6 +74,7 @@ class PGCWidget(QWidget):
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         selected_paths = self.get_selected_paths()
         if not selected_paths:
@@ -88,11 +89,12 @@ class PGCWidget(QWidget):
             device_state = device_state_from_device_viewer_message(dv_msg)
             item.setData(device_state, Qt.UserRole + 100)
             self.model_to_state()
-            self.state_to_model()
+            # self.state_to_model()
         except Exception as e:
             print(f"Failed to update DeviceState from device_viewer message: {e}")
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
-        
+
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()
         
@@ -312,7 +314,19 @@ class PGCWidget(QWidget):
             if index.isValid():
                 selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
         
+    def save_scroll_positions(self):
+        return (
+            self.tree.verticalScrollBar().value(),
+            self.tree.horizontalScrollBar().value()
+        )
+
+    def restore_scroll_positions(self, positions):
+        vert, horiz = positions
+        QTimer.singleShot(0, lambda: self.tree.verticalScrollBar().setValue(vert))
+        QTimer.singleShot(0, lambda: self.tree.horizontalScrollBar().setValue(horiz))
+
     def load_from_state(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         self.save_column_settings()        
         self._programmatic_change = True
@@ -326,6 +340,7 @@ class PGCWidget(QWidget):
             self._programmatic_change = False
             
         self.restore_column_settings()
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
             
     def state_to_model(self):
@@ -517,9 +532,8 @@ class PGCWidget(QWidget):
                 return
                 
             device_state = desc_item.data(Qt.UserRole + 100)
-            if not device_state:
-                from protocol_grid.logic.device_state_manager import DeviceStateManager
-                device_state = DeviceStateManager.create_default_device_state()
+            if not device_state:                
+                device_state = DeviceState()
                 desc_item.setData(device_state, Qt.UserRole + 100)
                 
             repetitions = int(repetitions_item.text() or "1")
@@ -631,6 +645,7 @@ class PGCWidget(QWidget):
                 selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
                 
     def insert_step(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -658,10 +673,11 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def insert_group(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -689,10 +705,11 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def add_step(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -719,10 +736,11 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def add_step_into(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -753,10 +771,11 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def add_group(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -783,10 +802,11 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def add_group_into(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -817,7 +837,7 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def delete_selected(self):
@@ -884,6 +904,7 @@ class PGCWidget(QWidget):
         if not hasattr(self, '_clipboard') or not self._clipboard:
             return
             
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -908,7 +929,7 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def paste(self):
@@ -918,6 +939,7 @@ class PGCWidget(QWidget):
         if not hasattr(self, '_clipboard') or not self._clipboard:
             return
             
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -939,7 +961,7 @@ class PGCWidget(QWidget):
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
-        
+        self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         
     def undo_last(self):
@@ -996,6 +1018,7 @@ class PGCWidget(QWidget):
                 QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
                 
     def import_into_json(self):
+        scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
         selected_paths = self.get_selected_paths()
@@ -1037,7 +1060,7 @@ class PGCWidget(QWidget):
             self.reassign_ids()
             self.load_from_state()
             # self.sync_to_state()
-            
+            self.restore_scroll_positions(scroll_pos)
             self.restore_selection(saved_selection)
             
         except Exception as e:
