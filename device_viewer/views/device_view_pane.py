@@ -128,23 +128,31 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scene.clear()
             self.scene.update()
 
-    @observe("model.channels_states_map.items") # When an electrode changes state
-    @observe("model.layers.items.route.route.items") # When a route is modified
-    @observe("model.layers.items")
-    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    def model_change_handler(self, event=None):
-        self.debounce_timer.start(1000) # Start timeout for sending message
+    def add_traits_event_to_undo_stack(self, event):
+        command = None
+        if isinstance(event, TraitChangeEvent):
+            command = TraitChangeCommand(event=event)
+        elif isinstance(event, ListChangeEvent):
+            command = ListChangeCommand(event=event)
+        elif isinstance(event, DictChangeEvent):
+            command = DictChangeCommand(event=event)
+        self.undo_manager.active_stack.push(command)
 
+    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.layers.items.route.route.items") # When a route is modified
+    @observe("model.layers.items") # When an electrode changes state
+    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
-            command = None
-            if isinstance(event, TraitChangeEvent):
-                command = TraitChangeCommand(event=event)
-            elif isinstance(event, ListChangeEvent):
-                command = ListChangeCommand(event=event)
-            elif isinstance(event, DictChangeEvent):
-                command = DictChangeCommand(event=event)
-            self.undo_manager.active_stack.push(command)
+            self.add_traits_event_to_undo_stack(event)
+        self.debounce_timer.start(700) # Start timeout for sending message
+    
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    def electrode_click_handler(self, event=None):
+        logger.info("Sending electrode update")
+        self.publish_electrode_update()
+        logger.info("Electrode update sent")
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
@@ -179,6 +187,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=message) # TODO: Change topic to UI topic protocol_grid expects
+
+    def publish_electrode_update(self):
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.channels_states_map))
 
     def create_contents(self, parent):
         """Called when the task is activated."""
