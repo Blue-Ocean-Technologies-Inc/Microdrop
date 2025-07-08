@@ -81,12 +81,12 @@ class Route(HasTraits):
         other_endpoints = other.get_endpoints()
         return self_endpoints[0] == other_endpoints[1] or self_endpoints[1] == other_endpoints[0]
     
-    def merge(self, other: "Route"):
+    def merge(self, other: "Route") -> list:
         '''Merge with other route. Does this in place and does not modify the other route. Prioritizes putting other at end in ambigous cases. Assumes can_merge returns True'''
         if self.route[-1] == other.route[0]:
-            self.route = self.route + other.route[1:]
+            return self.route + other.route[1:]
         elif self.route[0] == other.route[-1]:
-            self.route = other.route[:-1] + self.route
+            return other.route[:-1] + self.route
 
     def add_segment(self, from_id, to_id):
         '''Adds segment to path'''
@@ -282,6 +282,8 @@ class RouteLayerManager(HasTraits):
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
+    
+        return index
 
     def delete_layer(self, layer: RouteLayer):
         self.layers.remove(layer)
@@ -297,7 +299,10 @@ class RouteLayerManager(HasTraits):
     def merge_layer(self, other_layer) -> bool:
         '''Try to merge other_layer with layer_to_merge. Returns boolean indicating operation's success'''
         if self.layer_to_merge.route.can_merge(other_layer.route):
-            self.layer_to_merge.route.merge(other_layer.route)
+            new_route = Route(route=self.layer_to_merge.route.merge(other_layer.route), channel_map=self.layer_to_merge.route.channel_map)
+            index = self.replace_layer(self.layer_to_merge, [new_route]) # This should set layer_to_merge to None (for consistency) and mode to something else
+            self.layer_to_merge = self.layers[index] # ...so set it back
+            self.mode = 'merge'
             self.delete_layer(other_layer)
         else:
             return False

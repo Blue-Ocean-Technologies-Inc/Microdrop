@@ -47,4 +47,4 @@ Since this triggers a TraitChangeEvent, which might not trigger the correct call
 ```
 model.list.clear()
 ```
-which is muct more reliable (triggers a ListChangeEvent)
+which is muct more reliable (triggers a ListChangeEvent). ListChangeEvents have an optimisation that modifications to the same list (add, delete, modify) within a small timeframe (for exact time, see utils/commands.py) are merged into a single command (where that single command has its own 'mini-stack' that gets undone when undo is called). This *might* lead to weird but technically correct behaviour (too many/too little undo's for a certain action) so a mechanism for disabling this could probably be made using Trait arguments/properties.
