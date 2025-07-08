@@ -326,8 +326,9 @@ class PGCWidget(QWidget):
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
-
-        self.state.snapshot_for_undo()
+        if not getattr(self, "_undo_snapshotted", False):
+            self.state.snapshot_for_undo()
+            self._undo_snapshotted = True
         parent = item.parent() or self.model.invisibleRootItem()
         row = item.row()
         col = item.column()
@@ -370,6 +371,7 @@ class PGCWidget(QWidget):
             self._handle_trail_fields(parent, row)
 
         self.sync_to_state()
+        QTimer.singleShot(0, self._reset_undo_snapshotted)
         
     def _set_field_for_group(self, group_item, field, value):
         """Recursively set a field for all steps and subgroups under a group, and set the group row's own value."""
@@ -931,6 +933,9 @@ class PGCWidget(QWidget):
         
     def redo(self):
         self.redo_last()
+
+    def _reset_undo_snapshotted(self):
+        self._undo_snapshotted = False
         
     def export_to_json(self):        
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", "", "JSON Files (*.json)")
