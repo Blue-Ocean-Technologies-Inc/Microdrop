@@ -20,7 +20,7 @@ class DeviceViewerListenerController(HasTraits):
     signal_emitter = Instance(DeviceViewerListenerSignalEmitter)
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
-    listener_name = Str("protocol_grid_device_viewer_listener")
+    listener_name = Str("protocol_grid_listener")
 
     def __init__(self, **traits):
         super().__init__(**traits)
@@ -28,7 +28,7 @@ class DeviceViewerListenerController(HasTraits):
         self.traits_init()
 
     def listener_actor_routine(self, message, topic):
-        logger.debug(f"PROTOCOL_GRID: Received device_viewer message: {message} on topic: {topic}")
+        logger.info(f"PROTOCOL_GRID: Received device_viewer message: {message} on topic: {topic}")
         # Qt signal for UI thread
         self.signal_emitter.device_viewer_message_received.emit(message, topic)
 

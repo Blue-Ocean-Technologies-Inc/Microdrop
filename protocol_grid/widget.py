@@ -15,6 +15,7 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_
 from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.state.messages import DeviceViewerMessageModel
+from protocol_grid.state.device_state import device_state_from_device_viewer_message
 
 protocol_grid_column_widths = [
     120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
@@ -73,6 +74,7 @@ class PGCWidget(QWidget):
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return
+        saved_selection = self.save_selection()
         selected_paths = self.get_selected_paths()
         if not selected_paths:
             return
@@ -83,11 +85,13 @@ class PGCWidget(QWidget):
         # parse message and update DeviceState
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
-            item.setData(dv_msg, Qt.UserRole + 100)
+            device_state = device_state_from_device_viewer_message(dv_msg)
+            item.setData(device_state, Qt.UserRole + 100)
             self.model_to_state()
             self.state_to_model()
         except Exception as e:
             print(f"Failed to update DeviceState from device_viewer message: {e}")
+        self.restore_selection(saved_selection)
         
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()

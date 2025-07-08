@@ -64,4 +64,9 @@ class DeviceState:
     
     def __repr__(self):
         return self.__str__()
+    
+def device_state_from_device_viewer_message(dv_msg):
+    activated_electrodes = {str(k): bool(v) for k, v in dv_msg.channels_activated.items()}
+    paths = [route[0] for route in dv_msg.routes]
+    return DeviceState(activated_electrodes=activated_electrodes, paths=paths)
         
