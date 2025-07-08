@@ -20,7 +20,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
-from device_viewer.models.electrodes import Electrodes
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
@@ -31,6 +30,7 @@ from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
+from device_viewer.utils.dmf_utils import channels_to_svg
 import json
 
 logger = get_logger(__name__)
@@ -252,3 +252,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             self.set_model(new_model)
             logger.info(f"Electrodes model set to {new_model}")
+
+    def open_svg_dialog(self):
+        dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
+        if dialog.open() == OK:
+            new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
+            channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map)

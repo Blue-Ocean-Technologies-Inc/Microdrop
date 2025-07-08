@@ -42,7 +42,8 @@ class Electrodes(HasTraits):
 
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
     # Note that channel-electride_id is one-to-many! So there is meaningful difference in acting on one or the other
-    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes')
+    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
+    electrode_ids_channels_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
 
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     channels_states_map = Dict(Int, Bool, {})
@@ -71,6 +72,14 @@ class Electrodes(HasTraits):
         logger.debug(f"Found new channel to electrode_ids mapping for each electrode")
 
         return channel_to_electrode_ids_map
+    
+    @cached_property
+    def _get_electrode_ids_channels_map(self):
+        electrode_ids_channels_map = {}
+        for electrode_id, electrode in self.electrodes.items():
+            electrode_ids_channels_map[electrode_id] = electrode.channel
+        
+        return electrode_ids_channels_map
 
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):

@@ -229,3 +229,20 @@ class SvgUtil:
         self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
 
         return electrodes
+
+def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int]):
+    tree = ET.parse(old_filename)
+    root = tree.getroot()
+
+    electrodes = None
+    for child in root:
+        if "Device" in child.attrib.values():
+            electrodes = child
+    
+    if not electrodes:
+        return
+    
+    for electrode in list(electrodes):
+        electrode.attrib["data-channels"] = str(electrode_ids_channels_map[electrode.attrib["id"]])
+    
+    tree.write(new_filename)
