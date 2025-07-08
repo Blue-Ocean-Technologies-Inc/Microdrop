@@ -12,7 +12,8 @@ from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, Prot
 from protocol_grid.protocol_state_helpers import make_test_steps
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                 group_defaults, protocol_grid_fields)
-from protocol_grid.extra_ui_elements import EditContextMenu, ColumnToggleDialog
+from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
+                                             NavigationBar, StatusBar, make_separator)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.state.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import DeviceState, device_state_from_device_viewer_message
@@ -48,7 +49,14 @@ class PGCWidget(QWidget):
         
         self.create_buttons()
         
+        self.navigation_bar = NavigationBar(self)
+        self.status_bar = StatusBar(self)
+
         layout = QVBoxLayout()
+        layout.addWidget(self.navigation_bar)
+        layout.addWidget(make_separator())
+        layout.addWidget(self.status_bar)
+        layout.addWidget(make_separator())
         layout.addWidget(self.tree)
         layout.addLayout(self.button_layout_1)  # Add/Insert buttons
         layout.addLayout(self.button_layout_2)  # Import/Export buttons

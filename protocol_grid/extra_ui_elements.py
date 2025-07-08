@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, 
+from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
+                               QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, 
                                QCheckBox, QDialogButtonBox)
 from PySide6.QtGui import QAction, QCursor
@@ -7,6 +8,66 @@ from PySide6.QtGui import QAction, QCursor
 from pyface.action.api import Action
 
 from protocol_grid.consts import protocol_grid_fields, field_groupings, fixed_fields
+
+
+class NavigationBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.btn_first = QPushButton("⏮ First")
+        self.btn_prev = QPushButton("◀ Previous")
+        self.btn_play = QPushButton("▶ Play")
+        self.btn_next = QPushButton("Next ▶")
+        self.btn_last = QPushButton("Last ⏭")
+        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_next, self.btn_last]:
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            layout.addWidget(btn)
+        layout.addStretch()
+        self.setLayout(layout)
+
+class StatusBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.lbl_total_time = QLabel("Total Time: 0.00 s")
+        self.lbl_step_time = QLabel("Step Time: 0.00 s")
+        self.lbl_repeat_protocol = QLabel("Repeat Protocol:")
+        self.lbl_repeat_protocol_status = QLabel("1/")
+        self.edit_repeat_protocol = QLineEdit("1")
+        self.edit_repeat_protocol.setFixedWidth(40)
+        self.lbl_step_progress = QLabel("Step 0/0")
+        self.lbl_step_repetition = QLabel("Repetition 0/0")
+        self.lbl_recent_step = QLabel("Most Recent Step: -")
+        self.lbl_next_step = QLabel("Next Step: -")
+
+        layout.addWidget(self.lbl_total_time)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_step_time)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_repeat_protocol)
+        layout.addWidget(self.lbl_repeat_protocol_status)
+        layout.addWidget(self.edit_repeat_protocol)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_step_progress)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_step_repetition)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_recent_step)
+        layout.addSpacing(15)
+        layout.addWidget(self.lbl_next_step)
+        layout.addStretch()
+        self.setLayout(layout)
+
+def make_separator():
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setFrameShadow(QFrame.Sunken)
+    line.setLineWidth(1)
+    return line
+
 
 class EditContextMenu(QMenu):
     def __init__(self, parent_widget):
