@@ -186,10 +186,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     def publish_model_message(self):
         message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=message) # TODO: Change topic to UI topic protocol_grid expects
+        publish_message(topic="tbd", message=message) # TODO: Change topic to UI topic protocol_grid expects
 
     def publish_electrode_update(self):
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.channels_states_map))
+        message_obj = {}
+        for channel in self.model.channels_electrode_ids_map: # Make sure all channels are explicitly included
+            message_obj[channel] = self.model.channels_states_map.get(channel, False)
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
     def create_contents(self, parent):
         """Called when the task is activated."""
