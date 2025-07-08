@@ -20,16 +20,25 @@ class ModePicker(QWidget):
         # Make checkable buttons
         self.button_draw = QPushButton(ICON_DRAW)
         self.button_draw.setToolTip("Draw")
+
         self.button_edit = QPushButton(ICON_EDIT)
         self.button_edit.setToolTip("Edit")
+
         self.button_autoroute = QPushButton(ICON_AUTOMATION)
         self.button_autoroute.setToolTip("Autoroute")
-        self.button_reset = QPushButton(ICON_RESET_WRENCH)
-        self.button_reset.setToolTip("Reset Routes/Electrodes")
+
+        self.button_reset_routes = QPushButton(ICON_RESET_WRENCH)
+        self.button_reset_routes.setToolTip("Reset Routes")
+
+        self.button_reset_electrodes = QPushButton("reset_settings") # TODO: Choose better icons for these buttons
+        self.button_reset_electrodes.setToolTip("Reset Electrode States")
+
         self.button_channel_edit = QPushButton("Numbers")
         self.button_channel_edit.setToolTip("Edit Electrode Channels")
+
         self.button_undo = QPushButton("Undo")
         self.button_undo.setToolTip("Undo")
+
         self.button_redo = QPushButton("Redo")
         self.button_redo.setToolTip("Redo")
 
@@ -38,7 +47,8 @@ class ModePicker(QWidget):
         for btn in (self.button_draw, self.button_edit, self.button_autoroute, self.button_channel_edit):
             btn.setCheckable(True)
             btn_layout.addWidget(btn)
-        btn_layout.addWidget(self.button_reset)
+        btn_layout.addWidget(self.button_reset_routes)
+        btn_layout.addWidget(self.button_reset_electrodes)
         btn_layout.addWidget(self.button_undo)
         btn_layout.addWidget(self.button_redo)
         
@@ -58,7 +68,8 @@ class ModePicker(QWidget):
         self.button_edit.clicked.connect(lambda: self.set_mode("edit"))
         self.button_autoroute.clicked.connect(lambda: self.set_mode("auto"))
         self.button_channel_edit.clicked.connect(lambda: self.set_mode("channel-edit"))
-        self.button_reset.clicked.connect(lambda: self.reset())
+        self.button_reset_routes.clicked.connect(lambda: self.reset_routes())
+        self.button_reset_electrodes.clicked.connect(lambda: self.reset_electrodes())
         self.button_undo.clicked.connect(lambda: self.undo())
         self.button_redo.clicked.connect(lambda: self.redo())
         self.model.observe(self.on_mode_changed, "mode")
@@ -83,5 +94,8 @@ class ModePicker(QWidget):
     def on_mode_changed(self, event):
         self.sync_buttons_and_label()
 
-    def reset(self):
-        self.model.reset()
+    def reset_electrodes(self):
+        self.model.reset_electrode_states()
+
+    def reset_routes(self):
+        self.model.reset_route_manager()
