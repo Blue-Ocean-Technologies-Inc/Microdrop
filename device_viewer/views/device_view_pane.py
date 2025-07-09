@@ -235,6 +235,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.undo_manager.active_stack.clear()
 
     def open_file_dialog(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
