@@ -84,8 +84,12 @@ class Electrodes(HasTraits):
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
         logger.debug(f"Setting new electrode models based on new svg model {new_model}")
+        self.electrodes.clear()
+        new_electrodes = {}
         for k, v in new_model.electrodes.items():
-            self.electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
+            new_electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
+        
+        self.electrodes.update(new_electrodes) # Single update to model = single draw
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
 
@@ -102,3 +106,4 @@ class Electrodes(HasTraits):
     
     def reset_electrode_states(self):
         self.channels_states_map.clear()
+        self.electrode_editing = None

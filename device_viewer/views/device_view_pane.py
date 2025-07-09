@@ -96,15 +96,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.publish_model_message()
 
     # ------- Device View class methods -------------------------
-    def set_model(self, new_model):
+    def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
 
         # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
         self.set_view_from_model(new_model)
         logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
-
-        # Since were using traitsui for the layer viewer, its really difficult to simply reassign the model
-        self.model.reset() # So we just reset internal state
 
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
@@ -197,7 +194,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
-        self.set_model(self.model)
+        self.set_interaction_service(self.model)
 
         # Create debouce timer
         self.debounce_timer = QTimer()
@@ -246,12 +243,13 @@ class DeviceViewerDockPane(TraitsDockPane):
             svg_file = dialog.path
             logger.info(f"Selected SVG file: {svg_file}")
 
-            new_model = MainModel()
-            new_model.set_electrodes_from_svg_file(svg_file)
-            logger.debug(f"Created electrodes from SVG file: {new_model.svg_model.filename}")
+            self.model.reset()
+            self.model.set_electrodes_from_svg_file(svg_file)
+            logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
 
-            self.set_model(new_model)
-            logger.info(f"Electrodes model set to {new_model}")
+            self.set_view_from_model(self.model)
+            self.set_interaction_service(self.model)
+            logger.info(f"Electrodes model set to {self.model}")
 
     def open_svg_dialog(self):
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')

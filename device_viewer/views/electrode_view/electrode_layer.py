@@ -76,7 +76,7 @@ class ElectrodeLayer():
             parent_scene.removeItem(item)
 
     def remove_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
-        for electrode_id, endpoint_view in self.electrode_views.items():
+        for electrode_id, endpoint_view in self.electrode_endpoints.items():
             parent_scene.removeItem(endpoint_view)
 
     ######################## catch all methods to add / remove all elements from scene ###################

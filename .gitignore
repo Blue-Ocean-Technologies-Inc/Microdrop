@@ -11,3 +11,4 @@
 **/results.txt
 **/*.log
 **/*test*.html
+*.svg
