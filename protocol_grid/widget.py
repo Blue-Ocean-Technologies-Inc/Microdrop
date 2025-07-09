@@ -152,6 +152,10 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_step_repetition.setText(f"Repetition {status['step_rep_idx']}/{status['step_rep_total']}")
         self.status_bar.lbl_recent_step.setText(f"Most Recent Step: {status['recent_step']}")
         self.status_bar.lbl_next_step.setText(f"Next Step: {status['next_step']}")
+        if "protocol_repeat_idx" in status and "protocol_repeat_total" in status:
+            self.status_bar.lbl_repeat_protocol_status.setText(f"{status['protocol_repeat_idx']}/")
+        else:
+            self.status_bar.lbl_repeat_protocol_status.setText("1/")
 
     def on_protocol_finished(self):
         self.clear_highlight()
@@ -170,6 +174,13 @@ class PGCWidget(QWidget):
             self.navigation_bar.btn_play.setText("⏸ Pause")
         else:
             self.sync_to_state()
+            try:
+                repeat_n = int(self.status_bar.edit_repeat_protocol.text())
+                if repeat_n < 1:
+                    repeat_n = 1
+            except Exception:
+                repeat_n = 1
+            self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.start()
             self.navigation_bar.btn_play.setText("⏸ Pause")
 
@@ -186,6 +197,7 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_step_repetition.setText("Repetition 0/0")
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
+        self.status_bar.lbl_repeat_protocol_status.setText("1/")
     # ---------------------------------------------
 
     def create_buttons(self):
