@@ -4,17 +4,18 @@ import json
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
-from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut
+from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush
 
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
-from protocol_grid.protocol_state_helpers import make_test_steps
+from protocol_grid.protocol_state_helpers import make_test_steps, flatten_protocol_for_run
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                 group_defaults, protocol_grid_fields)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
+from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.state.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import DeviceState, device_state_from_device_viewer_message
 
@@ -34,6 +35,12 @@ class PGCWidget(QWidget):
         self.device_viewer_listener.signal_emitter.device_viewer_message_received.connect(self.on_device_viewer_message)
                 
         self.state = state or ProtocolState()
+
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run)
+        self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
+        self.protocol_runner.signals.update_status.connect(self.update_status_bar)
+        self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
+        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)        
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -50,6 +57,8 @@ class PGCWidget(QWidget):
         self.create_buttons()
         
         self.navigation_bar = NavigationBar(self)
+        self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
+
         self.status_bar = StatusBar(self)
 
         layout = QVBoxLayout()
@@ -79,6 +88,8 @@ class PGCWidget(QWidget):
         self.ensure_minimum_protocol()
         self.load_from_state()
 
+    # ---------- Message Handler ----------
+    
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return
@@ -102,6 +113,57 @@ class PGCWidget(QWidget):
             print(f"Failed to update DeviceState from device_viewer message: {e}")
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+    # -------------------------------------
+
+    # ---------- Protocol Runner Methods ----------
+    def highlight_step(self, path):
+        self.clear_highlight()
+        item = self.get_item_by_path(path)
+        if item:
+            parent = item.parent() or self.model.invisibleRootItem()
+            row = item.row()
+            for col in range(self.model.columnCount()):
+                cell = parent.child(row, col)
+                if cell:
+                    cell.setBackground(Qt.blue)
+                    cell.setForeground(Qt.white)
+
+    def clear_highlight(self):
+        def clear_recursive(parent):
+            for row in range(parent.rowCount()):
+                for col in range(parent.columnCount()):
+                    item = parent.child(row, col)
+                    if item:
+                        item.setBackground(QBrush())
+                        item.setForeground(QBrush())
+                desc_item = parent.child(row, 0)
+                if desc_item and desc_item.hasChildren():
+                    clear_recursive(desc_item)
+        clear_recursive(self.model.invisibleRootItem())
+
+    def update_status_bar(self, status):
+        self.status_bar.lbl_total_time.setText(f"Total Time: {status['total_time']:.2f} s")
+        self.status_bar.lbl_step_time.setText(f"Step Time: {status['step_time']:.2f} s")
+        self.status_bar.lbl_step_progress.setText(f"Step {status['step_idx']}/{status['step_total']}")
+        self.status_bar.lbl_step_repetition.setText(f"Repetition {status['step_rep_idx']}/{status['step_rep_total']}")
+        self.status_bar.lbl_recent_step.setText(f"Most Recent Step: {status['recent_step']}")
+        self.status_bar.lbl_next_step.setText(f"Next Step: {status['next_step']}")
+
+    def on_protocol_finished(self):
+        self.clear_highlight()
+        self.navigation_bar.btn_play.setText("▶ Play")
+
+    def on_protocol_paused(self):
+        self.navigation_bar.btn_play.setText("▶ Resume")
+
+    def toggle_play_pause(self):
+        if self.protocol_runner.is_running():
+            self.protocol_runner.pause()
+            self.navigation_bar.btn_play.setText("▶ Resume")
+        else:
+            self.protocol_runner.start()
+            self.navigation_bar.btn_play.setText("⏸ Pause")
+    # ---------------------------------------------
 
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()
