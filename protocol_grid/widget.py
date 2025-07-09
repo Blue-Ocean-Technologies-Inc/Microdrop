@@ -4,8 +4,9 @@ import json
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
-from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush
+from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
+from microdrop_application.application import is_dark_mode
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
@@ -58,6 +59,7 @@ class PGCWidget(QWidget):
         
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
+        self.navigation_bar.btn_stop.clicked.connect(self.stop_protocol)
 
         self.status_bar = StatusBar(self)
 
@@ -129,13 +131,15 @@ class PGCWidget(QWidget):
                     cell.setForeground(Qt.white)
 
     def clear_highlight(self):
+        dark = is_dark_mode()
+        fg = QBrush(QColor("white" if dark else "black"))
         def clear_recursive(parent):
             for row in range(parent.rowCount()):
                 for col in range(parent.columnCount()):
                     item = parent.child(row, col)
                     if item:
                         item.setBackground(QBrush())
-                        item.setForeground(QBrush())
+                        item.setForeground(fg)
                 desc_item = parent.child(row, 0)
                 if desc_item and desc_item.hasChildren():
                     clear_recursive(desc_item)
@@ -160,9 +164,28 @@ class PGCWidget(QWidget):
         if self.protocol_runner.is_running():
             self.protocol_runner.pause()
             self.navigation_bar.btn_play.setText("▶ Resume")
+        elif self.protocol_runner.is_paused():
+            self.sync_to_state()
+            self.protocol_runner.resume()
+            self.navigation_bar.btn_play.setText("⏸ Pause")
         else:
+            self.sync_to_state()
             self.protocol_runner.start()
             self.navigation_bar.btn_play.setText("⏸ Pause")
+
+    def stop_protocol(self):
+        self.protocol_runner.stop()
+        self.clear_highlight()
+        self.reset_status_bar()
+        self.navigation_bar.btn_play.setText("▶ Play")
+
+    def reset_status_bar(self):
+        self.status_bar.lbl_total_time.setText("Total Time: 0.00 s")
+        self.status_bar.lbl_step_time.setText("Step Time: 0.00 s")
+        self.status_bar.lbl_step_progress.setText("Step 0/0")
+        self.status_bar.lbl_step_repetition.setText("Repetition 0/0")
+        self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
+        self.status_bar.lbl_next_step.setText("Next Step: -")
     # ---------------------------------------------
 
     def create_buttons(self):

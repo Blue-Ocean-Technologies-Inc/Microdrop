@@ -18,9 +18,10 @@ class NavigationBar(QWidget):
         self.btn_first = QPushButton("⏮ First")
         self.btn_prev = QPushButton("◀ Previous")
         self.btn_play = QPushButton("▶ Play")
+        self.btn_stop = QPushButton("⏹ Stop") 
         self.btn_next = QPushButton("Next ▶")
         self.btn_last = QPushButton("Last ⏭")
-        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_next, self.btn_last]:
+        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last]:
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             layout.addWidget(btn)
         layout.addStretch()
