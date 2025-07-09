@@ -7,6 +7,7 @@ from PySide6.QtCore import Signal, QObject
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from protocol_grid.state.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
+from protocol_grid.consts import PROTOCOL_GRID_LISTENER_NAME
 
 logger = get_logger(__name__)
 
@@ -20,7 +21,7 @@ class DeviceViewerListenerController(HasTraits):
     signal_emitter = Instance(DeviceViewerListenerSignalEmitter)
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
-    listener_name = Str("protocol_grid_listener")
+    listener_name = Str(PROTOCOL_GRID_LISTENER_NAME)
 
     def __init__(self, **traits):
         super().__init__(**traits)
