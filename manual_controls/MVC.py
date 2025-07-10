@@ -14,6 +14,7 @@ from microdrop_utils.timestamped_message import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
+from microdrop_style.colors import INFO_COLOR, SECONDARY_COLOR, GREY
 
 from .consts import PKG_name, listener_name
 
@@ -22,15 +23,30 @@ logger = get_logger(__name__, level="DEBUG")
 
 
 class ToggleEditor(QtEditor):
-    button_style_sheet = Str("QPushButton { background-color: green; font-weight: bold;"
-                             "max-width: 100px; border-radius: 10px; padding: 2px;}")
-    hover_style_sheet = Str("QPushButton:hover { background-color: lightgreen; }")
     
     def init(self, parent):
         self.control = QPushButton()  # The button is the control that will be displayed in the editor
         self.control.setCheckable(True)
         self.control.setChecked(self.value)
         self.control.clicked.connect(self.click_handler)
+        self.control.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GREY["dark"]};
+                font-weight: bold;
+                max-width: 100px;
+                border-radius: 10px;
+                padding: 2px;
+            }}
+            QPushButton:hover {{
+                background-color: {GREY["light"]};
+            }}
+            QPushButton:checked {{
+                background-color: {INFO_COLOR};
+            }}
+            QPushButton:checked:hover {{
+                background-color: {SECONDARY_COLOR};
+            }}
+        """)
 
     def click_handler(self):
         '''Update the trait value to the button state. The value change will also invoke the _setattr method.'''
@@ -49,12 +65,9 @@ class ToggleEditor(QtEditor):
         if self.value:
             self.control.setChecked(True)
             self.control.setText("On")
-            self.control.setStyleSheet(self.button_style_sheet + self.hover_style_sheet)
         else:
             self.control.setChecked(False)
             self.control.setText("Off")
-            self.control.setStyleSheet(self.button_style_sheet.replace("green", "red") + 
-                                       self.hover_style_sheet.replace("lightgreen", "lightcoral"))
 
 
 class ToggleEditorFactory(BasicEditorFactory):

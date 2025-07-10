@@ -1,7 +1,11 @@
 # sys imports
+import os
+import sys
 from pathlib import Path
 
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
+
+from PySide6.QtCore import QEvent
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -17,22 +21,18 @@ from pyface.splash_screen import SplashScreen
 
 from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
                                QPushButton, QSizePolicy, QVBoxLayout,
-                               QWidget)
+                               QHBoxLayout, QWidget, QFrame)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QFont
+from PySide6.QtGui import QPixmap, QFont
 
 from microdrop_utils.font_helpers import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
-from .consts import (scibots_icon_path, menu_options_icons_path,
-                     sidebar_menu_options, sidebar_stylesheet,
+from .consts import (scibots_icon_path, sidebar_menu_options, 
                      hamburger_btn_stylesheet)
 
 from microdrop_utils._logger import get_logger
-logger = get_logger(__name__, level="DEBUG")
-
-MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
-ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
+logger = get_logger(__name__, level="CRITICAL")
 
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
@@ -175,14 +175,14 @@ class MicrodropSidebar(QToolBar):
         self.setMovable(False)
         self.setFloatable(False)
         self.setAllowedAreas(Qt.LeftToolBarArea)
-        self.setFixedWidth(140)
+        self.setFixedWidth(160)
         self.setObjectName("PermanentLeftToolbar")
 
         container = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 10, 0, 10) 
-        layout.setSpacing(15) 
-        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 10, 0, 10) 
+        self.layout.setSpacing(15) 
+        self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # Logo
         self.logo_label = QLabel()
@@ -190,7 +190,7 @@ class MicrodropSidebar(QToolBar):
         if not pixmap.isNull():
             self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
         self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
+        self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
 
         # Hamburger button
         self.hamburger_btn = QPushButton()
@@ -199,44 +199,35 @@ class MicrodropSidebar(QToolBar):
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
         self.hamburger_btn.setCursor(Qt.PointingHandCursor)
         self.hamburger_btn.clicked.connect(self.toggle_menu)
-        layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
+        self.layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
 
         self.menu_widget = QWidget()
         self.menu_layout = QVBoxLayout()
         self.menu_layout.setContentsMargins(0, 0, 0, 0)
-        self.menu_layout.setSpacing(26)
+        self.menu_layout.setSpacing(15)
         self.menu_widget.setLayout(self.menu_layout)
 
         # Menu buttons
         self.menu_buttons = []
-        menu_options = sidebar_menu_options
-        icon_dir = menu_options_icons_path
-        icon_size = QSize(22, 22)
-        font = QFont()
-        font.setBold(True)
-        for option, icon in menu_options:
-            label = "\n\t\t".join(option.split(" "))
-            btn = QPushButton("\t\t"+label)
-            btn.setFont(font)
-            btn.setFixedWidth(140)
-            btn.setIcon(QIcon(str(icon_dir / icon)))
-            btn.setIconSize(icon_size)
-            btn.setStyleSheet(sidebar_stylesheet)
-            btn.setCursor(Qt.PointingHandCursor)
-             
+        icon_font = QFont("Material Symbols Outlined")
+        icon_font.setPointSize(22)
+        color_str = "white" if is_dark_mode() else "black"
+
+        for option, icon_code in sidebar_menu_options:
+            btn = SidebarMenuButton(icon_code, option, icon_font, color_str)
             self.menu_layout.addWidget(btn)
-            self.menu_buttons.append(btn)
+            self.menu_buttons.append((btn, option))
         
         self.menu_widget.setVisible(False)
-        layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
-
+        self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
         # connections
-        button_names = [name for name, _ in menu_options]
-        self.menu_buttons[button_names.index("Exit")].clicked.connect(self._handle_exit)
-        self.menu_buttons[button_names.index("Diagnostics")].clicked.connect(self._handle_diagnostics)
+        button_names = [name for name, _ in sidebar_menu_options]
+        self.menu_buttons[button_names.index("Exit")][0].clicked.connect(self._handle_exit)
+        self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(self._handle_diagnostics)
 
-        container.setLayout(layout)
+        container.setLayout(self.layout)
         self.addWidget(container)
+        self.update_menu_colors()
 
     def toggle_menu(self):
         self.menu_widget.setVisible(not self.menu_widget.isVisible())
@@ -258,3 +249,97 @@ class MicrodropSidebar(QToolBar):
 
     def _handle_exit(self):
         self.task.window.application.exit()
+
+    def event(self, event):
+        if event.type() == QEvent.PaletteChange:
+            self.update_menu_colors()
+            self.toggle_menu
+        return super().event(event)
+
+    def update_menu_colors(self):
+        if is_dark_mode():
+            color_str = "white"
+        else:
+            color_str = "black"
+        for btn, _ in self.menu_buttons:
+            btn.set_color(color_str)
+        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % color_str)
+
+
+class SidebarMenuButton(QFrame):
+    def __init__(self, icon_code, label, icon_font, color_str, text_font=None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SidebarMenuButton")
+        self.setStyleSheet(f"QFrame#SidebarMenuButton {{ background: none; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        self.icon_label = QLabel(icon_code)
+        self.icon_label.setFont(icon_font)
+        self.icon_label.setStyleSheet(f"color: {color_str};")
+        self.icon_label.setFixedWidth(28)
+        self.text_label = QLabel(label)
+        text_font = QFont()
+        text_font.setPointSize(11)
+        self.text_label.setFont(text_font)
+        self.text_label.setStyleSheet(f"color: {color_str};")
+        self.text_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        hbox = QHBoxLayout(self)
+        hbox.setContentsMargins(8, 0, 0, 0)
+        hbox.setSpacing(12)
+        hbox.addWidget(self.icon_label)
+        hbox.addWidget(self.text_label)
+        self.setLayout(hbox)
+        self.setFixedHeight(37)
+        self.setMinimumWidth(140)
+
+    def set_color(self, color_str):
+        self.icon_label.setStyleSheet(f"color: {color_str};")
+        self.text_label.setStyleSheet(f"color: {color_str};")
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+    from PySide6.QtCore import Signal
+    clicked = Signal()
+    
+    
+def is_dark_mode():
+    if sys.platform == "darwin":
+        import subprocess
+        try:
+            mode = subprocess.check_output(
+                "defaults read -g AppleInterfaceStyle",
+                shell=True
+            ).strip()
+            return mode == b"Dark"
+        except Exception:
+            return False
+    elif sys.platform.startswith("win"):
+        try:
+            import winreg
+            reg = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+            key = winreg.OpenKey(
+                reg,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            )
+            apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return apps_use_light_theme == 0
+        except Exception:
+            return False
+    else:
+        gtk_theme = os.environ.get("GTK_THEME", "").lower()
+        if "dark" in gtk_theme:
+            return True
+        qt_theme = os.environ.get("QT_QPA_PLATFORMTHEME", "").lower()
+        if "dark" in qt_theme:
+            return True
+        # KDE check
+        kde_globals = os.path.expanduser("~/.config/kdeglobals")
+        if os.path.isfile(kde_globals):
+            try:
+                with open(kde_globals, "r") as f:
+                    if "ColorScheme=Dark" in f.read():
+                        return True
+            except Exception:
+                pass
+        return False

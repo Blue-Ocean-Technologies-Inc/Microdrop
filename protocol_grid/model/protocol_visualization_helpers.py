@@ -1,4 +1,3 @@
-import json
 import pygraphviz as pgv
 from typing import Union
 
@@ -24,7 +23,6 @@ base_node_attr = {
     "labelloc": "t",
     "labeljust": "l"
 }
-
 
 def add_nodes_edges(graph, parent):
     # Add steps
@@ -131,17 +129,65 @@ def visualize_protocol_graph(protocol_graph, save_file_name="tree_data.png") -> 
     protocol_graph.layout(prog="dot")
     protocol_graph.draw(save_file_name)
 
+def visualize_protocol_with_swimlanes(protocol_sequence, base_name="protocol_chain", max_nodes_per_column=5):
+    G = pgv.AGraph(directed=True, rankdir="TB", strict=False)
+    node_counter = [0]
 
-def convert_json_protocol_to_graph(json_input: Union[str, dict]) -> pgv.AGraph:
-    # Construct the ProtocolGroup object
-    protocol_dict = load_python_object_from_json(json_input)
-    protocol_group = ProtocolGroup.model_validate(protocol_dict)
+    def add_sequence(seq, parent_graph, parent_subgraph=None, group_name=None, parent_last_node=None, depth=0):
+        n = len(seq)
+        columns = [seq[i:i+max_nodes_per_column] for i in range(0, n, max_nodes_per_column)]
+        col_first_nodes = []
+        col_last_nodes = []
 
-    # Generate and visualize the graph
-    protocol_graph = get_protocol_graph(protocol_group)
+        prev_col_last_node = parent_last_node
 
-    return protocol_graph
+        for col_idx, chunk in enumerate(columns):
+            col_nodes = []
+            col_nodes_last = []  # track last node for each element
+            for obj in chunk:
+                
+                if isinstance(obj, ProtocolGroup):
+                    group_id = f"group_{node_counter[0]}"
+                    
+                    with parent_graph.subgraph(name=f"cluster_{group_id}") as sub:
+                        sub.graph_attr.update(style="dashed", label="Group", fontsize="12")
+                        
+                        first_in_group, last_in_group = add_sequence(
+                            obj.elements, sub, parent_subgraph=sub, group_name=group_id, depth=depth+1
+                        )
+                        
+                        col_nodes.append(first_in_group)
+                        col_nodes_last.append(last_in_group)
+                        # Only connect to the group's first node if previous node exists
+                        if len(col_nodes) > 1 and col_nodes[-2] is not None and first_in_group is not None:
+                            parent_graph.add_edge(col_nodes_last[-2], first_in_group)
+                
+                else:  # ProtocolStep
+                    step_id = f"step_{node_counter[0]}"
+                    node_counter[0] += 1
+                    label = f"{obj.name}\n" + "\n".join(f"{k}: {v}" for k, v in obj.parameters.items())
+                    parent_graph.add_node(step_id, label=label, shape="box", style="filled", fillcolor="#e0f7fa", fontname="Helvetica")
+                    col_nodes.append(step_id)
+                    col_nodes_last.append(step_id)
+                    
+                    if len(col_nodes) > 1:
+                        parent_graph.add_edge(col_nodes_last[-2], step_id)
 
-def save_protocol_sequence_to_json(seq, filename="protocol_seq.json"):
-    with open(filename, "w") as f:
-        json.dump([item.dict() for item in seq], f, indent=4)
+            if prev_col_last_node and col_nodes and col_nodes[0] is not None:
+                parent_graph.add_edge(prev_col_last_node, col_nodes[0], color="#1976d2", penwidth=2, arrowhead="normal", constraint=False, minlen=2)
+            # Store first/last for arrows
+            if col_nodes and col_nodes[0]:
+                col_first_nodes.append(col_nodes[0])
+            if col_nodes_last and col_nodes_last[-1]:
+                col_last_nodes.append(col_nodes_last[-1])
+            prev_col_last_node = col_nodes_last[-1] if col_nodes_last else prev_col_last_node
+
+        # For outer recursion, return first and last actual nodes in this sequence
+        first_node = col_first_nodes[0] if col_first_nodes else None
+        last_node = col_last_nodes[-1] if col_last_nodes else None
+        return first_node, last_node
+
+    add_sequence(protocol_sequence, G)
+    G.layout(prog="dot")
+    G.draw(f"{base_name}_swimlanes.png")
+    G.write(f"{base_name}_swimlanes.dot")

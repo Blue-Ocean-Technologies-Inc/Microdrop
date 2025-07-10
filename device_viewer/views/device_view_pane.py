@@ -31,6 +31,7 @@ from device_viewer.views.route_selection_view.route_selection_view import RouteL
 from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 from device_viewer.utils.dmf_utils import channels_to_svg
+from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED
 import json
 
 logger = get_logger(__name__)
@@ -183,7 +184,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def publish_model_message(self):
         message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
-        publish_message(topic="tbd", message=message) # TODO: Change topic to UI topic protocol_grid expects
+        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message) # TODO: Change topic to UI topic protocol_grid expects
 
     def publish_electrode_update(self):
         message_obj = {}

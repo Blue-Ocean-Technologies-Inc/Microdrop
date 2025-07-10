@@ -1,5 +1,10 @@
 from pathlib import Path
 
+from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
+                                         ICON_HEADSET_MIC, ICON_INFO,
+                                         ICON_TROUBLESHOOT, ICON_EXTENSION,
+                                         ICON_DESCRIPTION, ICON_CANCEL)
+
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -8,26 +13,25 @@ PKG_name = PKG.title().replace("_", " ")
 ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent/ "resources" / "scibots-icon.png"
-menu_options_icons_path = Path(__file__).parent / "resources"
 
 sidebar_menu_options = [
-            ("File", "file.png"),
-            ("Tools", "tools.png"),
-            ("Help", "help.png"),
-            ("Info", "info.png"),
-            ("Diagnostics", "diagnostics.png"),
-            ("Plugins", "plugins.png"),
-            ("Protocol Repository", "protocol_repository.png"),
-            ("Exit", "exit.png"),
+            ("File", ICON_FOLDER_OPEN),
+            ("Tools", ICON_EMOJI_OBJECTS),
+            ("Help", ICON_HEADSET_MIC),
+            ("Info", ICON_INFO),
+            ("Diagnostics", ICON_TROUBLESHOOT),
+            ("Plugins", ICON_EXTENSION),
+            ("Protocol \nRepository", ICON_DESCRIPTION),
+            ("Exit", ICON_CANCEL),
         ]
 
-hamburger_btn_stylesheet = "font-size: 24px; color: green; background: none; border: none;"
+hamburger_btn_stylesheet = "QPushButton { font-size: 24px; background: none; border: none; color: %s;}"
 
-sidebar_stylesheet = """
+sidebar_stylesheet = """QPushButton {
                 background: none;
                 border: none;
-                color: green;
                 font-size:2em;
                 text-align: left;
                 padding-left: 8px;
+                color: %s; }
                 """
