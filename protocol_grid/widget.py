@@ -3,7 +3,7 @@ import copy
 import json
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
 from microdrop_application.application import is_dark_mode
@@ -1289,10 +1289,10 @@ class PGCWidget(QWidget):
         self.load_from_state()
         # self.sync_to_state()
         
-    def open_device_editor(self):
-        QMessageBox.information(self, "Device Editor", "Device state editor not yet implemented.")
-        pass
-
+    def event(self, event):
+        if event.type() == QEvent.PaletteChange:
+            self.clear_highlight()
+        return super().event(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
