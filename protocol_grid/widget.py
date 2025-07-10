@@ -61,6 +61,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
+        self._protocol_running = False 
         self._last_published_step_id = None
         
         self.create_buttons()

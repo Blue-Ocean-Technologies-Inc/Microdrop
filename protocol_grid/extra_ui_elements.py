@@ -15,59 +15,70 @@ class NavigationBar(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        self.btn_first = QPushButton("⏮ First")
-        self.btn_prev = QPushButton("◀ Previous")
-        self.btn_play = QPushButton("▶ Play")
-        self.btn_stop = QPushButton("⏹ Stop") 
-        self.btn_next = QPushButton("Next ▶")
-        self.btn_last = QPushButton("Last ⏭")
-        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last]:
-            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        layout.setSpacing(0)
+
+        btns = [
+            QPushButton("⏮ First"),
+            QPushButton("◀ Previous"),
+            QPushButton("▶ Play"),
+            QPushButton("■ Stop"),
+            QPushButton("Next ▶"),
+            QPushButton("Last ⏭")
+        ]
+        for btn in btns:
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             layout.addWidget(btn)
-        layout.addStretch()
+
+        self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last = btns
         self.setLayout(layout)
+
 
 class StatusBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         self.lbl_total_time = QLabel("Total Time: 0.00 s")
         self.lbl_step_time = QLabel("Step Time: 0.00 s")
+
+        repeat_layout = QHBoxLayout()
+        repeat_layout.setContentsMargins(0, 0, 0, 0)
+        repeat_layout.setSpacing(0)
         self.lbl_repeat_protocol = QLabel("Repeat Protocol:")
         self.lbl_repeat_protocol_status = QLabel("1/")
         self.edit_repeat_protocol = QLineEdit("1")
         self.edit_repeat_protocol.setFixedWidth(40)
+        for widget in [self.lbl_repeat_protocol, self.lbl_repeat_protocol_status, self.edit_repeat_protocol]:
+            widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            repeat_layout.addWidget(widget)
+        repeat_widget = QWidget()
+        repeat_widget.setLayout(repeat_layout)
+        repeat_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.lbl_step_progress = QLabel("Step 0/0")
         self.lbl_step_repetition = QLabel("Repetition 0/0")
         self.lbl_recent_step = QLabel("Most Recent Step: -")
         self.lbl_next_step = QLabel("Next Step: -")
 
-        layout.addWidget(self.lbl_total_time)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_step_time)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_repeat_protocol)
-        layout.addWidget(self.lbl_repeat_protocol_status)
-        layout.addWidget(self.edit_repeat_protocol)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_step_progress)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_step_repetition)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_recent_step)
-        layout.addSpacing(15)
-        layout.addWidget(self.lbl_next_step)
-        layout.addStretch()
-        self.setLayout(layout)
+        for widget in [
+            self.lbl_total_time, self.lbl_step_time,
+            self.lbl_step_progress, self.lbl_step_repetition,
+            self.lbl_recent_step, self.lbl_next_step
+        ]:
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-def make_separator():
-    line = QFrame()
-    line.setFrameShape(QFrame.HLine)
-    line.setFrameShadow(QFrame.Sunken)
-    line.setLineWidth(1)
-    return line
+        layout.addWidget(self.lbl_total_time)
+        layout.addWidget(self.lbl_step_time)
+        layout.addWidget(repeat_widget)
+        layout.addSpacing(30)
+        layout.addWidget(self.lbl_step_progress)
+        layout.addWidget(self.lbl_step_repetition)
+        layout.addWidget(self.lbl_recent_step)
+        layout.addWidget(self.lbl_next_step)
+
+        self.setLayout(layout)
 
 
 class EditContextMenu(QMenu):
@@ -140,15 +151,6 @@ class EditContextMenu(QMenu):
             self.addAction(action)
             
         self.addSeparator()
-        
-        device_actions = [
-            ("Assign Test Device States", self.widget.assign_test_device_states),
-            ("Edit Device State", self.widget.open_device_editor),
-        ]
-        for name, slot in device_actions:
-            action = QAction(name, self)
-            action.triggered.connect(slot)
-            self.addAction(action)
 
 
 class ShowEditContextMenuAction(Action):
@@ -255,3 +257,11 @@ class ShowColumnToggleDialogAction(Action):
     def perform(self, event=None):
         dialog = ColumnToggleDialog(self.widget)
         dialog.exec()
+
+    
+def make_separator():
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setFrameShadow(QFrame.Sunken)
+    line.setLineWidth(1)
+    return line
