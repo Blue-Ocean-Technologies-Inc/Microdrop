@@ -45,7 +45,8 @@ class ProtocolRunnerController(QObject):
         self._status_timer.start()
         self._current_index = 0
         self._current_protocol_repeat = 1
-        self._run_order = self.flatten_func(self.protocol_state)
+        if not hasattr(self, "_run_order") or not self._run_order:
+            self._run_order = self.flatten_func(self.protocol_state)
         self._start_time = time.time()
         self._elapsed_time = 0.0
         self._step_elapsed_time = 0.0
@@ -89,6 +90,9 @@ class ProtocolRunnerController(QObject):
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
 
+    def set_run_order(self, run_order):
+        self._run_order = run_order
+
     def _run_next_step(self, resume=False):
         if self._current_index >= len(self._run_order):
             self._is_running = False
@@ -111,8 +115,8 @@ class ProtocolRunnerController(QObject):
         step_info = self._run_order[self._current_index]
         step, path = step_info["step"], step_info["path"]
         rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
-        step_total = len(self._run_order) * self._repeat_protocol_n
-        step_idx = (self._current_protocol_repeat - 1) * len(self._run_order) + self._current_index + 1
+        step_total = len(self._run_order)
+        step_idx = self._current_index + 1
         status = {
             "total_time": self._elapsed_time + (time.time() - self._start_time
                                                  if self._is_running and not self._is_paused else 0),
@@ -133,12 +137,6 @@ class ProtocolRunnerController(QObject):
             return
         self._current_index += 1
         if self._current_index >= len(self._run_order):
-            if self._current_protocol_repeat < self._repeat_protocol_n:
-                self._current_protocol_repeat += 1
-                self._current_index = 0
-                self._run_next_step()
-                return
-            else:
                 self._is_running = False
                 self._status_timer.stop()
                 self.signals.protocol_finished.emit()

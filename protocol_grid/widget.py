@@ -118,6 +118,25 @@ class PGCWidget(QWidget):
     # -------------------------------------
 
     # ---------- Protocol Runner Methods ----------
+    def find_first_step_path_under_group(self, group_path):
+        item = self.get_item_by_path(group_path)
+        if not item or item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
+            return None
+        def recurse(current_item, current_path):
+            for row in range(current_item.rowCount()):
+                child = current_item.child(row, 0)
+                if not child:
+                    continue
+                child_type = child.data(ROW_TYPE_ROLE)
+                if child_type == STEP_TYPE:
+                    return current_path + [row]
+                elif child_type == GROUP_TYPE:
+                    result = recurse(child, current_path + [row])
+                    if result is not None:
+                        return result
+            return None
+        return recurse(item, group_path)
+
     def highlight_step(self, path):
         self.clear_highlight()
         item = self.get_item_by_path(path)
@@ -180,7 +199,32 @@ class PGCWidget(QWidget):
                     repeat_n = 1
             except Exception:
                 repeat_n = 1
+
+            selected_paths = self.get_selected_paths()
+            start_step_path = None
+            if selected_paths:
+                path = selected_paths[0]
+                item = self.get_item_by_path(path)
+                if item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                    start_step_path = path
+                elif item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    start_step_path = self.find_first_step_path_under_group(path)
+            if not start_step_path:
+                start_step_path = [0]
+            flat_run = flatten_protocol_for_run(self.state)
+
+            start_idx = 0
+            for idx, entry in enumerate(flat_run):
+                if entry["path"] == start_step_path:
+                    start_idx = idx
+                    break
+
+            run_order = flat_run[start_idx:]
+            for _ in range(repeat_n - 1):
+                run_order.extend(flat_run)
+
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
+            self.protocol_runner.set_run_order(run_order)
             self.protocol_runner.start()
             self.navigation_bar.btn_play.setText("⏸ Pause")
 
