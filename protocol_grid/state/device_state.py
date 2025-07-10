@@ -2,12 +2,18 @@ from typing import List, Dict, Any, Optional, Callable
 import copy
 import json
 
+from protocol_grid.state.messages import DeviceViewerMessageModel
+
+
 class DeviceState:
     def __init__(self, activated_electrodes: Optional[Dict[str, bool]] = None,
-                 paths: Optional[List[List[str]]] = None):
-        
+                 paths: Optional[List[List[str]]] = None,
+                 id_to_channel: Optional[Dict[str, int]] = None,
+                 route_colors: Optional[List[str]] = None):
         self.activated_electrodes = activated_electrodes or {}
         self.paths = paths or []
+        self.id_to_channel = id_to_channel or {}
+        self.route_colors = route_colors or []
 
     def longest_path_length(self):
         if not self.paths:
@@ -68,5 +74,22 @@ class DeviceState:
 def device_state_from_device_viewer_message(dv_msg):
     activated_electrodes = {str(k): bool(v) for k, v in dv_msg.channels_activated.items()}
     paths = [route[0] for route in dv_msg.routes]
-    return DeviceState(activated_electrodes=activated_electrodes, paths=paths)
+    route_colors = [route[1] for route in dv_msg.routes]
+    id_to_channel = dv_msg.id_to_channel
+    return DeviceState(
+        activated_electrodes=activated_electrodes,
+        paths=paths,
+        id_to_channel=id_to_channel,
+        route_colors=route_colors
+    )
         
+
+
+def device_state_to_device_viewer_message(device_state: DeviceState) -> DeviceViewerMessageModel:
+    channels_activated = {int(k): bool(v) for k, v in device_state.activated_electrodes.items()}
+    routes = []
+    for i, path in enumerate(device_state.paths):
+        color = device_state.route_colors[i]# if i < len(device_state.route_colors) else "#000000"
+        routes.append((path, color))
+    id_to_channel = device_state.id_to_channel or {}
+    return DeviceViewerMessageModel(channels_activated, routes, id_to_channel)

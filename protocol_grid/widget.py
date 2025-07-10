@@ -11,14 +11,20 @@ from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import make_test_steps, flatten_protocol_for_run
-from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
-                                group_defaults, protocol_grid_fields)
+from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE, 
+                                  GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
+                                  group_defaults, protocol_grid_fields)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
-from protocol_grid.state.messages import DeviceViewerMessageModel
-from protocol_grid.state.device_state import DeviceState, device_state_from_device_viewer_message
+from device_viewer.models.messages import DeviceViewerMessageModel
+from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
+                                              device_state_to_device_viewer_message)
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 protocol_grid_column_widths = [
     120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
@@ -54,6 +60,8 @@ class PGCWidget(QWidget):
         
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
+
+        self._last_published_step_id = None
         
         self.create_buttons()
         
@@ -289,11 +297,32 @@ class PGCWidget(QWidget):
         
     def on_selection_changed(self):
         selected_paths = self.get_selected_paths()
-        
+
         has_selection = len(selected_paths) > 0
         self.btn_add_step_into.setEnabled(has_selection)
         self.btn_add_group_into.setEnabled(has_selection)
         self.btn_import_into.setEnabled(has_selection)
+
+        if has_selection:
+            path = selected_paths[0]
+            item = self.get_item_by_path(path)
+            if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                step_id = None
+                device_state = item.data(Qt.UserRole + 100)
+                if device_state and hasattr(device_state, "parameters"):
+                    step_id = device_state.parameters.get("ID")
+                if not step_id:
+                    id_col = protocol_grid_fields.index("ID")
+                    id_item = item.parent().child(item.row(), id_col) if item.parent() else self.model.invisibleRootItem().child(item.row(), id_col)
+                    if id_item:
+                        step_id = id_item.text()
+                if step_id and self._last_published_step_id != step_id:
+                    if not device_state:
+                        device_state = DeviceState()
+                    msg_model = device_state_to_device_viewer_message(device_state)
+                    publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+                    logger.info("message: %s", msg_model.serialize())
+                    self._last_published_step_id = step_id
         
     def save_column_settings(self):
         for i, field in enumerate(protocol_grid_fields):
