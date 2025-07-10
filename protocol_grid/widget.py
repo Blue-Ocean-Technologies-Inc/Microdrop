@@ -157,6 +157,17 @@ class PGCWidget(QWidget):
                     cell.setBackground(Qt.blue)
                     cell.setForeground(Qt.white)
 
+        if self._protocol_running and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            id_col = protocol_grid_fields.index("ID")
+            id_item = parent.child(row, id_col)
+            step_id = id_item.text() if id_item else None
+            device_state = item.data(Qt.UserRole + 100)
+            if not device_state:
+                device_state = DeviceState()
+            msg_model = device_state_to_device_viewer_message(device_state)
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+            logger.info("message: %s", msg_model.serialize())
+            self._last_published_step_id = step_id
     def clear_highlight(self):
         dark = is_dark_mode()
         fg = QBrush(QColor("white" if dark else "black"))
@@ -186,6 +197,7 @@ class PGCWidget(QWidget):
 
     def on_protocol_finished(self):
         self.clear_highlight()
+        self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
 
     def on_protocol_paused(self):
@@ -194,10 +206,12 @@ class PGCWidget(QWidget):
     def toggle_play_pause(self):
         if self.protocol_runner.is_running():
             self.protocol_runner.pause()
+            # self._protocol_running = False
             self.navigation_bar.btn_play.setText("▶ Resume")
         elif self.protocol_runner.is_paused():
             self.sync_to_state()
             self.protocol_runner.resume()
+            self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
         else:
             self.sync_to_state()
@@ -234,12 +248,18 @@ class PGCWidget(QWidget):
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.set_run_order(run_order)
             self.protocol_runner.start()
+            self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
+
+            if run_order:
+                first_step_path = run_order[0]["path"]
+                self.highlight_step(first_step_path)
 
     def stop_protocol(self):
         self.protocol_runner.stop()
         self.clear_highlight()
         self.reset_status_bar()
+        self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
 
     def reset_status_bar(self):
@@ -296,6 +316,8 @@ class PGCWidget(QWidget):
         dialog.exec()
         
     def on_selection_changed(self):
+        if self._protocol_running:
+            return
         selected_paths = self.get_selected_paths()
 
         has_selection = len(selected_paths) > 0

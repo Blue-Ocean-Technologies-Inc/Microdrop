@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional, Callable
 import copy
 import json
 
-from protocol_grid.state.messages import DeviceViewerMessageModel
+from device_viewer.models.messages import DeviceViewerMessageModel
 
 
 class DeviceState:
