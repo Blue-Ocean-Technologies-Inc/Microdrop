@@ -222,7 +222,12 @@ class PGCWidget(QWidget):
             return
         
         current_index = self._get_current_step_index()
-        if current_index <= 0:
+        all_step_paths = self._get_all_step_paths()
+        if current_index == -1: # no valid selection
+            if all_step_paths:
+                self._select_step_by_path(all_step_paths[0])
+            return
+        elif current_index <= 0:
             return # already at first step
         
         all_step_paths = self._get_all_step_paths()
@@ -241,7 +246,9 @@ class PGCWidget(QWidget):
             return
 
         if current_index + 1 < len(all_step_paths):
-            self._select_step_by_path(all_step_paths[current_index + 1])        
+            self._select_step_by_path(all_step_paths[current_index + 1]) 
+        else:
+            self._add_step_at_root_and_select()       
 
     def navigate_to_last_step(self):
         if self._protocol_running:
@@ -380,6 +387,117 @@ class PGCWidget(QWidget):
         if index.isValid():
             self.tree.selectionModel().select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
             self.tree.scrollTo(index)
+
+    def _add_step_at_root_and_select(self):
+        scroll_pos = self.save_scroll_positions()
+        self.state.snapshot_for_undo()
+
+        new_step = ProtocolStep(
+            parameters = dict(step_defaults),
+            name = "Step"
+        )
+        self.state.sequence.append(new_step)
+        self.reassign_ids()
+        self.load_from_state()
+
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            root_step_paths = [path for path in all_step_paths if len(path) == 1]
+            if root_step_paths:
+                self._select_step_by_path(root_step_paths[-1])
+
+        self.restore_scroll_positions(scroll_pos)
+
+    def add_step_to_current_group(self):
+        if self._protocol_running:
+            return        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return        
+        current_path = selected_paths[0]
+        current_item = self.get_item_by_path(current_path)        
+        if not current_item:
+            return        
+        if current_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            if not self._is_last_step_in_group(current_path):
+                return
+            
+            scroll_pos = self.save_scroll_positions()
+            self.state.snapshot_for_undo()    
+
+            new_step = ProtocolStep(
+                parameters=dict(step_defaults),
+                name="Step"
+            )  
+
+            if len(current_path) == 1:
+                target_elements = self.state.sequence
+                insert_position = current_path[0] + 1
+            else:
+                parent_path = current_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                insert_position = current_path[-1] + 1
+            
+            target_elements.insert(insert_position, new_step)        
+            self.reassign_ids()
+            self.load_from_state()
+            if len(current_path) == 1:
+                new_step_path = [insert_position]
+            else:
+                new_step_path = current_path[:-1] + [insert_position]
+            
+            self._select_step_by_path(new_step_path)
+            self.restore_scroll_positions(scroll_pos)
+            
+        elif current_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            if not self._group_has_direct_steps(current_item):
+                scroll_pos = self.save_scroll_positions()
+                self.state.snapshot_for_undo()
+                
+                new_step = ProtocolStep(
+                    parameters=dict(step_defaults),
+                    name="Step"
+                )
+                
+                target_elements = self._find_elements_by_path(current_path)
+                target_elements.append(new_step)                
+                self.reassign_ids()
+                self.load_from_state()                
+                new_step_path = current_path + [0]
+                self._select_step_by_path(new_step_path)
+                self.restore_scroll_positions(scroll_pos)
+
+    def _is_last_step_in_group(self, step_path):
+        if not step_path:
+            return False
+        
+        if len(step_path) == 1:
+            parent_item = self.model.invisibleRootItem()
+            parent_path = []
+        else:
+            parent_path = step_path[:-1]
+            parent_item = self.get_item_by_path(parent_path)
+        
+        if not parent_item:
+            return False
+        
+        step_index = step_path[-1]        
+        step_indices = []
+        for row in range(parent_item.rowCount()):
+            item = parent_item.child(row, 0)
+            if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                step_indices.append(row)
+        
+        return step_indices and step_index == step_indices[-1]
+    
+    def _group_has_direct_steps(self, group_item):
+        if not group_item or group_item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
+            return False        
+        for row in range(group_item.rowCount()):
+            child_item = group_item.child(row, 0)
+            if child_item and child_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                return True        
+        return False
     # ---------------------------------------------
 
     def create_buttons(self):
@@ -531,6 +649,7 @@ class PGCWidget(QWidget):
             (QKeySequence("S"), self.navigate_to_previous_step),
             (QKeySequence("D"), self.navigate_to_next_step),
             (QKeySequence("F"), self.navigate_to_last_step),
+            (QKeySequence("E"), self.add_step_to_current_group),
         ]
         
         for key_seq, slot in shortcuts:
