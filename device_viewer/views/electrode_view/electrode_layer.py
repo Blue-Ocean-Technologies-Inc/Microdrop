@@ -1,4 +1,4 @@
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QGraphicsScene
 from pyface.qt.QtCore import Qt, QPointF
 
@@ -24,6 +24,7 @@ class ElectrodeLayer():
         self.connection_items = {}
         self.electrode_views = {}
         self.electrode_endpoints = {}
+        self.electrode_editing_text = None
 
         self.svg = electrodes.svg_model
 
@@ -76,7 +77,7 @@ class ElectrodeLayer():
             parent_scene.removeItem(item)
 
     def remove_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
-        for electrode_id, endpoint_view in self.electrode_views.items():
+        for electrode_id, endpoint_view in self.electrode_endpoints.items():
             parent_scene.removeItem(endpoint_view)
 
     ######################## catch all methods to add / remove all elements from scene ###################
@@ -84,11 +85,14 @@ class ElectrodeLayer():
         self.add_electrodes_to_scene(parent_scene)
         self.add_connections_to_scene(parent_scene)
         self.add_endpoints_to_scene(parent_scene)
+        self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
+        self.electrode_editing_text.setPos(QPointF(0, 0))
 
     def remove_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
         self.remove_endpoints_to_scene(parent_scene)
+        parent_scene.removeItem(self.electrode_editing_text)
 
     ######################## Redraw functions ###########################
     def redraw_connections_to_scene(self, model: MainModel):
@@ -158,3 +162,9 @@ class ElectrodeLayer():
     def redraw_electrode_labels(self, model: MainModel):
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label()
+    
+    def redraw_electrode_editing_text(self, model: MainModel):
+        if model.step_id == None:
+            self.electrode_editing_text.setPlainText("Free Mode")
+        else:
+            self.electrode_editing_text.setPlainText(f"Editing step {model.step_id}")

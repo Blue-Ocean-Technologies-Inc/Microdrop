@@ -20,7 +20,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
-from device_viewer.models.electrodes import Electrodes
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
@@ -31,6 +30,7 @@ from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
+from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED
 import json
 
@@ -96,16 +96,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         if message == "True" and self.model:
             self.publish_model_message()
 
+    def _on_display_state_triggered(self, message_model_serial: str):
+        # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
+        # Which has weird side effects on QtGraphicsObject calls
+        self.device_view.display_state_signal.emit(message_model_serial)
+
+
     # ------- Device View class methods -------------------------
-    def set_model(self, new_model):
+    def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
 
         # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
         self.set_view_from_model(new_model)
         logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
-
-        # Since were using traitsui for the layer viewer, its really difficult to simply reassign the model
-        self.model.reset() # So we just reset internal state
 
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
@@ -165,37 +168,49 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.redo()
         self._undoing = False
 
-    def apply_message_model(self, message_model: DeviceViewerMessageModel, fullreset=False):
-        # Apply electrode on/off states
+    def apply_message_model(self, message_model_serial: str):
+        logger.debug(f"Display state triggered with model: {message_model_serial}")
+        # Reset the model to clear any existing routes and channels
+        self.undo_manager.active_stack.clear()  # Clear the undo stack
+        self._undoing = True  # Prevent changes from being added to the undo stack
+        self.model.reset()
+
+        message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
+
+        # Apply step ID
+        self.model.step_id = message_model.step_id
+
+        # Apply electrode channel mapping
         for electrode_id, electrode in self.model.electrodes.items():
-            electrode.state = message_model.channels_activated[electrode.channel]
-        
+            electrode.channel = message_model.id_to_channel.get(electrode_id, electrode.channel)
+
+        # Apply electrode on/off states
+        self.model.channels_states_map.update(message_model.channels_activated)
+
         # Apply routes
-        if fullreset:
-            self.model.reset()
-        else:
-            self.model.layers.clear() # Clear all layers
-            self.model.selected_layer = None # Deselect all layers
-            self.model.layer_to_merge = None # Reset merge layer
-            if self.model.mode == "merge":
-                self.model.mode = "edit" # Reset mode to edit if we were in merge mode
-        
         for route, color in message_model.routes:
-            self.model.add_layer(Route(route), None, color)
+            self.model.add_layer(Route(route=route.copy(), channel_map=self.model.channels_electrode_ids_map), None, color)
+
+        self._undoing = False  # Re-enable undo/redo after reset
+        
 
 
     def publish_model_message(self):
         message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
-        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message) # TODO: Change topic to UI topic protocol_grid expects
+        logger.debug(f"Publishing message for updated viewer state {message}")
+        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message)
 
     def publish_electrode_update(self):
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.channels_states_map))
+        message_obj = {}
+        for channel in self.model.channels_electrode_ids_map: # Make sure all channels are explicitly included
+            message_obj[channel] = self.model.channels_states_map.get(channel, False)
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
-        self.set_model(self.model)
+        self.set_interaction_service(self.model)
 
         # Create debouce timer
         self.debounce_timer = QTimer()
@@ -209,6 +224,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # device_view code
         self.device_view.setParent(container)
+        self.device_view.display_state_signal.connect(self.apply_message_model)
 
         # layer_view code
         layer_view = RouteLayerView
@@ -236,6 +252,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.undo_manager.active_stack.clear()
 
     def open_file_dialog(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
@@ -244,9 +261,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             svg_file = dialog.path
             logger.info(f"Selected SVG file: {svg_file}")
 
-            new_model = MainModel()
-            new_model.set_electrodes_from_svg_file(svg_file)
-            logger.debug(f"Created electrodes from SVG file: {new_model.svg_model.filename}")
+            self.model.reset()
+            self.model.set_electrodes_from_svg_file(svg_file)
+            logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
 
-            self.set_model(new_model)
-            logger.info(f"Electrodes model set to {new_model}")
+            self.set_view_from_model(self.model)
+            self.set_interaction_service(self.model)
+            logger.info(f"Electrodes model set to {self.model}")
+
+    def open_svg_dialog(self):
+        dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
+        if dialog.open() == OK:
+            new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
+            channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map)
