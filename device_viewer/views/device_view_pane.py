@@ -96,6 +96,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if message == "True" and self.model:
             self.publish_model_message()
 
+    def _on_display_state_triggered(self, message_model_serial: str):
+        # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
+        # Which has weird side effects on QtGraphicsObject calls
+        self.device_view.display_state_signal.emit(message_model_serial)
+
+
     # ------- Device View class methods -------------------------
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
@@ -162,29 +168,38 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.redo()
         self._undoing = False
 
-    def apply_message_model(self, message_model: DeviceViewerMessageModel, fullreset=False):
-        # Apply electrode on/off states
+    def apply_message_model(self, message_model_serial: str):
+        logger.debug(f"Display state triggered with model: {message_model_serial}")
+        # Reset the model to clear any existing routes and channels
+        self.undo_manager.active_stack.clear()  # Clear the undo stack
+        self._undoing = True  # Prevent changes from being added to the undo stack
+        self.model.reset()
+
+        message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
+
+        # Apply step ID
+        self.model.step_id = message_model.step_id
+
+        # Apply electrode channel mapping
         for electrode_id, electrode in self.model.electrodes.items():
-            electrode.state = message_model.channels_activated[electrode.channel]
-        
+            electrode.channel = message_model.id_to_channel.get(electrode_id, electrode.channel)
+
+        # Apply electrode on/off states
+        self.model.channels_states_map.update(message_model.channels_activated)
+
         # Apply routes
-        if fullreset:
-            self.model.reset()
-        else:
-            self.model.layers.clear() # Clear all layers
-            self.model.selected_layer = None # Deselect all layers
-            self.model.layer_to_merge = None # Reset merge layer
-            if self.model.mode == "merge":
-                self.model.mode = "edit" # Reset mode to edit if we were in merge mode
-        
         for route, color in message_model.routes:
-            self.model.add_layer(Route(route), None, color)
+            self.model.add_layer(Route(route=route.copy(), channel_map=self.model.channels_electrode_ids_map), None, color)
+
+        self._undoing = False  # Re-enable undo/redo after reset
+        
 
 
     def publish_model_message(self):
         message_model = gui_models_to_message_model(self.model)
         message = message_model.serialize()
-        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message) # TODO: Change topic to UI topic protocol_grid expects
+        logger.debug(f"Publishing message for updated viewer state {message}")
+        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message)
 
     def publish_electrode_update(self):
         message_obj = {}
@@ -209,6 +224,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # device_view code
         self.device_view.setParent(container)
+        self.device_view.display_state_signal.connect(self.apply_message_model)
 
         # layer_view code
         layer_view = RouteLayerView

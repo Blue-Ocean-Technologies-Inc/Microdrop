@@ -1,4 +1,4 @@
-from traits.api import Property, Str, Enum, observe
+from traits.api import Property, Str, Enum, observe, Instance
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 
@@ -16,6 +16,8 @@ class MainModel(RouteLayerManager, Electrodes):
     mode_name = Property(Str, observe="mode")
 
     message = Str("")
+
+    step_id = Instance(str, allow_none=True)
 
     # ------------------------- Properties ------------------------
 
