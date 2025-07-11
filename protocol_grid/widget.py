@@ -47,7 +47,7 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
-        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)        
+        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)       
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -69,6 +69,10 @@ class PGCWidget(QWidget):
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.stop_protocol)
+        self.navigation_bar.btn_first.clicked.connect(self.navigate_to_first_step)
+        self.navigation_bar.btn_prev.clicked.connect(self.navigate_to_previous_step)
+        self.navigation_bar.btn_next.clicked.connect(self.navigate_to_next_step)
+        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step) 
 
         self.status_bar = StatusBar(self)
 
@@ -94,10 +98,10 @@ class PGCWidget(QWidget):
         
         self.setup_context_menu()
         self.setup_shortcuts()
-        self.setup_header_context_menu()
-        
+        self.setup_header_context_menu()        
         self.ensure_minimum_protocol()
         self.load_from_state()
+        self._update_navigation_buttons_state()
 
     # ---------- Message Handler ----------
     
@@ -200,20 +204,65 @@ class PGCWidget(QWidget):
         self.clear_highlight()
         self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
+        self._update_navigation_buttons_state()
 
     def on_protocol_paused(self):
         self.navigation_bar.btn_play.setText("▶ Resume")
+
+    def navigate_to_first_step(self):
+        if self._protocol_running:
+            return  
+        
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            self._select_step_by_path(all_step_paths[0])
+
+    def navigate_to_previous_step(self):
+        if self._protocol_running:
+            return
+        
+        current_index = self._get_current_step_index()
+        if current_index <= 0:
+            return # already at first step
+        
+        all_step_paths = self._get_all_step_paths()
+        if current_index - 1 < len(all_step_paths):
+            self._select_step_by_path(all_step_paths[current_index - 1])
+
+    def navigate_to_next_step(self):
+        if self._protocol_running:
+            return
+        
+        current_index = self._get_current_step_index()
+        all_step_paths = self._get_all_step_paths()
+        if current_index == -1: # no valid selection
+            if all_step_paths:
+                self._select_step_by_path(all_step_paths[0])
+            return
+
+        if current_index + 1 < len(all_step_paths):
+            self._select_step_by_path(all_step_paths[current_index + 1])        
+
+    def navigate_to_last_step(self):
+        if self._protocol_running:
+            return
+        
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            self._select_step_by_path(all_step_paths[-1])
 
     def toggle_play_pause(self):
         if self.protocol_runner.is_running():
             self.protocol_runner.pause()
             # self._protocol_running = False
             self.navigation_bar.btn_play.setText("▶ Resume")
+            self._update_navigation_buttons_state()
         elif self.protocol_runner.is_paused():
             self.sync_to_state()
             self.protocol_runner.resume()
             self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
+            self._update_navigation_buttons_state()
         else:
             self.sync_to_state()
             try:
@@ -251,6 +300,7 @@ class PGCWidget(QWidget):
             self.protocol_runner.start()
             self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
+            self._update_navigation_buttons_state()
 
             if run_order:
                 first_step_path = run_order[0]["path"]
@@ -262,6 +312,7 @@ class PGCWidget(QWidget):
         self.reset_status_bar()
         self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
+        self._update_navigation_buttons_state()
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0.00 s")
@@ -271,6 +322,64 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("1/")
+
+    def _update_navigation_buttons_state(self):
+        enabled = not self._protocol_running
+        self.navigation_bar.btn_first.setEnabled(enabled)
+        self.navigation_bar.btn_prev.setEnabled(enabled)
+        self.navigation_bar.btn_next.setEnabled(enabled)
+        self.navigation_bar.btn_last.setEnabled(enabled)
+
+    def _get_all_step_paths(self):
+        step_paths = []
+
+        def collect_steps_recursive(parent_item, current_path):
+            for row in range(parent_item.rowCount()):
+                item = parent_item.child(row, 0)
+                if not item:
+                    continue
+
+                item_path = current_path + [row]
+                row_type = item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
+                    step_paths.append(item_path)
+                elif row_type == GROUP_TYPE:
+                    collect_steps_recursive(item, item_path)
+
+        collect_steps_recursive(self.model.invisibleRootItem(), [])
+        return step_paths     
+
+    def _get_current_step_index(self):
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return -1
+        
+        current_path = selected_paths[0]
+        current_item = self.get_item_by_path(current_path)
+        if not current_item or current_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return -1
+        
+        all_step_paths = self._get_all_step_paths()
+        try:
+            return all_step_paths.index(current_path)
+        except ValueError:
+            return -1
+        
+    def _select_step_by_path(self, path):
+        if not path:
+            return
+        
+        self.tree.clearSelection()
+        index = self.model.index(path[0], 0)
+        for row in path[1:]:
+            if index.isValid():
+                index = self.model.index(row, 0, index)
+            else:
+                return
+            
+        if index.isValid():
+            self.tree.selectionModel().select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+            self.tree.scrollTo(index)
     # ---------------------------------------------
 
     def create_buttons(self):
@@ -418,6 +527,10 @@ class PGCWidget(QWidget):
             (QKeySequence("Insert"), self.insert_step),
             (QKeySequence("Ctrl+Insert"), self.insert_group),
             (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+            (QKeySequence("A"), self.navigate_to_first_step),
+            (QKeySequence("S"), self.navigate_to_previous_step),
+            (QKeySequence("D"), self.navigate_to_next_step),
+            (QKeySequence("F"), self.navigate_to_last_step),
         ]
         
         for key_seq, slot in shortcuts:
