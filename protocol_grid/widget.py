@@ -117,15 +117,22 @@ class PGCWidget(QWidget):
         item = self.get_item_by_path(path)
         if not item or item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return
-        # parse message and update DeviceState
+        
+        selected_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+        
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
+            
+            if dv_msg.step_id != selected_step_uid:
+                return
+                
             device_state = device_state_from_device_viewer_message(dv_msg)
             item.setData(device_state, Qt.UserRole + 100)
             self.model_to_state()
             # self.state_to_model()
         except Exception as e:
-            print(f"Failed to update DeviceState from device_viewer message: {e}")
+            logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
+        
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
     # -------------------------------------
@@ -169,10 +176,12 @@ class PGCWidget(QWidget):
             device_state = item.data(Qt.UserRole + 100)
             if not device_state:
                 device_state = DeviceState()
-            msg_model = device_state_to_device_viewer_message(device_state)
+            step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+            msg_model = device_state_to_device_viewer_message(device_state, step_uid)
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
             logger.info("message: %s", msg_model.serialize())
             self._last_published_step_id = step_id
+
     def clear_highlight(self):
         dark = is_dark_mode()
         fg = QBrush(QColor("white" if dark else "black"))
@@ -572,7 +581,8 @@ class PGCWidget(QWidget):
                 if step_id and self._last_published_step_id != step_id:
                     if not device_state:
                         device_state = DeviceState()
-                    msg_model = device_state_to_device_viewer_message(device_state)
+                    step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+                    msg_model = device_state_to_device_viewer_message(device_state, step_uid)
                     publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
                     logger.info("message: %s", msg_model.serialize())
                     self._last_published_step_id = step_id

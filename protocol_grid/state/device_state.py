@@ -86,14 +86,12 @@ def device_state_from_device_viewer_message(dv_msg):
         id_to_channel=id_to_channel,
         route_colors=route_colors
     )
-        
 
-
-def device_state_to_device_viewer_message(device_state: DeviceState) -> DeviceViewerMessageModel:
+def device_state_to_device_viewer_message(device_state: DeviceState, step_id: str = None) -> DeviceViewerMessageModel:
     channels_activated = {int(k): bool(v) for k, v in device_state.activated_electrodes.items()}
     routes = []
     for i, path in enumerate(device_state.paths):
         color = device_state.route_colors[i] if i < len(device_state.route_colors) else "#000000"
         routes.append((path, color))
     id_to_channel = device_state.id_to_channel or {}
-    return DeviceViewerMessageModel(channels_activated, routes, id_to_channel)
+    return DeviceViewerMessageModel(channels_activated, routes, id_to_channel, step_id)
