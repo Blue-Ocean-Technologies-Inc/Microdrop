@@ -37,6 +37,10 @@ class DeviceViewerMessageModel():
     @staticmethod
     def deserialize(string: str) -> 'DeviceViewerMessageModel':
         obj = json.loads(string)
+
+        channels_activated_with_int_keys = {int(k): v for k, v in obj["channels_activated"].items()}
+        obj["channels_activated"] = channels_activated_with_int_keys # Convert keys to int for consistency with the constructor
+
         try:
             return DeviceViewerMessageModel(obj["channels_activated"], obj["routes"], obj["id_to_channel"])
         except KeyError:
