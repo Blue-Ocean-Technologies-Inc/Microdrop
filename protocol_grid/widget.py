@@ -396,6 +396,7 @@ class PGCWidget(QWidget):
             parameters = dict(step_defaults),
             name = "Step"
         )
+        self.state.assign_uid_to_step(new_step)
         self.state.sequence.append(new_step)
         self.reassign_ids()
         self.load_from_state()
@@ -429,6 +430,7 @@ class PGCWidget(QWidget):
                 parameters=dict(step_defaults),
                 name="Step"
             )  
+            self.state.assign_uid_to_step(new_step)  
 
             if len(current_path) == 1:
                 target_elements = self.state.sequence
@@ -458,6 +460,7 @@ class PGCWidget(QWidget):
                     parameters=dict(step_defaults),
                     name="Step"
                 )
+                self.state.assign_uid_to_step(new_step) 
                 
                 target_elements = self._find_elements_by_path(current_path)
                 target_elements.append(new_step)                
@@ -592,6 +595,7 @@ class PGCWidget(QWidget):
                 parameters=dict(step_defaults),
                 name="Step"
             )
+            self.state.assign_uid_to_step(default_step)
             self.state.sequence.append(default_step)
             self.reassign_ids()
             
@@ -700,6 +704,12 @@ class PGCWidget(QWidget):
                             parameters[field] = "1" if checked else "0"
                         else:
                             parameters[field] = item.text()
+                
+                if row_type == STEP_TYPE:
+                    uid_role = Qt.UserRole + 1000 + hash("UID") % 1000
+                    uid_value = desc_item.data(uid_role)
+                    if uid_value:
+                        parameters["UID"] = str(uid_value)
                             
                 if row_type == STEP_TYPE:
                     step = ProtocolStep(
@@ -764,6 +774,7 @@ class PGCWidget(QWidget):
         self.save_column_settings()        
         self._programmatic_change = True
         try:
+            self.state.assign_uids_to_all_steps()
             self.state_to_model()
             self.setup_headers()
             self.tree.expandAll()
@@ -1101,6 +1112,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         target_elements.insert(row, new_step)
         
         self.reassign_ids()
@@ -1164,6 +1176,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         target_elements.insert(row, new_step)
         
         self.reassign_ids()
@@ -1191,6 +1204,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         
         if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
             target_elements = self._find_elements_by_path(target_path)
@@ -1441,6 +1455,8 @@ class PGCWidget(QWidget):
                 else:
                     self.state.from_json(data)
                     
+                self.state.assign_uids_to_all_steps()
+                
                 self.state.undo_stack.clear()
                 self.state.redo_stack.clear()
                 
@@ -1476,6 +1492,9 @@ class PGCWidget(QWidget):
                 imported_state.from_flat_export(data)
             else:
                 imported_state.from_json(data)
+            
+            imported_state.update_uid_counter_from_sequence()
+            self.state._uid_counter = max(self.state._uid_counter, imported_state._uid_counter)
                 
             self.state.snapshot_for_undo()
             

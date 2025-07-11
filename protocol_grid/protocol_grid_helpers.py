@@ -136,6 +136,9 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
 
         if field == "Description":
             item.setData(row_type, ROW_TYPE_ROLE)
+            for hidden_field in ["UID"]:
+                if hidden_field in overrides:
+                    item.setData(overrides[hidden_field], Qt.UserRole + 1000 + hash(hidden_field) % 1000)
 
         if row_type == STEP_TYPE and field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
@@ -165,6 +168,8 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             else:
                 item.setEditable(False)
                 item.setText("")
+        elif row_type == STEP_TYPE and field == "ID":
+            item.setEditable(False)
 
         items.append(item)
 
