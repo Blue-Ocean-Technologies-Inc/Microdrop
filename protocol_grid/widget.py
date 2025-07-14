@@ -3,7 +3,7 @@ import copy
 import json
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
 from microdrop_application.application import is_dark_mode
@@ -47,7 +47,7 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
-        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)        
+        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)       
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -61,6 +61,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionBehavior(QTreeView.SelectRows)
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
+        self._protocol_running = False 
         self._last_published_step_id = None
         
         self.create_buttons()
@@ -68,6 +69,10 @@ class PGCWidget(QWidget):
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.stop_protocol)
+        self.navigation_bar.btn_first.clicked.connect(self.navigate_to_first_step)
+        self.navigation_bar.btn_prev.clicked.connect(self.navigate_to_previous_step)
+        self.navigation_bar.btn_next.clicked.connect(self.navigate_to_next_step)
+        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step) 
 
         self.status_bar = StatusBar(self)
 
@@ -93,10 +98,10 @@ class PGCWidget(QWidget):
         
         self.setup_context_menu()
         self.setup_shortcuts()
-        self.setup_header_context_menu()
-        
+        self.setup_header_context_menu()        
         self.ensure_minimum_protocol()
         self.load_from_state()
+        self._update_navigation_buttons_state()
 
     # ---------- Message Handler ----------
     
@@ -112,15 +117,23 @@ class PGCWidget(QWidget):
         item = self.get_item_by_path(path)
         if not item or item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return
-        # parse message and update DeviceState
+        
+        selected_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+        
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
+            
+            # check if UIDs match and both are non-empty
+            if not dv_msg.step_id or not selected_step_uid or dv_msg.step_id != selected_step_uid:
+                return
+                
             device_state = device_state_from_device_viewer_message(dv_msg)
             item.setData(device_state, Qt.UserRole + 100)
             self.model_to_state()
             # self.state_to_model()
         except Exception as e:
-            print(f"Failed to update DeviceState from device_viewer message: {e}")
+            logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
+        
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
     # -------------------------------------
@@ -157,6 +170,24 @@ class PGCWidget(QWidget):
                     cell.setBackground(Qt.blue)
                     cell.setForeground(Qt.white)
 
+        if self._protocol_running and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            id_col = protocol_grid_fields.index("ID")
+            desc_col = protocol_grid_fields.index("Description")
+            id_item = parent.child(row, id_col)
+            desc_item = parent.child(row, desc_col)
+            step_id = id_item.text() if id_item else None
+            step_description = desc_item.text() if desc_item else "Step"
+            device_state = item.data(Qt.UserRole + 100)
+            if not device_state:
+                device_state = DeviceState()
+            step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+            msg_model = device_state_to_device_viewer_message(
+                device_state, step_uid, step_description, step_id, False
+            )
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+            logger.info("message: %s", msg_model.serialize())
+            self._last_published_step_id = step_id
+
     def clear_highlight(self):
         dark = is_dark_mode()
         fg = QBrush(QColor("white" if dark else "black"))
@@ -186,19 +217,74 @@ class PGCWidget(QWidget):
 
     def on_protocol_finished(self):
         self.clear_highlight()
+        self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
+        self._update_navigation_buttons_state()
 
     def on_protocol_paused(self):
         self.navigation_bar.btn_play.setText("▶ Resume")
 
+    def navigate_to_first_step(self):
+        if self._protocol_running:
+            return  
+        
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            self._select_step_by_path(all_step_paths[0])
+
+    def navigate_to_previous_step(self):
+        if self._protocol_running:
+            return
+        
+        current_index = self._get_current_step_index()
+        all_step_paths = self._get_all_step_paths()
+        if current_index == -1: # no valid selection
+            if all_step_paths:
+                self._select_step_by_path(all_step_paths[0])
+            return
+        elif current_index <= 0:
+            return # already at first step
+        
+        all_step_paths = self._get_all_step_paths()
+        if current_index - 1 < len(all_step_paths):
+            self._select_step_by_path(all_step_paths[current_index - 1])
+
+    def navigate_to_next_step(self):
+        if self._protocol_running:
+            return
+        
+        current_index = self._get_current_step_index()
+        all_step_paths = self._get_all_step_paths()
+        if current_index == -1: # no valid selection
+            if all_step_paths:
+                self._select_step_by_path(all_step_paths[0])
+            return
+
+        if current_index + 1 < len(all_step_paths):
+            self._select_step_by_path(all_step_paths[current_index + 1]) 
+        else:
+            self._add_step_at_root_and_select()       
+
+    def navigate_to_last_step(self):
+        if self._protocol_running:
+            return
+        
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            self._select_step_by_path(all_step_paths[-1])
+
     def toggle_play_pause(self):
         if self.protocol_runner.is_running():
             self.protocol_runner.pause()
+            # self._protocol_running = False
             self.navigation_bar.btn_play.setText("▶ Resume")
+            self._update_navigation_buttons_state()
         elif self.protocol_runner.is_paused():
             self.sync_to_state()
             self.protocol_runner.resume()
+            self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
+            self._update_navigation_buttons_state()
         else:
             self.sync_to_state()
             try:
@@ -234,13 +320,21 @@ class PGCWidget(QWidget):
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.set_run_order(run_order)
             self.protocol_runner.start()
+            self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
+            self._update_navigation_buttons_state()
+
+            if run_order:
+                first_step_path = run_order[0]["path"]
+                self.highlight_step(first_step_path)
 
     def stop_protocol(self):
         self.protocol_runner.stop()
         self.clear_highlight()
         self.reset_status_bar()
+        self._protocol_running = False
         self.navigation_bar.btn_play.setText("▶ Play")
+        self._update_navigation_buttons_state()
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0.00 s")
@@ -250,6 +344,178 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("1/")
+
+    def _update_navigation_buttons_state(self):
+        enabled = not self._protocol_running
+        self.navigation_bar.btn_first.setEnabled(enabled)
+        self.navigation_bar.btn_prev.setEnabled(enabled)
+        self.navigation_bar.btn_next.setEnabled(enabled)
+        self.navigation_bar.btn_last.setEnabled(enabled)
+
+    def _get_all_step_paths(self):
+        step_paths = []
+
+        def collect_steps_recursive(parent_item, current_path):
+            for row in range(parent_item.rowCount()):
+                item = parent_item.child(row, 0)
+                if not item:
+                    continue
+
+                item_path = current_path + [row]
+                row_type = item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
+                    step_paths.append(item_path)
+                elif row_type == GROUP_TYPE:
+                    collect_steps_recursive(item, item_path)
+
+        collect_steps_recursive(self.model.invisibleRootItem(), [])
+        return step_paths     
+
+    def _get_current_step_index(self):
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return -1
+        
+        current_path = selected_paths[0]
+        current_item = self.get_item_by_path(current_path)
+        if not current_item or current_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return -1
+        
+        all_step_paths = self._get_all_step_paths()
+        try:
+            return all_step_paths.index(current_path)
+        except ValueError:
+            return -1
+        
+    def _select_step_by_path(self, path):
+        if not path:
+            return
+        
+        self.tree.clearSelection()
+        index = self.model.index(path[0], 0)
+        for row in path[1:]:
+            if index.isValid():
+                index = self.model.index(row, 0, index)
+            else:
+                return
+            
+        if index.isValid():
+            self.tree.selectionModel().select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+            self.tree.scrollTo(index)
+
+    def _add_step_at_root_and_select(self):
+        scroll_pos = self.save_scroll_positions()
+        self.state.snapshot_for_undo()
+
+        new_step = ProtocolStep(
+            parameters = dict(step_defaults),
+            name = "Step"
+        )
+        self.state.assign_uid_to_step(new_step)
+        self.state.sequence.append(new_step)
+        self.reassign_ids()
+        self.load_from_state()
+
+        all_step_paths = self._get_all_step_paths()
+        if all_step_paths:
+            root_step_paths = [path for path in all_step_paths if len(path) == 1]
+            if root_step_paths:
+                self._select_step_by_path(root_step_paths[-1])
+
+        self.restore_scroll_positions(scroll_pos)
+
+    def add_step_to_current_group(self):
+        if self._protocol_running:
+            return        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return        
+        current_path = selected_paths[0]
+        current_item = self.get_item_by_path(current_path)        
+        if not current_item:
+            return        
+        if current_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            if not self._is_last_step_in_group(current_path):
+                return
+            
+            scroll_pos = self.save_scroll_positions()
+            self.state.snapshot_for_undo()    
+
+            new_step = ProtocolStep(
+                parameters=dict(step_defaults),
+                name="Step"
+            )  
+            self.state.assign_uid_to_step(new_step)  
+
+            if len(current_path) == 1:
+                target_elements = self.state.sequence
+                insert_position = current_path[0] + 1
+            else:
+                parent_path = current_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                insert_position = current_path[-1] + 1
+            
+            target_elements.insert(insert_position, new_step)        
+            self.reassign_ids()
+            self.load_from_state()
+            if len(current_path) == 1:
+                new_step_path = [insert_position]
+            else:
+                new_step_path = current_path[:-1] + [insert_position]
+            
+            self._select_step_by_path(new_step_path)
+            self.restore_scroll_positions(scroll_pos)
+            
+        elif current_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            if not self._group_has_direct_steps(current_item):
+                scroll_pos = self.save_scroll_positions()
+                self.state.snapshot_for_undo()
+                
+                new_step = ProtocolStep(
+                    parameters=dict(step_defaults),
+                    name="Step"
+                )
+                self.state.assign_uid_to_step(new_step) 
+                
+                target_elements = self._find_elements_by_path(current_path)
+                target_elements.append(new_step)                
+                self.reassign_ids()
+                self.load_from_state()                
+                new_step_path = current_path + [0]
+                self._select_step_by_path(new_step_path)
+                self.restore_scroll_positions(scroll_pos)
+
+    def _is_last_step_in_group(self, step_path):
+        if not step_path:
+            return False
+        
+        if len(step_path) == 1:
+            parent_item = self.model.invisibleRootItem()
+            parent_path = []
+        else:
+            parent_path = step_path[:-1]
+            parent_item = self.get_item_by_path(parent_path)
+        
+        if not parent_item:
+            return False
+        
+        step_index = step_path[-1]        
+        step_indices = []
+        for row in range(parent_item.rowCount()):
+            item = parent_item.child(row, 0)
+            if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                step_indices.append(row)
+        
+        return step_indices and step_index == step_indices[-1]
+    
+    def _group_has_direct_steps(self, group_item):
+        if not group_item or group_item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
+            return False        
+        for row in range(group_item.rowCount()):
+            child_item = group_item.child(row, 0)
+            if child_item and child_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                return True        
+        return False
     # ---------------------------------------------
 
     def create_buttons(self):
@@ -296,6 +562,8 @@ class PGCWidget(QWidget):
         dialog.exec()
         
     def on_selection_changed(self):
+        if self._protocol_running:
+            return
         selected_paths = self.get_selected_paths()
 
         has_selection = len(selected_paths) > 0
@@ -307,19 +575,24 @@ class PGCWidget(QWidget):
             path = selected_paths[0]
             item = self.get_item_by_path(path)
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                step_id = None
-                device_state = item.data(Qt.UserRole + 100)
-                if device_state and hasattr(device_state, "parameters"):
-                    step_id = device_state.parameters.get("ID")
-                if not step_id:
-                    id_col = protocol_grid_fields.index("ID")
-                    id_item = item.parent().child(item.row(), id_col) if item.parent() else self.model.invisibleRootItem().child(item.row(), id_col)
-                    if id_item:
-                        step_id = id_item.text()
+                # step info
+                parent = item.parent() or self.model.invisibleRootItem()
+                row = item.row()
+                id_col = protocol_grid_fields.index("ID")
+                desc_col = protocol_grid_fields.index("Description")
+                id_item = parent.child(row, id_col)
+                desc_item = parent.child(row, desc_col)
+                step_id = id_item.text() if id_item else None
+                step_description = desc_item.text() if desc_item else "Step"
+                
                 if step_id and self._last_published_step_id != step_id:
+                    device_state = item.data(Qt.UserRole + 100)
                     if not device_state:
                         device_state = DeviceState()
-                    msg_model = device_state_to_device_viewer_message(device_state)
+                    step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+                    msg_model = device_state_to_device_viewer_message(
+                        device_state, step_uid, step_description, step_id, True
+                    )
                     publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
                     logger.info("message: %s", msg_model.serialize())
                     self._last_published_step_id = step_id
@@ -342,6 +615,7 @@ class PGCWidget(QWidget):
                 parameters=dict(step_defaults),
                 name="Step"
             )
+            self.state.assign_uid_to_step(default_step)
             self.state.sequence.append(default_step)
             self.reassign_ids()
             
@@ -395,6 +669,11 @@ class PGCWidget(QWidget):
             (QKeySequence("Insert"), self.insert_step),
             (QKeySequence("Ctrl+Insert"), self.insert_group),
             (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+            (QKeySequence("A"), self.navigate_to_first_step),
+            (QKeySequence("S"), self.navigate_to_previous_step),
+            (QKeySequence("D"), self.navigate_to_next_step),
+            (QKeySequence("F"), self.navigate_to_last_step),
+            (QKeySequence("E"), self.add_step_to_current_group),
         ]
         
         for key_seq, slot in shortcuts:
@@ -445,6 +724,12 @@ class PGCWidget(QWidget):
                             parameters[field] = "1" if checked else "0"
                         else:
                             parameters[field] = item.text()
+                
+                if row_type == STEP_TYPE:
+                    uid_role = Qt.UserRole + 1000 + hash("UID") % 1000
+                    uid_value = desc_item.data(uid_role)
+                    if uid_value:
+                        parameters["UID"] = str(uid_value)
                             
                 if row_type == STEP_TYPE:
                     step = ProtocolStep(
@@ -509,6 +794,7 @@ class PGCWidget(QWidget):
         self.save_column_settings()        
         self._programmatic_change = True
         try:
+            self.state.assign_uids_to_all_steps()
             self.state_to_model()
             self.setup_headers()
             self.tree.expandAll()
@@ -846,6 +1132,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         target_elements.insert(row, new_step)
         
         self.reassign_ids()
@@ -909,6 +1196,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         target_elements.insert(row, new_step)
         
         self.reassign_ids()
@@ -936,6 +1224,7 @@ class PGCWidget(QWidget):
             parameters=dict(step_defaults),
             name="Step"
         )
+        self.state.assign_uid_to_step(new_step)
         
         if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
             target_elements = self._find_elements_by_path(target_path)
@@ -1186,6 +1475,8 @@ class PGCWidget(QWidget):
                 else:
                     self.state.from_json(data)
                     
+                self.state.assign_uids_to_all_steps()
+                
                 self.state.undo_stack.clear()
                 self.state.redo_stack.clear()
                 
@@ -1221,6 +1512,9 @@ class PGCWidget(QWidget):
                 imported_state.from_flat_export(data)
             else:
                 imported_state.from_json(data)
+            
+            imported_state.update_uid_counter_from_sequence()
+            self.state._uid_counter = max(self.state._uid_counter, imported_state._uid_counter)
                 
             self.state.snapshot_for_undo()
             
@@ -1266,10 +1560,10 @@ class PGCWidget(QWidget):
         self.load_from_state()
         # self.sync_to_state()
         
-    def open_device_editor(self):
-        QMessageBox.information(self, "Device Editor", "Device state editor not yet implemented.")
-        pass
-
+    def event(self, event):
+        if event.type() == QEvent.PaletteChange:
+            self.clear_highlight()
+        return super().event(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

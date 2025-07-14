@@ -58,11 +58,51 @@ class ProtocolState:
         self.fields = list(protocol_grid_fields)
         self.undo_stack = []
         self.redo_stack = []
+        self._uid_counter = 1
+
+    def get_next_uid(self):
+        uid = self._uid_counter
+        self._uid_counter += 1
+        return uid
+
+    def update_uid_counter_from_sequence(self):
+        max_uid = 0
+        
+        def find_max_uid(elements):
+            nonlocal max_uid
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    uid_str = element.parameters.get("UID", "0")
+                    try:
+                        uid = int(uid_str) if uid_str else 0
+                        max_uid = max(max_uid, uid)
+                    except ValueError:
+                        pass
+                elif isinstance(element, ProtocolGroup):
+                    find_max_uid(element.elements)
+        
+        find_max_uid(self.sequence)
+        self._uid_counter = max_uid + 1
+
+    def assign_uid_to_step(self, step):
+        if not step.parameters.get("UID"):
+            step.parameters["UID"] = str(self.get_next_uid())
+
+    def assign_uids_to_all_steps(self):
+        def assign_recursive(elements):
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    self.assign_uid_to_step(element)
+                elif isinstance(element, ProtocolGroup):
+                    assign_recursive(element.elements)
+        
+        assign_recursive(self.sequence)
 
     def to_dict(self):
         return {
             "sequence": [step.to_dict() for step in self.sequence],
-            "fields": self.fields
+            "fields": self.fields,
+            "_uid_counter": self._uid_counter
         }
     
     def from_dict(self, data):
@@ -73,6 +113,8 @@ class ProtocolState:
             elif e.get("type") == "group":
                 self.sequence.append(ProtocolGroup.from_dict(e))
         self.fields = data.get("fields", list(protocol_grid_fields))
+        self._uid_counter = data.get("_uid_counter", 1)
+        self.update_uid_counter_from_sequence()
 
     def to_flat_export(self):
         """
@@ -109,7 +151,8 @@ class ProtocolState:
         return {
             "steps": steps,
             "groups": groups,
-            "fields": list(self.fields)
+            "fields": list(self.fields),
+            "_uid_counter": self._uid_counter
         }
     
     def from_flat_export(self, flat_json):  
@@ -117,6 +160,8 @@ class ProtocolState:
         sequence, fields = ImportExportManager.import_flat_protocol(flat_json)
         self.sequence = sequence
         self.fields = fields
+        self._uid_counter = flat_json.get("_uid_counter", 1)
+        self.update_uid_counter_from_sequence()
 
     def to_json(self):
         return self.to_dict()

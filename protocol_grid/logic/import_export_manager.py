@@ -72,6 +72,10 @@ class ImportExportManager:
             step_id = step["ID"]
             parent_group_id = get_parent_group_id(step_id)
             params = {k: v for k, v in step.items() if k != "device_state"}
+            
+            if "UID" not in params:
+                params["UID"] = ""  # Will be assigned later if needed
+            
             step_obj = ProtocolStep(
                 parameters=params,
                 name=step.get("Description", "Step")

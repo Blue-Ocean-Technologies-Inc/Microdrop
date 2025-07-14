@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional, Callable
 import copy
 import json
 
-from protocol_grid.state.messages import DeviceViewerMessageModel
+from device_viewer.models.messages import DeviceViewerMessageModel
 
 
 class DeviceState:
@@ -46,12 +46,16 @@ class DeviceState:
     def to_dict(self) -> Dict:
         return {
             'activated_electrodes': self.activated_electrodes,
-            'paths': self.paths
+            'paths': self.paths,
+            'route_colors': self.route_colors,
+            'id_to_channel': self.id_to_channel
         }
     
     def from_dict(self, data: Dict):
         self.activated_electrodes = data.get('activated_electrodes', {})
         self.paths = data.get('paths', [])
+        self.route_colors = data.get('route_colors', [])
+        self.id_to_channel = data.get('id_to_channel', {})
 
     def get_activated_electrode_ids(self):
         return [electrode_id for electrode_id, activated in 
@@ -82,14 +86,26 @@ def device_state_from_device_viewer_message(dv_msg):
         id_to_channel=id_to_channel,
         route_colors=route_colors
     )
-        
 
-
-def device_state_to_device_viewer_message(device_state: DeviceState) -> DeviceViewerMessageModel:
+def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: str=None, 
+                                          step_description: str=None, step_id: str=None, 
+                                          editable: bool=True) -> DeviceViewerMessageModel:
     channels_activated = {int(k): bool(v) for k, v in device_state.activated_electrodes.items()}
     routes = []
     for i, path in enumerate(device_state.paths):
-        color = device_state.route_colors[i]# if i < len(device_state.route_colors) else "#000000"
+        color = device_state.route_colors[i] if i < len(device_state.route_colors) else "#000000"
         routes.append((path, color))
     id_to_channel = device_state.id_to_channel or {}
-    return DeviceViewerMessageModel(channels_activated, routes, id_to_channel)
+    
+    step_info = {
+        "step_id": step_uid or "",
+        "step_label": f"{step_description or 'Step'} {step_id or ''}".strip()
+    }
+    
+    return DeviceViewerMessageModel(
+        channels_activated=channels_activated,
+        routes=routes,
+        id_to_channel=id_to_channel,
+        step_info=step_info,
+        editable=editable
+    )

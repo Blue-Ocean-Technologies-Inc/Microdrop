@@ -31,6 +31,8 @@ protocol_grid_fields = [
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
 ]
+hidden_fields = ["UID"]
+all_fields = protocol_grid_fields + hidden_fields
 fixed_fields = {"Description", "ID"}
 field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
@@ -59,7 +61,8 @@ step_defaults = {
     "Magnet": "0",
     "Magnet Height": "0",    
     "Max. Path Length": "0",
-    "Run Time": "0.0"
+    "Run Time": "0.0",
+    "UID": ""
 }
 group_defaults = {
     "Description": "Group",
