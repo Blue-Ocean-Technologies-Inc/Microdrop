@@ -50,12 +50,16 @@ class DeviceViewerDockPane(TraitsDockPane):
     id = PKG + ".pane"
     name = PKG_name + " Dock Pane"
 
-    scene = Instance(QGraphicsScene)
+    # Views
+    scene = Instance(QGraphicsScene) 
     device_view = Instance(AutoFitGraphicsView)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
     layer_ui = None
     mode_picker_view = None
-    _undoing = False
+
+    # Variables
+    _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
+    message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -100,6 +104,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
         self.device_view.display_state_signal.emit(message_model_serial)
+
+    # def _on_state_changed_triggered(self, message):
+    #     """
+    #     Handle state changes from the device viewer.
+    #     """
+    #     logger.debug(f"Device viewer state changed: {message}")
+    #     if self.model:
+    #         self.apply_message_model(message)
 
 
     # ------- Device View class methods -------------------------
@@ -153,6 +165,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             if not self.model.editable:
                 self.undo() # Revert changes if not editable
             else:
+                self.message_buffer = gui_models_to_message_model(self.model).serialize()
                 self.debounce_timer.start(700) # Start timeout for sending message
     
     @observe("model.channels_states_map.items") # When an electrode changes state
@@ -209,10 +222,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
 
     def publish_model_message(self):
-        message_model = gui_models_to_message_model(self.model)
-        message = message_model.serialize()
-        logger.debug(f"Publishing message for updated viewer state {message}")
-        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=message)
+        logger.debug(f"Publishing message for updated viewer state {self.message_buffer}")
+        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def publish_electrode_update(self):
         message_obj = {}
