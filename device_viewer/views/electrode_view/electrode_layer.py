@@ -167,4 +167,4 @@ class ElectrodeLayer():
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
-            self.electrode_editing_text.setPlainText(f"Editing step {model.step_id}")
+            self.electrode_editing_text.setPlainText(f"Editing: {model.step_label}")

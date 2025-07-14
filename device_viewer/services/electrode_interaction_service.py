@@ -147,7 +147,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
 
-    @observe("model.step_id")
-    def step_id_change(self, event):
+    @observe("model.step_label")
+    def step_label_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
