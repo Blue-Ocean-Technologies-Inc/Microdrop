@@ -20,6 +20,9 @@ class DeviceViewerMessageModel():
         if self.step_info is not None:  
             self.step_id = step_info.get("step_id", None)
             self.step_label = step_info.get("step_label", None)
+        else:
+            self.step_id = None
+            self.step_label = None
         self.editable = editable # True (editing) or False (running)
  
     def get_routes_with_ids(self) -> list[list[str]]:

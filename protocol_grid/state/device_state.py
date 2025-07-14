@@ -97,10 +97,21 @@ def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: s
         routes.append((path, color))
     id_to_channel = device_state.id_to_channel or {}
     
-    step_info = {
-        "step_id": step_uid or "",
-        "step_label": f"{step_description or 'Step'} {step_id or ''}".strip()
-    }
+    if step_uid is None and step_description is None and step_id is None:
+        step_info = {"step_id": None, "step_label": None}
+    else:
+        step_description = step_description or "Step"
+        step_id = step_id or ""
+        
+        if step_description != "Step":
+            step_label = f"Step: {step_description}, ID: {step_id}"
+        else:
+            step_label = f"Step, ID: {step_id}"
+        
+        step_info = {
+            "step_id": step_uid or "",
+            "step_label": step_label
+        }
     
     return DeviceViewerMessageModel(
         channels_activated=channels_activated,
