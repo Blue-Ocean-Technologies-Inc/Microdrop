@@ -1,8 +1,10 @@
-from traits.api import Property, Str, Enum, observe, Instance
+from traits.api import Property, Str, Enum, observe, Instance, Bool
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 
 class MainModel(RouteLayerManager, Electrodes):
+
+    # TODO: Move all RouteLayerManager and Electrodes related properties and methods to this class for better comprehension
 
     # ---------------- Model Traits -----------------------
 
@@ -11,13 +13,17 @@ class MainModel(RouteLayerManager, Electrodes):
     # Edit-Draw: Same as edit except we switch to draw on mouserelease
     # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
     # Merge: User can only merge paths. They cannot edit.
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit")
+    # Channel-Edit: User can edit the channel of an electrode.
+    # Display: User can only view the device. No editing allowed.
+    # To change the mode, set the mode property and clean up any references/inconsistencies
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display")
 
     mode_name = Property(Str, observe="mode")
+    editable = Property(Bool, observe="mode")
 
-    message = Str("")
+    message = Str("") # Message to display in the table view
 
-    step_id = Instance(str, allow_none=True)
+    step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
 
     # ------------------------- Properties ------------------------
 
@@ -30,7 +36,10 @@ class MainModel(RouteLayerManager, Electrodes):
             "merge": "Merge",
             "channel-edit": "Channel Edit"
         }.get(self.mode, "Error")
-    
+
+    def _get_editable(self):
+        return self.mode != "display"
+
     # ------------------------ Methods ---------------------------------
 
     def reset(self):

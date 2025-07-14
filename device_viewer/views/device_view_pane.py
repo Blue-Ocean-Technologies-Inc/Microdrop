@@ -154,9 +154,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     
     @observe("model.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        logger.info("Sending electrode update")
-        self.publish_electrode_update()
-        logger.info("Electrode update sent")
+        if self.model.step_id is None: # Only send electrode updates if we are in free mode (no step_id)
+            logger.info("Sending electrode update")
+            self.publish_electrode_update()
+            logger.info("Electrode update sent")
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
@@ -189,7 +190,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Apply routes
         for route, color in message_model.routes:
-            self.model.add_layer(Route(route=route.copy(), channel_map=self.model.channels_electrode_ids_map), None, color)
+            self.model.add_layer(Route(route=route.copy()), None, color)
+        self.model.selected_layer = None
 
         self._undoing = False  # Re-enable undo/redo after reset
         

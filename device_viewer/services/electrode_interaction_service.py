@@ -71,7 +71,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         '''Handle a route segment being drawn or first electrode being added'''
         if self.model.mode in ("edit", "edit-draw", "draw"):
             if self.model.mode == "draw": # Create a new layer
-                self.model.add_layer(Route(route=[from_id, to_id], channel_map=self.model.channels_electrode_ids_map))
+                self.model.add_layer(Route(route=[from_id, to_id]))
                 self.model.selected_layer = self.model.layers[-1] # Select the route we just added
                 self.model.mode = "edit-draw" # We now want to extend the route we just made
             else: # In some edit mode, try to modify currently selected layer
@@ -87,7 +87,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if current_route == None: return
         
         if current_route.can_remove(from_id, to_id):
-            new_routes = [Route(route_list, channel_map=current_route.channel_map) for route_list in current_route.remove_segment(from_id, to_id)]
+            new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
             self.model.replace_layer(self.model.selected_layer, new_routes)
     
     def handle_endpoint_erase(self, electrode_id):
@@ -107,7 +107,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_autoroute_start(self, from_id): # Run when the user enables autorouting an clicks on an electrode
         routes = [layer.route for layer in self.model.layers]
         self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.model.svg_model.neighbours) # Run the BFS and cache the result dict
-        self.model.autoroute_layer = RouteLayer(route=Route(channel_map=self.model.channels_electrode_ids_map), color=AUTOROUTE_COLOR)
+        self.model.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
 
     def handle_autoroute(self, to_id):
         self.model.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy() # Display cached result from BFS

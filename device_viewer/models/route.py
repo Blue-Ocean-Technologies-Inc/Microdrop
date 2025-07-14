@@ -1,3 +1,4 @@
+from typing import Any
 from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Property, DelegatesTo
 from pyface.undo.api import UndoManager
 from queue import Queue
@@ -12,18 +13,16 @@ class Route(HasTraits):
     def _route_default(self):
         return []
 
-    def __init__(self, route: list = [], channel_map={}, neighbors={}):
+    def __init__(self, route: list = []):
         self.route = route
-        self.channel_map = channel_map
-        self.neighbors = neighbors
 
-    def get_channel_from_id(self, id):
-        for key, value in self.channel_map.items():
+    def get_channel_from_id(self, id, channel_map):
+        for key, value in channel_map.items():
             if id in value:
                 return key
         return None
 
-    def get_segments(self):
+    def get_segments(self) -> list[tuple]:
         '''Returns list of segments from current route'''
         return list(zip(self.route, self.route[1:]))
 
@@ -34,28 +33,29 @@ class Route(HasTraits):
         else:
             return [self.route[0], self.route[-1]]        
 
-    def is_loop(self):
+    def is_loop(self) -> bool:
         '''Return True if the path is a loop'''
         return len(self.route) >= 2 and self.route[0] == self.route[-1]
-    
-    def count_loops(self):
+
+    def count_loops(self) -> int:
         '''Count how many times a path loops'''
         return self.route.count(self.route[0])-1
     
-    def get_name(self):
+    def get_name(self, channel_map: dict[int, list]) -> str:
+        # channel_map is a map of channel id to list of electrode ids
         if len(self.route) == 0:
             return "Empty route"
         elif self.is_loop():
             loop_count = self.count_loops()
             if loop_count > 1:
-                return f"{loop_count}x loop at {self.get_channel_from_id(self.route[0])}"
+                return f"{loop_count}x loop at {self.get_channel_from_id(self.route[0], channel_map)}"
             else:
-                return f"Loop at {self.get_channel_from_id(self.route[0])}"
+                return f"Loop at {self.get_channel_from_id(self.route[0], channel_map)}"
         else:
-            return f"Path from {self.get_channel_from_id(self.route[0])} to {self.get_channel_from_id(self.route[-1])}"
+            return f"Path from {self.get_channel_from_id(self.route[0], channel_map)} to {self.get_channel_from_id(self.route[-1], channel_map)}"
 
     @staticmethod
-    def is_segment(from_a, to_a, from_b, to_b):
+    def is_segment(from_a, to_a, from_b, to_b) -> bool:
         '''Returns if segment a is equivalent to segment b (equal or equal reversed)'''
         return (from_a == from_b and to_a == to_b) or (from_a == to_b and to_a == from_b)
     
@@ -66,7 +66,7 @@ class Route(HasTraits):
                 return True
         return False
     
-    def can_add_segment(self, from_id, to_id):
+    def can_add_segment(self, from_id, to_id) -> bool:
         '''Returns if this path can accept a given segment'''
         # We can currently only add to the ends of routes
         if len(self.route) == 0:
@@ -75,7 +75,7 @@ class Route(HasTraits):
         endpoints = self.get_endpoints()
         return to_id == endpoints[0] or from_id in self.route
     
-    def can_merge(self, other: "Route"):
+    def can_merge(self, other: "Route") -> bool:
         '''Returns if other can be merged with the current route'''
         self_endpoints = self.get_endpoints()
         other_endpoints = other.get_endpoints()
@@ -115,11 +115,11 @@ class Route(HasTraits):
             
             self.route = new_route
 
-    def can_remove(self, from_id, to_id):
+    def can_remove(self, from_id, to_id) -> bool:
         '''Returns true if the segment (from_id, to_id) can be removed'''
         return (from_id, to_id) in self.get_segments()
 
-    def remove_segment(self, from_id, to_id):
+    def remove_segment(self, from_id, to_id) -> list[list]:
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
         if len(self.route) == 0:
             return [[]]
@@ -159,7 +159,7 @@ class Route(HasTraits):
         return list(filter(lambda route: len(route) > 1, new_routes)) # Remove empty/singular routes
     
     @staticmethod
-    def find_shortest_paths(from_id, existing_routes: list["Route"], neighbors: dict) -> list:
+    def find_shortest_paths(from_id, existing_routes: list["Route"], neighbors: dict) -> dict[Any, list]:
         # Run BFS using the stored neighbors/coordinates to get the shortest path (in terms of nodes) from from_id to all other nodes
         # Under the constraints that all nodes in valid paths are at least one neighbor away from any existing routes
         
@@ -220,27 +220,20 @@ class Route(HasTraits):
     def invert(self):
         self.route.reverse()
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Route path={self.route}>"
 
 class RouteLayer(HasTraits):
     visible = Bool(True)
-    name = String()
     
     # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
     is_selected = Bool(False) # Needed to show selectedness in the TableEditor
     merge_in_progress = Bool(False)
 
     # Needs to be passed
-    route = Instance(Route) # Actual route model
-    color = String() # String that can be passed to QColor
-    
-    def _name_default(self):
-        return self.route.get_name()
-
-    @observe("route.route.items")
-    def _route_path_updated(self, event):
-        self.name = self.route.get_name()
+    route = Instance(Route, Route()) # Actual route model
+    color = String("red") # String that can be passed to QColor
+    name = String("Unnamed Route") # Name of the route, used in the table editor
 
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
@@ -292,14 +285,14 @@ class RouteLayerManager(HasTraits):
         if color == None:
             color = self.get_available_color()
         if index == None:
-            self.layers.append(RouteLayer(route=route, color=color))
+            self.layers.append(RouteLayer(route=route, color=color, name=route.get_name(self.channels_electrode_ids_map)))
         else:
-            self.layers.insert(index, RouteLayer(route=route, color=color))
+            self.layers.insert(index, RouteLayer(route=route, color=color, name=route.get_name(self.channels_electrode_ids_map)))
 
     def merge_layer(self, other_layer) -> bool:
         '''Try to merge other_layer with layer_to_merge. Returns boolean indicating operation's success'''
         if self.layer_to_merge.route.can_merge(other_layer.route):
-            new_route = Route(route=self.layer_to_merge.route.merge(other_layer.route), channel_map=self.layer_to_merge.route.channel_map)
+            new_route = Route(route=self.layer_to_merge.route.merge(other_layer.route))
             index = self.replace_layer(self.layer_to_merge, [new_route]) # This should set layer_to_merge to None (for consistency) and mode to something else
             self.layer_to_merge = self.layers[index] # ...so set it back
             self.mode = 'merge'
@@ -327,6 +320,16 @@ class RouteLayerManager(HasTraits):
             return None
     
     # --------------------- Observers ------------------------------
+    @observe("layers.items.route.route.items")
+    @observe("channels_electrode_ids_map.items")
+    def update_route_label(self, event):
+        for layer in self.layers:
+            if layer.route.route:
+                # Update the name of the route layer based on the current channel map
+                layer.name = layer.route.get_name(self.channels_electrode_ids_map)
+            else:
+                layer.name = "Null route"
+
     @observe('layers.items')
     def _layers_items_changed(self, event):
         if self.layer_to_merge != None and self.layer_to_merge not in self.layers: # Clean up merge reference
