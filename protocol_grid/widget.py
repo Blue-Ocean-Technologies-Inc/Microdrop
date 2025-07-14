@@ -110,6 +110,10 @@ class PGCWidget(QWidget):
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return        
+        
+        self._processing_device_viewer_message = True
+        self._programmatic_change = True
+
         scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
         
@@ -122,28 +126,27 @@ class PGCWidget(QWidget):
             if not target_item:
                 return  # no step found with matching UID
             
-            self._processing_device_viewer_message = True
-            
-            # Temporarily store the current selection state
             current_step_id = self._last_selected_step_id
+            current_published_id = self._last_published_step_id
             
             device_state = device_state_from_device_viewer_message(dv_msg)
             target_item.setData(device_state, Qt.UserRole + 100)
-
-            self._programmatic_change = True
+            
             self.model_to_state()
             
             # Restore the selection state to prevent false "deselection" detection
             self._last_selected_step_id = current_step_id
-            # self.state_to_model()
+            self._last_published_step_id = current_published_id
+            
+            # Restore scroll and selection BEFORE clearing blocking flags
+            self.restore_scroll_positions(scroll_pos)
+            self.restore_selection(saved_selection)
+        
         except Exception as e:
             logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
         finally:
-            self._programmatic_change = False
             self._processing_device_viewer_message = False
-        
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
+            self._programmatic_change = False        
     # -------------------------------------
 
     # ---------- Protocol Runner Methods ----------
@@ -178,23 +181,9 @@ class PGCWidget(QWidget):
                     cell.setBackground(Qt.blue)
                     cell.setForeground(Qt.white)
 
-        if self._protocol_running and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-            id_col = protocol_grid_fields.index("ID")
-            desc_col = protocol_grid_fields.index("Description")
-            id_item = parent.child(row, id_col)
-            desc_item = parent.child(row, desc_col)
-            step_id = id_item.text() if id_item else None
-            step_description = desc_item.text() if desc_item else "Step"
-            device_state = item.data(Qt.UserRole + 100)
-            if not device_state:
-                device_state = DeviceState()
-            step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
-            msg_model = device_state_to_device_viewer_message(
-                device_state, step_uid, step_description, step_id, False
-            )
-            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-            logger.info("message: %s", msg_model.serialize())
-            self._last_published_step_id = step_id
+        if self._protocol_running and item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            published_id = self._publish_step_message(item, path, editable=False)
+            self._last_published_step_id = published_id
 
     def clear_highlight(self):
         dark = is_dark_mode()
@@ -558,6 +547,33 @@ class PGCWidget(QWidget):
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize())
         logger.info("Empty message sent: %s", empty_msg.serialize())
+
+    def _publish_step_message(self, step_item, step_path, editable=True):
+        if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+        
+        parent = step_item.parent() or self.model.invisibleRootItem()
+        row = step_item.row()
+        id_col = protocol_grid_fields.index("ID")
+        desc_col = protocol_grid_fields.index("Description")
+        id_item = parent.child(row, id_col)
+        desc_item = parent.child(row, desc_col)
+        step_id = id_item.text() if id_item else ""
+        step_description = desc_item.text() if desc_item else "Step"
+        
+        device_state = step_item.data(Qt.UserRole + 100)
+        if not device_state:
+            device_state = DeviceState()
+        
+        step_uid = step_item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
+        
+        msg_model = device_state_to_device_viewer_message(
+            device_state, step_uid, step_description, step_id, editable
+        )
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        logger.info("message: %s", msg_model.serialize())
+        
+        return step_id
     # ---------------------------------------------
 
     def create_buttons(self):
@@ -607,8 +623,7 @@ class PGCWidget(QWidget):
         if hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message:
             return
         if self._programmatic_change:
-            return
-        print("on_selection_changed called past processing_device_viewer_message check")
+            return            
         if self._protocol_running:
             return
         selected_paths = self.get_selected_paths()
@@ -627,28 +642,16 @@ class PGCWidget(QWidget):
                 parent = item.parent() or self.model.invisibleRootItem()
                 row = item.row()
                 id_col = protocol_grid_fields.index("ID")
-                desc_col = protocol_grid_fields.index("Description")
                 id_item = parent.child(row, id_col)
-                desc_item = parent.child(row, desc_col)
-                step_id = id_item.text() if id_item else None
-                step_description = desc_item.text() if desc_item else "Step"
-                current_step_id = step_id
+                current_step_id = id_item.text() if id_item else None
                 
-                if step_id and self._last_published_step_id != step_id:
-                    device_state = item.data(Qt.UserRole + 100)
-                    if not device_state:
-                        device_state = DeviceState()
-                    step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
-                    msg_model = device_state_to_device_viewer_message(
-                        device_state, step_uid, step_description, step_id, True
-                    )
-                    publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-                    logger.info("message: %s", msg_model.serialize())
-                    self._last_published_step_id = step_id
+                # publish only if this is a different step
+                if current_step_id and self._last_published_step_id != current_step_id:
+                    published_id = self._publish_step_message(item, path, editable=True)
+                    self._last_published_step_id = published_id        
         
         # check if transitioned from a step selected to NO step selected
         if self._last_selected_step_id and not current_step_id:
-            print("Transitioned from a step selected to NO step selected")
             self._send_empty_device_state_message()
             self._last_published_step_id = None
             
@@ -749,10 +752,11 @@ class PGCWidget(QWidget):
             
     def sync_to_state(self):
         """Immediately sync model to state."""
+        if hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message:
+            return
         if not self._programmatic_change:
             self.model_to_state()
-            if not (hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message):
-                self.protocolChanged.emit()
+            self.protocolChanged.emit()
             
     def model_to_state(self):
         self.state.sequence.clear()
