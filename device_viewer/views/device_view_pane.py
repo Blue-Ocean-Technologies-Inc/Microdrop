@@ -150,7 +150,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
-        self.debounce_timer.start(700) # Start timeout for sending message
+            if not self.model.editable:
+                self.undo() # Revert changes if not editable
+            else:
+                self.debounce_timer.start(700) # Start timeout for sending message
     
     @observe("model.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
@@ -178,8 +181,16 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
+        print(message_model.step_info)
+
         # Apply step ID
         self.model.step_id = message_model.step_id
+
+        # Apply step label
+        self.model.step_label = message_model.step_label
+
+        # Apply editable state
+        self.model.editable = message_model.editable
 
         # Apply electrode channel mapping
         for electrode_id, electrode in self.model.electrodes.items():

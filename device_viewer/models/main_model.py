@@ -24,6 +24,7 @@ class MainModel(RouteLayerManager, Electrodes):
     message = Str("") # Message to display in the table view
 
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
+    step_label = Instance(str, allow_none=True) # The label of the current step, if any.
 
     # ------------------------- Properties ------------------------
 
@@ -34,11 +35,18 @@ class MainModel(RouteLayerManager, Electrodes):
             "edit": "Edit",
             "auto": "Autoroute",
             "merge": "Merge",
-            "channel-edit": "Channel Edit"
+            "channel-edit": "Channel Edit",
+            "display": "Display"
         }.get(self.mode, "Error")
 
     def _get_editable(self):
         return self.mode != "display"
+    
+    def _set_editable(self, value: bool):
+        if not value:
+            self.mode = "display"
+        elif self.mode == "display":
+            self.mode = "edit"  # Default to edit mode if editable is set to True
 
     # ------------------------ Methods ---------------------------------
 
