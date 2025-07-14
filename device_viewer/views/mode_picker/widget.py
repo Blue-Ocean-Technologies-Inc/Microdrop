@@ -1,3 +1,4 @@
+from turtle import undo
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QLabel
 from PySide6.QtGui import QFont
 from pathlib import Path
@@ -8,6 +9,15 @@ from microdrop_style.colors import SECONDARY_SHADE, WHITE
 
 MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent.parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
 ICON_FONT_FAMILY = "Material Symbols Outlined"
+
+def if_editable(func):
+    """Decorator to check if the model is editable before executing the function."""
+    def wrapper(self, *args, **kwargs):
+        if not self.model.editable:
+            self.sync_buttons_and_label()  # Ensure buttons and label are in sync with the model state
+            return
+        return func(self, *args, **kwargs)
+    return wrapper
 
 class ModePicker(QWidget):
     def __init__(self, model, pane):
@@ -74,6 +84,9 @@ class ModePicker(QWidget):
         self.button_redo.clicked.connect(lambda: self.redo())
         self.model.observe(self.on_mode_changed, "mode")
 
+    def on_mode_changed(self, event):
+            self.sync_buttons_and_label()
+
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
         self.button_draw.setChecked(self.model.mode in ("draw", "edit-draw"))
@@ -82,20 +95,22 @@ class ModePicker(QWidget):
         self.button_channel_edit.setChecked(self.model.mode == "channel-edit")
         self.mode_label.setText(f"Mode: {self.model.mode_name}")
 
+    @if_editable
     def set_mode(self, mode):
         self.model.mode = mode
 
+    @if_editable
     def undo(self):
         self.pane.undo()
-    
+
+    @if_editable
     def redo(self):
         self.pane.redo()
 
-    def on_mode_changed(self, event):
-        self.sync_buttons_and_label()
-
+    @if_editable
     def reset_electrodes(self):
         self.model.reset_electrode_states()
 
+    @if_editable
     def reset_routes(self):
         self.model.reset_route_manager()
