@@ -123,7 +123,8 @@ class PGCWidget(QWidget):
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             
-            if dv_msg.step_id != selected_step_uid:
+            # check if UIDs match and both are non-empty
+            if not dv_msg.step_id or not selected_step_uid or dv_msg.step_id != selected_step_uid:
                 return
                 
             device_state = device_state_from_device_viewer_message(dv_msg)
@@ -171,13 +172,18 @@ class PGCWidget(QWidget):
 
         if self._protocol_running and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
             id_col = protocol_grid_fields.index("ID")
+            desc_col = protocol_grid_fields.index("Description")
             id_item = parent.child(row, id_col)
+            desc_item = parent.child(row, desc_col)
             step_id = id_item.text() if id_item else None
+            step_description = desc_item.text() if desc_item else "Step"
             device_state = item.data(Qt.UserRole + 100)
             if not device_state:
                 device_state = DeviceState()
             step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
-            msg_model = device_state_to_device_viewer_message(device_state, step_uid)
+            msg_model = device_state_to_device_viewer_message(
+                device_state, step_uid, step_description, step_id, False
+            )
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
             logger.info("message: %s", msg_model.serialize())
             self._last_published_step_id = step_id
@@ -569,20 +575,24 @@ class PGCWidget(QWidget):
             path = selected_paths[0]
             item = self.get_item_by_path(path)
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                step_id = None
-                device_state = item.data(Qt.UserRole + 100)
-                if device_state and hasattr(device_state, "parameters"):
-                    step_id = device_state.parameters.get("ID")
-                if not step_id:
-                    id_col = protocol_grid_fields.index("ID")
-                    id_item = item.parent().child(item.row(), id_col) if item.parent() else self.model.invisibleRootItem().child(item.row(), id_col)
-                    if id_item:
-                        step_id = id_item.text()
+                # step info
+                parent = item.parent() or self.model.invisibleRootItem()
+                row = item.row()
+                id_col = protocol_grid_fields.index("ID")
+                desc_col = protocol_grid_fields.index("Description")
+                id_item = parent.child(row, id_col)
+                desc_item = parent.child(row, desc_col)
+                step_id = id_item.text() if id_item else None
+                step_description = desc_item.text() if desc_item else "Step"
+                
                 if step_id and self._last_published_step_id != step_id:
+                    device_state = item.data(Qt.UserRole + 100)
                     if not device_state:
                         device_state = DeviceState()
                     step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
-                    msg_model = device_state_to_device_viewer_message(device_state, step_uid)
+                    msg_model = device_state_to_device_viewer_message(
+                        device_state, step_uid, step_description, step_id, True
+                    )
                     publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
                     logger.info("message: %s", msg_model.serialize())
                     self._last_published_step_id = step_id
