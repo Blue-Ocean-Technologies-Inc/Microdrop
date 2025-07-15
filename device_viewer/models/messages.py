@@ -7,7 +7,7 @@ class DeviceViewerMessageModel():
     The actual models are way too large and contain lots of GUI-specific values that don't really need to be saved/transmitted
     '''
     def __init__(self, channels_activated: dict[int, bool], routes: list[tuple[list[str], str]],
-                 id_to_channel: dict[str, int], step_info: dict[str, str], editable: bool=True):
+                 id_to_channel: dict[str, int], step_info: dict[str, str], editable: bool=True, uuid: str=""):
         # A map from channel number to whether it is activated (not as part of a route)
         self.channels_activated = channels_activated
         # An in-order list of tuples (route, color), where route is a list of electrode ids in the path
@@ -24,6 +24,7 @@ class DeviceViewerMessageModel():
             self.step_id = None
             self.step_label = None
         self.editable = editable # True (editing) or False (running)
+        self.uuid = uuid # A unique identifier for the model, used to differentiate messages from different models
  
     def get_routes_with_ids(self) -> list[list[str]]:
         """Returns a list of just the electrode_id parts of each route"""
@@ -39,7 +40,8 @@ class DeviceViewerMessageModel():
             "routes": self.routes,
             "id_to_channel": self.id_to_channel,
             "step_info": self.step_info,
-            "editable": self.editable
+            "editable": self.editable,
+            "uuid": self.uuid
         }
     @staticmethod
     def deserialize(string: str) -> 'DeviceViewerMessageModel':
@@ -52,7 +54,8 @@ class DeviceViewerMessageModel():
                 obj["routes"], 
                 obj["id_to_channel"], 
                 obj["step_info"], 
-                obj.get("editable", True)
+                obj.get("editable", True),
+                obj.get("uuid", "")
             )
         except KeyError:
             raise ValueError("Provided string is not a valid Device Viewer message")

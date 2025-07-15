@@ -1,4 +1,5 @@
 # enthought imports
+from math import log
 import dramatiq
 from traits.api import Instance, observe, Any, Str, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
@@ -16,6 +17,7 @@ from pyface.undo.api import UndoManager, CommandStack
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
+from microdrop_utils.timestamped_message import TimestampedMessage
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
@@ -59,6 +61,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     # Variables
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
+    _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
     message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
@@ -73,7 +76,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
-        self.publish_model_message() # First message when all models are initialised
 
     def _model_default(self):
         model = MainModel()
@@ -98,20 +100,22 @@ class DeviceViewerDockPane(TraitsDockPane):
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
         if message == "True" and self.model:
+            self.message_buffer = gui_models_to_message_model(self.model).serialize()
             self.publish_model_message()
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
-        self.device_view.display_state_signal.emit(message_model_serial)
+        if self.model and self.device_view:
+            self.device_view.display_state_signal.emit(message_model_serial)
 
-    # def _on_state_changed_triggered(self, message):
-    #     """
-    #     Handle state changes from the device viewer.
-    #     """
-    #     logger.debug(f"Device viewer state changed: {message}")
-    #     if self.model:
-    #         self.apply_message_model(message)
+    def _on_state_changed_triggered(self, message: TimestampedMessage):
+        """
+        Handle state changes from the device viewer.
+        """
+        logger.debug(f"Device viewer state changed: {message}")
+        if self.model and self.device_view:
+            self.device_view.display_state_signal.emit(message)
 
 
     # ------- Device View class methods -------------------------
@@ -164,9 +168,11 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.add_traits_event_to_undo_stack(event)
             if not self.model.editable:
                 self.undo() # Revert changes if not editable
-            else:
-                self.message_buffer = gui_models_to_message_model(self.model).serialize()
-                self.debounce_timer.start(700) # Start timeout for sending message
+                return
+        if not self._disable_state_messages:
+            self.message_buffer = gui_models_to_message_model(self.model).serialize()
+            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
+            self.debounce_timer.start(200) # Start timeout for sending message
     
     @observe("model.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
@@ -187,14 +193,15 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def apply_message_model(self, message_model_serial: str):
         logger.debug(f"Display state triggered with model: {message_model_serial}")
-        # Reset the model to clear any existing routes and channels
-        self.undo_manager.active_stack.clear()  # Clear the undo stack
-        self._undoing = True  # Prevent changes from being added to the undo stack
-        self.model.reset()
 
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
-        print(message_model.step_info)
+        if message_model.uuid == self.model.uuid:
+            return  # Ignore messages that are from the same model
+
+        # Reset the model to clear any existing routes and channels
+        self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
+        self.model.reset()
 
         # Apply step ID
         self.model.step_id = message_model.step_id
@@ -217,9 +224,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.add_layer(Route(route=route.copy()), None, color)
         self.model.selected_layer = None
 
-        self._undoing = False  # Re-enable undo/redo after reset
-        
-
+        self._disable_state_messages = False  # Re-enable state messages after reset
+        self.undo_manager.active_stack.clear()  # Clear the undo stack
 
     def publish_model_message(self):
         logger.debug(f"Publishing message for updated viewer state {self.message_buffer}")
