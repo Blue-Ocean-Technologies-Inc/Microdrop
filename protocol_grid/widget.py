@@ -47,7 +47,8 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
-        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)       
+        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)    
+        self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)   
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -181,10 +182,6 @@ class PGCWidget(QWidget):
                     cell.setBackground(Qt.blue)
                     cell.setForeground(Qt.white)
 
-        if self._protocol_running and item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-            published_id = self._publish_step_message(item, path, editable=False)
-            self._last_published_step_id = published_id
-
     def clear_highlight(self):
         dark = is_dark_mode()
         fg = QBrush(QColor("white" if dark else "black"))
@@ -220,6 +217,14 @@ class PGCWidget(QWidget):
 
     def on_protocol_paused(self):
         self.navigation_bar.btn_play.setText("▶ Resume")
+    
+    def on_protocol_error(self, error_message):
+        logger.info(f"Protocol execution error: {error_message}")
+        self.clear_highlight()
+        self.reset_status_bar()
+        self._protocol_running = False
+        self.navigation_bar.btn_play.setText("▶ Play")
+        self._update_navigation_buttons_state()
 
     def navigate_to_first_step(self):
         if self._protocol_running:
@@ -310,9 +315,11 @@ class PGCWidget(QWidget):
                     start_idx = idx
                     break
 
-            run_order = flat_run[start_idx:]
-            for _ in range(repeat_n - 1):
-                run_order.extend(flat_run)
+            # Repeat Protocol 
+            run_order = []
+            for repeat_idx in range(repeat_n):
+                current_run = flat_run[start_idx:] if repeat_idx == 0 else flat_run
+                run_order.extend(current_run)
 
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.set_run_order(run_order)
@@ -320,10 +327,6 @@ class PGCWidget(QWidget):
             self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
             self._update_navigation_buttons_state()
-
-            if run_order:
-                first_step_path = run_order[0]["path"]
-                self.highlight_step(first_step_path)
 
     def stop_protocol(self):
         self.protocol_runner.stop()
