@@ -57,6 +57,13 @@ class ProtocolRunnerController(QObject):
         self._phase_timer.setSingleShot(True)
         self._phase_timer.timeout.connect(self._execute_next_phase)
 
+        self._pause_time = None
+        self._phase_start_time = None
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
+
     def start(self):
         if self._is_running:
             return
@@ -71,6 +78,14 @@ class ProtocolRunnerController(QObject):
         self._elapsed_time = 0.0
         self._step_elapsed_time = 0.0
         self._step_start_time = time.time()
+
+        self._pause_time = None
+        self._phase_start_time = None
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
+
         if not self._run_order:
             self.signals.protocol_finished.emit()
             return
@@ -82,12 +97,38 @@ class ProtocolRunnerController(QObject):
         if not self._is_running or self._is_paused:
             return
         self._is_paused = True
+        self._pause_time = time.time()
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
         
         self._elapsed_time += time.time() - self._start_time
         self._step_elapsed_time += time.time() - self._step_start_time
+        
+        if self._phase_start_time and self._current_phase_index > 0:
+            phase_elapsed = time.time() - self._phase_start_time
+            current_phase_item = self._current_execution_plan[self._current_phase_index - 1]
+            phase_duration = current_phase_item["duration"]
+            self._remaining_phase_time = max(0, phase_duration - phase_elapsed)
+            self._was_in_phase = True
+            self._paused_phase_index = self._current_phase_index - 1
+            logger.info(f"Paused in phase {self._paused_phase_index + 1} with {self._remaining_phase_time:.2f}s remaining")
+        else:
+            self._remaining_phase_time = 0.0
+            self._was_in_phase = False
+            self._paused_phase_index = self._current_phase_index
+        
+        if self._current_index < len(self._run_order):
+            step_info = self._run_order[self._current_index]
+            step = step_info["step"]
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            if not device_state:
+                device_state = PathExecutionService.get_empty_device_state()
+            
+            total_step_time = PathExecutionService.calculate_step_execution_time(step, device_state)
+            self._remaining_step_time = max(0, total_step_time - self._step_elapsed_time)
+            logger.info(f"Paused with {self._remaining_step_time:.2f}s remaining for step")
+        
         self.signals.protocol_paused.emit()
 
     def resume(self):
@@ -95,11 +136,27 @@ class ProtocolRunnerController(QObject):
             return
         self._is_paused = False
         self._status_timer.start()
-        self._start_time = time.time()
-        self._step_start_time = time.time()
         
-        # continue from current phase
-        self._execute_next_phase()
+        current_time = time.time()
+        self._start_time = current_time
+        self._step_start_time = current_time - self._step_elapsed_time
+        
+        if self._was_in_phase and self._remaining_phase_time > 0:
+            self._phase_start_time = current_time
+            self._current_phase_index = self._paused_phase_index + 1
+            self._phase_timer.start(int(self._remaining_phase_time * 1000))
+            logger.info(f"Resuming phase {self._paused_phase_index + 1} with {self._remaining_phase_time:.2f}s remaining")
+        else:
+            self._current_phase_index = self._paused_phase_index
+            self._execute_next_phase()
+        
+        # restart step timer with remaining time
+        if self._remaining_step_time > 0:
+            self._timer.start(int(self._remaining_step_time * 1000))
+            logger.info(f"Resuming step with {self._remaining_step_time:.2f}s remaining")
+        
+        self._pause_time = None
+        self._was_in_phase = False
 
     def stop(self):
         self._is_running = False
@@ -117,6 +174,13 @@ class ProtocolRunnerController(QObject):
         self._current_step_timer = None
         self._current_execution_plan = []
         self._current_phase_index = 0
+
+        self._pause_time = None
+        self._phase_start_time = None
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
@@ -152,6 +216,11 @@ class ProtocolRunnerController(QObject):
             
             self._step_start_time = time.time()
             self._step_elapsed_time = 0.0
+
+            self._remaining_step_time = 0.0
+            self._remaining_phase_time = 0.0
+            self._was_in_phase = False
+            self._paused_phase_index = 0
 
             step_timeout = PathExecutionService.calculate_step_execution_time(step, device_state)
             
@@ -200,7 +269,8 @@ class ProtocolRunnerController(QObject):
             )
             
             logger.info(f"Published electrode state immediately: {msg_model.serialize()}")
-            
+
+            self._phase_start_time = time.time()
             self._current_phase_index += 1
             
             duration_ms = int(plan_item["duration"] * 1000)
@@ -227,6 +297,12 @@ class ProtocolRunnerController(QObject):
         # Reset phase tracking
         self._current_execution_plan = []
         self._current_phase_index = 0
+
+        self._phase_start_time = None
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
         
         self._current_index += 1
         
@@ -248,17 +324,24 @@ class ProtocolRunnerController(QObject):
         self.signals.protocol_finished.emit()
 
     def _emit_status_update(self):
-        if not self._is_running or self._is_paused or not self._run_order:
+        if not self._is_running or not self._run_order:
             return
         step_info = self._run_order[self._current_index]
         step = step_info["step"]
         rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
         step_total = len(self._run_order)
         step_idx = self._current_index + 1
+        
+        if self._is_paused:
+            total_time = self._elapsed_time
+            step_time = self._step_elapsed_time
+        else:
+            total_time = self._elapsed_time + (time.time() - self._start_time)
+            step_time = time.time() - self._step_start_time
+        
         status = {
-            "total_time": self._elapsed_time + (time.time() - self._start_time
-                                                 if self._is_running and not self._is_paused else 0),
-            "step_time": time.time() - self._step_start_time if not self._is_paused else self._step_elapsed_time,
+            "total_time": total_time,
+            "step_time": step_time,
             "step_idx": step_idx,
             "step_total": step_total,
             "step_rep_idx": rep_idx,
