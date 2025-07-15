@@ -1,4 +1,5 @@
 from traits.api import Property, Str, Enum, observe, Instance, Bool
+import uuid
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 
@@ -25,6 +26,8 @@ class MainModel(RouteLayerManager, Electrodes):
 
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
+
+    uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
 
     # ------------------------- Properties ------------------------
 
