@@ -43,6 +43,8 @@ class ProtocolRunnerController(QObject):
         self._repeat_protocol_n = 1
         self._current_protocol_repeat = 1
         self._current_step_timer = None
+        self._current_execution_plan = []
+        self._current_phase_index = 0
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -50,6 +52,10 @@ class ProtocolRunnerController(QObject):
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(100)
         self._status_timer.timeout.connect(self._emit_status_update)
+        
+        self._phase_timer = QTimer(self)
+        self._phase_timer.setSingleShot(True)
+        self._phase_timer.timeout.connect(self._execute_next_phase)
 
     def start(self):
         if self._is_running:
@@ -78,6 +84,8 @@ class ProtocolRunnerController(QObject):
         self._is_paused = True
         self._status_timer.stop()
         self._timer.stop()
+        self._phase_timer.stop()
+        
         self._elapsed_time += time.time() - self._start_time
         self._step_elapsed_time += time.time() - self._step_start_time
         self.signals.protocol_paused.emit()
@@ -90,14 +98,16 @@ class ProtocolRunnerController(QObject):
         self._start_time = time.time()
         self._step_start_time = time.time()
         
-        # Continue from current step
-        self._execute_next_step()
+        # continue from current phase
+        self._execute_next_phase()
 
     def stop(self):
         self._is_running = False
         self._is_paused = False
         self._status_timer.stop()
         self._timer.stop()
+        self._phase_timer.stop()
+        
         self._current_index = 0
         self._run_order = []
         self._start_time = None
@@ -105,6 +115,8 @@ class ProtocolRunnerController(QObject):
         self._elapsed_time = 0.0
         self._step_elapsed_time = 0.0
         self._current_step_timer = None
+        self._current_execution_plan = []
+        self._current_phase_index = 0
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
@@ -133,7 +145,10 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Executing step {step.parameters.get('ID', 'Unknown')} with device state: {device_state}")
             
-            self._execute_step_with_immediate_messages(step, device_state)
+            self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+            self._current_phase_index = 0
+            
+            logger.info(f"Execution plan has {len(self._current_execution_plan)} phases")
             
             self._step_start_time = time.time()
             self._step_elapsed_time = 0.0
@@ -142,55 +157,62 @@ class ProtocolRunnerController(QObject):
             
             self._timer.timeout.disconnect()
             self._timer.timeout.connect(lambda: self._on_step_completed(step.parameters.get("UID", "")))
-            self._timer.start(int(step_timeout * 1000))
+            self._timer.start(int(step_timeout * 1000))  # Convert to milliseconds
+            
+            self._execute_next_phase()
             
         except Exception as e:
             logger.error(f"Error executing step: {e}")
             self.signals.protocol_error.emit(str(e))
             self.stop()
 
-    def _execute_step_with_immediate_messages(self, step, device_state):
+    def _execute_next_phase(self):
+        if self._is_paused or not self._is_running:
+            return
+            
+        if self._current_phase_index >= len(self._current_execution_plan):
+            # all phases completed, wait for timeout
+            return
+            
         try:
-            execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+            plan_item = self._current_execution_plan[self._current_phase_index]
             
-            logger.info(f"Execution plan has {len(execution_plan)} phases")
+            logger.info(f"Executing phase {self._current_phase_index + 1}/{len(self._current_execution_plan)}: {plan_item['activated_electrodes']}")
             
-            for i, plan_item in enumerate(execution_plan):
-                logger.info(f"Executing phase {i+1}/{len(execution_plan)}: {plan_item['activated_electrodes']}")
+            step_info = self._run_order[self._current_index]
+            step = step_info["step"]
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            if not device_state:
+                device_state = PathExecutionService.get_empty_device_state()
+            
+            # create and publish message immediately
+            msg_model = PathExecutionService.create_dynamic_device_state_message(
+                device_state, 
+                plan_item["activated_electrodes"], 
+                plan_item["step_uid"],
+                plan_item["step_description"],
+                plan_item["step_id"]
+            )
+            
+            publish_message(
+                topic=PROTOCOL_GRID_DISPLAY_STATE,
+                message=msg_model.serialize()
+            )
+            
+            logger.info(f"Published electrode state immediately: {msg_model.serialize()}")
+            
+            self._current_phase_index += 1
+            
+            duration_ms = int(plan_item["duration"] * 1000)
+            if self._current_phase_index < len(self._current_execution_plan):
+                logger.info(f"Scheduling next phase in {plan_item['duration']} seconds")
+                self._phase_timer.start(duration_ms)
+            else:
+                logger.info(f"Last phase - will complete in {plan_item['duration']} seconds")
+                # timer will handle step completion
                 
-                msg_model = PathExecutionService.create_dynamic_device_state_message(
-                    device_state, 
-                    plan_item["activated_electrodes"], 
-                    plan_item["step_uid"],
-                    plan_item["step_description"],
-                    plan_item["step_id"]
-                )
-                
-                publish_message(
-                    topic=PROTOCOL_GRID_DISPLAY_STATE,
-                    message=msg_model.serialize()
-                )
-                
-                logger.info(f"Published electrode state immediately: {msg_model.serialize()}")
-                
-                # Wait for the duration if not the last phase
-                if i < len(execution_plan) - 1:
-                    logger.info(f"Waiting {plan_item['duration']} seconds")
-                    time.sleep(plan_item["duration"])
-                else:
-                    # For the last phase, schedule completion callback
-                    def schedule_completion():
-                        time.sleep(plan_item["duration"])
-                        if self._is_running and not self._is_paused:
-                            QTimer.singleShot(0, lambda: self._on_step_completed(step.parameters.get("UID", "")))
-                    
-                    # Use a separate thread for the final sleep to avoid blocking
-                    completion_thread = threading.Thread(target=schedule_completion)
-                    completion_thread.daemon = True
-                    completion_thread.start()
-                    
         except Exception as e:
-            logger.error(f"Error in step execution: {e}")
+            logger.error(f"Error in phase execution: {e}")
             self.signals.protocol_error.emit(str(e))
 
     def _on_step_completed(self, step_uid):
@@ -200,6 +222,11 @@ class ProtocolRunnerController(QObject):
         logger.info(f"Step {step_uid} completed")
 
         self._timer.stop()
+        self._phase_timer.stop()
+        
+        # Reset phase tracking
+        self._current_execution_plan = []
+        self._current_phase_index = 0
         
         self._current_index += 1
         
@@ -216,6 +243,8 @@ class ProtocolRunnerController(QObject):
     def _on_protocol_finished(self):
         self._is_running = False
         self._status_timer.stop()
+        self._timer.stop()
+        self._phase_timer.stop()
         self.signals.protocol_finished.emit()
 
     def _emit_status_update(self):
