@@ -48,7 +48,8 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
         self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)    
-        self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)   
+        self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error) 
+        self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)  
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -226,6 +227,33 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setText("▶ Play")
         self._update_navigation_buttons_state()
 
+        # clear selection on error
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+
+    def select_step_by_uid(self, step_uid):
+        """select step by when protocol finishes/stops."""
+        if not step_uid:
+            return
+        
+        step_item, step_path = self._find_step_by_uid(step_uid)
+        
+        if step_item and step_path:
+            self.tree.clearSelection()
+            
+            self._select_step_by_path(step_path)
+            
+            # manually update internal tracking
+            parent = step_item.parent() or self.model.invisibleRootItem()
+            row = step_item.row()
+            id_col = protocol_grid_fields.index("ID")
+            id_item = parent.child(row, id_col)
+            step_id = id_item.text() if id_item else ""
+            
+            self._last_selected_step_id = step_id
+            # didnt update _last_published_step_id here since we want the message to be published
+
     def navigate_to_first_step(self):
         if self._protocol_running:
             return  
@@ -327,6 +355,11 @@ class PGCWidget(QWidget):
             self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
             self._update_navigation_buttons_state()
+            
+            # clear selection when protocol starts
+            self.tree.clearSelection()
+            self._last_selected_step_id = None
+            self._last_published_step_id = None
 
     def stop_protocol(self):
         self.protocol_runner.stop()

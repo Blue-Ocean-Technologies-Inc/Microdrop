@@ -22,6 +22,7 @@ class ProtocolRunnerSignals(QObject):
     protocol_finished = Signal()
     protocol_paused = Signal()
     protocol_error = Signal(str)
+    select_step = Signal(str)  # step_uid
 
 class ProtocolRunnerController(QObject):
     """
@@ -200,6 +201,10 @@ class ProtocolRunnerController(QObject):
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
             
             logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
+            
+            # select the current step that was being executed
+            if step_uid:
+                self.signals.select_step.emit(step_uid)
         
         self._is_running = False
         self._is_paused = False
@@ -398,6 +403,10 @@ class ProtocolRunnerController(QObject):
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
             
             logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
+            
+            # select the last executed step
+            if step_uid:
+                self.signals.select_step.emit(step_uid)
         
         self._is_running = False
         self._status_timer.stop()
