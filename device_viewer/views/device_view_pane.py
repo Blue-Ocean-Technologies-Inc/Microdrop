@@ -201,6 +201,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Reset the model to clear any existing routes and channels
         self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
+        self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
         self.model.reset()
 
         # Apply step ID
@@ -225,6 +226,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.selected_layer = None
 
         self._disable_state_messages = False  # Re-enable state messages after reset
+        self._undoing = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
     def publish_model_message(self):
