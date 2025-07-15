@@ -64,6 +64,8 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
         self._paused_phase_index = 0
 
+        self._unique_step_count = 0
+
     def start(self):
         if self._is_running:
             return
@@ -85,6 +87,11 @@ class ProtocolRunnerController(QObject):
         self._remaining_step_time = 0.0
         self._was_in_phase = False
         self._paused_phase_index = 0
+
+        unique_paths = set()
+        for entry in self._run_order:
+            unique_paths.add(tuple(entry["path"]))
+        self._unique_step_count = len(unique_paths)
 
         if not self._run_order:
             self.signals.protocol_finished.emit()
@@ -159,6 +166,36 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
 
     def stop(self):
+        # send final message of the step that was being executed before stopped
+        if self._is_running and self._current_index < len(self._run_order):
+            current_step_info = self._run_order[self._current_index]
+            current_step = current_step_info["step"]
+            
+            device_state = current_step.device_state if hasattr(current_step, 'device_state') and current_step.device_state else None
+            if not device_state:
+                device_state = PathExecutionService.get_empty_device_state()
+            
+            step_uid = current_step.parameters.get("UID", "")
+            step_description = current_step.parameters.get("Description", "Step")
+            step_id = current_step.parameters.get("ID", "")
+            
+            msg_model = PathExecutionService.create_dynamic_device_state_message(
+                device_state, 
+                device_state.activated_electrodes,
+                step_uid,
+                step_description,
+                step_id
+            )
+            
+            msg_model.editable = True
+            
+            publish_message(
+                topic=PROTOCOL_GRID_DISPLAY_STATE,
+                message=msg_model.serialize()
+            )
+            
+            logger.info(f"Published final stop message: {msg_model.serialize()}")
+        
         self._is_running = False
         self._is_paused = False
         self._status_timer.stop()
@@ -181,6 +218,7 @@ class ProtocolRunnerController(QObject):
         self._remaining_step_time = 0.0
         self._was_in_phase = False
         self._paused_phase_index = 0
+        self._unique_step_count = 0
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
@@ -317,6 +355,36 @@ class ProtocolRunnerController(QObject):
         self.stop()
 
     def _on_protocol_finished(self):
+        # message with last executed step
+        if self._current_index > 0 and self._current_index <= len(self._run_order):
+            last_step_info = self._run_order[self._current_index - 1]
+            last_step = last_step_info["step"]
+            
+            device_state = last_step.device_state if hasattr(last_step, 'device_state') and last_step.device_state else None
+            if not device_state:
+                device_state = PathExecutionService.get_empty_device_state()
+            
+            step_uid = last_step.parameters.get("UID", "")
+            step_description = last_step.parameters.get("Description", "Step")
+            step_id = last_step.parameters.get("ID", "")
+            
+            msg_model = PathExecutionService.create_dynamic_device_state_message(
+                device_state, 
+                device_state.activated_electrodes,
+                step_uid,
+                step_description,
+                step_id
+            )
+            
+            msg_model.editable = True
+            
+            publish_message(
+                topic=PROTOCOL_GRID_DISPLAY_STATE,
+                message=msg_model.serialize()
+            )
+            
+            logger.info(f"Published final protocol message: {msg_model.serialize()}")
+        
         self._is_running = False
         self._status_timer.stop()
         self._timer.stop()
@@ -329,8 +397,20 @@ class ProtocolRunnerController(QObject):
         step_info = self._run_order[self._current_index]
         step = step_info["step"]
         rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
-        step_total = len(self._run_order)
-        step_idx = self._current_index + 1
+        
+        current_path = tuple(step_info["path"])
+        unique_step_position = 1
+        seen_paths = set()
+        
+        for i, entry in enumerate(self._run_order):
+            entry_path = tuple(entry["path"])
+            if entry_path not in seen_paths:
+                seen_paths.add(entry_path)
+                if i <= self._current_index:
+                    unique_step_position = len(seen_paths)
+        
+        step_total = self._unique_step_count
+        step_idx = unique_step_position
         
         if self._is_paused:
             total_time = self._elapsed_time
@@ -346,8 +426,10 @@ class ProtocolRunnerController(QObject):
             "step_total": step_total,
             "step_rep_idx": rep_idx,
             "step_rep_total": rep_total,
-            "recent_step": self._run_order[self._current_index - 1]["step"].parameters.get("Description", "-") if self._current_index > 0 else "-",
-            "next_step": self._run_order[self._current_index + 1]["step"].parameters.get("Description", "-") if self._current_index + 1 < len(self._run_order) else "-",
+            "recent_step": self._run_order[self._current_index - 1]["step"].parameters.get("Description", "-")
+                if self._current_index > 0 else "-",
+            "next_step": self._run_order[self._current_index + 1]["step"].parameters.get("Description", "-")
+                if self._current_index + 1 < len(self._run_order) else "-",
             "protocol_repeat_idx": self._current_protocol_repeat,
             "protocol_repeat_total": self._repeat_protocol_n
         }
