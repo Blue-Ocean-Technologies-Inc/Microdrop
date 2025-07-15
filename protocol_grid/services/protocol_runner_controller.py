@@ -1,6 +1,7 @@
 import dramatiq
 import time
 import uuid
+import json
 from typing import List, Dict, Any
 import threading
 
@@ -10,6 +11,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.protocol_execution_actors import execute_step_actor
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -189,12 +191,15 @@ class ProtocolRunnerController(QObject):
             
             msg_model.editable = True
             
-            publish_message(
-                topic=PROTOCOL_GRID_DISPLAY_STATE,
-                message=msg_model.serialize()
-            )
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
             
-            logger.info(f"Published final stop message: {msg_model.serialize()}")
+            logger.info(f"Published final stop message to device viewer: {msg_model.serialize()}")
+            
+            deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
+            
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
+            
+            logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
         
         self._is_running = False
         self._is_paused = False
@@ -301,12 +306,18 @@ class ProtocolRunnerController(QObject):
                 plan_item["step_id"]
             )
             
-            publish_message(
-                topic=PROTOCOL_GRID_DISPLAY_STATE,
-                message=msg_model.serialize()
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+            
+            logger.info(f"Published electrode state to device viewer: {msg_model.serialize()}")
+            
+            hardware_message = PathExecutionService.create_hardware_electrode_message(
+                device_state, 
+                plan_item["activated_electrodes"]
             )
             
-            logger.info(f"Published electrode state immediately: {msg_model.serialize()}")
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+            
+            logger.info(f"Published electrode state to hardware: {hardware_message}")
 
             self._phase_start_time = time.time()
             self._current_phase_index += 1
@@ -378,12 +389,15 @@ class ProtocolRunnerController(QObject):
             
             msg_model.editable = True
             
-            publish_message(
-                topic=PROTOCOL_GRID_DISPLAY_STATE,
-                message=msg_model.serialize()
-            )
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
             
-            logger.info(f"Published final protocol message: {msg_model.serialize()}")
+            logger.info(f"Published final protocol message to device viewer: {msg_model.serialize()}")
+            
+            deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
+            
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
+            
+            logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
         
         self._is_running = False
         self._status_timer.stop()

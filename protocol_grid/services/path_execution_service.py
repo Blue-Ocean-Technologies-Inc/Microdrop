@@ -1,5 +1,6 @@
 import time
 import copy
+import json
 from typing import List, Dict, Any
 
 from device_viewer.models.messages import DeviceViewerMessageModel
@@ -124,3 +125,51 @@ class PathExecutionService:
     @staticmethod
     def get_empty_device_state() -> DeviceState:
         return DeviceState()
+    
+
+    @staticmethod
+    def create_hardware_electrode_message(device_state: DeviceState, active_electrodes: Dict[str, bool]) -> str:
+        """Create a hardware electrode message for the ELECTRODES_STATE_CHANGE topic."""
+        message_obj = {}
+        
+        # get all available channels from device state
+        all_channels = set()
+        for electrode_id, channel in device_state.id_to_channel.items():
+            all_channels.add(channel)
+        
+        # initialize all channels to False
+        for channel in all_channels:
+            message_obj[str(channel)] = False
+        
+        for electrode_id, activated in active_electrodes.items():
+            if activated:
+                # try direct electrode_id lookup first
+                if electrode_id in device_state.id_to_channel:
+                    channel = device_state.id_to_channel[electrode_id]
+                    message_obj[str(channel)] = True
+                else:
+                    # find electrode by channel number
+                    try:
+                        channel_num = int(electrode_id)
+                        for elec_id, elec_channel in device_state.id_to_channel.items():
+                            if elec_channel == channel_num:
+                                message_obj[str(channel_num)] = True
+                                break
+                    except ValueError:
+                        logger.warning(f"Could not convert electrode_id {electrode_id} to channel for hardware message")
+        
+        return json.dumps(message_obj)
+
+    @staticmethod
+    def create_deactivated_hardware_electrode_message(device_state: DeviceState) -> str:
+        message_obj = {}
+        
+        # get all available channels from device state
+        all_channels = set()
+        for electrode_id, channel in device_state.id_to_channel.items():
+            all_channels.add(channel)
+        
+        for channel in all_channels:
+            message_obj[str(channel)] = False
+        
+        return json.dumps(message_obj)

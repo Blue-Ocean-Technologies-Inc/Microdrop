@@ -549,7 +549,7 @@ class PGCWidget(QWidget):
             editable=True
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize())
-        logger.info("Empty message sent: %s", empty_msg.serialize())
+        logger.info("Empty message sent")
 
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
@@ -574,7 +574,7 @@ class PGCWidget(QWidget):
             device_state, step_uid, step_description, step_id, editable
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-        logger.info("message: %s", msg_model.serialize())
+        # logger.info("message: %s", msg_model.serialize())
         
         return step_id
     # ---------------------------------------------
