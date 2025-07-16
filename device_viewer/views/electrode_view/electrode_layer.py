@@ -36,7 +36,7 @@ class ElectrodeLayer():
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
                                                                modifier * electrode.path)
             self.electrode_endpoints[electrode_id] = ElectrodeEndpointItem(electrode_id,
-                    QPointF(self.svg.electrode_centers[electrode_id][0] * modifier, self.svg.electrode_centers[electrode_id][1] * modifier), 2 * modifier)
+                    QPointF(self.svg.electrode_centers[electrode_id][0] * modifier, self.svg.electrode_centers[electrode_id][1] * modifier), 8)
 
         # Create the connections between the electrodes
         connections = {
