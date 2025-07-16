@@ -43,7 +43,9 @@ class DeviceState:
             
             logger.info(f"effective_repetitions={effective_repetitions}")
             
-            max_cycle_length = 0
+            max_open_path_length = 0
+            max_loop_cycle_length = 0
+            
             for i, path in enumerate(self.paths):
                 is_loop = len(path) >= 2 and path[0] == path[-1]
                 logger.info(f"Path {i}: {path}, is_loop={is_loop}")
@@ -62,6 +64,7 @@ class DeviceState:
                             if position >= effective_length:
                                 break
                         cycle_length = phases
+                    max_loop_cycle_length = max(max_loop_cycle_length, cycle_length)
                     logger.info(f"Loop {i} cycle_length={cycle_length}")
                 else:
                     path_length = len(path)
@@ -97,17 +100,19 @@ class DeviceState:
                                 phases = max(1, phases - 1) if phases > 1 else 1
                         
                         cycle_length = phases
+                    max_open_path_length = max(max_open_path_length, cycle_length)
                     logger.info(f"Open path {i} cycle_length={cycle_length}")
-                
-                max_cycle_length = max(max_cycle_length, cycle_length)
             
-            if effective_repetitions > 1:
-                total_phases = (effective_repetitions - 1) * max_cycle_length + max_cycle_length + 1
-            else:
-                total_phases = max_cycle_length + 1
+            # calculate total phases based on the longest duration needed
+            loop_total_phases = 0
+            if max_loop_cycle_length > 0:
+                if effective_repetitions > 1:
+                    loop_total_phases = (effective_repetitions - 1) * max_loop_cycle_length + max_loop_cycle_length + 1
+                else:
+                    loop_total_phases = max_loop_cycle_length + 1
             
+            total_phases = max(loop_total_phases, max_open_path_length)
             calculated_time = total_phases * step_duration
-            logger.info(f"max_cycle_length={max_cycle_length}, total_phases={total_phases}, calculated_time={calculated_time}")
         
         result = max(calculated_time, repeat_duration)
         logger.info(f"Final result: max({calculated_time}, {repeat_duration}) = {result}")
