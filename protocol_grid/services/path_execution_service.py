@@ -13,17 +13,84 @@ logger = get_logger(__name__)
 class PathExecutionService:
 
     @staticmethod
+    def calculate_num_phases_for_path(path_length: int, trail_length: int, trail_overlay: int) -> int:
+        if path_length == 0:
+            return 0
+        
+        step_size = trail_length - trail_overlay
+        if step_size <= 0:
+            # not possible, fallback to current behavior
+            return path_length
+        
+        phases = 0
+        position = 0
+        
+        # cover the entire path
+        while position < path_length:
+            phases += 1
+            position += step_size
+        
+        return phases
+
+    @staticmethod
+    def calculate_trail_phases_for_path(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:
+        """calculate phase electrode indices for a path."""
+        path_length = len(path)
+        if path_length == 0:
+            return []
+        
+        step_size = trail_length - trail_overlay
+        if step_size <= 0:
+            # not possible, fallback to current behavior
+            return [[i] for i in range(path_length)]
+        
+        phases = []
+        position = 0
+        
+        # cover the entire path
+        while position < path_length:
+            phase_electrodes = []
+            for i in range(trail_length):
+                electrode_index = position + i
+                if electrode_index < path_length:
+                    phase_electrodes.append(electrode_index)
+            
+            phases.append(phase_electrodes)
+            position += step_size
+        
+        return phases
+
+    @staticmethod
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState) -> float:
         duration = float(step.parameters.get("Duration", "1.0"))
+        trail_length = int(step.parameters.get("Trail Length", "1"))
+        trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
-        if device_state.has_paths():
-            return duration * device_state.longest_path_length()
-        else:
+        # additional safety check: clamp trail overlay (remove if not needed)
+        trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+        
+        if not device_state.has_paths():
             return duration
+        
+        # calculate maximum phases across all paths (should be no. of phases for longest path)
+        max_phases = 0
+        for path in device_state.paths:
+            path_phases = PathExecutionService.calculate_num_phases_for_path(
+                len(path), trail_length, trail_overlay
+            )
+            max_phases = max(max_phases, path_phases)
+        
+        return duration * max_phases
     
     @staticmethod
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState) -> List[Dict[str, Any]]:
         duration = float(step.parameters.get("Duration", "1.0"))
+        trail_length = int(step.parameters.get("Trail Length", "1"))
+        trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+        
+        # additional safety check: clamp trail overlay (remove if not needed)
+        trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+        
         step_uid = step.parameters.get("UID", "")
         step_id = step.parameters.get("ID", "")
         step_description = step.parameters.get("Description", "Step")
@@ -40,22 +107,32 @@ class PathExecutionService:
                 "step_description": step_description
             })
         else:
-            max_path_length = device_state.longest_path_length()
+            # calculate phases for each path
+            path_phases = []
+            max_phases = 0
             
-            for position in range(max_path_length):
+            for path in device_state.paths:
+                phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                path_phases.append(phases)
+                max_phases = max(max_phases, len(phases))
+            
+            for phase_idx in range(max_phases):
                 # individually activated electrodes always active
-                position_electrodes = copy.deepcopy(device_state.activated_electrodes)
+                phase_electrodes = copy.deepcopy(device_state.activated_electrodes)
                 
                 # current position electrodes from (all) path(s)
-                for path in device_state.paths:
-                    if position < len(path):
-                        electrode_id = path[position]
-                        position_electrodes[electrode_id] = True
+                for path_idx, path in enumerate(device_state.paths):
+                    if phase_idx < len(path_phases[path_idx]):
+                        electrode_indices = path_phases[path_idx][phase_idx]
+                        for electrode_idx in electrode_indices:
+                            if electrode_idx < len(path):
+                                electrode_id = path[electrode_idx]
+                                phase_electrodes[electrode_id] = True
                 
                 execution_plan.append({
-                    "time": position * duration,
+                    "time": phase_idx * duration,
                     "duration": duration,
-                    "activated_electrodes": position_electrodes,
+                    "activated_electrodes": phase_electrodes,
                     "step_uid": step_uid,
                     "step_id": step_id,
                     "step_description": step_description

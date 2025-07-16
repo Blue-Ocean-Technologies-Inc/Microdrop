@@ -26,12 +26,38 @@ class DeviceState:
     def has_individual_electrodes(self):
         return any(self.activated_electrodes.values())
 
-    def calculated_duration(self, step_duration: float, repetitions: int,
-                            repeat_duration: float):
-        if self.has_paths():
-            calculated_time = self.longest_path_length() * step_duration * repetitions
+    def calculated_duration(self, step_duration: float, repetitions: int, 
+                            repeat_duration: float, trail_length: int = 1, trail_overlay: int = 0):
+        if not self.has_paths():
+            calculated_time = step_duration * repetitions
         else:
-            calculated_time = step_duration
+            # additional safety check: clamp trail overlay (remove if not needed)
+            trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+            
+            # calculate maximum phases across all paths (should be no. of phases for longest path)
+            max_phases = 0
+            for path in self.paths:
+                path_length = len(path)
+                
+                if path_length == 0:
+                    continue
+                
+                step_size = trail_length - trail_overlay
+                if step_size <= 0:
+                    path_phases = path_length
+                else:
+                    # simulate
+                    phases = 0
+                    position = 0
+                    while position < path_length:
+                        phases += 1
+                        position += step_size
+                    path_phases = phases
+                
+                max_phases = max(max_phases, path_phases)
+            
+            calculated_time = max_phases * step_duration * repetitions
+        
         return max(calculated_time, repeat_duration)
 
     def update_from_device_viewer(self, activated_electrodes_json: str,

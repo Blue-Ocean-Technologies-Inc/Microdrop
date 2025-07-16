@@ -1082,16 +1082,21 @@ class PGCWidget(QWidget):
             repetitions_col = protocol_grid_fields.index("Repetitions")
             duration_col = protocol_grid_fields.index("Duration")
             repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+            trail_length_col = protocol_grid_fields.index("Trail Length")
+            trail_overlay_col = protocol_grid_fields.index("Trail Overlay")
             max_path_col = protocol_grid_fields.index("Max. Path Length")
             run_time_col = protocol_grid_fields.index("Run Time")
             
             repetitions_item = parent.child(row, repetitions_col)
             duration_item = parent.child(row, duration_col)
             repeat_duration_item = parent.child(row, repeat_duration_col)
+            trail_length_item = parent.child(row, trail_length_col)
+            trail_overlay_item = parent.child(row, trail_overlay_col)
             max_path_item = parent.child(row, max_path_col)
             run_time_item = parent.child(row, run_time_col)
             
-            if not all([repetitions_item, duration_item, repeat_duration_item, max_path_item, run_time_item]):
+            if not all([repetitions_item, duration_item, repeat_duration_item, 
+                    trail_length_item, trail_overlay_item, max_path_item, run_time_item]):
                 return
                 
             device_state = desc_item.data(Qt.UserRole + 100)
@@ -1102,9 +1107,12 @@ class PGCWidget(QWidget):
             repetitions = int(repetitions_item.text() or "1")
             duration = float(duration_item.text() or "1.0")
             repeat_duration = float(repeat_duration_item.text() or "1.0")
+            trail_length = int(trail_length_item.text() or "1")
+            trail_overlay = int(trail_overlay_item.text() or "0")
             
             max_path_length = device_state.longest_path_length()
-            run_time = device_state.calculated_duration(duration, repetitions, repeat_duration)
+            run_time = device_state.calculated_duration(duration, repetitions, repeat_duration, 
+                                                    trail_length, trail_overlay)
             
             self._programmatic_change = True
             try:
