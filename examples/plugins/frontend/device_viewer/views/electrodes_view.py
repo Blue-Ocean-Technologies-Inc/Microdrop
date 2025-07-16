@@ -6,10 +6,11 @@ from microdrop_utils._logger import get_logger
 
 # enthought imports
 from traits.api import Instance, Array, Str
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QRectF
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
                              QGraphicsItem, QGraphicsItemGroup)
 
+# Relative imports
 from ..models.electrodes import Electrode
 
 logger = get_logger(__name__, level='DEBUG')
@@ -77,11 +78,19 @@ class ElectrodeView(QGraphicsPathItem):
         self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
 
         # Make the electrode selectable and focusable
+        self.enable_electrode()
+
+    def enable_electrode(self):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
 
+    def disable_electrode(self):
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, False)
+
     def mousePressEvent(self, event):
-        self.on_clicked()
+        if event.button() == Qt.LeftButton:
+            self.on_clicked()  # Emit the clicked signal
         super().mousePressEvent(event)  # Call the superclass method to ensure proper event handling
 
     def on_clicked(self):
@@ -168,7 +177,8 @@ class ElectrodeLayer(QGraphicsItemGroup):
     - The view is responsible for updating the properties of all the electrode views contained in bulk.
     """
 
-    def __init__(self, id_: str, electrodes, parent=None):
+    def __init__(self, id_: str, electrodes, bounding_box: QRectF = None,
+                 rotation: int = 0, mirror: bool = False, parent=None):
         super().__init__(parent=parent)
 
         self.id = id_
@@ -178,24 +188,44 @@ class ElectrodeLayer(QGraphicsItemGroup):
 
         svg = electrodes.svg_model
 
-        # # Scale to approx 360p resolution for display
-        modifier = max(640 / (svg.max_x - svg.min_x), 360 / (svg.max_y - svg.min_y))
+        if bounding_box is not None:
+            # Scale to bounding box
+            box_offset = 40
+            bounding_box_ = bounding_box.adjusted(box_offset, box_offset, -box_offset, -box_offset)
+            modifier = min(bounding_box_.width() / (svg.max_x - svg.min_x),
+                           bounding_box_.height() / (svg.max_y - svg.min_y))
+            svg_offset = np.array([(bounding_box.width() - svg.max_x * modifier) / 2,
+                                   (bounding_box.height() - svg.max_y * modifier) / 2])
+        else:
+            # # Scale to approx 360p resolution for display
+            modifier = max(640 / (svg.max_x - svg.min_x), 360 / (svg.max_y - svg.min_y))
+            svg_offset = np.array([0, 0])
 
         logger.debug(f"Creating Electrode Layer {id_} with {len(electrodes.electrodes)} electrodes.")
 
         # Create the electrode views for each electrode from the electrodes model and add them to the group
         for electrode_id, electrode in electrodes.electrodes.items():
+            points = electrode.path[:, 0, :]
+            points = points if not rotation else rotate_points(points, [svg.max_x / 2, svg.max_y / 2], rotation)
+            points = points if not mirror else mirror_points(points, [svg.max_x / 2, svg.max_y / 2])
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
-                                                               modifier * electrode.path[:, 0, :])
+                                                               modifier * points + svg_offset)
 
             self.addToGroup(self.electrode_views[electrode_id])
 
         self._electrodes = electrodes
 
         # Create the connections between the electrodes
-        self.connections = [con * modifier for con in svg.connections]
+        self.connections = []
+        for con in svg.connections:
+            con = con if not rotation else rotate_points(con, np.array([svg.max_x / 2, svg.max_y / 2]), rotation)
+            con = con if not mirror else mirror_points(con, np.array([svg.max_x / 2, svg.max_y / 2]))
+            con = con * modifier + svg_offset
+            self.connections.append(con)
+
         # Create the connection items
         self.connection_items = []
+
         # Draw the connections
         self.draw_connections()
 
@@ -242,3 +272,40 @@ class ElectrodeLayer(QGraphicsItemGroup):
             color.setAlphaF(alpha)
             item.setPen(QPen(color, 1))
             item.update()
+
+
+def rotate_points(points: np.array, center: list, angle: float):
+    """ Rotate points (NumPy arrays) around a center point by a given angle in degrees. """
+    angle_rad = np.radians(angle)
+    cos_theta, sin_theta = np.cos(angle_rad), np.sin(angle_rad)
+
+    # Convert points to a NumPy array if not already
+    points = np.asarray(points)
+    center = np.array(center)
+
+    # Translate points so center is at origin
+    translated_points = points - center
+
+    # Create the rotation matrix
+    rotation_matrix = np.array([[cos_theta, -sin_theta],
+                                [sin_theta, cos_theta]])
+
+    # Rotate points
+    rotated_points = translated_points.dot(rotation_matrix)
+
+    # Translate points back to the original center
+    rotated_points += center
+
+    return rotated_points
+
+
+def mirror_points(points: np.array, center: list):
+    """ Mirror points across a vertical line through the center point using NumPy. """
+    points = np.asarray(points)
+    center = np.array(center)
+
+    # Mirror points
+    mirrored_points = points.copy()
+    mirrored_points[:, 0] = 2 * center[0] - mirrored_points[:, 0]
+
+    return mirrored_points
