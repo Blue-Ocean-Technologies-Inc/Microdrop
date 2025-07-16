@@ -28,7 +28,38 @@ class PathExecutionService:
         # cover the entire path
         while position < path_length:
             phases += 1
+            
+            # check if this phase includes the last electrode
+            phase_end = position + trail_length - 1
+            if phase_end >= path_length - 1:
+                # this phase includes the last electrode, so it should be the final phase
+                break
+                
             position += step_size
+        
+        # check the last phase adjustment logic
+        if phases > 0:
+            last_phase_start = (phases - 1) * step_size
+            electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
+            
+            # if the last phase has fewer than "trail_length" no.of active electrodes, 
+            # needs to be adjusted
+            if electrodes_in_last_phase < trail_length and path_length >= trail_length:
+                # check if adjusted last phase would be identical to second-last phase
+                if phases > 1:
+                    second_last_phase_start = (phases - 2) * step_size
+                    second_last_phase_electrodes = list(range(second_last_phase_start, 
+                                                            second_last_phase_start + trail_length))
+                    
+                    adjusted_last_start = path_length - trail_length
+                    adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
+                    
+                    # if adjusted last phase is identical to second-last phase, remove the last phase
+                    if second_last_phase_electrodes == adjusted_last_electrodes:
+                        phases -= 1
+                        
+            elif electrodes_in_last_phase < trail_length:
+                phases = max(1, phases - 1) if phases > 1 else 1
         
         return phases
 
@@ -56,7 +87,39 @@ class PathExecutionService:
                     phase_electrodes.append(electrode_index)
             
             phases.append(phase_electrodes)
+            
+            # check if this phase includes the last electrode
+            if phase_electrodes and max(phase_electrodes) == path_length - 1:
+                break
+                
             position += step_size
+        
+        # adjust the last phase if needed and if possible
+        if len(phases) > 0:
+            last_phase = phases[-1]
+            
+            # if the last phase has fewer than "trail_length" no.of active electrodes
+            if len(last_phase) < trail_length and path_length >= trail_length:
+                end_position = path_length - 1
+                start_position = end_position - trail_length + 1
+                
+                start_position = max(0, start_position)
+                
+                adjusted_last_phase = list(range(start_position, end_position + 1))
+                
+                # check if adjusted last phase is identical to second-last phase
+                if len(phases) > 1 and phases[-2] == adjusted_last_phase:
+                    phases.pop()
+                else:
+                    phases[-1] = adjusted_last_phase
+            
+            # if the last phase still has fewer electrodes than trail_length after adjustment,
+            # it means the path is shorter than trail_length, so remove the incomplete phase
+            # and merge it with the previous phase (if it exists)
+            elif len(last_phase) < trail_length:
+                if len(phases) > 1:
+                    phases.pop()
+                # if there is only one phase and it is incomplete, keep it as is
         
         return phases
 
@@ -67,7 +130,7 @@ class PathExecutionService:
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
         # additional safety check: clamp trail overlay (remove if not needed)
-        trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+        # trail_overlay = min(trail_overlay, max(0, trail_length - 1))
         
         if not device_state.has_paths():
             return duration
@@ -89,7 +152,7 @@ class PathExecutionService:
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
         # additional safety check: clamp trail overlay (remove if not needed)
-        trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+        # trail_overlay = min(trail_overlay, max(0, trail_length - 1))
         
         step_uid = step.parameters.get("UID", "")
         step_id = step.parameters.get("ID", "")

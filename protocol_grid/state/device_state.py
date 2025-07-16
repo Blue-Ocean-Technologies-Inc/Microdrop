@@ -32,7 +32,7 @@ class DeviceState:
             calculated_time = step_duration * repetitions
         else:
             # additional safety check: clamp trail overlay (remove if not needed)
-            trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+            # trail_overlay = min(trail_overlay, max(0, trail_length - 1))
             
             # calculate maximum phases across all paths (should be no. of phases for longest path)
             max_phases = 0
@@ -51,7 +51,33 @@ class DeviceState:
                     position = 0
                     while position < path_length:
                         phases += 1
+                        
+                        # check if this phase includes the last electrode
+                        phase_end = position + trail_length - 1
+                        if phase_end >= path_length - 1:
+                            break
+                            
                         position += step_size
+                    
+                    # apply the same logic as PathExecutionService class
+                    if phases > 0:
+                        last_phase_start = (phases - 1) * step_size
+                        electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
+                        
+                        if electrodes_in_last_phase < trail_length and path_length >= trail_length:
+                            if phases > 1:
+                                second_last_phase_start = (phases - 2) * step_size
+                                second_last_phase_electrodes = list(range(second_last_phase_start, 
+                                                                        second_last_phase_start + trail_length))
+                                
+                                adjusted_last_start = path_length - trail_length
+                                adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
+                                
+                                if second_last_phase_electrodes == adjusted_last_electrodes:
+                                    phases -= 1
+                        elif electrodes_in_last_phase < trail_length:
+                            phases = max(1, phases - 1) if phases > 1 else 1
+                    
                     path_phases = phases
                 
                 max_phases = max(max_phases, path_phases)
