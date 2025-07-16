@@ -1,5 +1,5 @@
 from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import QGraphicsScene
+from PySide6.QtWidgets import QGraphicsScene, QApplication
 from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
@@ -162,9 +162,16 @@ class ElectrodeLayer():
     def redraw_electrode_labels(self, model: MainModel):
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label()
+
+    def set_loading_label(self):
+        """
+        Method to set the loading label for the electrode editing text
+        """
+        self.electrode_editing_text.setPlainText("Loading...")
+        QApplication.processEvents()  # Process events to ensure the scene is cleared immediately
     
     def redraw_electrode_editing_text(self, model: MainModel):
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
-            self.electrode_editing_text.setPlainText(f"Editing: {model.step_label}")
+            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label}")

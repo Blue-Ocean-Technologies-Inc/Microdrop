@@ -294,7 +294,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(f"Selected SVG file: {svg_file}")
 
             self.model.reset()
-            self.model.set_electrodes_from_svg_file(svg_file)
+            self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
+            self.model.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
             logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
 
             self.set_view_from_model(self.model)
