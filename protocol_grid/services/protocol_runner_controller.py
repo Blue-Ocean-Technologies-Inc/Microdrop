@@ -91,10 +91,11 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
         self._paused_phase_index = 0
 
-        unique_paths = set()
+        total_steps = 0
         for entry in self._run_order:
-            unique_paths.add(tuple(entry["path"]))
-        self._unique_step_count = len(unique_paths)
+            if entry["rep_idx"] == 1:
+                total_steps += 1
+        self._unique_step_count = total_steps
 
         if not self._run_order:
             self.signals.protocol_finished.emit()
@@ -421,19 +422,15 @@ class ProtocolRunnerController(QObject):
         step = step_info["step"]
         rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
         
-        current_path = tuple(step_info["path"])
-        unique_step_position = 1
-        seen_paths = set()
-        
+        current_step_position = 0
         for i, entry in enumerate(self._run_order):
-            entry_path = tuple(entry["path"])
-            if entry_path not in seen_paths:
-                seen_paths.add(entry_path)
-                if i <= self._current_index:
-                    unique_step_position = len(seen_paths)
+            if entry["rep_idx"] == 1:
+                current_step_position += 1
+                if i >= self._current_index:
+                    break
         
         step_total = self._unique_step_count
-        step_idx = unique_step_position
+        step_idx = current_step_position
         
         if self._is_paused:
             total_time = self._elapsed_time
