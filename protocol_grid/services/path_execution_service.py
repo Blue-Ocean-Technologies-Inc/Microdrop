@@ -13,6 +13,19 @@ logger = get_logger(__name__)
 class PathExecutionService:
 
     @staticmethod
+    def is_loop_path(path: List[str]) -> bool:
+        return len(path) >= 2 and path[0] == path[-1] # (first == last electrode)
+
+    @staticmethod
+    def has_any_loops(device_state: DeviceState) -> bool:
+        return any(PathExecutionService.is_loop_path(path) for path in device_state.paths)
+
+    @staticmethod
+    def calculate_effective_repetitions(step: ProtocolStep, device_state: DeviceState) -> int:
+        # always return 1 - repetitions are handled by extending the cycle phases
+        return 1
+    
+    @staticmethod
     def calculate_num_phases_for_path(path_length: int, trail_length: int, trail_overlay: int) -> int:
         if path_length == 0:
             return 0
@@ -124,8 +137,56 @@ class PathExecutionService:
         return phases
 
     @staticmethod
+    def calculate_loop_cycle_phases(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:
+        logger.info(f"calculate_loop_cycle_phases called with path={path}, trail_length={trail_length}, trail_overlay={trail_overlay}")
+        
+        if not PathExecutionService.is_loop_path(path):
+            logger.info(f"Path {path} is not a loop, using regular trail calculation")
+            result = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+            logger.info(f"Open path phases: {result}")
+            return result
+        
+        # for loops, make it a path without duplicating last electrode
+        effective_path = path[:-1]
+        effective_length = len(effective_path)
+        logger.info(f"Loop detected, effective_path={effective_path}, effective_length={effective_length}")
+        
+        step_size = trail_length - trail_overlay
+        logger.info(f"Step size calculated: {step_size}")
+        
+        if step_size <= 0:
+            # all positions, no smooth transition needed
+            phases = [[i] for i in range(effective_length)]
+            logger.info(f"Step size <= 0, generated phases: {phases}")
+            return phases
+        
+        phases = []
+        position = 0
+        
+        # generate phases for the loop
+        logger.info(f"Starting phase generation for loop")
+        while position < effective_length:
+            phase_electrodes = []
+            for i in range(trail_length):
+                electrode_idx = (position + i) % effective_length  # wrap around
+                phase_electrodes.append(electrode_idx)
+            
+            phases.append(phase_electrodes)
+            logger.info(f"Generated phase at position {position}: {phase_electrodes}")
+            position += step_size
+            
+            # check if the loop is completed
+            if position >= effective_length:
+                logger.info(f"Loop completed at position {position}")
+                break
+        
+        logger.info(f"Final loop cycle phases: {phases}")
+        return phases
+
+    @staticmethod
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState) -> float:
         duration = float(step.parameters.get("Duration", "1.0"))
+        repetitions = int(step.parameters.get("Repetitions", "1"))
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
@@ -135,19 +196,39 @@ class PathExecutionService:
         if not device_state.has_paths():
             return duration
         
-        # calculate maximum phases across all paths (should be no. of phases for longest path)
-        max_phases = 0
-        for path in device_state.paths:
-            path_phases = PathExecutionService.calculate_num_phases_for_path(
-                len(path), trail_length, trail_overlay
-            )
-            max_phases = max(max_phases, path_phases)
+        has_loops = PathExecutionService.has_any_loops(device_state)
+        effective_repetitions = repetitions if has_loops else 1
         
-        return duration * max_phases
+        logger.info(f"has_loops={has_loops}, effective_repetitions={effective_repetitions}")
+        
+        # calculate maximum phases across all paths
+        max_cycle_length = 0
+        for i, path in enumerate(device_state.paths):
+            if PathExecutionService.is_loop_path(path):
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+                logger.info(f"Loop path {i} cycle_length={cycle_length}")
+            else:
+                cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+                logger.info(f"Open path {i} cycle_length={cycle_length}")
+            
+            max_cycle_length = max(max_cycle_length, cycle_length)
+        
+        if effective_repetitions > 1:
+            total_phases = (effective_repetitions - 1) * max_cycle_length + max_cycle_length + 1
+        else:
+            total_phases = max_cycle_length + 1
+        
+        total_time = duration * total_phases
+        logger.info(f"max_cycle_length={max_cycle_length}, total_phases={total_phases}, total_time={total_time}")
+        
+        return total_time
     
     @staticmethod
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState) -> List[Dict[str, Any]]:
         duration = float(step.parameters.get("Duration", "1.0"))
+        repetitions = int(step.parameters.get("Repetitions", "1"))
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
@@ -169,37 +250,132 @@ class PathExecutionService:
                 "step_id": step_id,
                 "step_description": step_description
             })
+            return execution_plan
+        
+        has_loops = PathExecutionService.has_any_loops(device_state)
+        effective_repetitions = repetitions if has_loops else 1
+        
+        logger.info(f"has_loops={has_loops}, effective_repetitions={effective_repetitions}")
+        
+        # calculate phases for each path
+        path_info = []
+        max_cycle_length = 0
+        
+        for i, path in enumerate(device_state.paths):
+            is_loop = PathExecutionService.is_loop_path(path)
+            logger.info(f"Processing path {i}: {path}, is_loop={is_loop}")
+            
+            if is_loop:
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+            else:
+                cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+            
+            logger.info(f"Path {i} cycle_length={cycle_length}, cycle_phases={cycle_phases}")
+            
+            path_info.append({
+                "path": path,
+                "is_loop": is_loop,
+                "cycle_length": cycle_length,
+                "cycle_phases": cycle_phases
+            })
+            
+            max_cycle_length = max(max_cycle_length, cycle_length)
+        
+        logger.info(f"max_cycle_length={max_cycle_length}")
+        
+        # return phase only for the last repetition
+        total_phases = 0
+        if effective_repetitions > 1:
+            total_phases = (effective_repetitions - 1) * max_cycle_length + max_cycle_length + 1
         else:
-            # calculate phases for each path
-            path_phases = []
-            max_phases = 0
+            total_phases = max_cycle_length + 1
+        
+        logger.info(f"total_phases={total_phases}")
+        
+        for phase_idx in range(total_phases):
+            # individually activated electrodes always active
+            phase_electrodes = copy.deepcopy(device_state.activated_electrodes)
             
-            for path in device_state.paths:
-                phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
-                path_phases.append(phases)
-                max_phases = max(max_phases, len(phases))
+            # Determine current repetition and phase
+            if phase_idx < (effective_repetitions - 1) * max_cycle_length:
+                current_repetition = phase_idx // max_cycle_length
+                phase_in_cycle = phase_idx % max_cycle_length
+                is_return_phase = False
+            else:
+                # last repetition (return phase)
+                current_repetition = effective_repetitions - 1
+                phase_in_last_rep = phase_idx - (effective_repetitions - 1) * max_cycle_length
+                if phase_in_last_rep < max_cycle_length:
+                    phase_in_cycle = phase_in_last_rep
+                    is_return_phase = False
+                else:
+                    phase_in_cycle = 0
+                    is_return_phase = True
             
-            for phase_idx in range(max_phases):
-                # individually activated electrodes always active
-                phase_electrodes = copy.deepcopy(device_state.activated_electrodes)
+            logger.info(f"Phase {phase_idx}: repetition={current_repetition}, phase_in_cycle={phase_in_cycle}, is_return_phase={is_return_phase}")
+            
+            for path_idx, path_data in enumerate(path_info):
+                path = path_data["path"]
+                is_loop = path_data["is_loop"]
+                cycle_length = path_data["cycle_length"]
+                cycle_phases = path_data["cycle_phases"]
                 
-                # current position electrodes from (all) path(s)
-                for path_idx, path in enumerate(device_state.paths):
-                    if phase_idx < len(path_phases[path_idx]):
-                        electrode_indices = path_phases[path_idx][phase_idx]
-                        for electrode_idx in electrode_indices:
-                            if electrode_idx < len(path):
-                                electrode_id = path[electrode_idx]
-                                phase_electrodes[electrode_id] = True
-                
-                execution_plan.append({
-                    "time": phase_idx * duration,
-                    "duration": duration,
-                    "activated_electrodes": phase_electrodes,
-                    "step_uid": step_uid,
-                    "step_id": step_id,
-                    "step_description": step_description
-                })
+                if is_loop:
+                    # loop path - continues for all repetitions with seamless transitions
+                    if current_repetition < effective_repetitions:
+                        if is_return_phase:
+                            # return phase = first phase
+                            if 0 < len(cycle_phases):
+                                electrode_indices = cycle_phases[0]
+                                logger.info(f"Loop path {path_idx} return phase: electrodes {electrode_indices}")
+                                for electrode_idx in electrode_indices:
+                                    if electrode_idx < len(path) - 1: # exclude duplicate
+                                        electrode_id = path[electrode_idx]
+                                        phase_electrodes[electrode_id] = True
+                                        logger.info(f"  Activated electrode {electrode_id}")
+                            else:
+                                logger.info(f"Loop path {path_idx} return phase but no phases available")
+                        else:
+                            phase_in_path_cycle = phase_in_cycle % cycle_length
+                            if phase_in_path_cycle < len(cycle_phases):
+                                electrode_indices = cycle_phases[phase_in_path_cycle]
+                                logger.info(f"Loop path {path_idx} at phase {phase_in_path_cycle}: electrodes {electrode_indices}")
+                                for electrode_idx in electrode_indices:
+                                    if electrode_idx < len(path) - 1: # exclude duplicate
+                                        electrode_id = path[electrode_idx]
+                                        phase_electrodes[electrode_id] = True
+                                        logger.info(f"  Activated electrode {electrode_id}")
+                            else:
+                                logger.info(f"Loop path {path_idx} waiting (phase {phase_in_path_cycle} >= {len(cycle_phases)})")
+                    else:
+                        logger.info(f"Loop path {path_idx} finished (repetition {current_repetition} >= {effective_repetitions})")
+                else:
+                    if current_repetition == 0 and not is_return_phase and phase_in_cycle < cycle_length:
+                        if phase_in_cycle < len(cycle_phases):
+                            electrode_indices = cycle_phases[phase_in_cycle]
+                            logger.info(f"Open path {path_idx} at phase {phase_in_cycle}: electrodes {electrode_indices}")
+                            for electrode_idx in electrode_indices:
+                                if electrode_idx < len(path):
+                                    electrode_id = path[electrode_idx]
+                                    phase_electrodes[electrode_id] = True
+                                    logger.info(f"  Activated electrode {electrode_id}")
+                        else:
+                            logger.info(f"Open path {path_idx} waiting")
+                    else:
+                        logger.info(f"Open path {path_idx} deactivated (repetition {current_repetition} > 0 or return phase or phase {phase_in_cycle} >= {cycle_length})")
+            
+            logger.info(f"Final phase_electrodes for phase {phase_idx}: {phase_electrodes}")
+            
+            execution_plan.append({
+                "time": phase_idx * duration,
+                "duration": duration,
+                "activated_electrodes": phase_electrodes,
+                "step_uid": step_uid,
+                "step_id": step_id,
+                "step_description": step_description
+            })
         
         return execution_plan
     

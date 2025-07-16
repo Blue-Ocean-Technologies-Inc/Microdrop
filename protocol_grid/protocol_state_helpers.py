@@ -25,13 +25,13 @@ def flatten_protocol_for_run(protocol_state):
                 for g_rep in range(reps):
                     recurse(element.elements, path, group_reps * reps)
             else:
-                for s_rep in range(reps):
-                    run_order.append({
-                        "step": element,
-                        "path": path,
-                        "rep_idx": s_rep + 1,
-                        "rep_total": reps
-                    })
+                # repetitions are handled internally by PathExecutionService class
+                run_order.append({
+                    "step": element,
+                    "path": path,
+                    "rep_idx": 1,
+                    "rep_total": reps
+                })
     recurse(protocol_state.sequence, [])
     return run_order
 

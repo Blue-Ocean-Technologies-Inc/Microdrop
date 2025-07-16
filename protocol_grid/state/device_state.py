@@ -3,6 +3,9 @@ import copy
 import json
 
 from device_viewer.models.messages import DeviceViewerMessageModel
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class DeviceState:
@@ -31,60 +34,84 @@ class DeviceState:
         if not self.has_paths():
             calculated_time = step_duration * repetitions
         else:
-            # additional safety check: clamp trail overlay (remove if not needed)
-            # trail_overlay = min(trail_overlay, max(0, trail_length - 1))
+            has_loops = any(len(path) >= 2 and path[0] == path[-1] for path in self.paths)
             
-            # calculate maximum phases across all paths (should be no. of phases for longest path)
-            max_phases = 0
-            for path in self.paths:
-                path_length = len(path)
+            if not has_loops:
+                effective_repetitions = 1
+            else:
+                effective_repetitions = repetitions
+            
+            logger.info(f"effective_repetitions={effective_repetitions}")
+            
+            max_cycle_length = 0
+            for i, path in enumerate(self.paths):
+                is_loop = len(path) >= 2 and path[0] == path[-1]
+                logger.info(f"Path {i}: {path}, is_loop={is_loop}")
                 
-                if path_length == 0:
-                    continue
-                
-                step_size = trail_length - trail_overlay
-                if step_size <= 0:
-                    path_phases = path_length
+                if is_loop:
+                    effective_length = len(path) - 1
+                    step_size = trail_length - trail_overlay
+                    if step_size <= 0:
+                        cycle_length = effective_length
+                    else:
+                        phases = 0
+                        position = 0
+                        while position < effective_length:
+                            phases += 1
+                            position += step_size
+                            if position >= effective_length:
+                                break
+                        cycle_length = phases
+                    logger.info(f"Loop {i} cycle_length={cycle_length}")
                 else:
-                    # simulate
-                    phases = 0
-                    position = 0
-                    while position < path_length:
-                        phases += 1
+                    path_length = len(path)
+                    step_size = trail_length - trail_overlay
+                    if step_size <= 0:
+                        cycle_length = path_length
+                    else:
+                        phases = 0
+                        position = 0
+                        while position < path_length:
+                            phases += 1
+                            phase_end = position + trail_length - 1
+                            if phase_end >= path_length - 1:
+                                break
+                            position += step_size
                         
-                        # check if this phase includes the last electrode
-                        phase_end = position + trail_length - 1
-                        if phase_end >= path_length - 1:
-                            break
+                        if phases > 0:
+                            last_phase_start = (phases - 1) * step_size
+                            electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
                             
-                        position += step_size
-                    
-                    # apply the same logic as PathExecutionService class
-                    if phases > 0:
-                        last_phase_start = (phases - 1) * step_size
-                        electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
+                            if electrodes_in_last_phase < trail_length and path_length >= trail_length:
+                                if phases > 1:
+                                    second_last_phase_start = (phases - 2) * step_size
+                                    second_last_phase_electrodes = list(range(second_last_phase_start, 
+                                                                            second_last_phase_start + trail_length))
+                                    
+                                    adjusted_last_start = path_length - trail_length
+                                    adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
+                                    
+                                    if second_last_phase_electrodes == adjusted_last_electrodes:
+                                        phases -= 1
+                            elif electrodes_in_last_phase < trail_length:
+                                phases = max(1, phases - 1) if phases > 1 else 1
                         
-                        if electrodes_in_last_phase < trail_length and path_length >= trail_length:
-                            if phases > 1:
-                                second_last_phase_start = (phases - 2) * step_size
-                                second_last_phase_electrodes = list(range(second_last_phase_start, 
-                                                                        second_last_phase_start + trail_length))
-                                
-                                adjusted_last_start = path_length - trail_length
-                                adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
-                                
-                                if second_last_phase_electrodes == adjusted_last_electrodes:
-                                    phases -= 1
-                        elif electrodes_in_last_phase < trail_length:
-                            phases = max(1, phases - 1) if phases > 1 else 1
-                    
-                    path_phases = phases
+                        cycle_length = phases
+                    logger.info(f"Open path {i} cycle_length={cycle_length}")
                 
-                max_phases = max(max_phases, path_phases)
+                max_cycle_length = max(max_cycle_length, cycle_length)
             
-            calculated_time = max_phases * step_duration * repetitions
+            if effective_repetitions > 1:
+                total_phases = (effective_repetitions - 1) * max_cycle_length + max_cycle_length + 1
+            else:
+                total_phases = max_cycle_length + 1
+            
+            calculated_time = total_phases * step_duration
+            logger.info(f"max_cycle_length={max_cycle_length}, total_phases={total_phases}, calculated_time={calculated_time}")
         
-        return max(calculated_time, repeat_duration)
+        result = max(calculated_time, repeat_duration)
+        logger.info(f"Final result: max({calculated_time}, {repeat_duration}) = {result}")
+        return result
 
     def update_from_device_viewer(self, activated_electrodes_json: str,
                                   paths: List[List[str]]):
