@@ -2,6 +2,7 @@ from traits.api import Property, Str, Enum, observe, Instance, Bool, List
 import uuid
 
 from device_viewer.models.alpha import AlphaValue
+from device_viewer.models.perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from device_viewer.views.electrode_view.default_settings import default_alphas
@@ -19,8 +20,9 @@ class MainModel(RouteLayerManager, Electrodes):
     # Merge: User can only merge paths. They cannot edit.
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
+    # Camera-Edit: User can edit the perspecive correction of the camera feed
     # To change the mode, set the mode property and clean up any references/inconsistencies
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display")
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
 
     mode_name = Property(Str, observe="mode")
     editable = Property(Bool, observe="mode")
@@ -34,6 +36,9 @@ class MainModel(RouteLayerManager, Electrodes):
 
     # ------------------ Alpha Color Model --------------------
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
+
+    # ------------------ Camera Model --------------------
+    camera_perspective = Instance(PerspectiveModel, PerspectiveModel()) 
 
     # ------------------ Initialization --------------------
 
@@ -54,7 +59,9 @@ class MainModel(RouteLayerManager, Electrodes):
             "auto": "Autoroute",
             "merge": "Merge",
             "channel-edit": "Channel Edit",
-            "display": "Display"
+            "display": "Display",
+            "camera-edit": "Camera Edit",
+            "camera-place": "Camera Place"
         }.get(self.mode, "Error")
 
     def _get_editable(self):
@@ -88,3 +95,5 @@ class MainModel(RouteLayerManager, Electrodes):
             self.layer_to_merge = None
         if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
             self.electrode_editing = None
+        if event.old != "camera-place" and event.new == "camera-place":
+            self.camera_perspective.reference_rect.clear()

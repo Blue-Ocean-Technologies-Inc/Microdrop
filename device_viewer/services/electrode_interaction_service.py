@@ -1,5 +1,5 @@
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
-import json
+from pyface.qt.QtCore import QPointF
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.main_model import MainModel
@@ -43,6 +43,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     # -------------------- Handlers -----------------------
 
+    def handle_reference_point_placement(self, point: QPointF):
+        """Handle the placement of a reference point for perspective correction."""        
+        # Add the new point to the reference rect
+        self.model.camera_perspective.reference_rect.append(point)
+        if len(self.model.camera_perspective.reference_rect) == 4: # We have a rectangle now
+            self.model.mode = "camera-edit"  # Switch to camera-edit mode
+
     def handle_electrode_hover(self, electrode_view: ElectrodeView):
         self.electrode_hovered = electrode_view
 
@@ -62,7 +69,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle an electrode click event."""
         if self.model.mode == "channel-edit":
             self.model.electrode_editing = self.model.electrodes[electrode_id]
-        else:
+        elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
                 self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
@@ -154,3 +161,11 @@ class ElectrodeInteractionControllerService(HasTraits):
     def step_label_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
+
+    @observe("model.mode")
+    def mode_change(self, event):
+        if self.electrode_view_layer:
+            if event.new == "camera-edit":
+                self.electrode_view_layer.redraw_reference_rect(self.model)
+            if event.old == "camera-edit" and event.new != "camera-edit":
+                self.electrode_view_layer.reset_reference_rect()  # Clear the reference rect when leaving camera-edit mode

@@ -5,16 +5,19 @@ from traits.api import Instance, observe, Any, Str, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
-from pyface.qt.QtGui import QGraphicsScene
+from pyface.qt.QtGui import QGraphicsScene, QTransform, QPolygonF
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
+from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
+from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
@@ -245,7 +248,39 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
-        # Create debouce timer
+        # w, h = 320, 240  # Example width and height
+
+        # # Source quad: the normal rectangle of your video item
+        # src_quad = QPolygonF([
+        #     QPointF(0, 0),        # Top-left
+        #     QPointF(w, 0),        # Top-right
+        #     QPointF(w, h),        # Bottom-right
+        #     QPointF(0, h)         # Bottom-left
+        # ])
+
+        # # Destination quad: your arbitrary target polygon
+        # dst_quad = QPolygonF([
+        #     QPointF(100, 100),      # Top-left (warped position)
+        #     QPointF(400, 20),     # Top-right
+        #     QPointF(380, 300),    # Bottom-right
+        #     QPointF(30, 320)      # Bottom-left
+        # ])
+
+        # self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
+        # self.video_item = QGraphicsVideoItem()
+        # self.camera = QCamera(QMediaDevices.defaultVideoInput())  # Initialize camera for video capture
+        # perspective_correction = QTransform()
+        # QTransform.quadToQuad(src_quad, dst_quad, perspective_correction)  # Set perspective correction
+        # self.video_item.setTransform(perspective_correction)  # Apply perspective correction to the video item
+
+        # scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
+        # self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
+        # self.capture_session.setVideoOutput(self.video_item)
+        # self.capture_session.setCamera(self.camera)
+        # self.scene.addItem(self.video_item)
+        # self.camera.start()  # Start the camera to capture video
+
+        # Create debounce timer
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.publish_model_message)
@@ -276,7 +311,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view = ModePicker(self.model, self)
         self.mode_picker_view.setParent(container)
 
+        # camera_control_widget code
+        self.camera_control_widget = CameraControlWidget(self.model)
+        self.camera_control_widget.setParent(container)
+
         # Add widgets to layouts
+        left_stack.addWidget(self.camera_control_widget)
         left_stack.addWidget(self.alpha_view_ui.control)
         left_stack.addWidget(self.layer_ui.control)
         left_stack.addWidget(self.mode_picker_view)

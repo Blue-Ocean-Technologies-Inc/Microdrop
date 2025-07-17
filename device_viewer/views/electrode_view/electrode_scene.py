@@ -74,7 +74,8 @@ class ElectrodeScene(QGraphicsScene):
                     self.interaction_service.handle_autoroute_start(electrode_view.id)
                 else: # No electrode clicked, exit autoroute mode
                     self.interaction_service.set_mode("edit")
-
+            elif mode == "camera-place":
+                self.interaction_service.handle_reference_point_placement(event.scenePos())
         elif button == Qt.RightButton:
             self.right_mouse_pressed = True
 
