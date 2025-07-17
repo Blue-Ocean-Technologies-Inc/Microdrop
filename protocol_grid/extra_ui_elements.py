@@ -7,7 +7,8 @@ from PySide6.QtGui import QAction, QCursor
 
 from pyface.action.api import Action
 
-from protocol_grid.consts import protocol_grid_fields, field_groupings, fixed_fields
+from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
+                                  ROW_TYPE_ROLE, STEP_TYPE)
 
 
 class NavigationBar(QWidget):
@@ -178,6 +179,20 @@ class EditContextMenu(QMenu):
             self.addAction(action)
             
         self.addSeparator()
+        
+        run_step_action = QAction("Run Step", self)
+        run_step_action.triggered.connect(self.widget.run_selected_step)
+        
+        selected_paths = self.widget.get_selected_paths()
+        has_step_selected = any(
+            self.widget.get_item_by_path(path) and 
+            self.widget.get_item_by_path(path).data(ROW_TYPE_ROLE) == STEP_TYPE 
+            for path in selected_paths
+        )
+        
+        run_step_action.setEnabled(not self.widget._protocol_running and has_step_selected)
+        
+        self.addAction(run_step_action)
 
 
 class ShowEditContextMenuAction(Action):

@@ -373,6 +373,77 @@ class PGCWidget(QWidget):
             self._last_selected_step_id = None
             self._last_published_step_id = None
 
+    def run_selected_step(self):
+        if self._protocol_running:
+            return
+        
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+        
+        # find first selected step if multiple steps are selected
+        target_step_path = None
+        for path in selected_paths:
+            item = self.get_item_by_path(path)
+            if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                target_step_path = path
+                break
+        
+        if not target_step_path:
+            return
+        
+        self.sync_to_state()
+        
+        target_step_item = self.get_item_by_path(target_step_path)
+        if not target_step_item:
+            return
+        
+        parent = target_step_item.parent() or self.model.invisibleRootItem()
+        row = target_step_item.row()
+        
+        parameters = {}
+        for col, field in enumerate(protocol_grid_fields):
+            item = parent.child(row, col)
+            if item:
+                if field == "Magnet":
+                    raw_check_state = item.data(Qt.CheckStateRole)
+                    checked = raw_check_state == Qt.Checked or raw_check_state == 2
+                    parameters[field] = checked
+                else:
+                    parameters[field] = item.text()
+        
+        # temporary step object
+        from protocol_grid.state.protocol_state import ProtocolStep
+        temp_step = ProtocolStep(parameters=parameters, name=parameters.get("Description", "Step"))
+        
+        device_state = target_step_item.data(Qt.UserRole + 100)
+        if device_state:
+            temp_step.device_state = device_state
+        else:
+            temp_step.device_state = DeviceState()
+        
+        run_order = [{
+            "step": temp_step,
+            "path": target_step_path,
+            "rep_idx": 1,
+            "rep_total": 1
+        }]
+        
+        preview_mode = self.navigation_bar.is_preview_mode()
+        self.protocol_runner.set_preview_mode(preview_mode)
+        
+        self.protocol_runner.set_repeat_protocol_n(1)
+        self.protocol_runner.set_run_order(run_order)
+        self.protocol_runner.start()
+        
+        self._protocol_running = True
+        self.navigation_bar.btn_play.setText("⏸ Pause")
+        self._update_navigation_buttons_state()
+        
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+        
     def stop_protocol(self):
         self.protocol_runner.stop()
         self.clear_highlight()
