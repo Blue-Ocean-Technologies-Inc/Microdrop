@@ -141,15 +141,13 @@ class DeviceState:
         return {
             'activated_electrodes': self.activated_electrodes,
             'paths': self.paths,
-            'route_colors': self.route_colors,
-            'id_to_channel': self.id_to_channel
+            'route_colors': self.route_colors
         }
     
     def from_dict(self, data: Dict):
         self.activated_electrodes = data.get('activated_electrodes', {})
         self.paths = data.get('paths', [])
         self.route_colors = data.get('route_colors', [])
-        self.id_to_channel = data.get('id_to_channel', {})
 
     def get_activated_electrode_ids(self):
         return [electrode_id for electrode_id, activated in 

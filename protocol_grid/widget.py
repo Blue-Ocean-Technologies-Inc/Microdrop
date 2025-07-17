@@ -1616,10 +1616,7 @@ class PGCWidget(QWidget):
                     
                 self.state.snapshot_for_undo()
                 
-                if "steps" in data and "fields" in data:
-                    self.state.from_flat_export(data)
-                else:
-                    self.state.from_json(data)
+                self.state.from_flat_export(data)
                     
                 self.state.assign_uids_to_all_steps()
                 
@@ -1654,13 +1651,18 @@ class PGCWidget(QWidget):
                 data = json.load(f)
                 
             imported_state = ProtocolState()
-            if "steps" in data and "fields" in data:
-                imported_state.from_flat_export(data)
-            else:
-                imported_state.from_json(data)
-            
+            imported_state.from_flat_export(data)     
+
             imported_state.update_uid_counter_from_sequence()
             self.state._uid_counter = max(self.state._uid_counter, imported_state._uid_counter)
+            
+            current_mapping = self.state.get_protocol_id_to_channel_mapping()
+            imported_mapping = imported_state.get_protocol_id_to_channel_mapping()
+            
+            # if imported data has a different mapping,
+            # apply current mapping to all imported steps
+            if current_mapping and imported_mapping != current_mapping:
+                imported_state.set_protocol_id_to_channel_mapping(current_mapping)
                 
             self.state.snapshot_for_undo()
             

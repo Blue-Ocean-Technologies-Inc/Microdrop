@@ -98,10 +98,41 @@ class ProtocolState:
         
         assign_recursive(self.sequence)
 
+    def get_protocol_id_to_channel_mapping(self):
+
+        def find_mapping_recursive(elements):
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    if element.device_state and element.device_state.id_to_channel:
+                        return element.device_state.id_to_channel
+                elif isinstance(element, ProtocolGroup):
+                    mapping = find_mapping_recursive(element.elements)
+                    if mapping:
+                        return mapping
+            return {}
+        
+        return find_mapping_recursive(self.sequence)
+
+    def set_protocol_id_to_channel_mapping(self, id_to_channel_mapping):
+
+        def apply_mapping_recursive(elements):
+            for element in elements:
+                if isinstance(element, ProtocolStep):
+                    if not element.device_state:
+                        element.device_state = DeviceState()
+                    element.device_state.id_to_channel = id_to_channel_mapping.copy()
+                elif isinstance(element, ProtocolGroup):
+                    apply_mapping_recursive(element.elements)
+        
+        apply_mapping_recursive(self.sequence)
+
     def to_dict(self):
+        protocol_id_to_channel = self.get_protocol_id_to_channel_mapping()
+        
         return {
             "sequence": [step.to_dict() for step in self.sequence],
             "fields": self.fields,
+            "id_to_channel": protocol_id_to_channel,
             "_uid_counter": self._uid_counter
         }
     
@@ -115,16 +146,24 @@ class ProtocolState:
         self.fields = data.get("fields", list(protocol_grid_fields))
         self._uid_counter = data.get("_uid_counter", 1)
         self.update_uid_counter_from_sequence()
+        
+        # apply id_to_channel mapping to all steps
+        protocol_id_to_channel = data.get("id_to_channel", {})
+        if protocol_id_to_channel:
+            self.set_protocol_id_to_channel_mapping(protocol_id_to_channel)
 
     def to_flat_export(self):
         """
         Returns a dict with:
-        - 'steps': list of step dicts (including device_state as a dict)
+        - 'steps': list of step dicts (including device_state without id_to_channel)
         - 'groups': list of {'ID': group_id, 'Description': group_description}
         - 'fields': list of field names
+        - 'id_to_channel': common mapping for all steps
         """
         steps = []
         groups = []
+        
+        protocol_id_to_channel = self.get_protocol_id_to_channel_mapping()
 
         def recurse(seq, prefix=""):
             group_counter = 1
@@ -152,6 +191,7 @@ class ProtocolState:
             "steps": steps,
             "groups": groups,
             "fields": list(self.fields),
+            "id_to_channel": protocol_id_to_channel,
             "_uid_counter": self._uid_counter
         }
     
@@ -162,6 +202,11 @@ class ProtocolState:
         self.fields = fields
         self._uid_counter = flat_json.get("_uid_counter", 1)
         self.update_uid_counter_from_sequence()
+        
+        # apply id_to_channel mapping to all steps
+        protocol_id_to_channel = flat_json.get("id_to_channel", {})
+        if protocol_id_to_channel:
+            self.set_protocol_id_to_channel_mapping(protocol_id_to_channel)
 
     def to_json(self):
         return self.to_dict()

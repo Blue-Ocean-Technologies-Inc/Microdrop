@@ -15,6 +15,8 @@ class ImportExportManager:
             for g in flat_json.get("groups", [])
         }       
         fields = flat_json.get("fields", [])
+        protocol_id_to_channel = flat_json.get("id_to_channel", {})
+        
         group_objs = {}
 
         def get_parent_group_id(step_id):
@@ -82,6 +84,10 @@ class ImportExportManager:
             )
             if "device_state" in step:
                 step_obj.device_state.from_dict(step["device_state"])
+            
+            if protocol_id_to_channel:
+                step_obj.device_state.id_to_channel = protocol_id_to_channel.copy()
+            
             if parent_group_id:
                 group = get_or_create_group(parent_group_id)
                 group.elements.append(step_obj)
