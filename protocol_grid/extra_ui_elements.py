@@ -13,9 +13,15 @@ from protocol_grid.consts import protocol_grid_fields, field_groupings, fixed_fi
 class NavigationBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        # VLayout: Navigation buttons above checkbox
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)
+        
+        # HLayout: Navigation buttons
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(0)
 
         btns = [
             QPushButton("⏮ First"),
@@ -27,10 +33,31 @@ class NavigationBar(QWidget):
         ]
         for btn in btns:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            layout.addWidget(btn)
+            button_layout.addWidget(btn)
 
         self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last = btns
-        self.setLayout(layout)
+        
+        checkbox_layout = QHBoxLayout()
+        checkbox_layout.setContentsMargins(0, 0, 0, 0)
+        checkbox_layout.setSpacing(0)
+        
+        # right-align checkbox
+        checkbox_layout.addStretch()
+        
+        self.preview_mode_checkbox = QCheckBox("Preview Mode")
+        self.preview_mode_checkbox.setToolTip("When checked, no hardware messages will be sent during protocol execution")
+        checkbox_layout.addWidget(self.preview_mode_checkbox)
+        
+        main_layout.addLayout(button_layout)
+        main_layout.addLayout(checkbox_layout)
+        
+        self.setLayout(main_layout)
+    
+    def is_preview_mode(self):
+        return self.preview_mode_checkbox.isChecked()
+    
+    def set_preview_mode_enabled(self, enabled):
+        self.preview_mode_checkbox.setEnabled(enabled)
 
 
 class StatusBar(QWidget):

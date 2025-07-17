@@ -358,6 +358,9 @@ class PGCWidget(QWidget):
                 current_run = flat_run[start_idx:] if repeat_idx == 0 else flat_run
                 run_order.extend(current_run)
 
+            preview_mode = self.navigation_bar.is_preview_mode()
+            self.protocol_runner.set_preview_mode(preview_mode)
+
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.set_run_order(run_order)
             self.protocol_runner.start()
@@ -392,7 +395,8 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_first.setEnabled(enabled)
         self.navigation_bar.btn_prev.setEnabled(enabled)
         self.navigation_bar.btn_next.setEnabled(enabled)
-        self.navigation_bar.btn_last.setEnabled(enabled)
+        self.navigation_bar.btn_last.setEnabled(enabled)        
+        self.navigation_bar.set_preview_mode_enabled(enabled)
 
     def _get_all_step_paths(self):
         step_paths = []

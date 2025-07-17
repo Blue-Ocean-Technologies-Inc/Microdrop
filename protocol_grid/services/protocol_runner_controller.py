@@ -47,6 +47,7 @@ class ProtocolRunnerController(QObject):
         self._current_step_timer = None
         self._current_execution_plan = []
         self._current_phase_index = 0
+        self._preview_mode = False
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -67,6 +68,9 @@ class ProtocolRunnerController(QObject):
         self._paused_phase_index = 0
 
         self._unique_step_count = 0
+
+    def set_preview_mode(self, preview_mode):
+        self._preview_mode = preview_mode
 
     def start(self):
         if self._is_running:
@@ -203,11 +207,10 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Published final stop message to device viewer: {msg_model.serialize()}")
             
-            deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
-            
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
-            
-            logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
+            if not self._preview_mode:
+                deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
+                
+                publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
             
             # select the current step that was being executed
             if step_uid:
@@ -325,14 +328,13 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Published electrode state to device viewer: {msg_model.serialize()}")
             
-            hardware_message = PathExecutionService.create_hardware_electrode_message(
-                device_state, 
-                plan_item["activated_electrodes"]
-            )
-            
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
-            
-            logger.info(f"Published electrode state to hardware: {hardware_message}")
+            if not self._preview_mode:
+                hardware_message = PathExecutionService.create_hardware_electrode_message(
+                    device_state, 
+                    plan_item["activated_electrodes"]
+                )
+                
+                publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
 
             self._phase_start_time = time.time()
             self._current_phase_index += 1
@@ -408,11 +410,10 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Published final protocol message to device viewer: {msg_model.serialize()}")
             
-            deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
-            
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
-            
-            logger.info(f"Published deactivated hardware message: {deactivated_hardware_message}")
+            if not self._preview_mode:
+                deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
+                
+                publish_message(topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message)
             
             # select the last executed step
             if step_uid:
