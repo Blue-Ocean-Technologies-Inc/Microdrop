@@ -129,10 +129,12 @@ class ElectrodeLayer():
                     connection_map[(route_from, route_to)] = (color, z)
         
         # Apply map
+        alpha = model.get_alpha("connection")
+
         for key, connection_item in self.connection_items.items():
             (color, z) = connection_map.get(key, (None, None))
             if color:
-                connection_item.set_active(color)
+                connection_item.set_active(color, alpha)
                 connection_item.setZValue(z) # We want to make sure the whole route is on the same z value
             else:
                 connection_item.set_inactive()
@@ -140,12 +142,14 @@ class ElectrodeLayer():
         for endpoint_id, endpoint_view in self.electrode_endpoints.items():
             (color, z) = endpoint_map.get(endpoint_id, (None, None))
             if color:
-                endpoint_view.set_active(color)
+                endpoint_view.set_active(color, alpha)
                 endpoint_view.setZValue(z)
             else:
                 endpoint_view.set_inactive()
     
     def redraw_electrode_colors(self, model: MainModel, electrode_hovered: ElectrodeView):
+        alpha = model.get_alpha("fill")
+        
         for electrode_id, electrode_view in self.electrode_views.items():
             if electrode_view.electrode == model.electrode_editing:
                 color = ELECTRODE_CHANNEL_EDITING
@@ -157,11 +161,12 @@ class ElectrodeLayer():
             if electrode_hovered == electrode_view:
                 color = QColor(color).lighter(120).name()
 
-            electrode_view.update_color(color)
+            electrode_view.update_color(color, alpha)
 
     def redraw_electrode_labels(self, model: MainModel):
+        alpha = model.get_alpha("text")
         for electrode_id, electrode_view in self.electrode_views.items():
-            electrode_view.update_label()
+            electrode_view.update_label(alpha)
 
     def set_loading_label(self):
         """
