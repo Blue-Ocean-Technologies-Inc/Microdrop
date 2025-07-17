@@ -108,16 +108,17 @@ class ProtocolRunnerController(QObject):
         if not self._is_running or self._is_paused:
             return
         self._is_paused = True
-        self._pause_time = time.time()
+        current_time = time.time()
+        self._pause_time = current_time
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
         
-        self._elapsed_time += time.time() - self._start_time
-        self._step_elapsed_time += time.time() - self._step_start_time
+        self._elapsed_time += current_time - self._start_time
+        self._step_elapsed_time += current_time - self._step_start_time
         
         if self._phase_start_time and self._current_phase_index > 0:
-            phase_elapsed = time.time() - self._phase_start_time
+            phase_elapsed = current_time - self._phase_start_time
             current_phase_item = self._current_execution_plan[self._current_phase_index - 1]
             phase_duration = current_phase_item["duration"]
             self._remaining_phase_time = max(0, phase_duration - phase_elapsed)
@@ -129,6 +130,7 @@ class ProtocolRunnerController(QObject):
             self._was_in_phase = False
             self._paused_phase_index = self._current_phase_index
         
+        # remaining step time
         if self._current_index < len(self._run_order):
             step_info = self._run_order[self._current_index]
             step = step_info["step"]
@@ -138,7 +140,7 @@ class ProtocolRunnerController(QObject):
             
             total_step_time = PathExecutionService.calculate_step_execution_time(step, device_state)
             self._remaining_step_time = max(0, total_step_time - self._step_elapsed_time)
-            logger.info(f"Paused with {self._remaining_step_time:.2f}s remaining for step")
+            logger.info(f"Paused with {self._remaining_step_time:.2f}s remaining for step (elapsed: {self._step_elapsed_time:.2f}s)")
         
         self.signals.protocol_paused.emit()
 
@@ -150,7 +152,7 @@ class ProtocolRunnerController(QObject):
         
         current_time = time.time()
         self._start_time = current_time
-        self._step_start_time = current_time - self._step_elapsed_time
+        self._step_start_time = current_time
         
         if self._was_in_phase and self._remaining_phase_time > 0:
             self._phase_start_time = current_time
@@ -159,12 +161,17 @@ class ProtocolRunnerController(QObject):
             logger.info(f"Resuming phase {self._paused_phase_index + 1} with {self._remaining_phase_time:.2f}s remaining")
         else:
             self._current_phase_index = self._paused_phase_index
+            self._phase_start_time = None
             self._execute_next_phase()
         
         # restart step timer with remaining time
         if self._remaining_step_time > 0:
             self._timer.start(int(self._remaining_step_time * 1000))
             logger.info(f"Resuming step with {self._remaining_step_time:.2f}s remaining")
+        else:
+            logger.info("Step time expired, completing step")
+            self._on_step_completed(self._run_order[self._current_index]["step"].parameters.get("UID", ""))
+            return
         
         self._pause_time = None
         self._was_in_phase = False
@@ -263,13 +270,16 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Execution plan has {len(self._current_execution_plan)} phases")
             
-            self._step_start_time = time.time()
+            # reset timing for new step
+            current_time = time.time()
+            self._step_start_time = current_time
             self._step_elapsed_time = 0.0
 
             self._remaining_step_time = 0.0
             self._remaining_phase_time = 0.0
             self._was_in_phase = False
             self._paused_phase_index = 0
+            self._phase_start_time = None
 
             step_timeout = PathExecutionService.calculate_step_execution_time(step, device_state)
             
@@ -436,8 +446,9 @@ class ProtocolRunnerController(QObject):
             total_time = self._elapsed_time
             step_time = self._step_elapsed_time
         else:
-            total_time = self._elapsed_time + (time.time() - self._start_time)
-            step_time = time.time() - self._step_start_time
+            current_time = time.time()
+            total_time = self._elapsed_time + (current_time - self._start_time)
+            step_time = self._step_elapsed_time + (current_time - self._step_start_time)
         
         status = {
             "total_time": total_time,
