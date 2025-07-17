@@ -36,19 +36,12 @@ class DeviceState:
         else:
             has_loops = any(len(path) >= 2 and path[0] == path[-1] for path in self.paths)
             
-            if not has_loops:
-                effective_repetitions = 1
-            else:
-                effective_repetitions = repetitions
-            
-            logger.info(f"effective_repetitions={effective_repetitions}")
-            
+            # calculate phases for loops and open paths separately with per-path repetitions
             max_open_path_length = 0
-            max_loop_cycle_length = 0
+            max_loop_total_phases = 0
             
             for i, path in enumerate(self.paths):
                 is_loop = len(path) >= 2 and path[0] == path[-1]
-                logger.info(f"Path {i}: {path}, is_loop={is_loop}")
                 
                 if is_loop:
                     effective_length = len(path) - 1
@@ -64,8 +57,34 @@ class DeviceState:
                             if position >= effective_length:
                                 break
                         cycle_length = phases
-                    max_loop_cycle_length = max(max_loop_cycle_length, cycle_length)
-                    logger.info(f"Loop {i} cycle_length={cycle_length}")
+                    
+                    single_cycle_duration = cycle_length * step_duration
+                    
+                    if repetitions > 1:
+                        repetition_based_duration = (repetitions - 1) * single_cycle_duration + single_cycle_duration + step_duration  # +1 for return phase
+                    else:
+                        repetition_based_duration = single_cycle_duration + step_duration  # +1 for return phase
+                                        
+                    if repetition_based_duration >= repeat_duration:
+                        effective_repetitions = repetitions
+                    else:
+                        effective_repetitions = repetitions
+                        while True:
+                            if effective_repetitions > 1:
+                                test_duration = (effective_repetitions - 1) * single_cycle_duration + single_cycle_duration + step_duration
+                            else:
+                                test_duration = single_cycle_duration + step_duration
+                            
+                            if test_duration >= repeat_duration:
+                                break
+                            effective_repetitions += 1
+                                            
+                    if effective_repetitions > 1:
+                        loop_total_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
+                    else:
+                        loop_total_phases = cycle_length + 1
+                    
+                    max_loop_total_phases = max(max_loop_total_phases, loop_total_phases)
                 else:
                     path_length = len(path)
                     step_size = trail_length - trail_overlay
@@ -101,21 +120,12 @@ class DeviceState:
                         
                         cycle_length = phases
                     max_open_path_length = max(max_open_path_length, cycle_length)
-                    logger.info(f"Open path {i} cycle_length={cycle_length}")
             
             # calculate total phases based on the longest duration needed
-            loop_total_phases = 0
-            if max_loop_cycle_length > 0:
-                if effective_repetitions > 1:
-                    loop_total_phases = (effective_repetitions - 1) * max_loop_cycle_length + max_loop_cycle_length + 1
-                else:
-                    loop_total_phases = max_loop_cycle_length + 1
-            
-            total_phases = max(loop_total_phases, max_open_path_length)
+            total_phases = max(max_loop_total_phases, max_open_path_length)
             calculated_time = total_phases * step_duration
         
         result = max(calculated_time, repeat_duration)
-        logger.info(f"Final result: max({calculated_time}, {repeat_duration}) = {result}")
         return result
 
     def update_from_device_viewer(self, activated_electrodes_json: str,
