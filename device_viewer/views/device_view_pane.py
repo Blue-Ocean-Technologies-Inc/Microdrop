@@ -14,6 +14,7 @@ from pyface.undo.api import UndoManager, CommandStack
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
+from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
@@ -254,6 +255,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         layout = QHBoxLayout(container)
         left_stack = QVBoxLayout()
 
+        # alpha_view code
+        alpha_view = generate_alpha_view(self.model)
+        self.alpha_view_ui = self.model.edit_traits(view=alpha_view)
+        self.alpha_view_ui.control.setFixedWidth(250) # Set widget to fixed width
+        self.alpha_view_ui.control.setParent(container)
+
         # device_view code
         self.device_view.setParent(container)
         self.device_view.display_state_signal.connect(self.apply_message_model)
@@ -270,6 +277,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # Add widgets to layouts
+        left_stack.addWidget(self.alpha_view_ui.control)
         left_stack.addWidget(self.layer_ui.control)
         left_stack.addWidget(self.mode_picker_view)
         
@@ -294,7 +302,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(f"Selected SVG file: {svg_file}")
 
             self.model.reset()
-            self.model.set_electrodes_from_svg_file(svg_file)
+            self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
+            self.model.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
             logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
 
             self.set_view_from_model(self.model)

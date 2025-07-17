@@ -1,7 +1,10 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List
 import uuid
+
+from device_viewer.models.alpha import AlphaValue
 from .route import RouteLayerManager
 from .electrodes import Electrodes
+from device_viewer.views.electrode_view.default_settings import default_alphas
 
 class MainModel(RouteLayerManager, Electrodes):
 
@@ -28,6 +31,18 @@ class MainModel(RouteLayerManager, Electrodes):
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
 
     uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
+
+    # ------------------ Alpha Color Model --------------------
+    alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
+
+    # ------------------ Initialization --------------------
+
+    def traits_init(self, **traits):
+        """Initialize the model with default traits."""
+        super().traits_init(**traits)
+
+        # Initialize the alpha map with default values
+        self.alpha_map = [AlphaValue(key, default_alphas[key]) for key in default_alphas.keys()]
 
     # ------------------------- Properties ------------------------
 
@@ -56,6 +71,13 @@ class MainModel(RouteLayerManager, Electrodes):
     def reset(self):
         self.reset_electrode_states()
         self.reset_route_manager()
+
+    def get_alpha(self, key: str) -> float:
+        """Get the alpha value for a given key."""
+        for alpha_value in self.alpha_map:
+            if alpha_value.value == key:
+                return alpha_value.alpha
+        return 1.0 # Default alpha if not found
     
     # ------------------ Observers ------------------------------------
 

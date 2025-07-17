@@ -72,10 +72,11 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         self.key = key
         self.set_inactive()
 
-    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT)):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0):
         """
         Set connection item to visually active
         """
+        color.setAlphaF(alpha)
         self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
 
     def set_inactive(self):
@@ -116,10 +117,11 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         self.electrode_id = electrode_id
         self.set_inactive()
 
-    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT)):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0):
         """
         Set connection item to visually active
         """
+        color.setAlphaF(alpha)
         self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
         self.setBrush(QBrush(color))
 
@@ -167,7 +169,6 @@ class ElectrodeView(QGraphicsPathItem):
 
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
-        self.pen_color.setAlphaF(self.alphas['line'])
         self.pen = QPen(self.pen_color, 1)  # line color outline
         self.setPen(self.pen)
 
@@ -177,11 +178,10 @@ class ElectrodeView(QGraphicsPathItem):
         # Text item
         self.text_path = QGraphicsTextItem(parent=self)
         self.text_color = QColor(ELECTRODE_TEXT_COLOR)
-        self.text_color.setAlphaF(self.alphas['text'])
         self.text_path.setDefaultTextColor(self.text_color)
         self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
                               np.min(path_data[:, 1]), np.max(path_data[:, 1])]
-        self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
+        self._fit_text_in_path() # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -191,10 +191,14 @@ class ElectrodeView(QGraphicsPathItem):
     # electrode view protected methods
     ##################################################################################
 
-    def _fit_text_in_path(self, text: str, path_extremes, default_font_size: int = 8):
+    def _fit_text_in_path(self, alpha = 1.0, default_font_size: int = 8):
         """
         Method to fit the text in the center of the electrode path
         """
+
+        text = str(self.electrode.channel)
+        path_extremes = self.path_extremes
+
         self.text_path.setPlainText(text if text != "None" else "")
 
         # Determine the font size based on the path size
@@ -213,6 +217,11 @@ class ElectrodeView(QGraphicsPathItem):
         resized_font = QFont("Arial") # Get the default font
         resized_font.setPointSize(font_size)
         self.text_path.setFont(resized_font)
+
+        new_color = QColor(self.text_color)
+        new_color.setAlphaF(alpha)
+        self.text_path.setDefaultTextColor(new_color)
+
         # Adjust the font size to fit the text in the path
         text_size = self.text_path.document().size()
         # center the text to the path
@@ -223,16 +232,16 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def update_color(self, color_str: str):
+    def update_color(self, color_str: str, alpha: float = 1.0):
         """
         Method to update the color of the electrode based on the state
         """
         color = QColor(color_str)
-        color.setAlphaF(self.alphas['fill'])
+        color.setAlphaF(alpha)
         self.setBrush(QBrush(color))
         self.update()
 
-    def update_label(self):
-        self._fit_text_in_path(str(self.electrode.channel), self.path_extremes)
+    def update_label(self, alpha: float = 1.0):
+        self._fit_text_in_path(alpha)
 
 
