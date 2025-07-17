@@ -131,8 +131,17 @@ class PGCWidget(QWidget):
             current_step_id = self._last_selected_step_id
             current_published_id = self._last_published_step_id
             
+            # get current device state to check id_to_channel
+            current_device_state = target_item.data(Qt.UserRole + 100)
+            current_id_to_channel = current_device_state.id_to_channel if current_device_state else {}
+            
             device_state = device_state_from_device_viewer_message(dv_msg)
-            target_item.setData(device_state, Qt.UserRole + 100)
+            
+            # check if id_to_channel mapping has changed
+            if device_state.id_to_channel != current_id_to_channel:
+                self._apply_id_to_channel_mapping_to_all_steps(device_state.id_to_channel, device_state.route_colors)
+            else:
+                target_item.setData(device_state, Qt.UserRole + 100)
             
             self.model_to_state()
             
@@ -151,7 +160,7 @@ class PGCWidget(QWidget):
             self._programmatic_change = False        
     # -------------------------------------
 
-    # ---------- Protocol Runner Methods ----------
+    # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
     def find_first_step_path_under_group(self, group_path):
         item = self.get_item_by_path(group_path)
         if not item or item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
@@ -610,7 +619,37 @@ class PGCWidget(QWidget):
         # logger.info("message: %s", msg_model.serialize())
         
         return step_id
-    # ---------------------------------------------
+        
+    def _apply_id_to_channel_mapping_to_all_steps(self, new_id_to_channel_mapping, new_route_colors):
+        
+        def update_steps_recursive(parent_item):
+            for row in range(parent_item.rowCount()):
+                item = parent_item.child(row, 0)
+                if not item:
+                    continue
+                    
+                row_type = item.data(ROW_TYPE_ROLE)
+                if row_type == STEP_TYPE:
+                    current_device_state = item.data(Qt.UserRole + 100)
+                    if current_device_state:
+                        # update only the id_to_channel mapping
+                        current_device_state.update_id_to_channel_mapping(new_id_to_channel_mapping, new_route_colors)
+                        item.setData(current_device_state, Qt.UserRole + 100)
+                    else:
+                        new_device_state = DeviceState(
+                            activated_electrodes={},
+                            paths=[],
+                            id_to_channel=new_id_to_channel_mapping.copy(),
+                            route_colors=new_route_colors.copy() if new_route_colors else []
+                        )
+                        item.setData(new_device_state, Qt.UserRole + 100)
+                elif row_type == GROUP_TYPE:
+                    update_steps_recursive(item)
+        
+        update_steps_recursive(self.model.invisibleRootItem())
+        
+        self.update_step_dev_fields()
+    # ---------------------------------------------------------------------------
 
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()

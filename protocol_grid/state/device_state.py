@@ -161,6 +161,55 @@ class DeviceState:
             all_electrodes.extend(path)
         return all_electrodes
     
+    def update_id_to_channel_mapping(self, new_id_to_channel, new_route_colors=None):        
+        old_mapping = self.id_to_channel.copy()
+        
+        self.id_to_channel = new_id_to_channel.copy()
+        
+        # Update route colors if provided
+        if new_route_colors is not None:
+            self.route_colors = new_route_colors.copy()
+        
+        # update activated_electrodes to use new mapping
+        updated_activated_electrodes = {}
+        for electrode_id, is_active in self.activated_electrodes.items():
+            if electrode_id in new_id_to_channel:
+                updated_activated_electrodes[electrode_id] = is_active
+            else:
+                # find the electrode in the old mapping and map it according to new mapping
+                if electrode_id in old_mapping:
+                    old_channel = old_mapping[electrode_id]
+                    for new_electrode_id, new_channel in new_id_to_channel.items():
+                        if new_channel == old_channel:
+                            updated_activated_electrodes[new_electrode_id] = is_active
+                            break
+                else: # keep it as is
+                    updated_activated_electrodes[electrode_id] = is_active
+        
+        self.activated_electrodes = updated_activated_electrodes
+        
+        # update paths to use new electrode IDs
+        updated_paths = []
+        for path in self.paths:
+            updated_path = []
+            for electrode_id in path:
+                if electrode_id in new_id_to_channel:
+                    updated_path.append(electrode_id)
+                else:
+                    if electrode_id in old_mapping:
+                        old_channel = old_mapping[electrode_id]
+                        for new_electrode_id, new_channel in new_id_to_channel.items():
+                            if new_channel == old_channel:
+                                updated_path.append(new_electrode_id)
+                                break
+                        else:
+                            updated_path.append(electrode_id)
+                    else:
+                        updated_path.append(electrode_id)
+            updated_paths.append(updated_path)
+        
+        self.paths = updated_paths
+            
     def __str__(self):
         active_count = len(self.get_activated_electrode_ids())
         return (f"DeviceState(active_electrodes={active_count}, "
