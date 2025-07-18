@@ -178,19 +178,36 @@ class ProtocolRunnerController(QObject):
             if self._phase_start_time:
                 self._phase_start_time += pause_duration
         
-        if self._was_in_phase and self._remaining_phase_time > 0:
+        # check if navigated during pause (execution plan exists but no phases completed)
+        if (self._current_execution_plan and 
+            self._current_phase_index == 0 and 
+            self._total_step_phases_completed == 0 and
+            not self._was_in_phase):
+            
+            # navigated during pause, start fresh from the beginning of this step
+            logger.info("Resuming from navigated step - starting fresh execution")
+            self._execute_next_step()
+            
+        elif self._was_in_phase and self._remaining_phase_time > 0:
+            # Resume in the middle of a phase
             self._phase_start_time = current_time
             self._phase_elapsed_time = 0.0
             self._phase_timer.start(int(self._remaining_phase_time * 1000))
+            logger.info(f"Resuming phase {self._paused_phase_index + 1} with {self._remaining_phase_time:.2f}s remaining")
+            
+            if self._remaining_step_time > 0:
+                self._timer.start(int(self._remaining_step_time * 1000))
+                logger.info(f"Resuming step with {self._remaining_step_time:.2f}s remaining")
+                
         else:
             self._phase_start_time = None
             self._phase_elapsed_time = 0.0
             self._execute_next_phase()
-        
-        # restart step timer with remaining time
-        if self._remaining_step_time > 0:
-            self._timer.start(int(self._remaining_step_time * 1000))
-            logger.info(f"Resuming step with {self._remaining_step_time:.2f}s remaining")
+            
+            # restart step timer with remaining time
+            if self._remaining_step_time > 0:
+                self._timer.start(int(self._remaining_step_time * 1000))
+                logger.info(f"Resuming step with {self._remaining_step_time:.2f}s remaining")
         
         self._pause_time = None
         self._was_in_phase = False
@@ -287,13 +304,14 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Executing step {step.parameters.get('ID', 'Unknown')} with device state: {device_state}")
             
-            self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
-            self._current_phase_index = 0
-            self._total_step_phases_completed = 0
+            # recalculate execution plan if it doesn't exist (new step or first time)
+            if not self._current_execution_plan:
+                self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+                self._current_phase_index = 0
+                self._total_step_phases_completed = 0
+                
+                self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
             
-            self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
-                        
-            # reset timing for new step
             current_time = time.time()
             
             # if first step, synchronize total timer and step timer
@@ -413,8 +431,35 @@ class ProtocolRunnerController(QObject):
             self._execute_next_step()
         else:
             step_info = self._run_order[self._current_index]
+            step = step_info["step"]
             path = step_info["path"]
             self.signals.highlight_step.emit(path)
+            
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            if not device_state:
+                device_state = PathExecutionService.get_empty_device_state()
+            
+            self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+            self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
+            
+            if self._current_execution_plan:
+                first_phase = self._current_execution_plan[0]
+                
+                msg_model = PathExecutionService.create_dynamic_device_state_message(
+                    device_state, 
+                    first_phase["activated_electrodes"], 
+                    first_phase["step_uid"],
+                    first_phase["step_description"],
+                    first_phase["step_id"]
+                )
+                
+                msg_model.editable = False
+                
+                publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+                
+                logger.info(f"Published paused navigation preview to device viewer: {msg_model.serialize()}")
+            
+            logger.info(f"Navigated to step during pause, ready to resume from beginning of step")
         
         return True
     

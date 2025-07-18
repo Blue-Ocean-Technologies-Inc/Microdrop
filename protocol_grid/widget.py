@@ -348,6 +348,11 @@ class PGCWidget(QWidget):
             self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
             self._update_navigation_buttons_state()
+            
+            self.tree.clearSelection()
+            self._last_selected_step_id = None
+            self._last_published_step_id = None
+            
         else:
             self._protocol_running = True
             self.sync_to_state()
@@ -510,7 +515,14 @@ class PGCWidget(QWidget):
         success = self.protocol_runner.jump_to_step_by_path(target_step_path)
         if success:
             logger.info(f"Successfully navigated to step at path {target_step_path} during protocol execution")
-            self._select_step_by_path(target_step_path)
+            
+            # only select the step during pause, clear selection during play
+            if self.protocol_runner.is_paused():
+                self._select_step_by_path(target_step_path)
+            else:
+                self.tree.clearSelection()
+                self._last_selected_step_id = None
+                self._last_published_step_id = None
         
         return success
 
