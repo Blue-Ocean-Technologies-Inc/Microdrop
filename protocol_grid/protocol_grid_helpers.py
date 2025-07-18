@@ -82,11 +82,14 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         field = protocol_grid_fields[index.column()]
         
-        if field in ("Video"):
-            checked = index.model().data(index, Qt.CheckStateRole) == Qt.Checked
-            editor.setChecked(checked)
-        elif field in ("Magnet"):
-            checked = index.model().data(index, Qt.CheckStateRole) == 2
+        if field in ("Video", "Magnet"):
+            check_state = index.model().data(index, Qt.CheckStateRole)
+            if check_state is not None:
+                checked = check_state == Qt.Checked or check_state == 2
+            else:
+                # fallback to text based checking
+                text_value = index.model().data(index, Qt.DisplayRole) or ""
+                checked = str(text_value).strip().lower() in ("1", "true", "yes", "on")
             editor.setChecked(checked)
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             try:
@@ -100,9 +103,12 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             
     def setModelData(self, editor, model, index):
         field = protocol_grid_fields[index.column()]
-        if isinstance(editor, QCheckBox) and field != "Magnet":
+        
+        if isinstance(editor, QCheckBox):
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            model.setData(index, "", Qt.DisplayRole)
+            
             item = model.itemFromIndex(index)
             if item is not None:
                 item.emitDataChanged()
@@ -143,7 +149,10 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
         if row_type == STEP_TYPE and field in ("Video", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            checked = str(value).strip().lower() in ("1", "true", "yes", "on")
+            
+            value_str = str(value).strip().lower()
+            checked = value_str in ("1", "true", "yes", "on")
+            
             item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             item.setText("")
             if field == "Magnet":
@@ -155,9 +164,12 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                 item.setText("")
             else:
                 item.setEditable(True)
-                last_value = item.data(Qt.UserRole + 2)
-                if last_value is not None and last_value != "":
-                    item.setText(str(last_value))
+                stored_value = item.data(Qt.UserRole + 2)
+                if stored_value is not None and stored_value != "":
+                    item.setText(str(stored_value))
+                else:
+                    item.setText(str(value))
+                    
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE:

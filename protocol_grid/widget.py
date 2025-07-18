@@ -725,6 +725,70 @@ class PGCWidget(QWidget):
         
         self.update_step_dev_fields()
     # ---------------------------------------------------------------------------
+    def _is_checkbox_checked(self, item_or_value):
+        """standardize checkbox state checking across all scenarios."""
+        if item_or_value is None:
+            return False
+        
+        # if it is a QStandardItem, get checkbox state
+        if hasattr(item_or_value, 'data'):
+            check_state = item_or_value.data(Qt.CheckStateRole)
+            if check_state is not None:
+                return check_state == Qt.Checked or check_state == 2
+            # Fallback to text-based checking
+            text_value = item_or_value.text()
+            return str(text_value).strip().lower() in ("1", "true", "yes", "on")
+        
+        # other direct value checks
+        if isinstance(item_or_value, bool):
+            return item_or_value
+        if isinstance(item_or_value, int):
+            return item_or_value == 1 or item_or_value == 2 or item_or_value == Qt.Checked
+        if isinstance(item_or_value, str):
+            return item_or_value.strip().lower() in ("1", "true", "yes", "on")
+        
+        return False
+
+    def _normalize_checkbox_value(self, value):
+        """convert any checkbox value to standardized string format for protocol state."""
+        return "1" if self._is_checkbox_checked(value) else "0"
+    
+    def _handle_checkbox_change(self, parent, row, field):
+        if field == "Video":
+            video_col = protocol_grid_fields.index("Video")
+            video_item = parent.child(row, video_col)
+            if video_item:
+                checked = self._is_checkbox_checked(video_item)
+                video_item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+                
+        elif field == "Magnet":
+            magnet_col = protocol_grid_fields.index("Magnet")
+            magnet_height_col = protocol_grid_fields.index("Magnet Height")
+            magnet_item = parent.child(row, magnet_col)
+            magnet_height_item = parent.child(row, magnet_height_col)
+            
+            if not magnet_item or not magnet_height_item:
+                return
+
+            checked = self._is_checkbox_checked(magnet_item)
+            magnet_item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+            
+            if checked:
+                last_value = magnet_height_item.data(Qt.UserRole + 2)
+                if last_value is None or last_value == "":
+                    last_value = "0"
+                magnet_height_item.setEditable(True)
+                magnet_height_item.setText(str(last_value))
+                self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+            else:
+                current_value = magnet_height_item.text()
+                if current_value:
+                    magnet_height_item.setData(current_value, Qt.UserRole + 2)
+                magnet_height_item.setEditable(False)
+                magnet_height_item.setText("")
+                self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
+
+            self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
         self.button_layout_1 = QHBoxLayout()
@@ -923,18 +987,15 @@ class PGCWidget(QWidget):
                 for col, field in enumerate(protocol_grid_fields):
                     item = parent_item.child(row, col)
                     if item:
-                        if field == "Magnet":
-                            checked = item.data(Qt.CheckStateRole) == 2 # == Qt.Checked
-                            parameters[field] = "1" if checked else "0"
+                        if field in ("Video", "Magnet"):
+                            parameters[field] = self._normalize_checkbox_value(item)
                         elif field == "Magnet Height":
                             last_value = item.data(Qt.UserRole + 2)
                             if last_value is not None and last_value != "":
                                 parameters[field] = str(last_value)
-                            else:   
-                                parameters[field] = item.text()
-                        elif field == "Video":
-                            checked = item.data(Qt.CheckStateRole) == Qt.Checked
-                            parameters[field] = "1" if checked else "0"
+                            else:
+                                # fallback to display text if no stored value
+                                parameters[field] = item.text() or "0"
                         else:
                             parameters[field] = item.text()
                 
@@ -1057,8 +1118,11 @@ class PGCWidget(QWidget):
 
         field = protocol_grid_fields[col]
 
-        if field == "Magnet":
-            self._handle_magnet_change(parent, row)
+        if field in ("Video", "Magnet"):
+            self._handle_checkbox_change(parent, row, field)
+            # immediately sync to state
+            self.sync_to_state()
+            QTimer.singleShot(0, self._reset_undo_snapshotted)
             return
 
         desc_item = parent.child(row, 0)

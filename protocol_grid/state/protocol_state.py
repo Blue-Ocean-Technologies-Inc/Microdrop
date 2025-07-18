@@ -1,4 +1,7 @@
 import copy
+
+from PySide6.QtCore import Qt
+
 from protocol_grid.consts import protocol_grid_fields
 from protocol_grid.state.device_state import DeviceState
 
@@ -6,13 +9,19 @@ class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
         self.name = name
         self.parameters = parameters or {}
+        
+        # normalize checkbox fields for consistent storage
         for field in ("Magnet", "Video"):
             if field in self.parameters:
                 val = self.parameters[field]
-                if str(val).strip().lower() in ("1", "true", "yes", "on"):
-                    self.parameters[field] = "1"
+                if isinstance(val, bool):
+                    self.parameters[field] = "1" if val else "0"
+                elif isinstance(val, int):
+                    self.parameters[field] = "1" if val in (1, 2, Qt.Checked) else "0"
+                elif isinstance(val, str):
+                    self.parameters[field] = "1" if val.strip().lower() in ("1", "true", "yes", "on") else "0"
                 else:
-                    self.parameters[field] = "0"        
+                    self.parameters[field] = "0"
         
         self.device_state = DeviceState()
 
