@@ -377,6 +377,69 @@ class ProtocolRunnerController(QObject):
             logger.error(f"Error in phase execution: {e}")
             self.signals.protocol_error.emit(str(e))
 
+    def jump_to_step_by_path(self, step_path):
+        if not self._is_running or not self._run_order:
+            return False
+        
+        target_index = self.get_run_order_index_by_path(step_path)
+        if target_index == -1:
+            logger.warning(f"Could not find step with path {step_path} in run_order")
+            return False
+        
+        logger.info(f"Jumping from step {self._current_index} to step {target_index}")
+        
+        self._timer.stop()
+        self._phase_timer.stop()
+        
+        current_time = time.time()
+        if self._step_start_time:
+            self._step_elapsed_time = current_time - self._step_start_time
+        if self._start_time:
+            self._elapsed_time = current_time - self._start_time
+        
+        self._current_index = target_index
+        
+        self._current_execution_plan = []
+        self._current_phase_index = 0
+        self._total_step_phases_completed = 0
+        self._phase_start_time = None
+        self._phase_elapsed_time = 0.0
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
+        
+        if not self._is_paused:
+            self._execute_next_step()
+        else:
+            step_info = self._run_order[self._current_index]
+            path = step_info["path"]
+            self.signals.highlight_step.emit(path)
+        
+        return True
+    
+    def get_current_step_path(self):
+        if not self._is_running or self._current_index >= len(self._run_order):
+            return None
+        
+        step_info = self._run_order[self._current_index]
+        return step_info["path"]
+
+    def get_run_order_index_by_path(self, step_path):
+        for i, step_info in enumerate(self._run_order):
+            if step_info["path"] == step_path:
+                return i
+        return -1
+
+    def get_protocol_state(self):
+        return {
+            "is_running": self._is_running,
+            "is_paused": self._is_paused,
+            "current_index": self._current_index,
+            "total_steps": len(self._run_order),
+            "current_step_path": self.get_current_step_path()
+        }
+
     def _on_phase_timeout(self):
         if not self._is_running or self._is_paused:
             return

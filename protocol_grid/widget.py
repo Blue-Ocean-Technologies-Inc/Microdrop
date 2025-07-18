@@ -265,53 +265,76 @@ class PGCWidget(QWidget):
             # didnt update _last_published_step_id here since we want the message to be published
 
     def navigate_to_first_step(self):
-        if self._protocol_running:
-            return  
-        
         all_step_paths = self._get_all_step_paths()
-        if all_step_paths:
-            self._select_step_by_path(all_step_paths[0])
+        if not all_step_paths:
+            return
+        
+        target_path = all_step_paths[0]
+        
+        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+            self._navigate_during_protocol(target_path)
+        elif not self._protocol_running:
+            self._select_step_by_path(target_path)
 
     def navigate_to_previous_step(self):
-        if self._protocol_running:
+        all_step_paths = self._get_all_step_paths()
+        if not all_step_paths:
             return
         
-        current_index = self._get_current_step_index()
-        all_step_paths = self._get_all_step_paths()
-        if current_index == -1: # no valid selection
-            if all_step_paths:
-                self._select_step_by_path(all_step_paths[0])
-            return
-        elif current_index <= 0:
-            return # already at first step
-        
-        all_step_paths = self._get_all_step_paths()
-        if current_index - 1 < len(all_step_paths):
-            self._select_step_by_path(all_step_paths[current_index - 1])
+        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+            current_path = self.protocol_runner.get_current_step_path()
+            if current_path:
+                try:
+                    current_index = all_step_paths.index(current_path)
+                    if current_index > 0:
+                        target_path = all_step_paths[current_index - 1]
+                        self._navigate_during_protocol(target_path)
+                except ValueError:
+                    pass
+        elif not self._protocol_running:
+            current_index = self._get_current_step_index()
+            if current_index == -1:
+                if all_step_paths:
+                    self._select_step_by_path(all_step_paths[-1])
+            elif current_index > 0:
+                self._select_step_by_path(all_step_paths[current_index - 1])
 
     def navigate_to_next_step(self):
-        if self._protocol_running:
+        all_step_paths = self._get_all_step_paths()
+        if not all_step_paths:
             return
         
-        current_index = self._get_current_step_index()
-        all_step_paths = self._get_all_step_paths()
-        if current_index == -1: # no valid selection
-            if all_step_paths:
-                self._select_step_by_path(all_step_paths[0])
-            return
-
-        if current_index + 1 < len(all_step_paths):
-            self._select_step_by_path(all_step_paths[current_index + 1]) 
-        else:
-            self._add_step_at_root_and_select()       
+        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+            current_path = self.protocol_runner.get_current_step_path()
+            if current_path:
+                try:
+                    current_index = all_step_paths.index(current_path)
+                    if current_index + 1 < len(all_step_paths):
+                        target_path = all_step_paths[current_index + 1]
+                        self._navigate_during_protocol(target_path)
+                except ValueError:
+                    pass
+        elif not self._protocol_running:
+            current_index = self._get_current_step_index()
+            if current_index == -1:
+                if all_step_paths:
+                    self._select_step_by_path(all_step_paths[0])
+            elif current_index + 1 < len(all_step_paths):
+                self._select_step_by_path(all_step_paths[current_index + 1])
+            else:
+                self._add_step_at_root_and_select()
 
     def navigate_to_last_step(self):
-        if self._protocol_running:
+        all_step_paths = self._get_all_step_paths()
+        if not all_step_paths:
             return
         
-        all_step_paths = self._get_all_step_paths()
-        if all_step_paths:
-            self._select_step_by_path(all_step_paths[-1])
+        target_path = all_step_paths[-1]
+        
+        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+            self._navigate_during_protocol(target_path)
+        elif not self._protocol_running:
+            self._select_step_by_path(target_path)
 
     def toggle_play_pause(self):
         if self.protocol_runner.is_running():
@@ -329,23 +352,21 @@ class PGCWidget(QWidget):
             self._protocol_running = True
             self.sync_to_state()
             try:
-                repeat_n = int(self.status_bar.edit_repeat_protocol.text())
-                if repeat_n < 1:
-                    repeat_n = 1
-            except Exception:
+                repeat_n = int(self.status_bar.edit_repeat_protocol.text() or "1")
+            except ValueError:
                 repeat_n = 1
 
             selected_paths = self.get_selected_paths()
             start_step_path = None
             if selected_paths:
-                path = selected_paths[0]
-                item = self.get_item_by_path(path)
-                if item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                    start_step_path = path
-                elif item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                    start_step_path = self.find_first_step_path_under_group(path)
+                first_selected_item = self.get_item_by_path(selected_paths[0])
+                if first_selected_item and first_selected_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                    start_step_path = selected_paths[0]
+
             if not start_step_path:
-                start_step_path = [0]
+                all_step_paths = self._get_all_step_paths()
+                start_step_path = all_step_paths[0] if all_step_paths else None
+
             flat_run = flatten_protocol_for_run(self.state)
 
             start_idx = 0
@@ -357,8 +378,7 @@ class PGCWidget(QWidget):
             # Repeat Protocol 
             run_order = []
             for repeat_idx in range(repeat_n):
-                current_run = flat_run[start_idx:] if repeat_idx == 0 else flat_run
-                run_order.extend(current_run)
+                run_order.extend(flat_run[start_idx:])
 
             preview_mode = self.navigation_bar.is_preview_mode()
             self.protocol_runner.set_preview_mode(preview_mode)
@@ -463,12 +483,36 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_repeat_protocol_status.setText("1/")
 
     def _update_navigation_buttons_state(self):
-        enabled = not self._protocol_running
+        # Enable navigation buttons if:
+        # 1. Protocol is not running, OR
+        # 2. Protocol is running/paused AND advanced user mode is enabled
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        enabled = not self._protocol_running or (self._protocol_running and advanced_mode)
+        
         self.navigation_bar.btn_first.setEnabled(enabled)
         self.navigation_bar.btn_prev.setEnabled(enabled)
         self.navigation_bar.btn_next.setEnabled(enabled)
-        self.navigation_bar.btn_last.setEnabled(enabled)        
-        self.navigation_bar.set_preview_mode_enabled(enabled)
+        self.navigation_bar.btn_last.setEnabled(enabled)
+        
+        checkbox_enabled = not self._protocol_running
+        self.navigation_bar.set_preview_mode_enabled(checkbox_enabled)
+        self.navigation_bar.set_advanced_user_mode_enabled(checkbox_enabled)
+    
+    def _navigate_during_protocol(self, target_step_path):
+        """navigation during protocol execution in advanced user mode."""
+        if not self._protocol_running:
+            return False
+        
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        if not advanced_mode:
+            return False
+        
+        success = self.protocol_runner.jump_to_step_by_path(target_step_path)
+        if success:
+            logger.info(f"Successfully navigated to step at path {target_step_path} during protocol execution")
+            self._select_step_by_path(target_step_path)
+        
+        return success
 
     def _get_all_step_paths(self):
         step_paths = []

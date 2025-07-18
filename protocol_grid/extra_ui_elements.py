@@ -40,10 +40,14 @@ class NavigationBar(QWidget):
         
         checkbox_layout = QHBoxLayout()
         checkbox_layout.setContentsMargins(0, 0, 0, 0)
-        checkbox_layout.setSpacing(0)
+        checkbox_layout.setSpacing(10)
         
-        # right-align checkbox
+        # right-align checkboxes
         checkbox_layout.addStretch()
+        
+        self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
+        self.advanced_user_mode_checkbox.setToolTip("When checked, navigation buttons remain enabled during protocol execution for advanced users")
+        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
         
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
         self.preview_mode_checkbox.setToolTip("When checked, no hardware messages will be sent during protocol execution")
@@ -56,9 +60,15 @@ class NavigationBar(QWidget):
     
     def is_preview_mode(self):
         return self.preview_mode_checkbox.isChecked()
-    
+
+    def is_advanced_user_mode(self):
+        return self.advanced_user_mode_checkbox.isChecked()
+
     def set_preview_mode_enabled(self, enabled):
         self.preview_mode_checkbox.setEnabled(enabled)
+
+    def set_advanced_user_mode_enabled(self, enabled):
+        self.advanced_user_mode_checkbox.setEnabled(enabled)
 
 
 class StatusBar(QWidget):
