@@ -64,6 +64,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
     message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
+    video_item = None  # The video item for the camera feed
+    debounce_timer = None  # Timer to debounce state messages
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -170,7 +172,19 @@ class DeviceViewerDockPane(TraitsDockPane):
             if not self.model.editable:
                 self.undo() # Revert changes if not editable
                 return
-        if not self._disable_state_messages:
+
+    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.layers.items.route.route.items") # When a route is modified
+    @observe("model.layers.items") # When an electrode changes state
+    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.electrode_editing") # When an electrode is being edited
+    def model_change_handler_with_message(self, event=None):
+        """
+        Handle changes to the model and send a message to the device viewer state change topic.
+        """
+        self.model_change_handler_with_timeout(event)
+        if not self._disable_state_messages and self.debounce_timer:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
             self.debounce_timer.start(200) # Start timeout for sending message
