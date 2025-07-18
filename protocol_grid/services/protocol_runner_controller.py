@@ -48,6 +48,7 @@ class ProtocolRunnerController(QObject):
         self._current_execution_plan = []
         self._current_phase_index = 0
         self._preview_mode = False
+        self._step_repetition_info = {}
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -231,6 +232,7 @@ class ProtocolRunnerController(QObject):
         self._current_step_timer = None
         self._current_execution_plan = []
         self._current_phase_index = 0
+        self._step_repetition_info = {}
 
         self._pause_time = None
         self._phase_start_time = None
@@ -270,8 +272,8 @@ class ProtocolRunnerController(QObject):
             self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
             self._current_phase_index = 0
             
-            logger.info(f"Execution plan has {len(self._current_execution_plan)} phases")
-            
+            self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
+                        
             # reset timing for new step
             current_time = time.time()
             self._step_start_time = current_time
@@ -450,13 +452,16 @@ class ProtocolRunnerController(QObject):
             total_time = self._elapsed_time + (current_time - self._start_time)
             step_time = self._step_elapsed_time + (current_time - self._step_start_time)
         
+        # current repetition based on cycle of largest loop in the step
+        current_repetition, total_repetitions = self._calculate_current_repetition()
+        
         status = {
             "total_time": total_time,
             "step_time": step_time,
             "step_idx": step_idx,
             "step_total": step_total,
-            "step_rep_idx": rep_idx,
-            "step_rep_total": rep_total,
+            "step_rep_idx": current_repetition,
+            "step_rep_total": total_repetitions,
             "recent_step": self._run_order[self._current_index - 1]["step"].parameters.get("Description", "-")
                 if self._current_index > 0 else "-",
             "next_step": self._run_order[self._current_index + 1]["step"].parameters.get("Description", "-")
@@ -465,6 +470,29 @@ class ProtocolRunnerController(QObject):
             "protocol_repeat_total": self._repeat_protocol_n
         }
         self.signals.update_status.emit(status)
+
+    def _calculate_current_repetition(self):
+        """calculate current repetition based on largest loop cycle."""
+        if not hasattr(self, '_step_repetition_info') or not self._step_repetition_info:
+            return 1, 1
+        
+        max_cycle_length = self._step_repetition_info.get('max_cycle_length', 1)
+        max_effective_repetitions = self._step_repetition_info.get('max_effective_repetitions', 1)
+        
+        if max_cycle_length <= 0 or max_effective_repetitions <= 1:
+            return 1, 1
+        
+        current_phase = max(0, self._current_phase_index - 1)
+        
+        if max_effective_repetitions > 1:
+            if current_phase < (max_effective_repetitions - 1) * max_cycle_length:
+                current_repetition = (current_phase // max_cycle_length) + 1
+            else: # last repetition
+                current_repetition = max_effective_repetitions
+        else:
+            current_repetition = 1
+        
+        return current_repetition, max_effective_repetitions
 
     def _on_step_timeout(self):
         """Handle step timeout (fallback)."""

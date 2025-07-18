@@ -259,6 +259,45 @@ class PathExecutionService:
         return total_time
     
     @staticmethod
+    def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState) -> Dict[str, int]:
+        """calculate repetition information for status bar display."""
+        duration = float(step.parameters.get("Duration", "1.0"))
+        repetitions = int(step.parameters.get("Repetitions", "1"))
+        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0"))
+        trail_length = int(step.parameters.get("Trail Length", "1"))
+        trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+        
+        if not device_state.has_paths():
+            return {"max_cycle_length": 1, "max_effective_repetitions": 1}
+        
+        has_loops = PathExecutionService.has_any_loops(device_state)
+        
+        if not has_loops:
+            return {"max_cycle_length": 1, "max_effective_repetitions": 1}
+        
+        max_cycle_length = 0
+        max_effective_repetitions = 1
+        
+        for i, path in enumerate(device_state.paths):
+            if PathExecutionService.is_loop_path(path):
+                effective_repetitions = PathExecutionService.calculate_effective_repetitions_for_path(
+                    path, repetitions, duration, repeat_duration, trail_length, trail_overlay
+                )
+                
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+                
+                # track largest loop
+                if cycle_length > max_cycle_length or (cycle_length == max_cycle_length and effective_repetitions > max_effective_repetitions):
+                    max_cycle_length = cycle_length
+                    max_effective_repetitions = effective_repetitions
+                                
+        return {
+            "max_cycle_length": max_cycle_length,
+            "max_effective_repetitions": max_effective_repetitions
+        }
+    
+    @staticmethod
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState) -> List[Dict[str, Any]]:
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
