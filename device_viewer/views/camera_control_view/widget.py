@@ -15,7 +15,7 @@ class CameraControlWidget(QWidget):
         self.button_align = QPushButton("view_in_ar")
         self.button_align.setToolTip("Align Camera")
 
-        self.button_reset = QPushButton("reset")
+        self.button_reset = QPushButton("frame_reload")
         self.button_reset.setToolTip("Reset Camera")
 
         # btn_layout

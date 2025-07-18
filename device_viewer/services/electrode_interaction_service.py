@@ -48,9 +48,11 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_reference_point_placement(self, point: QPointF):
         """Handle the placement of a reference point for perspective correction."""        
         # Add the new point to the reference rect
-        self.model.camera_perspective.reference_rect.append(point)
-        if len(self.model.camera_perspective.reference_rect) == 4: # We have a rectangle now
-            self.model.camera_perspective.transformed_reference_rect = self.model.camera_perspective.reference_rect.copy()
+        self.model.camera_perspective.transformed_reference_rect.append(point)
+        if len(self.model.camera_perspective.transformed_reference_rect) == 4: # We have a rectangle now
+            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
+            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.model.camera_perspective.transformed_reference_rect]
+            self.model.camera_perspective.update_transformation()  # Update the transformation matrix based on the new reference rect
             self.model.mode = "camera-edit"  # Switch to camera-edit mode
 
     def handle_perspective_edit_start(self, point: QPointF):
@@ -61,6 +63,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_perspective_edit(self, point: QPointF):
         """Handle the editing of a reference point during perspective correction."""
         self.model.camera_perspective.transformed_reference_rect[self.rect_editing_index] = point
+        self.model.camera_perspective.update_transformation()  # Update the transformation matrix
 
     def handle_perspective_edit_end(self):
         """Finalize the perspective editing."""

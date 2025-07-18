@@ -190,7 +190,7 @@ class ElectrodeLayer():
         if len(model.camera_perspective.reference_rect) == 4:
             # Update the reference rect visualization
             self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
-            self.reference_rect_item.setPen(QPen(QColor("red"), 4))
+            self.reference_rect_item.setPen(QPen(QColor("red"), 2))
     
     def reset_reference_rect(self):
         """Reset the reference rectangle item."""

@@ -5,10 +5,11 @@ import math
 
 class PerspectiveModel(HasTraits):
     reference_rect = List(QPointF, []) # List of reference points for the rect, relative to untransformed feed
-    transformed_reference_rect = List(QPointF, []) # Transformed reference rectangle points
+    transformed_reference_rect = List(QPointF, []) # List of reference points for the rect, relative to transformed feed, aka the scene
 
     # Don't manually set this, it is updated automatically when the reference rect changes!
     # Not a property because it needs to be a trait for observe to work
+    # Note: This matrix must be invertible, since we use its inverse
     transformation = Instance(QTransform, QTransform()) # Transformation matrix for perspective correction
 
     # -------------------- Methods ------------------------
@@ -25,8 +26,7 @@ class PerspectiveModel(HasTraits):
                 closest_index = i
         return closest_point, closest_index
 
-    @observe("reference_rect.items,transformed_reference_rect.items")
-    def update_transformation(self, event):
+    def update_transformation(self):
         """Update the transformation matrix based on the reference rectangle such that the new point replaces the old one."""
         if len(self.reference_rect) == 4 and len(self.transformed_reference_rect) == 4:
             # Assuming the reference rectangle is a quadrilateral, we can compute a perspective transform
@@ -35,7 +35,15 @@ class PerspectiveModel(HasTraits):
             if new_transform.isInvertible(): # Only apply transformation if it's valid
                 self.transformation = new_transform
 
+    def reset_rects(self):
+        """Reset the perspective model to its initial state. 
+        Note that the transformation matrix is not reset. This is because we need to use the 
+        inverse of the previous transformation to derive the reference rectangle. Call 
+        update_transformation() after setting the reference rectangle to update the transformation matrix."""
+        self.reference_rect.clear()
+        self.transformed_reference_rect.clear()
+
     def reset(self):
         """Reset the perspective model to its initial state."""
-        self.reference_rect.clear()
+        self.reset_rects()
         self.transformation = QTransform()
