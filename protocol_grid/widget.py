@@ -66,6 +66,7 @@ class PGCWidget(QWidget):
         self._protocol_running = False 
         self._last_published_step_id = None
         self._last_selected_step_id = None
+        self._last_published_step_uid = None
         self._processing_device_viewer_message = False
         
         self.create_buttons()
@@ -657,6 +658,69 @@ class PGCWidget(QWidget):
               
         return search_recursive(self.model.invisibleRootItem(), [])
     
+    def _step_exists_by_uid(self, step_uid):
+        if not step_uid:
+            return False
+        
+        def search_recursive(parent_item):
+            for row in range(parent_item.rowCount()):
+                desc_item = parent_item.child(row, 0)
+                if not desc_item:
+                    continue
+                    
+                if desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                    stored_uid = desc_item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
+                    if stored_uid == step_uid:
+                        return True
+                elif desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    if search_recursive(desc_item):
+                        return True
+            return False
+        
+        return search_recursive(self.model.invisibleRootItem())
+
+    def _get_last_published_step_uid(self):
+        if not hasattr(self, '_last_published_step_uid'):
+            self._last_published_step_uid = None
+        return self._last_published_step_uid
+
+    def _set_last_published_step_uid(self, step_uid):
+        self._last_published_step_uid = step_uid
+
+    def _handle_step_removal_cleanup(self):
+        """check if published step still exists."""
+        if self._processing_device_viewer_message or self._protocol_running:
+            return
+        
+        last_published_uid = self._get_last_published_step_uid()
+        if not last_published_uid:
+            return
+        
+        if not self._step_exists_by_uid(last_published_uid):
+            
+            selected_paths = self.get_selected_paths()
+            published_something = False
+            
+            if selected_paths:
+                for path in selected_paths:
+                    item = self.get_item_by_path(path)
+                    if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                        step_id = self._publish_step_message(item, path, editable=True)
+                        if step_id:
+                            self._last_selected_step_id = step_id
+                            self._last_published_step_id = step_id
+                            # update the stored UID
+                            step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
+                            self._set_last_published_step_uid(step_uid)
+                            published_something = True
+                            break
+            
+            if not published_something:
+                self._send_empty_device_state_message()
+                self._last_selected_step_id = None
+                self._last_published_step_id = None
+                self._set_last_published_step_uid(None)
+    
     def _send_empty_device_state_message(self):
         empty_msg = DeviceViewerMessageModel(
             channels_activated={},
@@ -666,11 +730,15 @@ class PGCWidget(QWidget):
             editable=True
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize())
+        
+        # clear last published UID
+        self._set_last_published_step_uid(None)
+        
         logger.info("Empty message sent")
 
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
-            return
+            return None
         
         parent = step_item.parent() or self.model.invisibleRootItem()
         row = step_item.row()
@@ -691,7 +759,9 @@ class PGCWidget(QWidget):
             device_state, step_uid, step_description, step_id, editable
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-        # logger.info("message: %s", msg_model.serialize())
+        
+        # update last published UID
+        self._set_last_published_step_uid(step_uid)
         
         return step_id
         
@@ -848,6 +918,8 @@ class PGCWidget(QWidget):
         self.btn_import_into.setEnabled(has_selection)
 
         current_step_id = None
+        current_step_uid = None
+        
         if has_selection:
             path = selected_paths[0]
             item = self.get_item_by_path(path)
@@ -857,18 +929,19 @@ class PGCWidget(QWidget):
                 row = item.row()
                 id_col = protocol_grid_fields.index("ID")
                 id_item = parent.child(row, id_col)
-                current_step_id = id_item.text() if id_item else None
+                current_step_id = id_item.text() if id_item else ""
+                current_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
                 
                 # publish only if this is a different step
-                if current_step_id and self._last_published_step_id != current_step_id:
-                    published_id = self._publish_step_message(item, path, editable=True)
-                    self._last_published_step_id = published_id        
+                if current_step_id != self._last_published_step_id:
+                    published_step_id = self._publish_step_message(item, path, editable=True)
+                    if published_step_id:
+                        self._last_published_step_id = published_step_id
         
         # check if transitioned from a step selected to NO step selected
         if self._last_selected_step_id and not current_step_id:
             self._send_empty_device_state_message()
-            self._last_published_step_id = None
-            
+            self._last_published_step_id = None            
         
         self._last_selected_step_id = current_step_id
         
@@ -1671,20 +1744,17 @@ class PGCWidget(QWidget):
         selected_paths.sort(reverse=True)
         
         for path in selected_paths:
-            if len(path) == 1:
-                if path[0] < len(self.state.sequence):
-                    del self.state.sequence[path[0]]
-            else:
-                parent_path = path[:-1]
-                elements = self._find_elements_by_path(parent_path)
-                if path[-1] < len(elements):
-                    del elements[path[-1]]
-                    
+            target_elements = self._find_elements_by_path(path[:-1])
+            if target_elements and 0 <= path[-1] < len(target_elements):
+                target_elements.pop(path[-1])
+        
         self.ensure_minimum_protocol()
         
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
+        
+        QTimer.singleShot(0, self._handle_step_removal_cleanup)
         
     def copy_selected(self):
         selected_paths = self.get_selected_paths()
@@ -1719,6 +1789,12 @@ class PGCWidget(QWidget):
         
     def cut_selected(self):
         self.copy_selected()
+        
+        # store current state before deletion for cleanup
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+        
         self.delete_selected()
         
     def paste_selected(self, above=True):
@@ -1733,18 +1809,15 @@ class PGCWidget(QWidget):
             target_elements = self.state.sequence
             row = 0 if above else len(target_elements)
         else:
-            target_path = selected_paths[0]
-            if len(target_path) == 1:
-                target_elements = self.state.sequence
-                row = target_path[0] if above else target_path[0] + 1
-            else:
-                parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
-                row = target_path[-1] if above else target_path[-1] + 1
-                
+            path = selected_paths[0]
+            target_elements = self._find_elements_by_path(path[:-1])
+            row = path[-1] + (0 if above else 1)
+            
         self.state.snapshot_for_undo()
         
         for i, item in enumerate(copy.deepcopy(self._clipboard)):
+            if hasattr(item, 'parameters') and 'UID' in item.parameters:
+                self.state.assign_uid_to_step(item)
             target_elements.insert(row + i, item)
             
         self.reassign_ids()
@@ -1752,6 +1825,8 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        
+        QTimer.singleShot(0, self._handle_step_removal_cleanup)
         
     def paste(self):
         self.paste_selected(above=False)
@@ -1857,40 +1932,28 @@ class PGCWidget(QWidget):
         try:
             with open(file_name, "r") as f:
                 data = json.load(f)
-                
-            imported_state = ProtocolState()
-            imported_state.from_flat_export(data)     
-
-            imported_state.update_uid_counter_from_sequence()
-            self.state._uid_counter = max(self.state._uid_counter, imported_state._uid_counter)
             
-            current_mapping = self.state.get_protocol_id_to_channel_mapping()
-            imported_mapping = imported_state.get_protocol_id_to_channel_mapping()
-            
-            # if imported data has a different mapping,
-            # apply current mapping to all imported steps
-            if current_mapping and imported_mapping != current_mapping:
-                imported_state.set_protocol_id_to_channel_mapping(current_mapping)
-                
             self.state.snapshot_for_undo()
+            imported_state = ProtocolState()
+            imported_state.from_dict(data)
             
             if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
                 target_elements = self._find_elements_by_path(target_path)
-                for obj in imported_state.sequence:
-                    target_elements.append(copy.deepcopy(obj))
             else:
-                parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
-                row = target_path[-1] + 1
-                for i, obj in enumerate(imported_state.sequence):
-                    target_elements.insert(row + i, copy.deepcopy(obj))
-                    
+                target_elements = self._find_elements_by_path(target_path[:-1])
+            
+            for element in imported_state.sequence:
+                if hasattr(element, 'parameters') and 'UID' in element.parameters:
+                    self.state.assign_uid_to_step(element)
+                target_elements.append(element)
+            
             self.reassign_ids()
             self.load_from_state()
-            QTimer.singleShot(0, self.update_all_group_aggregations)
             # self.sync_to_state()
             self.restore_scroll_positions(scroll_pos)
             self.restore_selection(saved_selection)
+            
+            QTimer.singleShot(0, self._handle_step_removal_cleanup)
             
         except Exception as e:
             QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
