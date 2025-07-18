@@ -86,7 +86,7 @@ class MainModel(RouteLayerManager, Electrodes):
         """Get the alpha value for a given key."""
         for alpha_value in self.alpha_map:
             if alpha_value.value == key:
-                return alpha_value.alpha
+                return alpha_value.alpha if alpha_value.visible else 0.0
         return 1.0 # Default alpha if not found
     
     def set_alpha(self, key: str, alpha: float):
@@ -97,6 +97,13 @@ class MainModel(RouteLayerManager, Electrodes):
                 return
         # If not found, add a new alpha value
         self.alpha_map.append(AlphaValue(value=key, alpha=alpha))
+
+    def set_visible(self, key: str, visible: bool):
+        """Set the visibility of a given alpha value."""
+        for alpha_value in self.alpha_map:
+            if alpha_value.value == key:
+                alpha_value.visible = visible
+                return
     
     # ------------------ Observers ------------------------------------
 
@@ -109,5 +116,8 @@ class MainModel(RouteLayerManager, Electrodes):
             self.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
             self.camera_perspective.reset_rects() # Reset the reference rectangle when entering camera-place mode
-            self.set_alpha("fill", 0)  # Set the fill alpha low for visibility
-            self.set_alpha("text", 0)  # Set the text alpha low for visibility
+            self.set_visible("fill", False)  # Set the fill alpha low for visibility
+            self.set_visible("text", False)  # Set the text alpha low for visibility
+        if event.old == "camera-edit" and event.new != "camera-edit": # We left camera-edit mode
+            self.set_visible("fill", True)  # Restore fill visibility
+            self.set_visible("text", True)  # Restore text visibility

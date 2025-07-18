@@ -156,7 +156,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.layers.items.route.route.items")
     @observe("model.layers.items")
     @observe("model.autoroute_layer.route.route.items")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
@@ -165,13 +165,13 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.electrode_editing")
     @observe("model.electrodes.items.channel")
     @observe("electrode_hovered")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
 
     @observe("model.electrodes.items.channel")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_channel_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)

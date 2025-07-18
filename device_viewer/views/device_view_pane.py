@@ -67,6 +67,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
     message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
+    video_item = None  # The video item for the camera feed
+    debounce_timer = None  # Timer to debounce state messages
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -174,7 +176,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         Handle changes to the model and send a message to the device viewer state change topic.
         """
         self.model_change_handler_with_timeout(event)
-        if not self._disable_state_messages:
+        if not self._disable_state_messages and self.debounce_timer:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
             self.debounce_timer.start(200) # Start timeout for sending message
