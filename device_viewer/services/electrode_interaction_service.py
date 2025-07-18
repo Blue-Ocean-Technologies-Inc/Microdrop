@@ -25,6 +25,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     electrode_hovered = Instance(ElectrodeView)
 
     rect_editing_index = -1  # Index of the point being edited in the reference rect
+    rect_buffer = []
 
     # -------------------- Helpers ------------------------
 
@@ -48,11 +49,11 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_reference_point_placement(self, point: QPointF):
         """Handle the placement of a reference point for perspective correction."""        
         # Add the new point to the reference rect
-        self.model.camera_perspective.transformed_reference_rect.append(point)
-        if len(self.model.camera_perspective.transformed_reference_rect) == 4: # We have a rectangle now
+        self.rect_buffer.append(point)
+        if len(self.rect_buffer) == 4:  # We have a rectangle now
             inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
-            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.model.camera_perspective.transformed_reference_rect]
-            self.model.camera_perspective.update_transformation()  # Update the transformation matrix based on the new reference rect
+            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.rect_buffer]
+            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
             self.model.mode = "camera-edit"  # Switch to camera-edit mode
 
     def handle_perspective_edit_start(self, point: QPointF):
@@ -63,7 +64,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_perspective_edit(self, point: QPointF):
         """Handle the editing of a reference point during perspective correction."""
         self.model.camera_perspective.transformed_reference_rect[self.rect_editing_index] = point
-        self.model.camera_perspective.update_transformation()  # Update the transformation matrix
 
     def handle_perspective_edit_end(self):
         """Finalize the perspective editing."""
@@ -182,10 +182,15 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
 
     @observe("model.mode")
-    @observe("model.camera_perspective.transformed_reference_rect.items")
+    @observe("model.camera_perspective.transformation")
     def update_perspective_rect(self, event):
         if self.electrode_view_layer:
             if self.model.mode == "camera-edit":
                 self.electrode_view_layer.redraw_reference_rect(self.model)
             elif hasattr(event, 'old') and event.old == "camera-edit":
                 self.electrode_view_layer.reset_reference_rect()  # Clear the reference rect when leaving camera-edit mode
+
+    @observe("model.mode")
+    def clear_buffer_on_mode_change(self, event):
+        if event.old != "camera-place" and event.new == "camera-place":
+            self.rect_buffer = []

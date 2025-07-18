@@ -1,4 +1,5 @@
 from traits.api import Property, Str, Enum, observe, Instance, Bool, List
+from pyface.undo.api import UndoManager
 import uuid
 
 from device_viewer.models.alpha import AlphaValue
@@ -12,6 +13,8 @@ class MainModel(RouteLayerManager, Electrodes):
     # TODO: Move all RouteLayerManager and Electrodes related properties and methods to this class for better comprehension
 
     # ---------------- Model Traits -----------------------
+
+    undo_manager = Instance(UndoManager)  # Undo manager for the model
 
     # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
     # Edit: User can only extend selected segment

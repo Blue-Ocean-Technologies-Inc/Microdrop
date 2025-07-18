@@ -81,25 +81,17 @@ class DeviceViewerDockPane(TraitsDockPane):
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
 
-    def _model_default(self):
-        model = MainModel()
-        model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
-        return model
+        self.undo_manager = UndoManager(active_stack=CommandStack())
+        self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-    def _scene_default(self):
-        return ElectrodeScene()
+        self.model = MainModel(undo_manager=self.undo_manager)
+        self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
-    def _device_view_default(self):
-        view = AutoFitGraphicsView(self.scene)
-        view.setObjectName('device_view')
-        view.setViewport(QOpenGLWidget())
+        self.scene = ElectrodeScene()
 
-        return view
-
-    def _undo_manager_default(self):
-        undo_manager = UndoManager(active_stack=CommandStack())
-        undo_manager.active_stack.undo_manager = undo_manager
-        return undo_manager
+        self.device_view = AutoFitGraphicsView(self.scene)
+        self.device_view.setObjectName('device_view')
+        self.device_view.setViewport(QOpenGLWidget())
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
@@ -162,17 +154,26 @@ class DeviceViewerDockPane(TraitsDockPane):
             command = DictChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
 
-    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.layers.items.route.route.items") # When a route is modified
-    @observe("model.layers.items") # When an electrode changes state
-    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
+    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
     def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
             if not self.model.editable:
                 self.undo() # Revert changes if not editable
                 return
+
+    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.layers.items.route.route.items") # When a route is modified
+    @observe("model.layers.items") # When an electrode changes state
+    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.electrode_editing") # When an electrode is being edited
+    def model_change_handler_with_message(self, event=None):
+        """
+        Handle changes to the model and send a message to the device viewer state change topic.
+        """
+        self.model_change_handler_with_timeout(event)
         if not self._disable_state_messages:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
@@ -187,12 +188,12 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
-        self.undo_manager.undo()
+        self.model.undo_manager.undo()
         self._undoing = False
 
     def redo(self):
         self._undoing = True # We need to prevent the changes made in redo() from being added to the undo stack
-        self.undo_manager.redo()
+        self.model.undo_manager.redo()
         self._undoing = False
 
     def apply_message_model(self, message_model_serial: str):
