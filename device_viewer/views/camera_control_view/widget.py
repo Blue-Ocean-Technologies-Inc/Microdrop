@@ -15,11 +15,15 @@ class CameraControlWidget(QWidget):
         self.button_align = QPushButton("view_in_ar")
         self.button_align.setToolTip("Align Camera")
 
+        self.button_reset = QPushButton("reset")
+        self.button_reset.setToolTip("Reset Camera")
+
         # btn_layout
         btn_layout = QHBoxLayout()
         for btn in [self.button_align]:
             btn.setCheckable(True)
             btn_layout.addWidget(btn)
+        btn_layout.addWidget(self.button_reset)
         
         # Main layout
         layout = QVBoxLayout()
@@ -30,6 +34,7 @@ class CameraControlWidget(QWidget):
         self.sync_buttons_and_label()
 
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
+        self.button_reset.clicked.connect(self.reset)
         self.model.observe(self.on_mode_changed, "mode")
 
     def on_mode_changed(self, event):
@@ -41,3 +46,9 @@ class CameraControlWidget(QWidget):
 
     def set_mode(self, mode):
         self.model.mode = mode
+
+    def reset(self):
+        """Reset the camera control widget to its initial state."""
+        self.model.camera_perspective.reset()
+        if self.model.mode == "camera-edit":
+            self.model.mode = "camera-place"  # Reset to camera-place mode after reset

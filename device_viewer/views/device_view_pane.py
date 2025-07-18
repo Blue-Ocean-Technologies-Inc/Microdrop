@@ -248,37 +248,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
-        # w, h = 320, 240  # Example width and height
+        self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
+        self.video_item = QGraphicsVideoItem()
+        self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
+        self.camera = QCamera(QMediaDevices.defaultVideoInput())  # Initialize camera for video capture
 
-        # # Source quad: the normal rectangle of your video item
-        # src_quad = QPolygonF([
-        #     QPointF(0, 0),        # Top-left
-        #     QPointF(w, 0),        # Top-right
-        #     QPointF(w, h),        # Bottom-right
-        #     QPointF(0, h)         # Bottom-left
-        # ])
-
-        # # Destination quad: your arbitrary target polygon
-        # dst_quad = QPolygonF([
-        #     QPointF(100, 100),      # Top-left (warped position)
-        #     QPointF(400, 20),     # Top-right
-        #     QPointF(380, 300),    # Bottom-right
-        #     QPointF(30, 320)      # Bottom-left
-        # ])
-
-        # self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
-        # self.video_item = QGraphicsVideoItem()
-        # self.camera = QCamera(QMediaDevices.defaultVideoInput())  # Initialize camera for video capture
-        # perspective_correction = QTransform()
-        # QTransform.quadToQuad(src_quad, dst_quad, perspective_correction)  # Set perspective correction
-        # self.video_item.setTransform(perspective_correction)  # Apply perspective correction to the video item
-
-        # scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
-        # self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
-        # self.capture_session.setVideoOutput(self.video_item)
-        # self.capture_session.setCamera(self.camera)
-        # self.scene.addItem(self.video_item)
-        # self.camera.start()  # Start the camera to capture video
+        scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
+        self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
+        self.capture_session.setVideoOutput(self.video_item)
+        self.capture_session.setCamera(self.camera)
+        self.scene.addItem(self.video_item)
+        self.camera.start()  # Start the camera to capture video
 
         # Create debounce timer
         self.debounce_timer = QTimer()
@@ -355,3 +335,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map)
+
+    @observe("model.camera_perspective.transformation")
+    def camera_perspective_change_handler(self, event):
+        """
+        Handle changes to the camera perspective transformation.
+        This is used to update the scene's transformation when the camera perspective changes.
+        """
+        if self.video_item:
+            self.video_item.setTransform(self.model.camera_perspective.transformation)

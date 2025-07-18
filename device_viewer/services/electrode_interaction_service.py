@@ -24,6 +24,8 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     electrode_hovered = Instance(ElectrodeView)
 
+    reference_rect_editing_index = -1  # Index of the point being edited in the reference rect
+
     # -------------------- Helpers ------------------------
 
     def remove_last_digit(self, number: int | None) -> int | None:
@@ -49,6 +51,18 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.camera_perspective.reference_rect.append(point)
         if len(self.model.camera_perspective.reference_rect) == 4: # We have a rectangle now
             self.model.mode = "camera-edit"  # Switch to camera-edit mode
+
+    def handle_perspective_edit_start(self, point: QPointF):
+        """Handle the start of perspective editing."""
+        closest_point, closest_index = self.model.camera_perspective.get_closest_point(point)
+        self.reference_rect_editing_index = closest_index  # Store the index of the point being edited
+
+    def handle_perspective_edit(self, point: QPointF):
+        self.model.camera_perspective.update_transformation(self.reference_rect_editing_index, point)  # Update the transformation matrix with the new point
+
+    def handle_perspective_edit_end(self):
+        """Finalize the perspective editing."""
+        self.reference_rect_editing_index = -1
 
     def handle_electrode_hover(self, electrode_view: ElectrodeView):
         self.electrode_hovered = electrode_view
@@ -163,9 +177,10 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
 
     @observe("model.mode")
-    def mode_change(self, event):
+    @observe("model.camera_perspective.transformation")
+    def update_perspective_rect(self, event):
         if self.electrode_view_layer:
-            if event.new == "camera-edit":
+            if self.model.mode == "camera-edit":
                 self.electrode_view_layer.redraw_reference_rect(self.model)
-            if event.old == "camera-edit" and event.new != "camera-edit":
+            elif hasattr(event, 'old') and event.old == "camera-edit":
                 self.electrode_view_layer.reset_reference_rect()  # Clear the reference rect when leaving camera-edit mode
