@@ -325,6 +325,7 @@ class PGCWidget(QWidget):
             self.navigation_bar.btn_play.setText("⏸ Pause")
             self._update_navigation_buttons_state()
         else:
+            self._protocol_running = True
             self.sync_to_state()
             try:
                 repeat_n = int(self.status_bar.edit_repeat_protocol.text())
@@ -364,7 +365,6 @@ class PGCWidget(QWidget):
             self.protocol_runner.set_repeat_protocol_n(repeat_n)
             self.protocol_runner.set_run_order(run_order)
             self.protocol_runner.start()
-            self._protocol_running = True
             self.navigation_bar.btn_play.setText("⏸ Pause")
             self._update_navigation_buttons_state()
             
@@ -392,6 +392,7 @@ class PGCWidget(QWidget):
         if not target_step_path:
             return
         
+        self._protocol_running = True
         self.sync_to_state()
         
         target_step_item = self.get_item_by_path(target_step_path)
@@ -436,7 +437,6 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_run_order(run_order)
         self.protocol_runner.start()
         
-        self._protocol_running = True
         self.navigation_bar.btn_play.setText("⏸ Pause")
         self._update_navigation_buttons_state()
         
@@ -1064,13 +1064,23 @@ class PGCWidget(QWidget):
         desc_item = parent.child(row, 0)
 
         if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-            self.update_single_step_dev_fields(desc_item)
+            self.update_single_step_dev_fields(desc_item, changed_field=field)
 
         if field in ("Voltage", "Frequency", "Trail Length"):
             if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                value = item.text()
-                if value != "":
-                    self._set_field_for_group(desc_item, field, value)
+                voltage_col = protocol_grid_fields.index("Voltage")
+                frequency_col = protocol_grid_fields.index("Frequency")
+                trail_length_col = protocol_grid_fields.index("Trail Length")
+                
+                if field == "Voltage":
+                    value = parent.child(row, voltage_col).text()
+                    self._set_field_for_group(desc_item, "Voltage", value)
+                elif field == "Frequency":
+                    value = parent.child(row, frequency_col).text()
+                    self._set_field_for_group(desc_item, "Frequency", value)
+                elif field == "Trail Length":
+                    value = parent.child(row, trail_length_col).text()
+                    self._set_field_for_group(desc_item, "Trail Length", value)
             if not self._block_aggregation:
                 self._update_parent_aggregations(parent)
 
@@ -1080,7 +1090,9 @@ class PGCWidget(QWidget):
         if field == "Repetitions":
             desc_item = parent.child(row, 0)
             if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                self._update_parent_aggregations(desc_item)
+                repetitions_col = protocol_grid_fields.index("Repetitions")
+                value = parent.child(row, repetitions_col).text()
+                self._set_field_for_group(desc_item, "Repetitions", value)
             else:
                 self._update_parent_aggregations(parent)
 
@@ -1184,8 +1196,49 @@ class PGCWidget(QWidget):
                 ]
                 calculate_group_aggregation_from_children(group_items, children_rows)
             current = current.parent()
+
+    def _calculate_estimated_repeat_duration(self, device_state, repetitions, duration, trail_length, trail_overlay):
+        if not device_state.has_paths():
+            return 0.0
+        
+        has_loops = any(len(path) >= 2 and path[0] == path[-1] for path in device_state.paths)
+        if not has_loops:
+            return 0.0
+        
+        max_loop_duration = 0.0
+        
+        for path in device_state.paths:
+            is_loop = len(path) >= 2 and path[0] == path[-1]
+            if not is_loop:
+                continue
             
-    def update_single_step_dev_fields(self, desc_item):
+            effective_length = len(path) - 1
+            step_size = trail_length - trail_overlay
+            
+            if step_size <= 0:
+                cycle_length = effective_length
+            else:
+                phases = 0
+                position = 0
+                while position < effective_length:
+                    phases += 1
+                    position += step_size
+                    if position >= effective_length:
+                        break
+                cycle_length = phases
+            
+            single_cycle_duration = cycle_length * duration
+            
+            if repetitions > 1:
+                loop_duration = (repetitions - 1) * single_cycle_duration + single_cycle_duration + duration  # +1 for return phase
+            else:
+                loop_duration = single_cycle_duration + duration
+            
+            max_loop_duration = max(max_loop_duration, loop_duration)
+        
+        return max_loop_duration
+            
+    def update_single_step_dev_fields(self, desc_item, changed_field=None):
         if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return
             
@@ -1220,18 +1273,33 @@ class PGCWidget(QWidget):
                 
             repetitions = int(repetitions_item.text() or "1")
             duration = float(duration_item.text() or "1.0")
-            repeat_duration = float(repeat_duration_item.text() or "1.0")
+            current_repeat_duration = float(repeat_duration_item.text() or "0.0")
             trail_length = int(trail_length_item.text() or "1")
             trail_overlay = int(trail_overlay_item.text() or "0")
             
+            estimated_repeat_duration = self._calculate_estimated_repeat_duration(
+                device_state, repetitions, duration, trail_length, trail_overlay
+            )
+            
+            should_update_repeat_duration = changed_field != "Repeat Duration" and self._protocol_running == False 
+            
+            if should_update_repeat_duration:
+                repeat_duration_to_use = estimated_repeat_duration
+            else:
+                repeat_duration_to_use = current_repeat_duration
+            
             max_path_length = device_state.longest_path_length()
-            run_time = device_state.calculated_duration(duration, repetitions, repeat_duration, 
+            run_time = device_state.calculated_duration(duration, repetitions, repeat_duration_to_use, 
                                                     trail_length, trail_overlay)
             
             self._programmatic_change = True
             try:
                 max_path_item.setText(str(max_path_length))
-                run_time_item.setText(f"{run_time:.2f}")
+                run_time_item.setText(f"{run_time:.1f}")
+                
+                if should_update_repeat_duration:
+                    repeat_duration_item.setText(f"{estimated_repeat_duration:.1f}")
+                    
             finally:
                 self._programmatic_change = False
                 
@@ -1244,7 +1312,8 @@ class PGCWidget(QWidget):
                 desc_item = parent.child(row, 0)
                 if desc_item:
                     if desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                        self.update_single_step_dev_fields(desc_item)
+                        # pass None as changed_field
+                        self.update_single_step_dev_fields(desc_item, changed_field=None)
                     elif desc_item.hasChildren():
                         update_recursive(desc_item)
                         
