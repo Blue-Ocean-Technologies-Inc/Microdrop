@@ -83,10 +83,11 @@ class ProtocolRunnerController(QObject):
         self._current_protocol_repeat = 1
         if not hasattr(self, "_run_order") or not self._run_order:
             self._run_order = self.flatten_func(self.protocol_state)
-        self._start_time = time.time()
+        
+        self._start_time = None
         self._elapsed_time = 0.0
         self._step_elapsed_time = 0.0
-        self._step_start_time = time.time()
+        self._step_start_time = None
 
         self._pause_time = None
         self._phase_start_time = None
@@ -118,8 +119,11 @@ class ProtocolRunnerController(QObject):
         self._timer.stop()
         self._phase_timer.stop()
         
-        self._elapsed_time += current_time - self._start_time
-        self._step_elapsed_time += current_time - self._step_start_time
+        # store elapsed times at the moment of pause
+        if self._start_time:
+            self._elapsed_time = current_time - self._start_time
+        if self._step_start_time:
+            self._step_elapsed_time = current_time - self._step_start_time
         
         if self._phase_start_time and self._current_phase_index > 0:
             phase_elapsed = current_time - self._phase_start_time
@@ -155,8 +159,14 @@ class ProtocolRunnerController(QObject):
         self._status_timer.start()
         
         current_time = time.time()
-        self._start_time = current_time
-        self._step_start_time = current_time
+        
+        if self._pause_time:
+            pause_duration = current_time - self._pause_time
+            
+            if self._start_time:
+                self._start_time += pause_duration
+            if self._step_start_time:
+                self._step_start_time += pause_duration
         
         if self._was_in_phase and self._remaining_phase_time > 0:
             self._phase_start_time = current_time
@@ -276,6 +286,12 @@ class ProtocolRunnerController(QObject):
                         
             # reset timing for new step
             current_time = time.time()
+            
+            # if first step, synchronize total timer and step timer
+            if self._start_time is None:
+                self._start_time = current_time
+                logger.info("Starting total timer synchronized with first step")
+            
             self._step_start_time = current_time
             self._step_elapsed_time = 0.0
 
@@ -362,6 +378,14 @@ class ProtocolRunnerController(QObject):
         self._timer.stop()
         self._phase_timer.stop()
         
+        if self._step_start_time:
+            current_time = time.time()
+            self._step_elapsed_time += current_time - self._step_start_time
+            
+            if self._start_time:
+                total_elapsed = current_time - self._start_time
+                self._elapsed_time = total_elapsed
+        
         # Reset phase tracking
         self._current_execution_plan = []
         self._current_phase_index = 0
@@ -444,13 +468,18 @@ class ProtocolRunnerController(QObject):
         step_total = self._unique_step_count
         step_idx = current_step_position
         
+        current_time = time.time()
+        
         if self._is_paused:
             total_time = self._elapsed_time
             step_time = self._step_elapsed_time
         else:
-            current_time = time.time()
-            total_time = self._elapsed_time + (current_time - self._start_time)
-            step_time = self._step_elapsed_time + (current_time - self._step_start_time)
+            if self._start_time and self._step_start_time:
+                total_time = current_time - self._start_time
+                step_time = current_time - self._step_start_time
+            else:
+                total_time = 0.0
+                step_time = 0.0
         
         # current repetition based on cycle of largest loop in the step
         current_repetition, total_repetitions = self._calculate_current_repetition()
