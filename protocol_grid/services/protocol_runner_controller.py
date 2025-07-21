@@ -82,6 +82,10 @@ class ProtocolRunnerController(QObject):
         self._pending_pause_resume_action = None
         self._debounce_delay_ms = 250
 
+        # Advanced mode direct hardware control state tracking
+        self._paused_original_electrodes = {}
+        self._is_advanced_hardware_control = False
+
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
@@ -187,6 +191,11 @@ class ProtocolRunnerController(QObject):
     def _internal_resume(self):
         if not self._is_running or not self._is_paused:
             return
+        
+        # check if we need to restore hardware state from advanced mode control
+        if self._is_advanced_hardware_control:
+            self._restore_hardware_state_on_resume()
+        
         self._is_paused = False
         self._status_timer.start()
         
@@ -235,13 +244,47 @@ class ProtocolRunnerController(QObject):
         
         self._pause_time = None
         self._was_in_phase = False
+        
+        # clear advanced hardware control state
+        self._is_advanced_hardware_control = False
+        self._paused_original_electrodes = {}
 
-    def pause(self):
-        logger.info("Pause requested - using Qt-compatible debouncing")
+    def _restore_hardware_state_on_resume(self):
+        if not self._paused_original_electrodes or self._preview_mode:
+            return
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
+        
+        # hardware correction message to restore expected electrode state
+        hardware_message = PathExecutionService.create_hardware_electrode_message(
+            device_state, 
+            self._paused_original_electrodes
+        )
+        
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+        
+    def pause(self, advanced_mode=False, preview_mode=False):
+        
+        # store advanced mode state for pause handling
+        self._is_advanced_hardware_control = advanced_mode and not preview_mode
+        
+        # store original electrode state if advanced hardware control is enabled
+        if self._is_advanced_hardware_control:
+            self._paused_original_electrodes = self._get_current_phase_electrodes()
+        
+        # execute pause
         self._qt_debounce_pause_resume(self._internal_pause)
+        
+        # publish advanced mode message after pause if conditions are met
+        if self._is_advanced_hardware_control:
+            # QTimer to ensure it happens after the pause is processed
+            QTimer.singleShot(100, self._publish_advanced_pause_message)
 
-    def resume(self):
-        logger.info("Resume requested - using Qt-compatible debouncing")
+    def resume(self, advanced_mode=False, preview_mode=False):
         self._qt_debounce_pause_resume(self._internal_resume)
 
     def stop(self):
@@ -308,6 +351,10 @@ class ProtocolRunnerController(QObject):
         self._total_step_phases_completed = 0
         self._step_phase_start_time = None
         self._unique_step_count = 0
+        
+        # clear advanced mode state
+        self._is_advanced_hardware_control = False
+        self._paused_original_electrodes = {}
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
@@ -459,6 +506,10 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
         self._paused_phase_index = 0
         
+        # clear advanced mode state when jumping
+        self._is_advanced_hardware_control = False
+        self._paused_original_electrodes = {}
+        
         if not self._is_paused:
             self._execute_next_step()
         else:
@@ -485,7 +536,7 @@ class ProtocolRunnerController(QObject):
                     first_phase["step_id"]
                 )
                 
-                msg_model.editable = False
+                msg_model.editable = True
                 
                 publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
                 
@@ -516,7 +567,65 @@ class ProtocolRunnerController(QObject):
             "total_steps": len(self._run_order),
             "current_step_path": self.get_current_step_path()
         }
-
+    
+    def _get_current_phase_electrodes(self):
+        if not self._is_running or self._current_index >= len(self._run_order):
+            return {}
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
+        
+        if not self._current_execution_plan:
+            self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+        
+        current_phase_electrodes = {}
+        
+        if self._current_phase_index > 0 and self._current_phase_index <= len(self._current_execution_plan):
+            # middle of executing a phase
+            current_phase_item = self._current_execution_plan[self._current_phase_index - 1]
+            current_phase_electrodes = current_phase_item["activated_electrodes"].copy()
+        elif self._current_execution_plan:
+            # havent started any phases yet, use the first phase
+            first_phase = self._current_execution_plan[0]
+            current_phase_electrodes = first_phase["activated_electrodes"].copy()
+        else:
+            # no execution plan, use individual electrodes only
+            current_phase_electrodes = device_state.activated_electrodes.copy()
+        
+        return current_phase_electrodes
+    
+    def _publish_advanced_pause_message(self):
+        if not self._is_running or self._current_index >= len(self._run_order):
+            return
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
+        
+        step_uid = step.parameters.get("UID", "")
+        step_description = step.parameters.get("Description", "Step")
+        step_id = step.parameters.get("ID", "")
+        
+        current_electrodes = self._get_current_phase_electrodes()
+        
+        msg_model = PathExecutionService.create_dynamic_device_state_message(
+            device_state, 
+            current_electrodes,
+            step_uid,
+            step_description,
+            step_id
+        )
+        
+        msg_model.step_info["free_mode"] = True
+        msg_model.editable = True
+        
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        
     def _on_phase_timeout(self):
         if not self._is_running or self._is_paused:
             return
