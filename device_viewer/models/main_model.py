@@ -1,7 +1,9 @@
 from traits.api import Property, Str, Enum, observe, Instance, Bool, List
+from pyface.undo.api import UndoManager
 import uuid
 
 from device_viewer.models.alpha import AlphaValue
+from device_viewer.models.perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from device_viewer.views.electrode_view.default_settings import default_alphas
@@ -12,6 +14,8 @@ class MainModel(RouteLayerManager, Electrodes):
 
     # ---------------- Model Traits -----------------------
 
+    undo_manager = Instance(UndoManager)  # Undo manager for the model
+
     # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
     # Edit: User can only extend selected segment
     # Edit-Draw: Same as edit except we switch to draw on mouserelease
@@ -19,8 +23,9 @@ class MainModel(RouteLayerManager, Electrodes):
     # Merge: User can only merge paths. They cannot edit.
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
+    # Camera-Edit: User can edit the perspecive correction of the camera feed
     # To change the mode, set the mode property and clean up any references/inconsistencies
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display")
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
 
     mode_name = Property(Str, observe="mode")
     editable = Property(Bool, observe="mode")
@@ -29,11 +34,15 @@ class MainModel(RouteLayerManager, Electrodes):
 
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
+    free_mode = Bool(True)  # Whether we are in free mode (no step_id)
 
     uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
 
     # ------------------ Alpha Color Model --------------------
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
+
+    # ------------------ Camera Model --------------------
+    camera_perspective = Instance(PerspectiveModel, PerspectiveModel()) 
 
     # ------------------ Initialization --------------------
 
@@ -54,7 +63,9 @@ class MainModel(RouteLayerManager, Electrodes):
             "auto": "Autoroute",
             "merge": "Merge",
             "channel-edit": "Channel Edit",
-            "display": "Display"
+            "display": "Display",
+            "camera-edit": "Camera Edit",
+            "camera-place": "Camera Place"
         }.get(self.mode, "Error")
 
     def _get_editable(self):
@@ -76,8 +87,24 @@ class MainModel(RouteLayerManager, Electrodes):
         """Get the alpha value for a given key."""
         for alpha_value in self.alpha_map:
             if alpha_value.value == key:
-                return alpha_value.alpha
+                return alpha_value.alpha if alpha_value.visible else 0.0
         return 1.0 # Default alpha if not found
+    
+    def set_alpha(self, key: str, alpha: float):
+        """Set the alpha value for a given key."""
+        for alpha_value in self.alpha_map:
+            if alpha_value.value == key:
+                alpha_value.alpha = alpha
+                return
+        # If not found, add a new alpha value
+        self.alpha_map.append(AlphaValue(value=key, alpha=alpha))
+
+    def set_visible(self, key: str, visible: bool):
+        """Set the visibility of a given alpha value."""
+        for alpha_value in self.alpha_map:
+            if alpha_value.value == key:
+                alpha_value.visible = visible
+                return
     
     # ------------------ Observers ------------------------------------
 
@@ -88,3 +115,10 @@ class MainModel(RouteLayerManager, Electrodes):
             self.layer_to_merge = None
         if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
             self.electrode_editing = None
+        if event.old != "camera-place" and event.new == "camera-place":
+            self.camera_perspective.reset_rects() # Reset the reference rectangle when entering camera-place mode
+            self.set_visible("fill", False)  # Set the fill alpha low for visibility
+            self.set_visible("text", False)  # Set the text alpha low for visibility
+        if event.old == "camera-edit" and event.new != "camera-edit": # We left camera-edit mode
+            self.set_visible("fill", True)  # Restore fill visibility
+            self.set_visible("text", True)  # Restore text visibility

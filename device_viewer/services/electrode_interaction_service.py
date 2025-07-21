@@ -1,5 +1,5 @@
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
-import json
+from pyface.qt.QtCore import QPointF
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.main_model import MainModel
@@ -24,6 +24,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     electrode_hovered = Instance(ElectrodeView)
 
+    rect_editing_index = -1  # Index of the point being edited in the reference rect
+    rect_buffer = []
+
     # -------------------- Helpers ------------------------
 
     def remove_last_digit(self, number: int | None) -> int | None:
@@ -42,6 +45,29 @@ class ElectrodeInteractionControllerService(HasTraits):
             return int(str(number) + digit)
 
     # -------------------- Handlers -----------------------
+
+    def handle_reference_point_placement(self, point: QPointF):
+        """Handle the placement of a reference point for perspective correction."""        
+        # Add the new point to the reference rect
+        self.rect_buffer.append(point)
+        if len(self.rect_buffer) == 4:  # We have a rectangle now
+            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
+            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.rect_buffer]
+            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
+            self.model.mode = "camera-edit"  # Switch to camera-edit mode
+
+    def handle_perspective_edit_start(self, point: QPointF):
+        """Handle the start of perspective editing."""
+        closest_point, closest_index = self.model.camera_perspective.get_closest_point(point)
+        self.rect_editing_index = closest_index  # Store the index of the point being edited
+
+    def handle_perspective_edit(self, point: QPointF):
+        """Handle the editing of a reference point during perspective correction."""
+        self.model.camera_perspective.transformed_reference_rect[self.rect_editing_index] = point
+
+    def handle_perspective_edit_end(self):
+        """Finalize the perspective editing."""
+        self.rect_editing_index = -1
 
     def handle_electrode_hover(self, electrode_view: ElectrodeView):
         self.electrode_hovered = electrode_view
@@ -62,7 +88,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle an electrode click event."""
         if self.model.mode == "channel-edit":
             self.model.electrode_editing = self.model.electrodes[electrode_id]
-        else:
+        elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
                 self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
@@ -130,7 +156,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.layers.items.route.route.items")
     @observe("model.layers.items")
     @observe("model.autoroute_layer.route.route.items")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
@@ -139,13 +165,13 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.electrode_editing")
     @observe("model.electrodes.items.channel")
     @observe("electrode_hovered")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
 
     @observe("model.electrodes.items.channel")
-    @observe("model.alpha_map.items.alpha")
+    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_channel_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
@@ -154,3 +180,17 @@ class ElectrodeInteractionControllerService(HasTraits):
     def step_label_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
+
+    @observe("model.mode")
+    @observe("model.camera_perspective.transformation")
+    def update_perspective_rect(self, event):
+        if self.electrode_view_layer:
+            if self.model.mode == "camera-edit":
+                self.electrode_view_layer.redraw_reference_rect(self.model)
+            elif hasattr(event, 'old') and event.old == "camera-edit":
+                self.electrode_view_layer.reset_reference_rect()  # Clear the reference rect when leaving camera-edit mode
+
+    @observe("model.mode")
+    def clear_buffer_on_mode_change(self, event):
+        if event.old != "camera-place" and event.new == "camera-place":
+            self.rect_buffer = []

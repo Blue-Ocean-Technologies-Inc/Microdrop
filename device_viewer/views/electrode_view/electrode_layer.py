@@ -1,4 +1,4 @@
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QPolygonF, QPen
 from PySide6.QtWidgets import QGraphicsScene, QApplication
 from pyface.qt.QtCore import Qt, QPointF
 
@@ -25,6 +25,7 @@ class ElectrodeLayer():
         self.electrode_views = {}
         self.electrode_endpoints = {}
         self.electrode_editing_text = None
+        self.reference_rect_item = None
 
         self.svg = electrodes.svg_model
 
@@ -85,14 +86,18 @@ class ElectrodeLayer():
         self.add_electrodes_to_scene(parent_scene)
         self.add_connections_to_scene(parent_scene)
         self.add_endpoints_to_scene(parent_scene)
+
         self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
         self.electrode_editing_text.setPos(QPointF(0, 0))
+
+        self.reference_rect_item = parent_scene.addPolygon(QPolygonF(), Qt.NoPen)
 
     def remove_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
         self.remove_endpoints_to_scene(parent_scene)
         parent_scene.removeItem(self.electrode_editing_text)
+        parent_scene.removeItem(self.reference_rect_item)
 
     ######################## Redraw functions ###########################
     def redraw_connections_to_scene(self, model: MainModel):
@@ -179,4 +184,15 @@ class ElectrodeLayer():
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
-            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label}")
+            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label} {"(Free Mode)" if model.free_mode else ""}")
+
+    def redraw_reference_rect(self, model: MainModel):
+        if len(model.camera_perspective.reference_rect) == 4:
+            # Update the reference rect visualization
+            self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
+            self.reference_rect_item.setPen(QPen(QColor("red"), 2))
+    
+    def reset_reference_rect(self):
+        """Reset the reference rectangle item."""
+        self.reference_rect_item.setPolygon(QPolygonF())
+        self.reference_rect_item.setPen(Qt.NoPen)

@@ -5,16 +5,19 @@ from traits.api import Instance, observe, Any, Str, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
-from pyface.qt.QtGui import QGraphicsScene
+from pyface.qt.QtGui import QGraphicsScene, QTransform, QPolygonF
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
+from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
+from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
@@ -64,6 +67,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
     message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
+    video_item = None  # The video item for the camera feed
+    debounce_timer = None  # Timer to debounce state messages
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
@@ -78,25 +83,17 @@ class DeviceViewerDockPane(TraitsDockPane):
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
 
-    def _model_default(self):
-        model = MainModel()
-        model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
-        return model
+        self.undo_manager = UndoManager(active_stack=CommandStack())
+        self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-    def _scene_default(self):
-        return ElectrodeScene()
+        self.model = MainModel(undo_manager=self.undo_manager)
+        self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
-    def _device_view_default(self):
-        view = AutoFitGraphicsView(self.scene)
-        view.setObjectName('device_view')
-        view.setViewport(QOpenGLWidget())
+        self.scene = ElectrodeScene()
 
-        return view
-
-    def _undo_manager_default(self):
-        undo_manager = UndoManager(active_stack=CommandStack())
-        undo_manager.active_stack.undo_manager = undo_manager
-        return undo_manager
+        self.device_view = AutoFitGraphicsView(self.scene)
+        self.device_view.setObjectName('device_view')
+        self.device_view.setViewport(QOpenGLWidget())
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
@@ -159,37 +156,46 @@ class DeviceViewerDockPane(TraitsDockPane):
             command = DictChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
 
-    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.layers.items.route.route.items") # When a route is modified
-    @observe("model.layers.items") # When an electrode changes state
-    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
+    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
     def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
             if not self.model.editable:
                 self.undo() # Revert changes if not editable
                 return
-        if not self._disable_state_messages:
+
+    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.layers.items.route.route.items") # When a route is modified
+    @observe("model.layers.items") # When an electrode changes state
+    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.electrode_editing") # When an electrode is being edited
+    def model_change_handler_with_message(self, event=None):
+        """
+        Handle changes to the model and send a message to the device viewer state change topic.
+        """
+        self.model_change_handler_with_timeout(event)
+        if not self._disable_state_messages and self.debounce_timer:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
             self.debounce_timer.start(200) # Start timeout for sending message
     
     @observe("model.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        if self.model.step_id is None: # Only send electrode updates if we are in free mode (no step_id)
+        if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
             logger.info("Sending electrode update")
             self.publish_electrode_update()
             logger.info("Electrode update sent")
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
-        self.undo_manager.undo()
+        self.model.undo_manager.undo()
         self._undoing = False
 
     def redo(self):
         self._undoing = True # We need to prevent the changes made in redo() from being added to the undo stack
-        self.undo_manager.redo()
+        self.model.undo_manager.redo()
         self._undoing = False
 
     def apply_message_model(self, message_model_serial: str):
@@ -210,6 +216,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Apply step label
         self.model.step_label = message_model.step_label
+
+        # Apply free mode
+        self.model.free_mode = message_model.free_mode
 
         # Apply editable state
         self.model.editable = message_model.editable
@@ -245,7 +254,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
-        # Create debouce timer
+        self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
+        self.video_item = QGraphicsVideoItem()
+        self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
+        self.camera = QCamera(QMediaDevices.defaultVideoInput())  # Initialize camera for video capture
+
+        scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
+        self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
+        self.capture_session.setVideoOutput(self.video_item)
+        self.capture_session.setCamera(self.camera)
+        self.scene.addItem(self.video_item)
+        self.camera.start()  # Start the camera to capture video
+
+        # Create debounce timer
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.publish_model_message)
@@ -276,7 +297,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view = ModePicker(self.model, self)
         self.mode_picker_view.setParent(container)
 
+        # camera_control_widget code
+        self.camera_control_widget = CameraControlWidget(self.model)
+        self.camera_control_widget.setParent(container)
+
         # Add widgets to layouts
+        left_stack.addWidget(self.camera_control_widget)
         left_stack.addWidget(self.alpha_view_ui.control)
         left_stack.addWidget(self.layer_ui.control)
         left_stack.addWidget(self.mode_picker_view)
@@ -315,3 +341,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map)
+
+    @observe("model.camera_perspective.transformation")
+    def camera_perspective_change_handler(self, event):
+        """
+        Handle changes to the camera perspective transformation.
+        This is used to update the scene's transformation when the camera perspective changes.
+        """
+        if self.video_item:
+            self.video_item.setTransform(self.model.camera_perspective.transformation)
