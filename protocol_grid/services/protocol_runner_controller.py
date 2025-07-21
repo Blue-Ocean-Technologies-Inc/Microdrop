@@ -86,6 +86,9 @@ class ProtocolRunnerController(QObject):
         self._paused_original_electrodes = {}
         self._is_advanced_hardware_control = False
 
+        # Message dialog pause state
+        self._pause_for_message_display = False
+
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
@@ -288,6 +291,14 @@ class ProtocolRunnerController(QObject):
         self._qt_debounce_pause_resume(self._internal_resume)
 
     def stop(self):
+        if hasattr(self, '_current_message_dialog'):
+            self._current_message_dialog.close()
+            delattr(self, '_current_message_dialog')
+        
+        self._pause_for_message_display = False
+        if hasattr(self, '_message_dialog_step_info'):
+            delattr(self, '_message_dialog_step_info')
+        
         # send final message of the step that was being executed before stopped
         if self._is_running and self._current_index < len(self._run_order):
             current_step_info = self._run_order[self._current_index]
@@ -381,7 +392,7 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
             
-            logger.info(f"Executing step {step.parameters.get('ID', 'Unknown')} with device state: {device_state}")
+            logger.info(f"Executing step {self._current_index + 1} with device state: {device_state}")
             
             # recalculate execution plan if it doesn't exist (new step or first time)
             if not self._current_execution_plan:
@@ -413,8 +424,18 @@ class ProtocolRunnerController(QObject):
             self._timer.timeout.disconnect()
             self._timer.timeout.connect(self._on_step_timeout)
             self._timer.start(int(step_timeout * 1000))
-                        
-            self._execute_next_phase()
+            
+            logger.info(f"Started step timer for {step_timeout:.2f} seconds with {len(self._current_execution_plan)} phases")
+            
+            # check for Message first BEFORE any phase execution
+            message = step.parameters.get("Message", "")
+            if message and message.strip():
+                # show message dialog and set pause flag immediately
+                self._pause_for_message_display = True
+                self._show_step_message_if_needed(step)
+                # DO NOT call _execute_next_phase() here - wait for dialog to close
+            else:
+                self._execute_next_phase()
             
         except Exception as e:
             logger.error(f"Error executing step: {e}")
@@ -423,6 +444,10 @@ class ProtocolRunnerController(QObject):
 
     def _execute_next_phase(self):
         if self._is_paused or not self._is_running:
+            return
+        
+        if hasattr(self, '_pause_for_message_display') and self._pause_for_message_display:
+            logger.info("Protocol execution paused for message dialog - not executing phase")
             return
             
         if self._current_phase_index >= len(self._current_execution_plan):
@@ -807,3 +832,64 @@ class ProtocolRunnerController(QObject):
 
     def is_paused(self):
         return self._is_paused
+
+    def _show_step_message_if_needed(self, step):
+        if not step or not hasattr(step, 'parameters'):
+            return
+        
+        message = step.parameters.get("Message", "")
+        if not message or not message.strip():
+            return
+        
+        step_id = step.parameters.get("ID", "")
+        step_description = step.parameters.get("Description", "Step")
+        
+        # format step info for display
+        if step_description and step_description != "Step":
+            step_info = f"Step: {step_description} (ID: {step_id})"
+        else:
+            step_info = f"Step ID: {step_id}" if step_id else "Step"
+        
+        self._message_dialog_step_info = (message.strip(), step_info)
+        
+        QTimer.singleShot(50, self._create_and_show_message_dialog)
+
+    def _create_and_show_message_dialog(self):
+        if not hasattr(self, '_message_dialog_step_info') or not self._message_dialog_step_info:
+            return
+        
+        try:
+            # importing here to avoid circular imports
+            from protocol_grid.extra_ui_elements import StepMessageDialog
+            
+            message, step_info = self._message_dialog_step_info
+            
+            # set the main widget as parent
+            parent_widget = self.parent()
+            
+            # create dialog and connect to resume method
+            self._current_message_dialog = StepMessageDialog(message, step_info, parent_widget)
+            self._current_message_dialog.finished.connect(self._on_message_dialog_closed)
+            self._current_message_dialog.show_message()
+            
+            logger.info(f"Displayed message popup with pause: {message[:50]}{'...' if len(message) > 50 else ''}")
+            
+        except Exception as e:
+            logger.error(f"Failed to show step message dialog: {e}")
+            self._pause_for_message_display = False
+            self._execute_next_phase()
+
+    def _on_message_dialog_closed(self, result):
+        logger.info("Message dialog closed - resuming protocol execution")
+        
+        self._pause_for_message_display = False
+        
+        if hasattr(self, '_current_message_dialog'):
+            delattr(self, '_current_message_dialog')
+        if hasattr(self, '_message_dialog_step_info'):
+            delattr(self, '_message_dialog_step_info')
+        
+        if self._is_running and not self._is_paused:
+            logger.info("Continuing phase execution after message dialog closed")
+            # small delay to ensure dialog is properly cleaned up
+            QTimer.singleShot(10, self._execute_next_phase)
