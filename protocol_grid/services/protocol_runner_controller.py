@@ -75,9 +75,12 @@ class ProtocolRunnerController(QObject):
 
         self._unique_step_count = 0
 
-        # throttling
-        self._last_pause_resume_time = 0.0
-        self._pause_resume_throttle_delay = 0.7
+        # debounce setup for Qt thread
+        self._pause_resume_debounce_timer = QTimer()
+        self._pause_resume_debounce_timer.setSingleShot(True)
+        self._pause_resume_debounce_timer.timeout.connect(self._execute_debounced_pause_resume)
+        self._pending_pause_resume_action = None
+        self._debounce_delay_ms = 250
 
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
@@ -121,14 +124,24 @@ class ProtocolRunnerController(QObject):
         # Start executing the protocol
         self._execute_next_step()
 
-    def pause(self):
-        current_time = time.time()        
-        # check if enough time has passed since last pause/resume
-        if current_time - self._last_pause_resume_time < self._pause_resume_throttle_delay:
-            return
+    def _qt_debounce_pause_resume(self, action_func):
+        # store the action
+        self._pending_pause_resume_action = action_func
         
-        self._last_pause_resume_time = current_time
-        
+        # reset timer - cancels any pending execution
+        self._pause_resume_debounce_timer.stop()
+        self._pause_resume_debounce_timer.start(self._debounce_delay_ms)
+
+    def _execute_debounced_pause_resume(self):
+        if self._pending_pause_resume_action:
+            try:
+                self._pending_pause_resume_action()
+            except Exception as e:
+                logger.error(f"Error in debounced pause/resume action: {e}")
+            finally:
+                self._pending_pause_resume_action = None
+
+    def _internal_pause(self):
         if not self._is_running or self._is_paused:
             return
         self._is_paused = True
@@ -171,14 +184,7 @@ class ProtocolRunnerController(QObject):
         
         self.signals.protocol_paused.emit()
 
-    def resume(self):
-        current_time = time.time()        
-        # check if enough time has passed since last pause/resume
-        if current_time - self._last_pause_resume_time < self._pause_resume_throttle_delay:
-            return
-        
-        self._last_pause_resume_time = current_time
-        
+    def _internal_resume(self):
         if not self._is_running or not self._is_paused:
             return
         self._is_paused = False
@@ -229,6 +235,14 @@ class ProtocolRunnerController(QObject):
         
         self._pause_time = None
         self._was_in_phase = False
+
+    def pause(self):
+        logger.info("Pause requested - using Qt-compatible debouncing")
+        self._qt_debounce_pause_resume(self._internal_pause)
+
+    def resume(self):
+        logger.info("Resume requested - using Qt-compatible debouncing")
+        self._qt_debounce_pause_resume(self._internal_resume)
 
     def stop(self):
         # send final message of the step that was being executed before stopped

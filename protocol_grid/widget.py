@@ -69,8 +69,13 @@ class PGCWidget(QWidget):
         self._last_selected_step_id = None
         self._last_published_step_uid = None
         self._processing_device_viewer_message = False
-        self._last_play_pause_time = 0.0
-        self._play_pause_throttle_delay = 0.7
+
+        # debounce setup for Qt thread
+        self._play_pause_debounce_timer = QTimer()
+        self._play_pause_debounce_timer.setSingleShot(True)
+        self._play_pause_debounce_timer.timeout.connect(self._execute_debounced_play_pause)
+        self._pending_play_pause_action = None
+        self._debounce_delay_ms = 250
         
         self.create_buttons()
         
@@ -339,75 +344,98 @@ class PGCWidget(QWidget):
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
 
-    def toggle_play_pause(self):        
-        current_time = time.time()        
-        # check if enough time has passed since last click
-        if current_time - self._last_play_pause_time < self._play_pause_throttle_delay:
-            return
+    def _qt_debounce_play_pause(self, action_func):
+        # store the action to execute
+        self._pending_play_pause_action = action_func
         
-        self._last_play_pause_time = current_time
+        # reset the timer - cancel any pending execution
+        self._play_pause_debounce_timer.stop()
+        self._play_pause_debounce_timer.start(self._debounce_delay_ms)
+
+    def _execute_debounced_play_pause(self):
+        if self._pending_play_pause_action:
+            try:
+                self._pending_play_pause_action()
+            except Exception as e:
+                logger.error(f"Error in debounced play/pause action: {e}")
+            finally:
+                self._pending_play_pause_action = None
+
+    def _play_pause_start_protocol(self):
+        self._protocol_running = True
+        self.sync_to_state()
+        try:
+            repeat_n = int(self.status_bar.edit_repeat_protocol.text() or "1")
+        except ValueError:
+            repeat_n = 1
+
+        selected_paths = self.get_selected_paths()
+        start_step_path = None
+        if selected_paths:
+            first_selected_item = self.get_item_by_path(selected_paths[0])
+            if first_selected_item and first_selected_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                start_step_path = selected_paths[0]
+
+        if not start_step_path:
+            all_step_paths = self._get_all_step_paths()
+            start_step_path = all_step_paths[0] if all_step_paths else None
+
+        flat_run = flatten_protocol_for_run(self.state)
+
+        start_idx = 0
+        for idx, entry in enumerate(flat_run):
+            if entry["path"] == start_step_path:
+                start_idx = idx
+                break
+
+        # Repeat Protocol 
+        run_order = []
+        for repeat_idx in range(repeat_n):
+            run_order.extend(flat_run[start_idx:])
+
+        preview_mode = self.navigation_bar.is_preview_mode()
+        self.protocol_runner.set_preview_mode(preview_mode)
+
+        self.protocol_runner.set_repeat_protocol_n(repeat_n)
+        self.protocol_runner.set_run_order(run_order)
+        self.protocol_runner.start()
+        self.navigation_bar.btn_play.setText("⏸ Pause")
+        self._update_navigation_buttons_state()
         
+        # clear selection when protocol starts
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+
+    def _play_pause_pause_protocol(self):
+        self.protocol_runner.pause()
+        self.navigation_bar.btn_play.setText("▶ Resume")
+        self._update_navigation_buttons_state()
+
+    def _play_pause_resume_protocol(self):
+        self.sync_to_state()
+        self.protocol_runner.resume()
+        self._protocol_running = True
+        self.navigation_bar.btn_play.setText("⏸ Pause")
+        self._update_navigation_buttons_state()
+        
+        # Clear selection when resuming to ensure runtime highlight is visible
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+
+    def toggle_play_pause(self):
         if self.protocol_runner.is_running():
-            self.protocol_runner.pause()
-            # self._protocol_running = False
             self.navigation_bar.btn_play.setText("▶ Resume")
-            self._update_navigation_buttons_state()
-        elif self.protocol_runner.is_paused():
-            self.sync_to_state()
-            self.protocol_runner.resume()
-            self._protocol_running = True
-            self.navigation_bar.btn_play.setText("⏸ Pause")
-            self._update_navigation_buttons_state()
+            self._qt_debounce_play_pause(self._play_pause_pause_protocol)
             
-            self.tree.clearSelection()
-            self._last_selected_step_id = None
-            self._last_published_step_id = None
+        elif self.protocol_runner.is_paused():
+            self.navigation_bar.btn_play.setText("⏸ Pause")
+            self._qt_debounce_play_pause(self._play_pause_resume_protocol)
             
         else:
-            self._protocol_running = True
-            self.sync_to_state()
-            try:
-                repeat_n = int(self.status_bar.edit_repeat_protocol.text() or "1")
-            except ValueError:
-                repeat_n = 1
-
-            selected_paths = self.get_selected_paths()
-            start_step_path = None
-            if selected_paths:
-                first_selected_item = self.get_item_by_path(selected_paths[0])
-                if first_selected_item and first_selected_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                    start_step_path = selected_paths[0]
-
-            if not start_step_path:
-                all_step_paths = self._get_all_step_paths()
-                start_step_path = all_step_paths[0] if all_step_paths else None
-
-            flat_run = flatten_protocol_for_run(self.state)
-
-            start_idx = 0
-            for idx, entry in enumerate(flat_run):
-                if entry["path"] == start_step_path:
-                    start_idx = idx
-                    break
-
-            # Repeat Protocol 
-            run_order = []
-            for repeat_idx in range(repeat_n):
-                run_order.extend(flat_run[start_idx:])
-
-            preview_mode = self.navigation_bar.is_preview_mode()
-            self.protocol_runner.set_preview_mode(preview_mode)
-
-            self.protocol_runner.set_repeat_protocol_n(repeat_n)
-            self.protocol_runner.set_run_order(run_order)
-            self.protocol_runner.start()
             self.navigation_bar.btn_play.setText("⏸ Pause")
-            self._update_navigation_buttons_state()
-            
-            # clear selection when protocol starts
-            self.tree.clearSelection()
-            self._last_selected_step_id = None
-            self._last_published_step_id = None
+            self._qt_debounce_play_pause(self._play_pause_start_protocol)
 
     def run_selected_step(self):
         if self._protocol_running:
