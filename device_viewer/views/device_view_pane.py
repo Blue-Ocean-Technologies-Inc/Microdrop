@@ -257,14 +257,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
         self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
-        self.camera = QCamera(QMediaDevices.defaultVideoInput())  # Initialize camera for video capture
 
         scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
         self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
         self.capture_session.setVideoOutput(self.video_item)
-        self.capture_session.setCamera(self.camera)
         self.scene.addItem(self.video_item)
-        self.camera.start()  # Start the camera to capture video
 
         # Create debounce timer
         self.debounce_timer = QTimer()
@@ -298,7 +295,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session)
         self.camera_control_widget.setParent(container)
 
         # Add widgets to layouts
