@@ -792,7 +792,7 @@ class PGCWidget(QWidget):
             channels_activated={},
             routes=[],
             id_to_channel={},
-            step_info={"step_id": None, "step_label": None},
+            step_info={"step_id": None, "step_label": None, "free_mode": True},
             editable=True
         )
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize())

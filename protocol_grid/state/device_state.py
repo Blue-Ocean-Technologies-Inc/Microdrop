@@ -270,7 +270,7 @@ def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: s
     id_to_channel = device_state.id_to_channel or {}
     
     if step_uid is None and step_description is None and step_id is None:
-        step_info = {"step_id": None, "step_label": None}
+        step_info = {"step_id": None, "step_label": None, "free_mode": True}
     else:
         step_description = step_description or "Step"
         step_id = step_id or ""
@@ -282,7 +282,8 @@ def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: s
         
         step_info = {
             "step_id": step_uid or "",
-            "step_label": step_label
+            "step_label": step_label,
+            "free_mode": False
         }
     
     return DeviceViewerMessageModel(

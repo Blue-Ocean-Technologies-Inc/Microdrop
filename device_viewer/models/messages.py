@@ -20,9 +20,11 @@ class DeviceViewerMessageModel():
         if self.step_info is not None:  
             self.step_id = step_info.get("step_id", None)
             self.step_label = step_info.get("step_label", None)
+            self.free_mode = step_info.get("free_mode", False)
         else:
             self.step_id = None
             self.step_label = None
+            self.free_mode = False
         self.editable = editable # True (editing) or False (running)
         self.uuid = uuid # A unique identifier for the model, used to differentiate messages from different models
  
@@ -66,7 +68,7 @@ class DeviceViewerMessageModel():
                 number_of_channels_activated += 1
         return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} number_of_channels_activated={number_of_channels_activated}>"
 if __name__ == "__main__":
-    test_step_info = {"step_id": "1", "step_label": "Test Step 1"}
+    test_step_info = {"step_id": "1", "step_label": "Test Step 1", "free_mode": False}
     test = DeviceViewerMessageModel({1: True}, [(["a", "a"], "red")], {"a": 1}, test_step_info, True)
     print(test.get_routes_with_channels())
     print(test.get_routes_with_ids())

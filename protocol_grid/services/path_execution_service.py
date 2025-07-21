@@ -498,7 +498,8 @@ class PathExecutionService:
         
         step_info = {
             "step_id": step_uid,
-            "step_label": step_label
+            "step_label": step_label,
+            "free_mode": False
         }
         
         return DeviceViewerMessageModel(
