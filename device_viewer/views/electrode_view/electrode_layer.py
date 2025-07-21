@@ -179,4 +179,15 @@ class ElectrodeLayer():
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
-            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label}")
+            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label} {"(Free Mode)" if model.free_mode else ""}")
+
+    def redraw_reference_rect(self, model: MainModel):
+        if len(model.camera_perspective.reference_rect) == 4:
+            # Update the reference rect visualization
+            self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
+            self.reference_rect_item.setPen(QPen(QColor("red"), 2))
+    
+    def reset_reference_rect(self):
+        """Reset the reference rectangle item."""
+        self.reference_rect_item.setPolygon(QPolygonF())
+        self.reference_rect_item.setPen(Qt.NoPen)
