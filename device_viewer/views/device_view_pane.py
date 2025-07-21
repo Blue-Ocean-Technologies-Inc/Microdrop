@@ -183,7 +183,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     
     @observe("model.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        if self.model.step_id is None: # Only send electrode updates if we are in free mode (no step_id)
+        if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
             logger.info("Sending electrode update")
             self.publish_electrode_update()
             logger.info("Electrode update sent")
@@ -216,6 +216,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Apply step label
         self.model.step_label = message_model.step_label
+
+        # Apply free mode
+        self.model.free_mode = message_model.free_mode
 
         # Apply editable state
         self.model.editable = message_model.editable

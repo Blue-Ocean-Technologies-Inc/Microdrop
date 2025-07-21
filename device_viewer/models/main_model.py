@@ -34,6 +34,7 @@ class MainModel(RouteLayerManager, Electrodes):
 
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
+    free_mode = Bool(True)  # Whether we are in free mode (no step_id)
 
     uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
 

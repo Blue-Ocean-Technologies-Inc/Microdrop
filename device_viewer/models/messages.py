@@ -17,12 +17,16 @@ class DeviceViewerMessageModel():
         self.id_to_channel = id_to_channel
         # A dict containing step information
         self.step_info = step_info or None
-        if self.step_info is not None:  
+        if self.step_info is not None:
             self.step_id = step_info.get("step_id", None)
             self.step_label = step_info.get("step_label", None)
+            self.free_mode = step_info.get("free_mode", False)
+        else:
+            self.step_id = None
+            self.step_label = None
+            self.free_mode = False
         self.editable = editable # True (editing) or False (running)
         self.uuid = uuid # A unique identifier for the model, used to differentiate messages from different models
- 
     def get_routes_with_ids(self) -> list[list[str]]:
         """Returns a list of just the electrode_id parts of each route"""
         return [routedata[0] for routedata in self.routes]
@@ -47,10 +51,10 @@ class DeviceViewerMessageModel():
         obj["channels_activated"] = channels_activated_with_int_keys # Convert keys to int for consistency with the constructor
         try:
             return DeviceViewerMessageModel(
-                obj["channels_activated"], 
-                obj["routes"], 
-                obj["id_to_channel"], 
-                obj["step_info"], 
+                obj["channels_activated"],
+                obj["routes"],
+                obj["id_to_channel"],
+                obj["step_info"],
                 obj.get("editable", True),
                 obj.get("uuid", "")
             )
@@ -63,7 +67,7 @@ class DeviceViewerMessageModel():
                 number_of_channels_activated += 1
         return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} number_of_channels_activated={number_of_channels_activated}>"
 if __name__ == "__main__":
-    test_step_info = {"step_id": "1", "step_label": "Test Step 1"}
+    test_step_info = {"step_id": "1", "step_label": "Test Step 1", "free_mode": False}
     test = DeviceViewerMessageModel({1: True}, [(["a", "a"], "red")], {"a": 1}, test_step_info, True)
     print(test.get_routes_with_channels())
     print(test.get_routes_with_ids())

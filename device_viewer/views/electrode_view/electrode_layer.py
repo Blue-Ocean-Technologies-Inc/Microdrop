@@ -184,7 +184,7 @@ class ElectrodeLayer():
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
-            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label}")
+            self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label} {"(Free Mode)" if model.free_mode else ""}")
 
     def redraw_reference_rect(self, model: MainModel):
         if len(model.camera_perspective.reference_rect) == 4:
