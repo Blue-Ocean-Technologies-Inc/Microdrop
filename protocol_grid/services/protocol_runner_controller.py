@@ -75,6 +75,10 @@ class ProtocolRunnerController(QObject):
 
         self._unique_step_count = 0
 
+        # throttling
+        self._last_pause_resume_time = 0.0
+        self._pause_resume_throttle_delay = 0.7
+
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
@@ -118,6 +122,13 @@ class ProtocolRunnerController(QObject):
         self._execute_next_step()
 
     def pause(self):
+        current_time = time.time()        
+        # check if enough time has passed since last pause/resume
+        if current_time - self._last_pause_resume_time < self._pause_resume_throttle_delay:
+            return
+        
+        self._last_pause_resume_time = current_time
+        
         if not self._is_running or self._is_paused:
             return
         self._is_paused = True
@@ -161,6 +172,13 @@ class ProtocolRunnerController(QObject):
         self.signals.protocol_paused.emit()
 
     def resume(self):
+        current_time = time.time()        
+        # check if enough time has passed since last pause/resume
+        if current_time - self._last_pause_resume_time < self._pause_resume_throttle_delay:
+            return
+        
+        self._last_pause_resume_time = current_time
+        
         if not self._is_running or not self._is_paused:
             return
         self._is_paused = False

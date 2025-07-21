@@ -1,3 +1,4 @@
+import time
 import sys
 import copy
 import json
@@ -68,6 +69,8 @@ class PGCWidget(QWidget):
         self._last_selected_step_id = None
         self._last_published_step_uid = None
         self._processing_device_viewer_message = False
+        self._last_play_pause_time = 0.0
+        self._play_pause_throttle_delay = 0.7
         
         self.create_buttons()
         
@@ -336,7 +339,14 @@ class PGCWidget(QWidget):
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
 
-    def toggle_play_pause(self):
+    def toggle_play_pause(self):        
+        current_time = time.time()        
+        # check if enough time has passed since last click
+        if current_time - self._last_play_pause_time < self._play_pause_throttle_delay:
+            return
+        
+        self._last_play_pause_time = current_time
+        
         if self.protocol_runner.is_running():
             self.protocol_runner.pause()
             # self._protocol_running = False
