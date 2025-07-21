@@ -121,7 +121,8 @@ class PGCWidget(QWidget):
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return        
-        
+        if self._protocol_running:
+            return
         self._processing_device_viewer_message = True
         self._programmatic_change = True
 
@@ -408,13 +409,17 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
 
     def _play_pause_pause_protocol(self):
-        self.protocol_runner.pause()
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        preview_mode = self.navigation_bar.is_preview_mode()
+        self.protocol_runner.pause(advanced_mode=advanced_mode, preview_mode=preview_mode)
         self.navigation_bar.btn_play.setText("▶ Resume")
         self._update_navigation_buttons_state()
 
     def _play_pause_resume_protocol(self):
         self.sync_to_state()
-        self.protocol_runner.resume()
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        preview_mode = self.navigation_bar.is_preview_mode()
+        self.protocol_runner.resume(advanced_mode=advanced_mode, preview_mode=preview_mode)
         self._protocol_running = True
         self.navigation_bar.btn_play.setText("⏸ Pause")
         self._update_navigation_buttons_state()
