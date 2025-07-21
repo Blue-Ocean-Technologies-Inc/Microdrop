@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, 
@@ -309,6 +309,76 @@ class ShowColumnToggleDialogAction(Action):
     def perform(self, event=None):
         dialog = ColumnToggleDialog(self.widget)
         dialog.exec()
+
+
+class StepMessageDialog(QDialog):
+    
+    def __init__(self, message: str, step_info: str, parent=None):
+        super().__init__(parent)
+        self.message = message
+        self.step_info = step_info
+        self.setup_ui()
+        
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
+        self.setModal(True)
+    
+    def setup_ui(self):
+        self.setWindowTitle("Step Message")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
+        
+        if self.step_info:
+            step_label = QLabel(f"<b>{self.step_info}</b>")
+            step_label.setAlignment(Qt.AlignCenter)
+            step_label.setStyleSheet("QLabel { color: #0066cc; margin-bottom: 5px; }")
+            layout.addWidget(step_label)
+        
+        message_label = QLabel(self.message)
+        message_label.setWordWrap(True)
+        message_label.setAlignment(Qt.AlignCenter)
+        message_label.setMinimumWidth(300)
+        message_label.setMaximumWidth(500)
+        message_label.setStyleSheet("QLabel { font-size: 12pt; padding: 10px; }")
+        layout.addWidget(message_label)
+        
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        ok_button = QPushButton("OK")
+        ok_button.setDefault(True)
+        ok_button.setMinimumWidth(80)
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+        
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        self.adjustSize()
+        
+        # center on parent if available
+        if self.parent():
+            parent_geometry = self.parent().geometry()
+            x = parent_geometry.x() + (parent_geometry.width() - self.width()) // 2
+            y = parent_geometry.y() + (parent_geometry.height() - self.height()) // 2
+            self.move(x, y)
+    
+    def show_message(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        
+    def closeEvent(self, event):
+        self.accept()
+        event.accept()
+    
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape):
+            self.accept()
+        else:
+            super().keyPressEvent(event)
 
     
 def make_separator():
