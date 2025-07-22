@@ -2009,7 +2009,8 @@ class PGCWidget(QWidget):
                 
                 self.state.from_flat_export(data)
                     
-                self.state.assign_uids_to_all_steps()
+                # ALWAYS assign new UIDs to ALL imported steps to prevent conflicts
+                self._assign_new_uids_to_all_elements(self.state.sequence)
                 
                 self.state.undo_stack.clear()
                 self.state.redo_stack.clear()
@@ -2044,8 +2045,10 @@ class PGCWidget(QWidget):
             self.state.snapshot_for_undo()
 
             imported_state = ProtocolState()      
-            imported_state.from_flat_export(data)        
-            imported_state.assign_uids_to_all_steps()
+            imported_state.from_flat_export(data)
+            
+            # assign new UIDs to ALL imported elements to prevent conflicts
+            self._assign_new_uids_to_all_elements(imported_state.sequence)
             
             target_item_type = target_item.data(ROW_TYPE_ROLE)
             
@@ -2053,9 +2056,6 @@ class PGCWidget(QWidget):
                 target_elements = self._find_elements_by_path(target_path)
                 
                 for element in imported_state.sequence:
-                    if isinstance(element, ProtocolStep):
-                        self.state.assign_uid_to_step(element)
-
                     target_elements.append(element)
                                     
             elif target_item_type == STEP_TYPE:
@@ -2069,9 +2069,6 @@ class PGCWidget(QWidget):
                 
                 # insert AFTER the selected step
                 for i, element in enumerate(imported_state.sequence):
-                    if isinstance(element, ProtocolStep):
-                        self.state.assign_uid_to_step(element)
-
                     target_elements.insert(insert_position + i, element)
                                 
             else:
@@ -2087,6 +2084,13 @@ class PGCWidget(QWidget):
             
         except Exception as e:
             QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
+
+    def _assign_new_uids_to_all_elements(self, elements):
+        for element in elements:
+            if isinstance(element, ProtocolStep):
+                element.parameters["UID"] = str(self.state.get_next_uid())
+            elif isinstance(element, ProtocolGroup):
+                self._assign_new_uids_to_all_elements(element.elements)
             
     def assign_test_device_states(self):
         """Assign test device states to steps."""    
