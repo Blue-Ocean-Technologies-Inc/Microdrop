@@ -87,6 +87,9 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_prev.clicked.connect(self.navigate_to_previous_step)
         self.navigation_bar.btn_next.clicked.connect(self.navigate_to_next_step)
         self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step) 
+        self.navigation_bar.btn_prev_phase.clicked.connect(self.navigate_previous_phase)
+        self.navigation_bar.btn_resume.clicked.connect(self.toggle_play_pause)
+        self.navigation_bar.btn_next_phase.clicked.connect(self.navigate_next_phase)
 
         self.status_bar = StatusBar(self)
 
@@ -233,11 +236,17 @@ class PGCWidget(QWidget):
     def on_protocol_finished(self):
         self.clear_highlight()
         self._protocol_running = False
+        self._disable_phase_navigation()
         self.navigation_bar.btn_play.setText("▶ Play")
         self._update_navigation_buttons_state()
 
     def on_protocol_paused(self):
         self.navigation_bar.btn_play.setText("▶ Resume")
+
+        if self.protocol_runner.can_navigate_phases():
+            self._enable_phase_navigation()
+        else:
+            self._disable_phase_navigation()
     
     def on_protocol_error(self, error_message):
         logger.info(f"Protocol execution error: {error_message}")
@@ -428,6 +437,9 @@ class PGCWidget(QWidget):
         self.sync_to_state()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         preview_mode = self.navigation_bar.is_preview_mode()
+        
+        self._disable_phase_navigation()
+        
         self.protocol_runner.resume(advanced_mode=advanced_mode, preview_mode=preview_mode)
         self._protocol_running = True
         self.navigation_bar.btn_play.setText("⏸ Pause")
@@ -577,6 +589,32 @@ class PGCWidget(QWidget):
                 self._last_published_step_id = None
         
         return success
+    
+    def _enable_phase_navigation(self):
+        self.navigation_bar.split_play_button_to_phase_controls()
+        self._update_phase_navigation_buttons()
+
+    def _disable_phase_navigation(self):
+        self.navigation_bar.merge_phase_controls_to_play_button()
+
+    def navigate_previous_phase(self):
+        if self.protocol_runner.navigate_to_previous_phase():
+            self._update_phase_navigation_buttons()
+
+    def navigate_next_phase(self):
+        if self.protocol_runner.navigate_to_next_phase():
+            self._update_phase_navigation_buttons()
+
+    def _update_phase_navigation_buttons(self):
+        phase_info = self.protocol_runner.get_phase_navigation_info()
+        
+        current_phase = phase_info["current_phase"]
+        total_phases = phase_info["total_phases"]
+        
+        prev_enabled = current_phase > 1
+        next_enabled = current_phase < total_phases
+        
+        self.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
 
     def _get_all_step_paths(self):
         step_paths = []
