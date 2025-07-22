@@ -2042,18 +2042,40 @@ class PGCWidget(QWidget):
                 data = json.load(f)
             
             self.state.snapshot_for_undo()
-            imported_state = ProtocolState()
-            imported_state.from_dict(data)
+
+            imported_state = ProtocolState()      
+            imported_state.from_flat_export(data)        
+            imported_state.assign_uids_to_all_steps()
             
-            if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            target_item_type = target_item.data(ROW_TYPE_ROLE)
+            
+            if target_item_type == GROUP_TYPE:
                 target_elements = self._find_elements_by_path(target_path)
+                
+                for element in imported_state.sequence:
+                    if isinstance(element, ProtocolStep):
+                        self.state.assign_uid_to_step(element)
+
+                    target_elements.append(element)
+                                    
+            elif target_item_type == STEP_TYPE:
+                if len(target_path) == 1: # root-level step
+                    target_elements = self.state.sequence
+                    insert_position = target_path[0] + 1
+                else: # step inside a group                    
+                    parent_path = target_path[:-1]
+                    target_elements = self._find_elements_by_path(parent_path)
+                    insert_position = target_path[-1] + 1
+                
+                # insert AFTER the selected step
+                for i, element in enumerate(imported_state.sequence):
+                    if isinstance(element, ProtocolStep):
+                        self.state.assign_uid_to_step(element)
+
+                    target_elements.insert(insert_position + i, element)
+                                
             else:
-                target_elements = self._find_elements_by_path(target_path[:-1])
-            
-            for element in imported_state.sequence:
-                if hasattr(element, 'parameters') and 'UID' in element.parameters:
-                    self.state.assign_uid_to_step(element)
-                target_elements.append(element)
+                return
             
             self.reassign_ids()
             self.load_from_state()
