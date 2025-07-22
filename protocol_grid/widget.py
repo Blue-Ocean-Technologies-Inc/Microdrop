@@ -69,6 +69,7 @@ class PGCWidget(QWidget):
         self._last_selected_step_id = None
         self._last_published_step_uid = None
         self._processing_device_viewer_message = False
+        self._navigating = False
 
         # debounce setup for Qt thread
         self._play_pause_debounce_timer = QTimer()
@@ -274,6 +275,7 @@ class PGCWidget(QWidget):
             # didnt update _last_published_step_id here since we want the message to be published
 
     def navigate_to_first_step(self):
+        self._navigating = True
         all_step_paths = self._get_all_step_paths()
         if not all_step_paths:
             return
@@ -284,8 +286,10 @@ class PGCWidget(QWidget):
             self._navigate_during_protocol(target_path)
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
+        self._navigating = False
 
     def navigate_to_previous_step(self):
+        self._navigating = True
         all_step_paths = self._get_all_step_paths()
         if not all_step_paths:
             return
@@ -307,8 +311,10 @@ class PGCWidget(QWidget):
                     self._select_step_by_path(all_step_paths[-1])
             elif current_index > 0:
                 self._select_step_by_path(all_step_paths[current_index - 1])
+        self._navigating = False
 
     def navigate_to_next_step(self):
+        self._navigating = True
         all_step_paths = self._get_all_step_paths()
         if not all_step_paths:
             return
@@ -332,8 +338,10 @@ class PGCWidget(QWidget):
                 self._select_step_by_path(all_step_paths[current_index + 1])
             else:
                 self._add_step_at_root_and_select()
+        self._navigating = False
 
     def navigate_to_last_step(self):
+        self._navigating = True
         all_step_paths = self._get_all_step_paths()
         if not all_step_paths:
             return
@@ -344,6 +352,7 @@ class PGCWidget(QWidget):
             self._navigate_during_protocol(target_path)
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
+        self._navigating = False
 
     def _qt_debounce_play_pause(self, action_func):
         # store the action to execute
@@ -1038,7 +1047,7 @@ class PGCWidget(QWidget):
                         self._last_published_step_id = published_step_id
         
         # check if transitioned from a step selected to NO step selected
-        if self._last_selected_step_id and not current_step_id:
+        if self._last_selected_step_id and not current_step_id and not self._navigating:
             self._send_empty_device_state_message()
             self._last_published_step_id = None            
         
