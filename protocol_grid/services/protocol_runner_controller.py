@@ -299,6 +299,8 @@ class ProtocolRunnerController(QObject):
         if hasattr(self, '_message_dialog_step_info'):
             delattr(self, '_message_dialog_step_info')
         
+        self._cleanup_message_dialog_timing()
+        
         # send final message of the step that was being executed before stopped
         if self._is_running and self._current_index < len(self._run_order):
             current_step_info = self._run_order[self._current_index]
@@ -850,9 +852,82 @@ class ProtocolRunnerController(QObject):
         else:
             step_info = f"Step ID: {step_id}" if step_id else "Step"
         
+        self._pause_for_message_display = True
+        self._pause_timers_for_message()
+        
         self._message_dialog_step_info = (message.strip(), step_info)
         
         QTimer.singleShot(50, self._create_and_show_message_dialog)
+
+    def _pause_timers_for_message(self):
+        current_time = time.time()
+        
+        # store current elapsed times
+        if self._start_time:
+            self._message_dialog_total_elapsed = current_time - self._start_time
+        else:
+            self._message_dialog_total_elapsed = 0.0
+            
+        if self._step_start_time:
+            self._message_dialog_step_elapsed = current_time - self._step_start_time
+        else:
+            self._message_dialog_step_elapsed = 0.0
+            
+        if self._phase_start_time:
+            self._message_dialog_phase_elapsed = current_time - self._phase_start_time
+        else:
+            self._message_dialog_phase_elapsed = 0.0
+        
+        # store remaining times from active timers
+        if self._timer.isActive():
+            self._message_dialog_step_remaining = self._timer.remainingTime() / 1000.0
+            self._timer.stop()
+        else:
+            self._message_dialog_step_remaining = 0.0
+            
+        if self._phase_timer.isActive():
+            self._message_dialog_phase_remaining = self._phase_timer.remainingTime() / 1000.0
+            self._phase_timer.stop()
+        else:
+            self._message_dialog_phase_remaining = 0.0
+        
+        # stop status timer to freeze status bar
+        self._status_timer.stop()
+        
+        logger.info(f"Paused timers for message dialog - step remaining: {self._message_dialog_step_remaining:.2f}s, phase remaining: {self._message_dialog_phase_remaining:.2f}s")
+
+    def _resume_timers_for_message(self):
+        current_time = time.time()
+        
+        # adjust times to account for the message dialog pause duration
+        if hasattr(self, '_message_dialog_total_elapsed'):
+            if self._start_time:
+                self._start_time = current_time - self._message_dialog_total_elapsed
+            
+        if hasattr(self, '_message_dialog_step_elapsed'):
+            if self._step_start_time:
+                self._step_start_time = current_time - self._message_dialog_step_elapsed
+                
+        if hasattr(self, '_message_dialog_phase_elapsed'):
+            if self._phase_start_time:
+                self._phase_start_time = current_time - self._message_dialog_phase_elapsed
+        
+        # resume step timer if it was active
+        if hasattr(self, '_message_dialog_step_remaining') and self._message_dialog_step_remaining > 0:
+            self._timer.start(int(self._message_dialog_step_remaining * 1000))
+            logger.info(f"Resumed step timer with {self._message_dialog_step_remaining:.2f}s remaining")
+            
+        # resume phase timer if it was active
+        if hasattr(self, '_message_dialog_phase_remaining') and self._message_dialog_phase_remaining > 0:
+            self._phase_timer.start(int(self._message_dialog_phase_remaining * 1000))
+            logger.info(f"Resumed phase timer with {self._message_dialog_phase_remaining:.2f}s remaining")
+        
+        # resume status timer
+        self._status_timer.start()
+        
+        self._cleanup_message_dialog_timing()
+        
+        logger.info("Resumed all timers after message dialog closed")
 
     def _create_and_show_message_dialog(self):
         if not hasattr(self, '_message_dialog_step_info') or not self._message_dialog_step_info:
@@ -877,18 +952,29 @@ class ProtocolRunnerController(QObject):
         except Exception as e:
             logger.error(f"Failed to show step message dialog: {e}")
             self._pause_for_message_display = False
+            self._resume_timers_for_message()
             self._execute_next_phase()
+
+    def _cleanup_message_dialog_timing(self):
+        for attr in ['_message_dialog_total_elapsed', '_message_dialog_step_elapsed', 
+                    '_message_dialog_phase_elapsed', '_message_dialog_step_remaining', 
+                    '_message_dialog_phase_remaining']:
+            if hasattr(self, attr):
+                delattr(self, attr)
 
     def _on_message_dialog_closed(self, result):
         logger.info("Message dialog closed - resuming protocol execution")
         
         self._pause_for_message_display = False
         
+        self._resume_timers_for_message()
+        
         if hasattr(self, '_current_message_dialog'):
             delattr(self, '_current_message_dialog')
         if hasattr(self, '_message_dialog_step_info'):
             delattr(self, '_message_dialog_step_info')
         
+        # Continue with phase execution if protocol is still running and NOT MANUALLY PAUSED
         if self._is_running and not self._is_paused:
             logger.info("Continuing phase execution after message dialog closed")
             # small delay to ensure dialog is properly cleaned up
