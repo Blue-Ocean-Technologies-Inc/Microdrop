@@ -85,6 +85,8 @@ class ProtocolRunnerController(QObject):
         # Advanced mode direct hardware control state tracking
         self._paused_original_electrodes = {}
         self._is_advanced_hardware_control = False
+        # Advanced mode editability state
+        self._advanced_mode_editable_state = False
 
         # Message dialog pause state
         self._pause_for_message_display = False
@@ -189,6 +191,9 @@ class ProtocolRunnerController(QObject):
             self._remaining_step_time = max(0, total_step_time - self._step_elapsed_time)
             logger.info(f"Paused with {self._remaining_step_time:.2f}s remaining for step (elapsed: {self._step_elapsed_time:.2f}s)")
         
+        # track whether to maintain editability for advanced mode
+        self._advanced_mode_editable_state = self._is_advanced_hardware_control
+        
         self.signals.protocol_paused.emit()
 
     def _internal_resume(self):
@@ -248,6 +253,9 @@ class ProtocolRunnerController(QObject):
         self._pause_time = None
         self._was_in_phase = False
         
+        # clear advanced mode editability state
+        self._advanced_mode_editable_state = False
+        
         # clear advanced hardware control state
         self._is_advanced_hardware_control = False
         self._paused_original_electrodes = {}
@@ -300,6 +308,9 @@ class ProtocolRunnerController(QObject):
             delattr(self, '_message_dialog_step_info')
         
         self._cleanup_message_dialog_timing()
+        
+        # clear advanced mode editability state
+        self._advanced_mode_editable_state = False
         
         # send final message of the step that was being executed before stopped
         if self._is_running and self._current_index < len(self._run_order):
@@ -476,6 +487,10 @@ class ProtocolRunnerController(QObject):
                 plan_item["step_id"]
             )
             
+            if self._advanced_mode_editable_state:
+                msg_model.step_info["free_mode"] = True
+                msg_model.editable = True
+            
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
             
             logger.info(f"Published electrode state to device viewer: {msg_model.serialize()}")
@@ -650,6 +665,9 @@ class ProtocolRunnerController(QObject):
         
         msg_model.step_info["free_mode"] = True
         msg_model.editable = True
+        
+        # re-set the advanced mode editability state, for safety
+        self._advanced_mode_editable_state = True
         
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         
