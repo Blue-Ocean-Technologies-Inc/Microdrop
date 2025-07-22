@@ -20,23 +20,54 @@ class NavigationBar(QWidget):
         main_layout.setSpacing(5)
         
         # HLayout: Navigation buttons
-        button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(0)
+        self.button_layout = QHBoxLayout()
+        self.button_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_layout.setSpacing(0)
 
-        btns = [
-            QPushButton("⏮ First"),
-            QPushButton("◀ Previous"),
-            QPushButton("▶ Play"),
-            QPushButton("■ Stop"),
-            QPushButton("Next ▶"),
-            QPushButton("Last ⏭")
-        ]
-        for btn in btns:
+        # main navigation buttons
+        self.btn_first = QPushButton("⏮ First")
+        self.btn_prev = QPushButton("◀ Previous")
+        self.btn_stop = QPushButton("■ Stop")
+        self.btn_next = QPushButton("Next ▶")
+        self.btn_last = QPushButton("Last ⏭")
+        
+        self.btn_play = QPushButton("▶ Play")
+        
+        # phase navigation buttons (initially hidden)
+        self.btn_prev_phase = QPushButton("◀ Phase")
+        self.btn_resume = QPushButton("▶ Resume")  
+        self.btn_next_phase = QPushButton("Phase ▶")
+        
+        # container widget for the play/phase buttons area
+        self.play_phase_container = QWidget()
+        self.play_phase_layout = QHBoxLayout(self.play_phase_container)
+        self.play_phase_layout.setContentsMargins(0, 0, 0, 0)
+        self.play_phase_layout.setSpacing(0)
+        
+        self.play_phase_layout.addWidget(self.btn_play)
+        
+        for btn in [self.btn_prev_phase, self.btn_resume, self.btn_next_phase]:
+            btn.setVisible(False)
+            self.play_phase_layout.addWidget(btn)
+        
+        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last]:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            button_layout.addWidget(btn)
-
-        self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last = btns
+        
+        for btn in [self.btn_prev_phase, self.btn_resume, self.btn_next_phase]:
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        self.play_phase_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        # add in correct order
+        self.button_layout.addWidget(self.btn_first)
+        self.button_layout.addWidget(self.btn_prev)
+        self.button_layout.addWidget(self.play_phase_container)
+        self.button_layout.addWidget(self.btn_stop)
+        self.button_layout.addWidget(self.btn_next)
+        self.button_layout.addWidget(self.btn_last)
+        
+        # track navigation state
+        self._phase_navigation_active = False
         
         checkbox_layout = QHBoxLayout()
         checkbox_layout.setContentsMargins(0, 0, 0, 0)
@@ -53,7 +84,7 @@ class NavigationBar(QWidget):
         self.preview_mode_checkbox.setToolTip("When checked, no hardware messages will be sent during protocol execution")
         checkbox_layout.addWidget(self.preview_mode_checkbox)
         
-        main_layout.addLayout(button_layout)
+        main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
         
         self.setLayout(main_layout)
@@ -69,6 +100,46 @@ class NavigationBar(QWidget):
 
     def set_advanced_user_mode_enabled(self, enabled):
         self.advanced_user_mode_checkbox.setEnabled(enabled)
+    
+    def split_play_button_to_phase_controls(self):
+        if self._phase_navigation_active:
+            return
+            
+        self._phase_navigation_active = True
+        
+        self.btn_play.setVisible(False)
+        
+        self.btn_prev_phase.setVisible(True)
+        self.btn_resume.setVisible(True)
+        self.btn_next_phase.setVisible(True)
+        
+        # force layout update
+        self.play_phase_container.update()
+        self.update()
+    
+    def merge_phase_controls_to_play_button(self):
+        if not self._phase_navigation_active:
+            return
+            
+        self._phase_navigation_active = False
+        
+        # Hide the phase  buttons
+        self.btn_prev_phase.setVisible(False)
+        self.btn_resume.setVisible(False) 
+        self.btn_next_phase.setVisible(False)
+        
+        self.btn_play.setVisible(True)
+        
+        # force layout update
+        self.play_phase_container.update()
+        self.update()
+    
+    def set_phase_navigation_enabled(self, prev_enabled, next_enabled):
+        self.btn_prev_phase.setEnabled(prev_enabled)
+        self.btn_next_phase.setEnabled(next_enabled)
+    
+    def is_phase_navigation_active(self):
+        return self._phase_navigation_active
 
 
 class StatusBar(QWidget):

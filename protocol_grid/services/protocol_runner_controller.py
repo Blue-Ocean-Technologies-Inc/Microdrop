@@ -91,6 +91,13 @@ class ProtocolRunnerController(QObject):
         # Message dialog pause state
         self._pause_for_message_display = False
 
+        # phase navigation state
+        self._phase_navigation_mode = False
+        self._original_pause_phase_index = 0
+        self._navigated_phase_index = 0
+        self._phase_navigation_step_elapsed = 0.0
+        self._original_step_time_remaining = 0.0
+
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
@@ -194,6 +201,12 @@ class ProtocolRunnerController(QObject):
         # track whether to maintain editability for advanced mode
         self._advanced_mode_editable_state = self._is_advanced_hardware_control
         
+        # initialize phase navigation state
+        self._original_pause_phase_index = max(0, self._current_phase_index - 1)
+        self._navigated_phase_index = self._original_pause_phase_index
+        self._phase_navigation_step_elapsed = self._step_elapsed_time
+        self._original_step_time_remaining = self._remaining_step_time
+        
         self.signals.protocol_paused.emit()
 
     def _internal_resume(self):
@@ -219,8 +232,36 @@ class ProtocolRunnerController(QObject):
             if self._phase_start_time:
                 self._phase_start_time += pause_duration
         
+        # handle phase navigation resume
+        if self._phase_navigation_mode:
+            # resume from navigated phase
+            self._current_phase_index = self._navigated_phase_index
+            
+            # calculate number of phases moved to adjust step timer
+            phases_moved = self._navigated_phase_index - self._original_pause_phase_index
+            if self._current_execution_plan and phases_moved != 0:
+                phase_duration = self._current_execution_plan[0]["duration"]  # all phases in a step have same duration
+                time_adjustment = phases_moved * phase_duration
+                new_remaining_time = max(0, self._original_step_time_remaining - time_adjustment)
+            else:
+                new_remaining_time = self._original_step_time_remaining
+            
+            # reset phase navigation state
+            self._phase_navigation_mode = False
+            self._original_pause_phase_index = 0
+            self._navigated_phase_index = 0
+            
+            self._phase_start_time = None
+            self._phase_elapsed_time = 0.0
+            self._execute_next_phase()
+            
+            # restart step timer with adjusted time
+            if new_remaining_time > 0:
+                self._timer.start(int(new_remaining_time * 1000))
+                logger.info(f"Resuming step from navigated phase with {new_remaining_time:.2f}s remaining")
+            
         # check if navigated during pause (execution plan exists but no phases completed)
-        if (self._current_execution_plan and 
+        elif (self._current_execution_plan and 
             self._current_phase_index == 0 and 
             self._total_step_phases_completed == 0 and
             not self._was_in_phase):
@@ -379,6 +420,13 @@ class ProtocolRunnerController(QObject):
         # clear advanced mode state
         self._is_advanced_hardware_control = False
         self._paused_original_electrodes = {}
+
+        # clear phase navigation state
+        self._phase_navigation_mode = False
+        self._original_pause_phase_index = 0
+        self._navigated_phase_index = 0
+        self._phase_navigation_step_elapsed = 0.0
+        self._original_step_time_remaining = 0.0
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
@@ -796,7 +844,16 @@ class ProtocolRunnerController(QObject):
         
         if self._is_paused:
             total_time = self._elapsed_time
-            step_time = self._step_elapsed_time
+            if self._phase_navigation_mode:
+                # calculate time to reach the navigated phase
+                phases_moved = self._navigated_phase_index - self._original_pause_phase_index
+                if self._current_execution_plan:
+                    phase_duration = self._current_execution_plan[0]["duration"]
+                    step_time = self._phase_navigation_step_elapsed + (phases_moved * phase_duration)
+                else:
+                    step_time = self._step_elapsed_time
+            else:
+                step_time = self._step_elapsed_time
         else:
             if self._start_time and self._step_start_time:
                 total_time = current_time - self._start_time
@@ -805,8 +862,11 @@ class ProtocolRunnerController(QObject):
                 total_time = 0.0
                 step_time = 0.0
         
-        # current repetition based on cycle of largest loop in the step
-        current_repetition, total_repetitions = self._calculate_current_repetition()
+        if self._phase_navigation_mode:
+            # calculate repetition based on navigated phase
+            current_repetition, total_repetitions = self._calculate_repetition_for_phase(self._navigated_phase_index)
+        else:
+            current_repetition, total_repetitions = self._calculate_current_repetition()
         
         status = {
             "total_time": total_time,
@@ -840,6 +900,26 @@ class ProtocolRunnerController(QObject):
         if max_effective_repetitions > 1:
             if current_phase < (max_effective_repetitions - 1) * max_cycle_length:
                 current_repetition = (current_phase // max_cycle_length) + 1
+            else: # last repetition
+                current_repetition = max_effective_repetitions
+        else:
+            current_repetition = 1
+        
+        return current_repetition, max_effective_repetitions
+    
+    def _calculate_repetition_for_phase(self, phase_index):
+        if not hasattr(self, '_step_repetition_info') or not self._step_repetition_info:
+            return 1, 1
+        
+        max_cycle_length = self._step_repetition_info.get('max_cycle_length', 1)
+        max_effective_repetitions = self._step_repetition_info.get('max_effective_repetitions', 1)
+        
+        if max_cycle_length <= 0 or max_effective_repetitions <= 1:
+            return 1, 1
+        
+        if max_effective_repetitions > 1:
+            if phase_index < (max_effective_repetitions - 1) * max_cycle_length:
+                current_repetition = (phase_index // max_cycle_length) + 1
             else: # last repetition
                 current_repetition = max_effective_repetitions
         else:
@@ -997,3 +1077,89 @@ class ProtocolRunnerController(QObject):
             logger.info("Continuing phase execution after message dialog closed")
             # small delay to ensure dialog is properly cleaned up
             QTimer.singleShot(10, self._execute_next_phase)
+
+    def can_navigate_phases(self):
+        if not self._is_running or self._current_index >= len(self._run_order):
+            return False
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        
+        if not device_state:
+            return False
+        
+        return device_state.has_paths()
+
+    def get_phase_navigation_info(self):
+        if not self._current_execution_plan:
+            return {"current_phase": 1, "total_phases": 1, "can_navigate": False}
+        
+        return {
+            "current_phase": self._navigated_phase_index + 1 if self._phase_navigation_mode else self._current_phase_index,
+            "total_phases": len(self._current_execution_plan),
+            "can_navigate": self.can_navigate_phases()
+        }
+    
+    def navigate_to_previous_phase(self):
+        if not self._is_paused or not self._current_execution_plan:
+            return False
+        
+        if self._navigated_phase_index > 0:
+            self._navigated_phase_index -= 1
+            self._phase_navigation_mode = True
+            self._publish_phase_navigation_state()
+            logger.info(f"Navigated to previous phase: {self._navigated_phase_index + 1}/{len(self._current_execution_plan)}")
+            return True
+        
+        return False
+
+    def navigate_to_next_phase(self):
+        if not self._is_paused or not self._current_execution_plan:
+            return False
+        
+        if self._navigated_phase_index < len(self._current_execution_plan) - 1:
+            self._navigated_phase_index += 1
+            self._phase_navigation_mode = True
+            self._publish_phase_navigation_state()
+            logger.info(f"Navigated to next phase: {self._navigated_phase_index + 1}/{len(self._current_execution_plan)}")
+            return True
+        
+        return False
+
+    def _publish_phase_navigation_state(self):
+        if not self._current_execution_plan or not self._is_paused:
+            return
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
+        
+        plan_item = self._current_execution_plan[self._navigated_phase_index]
+        
+        msg_model = PathExecutionService.create_dynamic_device_state_message(
+            device_state, 
+            plan_item["activated_electrodes"], 
+            plan_item["step_uid"],
+            plan_item["step_description"],
+            plan_item["step_id"]
+        )
+        
+        # editable if in advanced mode
+        if self._advanced_mode_editable_state:
+            msg_model.step_info["free_mode"] = True
+            msg_model.editable = True
+        
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        
+        # hardware message if not in preview mode
+        if not self._preview_mode:
+            hardware_message = PathExecutionService.create_hardware_electrode_message(
+                device_state, 
+                plan_item["activated_electrodes"]
+            )
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+        
+        logger.info(f"Published phase navigation state for phase {self._navigated_phase_index + 1}")
