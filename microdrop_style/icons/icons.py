@@ -12,3 +12,15 @@ ICON_EDIT            = "\ue3c9"  # edit
 ICON_AUTOMATION      = "\uf421"  # automation
 ICON_VISIBILITY      = "\ue8f4"  # eye open
 ICON_VISIBILITY_OFF  = "\ue8f5"  # eye closed
+
+# PROTOCOL GRID ICONS
+ICON_FIRST           = "\ue5dc"  # first
+ICON_PREVIOUS        = "\ueac3"  # previous
+ICON_PREVIOUS_PHASE  = "\uf46b"  # previous_phase
+ICON_PLAY            = "\ue1c4"  # play
+ICON_PAUSE           = "\ue1a2"  # pause
+ICON_RESUME          = "\ue1c4"  # resume
+ICON_NEXT_PHASE      = "\ue5cc"  # next_phase
+ICON_STOP            = "\uef71"  # stop
+ICON_NEXT            = "\ueac9"  # next
+ICON_LAST            = "\ue5dd"  # last

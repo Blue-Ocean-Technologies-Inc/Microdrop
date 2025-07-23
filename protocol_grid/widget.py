@@ -23,6 +23,7 @@ from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -237,11 +238,15 @@ class PGCWidget(QWidget):
         self.clear_highlight()
         self._protocol_running = False
         self._disable_phase_navigation()
-        self.navigation_bar.btn_play.setText("▶ Play")
+
+        self.navigation_bar.btn_play.setText(ICON_PLAY)
+        self.navigation_bar.btn_play.setToolTip("Play Protocol")
+
         self._update_navigation_buttons_state()
 
     def on_protocol_paused(self):
-        self.navigation_bar.btn_play.setText("▶ Resume")
+        self.navigation_bar.btn_play.setText(ICON_RESUME)
+        self.navigation_bar.btn_play.setToolTip("Resume Protocol")
 
         if self.protocol_runner.can_navigate_phases():
             self._enable_phase_navigation()
@@ -253,7 +258,10 @@ class PGCWidget(QWidget):
         self.clear_highlight()
         self.reset_status_bar()
         self._protocol_running = False
-        self.navigation_bar.btn_play.setText("▶ Play")
+
+        self.navigation_bar.btn_play.setText(ICON_PLAY)
+        self.navigation_bar.btn_play.setToolTip("Play Protocol")
+
         self._update_navigation_buttons_state()
 
         # clear selection on error
@@ -418,7 +426,10 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
         self.protocol_runner.set_run_order(run_order)
         self.protocol_runner.start()
-        self.navigation_bar.btn_play.setText("⏸ Pause")
+
+        self.navigation_bar.btn_play.setText(ICON_PAUSE)
+        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+
         self._update_navigation_buttons_state()
         
         # clear selection when protocol starts
@@ -430,7 +441,10 @@ class PGCWidget(QWidget):
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         preview_mode = self.navigation_bar.is_preview_mode()
         self.protocol_runner.pause(advanced_mode=advanced_mode, preview_mode=preview_mode)
-        self.navigation_bar.btn_play.setText("▶ Resume")
+
+        self.navigation_bar.btn_play.setText(ICON_RESUME)
+        self.navigation_bar.btn_play.setToolTip("Resume Protocol")
+
         self._update_navigation_buttons_state()
 
     def _play_pause_resume_protocol(self):
@@ -442,7 +456,10 @@ class PGCWidget(QWidget):
         
         self.protocol_runner.resume(advanced_mode=advanced_mode, preview_mode=preview_mode)
         self._protocol_running = True
-        self.navigation_bar.btn_play.setText("⏸ Pause")
+
+        self.navigation_bar.btn_play.setText(ICON_PAUSE)
+        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+
         self._update_navigation_buttons_state()
         
         # Clear selection when resuming to ensure runtime highlight is visible
@@ -452,15 +469,21 @@ class PGCWidget(QWidget):
 
     def toggle_play_pause(self):
         if self.protocol_runner.is_running():
-            self.navigation_bar.btn_play.setText("▶ Resume")
+            self.navigation_bar.btn_play.setText(ICON_RESUME)
+            self.navigation_bar.btn_play.setToolTip("Resume Protocol")
+
             self._qt_debounce_play_pause(self._play_pause_pause_protocol)
             
         elif self.protocol_runner.is_paused():
-            self.navigation_bar.btn_play.setText("⏸ Pause")
+            self.navigation_bar.btn_play.setText(ICON_PAUSE)
+            self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+
             self._qt_debounce_play_pause(self._play_pause_resume_protocol)
             
         else:
-            self.navigation_bar.btn_play.setText("⏸ Pause")
+            self.navigation_bar.btn_play.setText(ICON_PAUSE)
+            self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+
             self._qt_debounce_play_pause(self._play_pause_start_protocol)
 
     def run_selected_step(self):
@@ -527,7 +550,9 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_run_order(run_order)
         self.protocol_runner.start()
         
-        self.navigation_bar.btn_play.setText("⏸ Pause")
+        self.navigation_bar.btn_play.setText(ICON_PAUSE)
+        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+
         self._update_navigation_buttons_state()
         
         self.tree.clearSelection()
@@ -539,7 +564,12 @@ class PGCWidget(QWidget):
         self.clear_highlight()
         self.reset_status_bar()
         self._protocol_running = False
-        self.navigation_bar.btn_play.setText("▶ Play")
+
+        self._disable_phase_navigation()
+
+        self.navigation_bar.btn_play.setText(ICON_PLAY)
+        self.navigation_bar.btn_play.setToolTip("Play Protocol")
+
         self._update_navigation_buttons_state()
 
     def reset_status_bar(self):
