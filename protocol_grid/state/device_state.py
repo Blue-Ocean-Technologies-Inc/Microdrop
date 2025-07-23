@@ -1,5 +1,4 @@
-from typing import List, Dict, Any, Optional, Callable
-import copy
+from typing import List, Dict, Optional
 import json
 
 from device_viewer.models.messages import DeviceViewerMessageModel
@@ -25,9 +24,6 @@ class DeviceState:
 
     def has_paths(self):
         return len(self.paths) > 0
-    
-    def has_individual_electrodes(self):
-        return any(self.activated_electrodes.values())
 
     def calculated_duration(self, step_duration: float, repetitions: int, 
                             repeat_duration: float, trail_length: int = 1, trail_overlay: int = 0):
@@ -128,15 +124,6 @@ class DeviceState:
         result = max(calculated_time, repeat_duration)
         return result
 
-    def update_from_device_viewer(self, activated_electrodes_json: str,
-                                  paths: List[List[str]]):
-        try:
-            self.activated_electrodes = json.loads(activated_electrodes_json)
-        except (json.JSONDecodeError, TypeError):
-            self.activated_electrodes = {}
-
-        self.paths = paths or []
-
     def to_dict(self) -> Dict:
         return {
             'activated_electrodes': self.activated_electrodes,
@@ -152,12 +139,6 @@ class DeviceState:
     def get_activated_electrode_ids(self):
         return [electrode_id for electrode_id, activated in 
                 self.activated_electrodes.items() if activated]
-    
-    def get_all_path_electrodes(self):
-        all_electrodes = []
-        for path in self.paths:
-            all_electrodes.extend(path)
-        return all_electrodes
     
     def update_id_to_channel_mapping(self, new_id_to_channel, new_route_colors=None):        
         old_mapping = self.id_to_channel.copy()

@@ -1,12 +1,10 @@
 import dramatiq
 
-from traits.api import HasTraits, provides, Str, Instance
+from traits.api import HasTraits, Str, Instance
 
 from PySide6.QtCore import Signal, QObject
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
-# from protocol_grid.state.messages import DeviceViewerMessageModel
-from device_viewer.models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
 from protocol_grid.consts import PROTOCOL_GRID_LISTENER_NAME
 
