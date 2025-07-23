@@ -9,6 +9,13 @@ from pyface.action.api import Action
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
                                   ROW_TYPE_ROLE, STEP_TYPE)
+from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
+                                         ICON_PAUSE, ICON_STOP, ICON_NEXT,
+                                         ICON_LAST, ICON_PREVIOUS_PHASE,
+                                         ICON_NEXT_PHASE, ICON_RESUME)
+from microdrop_style.colors import SECONDARY_SHADE, WHITE
+
+ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 
 class NavigationBar(QWidget):
@@ -24,20 +31,37 @@ class NavigationBar(QWidget):
         self.button_layout.setContentsMargins(0, 0, 0, 0)
         self.button_layout.setSpacing(0)
 
+        self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
+
         # main navigation buttons
-        self.btn_first = QPushButton("⏮ First")
-        self.btn_prev = QPushButton("◀ Previous")
-        self.btn_stop = QPushButton("■ Stop")
-        self.btn_next = QPushButton("Next ▶")
-        self.btn_last = QPushButton("Last ⏭")
-        
-        self.btn_play = QPushButton("▶ Play")
+        self.btn_first = QPushButton(ICON_FIRST)
+        self.btn_first.setToolTip("First Step")
+
+        self.btn_prev = QPushButton(ICON_PREVIOUS)
+        self.btn_prev.setToolTip("Previous Step")
+
+        self.btn_stop = QPushButton(ICON_STOP)
+        self.btn_stop.setToolTip("Stop Protocol")
+
+        self.btn_next = QPushButton(ICON_NEXT)
+        self.btn_next.setToolTip("Next Step")
+
+        self.btn_last = QPushButton(ICON_LAST)
+        self.btn_last.setToolTip("Last Step")
+
+        self.btn_play = QPushButton(ICON_PLAY)
+        self.btn_play.setToolTip("Play Protocol")
         
         # phase navigation buttons (initially hidden)
-        self.btn_prev_phase = QPushButton("◀ Phase")
-        self.btn_resume = QPushButton("▶ Resume")  
-        self.btn_next_phase = QPushButton("Phase ▶")
-        
+        self.btn_prev_phase = QPushButton(ICON_PREVIOUS_PHASE)
+        self.btn_prev_phase.setToolTip("Previous Phase")
+
+        self.btn_resume = QPushButton(ICON_RESUME)
+        self.btn_resume.setToolTip("Resume Protocol")
+
+        self.btn_next_phase = QPushButton(ICON_NEXT_PHASE)
+        self.btn_next_phase.setToolTip("Next Phase")
+
         # container widget for the play/phase buttons area
         self.play_phase_container = QWidget()
         self.play_phase_layout = QHBoxLayout(self.play_phase_container)
