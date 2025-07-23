@@ -1,5 +1,4 @@
 # enthought imports
-from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension

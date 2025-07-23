@@ -31,6 +31,9 @@ protocol_grid_fields = [
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
 ]
+protocol_grid_column_widths = [
+    120, 70, 70, 70, 70, 80, 70, 110, 80, 90, 50, 120, 60, 100, 120, 90
+]
 hidden_fields = ["UID"]
 all_fields = protocol_grid_fields + hidden_fields
 fixed_fields = {"Description", "ID"}

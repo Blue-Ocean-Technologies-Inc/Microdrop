@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox
 from PySide6.QtGui import QStandardItem
 from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
@@ -190,64 +190,6 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
 
     return items
 
-
-def calculate_group_aggregation(group_item):
-    if not group_item or not group_item.hasChildren():
-        return
-        
-    parent = group_item.parent() or group_item.model().invisibleRootItem()
-    row = group_item.row()
-    
-    total_repetitions = 0
-    total_duration = 0.0
-    total_run_time = 0.0
-    
-    def collect_from_children(parent_item):
-        nonlocal total_repetitions, total_duration, total_run_time
-        
-        for child_row in range(parent_item.rowCount()):
-            child_desc = parent_item.child(child_row, 0)
-            if not child_desc:
-                continue
-                
-            child_type = child_desc.data(ROW_TYPE_ROLE)
-            
-            if child_type == STEP_TYPE:
-                try:
-                    rep_item = parent_item.child(child_row, protocol_grid_fields.index("Repetitions"))
-                    dur_item = parent_item.child(child_row, protocol_grid_fields.index("Duration"))
-                    run_item = parent_item.child(child_row, protocol_grid_fields.index("Run Time"))
-                    
-                    if rep_item and dur_item and run_item:
-                        reps = int(rep_item.text() or "1")
-                        dur = float(dur_item.text() or "1.0")
-                        run = float(run_item.text() or "0.0")
-                        
-                        total_repetitions += reps
-                        total_duration += dur
-                        total_run_time += run
-                except (ValueError, IndexError):
-                    pass
-            elif child_type == GROUP_TYPE and child_desc.hasChildren():
-                collect_from_children(child_desc)
-                
-    collect_from_children(group_item)
-    
-    try:
-        rep_item = parent.child(row, protocol_grid_fields.index("Repetitions"))
-        dur_item = parent.child(row, protocol_grid_fields.index("Duration"))
-        run_item = parent.child(row, protocol_grid_fields.index("Run Time"))
-        
-        if rep_item:
-            rep_item.setText(str(total_repetitions))
-        if dur_item:
-            dur_item.setText(f"{total_duration:.1f}")
-        if run_item:
-            run_item.setText(f"{total_run_time:.2f}")
-    except IndexError:
-        pass
-
-
 def calculate_group_aggregation_from_children(group_items, children):
     agg_fields = ["Voltage", "Frequency", "Trail Length"]
     agg_values = {field: None for field in agg_fields}
@@ -323,34 +265,3 @@ def calculate_group_aggregation_from_children(group_items, children):
         group_items[run_idx].setText(f"{total_run_time * group_reps:.2f}")
     except IndexError:
         pass
-
-
-def clamp_trail_overlay(parent):
-    if hasattr(parent, "rowCount") and hasattr(parent, "columnCount"):
-        row_count = parent.rowCount()
-        item_getter = (lambda r, c: parent.item(r, c)) if hasattr(parent, "item") else (lambda r, c: parent.child(r, c))
-    else:
-        return
-        
-    for row in range(row_count):
-        desc_item = item_getter(row, 0)
-        if desc_item is None:
-            continue
-            
-        if desc_item.hasChildren():
-            clamp_trail_overlay(desc_item)
-        else:
-            try:
-                trail_length_col = protocol_grid_fields.index("Trail Length")
-                overlay_col = protocol_grid_fields.index("Trail Overlay")
-                trail_length_item = item_getter(row, trail_length_col)
-                overlay_item = item_getter(row, overlay_col)
-                
-                trail_length = int(trail_length_item.text())
-                max_overlay = max(0, trail_length - 1)
-                overlay_val = int(overlay_item.text())
-                
-                if overlay_val > max_overlay:
-                    overlay_item.setText(str(max_overlay))
-            except Exception:
-                pass

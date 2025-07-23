@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QPoint, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, 
@@ -10,7 +10,7 @@ from pyface.action.api import Action
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
                                   ROW_TYPE_ROLE, STEP_TYPE)
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
-                                         ICON_PAUSE, ICON_STOP, ICON_NEXT,
+                                         ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
 from microdrop_style.colors import SECONDARY_SHADE, WHITE

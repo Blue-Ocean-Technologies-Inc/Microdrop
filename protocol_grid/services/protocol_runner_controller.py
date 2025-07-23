@@ -1,9 +1,4 @@
-import dramatiq
 import time
-import uuid
-import json
-from typing import List, Dict, Any
-import threading
 
 from PySide6.QtCore import QObject, Signal, QTimer
 
@@ -648,15 +643,6 @@ class ProtocolRunnerController(QObject):
             if step_info["path"] == step_path:
                 return i
         return -1
-
-    def get_protocol_state(self):
-        return {
-            "is_running": self._is_running,
-            "is_paused": self._is_paused,
-            "current_index": self._current_index,
-            "total_steps": len(self._run_order),
-            "current_step_path": self.get_current_step_path()
-        }
     
     def _get_current_phase_electrodes(self):
         if not self._is_running or self._current_index >= len(self._run_order):
@@ -775,10 +761,6 @@ class ProtocolRunnerController(QObject):
             self._execute_next_phase()
         else:
             self._on_step_completed_by_phases()
-
-    def _on_protocol_error(self, error_message):
-        self.signals.protocol_error.emit(error_message)
-        self.stop()
 
     def _on_protocol_finished(self):
         # message with last executed step

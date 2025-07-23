@@ -1,4 +1,3 @@
-import time
 import copy
 import json
 from typing import List, Dict, Any
@@ -19,11 +18,6 @@ class PathExecutionService:
     @staticmethod
     def has_any_loops(device_state: DeviceState) -> bool:
         return any(PathExecutionService.is_loop_path(path) for path in device_state.paths)
-
-    @staticmethod
-    def calculate_effective_repetitions(step: ProtocolStep, device_state: DeviceState) -> int:
-        # always return 1 - repetitions are handled by extending the cycle phases
-        return 1
     
     @staticmethod
     def calculate_effective_repetitions_for_path(path: List[str], original_repetitions: int, 
@@ -55,57 +49,6 @@ class PathExecutionService:
             min_repetitions += 1
         
         return min_repetitions
-    
-    @staticmethod
-    def calculate_num_phases_for_path(path_length: int, trail_length: int, trail_overlay: int) -> int:
-        if path_length == 0:
-            return 0
-        
-        step_size = trail_length - trail_overlay
-        if step_size <= 0:
-            # not possible, fallback to current behavior
-            return path_length
-        
-        phases = 0
-        position = 0
-        
-        # cover the entire path
-        while position < path_length:
-            phases += 1
-            
-            # check if this phase includes the last electrode
-            phase_end = position + trail_length - 1
-            if phase_end >= path_length - 1:
-                # this phase includes the last electrode, so it should be the final phase
-                break
-                
-            position += step_size
-        
-        # check the last phase adjustment logic
-        if phases > 0:
-            last_phase_start = (phases - 1) * step_size
-            electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
-            
-            # if the last phase has fewer than "trail_length" no.of active electrodes, 
-            # needs to be adjusted
-            if electrodes_in_last_phase < trail_length and path_length >= trail_length:
-                # check if adjusted last phase would be identical to second-last phase
-                if phases > 1:
-                    second_last_phase_start = (phases - 2) * step_size
-                    second_last_phase_electrodes = list(range(second_last_phase_start, 
-                                                            second_last_phase_start + trail_length))
-                    
-                    adjusted_last_start = path_length - trail_length
-                    adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
-                    
-                    # if adjusted last phase is identical to second-last phase, remove the last phase
-                    if second_last_phase_electrodes == adjusted_last_electrodes:
-                        phases -= 1
-                        
-            elif electrodes_in_last_phase < trail_length:
-                phases = max(1, phases - 1) if phases > 1 else 1
-        
-        return phases
 
     @staticmethod
     def calculate_trail_phases_for_path(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:

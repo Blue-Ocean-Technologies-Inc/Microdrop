@@ -1,5 +1,4 @@
-from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
-from protocol_grid.state.device_state import DeviceState
+from protocol_grid.state.protocol_state import ProtocolStep, ProtocolGroup
 
 
 class ImportExportManager:

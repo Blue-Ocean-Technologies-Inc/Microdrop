@@ -1,8 +1,7 @@
-import time
 import sys
 import copy
 import json
-from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHeaderView, QHBoxLayout,
+from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
@@ -11,10 +10,10 @@ from microdrop_application.application import is_dark_mode
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
-from protocol_grid.protocol_state_helpers import make_test_steps, flatten_protocol_for_run
+from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
-                                  group_defaults, protocol_grid_fields)
+                                  group_defaults, protocol_grid_fields, protocol_grid_column_widths)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
@@ -27,10 +26,6 @@ from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
-
-protocol_grid_column_widths = [
-    120, 70, 70, 70, 70, 70, 70, 100, 70, 70, 50, 110, 60, 90, 110, 90
-]
 
 
 class PGCWidget(QWidget):
@@ -121,8 +116,7 @@ class PGCWidget(QWidget):
         self.load_from_state()
         self._update_navigation_buttons_state()
 
-    # ---------- Message Handler ----------
-    
+    # ---------- Message Handler ----------    
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return        
@@ -176,25 +170,6 @@ class PGCWidget(QWidget):
     # -------------------------------------
 
     # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
-    def find_first_step_path_under_group(self, group_path):
-        item = self.get_item_by_path(group_path)
-        if not item or item.data(ROW_TYPE_ROLE) != GROUP_TYPE:
-            return None
-        def recurse(current_item, current_path):
-            for row in range(current_item.rowCount()):
-                child = current_item.child(row, 0)
-                if not child:
-                    continue
-                child_type = child.data(ROW_TYPE_ROLE)
-                if child_type == STEP_TYPE:
-                    return current_path + [row]
-                elif child_type == GROUP_TYPE:
-                    result = recurse(child, current_path + [row])
-                    if result is not None:
-                        return result
-            return None
-        return recurse(item, group_path)
-
     def highlight_step(self, path):
         self.clear_highlight()
         item = self.get_item_by_path(path)
@@ -1073,12 +1048,8 @@ class PGCWidget(QWidget):
     def setup_header_context_menu(self):
         header = self.tree.header()
         header.setContextMenuPolicy(Qt.CustomContextMenu)
-        header.customContextMenuRequested.connect(self.show_header_context_menu)
-        
-    def show_header_context_menu(self, pos):
-        dialog = ColumnToggleDialog(self)
-        dialog.exec()
-        
+        header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
+
     def on_selection_changed(self):
         if hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message:
             return
@@ -1442,33 +1413,6 @@ class PGCWidget(QWidget):
                     self._set_field_for_group(desc_item, field, value)
         finally:
             self._block_aggregation = False
-        
-    def _handle_magnet_change(self, parent, row):
-        magnet_col = protocol_grid_fields.index("Magnet")
-        magnet_height_col = protocol_grid_fields.index("Magnet Height")
-        magnet_item = parent.child(row, magnet_col)
-        magnet_height_item = parent.child(row, magnet_height_col)
-        if not magnet_item or not magnet_height_item:
-            return
-
-        raw_check_state = magnet_item.data(Qt.CheckStateRole)
-        checked = raw_check_state == Qt.Checked or raw_check_state == 2
-
-        if checked:
-            last_value = magnet_height_item.data(Qt.UserRole + 2)
-            if last_value is None or last_value == "":
-                last_value = "0"
-            magnet_height_item.setEditable(True)
-            magnet_height_item.setText(str(last_value))
-            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
-        else:
-            last_value = magnet_height_item.text()
-            magnet_height_item.setData(last_value, Qt.UserRole + 2)
-            magnet_height_item.setEditable(False)
-            magnet_height_item.setText("")
-            self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
-
-        self.model.itemChanged.emit(magnet_height_item)
             
     def _validate_numeric_field(self, item, field):
         """Validate numeric fields."""
@@ -2004,9 +1948,6 @@ class PGCWidget(QWidget):
         
         QTimer.singleShot(0, self._handle_step_removal_cleanup)
         
-    def paste(self):
-        self.paste_selected(above=False)
-        
     def paste_into(self):
         if not hasattr(self, '_clipboard') or not self._clipboard:
             return
@@ -2049,12 +1990,6 @@ class PGCWidget(QWidget):
             self.state.redo()
             self.load_from_state()
         self._programmatic_change = False
-            
-    def undo(self):
-        self.undo_last()
-        
-    def redo(self):
-        self.redo_last()
 
     def _reset_undo_snapshotted(self):
         self._undo_snapshotted = False
@@ -2159,27 +2094,6 @@ class PGCWidget(QWidget):
                 element.parameters["UID"] = str(self.state.get_next_uid())
             elif isinstance(element, ProtocolGroup):
                 self._assign_new_uids_to_all_elements(element.elements)
-            
-    def assign_test_device_states(self):
-        """Assign test device states to steps."""    
-        test_steps = make_test_steps()
-        test_states = [step.device_state for step in test_steps]
-        
-        def assign_recursive(elements):
-            idx = 0
-            for obj in elements:
-                if isinstance(obj, ProtocolStep):
-                    obj.device_state = copy.deepcopy(test_states[idx % len(test_states)])
-                    idx += 1
-                elif isinstance(obj, ProtocolGroup):
-                    idx += assign_recursive(obj.elements)
-            return idx
-            
-        self.state.snapshot_for_undo()
-        assign_recursive(self.state.sequence)
-        
-        self.load_from_state()
-        # self.sync_to_state()
         
     def event(self, event):
         if event.type() == QEvent.PaletteChange:
