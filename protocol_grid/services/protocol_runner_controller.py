@@ -421,9 +421,7 @@ class ProtocolRunnerController(QObject):
             msg_model.editable = True
             
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-            
-            logger.info(f"Published final stop message to device viewer: {msg_model.serialize()}")
-            
+                        
             if not self._preview_mode:
                 deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
                 
@@ -512,7 +510,6 @@ class ProtocolRunnerController(QObject):
             # if first step, synchronize total timer and step timer
             if self._start_time is None:
                 self._start_time = current_time
-                logger.info("Starting total timer synchronized with first step")
             
             self._step_start_time = current_time
             self._step_phase_start_time = current_time
@@ -584,9 +581,7 @@ class ProtocolRunnerController(QObject):
                 msg_model.editable = True
             
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-            
-            logger.info(f"Published electrode state to device viewer: {msg_model.serialize()}")
-            
+                        
             if not self._preview_mode:
                 hardware_message = PathExecutionService.create_hardware_electrode_message(
                     device_state, 
@@ -616,9 +611,7 @@ class ProtocolRunnerController(QObject):
         if target_index == -1:
             logger.warning(f"Could not find step with path {step_path} in run_order")
             return False
-        
-        logger.info(f"Jumping from step {self._current_index} to step {target_index}")
-        
+                
         self._timer.stop()
         self._phase_timer.stop()
         
@@ -673,11 +666,7 @@ class ProtocolRunnerController(QObject):
                 msg_model.editable = True
                 
                 publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-                
-                logger.info(f"Published paused navigation preview to device viewer: {msg_model.serialize()}")
-            
-            logger.info(f"Navigated to step during pause, ready to resume from beginning of step")
-        
+                                    
         return True
     
     def get_current_step_path(self):
@@ -836,9 +825,7 @@ class ProtocolRunnerController(QObject):
             msg_model.editable = True
             
             publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
-            
-            logger.info(f"Published final protocol message to device viewer: {msg_model.serialize()}")
-            
+                        
             if not self._preview_mode:
                 deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
                 
@@ -1041,8 +1028,6 @@ class ProtocolRunnerController(QObject):
         # stop status timer to freeze status bar
         self._status_timer.stop()
         
-        logger.info(f"Paused timers for message dialog - step remaining: {self._message_dialog_step_remaining:.2f}s, phase remaining: {self._message_dialog_phase_remaining:.2f}s")
-
     def _resume_timers_for_message(self):
         current_time = time.time()
         
@@ -1062,20 +1047,16 @@ class ProtocolRunnerController(QObject):
         # resume step timer if it was active
         if hasattr(self, '_message_dialog_step_remaining') and self._message_dialog_step_remaining > 0:
             self._timer.start(int(self._message_dialog_step_remaining * 1000))
-            logger.info(f"Resumed step timer with {self._message_dialog_step_remaining:.2f}s remaining")
             
         # resume phase timer if it was active
         if hasattr(self, '_message_dialog_phase_remaining') and self._message_dialog_phase_remaining > 0:
             self._phase_timer.start(int(self._message_dialog_phase_remaining * 1000))
-            logger.info(f"Resumed phase timer with {self._message_dialog_phase_remaining:.2f}s remaining")
         
         # resume status timer
         self._status_timer.start()
         
         self._cleanup_message_dialog_timing()
         
-        logger.info("Resumed all timers after message dialog closed")
-
     def _create_and_show_message_dialog(self):
         if not hasattr(self, '_message_dialog_step_info') or not self._message_dialog_step_info:
             return
@@ -1261,12 +1242,12 @@ class ProtocolRunnerController(QObject):
             logger.error(f"Failed to show experiment completion dialog: {e}")
 
     def _on_completion_dialog_response(self, result):              
-        if result == QDialog.Accepted:  # YES button pressed
-            logger.info("User selected YES - for now, just closing dialog")
-            # TODO: increment experiment count
-        else:  # NO button pressed or dialog closed
-            logger.info("User selected NO or closed dialog - just closing")
-            # TODO: future implementation if needed
+        # if result == QDialog.Accepted:  # YES button pressed
+        #     logger.info("User selected YES - for now, just closing dialog")
+        #     # TODO: increment experiment count
+        # else:  # NO button pressed or dialog closed
+        #     logger.info("User selected NO or closed dialog - just closing")
+        #     # TODO: future implementation if needed
         
         if hasattr(self, '_current_completion_dialog'):
             delattr(self, '_current_completion_dialog')
