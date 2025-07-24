@@ -438,10 +438,11 @@ class ShowColumnToggleDialogAction(Action):
 
 class StepMessageDialog(QDialog):
     
-    def __init__(self, message: str, step_info: str, parent=None):
+    def __init__(self, message: str, step_info: str, parent=None, use_yes_no=False):
         super().__init__(parent)
         self.message = message
         self.step_info = step_info
+        self.use_yes_no = use_yes_no
         self.setup_ui()
         
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -472,11 +473,24 @@ class StepMessageDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        ok_button = QPushButton("OK")
-        ok_button.setDefault(True)
-        ok_button.setMinimumWidth(80)
-        ok_button.clicked.connect(self.accept)
-        button_layout.addWidget(ok_button)
+        if self.use_yes_no:
+            no_button = QPushButton("NO")
+            no_button.setMinimumWidth(80)
+            no_button.clicked.connect(self.reject)
+            button_layout.addWidget(no_button)
+            
+            yes_button = QPushButton("YES")
+            yes_button.setDefault(True)
+            yes_button.setMinimumWidth(80)
+            yes_button.clicked.connect(self.accept)
+            button_layout.addWidget(yes_button)
+        else:
+            # original OK button for backwards compatibility
+            ok_button = QPushButton("OK")
+            ok_button.setDefault(True)
+            ok_button.setMinimumWidth(80)
+            ok_button.clicked.connect(self.accept)
+            button_layout.addWidget(ok_button)
         
         button_layout.addStretch()
         layout.addLayout(button_layout)
@@ -496,14 +510,26 @@ class StepMessageDialog(QDialog):
         self.activateWindow()
         
     def closeEvent(self, event):
-        self.accept()
+        if self.use_yes_no:
+            self.reject()
+        else:
+            self.accept()  # closing dialog = OK (backwards compatibility)
         event.accept()
     
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape):
-            self.accept()
+        if self.use_yes_no:
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.accept()  # Enter = YES
+            elif event.key() == Qt.Key_Escape:
+                self.reject()  # Escape = NO
+            else:
+                super().keyPressEvent(event)
         else:
-            super().keyPressEvent(event)
+            # original behavior for OK button (backwards compatibility)
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape):
+                self.accept()
+            else:
+                super().keyPressEvent(event)
 
     
 def make_separator():

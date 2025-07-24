@@ -1,6 +1,7 @@
 import time
 
 from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtWidgets import QDialog
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
@@ -85,6 +86,9 @@ class ProtocolRunnerController(QObject):
 
         # Message dialog pause state
         self._pause_for_message_display = False
+        # message dialog response state
+        self._message_waiting_for_response = False
+        self._message_rejected_pause = False
 
         # phase navigation state
         self._phase_navigation_mode = False
@@ -227,6 +231,33 @@ class ProtocolRunnerController(QObject):
             if self._phase_start_time:
                 self._phase_start_time += pause_duration
         
+        # handle resuming from message rejection pause
+        if hasattr(self, '_message_rejected_pause') and self._message_rejected_pause:
+            self._message_rejected_pause = False
+            
+            # reset phase index to start from beginning of step
+            self._current_phase_index = 0
+            self._phase_start_time = None
+            self._phase_elapsed_time = 0.0
+            
+            self._execute_next_phase()
+            
+            # restart step timer with full remaining time
+            if self._remaining_step_time > 0:
+                self._timer.start(int(self._remaining_step_time * 1000))
+            
+            self._pause_time = None
+            self._was_in_phase = False
+            
+            # clear advanced mode editability state
+            self._advanced_mode_editable_state = False
+            
+            # clear advanced hardware control state
+            self._is_advanced_hardware_control = False
+            self._paused_original_electrodes = {}
+            
+            return
+        
         # handle phase navigation resume
         if self._phase_navigation_mode:
             # resume from navigated phase
@@ -340,6 +371,8 @@ class ProtocolRunnerController(QObject):
             delattr(self, '_current_message_dialog')
         
         self._pause_for_message_display = False
+        self._message_waiting_for_response = False
+        self._message_rejected_pause = False
         if hasattr(self, '_message_dialog_step_info'):
             delattr(self, '_message_dialog_step_info')
         
@@ -486,10 +519,8 @@ class ProtocolRunnerController(QObject):
             # check for Message first BEFORE any phase execution
             message = step.parameters.get("Message", "")
             if message and message.strip():
-                # show message dialog and set pause flag immediately
-                self._pause_for_message_display = True
-                self._show_step_message_if_needed(step)
-                # DO NOT call _execute_next_phase() here - wait for dialog to close
+                # publish individual electrodes first, then message pop-up
+                self._show_individual_electrodes_and_message(step, device_state)
             else:
                 self._execute_next_phase()
             
@@ -503,7 +534,9 @@ class ProtocolRunnerController(QObject):
             return
         
         if hasattr(self, '_pause_for_message_display') and self._pause_for_message_display:
-            logger.info("Protocol execution paused for message dialog - not executing phase")
+            return
+        
+        if hasattr(self, '_message_waiting_for_response') and self._message_waiting_for_response:
             return
             
         if self._current_phase_index >= len(self._current_execution_plan):
@@ -915,28 +948,42 @@ class ProtocolRunnerController(QObject):
     def is_paused(self):
         return self._is_paused
 
-    def _show_step_message_if_needed(self, step):
-        if not step or not hasattr(step, 'parameters'):
-            return
-        
-        message = step.parameters.get("Message", "")
-        if not message or not message.strip():
-            return
-        
-        step_id = step.parameters.get("ID", "")
+    def _show_individual_electrodes_and_message(self, step, device_state):
+        step_uid = step.parameters.get("UID", "")
         step_description = step.parameters.get("Description", "Step")
+        step_id = step.parameters.get("ID", "")
         
-        # format step info for display
+        # publish message with ONLY individual electrodes (no paths/loops)
+        msg_model = PathExecutionService.create_dynamic_device_state_message(
+            device_state, 
+            device_state.activated_electrodes,
+            step_uid,
+            step_description,
+            step_id
+        )
+        
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        
+        if not self._preview_mode:
+            hardware_message = PathExecutionService.create_hardware_electrode_message(
+                device_state, 
+                device_state.activated_electrodes
+            )
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+                
+        self._pause_for_message_display = True
+        self._message_waiting_for_response = True
+        self._pause_timers_for_message()
+        
+        message_text = step.parameters.get("Message", "").strip()
         if step_description and step_description != "Step":
             step_info = f"Step: {step_description} (ID: {step_id})"
         else:
             step_info = f"Step ID: {step_id}" if step_id else "Step"
         
-        self._pause_for_message_display = True
-        self._pause_timers_for_message()
+        self._message_dialog_step_info = (message_text, step_info)
         
-        self._message_dialog_step_info = (message.strip(), step_info)
-        
+        # QTimer to create dialog on main thread
         QTimer.singleShot(50, self._create_and_show_message_dialog)
 
     def _pause_timers_for_message(self):
@@ -1022,16 +1069,15 @@ class ProtocolRunnerController(QObject):
             # set the main widget as parent
             parent_widget = self.parent()
             
-            # create dialog and connect to resume method
-            self._current_message_dialog = StepMessageDialog(message, step_info, parent_widget)
-            self._current_message_dialog.finished.connect(self._on_message_dialog_closed)
+            # create dialog with YES/NO buttons and connect to response method
+            self._current_message_dialog = StepMessageDialog(message, step_info, parent_widget, use_yes_no=True)
+            self._current_message_dialog.finished.connect(self._on_message_dialog_response)
             self._current_message_dialog.show_message()
-            
-            logger.info(f"Displayed message popup with pause: {message[:50]}{'...' if len(message) > 50 else ''}")
-            
+                        
         except Exception as e:
             logger.error(f"Failed to show step message dialog: {e}")
             self._pause_for_message_display = False
+            self._message_waiting_for_response = False
             self._resume_timers_for_message()
             self._execute_next_phase()
 
@@ -1042,23 +1088,40 @@ class ProtocolRunnerController(QObject):
             if hasattr(self, attr):
                 delattr(self, attr)
 
-    def _on_message_dialog_closed(self, result):
-        logger.info("Message dialog closed - resuming protocol execution")
-        
-        self._pause_for_message_display = False
-        
-        self._resume_timers_for_message()
-        
+    def _cleanup_message_dialog_state(self):
         if hasattr(self, '_current_message_dialog'):
             delattr(self, '_current_message_dialog')
         if hasattr(self, '_message_dialog_step_info'):
             delattr(self, '_message_dialog_step_info')
+
+    def _on_message_dialog_response(self, result):               
+        self._pause_for_message_display = False
         
-        # Continue with phase execution if protocol is still running and NOT MANUALLY PAUSED
-        if self._is_running and not self._is_paused:
-            logger.info("Continuing phase execution after message dialog closed")
-            # small delay to ensure dialog is properly cleaned up
-            QTimer.singleShot(10, self._execute_next_phase)
+        if result == QDialog.Accepted: # YES button pressed
+            self._message_waiting_for_response = False
+            
+            self._resume_timers_for_message()
+            
+            self._cleanup_message_dialog_state()
+            
+            # continue phase execution if protocol still running and NOT manually paused
+            if self._is_running and not self._is_paused:
+                QTimer.singleShot(10, self._execute_next_phase)
+        else:  # NO button pressed or dialog closed            
+            self._resume_timers_for_message()
+            
+            # set pause state manually
+            self._is_paused = True
+            self._pause_time = time.time()
+            
+            # flags to wait for manual resume after message rejection
+            self._message_waiting_for_response = False
+            self._message_rejected_pause = True
+            
+            self._cleanup_message_dialog_state()
+            
+            # emit paused signal to update UI
+            self.signals.protocol_paused.emit()
 
     def can_navigate_phases(self):
         if not self._is_running or self._current_index >= len(self._run_order):
@@ -1101,7 +1164,11 @@ class ProtocolRunnerController(QObject):
             return False
         
         if self._navigated_phase_index < len(self._current_execution_plan) - 1:
-            self._navigated_phase_index += 1
+            if self._message_rejected_pause:
+                self._navigated_phase_index = 0
+                self._message_rejected_pause = False
+            else:
+                self._navigated_phase_index += 1
             self._phase_navigation_mode = True
             self._publish_phase_navigation_state()
             logger.info(f"Navigated to next phase: {self._navigated_phase_index + 1}/{len(self._current_execution_plan)}")
