@@ -526,14 +526,15 @@ class StepMessageDialog(QDialog):
         
         no_button = QPushButton("NO")
         no_button.setMinimumWidth(80)
-        no_button.clicked.connect(self.reject)
-        button_layout.addWidget(no_button)
+        no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(80)
         yes_button.clicked.connect(self.accept)
+
         button_layout.addWidget(yes_button)
+        button_layout.addWidget(no_button)
         
         button_layout.addStretch()
         layout.addLayout(button_layout)
@@ -594,14 +595,15 @@ class ExperimentCompleteDialog(QDialog):
         
         no_button = QPushButton("NO")
         no_button.setMinimumWidth(100)
-        no_button.clicked.connect(self.reject)
-        button_layout.addWidget(no_button)
+        no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
+
         button_layout.addWidget(yes_button)
+        button_layout.addWidget(no_button)
         
         button_layout.addStretch()
         layout.addLayout(button_layout)
