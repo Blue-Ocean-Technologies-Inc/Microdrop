@@ -438,11 +438,10 @@ class ShowColumnToggleDialogAction(Action):
 
 class StepMessageDialog(QDialog):
     
-    def __init__(self, message: str, step_info: str, parent=None, use_yes_no=False):
+    def __init__(self, message: str, step_info: str, parent=None):
         super().__init__(parent)
         self.message = message
         self.step_info = step_info
-        self.use_yes_no = use_yes_no
         self.setup_ui()
         
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -473,24 +472,16 @@ class StepMessageDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        if self.use_yes_no:
-            no_button = QPushButton("NO")
-            no_button.setMinimumWidth(80)
-            no_button.clicked.connect(self.reject)
-            button_layout.addWidget(no_button)
-            
-            yes_button = QPushButton("YES")
-            yes_button.setDefault(True)
-            yes_button.setMinimumWidth(80)
-            yes_button.clicked.connect(self.accept)
-            button_layout.addWidget(yes_button)
-        else:
-            # original OK button for backwards compatibility
-            ok_button = QPushButton("OK")
-            ok_button.setDefault(True)
-            ok_button.setMinimumWidth(80)
-            ok_button.clicked.connect(self.accept)
-            button_layout.addWidget(ok_button)
+        no_button = QPushButton("NO")
+        no_button.setMinimumWidth(80)
+        no_button.clicked.connect(self.reject)
+        button_layout.addWidget(no_button)
+        
+        yes_button = QPushButton("YES")
+        yes_button.setDefault(True)
+        yes_button.setMinimumWidth(80)
+        yes_button.clicked.connect(self.accept)
+        button_layout.addWidget(yes_button)
         
         button_layout.addStretch()
         layout.addLayout(button_layout)
@@ -510,28 +501,86 @@ class StepMessageDialog(QDialog):
         self.activateWindow()
         
     def closeEvent(self, event):
-        if self.use_yes_no:
-            self.reject()
-        else:
-            self.accept()  # closing dialog = OK (backwards compatibility)
+        self.reject()
         event.accept()
     
     def keyPressEvent(self, event):
-        if self.use_yes_no:
-            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-                self.accept()  # Enter = YES
-            elif event.key() == Qt.Key_Escape:
-                self.reject()  # Escape = NO
-            else:
-                super().keyPressEvent(event)
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.accept()  # Enter = YES
+        elif event.key() == Qt.Key_Escape:
+            self.reject()  # Escape = NO
         else:
-            # original behavior for OK button (backwards compatibility)
-            if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape):
-                self.accept()
-            else:
-                super().keyPressEvent(event)
+            super().keyPressEvent(event)
 
+
+class ExperimentCompleteDialog(QDialog):
     
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
+        self.setModal(True)
+    
+    def setup_ui(self):
+        self.setWindowTitle("Experiment Complete")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        
+        message_label = QLabel("Experiment complete. Would you like to start a new experiment?")
+        message_label.setWordWrap(True)
+        message_label.setAlignment(Qt.AlignCenter)
+        message_label.setMinimumWidth(400)
+        message_label.setStyleSheet("QLabel { font-size: 14pt; padding: 15px; }")
+        layout.addWidget(message_label)
+        
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        no_button = QPushButton("NO")
+        no_button.setMinimumWidth(100)
+        no_button.clicked.connect(self.reject)
+        button_layout.addWidget(no_button)
+        
+        yes_button = QPushButton("YES")
+        yes_button.setDefault(True)
+        yes_button.setMinimumWidth(100)
+        yes_button.clicked.connect(self.accept)
+        button_layout.addWidget(yes_button)
+        
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        self.adjustSize()
+        
+        # center on parent if available
+        if self.parent():
+            parent_geometry = self.parent().geometry()
+            x = parent_geometry.x() + (parent_geometry.width() - self.width()) // 2
+            y = parent_geometry.y() + (parent_geometry.height() - self.height()) // 2
+            self.move(x, y)
+    
+    def show_completion_dialog(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        
+    def closeEvent(self, event):
+        self.reject()
+        event.accept()
+    
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.accept()
+        elif event.key() == Qt.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+
 def make_separator():
     line = QFrame()
     line.setFrameShape(QFrame.HLine)

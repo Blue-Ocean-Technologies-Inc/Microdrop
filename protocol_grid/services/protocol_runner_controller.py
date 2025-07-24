@@ -11,6 +11,7 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class ProtocolRunnerSignals(QObject):
     highlight_step = Signal(object) # path (list of ints)
     update_status = Signal(dict)
@@ -97,6 +98,10 @@ class ProtocolRunnerController(QObject):
         self._phase_navigation_step_elapsed = 0.0
         self._original_step_time_remaining = 0.0
 
+        # experiment completion dialog state
+        self._completion_dialog_shown = False
+        self._was_advanced_hardware_mode = False
+
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
@@ -126,6 +131,9 @@ class ProtocolRunnerController(QObject):
         self._total_step_phases_completed = 0
         self._step_phase_start_time = None
 
+        # reset completion dialog state
+        self._completion_dialog_shown = False
+        
         total_steps = 0
         for entry in self._run_order:
             if entry["rep_idx"] == 1:
@@ -370,6 +378,10 @@ class ProtocolRunnerController(QObject):
             self._current_message_dialog.close()
             delattr(self, '_current_message_dialog')
         
+        if hasattr(self, '_current_completion_dialog'):
+            self._current_completion_dialog.close()
+            delattr(self, '_current_completion_dialog')
+        
         self._pause_for_message_display = False
         self._message_waiting_for_response = False
         self._message_rejected_pause = False
@@ -380,6 +392,10 @@ class ProtocolRunnerController(QObject):
         
         # clear advanced mode editability state
         self._advanced_mode_editable_state = False
+        
+        # clear completion dialog state
+        self._completion_dialog_shown = False
+        self._was_advanced_hardware_mode = False
         
         # send final message of the step that was being executed before stopped
         if self._is_running and self._current_index < len(self._run_order):
@@ -836,6 +852,10 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
+        
+        if self._should_show_completion_dialog():
+            self._show_experiment_complete_dialog()
+        
         self.signals.protocol_finished.emit()
 
     def _emit_status_update(self):
@@ -1070,7 +1090,7 @@ class ProtocolRunnerController(QObject):
             parent_widget = self.parent()
             
             # create dialog with YES/NO buttons and connect to response method
-            self._current_message_dialog = StepMessageDialog(message, step_info, parent_widget, use_yes_no=True)
+            self._current_message_dialog = StepMessageDialog(message, step_info, parent_widget)
             self._current_message_dialog.finished.connect(self._on_message_dialog_response)
             self._current_message_dialog.show_message()
                         
@@ -1211,4 +1231,42 @@ class ProtocolRunnerController(QObject):
             )
             publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
         
-        logger.info(f"Published phase navigation state for phase {self._navigated_phase_index + 1}")
+    def set_advanced_hardware_mode(self, advanced_mode, preview_mode):
+        self._was_advanced_hardware_mode = advanced_mode and not preview_mode
+
+    def _should_show_completion_dialog(self):
+        return (self._was_advanced_hardware_mode and 
+                not self._preview_mode and 
+                not self._completion_dialog_shown)
+    
+    def _show_experiment_complete_dialog(self):
+        self._completion_dialog_shown = True        
+        # QTimer to create dialog on main thread
+        QTimer.singleShot(100, self._create_and_show_completion_dialog)
+
+    def _create_and_show_completion_dialog(self):
+        try:
+            # importing here to avoid circular imports
+            from protocol_grid.extra_ui_elements import ExperimentCompleteDialog
+            
+            # set the main widget as parent
+            parent_widget = self.parent()
+            
+            # create dialog and connect to response method
+            self._current_completion_dialog = ExperimentCompleteDialog(parent_widget)
+            self._current_completion_dialog.finished.connect(self._on_completion_dialog_response)
+            self._current_completion_dialog.show_completion_dialog()
+                        
+        except Exception as e:
+            logger.error(f"Failed to show experiment completion dialog: {e}")
+
+    def _on_completion_dialog_response(self, result):              
+        if result == QDialog.Accepted:  # YES button pressed
+            logger.info("User selected YES - for now, just closing dialog")
+            # TODO: increment experiment count
+        else:  # NO button pressed or dialog closed
+            logger.info("User selected NO or closed dialog - just closing")
+            # TODO: future implementation if needed
+        
+        if hasattr(self, '_current_completion_dialog'):
+            delattr(self, '_current_completion_dialog')
