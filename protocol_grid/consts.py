@@ -74,14 +74,6 @@ group_defaults = {
     "Duration": "1.0",
     "Voltage": "",
     "Frequency": "",
-    "Message": "",
-    "Repeat Duration": "",
     "Trail Length": "",
-    "Trail Overlay": "",
-    "Video": "",
-    "Volume Threshold": "",
-    "Magnet": "",
-    "Magnet Height": "",   
-    "Max. Path Length": "",
-    "Run Time": "" 
+    "Run Time": "",
 }

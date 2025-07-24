@@ -137,7 +137,19 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
     magnet_checked = False
 
     for field in protocol_grid_fields:
-        value = overrides.get(field, defaults.get(field, ""))
+        if row_type == GROUP_TYPE:
+            allowed_group_fields = {
+                "Description", "ID", "Repetitions", "Duration", "Run Time",
+                "Voltage", "Frequency", "Trail Length"
+            }
+            
+            if field in allowed_group_fields:
+                value = overrides.get(field, defaults.get(field, ""))
+            else:
+                value = ""
+        else:
+            value = overrides.get(field, defaults.get(field, ""))
+            
         item = PGCItem(str(value))
 
         if field == "Description":
@@ -180,6 +192,9 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             else:
                 item.setEditable(False)
                 item.setText("")
+                if field in ("Video", "Magnet"):
+                    item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
+                    item.setData(None, Qt.CheckStateRole)
         elif row_type == STEP_TYPE and field == "ID":
             item.setEditable(False)
 
