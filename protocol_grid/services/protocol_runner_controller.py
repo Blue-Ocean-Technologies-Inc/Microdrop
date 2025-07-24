@@ -271,12 +271,11 @@ class ProtocolRunnerController(QObject):
             # resume from navigated phase
             self._current_phase_index = self._navigated_phase_index
             
-            # calculate number of phases moved to adjust step timer
-            phases_moved = self._navigated_phase_index - self._original_pause_phase_index
-            if self._current_execution_plan and phases_moved != 0:
+            # calculate remaining time based on phases left from navigated position
+            if self._current_execution_plan:
+                phases_remaining = len(self._current_execution_plan) - self._navigated_phase_index
                 phase_duration = self._current_execution_plan[0]["duration"]  # all phases in a step have same duration
-                time_adjustment = phases_moved * phase_duration
-                new_remaining_time = max(0, self._original_step_time_remaining - time_adjustment)
+                new_remaining_time = phases_remaining * phase_duration                
             else:
                 new_remaining_time = self._original_step_time_remaining
             
