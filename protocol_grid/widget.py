@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
 from microdrop_application.application import is_dark_mode
-from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
+from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
@@ -218,6 +218,34 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
 
         self._update_navigation_buttons_state()
+        
+        QTimer.singleShot(10, self._cleanup_after_protocol_operation)
+
+    def _cleanup_after_protocol_operation(self):
+        if not getattr(self, '_programmatic_change', False):
+            self._programmatic_change = True
+            try:
+                self._clean_group_parameters_recursive(self.state.sequence)
+                
+                self.load_from_state()
+            finally:
+                self._programmatic_change = False
+
+    def _clean_group_parameters_recursive(self, elements):
+        allowed_group_fields = {
+            "Description", "ID", "Repetitions", "Duration", "Run Time",
+            "Voltage", "Frequency", "Trail Length", "UID"
+        }
+        
+        for element in elements:
+            if hasattr(element, "elements"): # group 
+                filtered_parameters = {}
+                for field, value in element.parameters.items():
+                    if field in allowed_group_fields:
+                        filtered_parameters[field] = value
+                element.parameters = filtered_parameters
+                
+                self._clean_group_parameters_recursive(element.elements)
 
     def on_protocol_paused(self):
         self.navigation_bar.btn_play.setText(ICON_RESUME)
@@ -365,7 +393,7 @@ class PGCWidget(QWidget):
 
     def _play_pause_start_protocol(self):
         self._protocol_running = True
-        self.sync_to_state()
+        # self.sync_to_state()
         try:
             repeat_n = int(self.status_bar.edit_repeat_protocol.text() or "1")
         except ValueError:
@@ -423,7 +451,7 @@ class PGCWidget(QWidget):
         self._update_navigation_buttons_state()
 
     def _play_pause_resume_protocol(self):
-        self.sync_to_state()
+        # self.sync_to_state()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         preview_mode = self.navigation_bar.is_preview_mode()
         
@@ -546,6 +574,8 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
 
         self._update_navigation_buttons_state()
+        
+        QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0.00 s")
@@ -1189,6 +1219,9 @@ class PGCWidget(QWidget):
         if hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message:
             return
         if not self._programmatic_change:
+            # dont sync during protocol running
+            if self._protocol_running:
+                return
             self.model_to_state()
             self.protocolChanged.emit()
             
@@ -1208,43 +1241,57 @@ class PGCWidget(QWidget):
                     item = parent_item.child(row, col)
                     if item:
                         if field in ("Video", "Magnet"):
-                            parameters[field] = self._normalize_checkbox_value(item)
-                        elif field == "Magnet Height":
-                            last_value = item.data(Qt.UserRole + 2)
-                            if last_value is not None and last_value != "":
-                                parameters[field] = str(last_value)
+                            check_state = item.data(Qt.CheckStateRole)
+                            if check_state is not None:
+                                parameters[field] = "1" if check_state == Qt.Checked else "0"
                             else:
-                                # fallback to display text if no stored value
-                                parameters[field] = item.text() or "0"
+                                text_value = item.text().strip()
+                                parameters[field] = "1" if text_value.lower() in ("1", "true", "yes", "on") else "0"
                         else:
                             parameters[field] = item.text()
                 
-                if row_type == STEP_TYPE:
-                    uid_role = Qt.UserRole + 1000 + hash("UID") % 1000
-                    uid_value = desc_item.data(uid_role)
-                    if uid_value:
-                        parameters["UID"] = str(uid_value)
-                            
-                if row_type == STEP_TYPE:
-                    step = ProtocolStep(
-                        parameters=parameters,
-                        name=parameters.get("Description", "Step")
-                    )
-                    # Get device state from model
-                    device_state = desc_item.data(Qt.UserRole + 100)
-                    if device_state:
-                        step.device_state = device_state
-                    target_list.append(step)
-                    
-                elif row_type == GROUP_TYPE:
+                if row_type == GROUP_TYPE:
+                    allowed_group_fields = {
+                        "Description", "ID", "Repetitions", "Duration", "Run Time",
+                        "Voltage", "Frequency", "Trail Length"
+                    }
+                    filtered_parameters = {}
+                    for field, value in parameters.items():
+                        if field in allowed_group_fields:
+                            filtered_parameters[field] = value
+                    parameters = filtered_parameters
+                
+                for hidden_field in ["UID"]:
+                    hidden_value = desc_item.data(Qt.UserRole + 1000 + hash(hidden_field) % 1000)
+                    if hidden_value is not None:
+                        parameters[hidden_field] = hidden_value
+                
+                if row_type == GROUP_TYPE:
+                    from protocol_grid.state.protocol_state import ProtocolGroup
                     group = ProtocolGroup(
                         parameters=parameters,
                         name=parameters.get("Description", "Group")
                     )
-                    # Recursively convert children
-                    convert_recursive(desc_item, group.elements)
                     target_list.append(group)
                     
+                    convert_recursive(desc_item, group.elements)
+                    
+                elif row_type == STEP_TYPE:
+                    from protocol_grid.state.protocol_state import ProtocolStep
+                    step = ProtocolStep(
+                        parameters=parameters,
+                        name=parameters.get("Description", "Step")
+                    )
+                    
+                    device_state = desc_item.data(Qt.UserRole + 100)
+                    if device_state:
+                        step.device_state = device_state
+                    else:
+                        from protocol_grid.state.device_state import DeviceState
+                        step.device_state = DeviceState()
+                    
+                    target_list.append(step)
+                        
         convert_recursive(self.model.invisibleRootItem(), self.state.sequence)
         
     def save_selection(self):
@@ -1312,7 +1359,17 @@ class PGCWidget(QWidget):
                     row_items[0].setData(element.device_state, Qt.UserRole + 100)
                     parent_item.appendRow(row_items)                    
                 elif isinstance(element, ProtocolGroup):
-                    row_items = make_row(group_defaults, element.parameters, GROUP_TYPE)
+                    allowed_group_fields = {
+                        "Description", "ID", "Repetitions", "Duration", "Run Time",
+                        "Voltage", "Frequency", "Trail Length", "UID"
+                    }
+                    
+                    filtered_group_parameters = {}
+                    for field, value in element.parameters.items():
+                        if field in allowed_group_fields:
+                            filtered_group_parameters[field] = value
+                    
+                    row_items = make_row(group_defaults, filtered_group_parameters, GROUP_TYPE)
                     parent_item.appendRow(row_items)
                     # Recursively add children
                     add_recursive(element.elements, row_items[0])
@@ -1370,15 +1427,6 @@ class PGCWidget(QWidget):
 
         if field in ("Duration", "Run Time"):
             self._update_parent_aggregations(parent)
-
-        if field == "Repetitions":
-            desc_item = parent.child(row, 0)
-            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                repetitions_col = protocol_grid_fields.index("Repetitions")
-                value = parent.child(row, repetitions_col).text()
-                self._set_field_for_group(desc_item, "Repetitions", value)
-            else:
-                self._update_parent_aggregations(parent)
 
         if field in ("Duration", "Repeat Duration", "Volume Threshold"):
             self._validate_numeric_field(item, field)
