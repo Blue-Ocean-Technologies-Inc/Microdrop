@@ -424,10 +424,15 @@ class PGCWidget(QWidget):
             run_order.extend(flat_run[start_idx:])
 
         preview_mode = self.navigation_bar.is_preview_mode()
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        
         self.protocol_runner.set_preview_mode(preview_mode)
 
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
         self.protocol_runner.set_run_order(run_order)
+        
+        self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
+        
         self.protocol_runner.start()
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
@@ -523,9 +528,7 @@ class PGCWidget(QWidget):
             item = parent.child(row, col)
             if item:
                 if field == "Magnet":
-                    raw_check_state = item.data(Qt.CheckStateRole)
-                    checked = raw_check_state == Qt.Checked or raw_check_state == 2
-                    parameters[field] = checked
+                    parameters[field] = "1" if self._is_checkbox_checked(item) else "0"
                 else:
                     parameters[field] = item.text()
         
@@ -547,10 +550,15 @@ class PGCWidget(QWidget):
         }]
         
         preview_mode = self.navigation_bar.is_preview_mode()
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        
         self.protocol_runner.set_preview_mode(preview_mode)
         
         self.protocol_runner.set_repeat_protocol_n(1)
         self.protocol_runner.set_run_order(run_order)
+        
+        self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
+        
         self.protocol_runner.start()
         
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
