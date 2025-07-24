@@ -922,8 +922,6 @@ class PGCWidget(QWidget):
         
         # clear last published UID
         self._set_last_published_step_uid(None)
-        
-        logger.info("Empty message sent")
 
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:

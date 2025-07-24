@@ -111,11 +111,8 @@ class PathExecutionService:
         return phases
 
     @staticmethod
-    def calculate_loop_cycle_phases(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:
-        logger.info(f"calculate_loop_cycle_phases called with path={path}, trail_length={trail_length}, trail_overlay={trail_overlay}")
-        
+    def calculate_loop_cycle_phases(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:        
         if not PathExecutionService.is_loop_path(path):
-            logger.info(f"Path {path} is not a loop, using regular trail calculation")
             result = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
             logger.info(f"Open path phases: {result}")
             return result
@@ -123,10 +120,8 @@ class PathExecutionService:
         # for loops, make it a path without duplicating last electrode
         effective_path = path[:-1]
         effective_length = len(effective_path)
-        logger.info(f"Loop detected, effective_path={effective_path}, effective_length={effective_length}")
         
         step_size = trail_length - trail_overlay
-        logger.info(f"Step size calculated: {step_size}")
         
         if step_size <= 0:
             # all positions, no smooth transition needed
@@ -138,7 +133,6 @@ class PathExecutionService:
         position = 0
         
         # generate phases for the loop
-        logger.info(f"Starting phase generation for loop")
         while position < effective_length:
             phase_electrodes = []
             for i in range(trail_length):
@@ -146,7 +140,6 @@ class PathExecutionService:
                 phase_electrodes.append(electrode_idx)
             
             phases.append(phase_electrodes)
-            logger.info(f"Generated phase at position {position}: {phase_electrodes}")
             position += step_size
             
             # check if the loop is completed
@@ -399,10 +392,7 @@ class PathExecutionService:
                                           step_uid: str,
                                           step_description: str = "Step",
                                           step_id: str = "") -> DeviceViewerMessageModel:
-        """create a dynamic message combining individual + path electrodes."""
-        logger.info(f"Creating dynamic message with active_electrodes: {active_electrodes}")
-        logger.info(f"Original device state id_to_channel: {original_device_state.id_to_channel}")
-        
+        """create a dynamic message combining individual + path electrodes."""        
         # electrode IDs to channels
         channels_activated = {}
         for electrode_id, activated in active_electrodes.items():
@@ -411,7 +401,6 @@ class PathExecutionService:
                 if electrode_id in original_device_state.id_to_channel:
                     channel = original_device_state.id_to_channel[electrode_id]
                     channels_activated[str(channel)] = True
-                    logger.info(f"Found direct mapping: {electrode_id} -> channel {channel}")
                 else:
                     # try finding electrode by channel number
                     # convert electrode_id to channel if it's a number
@@ -421,13 +410,10 @@ class PathExecutionService:
                         for elec_id, elec_channel in original_device_state.id_to_channel.items():
                             if elec_channel == channel_num:
                                 channels_activated[str(channel_num)] = True
-                                logger.info(f"Found channel mapping: electrode {electrode_id} -> channel {channel_num}")
                                 break
                     except ValueError:
                         logger.warning(f"Could not convert electrode_id {electrode_id} to channel")
-        
-        logger.info(f"Final channels_activated: {channels_activated}")
-        
+            
         # keep original routes and colors
         routes = []
         for i, path in enumerate(original_device_state.paths):
