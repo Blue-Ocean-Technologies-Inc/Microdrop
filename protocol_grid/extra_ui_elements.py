@@ -9,11 +9,13 @@ from pyface.action.api import Action
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
                                   ROW_TYPE_ROLE, STEP_TYPE)
+from microdrop_application.application import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
-from microdrop_style.colors import SECONDARY_SHADE, WHITE
+from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
+                                   WHITE, BLACK, GREY)
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
@@ -30,8 +32,6 @@ class NavigationBar(QWidget):
         self.button_layout = QHBoxLayout()
         self.button_layout.setContentsMargins(0, 0, 0, 0)
         self.button_layout.setSpacing(0)
-
-        self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
 
         # main navigation buttons
         self.btn_first = QPushButton(ICON_FIRST)
@@ -112,6 +112,58 @@ class NavigationBar(QWidget):
         main_layout.addLayout(checkbox_layout)
         
         self.setLayout(main_layout)
+        
+        # apply initial styling
+        self._apply_navigation_bar_styling()
+    
+    def _apply_navigation_bar_styling(self):
+        button_style = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 2px 2px 2px 2px;
+                background-color: {WHITE};
+                color: {BLACK};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {WHITE};
+                background-color: {GREY['light']};
+            }}
+        """
+        self.setStyleSheet(button_style)
+        
+        # apply theme-appropriate styling for checkboxes and labels
+        self._apply_checkbox_styling()
+    
+    def _apply_checkbox_styling(self):
+        dark = is_dark_mode()
+        
+        if dark:
+            checkbox_style = f"""
+                QCheckBox {{
+                    color: {WHITE};
+
+                }}
+            """
+        else:
+            checkbox_style = f"""
+                QCheckBox {{
+                    color: {BLACK};
+
+                }}
+            """
+        self.advanced_user_mode_checkbox.setStyleSheet(checkbox_style)
+        self.preview_mode_checkbox.setStyleSheet(checkbox_style)
+    
+    def update_theme_styling(self):
+        self._apply_checkbox_styling()
     
     def is_preview_mode(self):
         return self.preview_mode_checkbox.isChecked()

@@ -2154,6 +2154,8 @@ class PGCWidget(QWidget):
     def event(self, event):
         if event.type() == QEvent.PaletteChange:
             self.clear_highlight()
+            if hasattr(self, 'navigation_bar'):
+                self.navigation_bar.update_theme_styling()
         return super().event(event)
 
 if __name__ == "__main__":
