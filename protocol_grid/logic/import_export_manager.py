@@ -34,6 +34,7 @@ class ImportExportManager:
                     "Description": meta.get("Description", group_id),
                     "ID": group_id,
                     "Repetitions": meta.get("Repetitions", "1")
+                    # "Force": ""  # Ensure Force field exists for groups
                 },
                 name=meta.get("Description", group_id),
                 elements=[]
@@ -76,6 +77,10 @@ class ImportExportManager:
             
             if "UID" not in params:
                 params["UID"] = ""  # Will be assigned later if needed
+            
+            # ensure Force field exists (backwards compatibility)
+            if "Force" not in params:
+                params["Force"] = ""
             
             step_obj = ProtocolStep(
                 parameters=params,
