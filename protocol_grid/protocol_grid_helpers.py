@@ -21,8 +21,13 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.parent_widget = parent
         
     def createEditor(self, parent, option, index):
+        # prevent editing during protocol execution
+        if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
+            return None
+        
         field = protocol_grid_fields[index.column()]
         
         if field == "Force":
@@ -106,6 +111,10 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setText(str(text))
             
     def setModelData(self, editor, model, index):
+        # prevent data setting during protocol execution
+        if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
+            return
+        
         field = protocol_grid_fields[index.column()]
         
         if field == "Force":
