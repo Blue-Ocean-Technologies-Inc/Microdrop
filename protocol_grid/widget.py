@@ -171,6 +171,9 @@ class PGCWidget(QWidget):
     # -------------------------------------
 
     # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
+    def is_protocol_running(self):
+            return self._protocol_running
+
     def highlight_step(self, path):
         self.clear_highlight()
         item = self.get_item_by_path(path)
@@ -182,6 +185,35 @@ class PGCWidget(QWidget):
                 if cell:
                     cell.setBackground(Qt.blue)
                     cell.setForeground(Qt.white)
+
+            if self._protocol_running:
+                self._scroll_to_highlighted_step(path)
+
+    def _scroll_to_highlighted_step(self, path):
+        if not path:
+            return
+        
+        # model index for the first column of the highlighted row
+        index = self.model.index(path[0], 0)
+        for row in path[1:]:
+            if index.isValid():
+                index = self.model.index(row, 0, index)
+            else:
+                return
+        
+        if index.isValid():
+            # scroll to the item, leave some padding
+            self.tree.scrollTo(index, QTreeView.PositionAtCenter)
+            
+            # expand if group
+            item = self.get_item_by_path(path)
+            if item and item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                parent_index = index.parent()
+                while parent_index.isValid():
+                    self.tree.expand(parent_index)
+                    parent_index = parent_index.parent()
+            
+            self.tree.expand(index)
 
     def clear_highlight(self):
         dark = is_dark_mode()
@@ -600,7 +632,15 @@ class PGCWidget(QWidget):
     def _update_ui_enabled_state(self):
         enabled = not self._protocol_running
         
-        self.tree.setEnabled(enabled)
+        # allow scrolling but not editing and selection
+        if enabled:
+            self.tree.setEnabled(True)
+            self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.tree.setSelectionMode(QTreeView.ExtendedSelection)
+        else:
+            self.tree.setEnabled(True)
+            self.tree.setContextMenuPolicy(Qt.NoContextMenu)
+            self.tree.setSelectionMode(QTreeView.NoSelection)
         
         self.btn_add_step.setEnabled(enabled)
         self.btn_add_step_into.setEnabled(enabled)
@@ -609,11 +649,6 @@ class PGCWidget(QWidget):
         self.btn_import.setEnabled(enabled)
         self.btn_import_into.setEnabled(enabled)
         self.btn_export.setEnabled(enabled)
-        
-        if enabled:
-            self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        else:
-            self.tree.setContextMenuPolicy(Qt.NoContextMenu)
 
     def _update_navigation_buttons_state(self):
         # Enable navigation buttons if:
