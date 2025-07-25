@@ -116,9 +116,9 @@ class MainModel(RouteLayerManager, Electrodes):
         if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
             self.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
-            self.camera_perspective.reset_rects() # Reset the reference rectangle when entering camera-place mode
+            self.camera_perspective.reset_rects() # Reset the rectangles when entering camera-place mode
             self.set_visible("fill", False)  # Set the fill alpha low for visibility
             self.set_visible("text", False)  # Set the text alpha low for visibility
-        if event.old == "camera-edit" and event.new != "camera-edit": # We left camera-edit mode
+        if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
             self.set_visible("fill", True)  # Restore fill visibility
             self.set_visible("text", True)  # Restore text visibility
