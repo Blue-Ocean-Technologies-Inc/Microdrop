@@ -393,7 +393,7 @@ class PGCWidget(QWidget):
 
     def _play_pause_start_protocol(self):
         self._protocol_running = True
-        # self.sync_to_state()
+        self.sync_to_state()
         try:
             repeat_n = int(self.status_bar.edit_repeat_protocol.text() or "1")
         except ValueError:
@@ -427,10 +427,8 @@ class PGCWidget(QWidget):
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         
         self.protocol_runner.set_preview_mode(preview_mode)
-
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
-        self.protocol_runner.set_run_order(run_order)
-        
+        self.protocol_runner.set_run_order(run_order)        
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
         
         self.protocol_runner.start()
@@ -1232,6 +1230,9 @@ class PGCWidget(QWidget):
             self.protocolChanged.emit()
             
     def model_to_state(self):
+        if self._protocol_running:
+            return
+            
         self.state.sequence.clear()
         
         def convert_recursive(parent_item, target_list):
@@ -1245,59 +1246,58 @@ class PGCWidget(QWidget):
                 parameters = {}
                 for col, field in enumerate(protocol_grid_fields):
                     item = parent_item.child(row, col)
-                    if item:
-                        if field in ("Video", "Magnet"):
-                            check_state = item.data(Qt.CheckStateRole)
-                            if check_state is not None:
-                                parameters[field] = "1" if check_state == Qt.Checked else "0"
-                            else:
-                                text_value = item.text().strip()
-                                parameters[field] = "1" if text_value.lower() in ("1", "true", "yes", "on") else "0"
+                    if not item:
+                        continue
+                        
+                    if field in ("Video", "Magnet"):
+                        check_state = item.data(Qt.CheckStateRole)
+                        if check_state is not None:
+                            checked = check_state == Qt.Checked or check_state == 2
+                            parameters[field] = "1" if checked else "0"
+                        else:
+                            parameters[field] = "0"
+                    elif field == "Magnet Height":
+                        stored_value = item.data(Qt.UserRole + 2)
+                        if stored_value is not None and stored_value != "":
+                            parameters[field] = str(stored_value)
                         else:
                             parameters[field] = item.text()
+                    else:
+                        parameters[field] = item.text()
                 
-                if row_type == GROUP_TYPE:
+                uid = desc_item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
+                if uid:
+                    parameters["UID"] = str(uid)
+                
+                if row_type == STEP_TYPE:
+                    step = ProtocolStep(parameters=parameters, name=parameters.get("Description", "Step"))
+                    
+                    device_state = desc_item.data(Qt.UserRole + 100)
+                    if device_state:
+                        step.device_state = device_state
+                    else:
+                        step.device_state = DeviceState()
+                    
+                    target_list.append(step)
+                    
+                elif row_type == GROUP_TYPE:
                     allowed_group_fields = {
                         "Description", "ID", "Repetitions", "Duration", "Run Time",
                         "Voltage", "Frequency", "Trail Length"
                     }
                     filtered_parameters = {}
                     for field, value in parameters.items():
-                        if field in allowed_group_fields:
+                        if field in allowed_group_fields and value.strip():
                             filtered_parameters[field] = value
-                    parameters = filtered_parameters
-                
-                for hidden_field in ["UID"]:
-                    hidden_value = desc_item.data(Qt.UserRole + 1000 + hash(hidden_field) % 1000)
-                    if hidden_value is not None:
-                        parameters[hidden_field] = hidden_value
-                
-                if row_type == GROUP_TYPE:
-                    from protocol_grid.state.protocol_state import ProtocolGroup
+                    
                     group = ProtocolGroup(
-                        parameters=parameters,
-                        name=parameters.get("Description", "Group")
+                        parameters=filtered_parameters,
+                        name=filtered_parameters.get("Description", "Group")
                     )
-                    target_list.append(group)
                     
                     convert_recursive(desc_item, group.elements)
+                    target_list.append(group)
                     
-                elif row_type == STEP_TYPE:
-                    from protocol_grid.state.protocol_state import ProtocolStep
-                    step = ProtocolStep(
-                        parameters=parameters,
-                        name=parameters.get("Description", "Step")
-                    )
-                    
-                    device_state = desc_item.data(Qt.UserRole + 100)
-                    if device_state:
-                        step.device_state = device_state
-                    else:
-                        from protocol_grid.state.device_state import DeviceState
-                        step.device_state = DeviceState()
-                    
-                    target_list.append(step)
-                        
         convert_recursive(self.model.invisibleRootItem(), self.state.sequence)
         
     def save_selection(self):
@@ -1390,6 +1390,12 @@ class PGCWidget(QWidget):
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
+        if self._protocol_running:
+            # allow changes in advanced mode for specific scenarios
+            # if not self.navigation_bar.is_advanced_user_mode():
+            #     logger.debug("Blocking item change during protocol execution (not in advanced mode)")
+            return
+            
         if not getattr(self, "_undo_snapshotted", False):
             self.state.snapshot_for_undo()
             self._undo_snapshotted = True
@@ -1403,8 +1409,8 @@ class PGCWidget(QWidget):
 
         if field in ("Video", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
-            # immediately sync to state
-            self.sync_to_state()
+            if not self._protocol_running:
+                self.sync_to_state()
             QTimer.singleShot(0, self._reset_undo_snapshotted)
             return
 
@@ -1415,19 +1421,7 @@ class PGCWidget(QWidget):
 
         if field in ("Voltage", "Frequency", "Trail Length"):
             if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                voltage_col = protocol_grid_fields.index("Voltage")
-                frequency_col = protocol_grid_fields.index("Frequency")
-                trail_length_col = protocol_grid_fields.index("Trail Length")
-                
-                if field == "Voltage":
-                    value = parent.child(row, voltage_col).text()
-                    self._set_field_for_group(desc_item, "Voltage", value)
-                elif field == "Frequency":
-                    value = parent.child(row, frequency_col).text()
-                    self._set_field_for_group(desc_item, "Frequency", value)
-                elif field == "Trail Length":
-                    value = parent.child(row, trail_length_col).text()
-                    self._set_field_for_group(desc_item, "Trail Length", value)
+                self._set_field_for_group(desc_item, field, item.text())
             if not self._block_aggregation:
                 self._update_parent_aggregations(parent)
 
@@ -1440,7 +1434,8 @@ class PGCWidget(QWidget):
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
 
-        self.sync_to_state()
+        if not self._protocol_running:
+            self.sync_to_state()
         QTimer.singleShot(0, self._reset_undo_snapshotted)
         
     def _set_field_for_group(self, group_item, field, value):
