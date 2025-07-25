@@ -1,20 +1,29 @@
-from venv import logger
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene
+from PySide6.QtCore import Slot, QPointF, QTimer
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
+from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
+import time
 
-from microdrop_style.colors import SECONDARY_SHADE, WHITE
+from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class CameraControlWidget(QWidget):
 
-    def __init__(self, model, capture_session: QMediaCaptureSession):
+    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, scene: QGraphicsScene):
         super().__init__()
         self.model = model
         self.capture_session = capture_session
+        self.scene = scene
+        self.video_item = video_item  # The video item for the camera feed
         self.camera = None  # Will be set when a camera is selected
         self.available_cameras = None
         self.camera_formats = None  # Will be set when a camera is selected
+
+        self.capture_success_timer = QTimer() # Timer to reset the capture button style after a successful capture
+        self.capture_success_timer.setSingleShot(True)
+        self.capture_success_timer.timeout.connect(self.reset_capture_button_style)
 
         self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
 
@@ -41,6 +50,19 @@ class CameraControlWidget(QWidget):
         self.camera_refresh_button = QPushButton("refresh")
         self.camera_refresh_button.setToolTip("Refresh Camera List")
 
+        # recording buttons
+        recording_layout = QHBoxLayout()
+        self.record_button = QPushButton("videocam")
+        self.record_button.setToolTip("Start Recording")
+        self.stop_record_button = QPushButton("stop")
+        self.stop_record_button.setToolTip("Stop Recording")
+        self.capture_image_button = QPushButton("photo_camera")
+        self.capture_image_button.setToolTip("Capture Image")
+
+        recording_layout.addWidget(self.record_button)
+        recording_layout.addWidget(self.stop_record_button)
+        recording_layout.addWidget(self.capture_image_button)
+
         # btn_layout
         btn_layout = QHBoxLayout()
         for btn in [self.button_align]:
@@ -54,6 +76,7 @@ class CameraControlWidget(QWidget):
 
         layout.addLayout(self.camera_select_layout)
         layout.addLayout(self.resolution_select_layout)
+        layout.addLayout(recording_layout)
         layout.addLayout(btn_layout)
         self.setLayout(layout)
 
@@ -61,6 +84,7 @@ class CameraControlWidget(QWidget):
 
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
         self.button_reset.clicked.connect(self.reset)
+        self.capture_image_button.clicked.connect(self.capture_button_handler)
         self.camera_refresh_button.clicked.connect(self.populate_camera_list)
         self.camera_combo.currentIndexChanged.connect(self.set_camera_model)
         self.resolution_combo.currentIndexChanged.connect(self.set_resolution)
@@ -110,7 +134,6 @@ class CameraControlWidget(QWidget):
             self.resolution_combo.clear()
 
             for format in self.camera_formats:
-                print(f"format: {format.resolution()} {format.maxFrameRate()} {format.pixelFormat()} {format.isNull()}")
                 res = format.resolution()
                 self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
 
@@ -120,6 +143,32 @@ class CameraControlWidget(QWidget):
             format = self.camera_formats[index]
             self.camera.setCameraFormat(format)
 
+    def get_next_image_id(self):
+        """Generate a unique image ID for captured images."""
+        return str(int(time.time()))
+
+    # Callbacks
+
+    @Slot()
+    def capture_button_handler(self):
+        """Callback for when the capture button is pressed."""
+        self.capture_image_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]};")
+        image = QImage(self.scene.width(), self.scene.height(), QImage.Format_ARGB32)
+        image.fill(0xFF000000)  # Fill with black background
+
+        painter = QPainter(image)
+        painter.setTransform(self.model.camera_perspective.transformation)
+        self.video_item.paint(painter, None, None)
+        painter.end()
+
+        image.save(f"captured_image_{self.get_next_image_id()}.png", "PNG")
+        self.capture_image_button.setStyleSheet(f"background-color: {SUCCESS_COLOR};")  # Indicate success with a different color
+        self.capture_success_timer.start(1000)  # Reset style after 2 seconds
+
+    @Slot()
+    def reset_capture_button_style(self):
+        """Reset the capture button style to its default state."""
+        self.capture_image_button.setStyleSheet("")
 
     def set_mode(self, mode):
         self.model.mode = mode

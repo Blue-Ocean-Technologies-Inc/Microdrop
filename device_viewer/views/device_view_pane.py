@@ -1,18 +1,17 @@
 # enthought imports
 from math import log
 import dramatiq
-from traits.api import Instance, observe, Any, Str, provides
+from traits.api import Instance, observe, Str
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
-from pyface.tasks.dock_pane import DockPane
-from pyface.qt.QtGui import QGraphicsScene, QTransform, QPolygonF
+from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
+from pyface.qt.QtCore import Qt, QTimer, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
+from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
@@ -254,6 +253,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
+        # Initialize camera primitives
         self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
         self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
@@ -295,7 +295,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.scene)
         self.camera_control_widget.setParent(container)
 
         # Add widgets to layouts
