@@ -20,6 +20,98 @@ from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 
+class InformationPanel(QWidget):
+    """shows device, protocol, experiment info, and button to open experiment directory."""    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        self.apply_styling()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(3)
+        
+        # self.device_label = QLabel("Device: ")
+        # self.device_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        self.protocol_label = QLabel("Protocol: untitled [not modified]")
+        self.protocol_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        self.experiment_label = QLabel("Experiment: ")
+        self.experiment_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        self.open_button = QPushButton("Open...")
+        self.open_button.setMaximumWidth(80)
+        self.open_button.setToolTip("Open current experiment directory")
+        
+        # layout.addWidget(self.device_label)
+        layout.addWidget(self.protocol_label)
+        layout.addWidget(self.experiment_label)
+        layout.addWidget(self.open_button, alignment=Qt.AlignLeft | Qt.AlignVCenter)
+                
+        self.setLayout(layout)
+        self.setFixedHeight(80)
+    
+    def apply_styling(self):
+        dark = is_dark_mode()
+        
+        if dark:
+            text_color = WHITE
+            button_style = f"""
+                QPushButton {{
+                    background-color: {GREY['dark']};
+                    color: {WHITE};
+                    border: 1px solid {GREY['light']};
+                    border-radius: 3px;
+                    padding: 4px 8px;
+                }}
+                QPushButton:hover {{
+                    background-color: {GREY['light']};
+                }}
+                QPushButton:pressed {{
+                    background-color: {GREY['dark']};
+                }}
+            """
+        else:
+            text_color = BLACK
+            button_style = f"""
+                QPushButton {{
+                    background-color: {WHITE};
+                    color: {BLACK};
+                    border: 1px solid {GREY['light']};
+                    border-radius: 3px;
+                    padding: 4px 8px;
+                }}
+                QPushButton:hover {{
+                    background-color: {GREY['light']};
+                }}
+                QPushButton:pressed {{
+                    background-color: {GREY['dark']};
+                }}
+            """
+        
+        label_style = f"QLabel {{ color: {text_color}; }}"
+        
+        # for label in [self.device_label, self.protocol_label, self.experiment_label]:
+        for label in [self.protocol_label, self.experiment_label]:
+            label.setStyleSheet(label_style)
+        
+        self.open_button.setStyleSheet(button_style)
+    
+    # def update_device_name(self, device_name):
+    #     self.device_label.setText(f"Device: {device_name}")
+    
+    def update_protocol_name(self, protocol_display_name):
+        self.protocol_label.setText(f"Protocol: {protocol_display_name}")
+    
+    def update_experiment_id(self, experiment_id):
+        self.experiment_label.setText(f"Experiment: {experiment_id}")
+    
+    def update_theme_styling(self):
+        self.apply_styling()
+
+
 class NavigationBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)

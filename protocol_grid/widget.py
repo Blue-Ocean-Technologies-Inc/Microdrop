@@ -15,9 +15,12 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DIS
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                   group_defaults, protocol_grid_fields, protocol_grid_column_widths)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
-                                             NavigationBar, StatusBar, make_separator)
+                                             NavigationBar, StatusBar, make_separator,
+                                             InformationPanel)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
+from protocol_grid.services.experiment_manager import ExperimentManager
+from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
                                               device_state_to_device_viewer_message)
@@ -46,7 +49,12 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
         self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)    
         self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error) 
-        self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)  
+        self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
+
+        self.experiment_manager = ExperimentManager()
+        self.experiment_manager.initialize()  
+
+        self.protocol_state_tracker = ProtocolStateTracker()        
         
         self._column_visibility = {}
         self._column_widths = {}
@@ -75,6 +83,11 @@ class PGCWidget(QWidget):
         self._debounce_delay_ms = 250
         
         self.create_buttons()
+
+        self.information_panel = InformationPanel(self)
+        self.information_panel.open_button.clicked.connect(self.open_experiment_directory)        
+        self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_id())
+        self.information_panel.update_protocol_name(self.protocol_state_tracker.get_protocol_display_name())
         
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
@@ -90,6 +103,8 @@ class PGCWidget(QWidget):
         self.status_bar = StatusBar(self)
 
         layout = QVBoxLayout()
+        layout.addWidget(self.information_panel)
+        layout.addWidget(make_separator())
         layout.addWidget(self.navigation_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.status_bar)
@@ -169,6 +184,22 @@ class PGCWidget(QWidget):
             self._processing_device_viewer_message = False
             self._programmatic_change = False        
     # -------------------------------------
+
+    # ---------- Information Panel Methods ----------
+    def open_experiment_directory(self):
+        """open experiment directory in file explorer."""
+        self.experiment_manager.open_experiment_directory()
+
+    def _update_protocol_display(self):
+        display_name = self.protocol_state_tracker.get_protocol_display_name()
+        self.information_panel.update_protocol_name(display_name)
+
+    def _mark_protocol_modified(self):
+        """mark the protocol as modified and update display."""
+        if not self.protocol_state_tracker.is_modified():
+            self.protocol_state_tracker.mark_modified(True)
+            self._update_protocol_display()
+    # -----------------------------------------------
 
     # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
     def is_protocol_running(self):
@@ -1340,6 +1371,9 @@ class PGCWidget(QWidget):
                 return
             self.model_to_state()
             self.protocolChanged.emit()
+
+            if not getattr(self, '_loading_from_file', False):
+                self._mark_protocol_modified()
             
     def model_to_state(self):
         if self._protocol_running:
@@ -1452,6 +1486,7 @@ class PGCWidget(QWidget):
         saved_selection = self.save_selection()
         self.save_column_settings()        
         self._programmatic_change = True
+        self._loading_from_file = True
         try:
             self.state.assign_uids_to_all_steps()
             self.state_to_model()
@@ -1461,6 +1496,7 @@ class PGCWidget(QWidget):
             self.update_step_dev_fields()
         finally:
             self._programmatic_change = False
+            self._loading_from_file = False
             
         self.restore_column_settings()
         self.restore_scroll_positions(scroll_pos)
@@ -1849,6 +1885,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def insert_group(self):
         scroll_pos = self.save_scroll_positions()
@@ -1881,6 +1918,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def add_step(self):
         scroll_pos = self.save_scroll_positions()
@@ -1913,6 +1951,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def add_step_into(self):
         scroll_pos = self.save_scroll_positions()
@@ -1949,6 +1988,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def add_group(self):
         scroll_pos = self.save_scroll_positions()
@@ -1980,6 +2020,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def add_group_into(self):
         scroll_pos = self.save_scroll_positions()
@@ -2015,6 +2056,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
@@ -2037,6 +2079,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         
         QTimer.singleShot(0, self._handle_step_removal_cleanup)
+        self._mark_protocol_modified()
         
     def copy_selected(self):
         selected_paths = self.get_selected_paths()
@@ -2109,6 +2152,7 @@ class PGCWidget(QWidget):
         self.restore_selection(saved_selection)
         
         QTimer.singleShot(0, self._handle_step_removal_cleanup)
+        self._mark_protocol_modified()
         
     def paste_into(self):
         if not hasattr(self, '_clipboard') or not self._clipboard:
@@ -2138,6 +2182,7 @@ class PGCWidget(QWidget):
         # self.sync_to_state()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
         
     def undo_last(self):
         self._programmatic_change = True
@@ -2145,6 +2190,7 @@ class PGCWidget(QWidget):
             self.state.undo()
             self.load_from_state()
         self._programmatic_change = False
+        self._mark_protocol_modified()
             
     def redo_last(self):
         self._programmatic_change = True
@@ -2152,16 +2198,27 @@ class PGCWidget(QWidget):
             self.state.redo()
             self.load_from_state()
         self._programmatic_change = False
+        self._mark_protocol_modified()
 
     def _reset_undo_snapshotted(self):
         self._undo_snapshotted = False
         
-    def export_to_json(self):        
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", "", "JSON Files (*.json)")
+    def export_to_json(self):
+        if self._protocol_running:
+            return
+        
+        # use experiment directory as default save location
+        default_dir = str(self.experiment_manager.get_experiment_directory())
+        
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)")
         if file_name:
             flat_data = self.state.to_flat_export()
             with open(file_name, "w") as f:
                 json.dump(flat_data, f, indent=2)
+            
+            # update protocol state tracker
+            self.protocol_state_tracker.set_saved_protocol(file_name)
+            self._update_protocol_display()
                 
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
@@ -2169,20 +2226,20 @@ class PGCWidget(QWidget):
             try:
                 with open(file_name, "r") as f:
                     data = json.load(f)
+                
+                # flag to prevent marking as modified during an import
+                self._loading_from_file = True
+                try:
+                    self.state.from_flat_export(data)
+                    self.load_from_state()
                     
-                self.state.snapshot_for_undo()
-                
-                self.state.from_flat_export(data)
+                    # update protocol state tracker
+                    self.protocol_state_tracker.set_loaded_protocol(file_name)
+                    self._update_protocol_display()
                     
-                # ALWAYS assign new UIDs to ALL imported steps to prevent conflicts
-                self._assign_new_uids_to_all_elements(self.state.sequence)
-                
-                self.state.undo_stack.clear()
-                self.state.redo_stack.clear()
-                
-                self.reassign_ids()
-                self.load_from_state()
-                QTimer.singleShot(0, self.update_all_group_aggregations)
+                finally:
+                    self._loading_from_file = False
+                    
             except Exception as e:
                 QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
                 
@@ -2246,6 +2303,7 @@ class PGCWidget(QWidget):
             self.restore_selection(saved_selection)
             
             QTimer.singleShot(0, self._handle_step_removal_cleanup)
+            self._mark_protocol_modified()
             
         except Exception as e:
             QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
@@ -2262,6 +2320,7 @@ class PGCWidget(QWidget):
             self.clear_highlight()
             if hasattr(self, 'navigation_bar'):
                 self.navigation_bar.update_theme_styling()
+                self.information_panel.update_theme_styling()
         return super().event(event)
 
 if __name__ == "__main__":
