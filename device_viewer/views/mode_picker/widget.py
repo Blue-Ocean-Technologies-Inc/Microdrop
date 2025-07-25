@@ -96,6 +96,7 @@ class ModePicker(QWidget):
     @if_editable
     def set_mode(self, mode):
         self.model.mode = mode
+        self.sync_buttons_and_label()
 
     @if_editable
     def undo(self):

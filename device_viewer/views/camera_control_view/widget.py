@@ -172,6 +172,7 @@ class CameraControlWidget(QWidget):
 
     def set_mode(self, mode):
         self.model.mode = mode
+        self.sync_buttons_and_label()
 
     def reset(self):
         """Reset the camera control widget to its initial state."""
