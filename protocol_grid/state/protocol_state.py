@@ -10,6 +10,10 @@ class ProtocolStep:
         self.name = name
         self.parameters = parameters or {}
         
+        # ensure Force field exists (backwards compatibility)
+        if "Force" not in self.parameters:
+            self.parameters["Force"] = ""
+        
         # normalize checkbox fields for consistent storage
         for field in ("Magnet", "Video"):
             if field in self.parameters:
@@ -45,6 +49,10 @@ class ProtocolGroup:
         self.name = name
         self.parameters = parameters or {}
         self.elements = elements or []
+        
+        # ensure Force field exists (backwards compatibility)
+        if "Force" not in self.parameters:
+            self.parameters["Force"] = ""
 
     def to_dict(self):
         return {
@@ -135,6 +143,18 @@ class ProtocolState:
         
         apply_mapping_recursive(self.sequence)
 
+    def _ensure_force_field_in_sequence(self):
+        """ensure Force field exists (backwards compatibility)"""
+        def ensure_force_recursive(elements):
+            for element in elements:
+                if isinstance(element, (ProtocolStep, ProtocolGroup)):
+                    if "Force" not in element.parameters:
+                        element.parameters["Force"] = ""
+                if isinstance(element, ProtocolGroup):
+                    ensure_force_recursive(element.elements)
+        
+        ensure_force_recursive(self.sequence)
+
     def to_dict(self):
         protocol_id_to_channel = self.get_protocol_id_to_channel_mapping()
         
@@ -155,6 +175,9 @@ class ProtocolState:
         self.fields = data.get("fields", list(protocol_grid_fields))
         self._uid_counter = data.get("_uid_counter", 1)
         self.update_uid_counter_from_sequence()
+        
+        # ensure Force field exists (backwards compatibility)
+        self._ensure_force_field_in_sequence()
         
         # apply id_to_channel mapping to all steps
         protocol_id_to_channel = data.get("id_to_channel", {})
@@ -211,6 +234,9 @@ class ProtocolState:
         self.fields = fields
         self._uid_counter = flat_json.get("_uid_counter", 1)
         self.update_uid_counter_from_sequence()
+        
+        # ensure Force field exists (backwards compatibility)
+        self._ensure_force_field_in_sequence()
         
         # apply id_to_channel mapping to all steps
         protocol_id_to_channel = flat_json.get("id_to_channel", {})

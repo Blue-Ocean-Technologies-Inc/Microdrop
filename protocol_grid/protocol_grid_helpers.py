@@ -25,6 +25,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         field = protocol_grid_fields[index.column()]
         
+        if field == "Force":
+            return None            
         if field in ("Video", "Magnet"):
             editor = QCheckBox(parent)
             return editor
@@ -82,6 +84,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         field = protocol_grid_fields[index.column()]
         
+        if field == "Force":
+            return            
         if field in ("Video", "Magnet"):
             check_state = index.model().data(index, Qt.CheckStateRole)
             if check_state is not None:
@@ -104,6 +108,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         field = protocol_grid_fields[index.column()]
         
+        if field == "Force":
+            return            
         if isinstance(editor, QCheckBox):
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
@@ -181,7 +187,9 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                     item.setText(str(stored_value))
                 else:
                     item.setText(str(value))
-                    
+        elif row_type == STEP_TYPE and field == "Force":
+            item.setEditable(False)
+            item.setText("")
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE:

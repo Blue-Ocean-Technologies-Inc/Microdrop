@@ -25,14 +25,14 @@ ROW_TYPE_ROLE = Qt.UserRole + 1
 
 protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
-    "Duration", "Voltage", "Frequency", 
+    "Duration", "Voltage", "Force", "Frequency", 
     "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay", "Video", 
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
 ]
 protocol_grid_column_widths = [
-    120, 70, 70, 70, 70, 80, 70, 110, 80, 90, 50, 120, 60, 100, 120, 90
+    120, 70, 70, 70, 70, 70, 80, 70, 110, 80, 90, 50, 120, 60, 100, 120, 90
 ]
 hidden_fields = ["UID"]
 all_fields = protocol_grid_fields + hidden_fields
@@ -54,6 +54,7 @@ step_defaults = {
     "Repetitions": "1",
     "Duration": "1.0",
     "Voltage": "100.0",
+    "Force": "",
     "Frequency": "10000",
     "Message": "",
     "Repeat Duration": "0.0",

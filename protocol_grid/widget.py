@@ -1542,7 +1542,10 @@ class PGCWidget(QWidget):
         """Validate numeric fields."""
         try:
             value = float(item.text())
-            item.setText(f"{value:.1f}")
+            if field == "Volume Threshold":
+                item.setText(f"{value:.2f}")
+            else:
+                item.setText(f"{value:.1f}")
         except ValueError:
             item.setText("0.0")
             
