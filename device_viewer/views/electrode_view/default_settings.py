@@ -12,10 +12,13 @@ ELECTRODE_CHANNEL_EDITING = "teal"
 CONNECTION_LINE_OFF = WHITE
 CONNECTION_LINE_ON_DEFAULT = PRIMARY_COLOR
 
+PERSPECTIVE_RECT_COLOR = "red"
+PERSPECTIVE_RECT_COLOR_EDITING = "orange"
+
 ROUTE_SELECTED = "yellow"
 ROUTE_CW_LOOP = "red"
 ROUTE_CCW_LOOP = "orange"
 ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], PRIMARY_SHADE[600])
 AUTOROUTE_COLOR = "pink"
 
-default_alphas = {'connection': 1.0, 'fill': 0.75, 'text': 0.75}
+default_alphas = {'routes': 1.0, 'electrode_fill': 0.75, 'electrode_text': 0.75, 'electrode_outline': 1, 'video': 1.0}

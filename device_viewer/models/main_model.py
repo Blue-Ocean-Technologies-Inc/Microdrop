@@ -117,8 +117,9 @@ class MainModel(RouteLayerManager, Electrodes):
             self.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
             self.camera_perspective.reset_rects() # Reset the rectangles when entering camera-place mode
-            self.set_visible("fill", False)  # Set the fill alpha low for visibility
-            self.set_visible("text", False)  # Set the text alpha low for visibility
+            self.set_visible("electrode_fill", False)  # Set the fill alpha low for visibility
+            self.set_visible("electrode_text", False)  # Set the text alpha low for visibility
+            self.set_visible("electrode_outline", True)  # Keep the outline visible for editing
         if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
-            self.set_visible("fill", True)  # Restore fill visibility
-            self.set_visible("text", True)  # Restore text visibility
+            self.set_visible("electrode_fill", True)  # Restore fill visibility
+            self.set_visible("electrode_text", True)  # Restore text visibility

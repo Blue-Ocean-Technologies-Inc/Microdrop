@@ -244,4 +244,12 @@ class ElectrodeView(QGraphicsPathItem):
     def update_label(self, alpha: float = 1.0):
         self._fit_text_in_path(alpha)
 
+    def update_line_alpha(self, alpha: float = 1.0):
+        """
+        Method to update the alpha of the electrode outline
+        """
+        new_color = QColor(self.pen_color)
+        new_color.setAlphaF(alpha)
+        self.setPen(QPen(new_color, 1))
+
 

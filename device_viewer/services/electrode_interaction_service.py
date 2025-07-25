@@ -1,3 +1,4 @@
+from math import e
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 from microdrop_utils._logger import get_logger
@@ -25,7 +26,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     electrode_hovered = Instance(ElectrodeView)
 
     rect_editing_index = -1  # Index of the point being edited in the reference rect
-    rect_buffer = []
+    rect_buffer = List([])
 
     # -------------------- Helpers ------------------------
 
@@ -170,6 +171,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
 
+    @observe("model.alpha_map.items.[alpha, visible]")
+    def electrode_alpha_change(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_electrode_lines(self.model)
+
     @observe("model.electrodes.items.channel")
     @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_channel_change(self, event):
@@ -181,14 +187,19 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_editing_text(self.model)
 
-    @observe("model.mode")
     @observe("model.camera_perspective.transformation")
+    @observe("rect_buffer.items")
     def update_perspective_rect(self, event):
         if self.electrode_view_layer:
-            if self.model.mode == "camera-edit":
+            if self.model.mode == "camera-edit" and len(self.model.camera_perspective.reference_rect) == 4:
                 self.electrode_view_layer.redraw_reference_rect(self.model)
-            elif hasattr(event, 'old') and event.old == "camera-edit":
-                self.electrode_view_layer.reset_reference_rect()  # Clear the reference rect when leaving camera-edit mode
+            elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
+                self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
+    
+    @observe("model.mode")
+    def clear_prespective_rect_on_mode_change(self, event):
+        if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
+            self.electrode_view_layer.clear_reference_rect()
 
     @observe("model.mode")
     def clear_buffer_on_mode_change(self, event):

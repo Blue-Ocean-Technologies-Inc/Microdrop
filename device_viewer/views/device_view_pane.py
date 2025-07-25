@@ -347,3 +347,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
+
+    @observe("model.alpha_map.items.[alpha, visible]")
+    def _alpha_change(self, event):
+        if self.video_item:
+            self.video_item.setOpacity(self.model.get_alpha("video"))

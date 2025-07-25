@@ -1,10 +1,11 @@
-from PySide6.QtGui import QColor, QFont, QPolygonF, QPen
-from PySide6.QtWidgets import QGraphicsScene, QApplication
+from email.charset import QP
+from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
+from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
 from pyface.qt.QtCore import Qt, QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
-from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL
+from .default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
 from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import MainModel
 
@@ -26,6 +27,7 @@ class ElectrodeLayer():
         self.electrode_endpoints = {}
         self.electrode_editing_text = None
         self.reference_rect_item = None
+        self.reference_rect_path_item = None
 
         self.svg = electrodes.svg_model
 
@@ -90,7 +92,11 @@ class ElectrodeLayer():
         self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
         self.electrode_editing_text.setPos(QPointF(0, 0))
 
-        self.reference_rect_item = parent_scene.addPolygon(QPolygonF(), Qt.NoPen)
+        self.reference_rect_item = parent_scene.addPolygon(QPolygonF(), QPen(QColor(PERSPECTIVE_RECT_COLOR), 3))
+
+        self.reference_rect_path_item = QGraphicsPathItem()
+        self.reference_rect_path_item.setPen(QPen(QColor(PERSPECTIVE_RECT_COLOR_EDITING), 2))
+        parent_scene.addItem(self.reference_rect_path_item)
 
     def remove_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.remove_electrodes_to_scene(parent_scene)
@@ -134,7 +140,7 @@ class ElectrodeLayer():
                     connection_map[(route_from, route_to)] = (color, z)
         
         # Apply map
-        alpha = model.get_alpha("connection")
+        alpha = model.get_alpha("routes")
 
         for key, connection_item in self.connection_items.items():
             (color, z) = connection_map.get(key, (None, None))
@@ -152,8 +158,16 @@ class ElectrodeLayer():
             else:
                 endpoint_view.set_inactive()
     
+    def redraw_electrode_lines(self, model: MainModel):
+        """
+        Method to redraw the electrode lines in the layer
+        """
+        alpha = model.get_alpha("electrode_outline")
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.update_line_alpha(alpha)
+
     def redraw_electrode_colors(self, model: MainModel, electrode_hovered: ElectrodeView):
-        alpha = model.get_alpha("fill")
+        alpha = model.get_alpha("electrode_fill")
         
         for electrode_id, electrode_view in self.electrode_views.items():
             if electrode_view.electrode == model.electrode_editing:
@@ -169,7 +183,7 @@ class ElectrodeLayer():
             electrode_view.update_color(color, alpha)
 
     def redraw_electrode_labels(self, model: MainModel):
-        alpha = model.get_alpha("text")
+        alpha = model.get_alpha("electrode_text")
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label(alpha)
 
@@ -186,13 +200,25 @@ class ElectrodeLayer():
         else:
             self.electrode_editing_text.setPlainText(f"{"Editing" if model.editable else "Displaying"}: {model.step_label} {"(Free Mode)" if model.free_mode else ""}")
 
-    def redraw_reference_rect(self, model: MainModel):
+    def redraw_reference_rect(self, model: MainModel, partial_rect=None):
         if len(model.camera_perspective.reference_rect) == 4:
             # Update the reference rect visualization
             self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
-            self.reference_rect_item.setPen(QPen(QColor("red"), 2))
+            self.reference_rect_path_item.setVisible(False)  # Hide the path item if we're using a polygon
+            self.reference_rect_item.setVisible(True)  # Show the polygon item
+        elif partial_rect is not None and len(partial_rect) > 1:
+            path = QPainterPath()
+            path.moveTo(partial_rect[0])
+            # Draw the path for the reference rect
+            for point in partial_rect[1:]:
+                path.lineTo(point)
+            self.reference_rect_path_item.setPath(path)
+            self.reference_rect_path_item.setVisible(True)
+            self.reference_rect_item.setVisible(False)  # Hide the polygon item if we're using a path
     
-    def reset_reference_rect(self):
-        """Reset the reference rectangle item."""
+    def clear_reference_rect(self):
+        """Reset the reference rectangle to its initial state."""
         self.reference_rect_item.setPolygon(QPolygonF())
-        self.reference_rect_item.setPen(Qt.NoPen)
+        self.reference_rect_item.setVisible(False)
+        self.reference_rect_path_item.setPath(QPainterPath())
+        self.reference_rect_path_item.setVisible(False)
