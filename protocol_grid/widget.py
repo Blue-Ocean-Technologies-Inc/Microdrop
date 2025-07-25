@@ -115,6 +115,7 @@ class PGCWidget(QWidget):
         self.ensure_minimum_protocol()
         self.load_from_state()
         self._update_navigation_buttons_state()
+        self._update_ui_enabled_state()
 
     # ---------- Message Handler ----------    
     def on_device_viewer_message(self, message, topic):
@@ -218,6 +219,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
 
         self._update_navigation_buttons_state()
+        self._update_ui_enabled_state() 
         
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
@@ -266,6 +268,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
 
         self._update_navigation_buttons_state()
+        self._update_ui_enabled_state()
 
         # clear selection on error
         self.tree.clearSelection()
@@ -437,6 +440,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
 
         self._update_navigation_buttons_state()
+        self._update_ui_enabled_state()
         
         # clear selection when protocol starts
         self.tree.clearSelection()
@@ -580,6 +584,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
 
         self._update_navigation_buttons_state()
+        self._update_ui_enabled_state()
         
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
@@ -591,6 +596,24 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("1/")
+
+    def _update_ui_enabled_state(self):
+        enabled = not self._protocol_running
+        
+        self.tree.setEnabled(enabled)
+        
+        self.btn_add_step.setEnabled(enabled)
+        self.btn_add_step_into.setEnabled(enabled)
+        self.btn_add_group.setEnabled(enabled)
+        self.btn_add_group_into.setEnabled(enabled)
+        self.btn_import.setEnabled(enabled)
+        self.btn_import_into.setEnabled(enabled)
+        self.btn_export.setEnabled(enabled)
+        
+        if enabled:
+            self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        else:
+            self.tree.setContextMenuPolicy(Qt.NoContextMenu)
 
     def _update_navigation_buttons_state(self):
         # Enable navigation buttons if:
@@ -1094,9 +1117,10 @@ class PGCWidget(QWidget):
         selected_paths = self.get_selected_paths()
 
         has_selection = len(selected_paths) > 0
-        self.btn_add_step_into.setEnabled(has_selection)
-        self.btn_add_group_into.setEnabled(has_selection)
-        self.btn_import_into.setEnabled(has_selection)
+        if not self._protocol_running:
+            self.btn_add_step_into.setEnabled(has_selection)
+            self.btn_add_group_into.setEnabled(has_selection)
+            self.btn_import_into.setEnabled(has_selection)
 
         current_step_id = None
         current_step_uid = None
@@ -1185,29 +1209,82 @@ class PGCWidget(QWidget):
         
     def setup_shortcuts(self):
         shortcuts = [
-            (QKeySequence.Delete, self.delete_selected),
-            (QKeySequence("Ctrl+C"), self.copy_selected),
-            (QKeySequence("Ctrl+X"), self.cut_selected),
-            (QKeySequence("Ctrl+V"), self.paste_selected),
-            (QKeySequence("Ctrl+Z"), self.undo_last),
-            (QKeySequence("Ctrl+Y"), self.redo_last),
-            (QKeySequence("Ctrl+Shift+Y"), self.redo_last),
-            (QKeySequence("Ctrl+A"), self.select_all),
-            (QKeySequence("Ctrl+D"), self.deselect_rows),
-            (QKeySequence("Ctrl+I"), self.invert_row_selection),
-            (QKeySequence("Insert"), self.insert_step),
-            (QKeySequence("Ctrl+Insert"), self.insert_group),
-            (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+            (QKeySequence.Delete, self._protected_delete_selected),
+            (QKeySequence("Ctrl+C"), self._protected_copy_selected),
+            (QKeySequence("Ctrl+X"), self._protected_cut_selected),
+            (QKeySequence("Ctrl+V"), self._protected_paste_selected),
+            (QKeySequence("Ctrl+Z"), self._protected_undo_last),
+            (QKeySequence("Ctrl+Y"), self._protected_redo_last),
+            (QKeySequence("Ctrl+Shift+Y"), self._protected_redo_last),
+            (QKeySequence("Ctrl+A"), self._protected_select_all),
+            (QKeySequence("Ctrl+D"), self._protected_deselect_rows),
+            (QKeySequence("Ctrl+I"), self._protected_invert_row_selection),
+            (QKeySequence("Insert"), self._protected_insert_step),
+            (QKeySequence("Ctrl+Insert"), self._protected_insert_group),
+            (QKeySequence("Ctrl+Shift+V"), self._protected_paste_into),
             (QKeySequence("A"), self.navigate_to_first_step),
             (QKeySequence("S"), self.navigate_to_previous_step),
             (QKeySequence("D"), self.navigate_to_next_step),
             (QKeySequence("F"), self.navigate_to_last_step),
-            (QKeySequence("E"), self.add_step_to_current_group),
+            (QKeySequence("E"), self._protected_add_step_to_current_group),
         ]
         
         for key_seq, slot in shortcuts:
             shortcut = QShortcut(key_seq, self)
             shortcut.activated.connect(slot)
+
+    # protected wrapper methods for keyboard shortcuts
+    def _protected_delete_selected(self):
+        if not self._protocol_running:
+            self.delete_selected()
+
+    def _protected_copy_selected(self):
+        if not self._protocol_running:
+            self.copy_selected()
+
+    def _protected_cut_selected(self):
+        if not self._protocol_running:
+            self.cut_selected()
+
+    def _protected_paste_selected(self):
+        if not self._protocol_running:
+            self.paste_selected()
+
+    def _protected_undo_last(self):
+        if not self._protocol_running:
+            self.undo_last()
+
+    def _protected_redo_last(self):
+        if not self._protocol_running:
+            self.redo_last()
+
+    def _protected_select_all(self):
+        if not self._protocol_running:
+            self.select_all()
+
+    def _protected_deselect_rows(self):
+        if not self._protocol_running:
+            self.deselect_rows()
+
+    def _protected_invert_row_selection(self):
+        if not self._protocol_running:
+            self.invert_row_selection()
+
+    def _protected_insert_step(self):
+        if not self._protocol_running:
+            self.insert_step()
+
+    def _protected_insert_group(self):
+        if not self._protocol_running:
+            self.insert_group()
+
+    def _protected_paste_into(self):
+        if not self._protocol_running:
+            self.paste_into()
+
+    def _protected_add_step_to_current_group(self):
+        if not self._protocol_running:
+            self.add_step_to_current_group()
             
     def show_column_toggle_dialog(self):
         dialog = ColumnToggleDialog(self)
@@ -1409,8 +1486,7 @@ class PGCWidget(QWidget):
 
         if field in ("Video", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
-            if not self._protocol_running:
-                self.sync_to_state()
+            self.sync_to_state()
             QTimer.singleShot(0, self._reset_undo_snapshotted)
             return
 
@@ -1434,8 +1510,7 @@ class PGCWidget(QWidget):
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
 
-        if not self._protocol_running:
-            self.sync_to_state()
+        self.sync_to_state()
         QTimer.singleShot(0, self._reset_undo_snapshotted)
         
     def _set_field_for_group(self, group_item, field, value):
