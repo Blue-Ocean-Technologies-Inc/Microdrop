@@ -6,7 +6,7 @@ from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
-from device_viewer.views.electrode_view.default_settings import default_alphas
+from device_viewer.default_settings import default_alphas
 
 class MainModel(RouteLayerManager, Electrodes):
 

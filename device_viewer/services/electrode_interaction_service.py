@@ -7,7 +7,7 @@ from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
-from device_viewer.views.electrode_view.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
+from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
 
 logger = get_logger(__name__)
 

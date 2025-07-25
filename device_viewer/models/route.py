@@ -3,7 +3,7 @@ from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, S
 from pyface.undo.api import UndoManager
 from queue import Queue
 from collections import Counter
-from ..views.electrode_view.default_settings import ROUTE_COLOR_POOL
+from ..default_settings import ROUTE_COLOR_POOL
 
 # Abstract pathing object class
 class Route(HasTraits):
