@@ -17,11 +17,11 @@ class TraitChangeCommand(AbstractCommand):
         pass
 
     def undo(self):
-        logger.info(f"Undoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
+        logger.debug(f"Undoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
         setattr(self.event.object, self.event.name, self.event.old)
     
     def redo(self):
-        logger.info(f"Redoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
+        logger.debug(f"Redoing set {self.event.name} on {self.event.object} from {self.event.old} to {self.event.new}")
         setattr(self.event.object, self.event.name, self.event.new)
 
 class ListChangeCommand(AbstractCommand):
@@ -47,7 +47,7 @@ class ListChangeCommand(AbstractCommand):
         
         # Merge edits to the same list within x seconds of each other. Could possibly cause weird side effects in the undo system, but this seems like an easy general case
         if isinstance(other, ListChangeCommand) and other.event.object is self.event.object and merge_timestamp - self.timestamp <= 0.5:
-            logger.info(f"Merging {self.event} with {other.event}")
+            logger.debug(f"Merging {self.event} with {other.event}")
             self.event_stack.append({
                 "index": other.event.index,
                 "added": other.event.added.copy(),
@@ -60,7 +60,7 @@ class ListChangeCommand(AbstractCommand):
 
     def undo(self):
         for event in reversed(self.event_stack):
-            logger.info(f"Undoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
+            logger.debug(f"Undoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
             for _ in event["added"]:
                 self.event.object.pop(event["index"])
             for item in reversed(event["removed"]):
@@ -68,7 +68,7 @@ class ListChangeCommand(AbstractCommand):
 
     def redo(self):
         for event in self.event_stack:
-            logger.info(f"Redoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
+            logger.debug(f"Redoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
             for _ in event["removed"]:
                 self.event.object.pop(event["index"])
             for item in reversed(event["added"]):
@@ -84,14 +84,14 @@ class DictChangeCommand(AbstractCommand):
         pass
 
     def undo(self):
-        logger.info(f"Undoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
+        logger.debug(f"Undoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
         for key in self.event.added.keys():
             self.event.object.pop(key)
         for key, value in self.event.removed.items():
             self.event.object[key] = value
 
     def redo(self):
-        logger.info(f"Redoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
+        logger.debug(f"Redoing dict mod {self.event.object}, added {self.event.added}, removed {self.event.removed}")
         for key in self.event.removed.keys():
             self.event.object.pop(key)
         for key, value in self.event.added.items():
