@@ -69,6 +69,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
         self._protocol_running = False 
+        self._processing_palette_change = False
         self._last_published_step_id = None
         self._last_selected_step_id = None
         self._last_published_step_uid = None
@@ -247,6 +248,9 @@ class PGCWidget(QWidget):
             self.tree.expand(index)
 
     def clear_highlight(self):
+        if self._protocol_running or getattr(self, '_processing_palette_change', False):
+            return
+            
         dark = is_dark_mode()
         fg = QBrush(QColor("white" if dark else "black"))
         def clear_recursive(parent):
@@ -2314,13 +2318,41 @@ class PGCWidget(QWidget):
                 element.parameters["UID"] = str(self.state.get_next_uid())
             elif isinstance(element, ProtocolGroup):
                 self._assign_new_uids_to_all_elements(element.elements)
+
+    def _reset_palette_change_flag(self):
+        self._processing_palette_change = False
+
+    def _refresh_model_after_theme_change(self):
+        if self._protocol_running:
+            return            
+        
+        scroll_pos = self.save_scroll_positions()
+        saved_selection = self.save_selection()
+        
+        self._programmatic_change = True
+        try:
+            self._clean_group_parameters_recursive(self.state.sequence)            
+            # reload model from clean state
+            self.load_from_state()            
+        finally:
+            self._programmatic_change = False
+            
+        self.restore_scroll_positions(scroll_pos)
+        self.restore_selection(saved_selection)
         
     def event(self, event):
         if event.type() == QEvent.PaletteChange:
-            self.clear_highlight()
-            if hasattr(self, 'navigation_bar'):
-                self.navigation_bar.update_theme_styling()
-                self.information_panel.update_theme_styling()
+            self._processing_palette_change = True
+            try:                
+                self.clear_highlight()
+                if hasattr(self, 'navigation_bar'):
+                    self.navigation_bar.update_theme_styling()
+                if hasattr(self, 'information_panel'):
+                    self.information_panel.update_theme_styling()
+
+                QTimer.singleShot(50, self._refresh_model_after_theme_change)
+            finally:
+                QTimer.singleShot(100, self._reset_palette_change_flag)
         return super().event(event)
 
 if __name__ == "__main__":
