@@ -248,7 +248,7 @@ class PGCWidget(QWidget):
             self.tree.expand(index)
 
     def clear_highlight(self):
-        if self._protocol_running or getattr(self, '_processing_palette_change', False):
+        if getattr(self, '_processing_palette_change', False):
             return
             
         dark = is_dark_mode()
