@@ -1375,7 +1375,9 @@ class PGCWidget(QWidget):
         if not self._programmatic_change:
             # dont sync during protocol running
             if self._protocol_running:
-                return
+                if not self.navigation_bar.is_advanced_user_mode():
+                    return
+            
             self.model_to_state()
             self.protocolChanged.emit()
 
@@ -1383,7 +1385,7 @@ class PGCWidget(QWidget):
                 self._mark_protocol_modified()
             
     def model_to_state(self):
-        if self._protocol_running:
+        if self._protocol_running and not self.navigation_bar.is_advanced_user_mode():
             return
             
         self.state.sequence.clear()
@@ -1541,15 +1543,25 @@ class PGCWidget(QWidget):
     def setup_headers(self):
         for i, width in enumerate(protocol_grid_column_widths):
             self.tree.setColumnWidth(i, width)
+
+    def _is_advanced_mode_field_editable(self, field):
+        return field in ("Voltage", "Frequency")
             
     def on_item_changed(self, item):
         if self._programmatic_change:
             return
         if self._protocol_running:
-            # allow changes in advanced mode for specific scenarios
-            # if not self.navigation_bar.is_advanced_user_mode():
-            #     logger.debug("Blocking item change during protocol execution (not in advanced mode)")
-            return
+            if self.navigation_bar.is_advanced_user_mode():
+                parent = item.parent() or self.model.invisibleRootItem()
+                col = item.column()
+                if col < len(protocol_grid_fields):
+                    field = protocol_grid_fields[col]
+                    if not self._is_advanced_mode_field_editable(field):
+                        return
+                else:
+                    return
+            else:
+                return
             
         if not getattr(self, "_undo_snapshotted", False):
             self.state.snapshot_for_undo()
@@ -1564,7 +1576,8 @@ class PGCWidget(QWidget):
 
         if field in ("Video", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
-            self.sync_to_state()
+            if not self._protocol_running or (self._protocol_running and self.navigation_bar.is_advanced_user_mode() and self._is_advanced_mode_field_editable(field)):
+                self.sync_to_state()
             QTimer.singleShot(0, self._reset_undo_snapshotted)
             return
 
@@ -1588,7 +1601,8 @@ class PGCWidget(QWidget):
         if field in ("Trail Length", "Trail Overlay"):
             self._handle_trail_fields(parent, row)
 
-        self.sync_to_state()
+        if not self._protocol_running or (self._protocol_running and self.navigation_bar.is_advanced_user_mode() and self._is_advanced_mode_field_editable(field)):
+            self.sync_to_state()
         QTimer.singleShot(0, self._reset_undo_snapshotted)
         
     def _set_field_for_group(self, group_item, field, value):

@@ -26,7 +26,15 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         # prevent editing during protocol execution
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
-            return None
+            # during protocol execution, only allow editing in advanced mode for specific fields
+            if hasattr(self.parent_widget, 'navigation_bar') and self.parent_widget.navigation_bar.is_advanced_user_mode():
+                field = protocol_grid_fields[index.column()]
+                if field in ("Voltage", "Frequency"):
+                    pass
+                else:
+                    return None
+            else:
+                return None
         
         field = protocol_grid_fields[index.column()]
         
@@ -113,7 +121,13 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         # prevent data setting during protocol execution
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
-            return
+            # during protocol execution, only allow editing in advanced mode for specific fields
+            if hasattr(self.parent_widget, 'navigation_bar') and self.parent_widget.navigation_bar.is_advanced_user_mode():
+                field = protocol_grid_fields[index.column()]
+                if field not in ("Voltage", "Frequency"):
+                    return
+            else:
+                return
         
         field = protocol_grid_fields[index.column()]
         
