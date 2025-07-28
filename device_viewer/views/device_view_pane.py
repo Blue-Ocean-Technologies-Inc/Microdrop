@@ -142,8 +142,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         if self.current_electrode_layer:
             self.current_electrode_layer.remove_all_items_to_scene(self.scene)
-            self.scene.clear()
-            self.scene.update()
 
     def add_traits_event_to_undo_stack(self, event):
         command = None
@@ -329,7 +327,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
             logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
 
-            self.set_view_from_model(self.model)
             self.set_interaction_service(self.model)
             logger.info(f"Electrodes model set to {self.model}")
 
