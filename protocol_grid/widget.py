@@ -821,6 +821,7 @@ class PGCWidget(QWidget):
                 self._select_step_by_path(root_step_paths[-1])
 
         self.restore_scroll_positions(scroll_pos)
+        self._mark_protocol_modified()
 
     def add_step_to_current_group(self):
         if self._protocol_running:
@@ -882,6 +883,8 @@ class PGCWidget(QWidget):
                 new_step_path = current_path + [0]
                 self._select_step_by_path(new_step_path)
                 self.restore_scroll_positions(scroll_pos)
+
+        self._mark_protocol_modified()
 
     def _is_last_step_in_group(self, step_path):
         if not step_path:
