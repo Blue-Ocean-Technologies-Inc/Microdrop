@@ -1,11 +1,16 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene
-from PySide6.QtCore import Slot, QPointF, QTimer
+from PySide6.QtCore import Slot, QTimer, QStandardPaths
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
+import cv2
 import time
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
+from device_viewer.utils.camera import qimage_to_cv_image
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
@@ -20,6 +25,9 @@ class CameraControlWidget(QWidget):
         self.camera = None  # Will be set when a camera is selected
         self.available_cameras = None
         self.camera_formats = None  # Will be set when a camera is selected
+        self.recording_timer = QTimer()  # Timer to handle recording state
+        self.recording_timer.timeout.connect(lambda: None)  # Placeholder for recording logic
+        self.video_writer = None  # Video writer for recording
 
         self.capture_success_timer = QTimer() # Timer to reset the capture button style after a successful capture
         self.capture_success_timer.setSingleShot(True)
@@ -85,6 +93,9 @@ class CameraControlWidget(QWidget):
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
+        self.record_button.clicked.connect(self.video_record_start)
+        self.stop_record_button.clicked.connect(self.video_record_stop)
+        self.recording_timer.timeout.connect(self.video_record_frame_handler)
         self.camera_refresh_button.clicked.connect(self.populate_camera_list)
         self.camera_combo.currentIndexChanged.connect(self.set_camera_model)
         self.resolution_combo.currentIndexChanged.connect(self.set_resolution)
@@ -147,23 +158,64 @@ class CameraControlWidget(QWidget):
         """Generate a unique image ID for captured images."""
         return str(int(time.time()))
 
+    def get_transformed_frame(self):
+        """Apply a transformation to the video frame."""
+
+        image = QImage(self.scene.width(), self.scene.height(), QImage.Format_ARGB32)
+        image.fill(0xFF000000)  # Fill with black background
+
+        if self.model.camera_perspective:
+            painter = QPainter(image)
+            painter.setTransform(self.model.camera_perspective.transformation)
+            self.video_item.paint(painter, None, None)
+            painter.end()
+        return image
     # Callbacks
 
     @Slot()
     def capture_button_handler(self):
         """Callback for when the capture button is pressed."""
         self.capture_image_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]};")
-        image = QImage(self.scene.width(), self.scene.height(), QImage.Format_ARGB32)
-        image.fill(0xFF000000)  # Fill with black background
-
-        painter = QPainter(image)
-        painter.setTransform(self.model.camera_perspective.transformation)
-        self.video_item.paint(painter, None, None)
-        painter.end()
-
-        image.save(f"captured_image_{self.get_next_image_id()}.png", "PNG")
+        image = self.get_transformed_frame()
+        image.save(f"{QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)}/captured_image_{self.get_next_image_id()}.png", "PNG")
         self.capture_image_button.setStyleSheet(f"background-color: {SUCCESS_COLOR};")  # Indicate success with a different color
         self.capture_success_timer.start(1000)  # Reset style after 2 seconds
+
+    @Slot()
+    def video_record_stop(self):
+        """Stop video recording."""
+        self.recording_timer.stop()
+        logger.info("Video recording stopped.")
+        if self.video_writer:
+            self.video_writer.release()
+            logger.info("Video file saved.")
+            self.video_writer = None
+            self.record_button.setStyleSheet("")
+            self.stop_record_button.setStyleSheet("")
+
+    @Slot()
+    def video_record_start(self):
+        """Start video recording."""
+        if not self.video_writer:
+            self.video_writer = cv2.VideoWriter(f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4",
+                                        cv2.VideoWriter_fourcc(*'mp4v'),
+                                        30,  # Frame rate
+                                        (int(self.scene.width()), int(self.scene.height())))
+
+            self.recording_timer.start(1000/30) # Example: record every 1/30th of a second
+            self.record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
+            self.stop_record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
+            logger.info("Video recording started.")
+        else:
+            logger.warning("Video recording is already in progress.")
+        
+
+    @Slot()
+    def video_record_frame_handler(self):
+        """Handle video frame for recording."""
+        frame = self.get_transformed_frame()
+        if self.video_writer:
+            self.video_writer.write(qimage_to_cv_image(frame))
 
     @Slot()
     def reset_capture_button_style(self):
