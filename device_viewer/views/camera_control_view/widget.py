@@ -1,3 +1,4 @@
+from math import log
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene
 from PySide6.QtCore import Slot, QTimer, QStandardPaths
 from PySide6.QtGui import QImage, QPainter
@@ -5,6 +6,7 @@ from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, Q
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
 import time
+import subprocess
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
 from device_viewer.utils.camera import qimage_to_cv_image
@@ -28,6 +30,9 @@ class CameraControlWidget(QWidget):
         self.recording_timer = QTimer()  # Timer to handle recording state
         self.recording_timer.timeout.connect(lambda: None)  # Placeholder for recording logic
         self.video_writer = None  # Video writer for recording
+        self.recording_file_path = None  # Path to the video file being recorded
+        self.frame_count = 0  # Frame count for video recording
+        self.record_start_ts = None  # Timestamp when recording starts
 
         self.capture_success_timer = QTimer() # Timer to reset the capture button style after a successful capture
         self.capture_success_timer.setSingleShot(True)
@@ -189,7 +194,18 @@ class CameraControlWidget(QWidget):
         if self.video_writer:
             self.video_writer.release()
             logger.info("Video file saved.")
+
+            recording_duration = time.time() - self.record_start_ts
+            frames_per_second = self.frame_count / recording_duration if recording_duration > 0 else None
+
+            if frames_per_second:
+                # Use ffmpeg to recode with the correct frame rate
+                logger.info(f"Re-encoding video with {frames_per_second} FPS.")
+                subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4; rm {self.recording_file_path}""", shell=True)
+                logger.info("Video re-encoded successfully.")
+
             self.video_writer = None
+            self.recording_file_path = None  # Reset the recording file path
             self.record_button.setStyleSheet("")
             self.stop_record_button.setStyleSheet("")
 
@@ -197,12 +213,15 @@ class CameraControlWidget(QWidget):
     def video_record_start(self):
         """Start video recording."""
         if not self.video_writer:
-            self.video_writer = cv2.VideoWriter(f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4",
+            self.recording_file_path = f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4"
+            self.video_writer = cv2.VideoWriter(self.recording_file_path,
                                         cv2.VideoWriter_fourcc(*'mp4v'),
                                         30,  # Frame rate
                                         (int(self.scene.width()), int(self.scene.height())))
 
             self.recording_timer.start(1000/30) # Example: record every 1/30th of a second
+            self.frame_count = 0  # Reset frame count
+            self.record_start_ts = time.time()  # Set the start timestamp
             self.record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
             self.stop_record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
             logger.info("Video recording started.")
@@ -216,6 +235,7 @@ class CameraControlWidget(QWidget):
         frame = self.get_transformed_frame()
         if self.video_writer:
             self.video_writer.write(qimage_to_cv_image(frame))
+            self.frame_count += 1
 
     @Slot()
     def reset_capture_button_style(self):
