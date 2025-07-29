@@ -2,7 +2,8 @@ import sys
 import copy
 import json
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
-                               QFileDialog, QMessageBox, QApplication, QMainWindow, QPushButton)
+                               QFileDialog, QMessageBox, QApplication, QMainWindow, 
+                               QPushButton, QDialog)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
@@ -16,7 +17,7 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DIS
                                   group_defaults, protocol_grid_fields, protocol_grid_column_widths)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
-                                             InformationPanel)
+                                             InformationPanel, ExperimentCompleteDialog)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
@@ -288,8 +289,60 @@ class PGCWidget(QWidget):
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state() 
+
+        # handle auto-save and new experiment creation based on mode
+        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        
+        if advanced_mode:
+            # advanced mode: show dialog and handle response
+            self._handle_advanced_mode_completion()
+        else:
+            # regular mode: auto-save and create new experiment
+            self._handle_regular_mode_completion()
         
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
+
+    def _handle_regular_mode_completion(self):
+        """handle protocol completion in regular mode: auto-save + new experiment."""
+        try:
+            # auto-save current protocol with smart filename
+            protocol_data = self.state.to_flat_export()
+            protocol_name = self.protocol_state_tracker.get_protocol_name()
+            is_modified = self.protocol_state_tracker.is_modified()
+            
+            saved_path = self.experiment_manager.auto_save_protocol(
+                protocol_data, protocol_name, is_modified
+            )
+            
+            if saved_path:
+                # update protocol state tracker to reflect the auto-saved protocol
+                self.protocol_state_tracker.set_saved_protocol(saved_path)
+                self._update_protocol_display()
+                logger.info(f"Protocol auto-saved to: {saved_path}")
+            
+            # initialize new experiment
+            new_experiment_id = self.experiment_manager.initialize_new_experiment()
+            if new_experiment_id:
+                # update information panel with new experiment ID
+                self.information_panel.update_experiment_id(new_experiment_id)
+                logger.info(f"Started new experiment: {new_experiment_id}")
+            
+        except Exception as e:
+            logger.error(f"Error handling regular mode completion: {e}")
+
+    def _handle_advanced_mode_completion(self):
+        """handle protocol completion in advanced mode: show dialog."""       
+        try:
+            dialog = ExperimentCompleteDialog(self)
+            result = dialog.exec()
+            
+            if result == QDialog.Accepted:
+                # user chose YES: same as regular mode
+                self._handle_regular_mode_completion()
+            # if NO or closed: do nothing, stay with current experiment
+            
+        except Exception as e:
+            logger.error(f"Error handling advanced mode completion: {e}")
 
     def _cleanup_after_protocol_operation(self):
         if not getattr(self, '_programmatic_change', False):
@@ -1382,7 +1435,7 @@ class PGCWidget(QWidget):
             self.model_to_state()
             self.protocolChanged.emit()
 
-            if not getattr(self, '_loading_from_file', False):
+            if not getattr(self, '_loading_from_file', False) and not self._protocol_running:
                 self._mark_protocol_modified()
             
     def model_to_state(self):
@@ -2276,13 +2329,23 @@ class PGCWidget(QWidget):
         
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)")
         if file_name:
-            flat_data = self.state.to_flat_export()
-            with open(file_name, "w") as f:
-                json.dump(flat_data, f, indent=2)
-            
-            # update protocol state tracker
-            self.protocol_state_tracker.set_saved_protocol(file_name)
-            self._update_protocol_display()
+            try:
+                # check if saving to experiment directory
+                if self.experiment_manager.is_save_in_experiment_directory(file_name):
+                    # cleanup existing JSONs first
+                    self.experiment_manager.cleanup_experiment_jsons()
+                    logger.info("Overwriting existing JSONs in experiment directory")
+                
+                flat_data = self.state.to_flat_export()
+                with open(file_name, "w") as f:
+                    json.dump(flat_data, f, indent=2)
+                
+                # update protocol state tracker
+                self.protocol_state_tracker.set_saved_protocol(file_name)
+                self._update_protocol_display()
+                
+            except Exception as e:
+                logger.info(self, "Export Error", f"Failed to export: {str(e)}")
                 
     def import_from_json(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")

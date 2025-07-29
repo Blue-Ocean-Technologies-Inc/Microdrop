@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import subprocess
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -126,3 +127,71 @@ class ExperimentManager:
                     subprocess.run(["xdg-open", str(directory)])
             except Exception as e:
                 logger.error(f"Failed to open experiment directory: {e}")
+    
+    def is_save_in_experiment_directory(self, file_path):
+        """check if the file path is exactly in the current experiment directory."""
+        try:
+            file_path = Path(file_path)
+            experiment_dir = self.get_experiment_directory()
+            
+            return file_path.parent.resolve() == experiment_dir.resolve()
+        except Exception as e:
+            logger.error(f"Error checking if save is in experiment directory: {e}")
+            return False
+    
+    def cleanup_experiment_jsons(self):
+        """delete all JSON files in the current experiment directory."""
+        try:
+            experiment_dir = self.get_experiment_directory()
+            
+            # find and delete all .json files
+            json_files = list(experiment_dir.glob("*.json"))
+            for json_file in json_files:
+                json_file.unlink()
+                logger.info(f"Deleted existing JSON file: {json_file.name}")
+                
+        except Exception as e:
+            logger.error(f"Failed to cleanup experiment JSONs: {e}")
+    
+    def auto_save_protocol(self, protocol_data, protocol_name=None, is_modified=False):
+        """auto-save protocol to experiment directory with standard filename."""
+        try:
+            # cleanup existing JSONs first
+            self.cleanup_experiment_jsons()
+            
+            # create filename
+            if protocol_name and protocol_name != "untitled" and not is_modified:
+                # use current protocol name if not modified
+                filename = f"{protocol_name}.json"
+            else:
+                # use experiment ID if untitled or modified
+                filename = f"protocol_{self._experiment_id}.json"
+            file_path = self.get_experiment_directory() / filename
+            
+            # save protocol
+            with open(file_path, "w") as f:
+                json.dump(protocol_data, f, indent=2)
+            
+            logger.info(f"Auto-saved protocol to: {file_path}")
+            return str(file_path)
+            
+        except Exception as e:
+            logger.error(f"Failed to auto-save protocol: {e}")
+            return None 
+    
+    def initialize_new_experiment(self):
+        """initialize a new experiment with new ID and directory."""
+        try:
+            # generate new experiment ID
+            self._experiment_id = self._generate_experiment_id()
+            
+            # create new experiment directory
+            self._experiment_directory = self._base_experiments_dir / self._experiment_id
+            self._experiment_directory.mkdir(parents=True, exist_ok=True)
+            
+            logger.info(f"Initialized new experiment: {self._experiment_id}")
+            return self._experiment_id
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize new experiment: {e}")
+            return None

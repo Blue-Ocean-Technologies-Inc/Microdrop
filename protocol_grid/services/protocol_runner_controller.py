@@ -846,8 +846,8 @@ class ProtocolRunnerController(QObject):
         self._timer.stop()
         self._phase_timer.stop()
         
-        if self._should_show_completion_dialog():
-            self._show_experiment_complete_dialog()
+        # if self._should_show_completion_dialog():
+        #     self._show_experiment_complete_dialog()
         
         self.signals.protocol_finished.emit()
 
