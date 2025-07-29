@@ -5,6 +5,9 @@ from typing import List, Dict, Any
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import DeviceState
 from protocol_grid.state.protocol_state import ProtocolStep
+from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -490,3 +493,14 @@ class PathExecutionService:
             message_obj[str(channel)] = False
         
         return json.dumps(message_obj)
+    
+    @staticmethod
+    def publish_step_hardware_state(step, device_state, active_electrodes, preview_mode=False):
+        """Publish both voltage/frequency and electrode state for a step."""
+        VoltageFrequencyService.publish_step_voltage_frequency(step, preview_mode)
+        
+        if not preview_mode:
+            hardware_message = PathExecutionService.create_hardware_electrode_message(
+                device_state, active_electrodes
+            )
+            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
