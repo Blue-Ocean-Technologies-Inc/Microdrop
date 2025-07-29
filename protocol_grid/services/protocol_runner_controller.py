@@ -431,7 +431,7 @@ class ProtocolRunnerController(QObject):
             if step_uid:
                 self.signals.select_step.emit(step_uid)
 
-        VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
+        # VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
         
         self._is_running = False
         self._is_paused = False
@@ -805,7 +805,7 @@ class ProtocolRunnerController(QObject):
             self._on_step_completed_by_phases()
 
     def _on_protocol_finished(self):
-        VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
+        # VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
 
         # message with last executed step
         if self._current_index > 0 and self._current_index <= len(self._run_order):

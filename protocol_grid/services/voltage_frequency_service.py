@@ -70,25 +70,6 @@ class VoltageFrequencyService:
                 logger.error(f"Failed to publish fallback frequency: {fallback_e}")
     
     @staticmethod
-    def publish_default_voltage_frequency(preview_mode=False):
-        """publish default voltage (30V) and frequency (10000Hz) when protocol ends/stops."""
-        if preview_mode:
-            logger.info("Skipping voltage/frequency publishing in preview mode")
-            return
-        
-        try:
-            publish_message(topic=SET_VOLTAGE, message="30.0")
-            logger.info("Published default voltage: 30V (protocol end)")
-        except Exception as e:
-            logger.info(f"Failed to publish default voltage: {e}")
-        
-        try:
-            publish_message(topic=SET_FREQUENCY, message="10000")
-            logger.info("Published default frequency: 10000Hz (protocol end)")
-        except Exception as e:
-            logger.info(f"Failed to publish default frequency: {e}")
-    
-    @staticmethod
     def publish_immediate_voltage_frequency(voltage_str, frequency_str, preview_mode=False):
         """publish voltage/frequency immediately for advanced mode edits."""
         if preview_mode:
