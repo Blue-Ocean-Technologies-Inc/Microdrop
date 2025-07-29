@@ -32,7 +32,7 @@ from .consts import (scibots_icon_path, sidebar_menu_options,
                      hamburger_btn_stylesheet)
 
 from microdrop_utils._logger import get_logger
-logger = get_logger(__name__, level="CRITICAL")
+logger = get_logger(__name__)
 
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
@@ -70,11 +70,11 @@ class MicrodropApplication(TasksApplication):
     splash_screen = Instance(SplashScreen)
 
     def _icon_default(self):
-        icon_path = Path(__file__).parent / 'microdrop.ico'
+        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon2.png'
         return ImageResource(str(icon_path))
 
     def _splash_screen_default(self):
-        splash_image_path = Path(__file__).parent / 'scibots.jpg'
+        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo2.png'
         return SplashScreen(
             image=ImageResource(str(splash_image_path)),
             text="Microdrop-Next-Gen v.alpha"
