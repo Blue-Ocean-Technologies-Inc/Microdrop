@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QDialog
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
+from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from microdrop_utils._logger import get_logger
@@ -429,6 +430,8 @@ class ProtocolRunnerController(QObject):
             # select the current step that was being executed
             if step_uid:
                 self.signals.select_step.emit(step_uid)
+
+        VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
         
         self._is_running = False
         self._is_paused = False
@@ -487,6 +490,10 @@ class ProtocolRunnerController(QObject):
             step_info = self._run_order[self._current_index]
             step = step_info["step"]
             path = step_info["path"]
+            rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
+
+            logger.info(f"Executing step {self._current_index + 1}/{len(self._run_order)}: "
+                        f"{step.parameters.get('Description', 'Step')} (rep {rep_idx}/{rep_total})")
             
             self.signals.highlight_step.emit(path)
             
@@ -496,13 +503,10 @@ class ProtocolRunnerController(QObject):
             
             logger.info(f"Executing step {self._current_index + 1} with device state: {device_state}")
             
-            # recalculate execution plan if it doesn't exist (new step or first time)
-            if not self._current_execution_plan:
-                self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
-                self._current_phase_index = 0
-                self._total_step_phases_completed = 0
-                
-                self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
+            self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+            self._current_phase_index = 0
+            self._total_step_phases_completed = 0
+            self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
             
             current_time = time.time()
             
@@ -520,6 +524,7 @@ class ProtocolRunnerController(QObject):
             self._was_in_phase = False
             self._paused_phase_index = 0
 
+            VoltageFrequencyService.publish_step_voltage_frequency(step, self._preview_mode)
             step_timeout = PathExecutionService.calculate_step_execution_time(step, device_state)
             
             self._timer.timeout.disconnect()
@@ -800,6 +805,8 @@ class ProtocolRunnerController(QObject):
             self._on_step_completed_by_phases()
 
     def _on_protocol_finished(self):
+        VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
+
         # message with last executed step
         if self._current_index > 0 and self._current_index <= len(self._run_order):
             last_step_info = self._run_order[self._current_index - 1]
@@ -1250,3 +1257,33 @@ class ProtocolRunnerController(QObject):
         
         if hasattr(self, '_current_completion_dialog'):
             delattr(self, '_current_completion_dialog')
+
+    def update_step_voltage_frequency_in_plan(self, step_uid, new_voltage, new_frequency):
+        if not self._is_running or not self._run_order:
+            return False
+        
+        target_step_index = -1
+        for i, step_info in enumerate(self._run_order):
+            step = step_info["step"]
+            if step.parameters.get("UID", "") == step_uid:
+                target_step_index = i
+                break
+        
+        if target_step_index == -1:
+            return False
+        
+        # update the step parameters
+        target_step = self._run_order[target_step_index]["step"]
+        target_step.parameters["Voltage"] = str(new_voltage)
+        target_step.parameters["Frequency"] = str(new_frequency)
+        
+        # if its the currently running step, publish immediately
+        if target_step_index == self._current_index:
+            VoltageFrequencyService.publish_immediate_voltage_frequency(
+                str(new_voltage), str(new_frequency), self._preview_mode
+            )
+            logger.info(f"Updated voltage/frequency for currently running step: {new_voltage}V, {new_frequency}Hz")
+        else:
+            logger.info(f"Updated voltage/frequency for upcoming step: {new_voltage}V, {new_frequency}Hz")
+        
+        return True

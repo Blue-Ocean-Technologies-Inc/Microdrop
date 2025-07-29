@@ -21,6 +21,7 @@ from protocol_grid.services.device_viewer_listener_controller import DeviceViewe
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
+from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
                                               device_state_to_device_viewer_message)
@@ -1556,7 +1557,13 @@ class PGCWidget(QWidget):
                 col = item.column()
                 if col < len(protocol_grid_fields):
                     field = protocol_grid_fields[col]
-                    if not self._is_advanced_mode_field_editable(field):
+                    if self._is_advanced_mode_field_editable(field):
+                        logger.debug(f"Allowing advanced mode edit of field: {field}")
+                        
+                        # handle immediate voltage/frequency publishing for advanced mode
+                        if field in ("Voltage", "Frequency"):
+                            self._handle_advanced_mode_voltage_frequency_edit(item, parent, field)
+                    else:
                         return
                 else:
                     return
@@ -1604,6 +1611,42 @@ class PGCWidget(QWidget):
         if not self._protocol_running or (self._protocol_running and self.navigation_bar.is_advanced_user_mode() and self._is_advanced_mode_field_editable(field)):
             self.sync_to_state()
         QTimer.singleShot(0, self._reset_undo_snapshotted)
+
+    def _handle_advanced_mode_voltage_frequency_edit(self, item, parent, field):
+        """Handle voltage/frequency edits in advanced mode during protocol execution."""
+        if not self._protocol_running or not self.navigation_bar.is_advanced_user_mode():
+            return
+        
+        # get the step item and extract UID
+        desc_item = parent.child(item.row(), 0)
+        if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+        
+        step_uid = desc_item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
+        if not step_uid:
+            return
+        
+        # get current voltage and frequency values from the row
+        voltage_col = protocol_grid_fields.index("Voltage")
+        frequency_col = protocol_grid_fields.index("Frequency")
+        
+        voltage_item = parent.child(item.row(), voltage_col)
+        frequency_item = parent.child(item.row(), frequency_col)
+        
+        voltage_str = voltage_item.text() if voltage_item else "100.0"
+        frequency_str = frequency_item.text() if frequency_item else "10000"
+        
+        # validate values
+        voltage = VoltageFrequencyService.validate_voltage(voltage_str)
+        frequency = VoltageFrequencyService.validate_frequency(frequency_str)
+        
+        # update the protocol runner execution plan and publish if needed
+        preview_mode = self.navigation_bar.is_preview_mode()
+        success = self.protocol_runner.update_step_voltage_frequency_in_plan(
+            step_uid, voltage, frequency
+        )        
+        if success:
+            logger.info(f"Advanced mode edit: Updated step {step_uid} to {voltage}V, {frequency}Hz")
         
     def _set_field_for_group(self, group_item, field, value):
         """Recursively set a field for all steps and subgroups under a group, and set the group row's own value."""
