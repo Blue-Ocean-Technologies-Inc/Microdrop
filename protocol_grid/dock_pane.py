@@ -18,4 +18,18 @@ class PGCDockPane(DockPane):
     name = Str(PKG_name)
 
     def create_contents(self, parent):
-        return PGCWidget()
+        widget = PGCWidget()
+        
+        # pass plugin reference to widget if available
+        try:
+            if hasattr(self, 'task') and self.task and hasattr(self.task, 'window'):
+                app = self.task.window.application
+                if app and hasattr(app, 'plugin_manager'):
+                    for plugin in app.plugin_manager._plugins:
+                        if hasattr(plugin, 'id') and plugin.id == "protocol_grid.plugin":
+                            widget._protocol_grid_plugin = plugin
+                            break
+        except Exception as e:
+            return widget
+
+        return widget
