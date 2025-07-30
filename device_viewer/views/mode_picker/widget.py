@@ -51,15 +51,19 @@ class ModePicker(QWidget):
         self.button_redo.setToolTip("Redo")
 
         # btn_layout
-        btn_layout = QHBoxLayout()
+        btn_layout = QVBoxLayout()
+        row1_layout = QHBoxLayout()
+        row2_layout = QHBoxLayout()
         for btn in (self.button_draw, self.button_edit, self.button_autoroute, self.button_channel_edit):
             btn.setCheckable(True)
-            btn_layout.addWidget(btn)
-        btn_layout.addWidget(self.button_reset_routes)
-        btn_layout.addWidget(self.button_reset_electrodes)
-        btn_layout.addWidget(self.button_undo)
-        btn_layout.addWidget(self.button_redo)
-        
+            row1_layout.addWidget(btn)
+        btn_layout.addLayout(row1_layout)
+        row2_layout.addWidget(self.button_reset_routes)
+        row2_layout.addWidget(self.button_reset_electrodes)
+        row2_layout.addWidget(self.button_undo)
+        row2_layout.addWidget(self.button_redo)
+        btn_layout.addLayout(row2_layout)
+
         # Main layout
         layout = QVBoxLayout()
         
