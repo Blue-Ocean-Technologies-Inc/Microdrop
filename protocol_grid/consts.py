@@ -11,7 +11,6 @@ PKG_name = PKG.title().replace("_", " ")
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
 
 PROTOCOL_GRID_LISTENER_NAME = f"{PKG}_listener"
-PROTOCOL_GRID_DROPBOT_LISTENER_NAME = f"{PKG}_dropbot_listener"
 
 DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
@@ -20,12 +19,10 @@ DEVICE_NAME_CHANGED = "ui/device_viewer/device_name_changed"
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,
-        # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
-    ],
-    PROTOCOL_GRID_DROPBOT_LISTENER_NAME: [
         DROPBOT_DISCONNECTED,
         CHIP_INSERTED,
         DROPBOT_CONNECTED,
+        # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
 
