@@ -17,7 +17,8 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DIS
                                   group_defaults, protocol_grid_fields, protocol_grid_column_widths)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
-                                             InformationPanel, ExperimentCompleteDialog)
+                                             InformationPanel, ExperimentCompleteDialog,
+                                             DropbotDisconnectedBeforeRunDialogAction)
 from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
@@ -134,6 +135,52 @@ class PGCWidget(QWidget):
         self.load_from_state()
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
+
+        self._protocol_grid_plugin = None
+
+    # ---------- DropBot connection ----------
+    def _is_dropbot_connected(self):
+        if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'dropbot_connected'):
+            return self._protocol_grid_plugin.dropbot_connected
+        
+        # fallback
+        logger.info("Cannot determine dropbot connection status, assuming disconnected")
+        return False
+
+    def _check_dropbot_connection_and_show_dialog(self):
+        preview_mode = self.navigation_bar.is_preview_mode()
+        
+        if preview_mode:
+            return True
+        
+        if self._is_dropbot_connected():
+            return True
+        
+        dialog_action = DropbotDisconnectedBeforeRunDialogAction()
+        
+        def show_dialog_safe():
+            try:
+                preview_mode_requested = dialog_action.perform(self)
+                if preview_mode_requested:
+                    self.navigation_bar.preview_mode_checkbox.setChecked(True)
+                    logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
+                return False
+            except Exception as e:
+                logger.info(f"Error showing dropbot disconnection dialog: {e}")
+                return False
+        
+        # for immediate protocol execution requests, block and show dialog
+        try:
+            preview_mode_requested = dialog_action.perform(self)
+            if preview_mode_requested:
+                self.navigation_bar.preview_mode_checkbox.setChecked(True)
+                logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
+            return False
+        except Exception as e:
+            logger.info(f"Error showing dropbot disconnection dialog: {e}")
+            return False
+    #-----------------------------------------
+
 
     # ---------- Message Handler ----------    
     def on_device_viewer_message(self, message, topic):
@@ -599,6 +646,11 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
 
     def toggle_play_pause(self):
+        # check dropbot connection before any protocol operation
+        if not self.protocol_runner.is_running() and not self.protocol_runner.is_paused():
+            if not self._check_dropbot_connection_and_show_dialog():
+                return
+            
         if self.protocol_runner.is_running():
             self.navigation_bar.btn_play.setText(ICON_RESUME)
             self.navigation_bar.btn_play.setToolTip("Resume Protocol")
@@ -619,6 +671,9 @@ class PGCWidget(QWidget):
 
     def run_selected_step(self):
         if self._protocol_running:
+            return
+
+        if not self._check_dropbot_connection_and_show_dialog():
             return
         
         selected_paths = self.get_selected_paths()

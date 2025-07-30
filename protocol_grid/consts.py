@@ -2,6 +2,8 @@ import os
 
 from PySide6.QtCore import Qt
 
+from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
+
 # # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -9,6 +11,7 @@ PKG_name = PKG.title().replace("_", " ")
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
 
 PROTOCOL_GRID_LISTENER_NAME = f"{PKG}_listener"
+PROTOCOL_GRID_DROPBOT_LISTENER_NAME = f"{PKG}_dropbot_listener"
 
 DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
@@ -18,6 +21,11 @@ ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,
         # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
+    ],
+    PROTOCOL_GRID_DROPBOT_LISTENER_NAME: [
+        DROPBOT_DISCONNECTED,
+        CHIP_INSERTED,
+        DROPBOT_CONNECTED,
     ]
 }
 

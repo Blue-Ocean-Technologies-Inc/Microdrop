@@ -1,11 +1,15 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, 
-                               QCheckBox, QDialogButtonBox)
+                               QCheckBox, QDialogButtonBox, QApplication)
 from PySide6.QtGui import QAction, QCursor
 
 from pyface.action.api import Action
+from pyface.qt.QtWidgets import QTextBrowser
+from traits.api import Str
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
                                   ROW_TYPE_ROLE, STEP_TYPE)
@@ -725,6 +729,87 @@ class ExperimentCompleteDialog(QDialog):
             self.reject()
         else:
             super().keyPressEvent(event)
+
+
+class DropbotDisconnectedBeforeRunDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Dropbot Disconnected")
+        self.setModal(True)
+        self.setFixedSize(400, 350)
+
+        self.preview_mode_requested = False  # track whether preview mode was requested
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        img_path = Path(__file__).parent.parent / "dropbot_status" / "images" / "dropbot-power-usb.png"
+
+        html_content = f"""
+        <html>
+        <head></head>
+        <body>
+            <h3>DropBot is not connected.</h3>
+            <strong>Plug in the DropBot USB cable and power supply.<br></strong>
+            <img src='{img_path.as_posix()}' width="104" height="90">
+            <strong><br>Click "OK" after connecting the DropBot and try again.</strong>
+            <strong><br>OR</strong>
+            <strong><br>Turn on Preview Mode and try again.</strong>
+        </body>
+        </html>
+        """
+
+        browser = QTextBrowser()
+        browser.setHtml(html_content)
+        browser.setOpenExternalLinks(True)
+        browser.setAlignment(Qt.AlignCenter)
+        layout.addWidget(browser)
+
+        button_layout = QHBoxLayout()
+
+        preview_button = QPushButton("Turn on Preview Mode")
+        preview_button.clicked.connect(self._on_preview_mode_clicked)
+        button_layout.addWidget(preview_button)
+
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+
+        layout.addLayout(button_layout)
+
+    def _on_preview_mode_clicked(self):
+        self.preview_mode_requested = True
+        self.accept()
+
+    def was_preview_mode_requested(self):
+        return self.preview_mode_requested
+
+
+class DropbotDisconnectedBeforeRunDialogAction(Action):
+    name = Str("Dropbot Disconnected Before Run Dialog")
+    
+    def perform(self, parent_widget):
+        dialog_parent = None
+        
+        if parent_widget:
+            dialog_parent = parent_widget.window()
+            if not dialog_parent:
+                dialog_parent = parent_widget
+        
+        if not dialog_parent:
+            dialog_parent = QApplication.activeWindow()
+        
+        dialog = DropbotDisconnectedBeforeRunDialog(parent=dialog_parent)
+        result = dialog.exec()
+        
+        if result == QDialog.Accepted:
+            return dialog.was_preview_mode_requested()
+        return False
+
+    def close(self):
+        if hasattr(self, 'dialog'):
+            self.dialog.close()
+            self.dialog = None
 
 
 def make_separator():
