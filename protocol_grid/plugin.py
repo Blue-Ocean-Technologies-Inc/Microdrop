@@ -2,9 +2,10 @@
 from traits.api import List, Str, Bool
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
+
+from protocol_grid.services.message_listener import MessageListener
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
-
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
 
@@ -39,7 +40,7 @@ class ProtocolGridControllerUIPlugin(Plugin):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._setup_listener_actor()
+        self._setup_listener()
 
     #### Trait initializers ###################################################
 
@@ -52,23 +53,15 @@ class ProtocolGridControllerUIPlugin(Plugin):
                 dock_pane_factories=[PGCDockPane]
             )
         ]
-    
-    def _listener_actor_routine(self, message, topic):
-        if topic == CHIP_INSERTED:
-            logger.debug(f"Received {topic} signal")
-            self.dropbot_connected = True
-            logger.info(f"Dropbot connected: {self.dropbot_connected}")
-        elif topic == DROPBOT_DISCONNECTED:
-            logger.debug(f"Received {topic} signal")
-            self.dropbot_connected = False   
-            logger.info(f"Dropbot connected: {self.dropbot_connected}")
-        elif topic == DROPBOT_CONNECTED:
-            logger.debug(f"Received {topic} signal")
-            self.dropbot_connected = True
-            logger.info(f"Dropbot connected: {self.dropbot_connected}")
 
-    def _setup_listener_actor(self):
-        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=f"{PKG}_dropbot_listener",
-            class_method=self._listener_actor_routine
-        )
+    def _setup_listener(self):
+        self.listener = MessageListener()
+        self.listener.signal_emitter.dropbot_connection_changed.connect(self._on_dropbot_connection_changed)
+        logger.info("Protocol Grid Message Listener setup complete")
+
+    def _on_dropbot_connection_changed(self, connected):
+        self.dropbot_connected = connected
+        logger.info(f"Dropbot connection status changed: {connected}")
+    
+    def get_listener(self):
+        return getattr(self, 'listener', None)

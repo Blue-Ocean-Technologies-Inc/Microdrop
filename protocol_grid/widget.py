@@ -41,9 +41,8 @@ class PGCWidget(QWidget):
     def __init__(self, parent=None, state=None):
         super().__init__(parent)
 
-        self.device_viewer_listener = DeviceViewerListenerController()
-        self.device_viewer_listener.signal_emitter.device_viewer_message_received.connect(self.on_device_viewer_message)
-                
+        self._setup_listener()
+
         self.state = state or ProtocolState()
 
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run)
@@ -182,7 +181,38 @@ class PGCWidget(QWidget):
     #-----------------------------------------
 
 
-    # ---------- Message Handler ----------    
+    # ---------- Message Handling ----------    
+    def _setup_listener(self):
+        try:
+            app_instance = None
+            
+            qt_app = QApplication.instance()
+            if qt_app:
+                for widget in qt_app.allWidgets():
+                    if hasattr(widget, 'application') and widget.application:
+                        app_instance = widget.application
+                        break
+            
+            # find the protocol grid plugin and get its listener
+            if app_instance and hasattr(app_instance, 'plugin_manager'):
+                for plugin in app_instance.plugin_manager._plugins:
+                    if hasattr(plugin, 'id') and plugin.id == "protocol_grid.plugin":
+                        self._protocol_grid_plugin = plugin
+                        listener = plugin.get_listener()
+                        if listener:
+                            # connect to device viewer messages
+                            listener.signal_emitter.device_viewer_message_received.connect(
+                                self.on_device_viewer_message
+                            )
+                            logger.info("Connected to message listener")
+                            return
+                        break
+
+            logger.info("Could not connect to message listener")
+
+        except Exception as e:
+            logger.info(f"Error setting up message listener: {e}")
+
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return        
