@@ -1817,10 +1817,15 @@ class PGCWidget(QWidget):
             value = float(item.text())
             if field == "Volume Threshold":
                 item.setText(f"{value:.2f}")
+            elif field in ("Duration", "Repeat Duration", "Run Time"):
+                item.setText(f"{value:.1f}")
             else:
                 item.setText(f"{value:.1f}")
         except ValueError:
-            item.setText("0.0")
+            if field == "Volume Threshold":
+                item.setText("0.00")
+            else:
+                item.setText("0.0")
             
     def _handle_trail_fields(self, parent, row):
         try:
