@@ -83,7 +83,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setMinimum(0.00)
             editor.setMaximum(1.00)
             editor.setDecimals(2)
-            editor.setSingleStep(0.01)
+            editor.setSingleStep(0.05)
             return editor
         elif field in ("Repeat Duration", "Run Time"):
             editor = QDoubleSpinBox(parent)
@@ -143,7 +143,9 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                 item.emitDataChanged()
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)) and field != "Magnet Height":
             value = editor.value()
-            if isinstance(editor, QDoubleSpinBox):
+            if field == "Volume Threshold":
+                model.setData(index, f"{value:.2f}", Qt.EditRole)
+            elif isinstance(editor, QDoubleSpinBox):
                 model.setData(index, f"{value:.1f}", Qt.EditRole)
             else:
                 model.setData(index, str(int(value)), Qt.EditRole)
