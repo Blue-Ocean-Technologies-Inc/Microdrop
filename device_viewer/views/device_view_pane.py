@@ -1,7 +1,7 @@
 # enthought imports
 from math import log
 import dramatiq
-from traits.api import Instance, observe, Any, Str, provides
+from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.tasks.dock_pane import DockPane
