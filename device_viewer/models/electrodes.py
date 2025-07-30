@@ -107,3 +107,10 @@ class Electrodes(HasTraits):
     def reset_electrode_states(self):
         self.channels_states_map.clear()
         self.electrode_editing = None
+
+    def any_electrode_on(self) -> bool:
+        """
+        Check if any electrode is on
+        :return: True if any electrode is on, False otherwise
+        """
+        return any(self.channels_states_map.values())

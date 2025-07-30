@@ -1,4 +1,4 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float
 from pyface.undo.api import UndoManager
 import uuid
 
@@ -27,11 +27,17 @@ class MainModel(RouteLayerManager, Electrodes):
     # To change the mode, set the mode property and clean up any references/inconsistencies
     mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
 
+    # Editor related properties
     mode_name = Property(Str, observe="mode")
     editable = Property(Bool, observe="mode")
-
     message = Str("") # Message to display in the table view
 
+    # calibration related properties
+    liquid_capacitance = Instance(float, allow_none=True)  # The capacitance of the liquid in pF
+    filler_capacitance = Instance(float, allow_none=True)  # The capacitance of the filler in pF
+    electrode_area_scale = Instance(float, allow_none=True)  # The scale of the electrode area in mm^2
+
+    # message model properties
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
