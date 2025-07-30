@@ -38,6 +38,7 @@ class SvgUtil:
         self.electrodes: dict[str, ElectrodeDict] = {}
         self.connections = {}
         self.electrode_centers = {}
+        self.electrode_areas = {}
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -68,6 +69,7 @@ class SvgUtil:
         
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
+            self.electrode_areas = self.find_electrode_areas()
             if len(self.connections.items()) == 0:
                 self.neighbours = self.find_neighbours_all()
                 self.neighbours_to_points()
@@ -102,6 +104,12 @@ class SvgUtil:
         Get the polygons of the electrodes
         """
         return {k: Polygon(v['path'].reshape(-1, 2)) for k, v in self.electrodes.items()}
+    
+    def find_electrode_areas(self) -> dict[str, float]:
+        """
+        Find the areas of the electrodes
+        """
+        return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
 
     def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
         """
