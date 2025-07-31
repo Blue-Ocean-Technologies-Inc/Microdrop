@@ -70,11 +70,11 @@ class MicrodropApplication(TasksApplication):
     splash_screen = Instance(SplashScreen)
 
     def _icon_default(self):
-        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon2.png'
+        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon.png'
         return ImageResource(str(icon_path))
 
     def _splash_screen_default(self):
-        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo2.png'
+        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo_FHD.png'
         return SplashScreen(
             image=ImageResource(str(splash_image_path)),
             text="Microdrop-Next-Gen v.alpha"
