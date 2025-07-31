@@ -12,6 +12,7 @@ PROTOCOL_GRID_LISTENER_NAME = f"{PKG}_listener"
 
 DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
+CALIBRATION_DATA = "ui/calibration_data"
 
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [

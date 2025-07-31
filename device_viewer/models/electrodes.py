@@ -41,7 +41,7 @@ class Electrodes(HasTraits):
     svg_model = Instance(SvgUtil, allow_none=True, desc="Model for the SVG file if given")
 
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
-    # Note that channel-electride_id is one-to-many! So there is meaningful difference in acting on one or the other
+    # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
     channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
     electrode_ids_channels_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
 
@@ -115,3 +115,15 @@ class Electrodes(HasTraits):
         :return: True if any electrode is on, False otherwise
         """
         return any(self.channels_states_map.values())
+    
+    def get_electrode_areas_scaled(self) -> dict[str, float]:
+        """
+        Get the areas of all electrodes in mm^2
+        :return: Dictionary of electrode id to area in mm^2
+        """
+        if self.svg_model is not None:
+            areas = {}
+            for electrode_id, area in self.svg_model.electrode_areas.items():
+                areas[electrode_id] = area * (self.svg_model.pixel_scale ** 2)
+            return areas
+        return {}
