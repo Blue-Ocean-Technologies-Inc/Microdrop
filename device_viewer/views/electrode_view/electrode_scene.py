@@ -1,13 +1,13 @@
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QGraphicsScene
+from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEvent
 
 from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
+from .scale_edit_view import scale_edit_view
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, level='DEBUG')
-
 
 class ElectrodeScene(QGraphicsScene):
     """
@@ -149,3 +149,44 @@ class ElectrodeScene(QGraphicsScene):
             self.right_mouse_pressed = False
         
         super().mouseReleaseEvent(event)
+
+    def action_1(self):
+        """Placeholder for a context menu action."""
+        logger.info("Action 1 triggered")
+
+    def measure_filler_capacitance(self):
+        """Placeholder for measuring filler capacitance."""
+        if not self.interaction_service.model.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure filler capacitance.")
+            return
+        
+        if self.dockpane.last_capacitance is None:
+            logger.warning("No capacitance value available to set for filler capacitance.")
+            return
+        
+        self.interaction_service.model.filler_capacitance = self.dockpane.last_capacitance
+
+    def measure_liquid_capacitance(self):
+        """Placeholder for measuring liquid capacitance."""
+        if not self.interaction_service.model.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure liquid capacitance.")
+            return
+        
+        if self.dockpane.last_capacitance is None:
+            logger.warning("No capacitance value available to set for liquid capacitance.")
+            return
+
+        self.interaction_service.model.liquid_capacitance = self.dockpane.last_capacitance
+
+    def adjust_electrode_area(self):
+        """Placeholder for adjusting electrode area."""
+        self.interaction_service.model.configure_traits(view=scale_edit_view)
+
+    def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
+        context_menu = QMenu()
+        context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
+        context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
+        context_menu.addAction("Find Liquid", self.action_1)
+        context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
+        context_menu.exec(event.screenPos())
+        return super().contextMenuEvent(event)

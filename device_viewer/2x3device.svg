@@ -6,6 +6,7 @@
         <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
       </ns4:Work>
     </rdf:RDF>
+    <scale>1.1</scale>
   </ns0:metadata>
   <ns1:namedview pagecolor="#ffffff" bordercolor="#666666" ns2:document-rotation="0" borderopacity="1" objecttolerance="10" gridtolerance="10" guidetolerance="10" ns2:pageopacity="0" ns2:pageshadow="2" ns2:window-width="1920" ns2:window-height="1002" id="namedview237" showgrid="false" ns2:zoom="10.854672" ns2:cx="61.804865" ns2:cy="65.590317" ns2:window-x="-8" ns2:window-y="-8" ns2:window-maximized="1" ns2:current-layer="layer4" />
   <ns0:defs id="defs2" />
