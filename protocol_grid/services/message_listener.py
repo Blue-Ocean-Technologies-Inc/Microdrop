@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal, QObject
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from microdrop_utils._logger import get_logger
 from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
-from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED
+from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ class MessageListener(HasTraits):
     """
     signal_emitter = Instance(MessageListenerSignalEmitter)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
-    listener_name = Str("protocol_grid_message_listener")
+    listener_name = PROTOCOL_GRID_LISTENER_NAME
 
     def __init__(self, **traits):
         super().__init__(**traits)

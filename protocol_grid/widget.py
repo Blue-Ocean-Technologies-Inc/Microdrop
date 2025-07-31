@@ -41,7 +41,7 @@ class PGCWidget(QWidget):
     def __init__(self, parent=None, state=None):
         super().__init__(parent)
 
-        self._setup_listener()
+        self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
 
@@ -135,8 +135,6 @@ class PGCWidget(QWidget):
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
 
-        self._protocol_grid_plugin = None
-
     # ---------- DropBot connection ----------
     def _is_dropbot_connected(self):
         if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'dropbot_connected'):
@@ -184,31 +182,21 @@ class PGCWidget(QWidget):
     # ---------- Message Handling ----------    
     def _setup_listener(self):
         try:
-            app_instance = None
-            
-            qt_app = QApplication.instance()
-            if qt_app:
-                for widget in qt_app.allWidgets():
-                    if hasattr(widget, 'application') and widget.application:
-                        app_instance = widget.application
-                        break
-            
             # find the protocol grid plugin and get its listener
-            if app_instance and hasattr(app_instance, 'plugin_manager'):
-                for plugin in app_instance.plugin_manager._plugins:
-                    if hasattr(plugin, 'id') and plugin.id == "protocol_grid.plugin":
-                        self._protocol_grid_plugin = plugin
-                        listener = plugin.get_listener()
-                        if listener:
-                            # connect to device viewer messages
-                            listener.signal_emitter.device_viewer_message_received.connect(
-                                self.on_device_viewer_message
-                            )
-                            logger.info("Connected to message listener")
-                            return
-                        break
+            if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'get_listener'):
+                message_listener = self._protocol_grid_plugin.get_listener()
+                if message_listener and hasattr(message_listener, 'signal_emitter'):
+                    message_listener.signal_emitter.device_viewer_message_received.connect(
+                        self.on_device_viewer_message
+                    )
+                    logger.info("connected to message listener successfully")
+                    return
+                else:
+                    logger.info("message listener not available OR missing signal emitter")
+            else:
+                logger.info("protocol grid not available or missing get_listener_method")
 
-            logger.info("Could not connect to message listener")
+            logger.info("could not connect to message listener") 
 
         except Exception as e:
             logger.info(f"Error setting up message listener: {e}")
@@ -264,6 +252,24 @@ class PGCWidget(QWidget):
             self._processing_device_viewer_message = False
             self._programmatic_change = False        
     # -------------------------------------
+
+    # ---------- Droplet detection ----------
+    def _initialize_droplet_detection_service(self):
+        try:
+            # get service from plugin
+            if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'get_droplet_detection_service'):
+                droplet_detection_service = self._protocol_grid_plugin.get_droplet_detection_service()
+                if droplet_detection_service:
+                    self.protocol_runner.set_droplet_detection_service(droplet_detection_service)
+                    logger.info("droplet detection service connected to protocol runner")
+                else:
+                    logger.info("no droplet detection service available from plugin")
+            else:
+                logger.info("could not access droplet detection service from plugin")
+        except Exception as e:
+            logger.info(f"failed to initialize droplet detection service connection: {e}")
+
+    # ---------------------------------------
 
     # ---------- Information Panel Methods ----------
     def open_experiment_directory(self):
