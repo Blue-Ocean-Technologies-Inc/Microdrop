@@ -353,10 +353,11 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(f"Electrodes model set to {self.model}")
 
     def open_svg_dialog(self):
+        """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
-            channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map)
+            channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map, self.model.electrode_scale)
 
     @observe("model.camera_perspective.transformation")
     def camera_perspective_change_handler(self, event):

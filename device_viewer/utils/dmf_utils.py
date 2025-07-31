@@ -39,6 +39,7 @@ class SvgUtil:
         self.connections = {}
         self.electrode_centers = {}
         self.electrode_areas = {}
+        self.pixel_scale = 1.0 # Scale from pixels to mm (should be < 1). To scale the area, we need to square this value.
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -65,8 +66,10 @@ class SvgUtil:
             elif "Connections" in child.attrib.values():
                 pass
                 # self.connections = self.svg_to_points(child)
+            elif child.tag == "{http://www.w3.org/2000/svg}metadata":
+                self.pixel_scale = float(child.find("scale").text)
+                print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
 
-        
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
             self.electrode_areas = self.find_electrode_areas()
@@ -238,7 +241,7 @@ class SvgUtil:
 
         return electrodes
 
-def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int]):
+def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
     tree = ET.parse(old_filename)
     root = tree.getroot()
 
@@ -246,13 +249,17 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
     for child in root:
         if "Device" in child.attrib.values():
             electrodes = child
-    
-    if not electrodes:
+        elif child.tag == "{http://www.w3.org/2000/svg}metadata":
+            scale_element = child.find("scale")
+            if scale_element is not None:
+                scale_element.text = str(scale)
+
+    if electrodes is None:
         return
     
     for electrode in list(electrodes):
         channel = electrode_ids_channels_map[electrode.attrib["id"]]
-        if channel != None:
+        if channel is not None:
             electrode.attrib["data-channels"] = str(channel)
         else:
             electrode.attrib.pop("data-channels", None)

@@ -35,7 +35,7 @@ class MainModel(RouteLayerManager, Electrodes):
     # calibration related properties
     liquid_capacitance = Instance(float, allow_none=True)  # The capacitance of the liquid in pF
     filler_capacitance = Instance(float, allow_none=True)  # The capacitance of the filler in pF
-    electrode_area_scale = Instance(float, allow_none=True)  # The scale of the electrode area in mm^2
+    electrode_scale = Float(1.0)  # The scale of the electrode area in pixels to mm
 
     # message model properties
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
