@@ -5,7 +5,7 @@ from envisage.ui.tasks.api import TaskExtension
 from PySide6.QtWidgets import QApplication
 
 from protocol_grid.services.message_listener import MessageListener
-# from protocol_grid.services.droplet_detection_service import DropletDetectionService
+from protocol_grid.services.droplet_detection_service import DropletDetectionService
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
@@ -43,7 +43,7 @@ class ProtocolGridControllerUIPlugin(Plugin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._message_listener = None
-        # self._droplet_detection_service = DropletDetectionService()
+        self._droplet_detection_service = DropletDetectionService()
         self._setup_listener()
 
     #### Trait initializers ###################################################
@@ -76,34 +76,37 @@ class ProtocolGridControllerUIPlugin(Plugin):
     def _on_dropbot_connection_changed(self, connected):
         self.dropbot_connected = connected
         logger.info(f"Dropbot connection status changed: {connected}")
+        if connected:
+            self._initialize_droplet_detection_service()
     
     def get_listener(self):
         return self._message_listener
     
-    # def _initialize_droplet_detection_service(self):
-    #     try:
-    #         # access dropbot_controller from application
-    #         app_instance = None
-    #         qt_app = QApplication.instance()
-    #         if qt_app:
-    #             for widget in qt_app.allWidgets():
-    #                 if hasattr(widget, 'application') and widget.application:
-    #                     app_instance = widget.application
-    #                     break
+    def _initialize_droplet_detection_service(self):
+        try:
+            # access dropbot_controller from application
+            app_instance = None
+            qt_app = QApplication.instance()
+            if qt_app:
+                for widget in qt_app.allWidgets():
+                    if hasattr(widget, 'application') and widget.application:
+                        app_instance = widget.application
+                        break
             
-    #         if app_instance and hasattr(app_instance, 'plugin_manager'):
-    #             for plugin in app_instance.plugin_manager._plugins:
-    #                 if hasattr(plugin, 'id') and plugin.id == 'dropbot_controller.plugin':
-    #                     if hasattr(plugin, 'dropbot_controller'):
-    #                         self._droplet_detection_service.initialize(plugin.dropbot_controller)
-    #                         logger.info("droplet detection service initiaalized with dropbot controller")
-    #                         return
-    #                     break 
+            if app_instance and hasattr(app_instance, 'plugin_manager'):
+                logger.info("found an app instance with plugin_manager")
+                for plugin in app_instance.plugin_manager._plugins:
+                    if hasattr(plugin, 'id') and plugin.id == 'dropbot_controller.plugin':
+                        if hasattr(plugin, 'dropbot_controller'):
+                            self._droplet_detection_service.initialize(plugin.dropbot_controller)
+                            logger.info("droplet detection service initiaalized with dropbot controller")
+                            return
+                        break 
 
-    #         logger.info("could not find dropbot controller to initialize droplet detection service ")
+            logger.info("could not find dropbot controller to initialize droplet detection service ")
 
-    #     except Exception as e:
-    #         logger.info(f"failed to initialize droplet detection service: {e}")
+        except Exception as e:
+            logger.info(f"failed to initialize droplet detection service: {e}")
 
-    # def get_droplet_detection_service(self):
-    #     return self._droplet_detection_service  
+    def get_droplet_detection_service(self):
+        return self._droplet_detection_service  

@@ -1,11 +1,12 @@
 import time
 
 from PySide6.QtCore import QObject, Signal, QTimer
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from microdrop_utils._logger import get_logger
@@ -100,6 +101,170 @@ class ProtocolRunnerController(QObject):
         self._original_step_time_remaining = 0.0
 
         self._was_advanced_hardware_mode = False
+
+        # droplet detection state
+        self._droplet_detection_service = None
+        self._waiting_for_droplet_check = False
+        self._droplet_check_failed = False
+
+    def set_droplet_detection_service(self, service):
+        self._droplet_detection_service = service
+
+    def _should_perform_droplet_check(self):
+        if self._preview_mode:
+            return False
+        
+        if not self._droplet_detection_service:# or not self._droplet_detection_service.is_initialized():
+            logger.info("droplet detection service doesnt exist/not initialized in protocol runner")
+            return False
+        
+        # skip if current step has no electrodes/paths/loops
+        if self._current_index >= len(self._run_order):
+            return False
+        
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+    
+        if not device_state:
+            return False
+        
+        # check if step has any electrodes to check
+        has_individual_electrodes = any(device_state.activated_electrodes.values())
+        has_paths = device_state.has_paths()
+        
+        return has_individual_electrodes or has_paths
+    
+    def _perform_droplet_detection_check(self):
+        """perform droplet detection check at the end of a step."""
+        try:
+            step_info = self._run_order[self._current_index]
+            step = step_info["step"]
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            
+            if not device_state:
+                self._proceed_to_next_step()
+                return
+            
+            # get the electrodes that should have droplets (last phase electrodes)
+            target_electrodes = self._get_final_phase_electrodes(step, device_state)
+            
+            if not any(target_electrodes.values()):
+                # no electrodes to check
+                self._proceed_to_next_step()
+                return
+            
+            # flag to indicate waiting for droplet check
+            self._waiting_for_droplet_check = True
+            
+            # perform the check
+            result = self._droplet_detection_service.check_droplets_at_electrodes(
+                device_state, target_electrodes, self._preview_mode
+            )
+            
+            if result['success']:
+                logger.info("Droplet detection passed - all expected droplets found")
+                self._waiting_for_droplet_check = False
+                self._proceed_to_next_step()
+            else:
+                logger.info(f"Droplet detection failed - missing droplets at: {result['missing_electrodes']}")
+                self._handle_droplet_detection_failure(result)
+            
+        except Exception as e:
+            logger.info(f"Error during droplet detection check: {e}")
+            self._handle_droplet_detection_failure({
+                'expected_electrodes': [],
+                'detected_electrodes': [],
+                'missing_electrodes': []
+            })
+
+    def _handle_droplet_detection_failure(self, result):
+        """show dialog and pause."""
+        self._waiting_for_droplet_check = False
+        self._droplet_check_failed = True
+        
+        # pause
+        self._is_paused = True
+        self._pause_time = time.time()
+        self._status_timer.stop()
+        
+        # show dialog on main thread
+        QTimer.singleShot(50, lambda: self._show_droplet_detection_failure_dialog(result))
+        
+        # emit pause signal
+        self.signals.protocol_paused.emit()
+
+    def _show_droplet_detection_failure_dialog(self, result):
+        try:
+            dialog_action = DropletDetectionFailureDialogAction()
+            
+            parent_widget = self.parent()
+            if not parent_widget:                
+                parent_widget = QApplication.activeWindow()
+            
+            # show dialog
+            continue_anyway = dialog_action.perform(
+                result['expected_electrodes'],
+                result['detected_electrodes'], 
+                result['missing_electrodes'],
+                parent_widget
+            )
+            
+            if continue_anyway:
+                logger.info("User chose to continue despite droplet detection failure")
+                self._droplet_check_failed = False
+                self._resume_after_droplet_dialog()
+            else:
+                logger.info("User chose to stay paused due to droplet detection failure")
+                # stay paused - user can manually resume or stop
+                
+        except Exception as e:
+            logger.error(f"Error showing droplet detection failure dialog: {e}")
+            self._droplet_check_failed = False
+
+    def _resume_after_droplet_dialog(self):
+        if not self._is_paused:
+            return
+        
+        self._is_paused = False
+        self._droplet_check_failed = False
+        
+        current_time = time.time()
+        if self._pause_time:
+            pause_duration = current_time - self._pause_time
+            if self._start_time:
+                self._start_time += pause_duration
+            if self._step_start_time:
+                self._step_start_time += pause_duration
+        
+        self._pause_time = None
+        
+        self._status_timer.start()
+        
+        self._proceed_to_next_step()
+
+    def _proceed_to_next_step(self):
+        # reset step tracking
+        self._current_execution_plan = []
+        self._current_phase_index = 0
+        self._total_step_phases_completed = 0
+        self._phase_start_time = None
+        self._phase_elapsed_time = 0.0
+        self._remaining_phase_time = 0.0
+        self._remaining_step_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
+        
+        # clear droplet detection state
+        self._waiting_for_droplet_check = False
+        self._droplet_check_failed = False
+        
+        self._current_index += 1
+        
+        if self._current_index >= len(self._run_order):
+            self._on_protocol_finished()
+        else:
+            self._execute_next_step()
 
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
@@ -234,6 +399,11 @@ class ProtocolRunnerController(QObject):
                 self._step_start_time += pause_duration
             if self._phase_start_time:
                 self._phase_start_time += pause_duration
+
+        if self._droplet_check_failed:
+            self._droplet_check_failed = False
+            self._proceed_to_next_step()
+            return
         
         # handle resuming from message rejection pause
         if hasattr(self, '_message_rejected_pause') and self._message_rejected_pause:
@@ -708,6 +878,21 @@ class ProtocolRunnerController(QObject):
         
         return current_phase_electrodes
     
+    def _get_final_phase_electrodes(self, step, device_state):
+        """get electrodes that should be active in the final phase of the step."""
+        target_electrodes = {}
+        
+        # individual electrodes
+        target_electrodes.update(device_state.activated_electrodes)
+        
+        # electrodes from the last phase of paths/loops if any
+        if device_state.has_paths() and self._current_execution_plan:
+            last_phase = self._current_execution_plan[-1]
+            last_phase_electrodes = last_phase["activated_electrodes"]
+            target_electrodes.update(last_phase_electrodes)
+        
+        return target_electrodes
+    
     def _publish_advanced_pause_message(self):
         if not self._is_running or self._current_index >= len(self._run_order):
             return
@@ -767,6 +952,14 @@ class ProtocolRunnerController(QObject):
             
             if self._start_time:
                 self._elapsed_time = current_time - self._start_time
+
+        # perform droplet detection 
+        logger.info(f"should perform droplet check? {self._should_perform_droplet_check()}")
+        if self._should_perform_droplet_check():
+            self._perform_droplet_detection_check()
+        else:
+            self._proceed_to_next_step() 
+
         
         # Reset phase tracking
         self._current_execution_plan = []

@@ -812,6 +812,166 @@ class DropbotDisconnectedBeforeRunDialogAction(Action):
             self.dialog = None
 
 
+class DropletDetectionFailureDialog(QDialog):
+    
+    def __init__(self, expected_electrodes, detected_electrodes, missing_electrodes, parent=None):
+        super().__init__(parent)
+        self.expected_electrodes = expected_electrodes
+        self.detected_electrodes = detected_electrodes
+        self.missing_electrodes = missing_electrodes
+        self.setup_ui()
+        
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
+        self.setModal(True)
+    
+    def setup_ui(self):
+        self.setWindowTitle("Droplet Detection Failed")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Main message
+        main_message = QLabel("Droplet detection failed at the end of this step.")
+        main_message.setWordWrap(True)
+        main_message.setAlignment(Qt.AlignCenter)
+        main_message.setStyleSheet("QLabel { font-size: 14pt; font-weight: bold; color: #cc3300; }")
+        layout.addWidget(main_message)
+        
+        # Details section
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        details_layout.setContentsMargins(10, 10, 10, 10)
+        details_layout.setSpacing(8)
+        
+        expected_label = QLabel(f"Expected droplets at: {', '.join(self.expected_electrodes) if self.expected_electrodes else 'None'}")
+        expected_label.setWordWrap(True)
+        expected_label.setStyleSheet("QLabel { font-size: 11pt; }")
+        details_layout.addWidget(expected_label)
+        
+        detected_label = QLabel(f"Detected droplets at: {', '.join(self.detected_electrodes) if self.detected_electrodes else 'None'}")
+        detected_label.setWordWrap(True)
+        detected_label.setStyleSheet("QLabel { font-size: 11pt; }")
+        details_layout.addWidget(detected_label)
+        
+        if self.missing_electrodes:
+            missing_label = QLabel(f"Missing droplets at: {', '.join(self.missing_electrodes)}")
+            missing_label.setWordWrap(True)
+            missing_label.setStyleSheet("QLabel { font-size: 11pt; font-weight: bold; color: #cc3300; }")
+            details_layout.addWidget(missing_label)
+        
+        details_widget.setStyleSheet("QWidget { background-color: #f5f5f5; border: 1px solid #cccccc; border-radius: 5px; }")
+        layout.addWidget(details_widget)
+        
+        # Question
+        question_label = QLabel("Would you like to continue with the protocol anyway?")
+        question_label.setWordWrap(True)
+        question_label.setAlignment(Qt.AlignCenter)
+        question_label.setStyleSheet("QLabel { font-size: 12pt; margin: 10px 0; }")
+        layout.addWidget(question_label)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        no_button = QPushButton("NO (Stay Paused)")
+        no_button.setMinimumWidth(120)
+        no_button.clicked.connect(self.reject)
+        no_button.setStyleSheet("""
+            QPushButton {
+                background-color: #cc3300;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #aa2200;
+            }
+        """)
+        
+        yes_button = QPushButton("YES (Continue)")
+        yes_button.setDefault(True)
+        yes_button.setMinimumWidth(120)
+        yes_button.clicked.connect(self.accept)
+        yes_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0066cc;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0055aa;
+            }
+        """)
+        
+        button_layout.addWidget(yes_button)
+        button_layout.addWidget(no_button)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
+        self.setMinimumWidth(450)
+        self.adjustSize()
+        
+        # Center on parent if available
+        if self.parent():
+            parent_geometry = self.parent().geometry()
+            x = parent_geometry.x() + (parent_geometry.width() - self.width()) // 2
+            y = parent_geometry.y() + (parent_geometry.height() - self.height()) // 2
+            self.move(x, y)
+    
+    def show_detection_dialog(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        
+    def closeEvent(self, event):
+        self.reject()
+        event.accept()
+    
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.accept()
+        elif event.key() == Qt.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+
+class DropletDetectionFailureDialogAction(Action):
+    name = Str("Droplet Detection Failure Dialog")
+    
+    def perform(self, expected_electrodes, detected_electrodes, missing_electrodes, parent_widget):
+        dialog_parent = None
+        
+        if parent_widget:
+            dialog_parent = parent_widget.window()
+            if not dialog_parent:
+                dialog_parent = parent_widget
+        
+        if not dialog_parent:
+            dialog_parent = QApplication.activeWindow()
+        
+        dialog = DropletDetectionFailureDialog(
+            expected_electrodes, detected_electrodes, missing_electrodes, 
+            parent=dialog_parent
+        )
+        result = dialog.exec()
+        
+        return result == QDialog.Accepted
+
+    def close(self):
+        if hasattr(self, 'dialog'):
+            self.dialog.close()
+            self.dialog = None
+
+
 def make_separator():
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
