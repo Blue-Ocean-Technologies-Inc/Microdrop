@@ -1,11 +1,12 @@
 # enthought imports
+from venv import create
 import dramatiq
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame
 from pyface.qt.QtCore import Qt, QTimer, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
@@ -335,9 +336,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Add widgets to layouts
         left_stack.addWidget(self.camera_control_widget)
+        left_stack.addWidget(create_line())  # Add a separator line
         left_stack.addWidget(self.alpha_view_ui.control)
+        left_stack.addWidget(create_line())  # Add a separator line
         left_stack.addWidget(self.calibration_view)
+        left_stack.addWidget(create_line())  # Add a separator line
         left_stack.addWidget(self.layer_ui.control)
+        left_stack.addWidget(create_line())  # Add a separator line
         left_stack.addWidget(self.mode_picker_view)
         
         layout.addWidget(self.device_view)
@@ -388,3 +393,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _alpha_change(self, event):
         if self.video_item:
             self.video_item.setOpacity(self.model.get_alpha("video"))
+
+def create_line():
+    line = QFrame()
+    line.setStyleSheet("padding: 0px; margin: 0px;")
+    line.setFrameShape(QFrame.HLine)
+    line.setFrameShadow(QFrame.Sunken)
+    return line
