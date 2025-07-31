@@ -35,6 +35,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                                                                            num_available_channels=self.proxy.number_of_channels)
 
         # do actuation
+        logger.error(f'{self.proxy.number_of_channels}, {len(self.proxy.state_of_channels)}')
         self.proxy.state_of_channels = channel_states_map_model.channels_states_boolean_mask
 
         logger.info(f"{self.proxy.state_of_channels.sum()} number of channels actuated now")

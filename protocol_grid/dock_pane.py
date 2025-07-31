@@ -35,7 +35,7 @@ class PGCDockPane(DockPane):
 
                             # initialize services that depend on plugin
                             widget._setup_listener()
-                            # widget._initialize_droplet_detection_service()
+                            widget._initialize_droplet_detection_service()
                             
                             logger.info("protocol grid plugin references and services intialized via dock pane")
                             break
