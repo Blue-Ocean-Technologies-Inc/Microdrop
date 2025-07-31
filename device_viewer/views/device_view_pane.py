@@ -37,7 +37,7 @@ from device_viewer.views.route_selection_view.route_selection_view import RouteL
 from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 from device_viewer.utils.dmf_utils import channels_to_svg
-from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED
+from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 import json
 
 logger = get_logger(__name__)
@@ -188,6 +188,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.publish_electrode_update()
             logger.info("Electrode update sent")
 
+    @observe("model.liquid_capacitance, model.filler_capacitance, model.electrode_scale")
+    def calibration_change_handler(self, event=None):
+        """
+        Handle changes to the calibration values and publish a message.
+        """
+        self.publish_calibration_message()
+        logger.info("Calibration message published")
+
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
         self.model.undo_manager.undo()
@@ -248,6 +256,20 @@ class DeviceViewerDockPane(TraitsDockPane):
         for channel in self.model.channels_electrode_ids_map: # Make sure all channels are explicitly included
             message_obj[channel] = self.model.channels_states_map.get(channel, False)
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
+
+    def publish_calibration_message(self):
+        """
+        Publish a message with the current calibration values.
+        """
+        message = {
+            "liquid_capacitance": self.model.liquid_capacitance,
+            "filler_capacitance": self.model.filler_capacitance,
+            "electrode_areas": self.model.get_electrode_areas_scaled(),
+            "electrode_scale": self.model.electrode_scale
+        }
+        logger.warning(f"Publishing calibration message: {message}")
+        publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
+        logger.info(f"Published calibration message: {message}")
 
     def create_contents(self, parent):
         """Called when the task is activated."""
