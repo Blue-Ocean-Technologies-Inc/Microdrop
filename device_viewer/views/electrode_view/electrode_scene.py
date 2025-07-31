@@ -4,10 +4,10 @@ from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEv
 
 from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
+from .scale_edit_view import scale_edit_view
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, level='DEBUG')
-
 
 class ElectrodeScene(QGraphicsScene):
     """
@@ -179,11 +179,15 @@ class ElectrodeScene(QGraphicsScene):
 
         self.interaction_service.model.liquid_capacitance = self.dockpane.last_capacitance
 
+    def adjust_electrode_area(self):
+        """Placeholder for adjusting electrode area."""
+        self.interaction_service.model.configure_traits(view=scale_edit_view)
+
     def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
         context_menu = QMenu()
         context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
         context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
         context_menu.addAction("Find Liquid", self.action_1)
-        context_menu.addAction("Adjust Electrode Area", self.action_1)
+        context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
         context_menu.exec(event.screenPos())
         return super().contextMenuEvent(event)
