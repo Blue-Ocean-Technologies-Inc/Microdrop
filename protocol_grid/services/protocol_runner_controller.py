@@ -284,9 +284,9 @@ class ProtocolRunnerController(QObject):
         
             # show dialog
             continue_anyway = dialog_action.perform(
-                expected_channels,
-                detected_channels, 
-                missing_channels,
+                expected_channels_str,
+                detected_channels_str, 
+                missing_channels_str,
                 parent_widget
             )
             
