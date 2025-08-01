@@ -112,14 +112,20 @@ class ProtocolRunnerController(QObject):
 
     def _should_perform_droplet_check(self):
         if self._preview_mode:
+            logger.debug("Skipping droplet check: preview mode")
             return False
         
-        if not self._droplet_detection_service:# or not self._droplet_detection_service.is_initialized():
-            logger.info("droplet detection service doesnt exist/not initialized in protocol runner")
+        if not self._droplet_detection_service:
+            logger.debug("Skipping droplet check: no detection service")
+            return False
+        
+        if not self._droplet_detection_service.is_initialized():
+            logger.debug("Skipping droplet check: detection service not initialized")
             return False
         
         # skip if current step has no electrodes/paths/loops
         if self._current_index >= len(self._run_order):
+            logger.debug("Skipping droplet check: no current step")
             return False
         
         step_info = self._run_order[self._current_index]
@@ -127,13 +133,17 @@ class ProtocolRunnerController(QObject):
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
     
         if not device_state:
+            logger.debug("Skipping droplet check: no device state")
             return False
         
         # check if step has any electrodes to check
         has_individual_electrodes = any(device_state.activated_electrodes.values())
         has_paths = device_state.has_paths()
         
-        return has_individual_electrodes or has_paths
+        should_check = has_individual_electrodes or has_paths
+        logger.debug(f"Droplet check decision: has_individual={has_individual_electrodes}, has_paths={has_paths}, should_check={should_check}")
+        
+        return should_check
     
     def _perform_droplet_detection_check(self):
         """perform droplet detection check at the end of a step."""
@@ -961,23 +971,23 @@ class ProtocolRunnerController(QObject):
             self._proceed_to_next_step() 
 
         
-        # Reset phase tracking
-        self._current_execution_plan = []
-        self._current_phase_index = 0
-        self._total_step_phases_completed = 0
-        self._phase_start_time = None
-        self._phase_elapsed_time = 0.0
-        self._remaining_phase_time = 0.0
-        self._remaining_step_time = 0.0
-        self._was_in_phase = False
-        self._paused_phase_index = 0
+        # # Reset phase tracking
+        # self._current_execution_plan = []
+        # self._current_phase_index = 0
+        # self._total_step_phases_completed = 0
+        # self._phase_start_time = None
+        # self._phase_elapsed_time = 0.0
+        # self._remaining_phase_time = 0.0
+        # self._remaining_step_time = 0.0
+        # self._was_in_phase = False
+        # self._paused_phase_index = 0
         
-        self._current_index += 1
+        # self._current_index += 1
         
-        if self._current_index >= len(self._run_order):
-            self._on_protocol_finished()
-        else:
-            self._execute_next_step()
+        # if self._current_index >= len(self._run_order):
+        #     self._on_protocol_finished()
+        # else:
+        #     self._execute_next_step()
 
     def _on_step_timeout(self):
         if not self._is_running or self._is_paused:

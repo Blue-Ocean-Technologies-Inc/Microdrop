@@ -22,11 +22,14 @@ class DropletDetectionService(QObject):
         """initialize with dropbot controller reference."""
         self._dropbot_controller = dropbot_controller
         self._initialized = True
-        logger.info("Droplet detection service initialized")
+        logger.info(f"Droplet detection service initialized with controller: {type(dropbot_controller)}")
     
     def is_initialized(self):
         """check if service is properly initialized."""
-        return self._initialized and self._dropbot_controller is not None
+        is_init = self._initialized and self._dropbot_controller is not None
+        if not is_init:
+            logger.debug(f"Droplet detection service not initialized: _initialized={self._initialized}, _dropbot_controller={self._dropbot_controller is not None}")
+        return is_init
     
     def check_droplets_at_electrodes(self, device_state: DeviceState, 
                                    target_electrodes: Dict[str, bool],
@@ -86,6 +89,16 @@ class DropletDetectionService(QObject):
             }
         
         try:
+            # Check if dropbot controller has proxy
+            if not hasattr(self._dropbot_controller, 'proxy') or self._dropbot_controller.proxy is None:
+                logger.info("Dropbot controller proxy not available")
+                return {
+                    'success': False,
+                    'expected_electrodes': expected_electrode_ids,
+                    'detected_electrodes': [],
+                    'missing_electrodes': expected_electrode_ids.copy()
+                }
+            
             # convert electrode IDs to channel numbers
             expected_channels = []
             for electrode_id in expected_electrode_ids:
@@ -114,6 +127,8 @@ class DropletDetectionService(QObject):
             
             # call dropbot proxy get_drops
             expected_channels_array = np.array(expected_channels, dtype=int)
+            logger.info(f"Checking droplets on channels: {expected_channels}")
+            
             detected_drops = self._dropbot_controller.proxy.get_drops(
                 channels=expected_channels_array,
             )
@@ -122,6 +137,8 @@ class DropletDetectionService(QObject):
             detected_channels = set()
             for drop in detected_drops:
                 detected_channels.update(drop.tolist())
+            
+            logger.info(f"Detected drops on channels: {list(detected_channels)}")
             
             # convert detected channels back to electrode IDs
             detected_electrode_ids = []

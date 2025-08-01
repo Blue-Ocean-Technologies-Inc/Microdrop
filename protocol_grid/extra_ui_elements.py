@@ -847,12 +847,12 @@ class DropletDetectionFailureDialog(QDialog):
         
         expected_label = QLabel(f"Expected droplets at: {', '.join(self.expected_electrodes) if self.expected_electrodes else 'None'}")
         expected_label.setWordWrap(True)
-        expected_label.setStyleSheet("QLabel { font-size: 11pt; }")
+        expected_label.setStyleSheet("QLabel { font-size: 11pt; font-weight: bold; color: #cc3300; }")
         details_layout.addWidget(expected_label)
         
         detected_label = QLabel(f"Detected droplets at: {', '.join(self.detected_electrodes) if self.detected_electrodes else 'None'}")
         detected_label.setWordWrap(True)
-        detected_label.setStyleSheet("QLabel { font-size: 11pt; }")
+        detected_label.setStyleSheet("QLabel { font-size: 11pt; font-weight: bold; color: #cc3300; }")
         details_layout.addWidget(detected_label)
         
         if self.missing_electrodes:
