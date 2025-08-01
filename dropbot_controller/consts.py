@@ -23,6 +23,7 @@ SELF_TESTS_PROGRESS = 'dropbot/signals/self_tests_progress'
 REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
 DROPBOT_CONNECTED = 'dropbot/signals/connected'
 DROPBOT_DISCONNECTED = 'dropbot/signals/disconnected'
+DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
 START_DEVICE_MONITORING = "dropbot/requests/start_device_monitoring"
@@ -40,6 +41,7 @@ TEST_CHANNELS = "dropbot/requests/test_channels"
 CHIP_CHECK = "dropbot/requests/chip_check"
 ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'
 SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
+DETECT_DROPLETS = "dropbot/requests/detect_droplets"
 
 # Dropbot Error Topics
 DROPBOT_ERROR = 'dropbot/error'
