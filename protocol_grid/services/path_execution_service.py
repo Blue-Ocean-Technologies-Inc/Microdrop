@@ -457,26 +457,35 @@ class PathExecutionService:
         for electrode_id, channel in device_state.id_to_channel.items():
             all_channels.add(channel)
         
-        # initialize all channels to False
-        for channel in all_channels:
-            message_obj[str(channel)] = False
+        # collect channels that should be active
+        active_channels = set()
         
         for electrode_id, activated in active_electrodes.items():
             if activated:
                 # try direct electrode_id lookup first
                 if electrode_id in device_state.id_to_channel:
                     channel = device_state.id_to_channel[electrode_id]
-                    message_obj[str(channel)] = True
+                    active_channels.add(channel)
                 else:
                     # find electrode by channel number
                     try:
                         channel_num = int(electrode_id)
                         for elec_id, elec_channel in device_state.id_to_channel.items():
                             if elec_channel == channel_num:
-                                message_obj[str(channel_num)] = True
+                                active_channels.add(channel_num)
                                 break
                     except ValueError:
                         logger.warning(f"Could not convert electrode_id {electrode_id} to channel for hardware message")
+        
+        # optimization: only include channels that are True, unless all are False
+        if active_channels:
+            for channel in active_channels:
+                message_obj[str(channel)] = True
+            logger.debug(f"Optimized electrode message: {len(message_obj)} active channels out of {len(all_channels)} total")
+        else:
+            for channel in all_channels:
+                message_obj[str(channel)] = False
+            logger.debug(f"All electrodes False: sending full dict with {len(message_obj)} channels")
         
         return json.dumps(message_obj)
 
