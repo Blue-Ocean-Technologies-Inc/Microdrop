@@ -1,4 +1,5 @@
 import time
+import json
 
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
@@ -8,7 +9,7 @@ from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -103,24 +104,25 @@ class ProtocolRunnerController(QObject):
         self._was_advanced_hardware_mode = False
 
         # droplet detection state
-        self._droplet_detection_service = None
         self._waiting_for_droplet_check = False
         self._droplet_check_failed = False
+        self._droplet_check_timeout_timer = QTimer()
+        self._droplet_check_timeout_timer.setSingleShot(True)
+        self._droplet_check_timeout_timer.timeout.connect(self._on_droplet_check_timeout)
+        self._droplet_detection_timeout_ms = 1000  # 1 second timeout
+        self._expected_electrodes_for_check = []
 
-    def set_droplet_detection_service(self, service):
-        self._droplet_detection_service = service
+    def connect_droplet_detection_listener(self, message_listener):
+        """Connect to droplet detection response signals."""
+        if message_listener and hasattr(message_listener, 'signal_emitter'):
+            message_listener.signal_emitter.droplets_detected.connect(
+                self._on_droplets_detected_response
+            )
+            logger.info("Connected to droplet detection signals")
 
     def _should_perform_droplet_check(self):
         if self._preview_mode:
             logger.debug("Skipping droplet check: preview mode")
-            return False
-        
-        if not self._droplet_detection_service:
-            logger.debug("Skipping droplet check: no detection service")
-            return False
-        
-        if not self._droplet_detection_service.is_initialized():
-            logger.debug("Skipping droplet check: detection service not initialized")
             return False
         
         # skip if current step has no electrodes/paths/loops
@@ -159,39 +161,98 @@ class ProtocolRunnerController(QObject):
             # get the electrodes that should have droplets (last phase electrodes)
             target_electrodes = self._get_final_phase_electrodes(step, device_state)
             
-            if not any(target_electrodes.values()):
-                # no electrodes to check
+            # convert electrode IDs to channel numbers for comparison
+            expected_channels = []
+            for electrode_id, active in target_electrodes.items():
+                if active:
+                    if electrode_id in device_state.id_to_channel:
+                        channel = device_state.id_to_channel[electrode_id]
+                        expected_channels.append(int(channel))
+                    else:
+                        # try converting directly
+                        try:
+                            channel = int(electrode_id)
+                            if any(ch == channel for ch in device_state.id_to_channel.values()):
+                                expected_channels.append(channel)
+                        except ValueError:
+                            pass
+            
+            if not expected_channels:
+                logger.info("No channels to check for droplets")
                 self._proceed_to_next_step()
                 return
+            
+            self._expected_electrodes_for_check = expected_channels
             
             # flag to indicate waiting for droplet check
             self._waiting_for_droplet_check = True
             
-            # perform the check
-            result = self._droplet_detection_service.check_droplets_at_electrodes(
-                device_state, target_electrodes, self._preview_mode
-            )
+            # start timeout timer
+            self._droplet_check_timeout_timer.start(self._droplet_detection_timeout_ms)
             
-            if result['success']:
-                logger.info("Droplet detection passed - all expected droplets found")
-                self._waiting_for_droplet_check = False
-                self._proceed_to_next_step()
-            else:
-                logger.info(f"Droplet detection failed - missing droplets at: {result['missing_electrodes']}")
-                self._handle_droplet_detection_failure(result)
+            # send droplet detection request
+            publish_message(topic=DETECT_DROPLETS, message="")
+            logger.info(f"Sent droplet detection request for channels: {expected_channels}")
             
         except Exception as e:
-            logger.info(f"Error during droplet detection check: {e}")
-            self._handle_droplet_detection_failure({
-                'expected_electrodes': [],
-                'detected_electrodes': [],
-                'missing_electrodes': []
-            })
+            logger.error(f"Error during droplet detection request: {e}")
+            self._handle_droplet_detection_failure([], [])
 
-    def _handle_droplet_detection_failure(self, result):
+    def _on_droplets_detected_response(self, response_json):
+        if not self._waiting_for_droplet_check:
+            return
+        
+        try:
+            response = json.loads(response_json)
+            
+            # stop timeout timer
+            self._droplet_check_timeout_timer.stop()
+            self._waiting_for_droplet_check = False
+            
+            if response.get('success', False):
+                detected_channels = response.get('detected_channels', [])
+                detected_channels = [int(ch) for ch in detected_channels]
+                logger.info(f"Droplet detection successful - detected channels: {detected_channels}")
+                
+                # check
+                expected_set = set(self._expected_electrodes_for_check)
+                detected_set = set(detected_channels)
+                missing_channels = list(expected_set - detected_set)
+                
+                if not missing_channels:
+                    logger.info("All expected droplets found")
+                    self._proceed_to_next_step()
+                else:
+                    logger.info(f"Missing droplets on channels: {missing_channels}")
+                    self._handle_droplet_detection_failure(self._expected_electrodes_for_check, detected_channels)
+            else:
+                error_message = response.get('error', 'Unknown error')
+                logger.info(f"Droplet detection failed: {error_message}")
+                self._handle_droplet_detection_failure(self._expected_electrodes_for_check, [])
+                
+        except Exception as e:
+            logger.error(f"Error processing droplet detection response: {e}")
+            self._handle_droplet_detection_failure(self._expected_electrodes_for_check, [])
+
+    def _on_droplet_check_timeout(self):
+        if not self._waiting_for_droplet_check:
+            return
+        
+        logger.warning("Droplet detection request timed out")
+        self._waiting_for_droplet_check = False
+        
+        # retry
+        logger.info("Retrying droplet detection request")
+        QTimer.singleShot(100, self._perform_droplet_detection_check)
+
+    def _handle_droplet_detection_failure(self, expected_channels, detected_channels):
         """show dialog and pause."""
         self._waiting_for_droplet_check = False
         self._droplet_check_failed = True
+
+        # Ensure all channels are integers for consistent handling
+        expected_channels = [int(ch) for ch in expected_channels]
+        detected_channels = [int(ch) for ch in detected_channels]
         
         # pause
         self._is_paused = True
@@ -199,12 +260,14 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         
         # show dialog on main thread
-        QTimer.singleShot(50, lambda: self._show_droplet_detection_failure_dialog(result))
+        QTimer.singleShot(50, lambda: self._show_droplet_detection_failure_dialog(
+            expected_channels, detected_channels
+        ))
         
         # emit pause signal
         self.signals.protocol_paused.emit()
 
-    def _show_droplet_detection_failure_dialog(self, result):
+    def _show_droplet_detection_failure_dialog(self, expected_channels, detected_channels):
         try:
             dialog_action = DropletDetectionFailureDialogAction()
             
@@ -212,11 +275,18 @@ class ProtocolRunnerController(QObject):
             if not parent_widget:                
                 parent_widget = QApplication.activeWindow()
             
+            missing_channels = list(set(expected_channels) - set(detected_channels))
+
+            # Convert all channel numbers to strings for display
+            expected_channels_str = [str(ch) for ch in expected_channels]
+            detected_channels_str = [str(ch) for ch in detected_channels]
+            missing_channels_str = [str(ch) for ch in missing_channels]
+        
             # show dialog
             continue_anyway = dialog_action.perform(
-                result['expected_electrodes'],
-                result['detected_electrodes'], 
-                result['missing_electrodes'],
+                expected_channels,
+                detected_channels, 
+                missing_channels,
                 parent_widget
             )
             

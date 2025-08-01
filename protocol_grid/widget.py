@@ -186,9 +186,13 @@ class PGCWidget(QWidget):
             if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'get_listener'):
                 message_listener = self._protocol_grid_plugin.get_listener()
                 if message_listener and hasattr(message_listener, 'signal_emitter'):
+                    # connect to device viewer messages
                     message_listener.signal_emitter.device_viewer_message_received.connect(
                         self.on_device_viewer_message
                     )
+                    # connect protocol runner to droplet detection responses
+                    self.protocol_runner.connect_droplet_detection_listener(message_listener)
+
                     logger.info("connected to message listener successfully")
                     return
                 else:
@@ -252,24 +256,6 @@ class PGCWidget(QWidget):
             self._processing_device_viewer_message = False
             self._programmatic_change = False        
     # -------------------------------------
-
-    # ---------- Droplet detection ----------
-    def _initialize_droplet_detection_service(self):
-        try:
-            # get service from plugin
-            if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'get_droplet_detection_service'):
-                droplet_detection_service = self._protocol_grid_plugin.get_droplet_detection_service()
-                if droplet_detection_service:
-                    self.protocol_runner.set_droplet_detection_service(droplet_detection_service)
-                    logger.info("droplet detection service connected to protocol runner")
-                else:
-                    logger.info("no droplet detection service available from plugin")
-            else:
-                logger.info("could not access droplet detection service from plugin")
-        except Exception as e:
-            logger.info(f"failed to initialize droplet detection service connection: {e}")
-
-    # ---------------------------------------
 
     # ---------- Information Panel Methods ----------
     def open_experiment_directory(self):
