@@ -44,10 +44,10 @@ class ProtocolGridControllerUIPlugin(Plugin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._message_listener = None
-        self._droplet_detection_service = DropletDetectionService()
-        self._dropbot_controller_plugin = None
-        self._initialization_attempts = 0
-        self._max_initialization_attempts = 10
+        # self._droplet_detection_service = DropletDetectionService()
+        # self._dropbot_controller_plugin = None
+        # self._initialization_attempts = 0
+        # self._max_initialization_attempts = 10
         self._setup_listener()
 
     #### Trait initializers ###################################################
@@ -80,100 +80,100 @@ class ProtocolGridControllerUIPlugin(Plugin):
     def _on_dropbot_connection_changed(self, connected):
         self.dropbot_connected = connected
         logger.info(f"Dropbot connection status changed: {connected}")
-        if connected:
-            self._initialization_attempts = 0
-            self._initialize_droplet_detection_service()
+        # if connected:
+        #     self._initialization_attempts = 0
+        #     self._initialize_droplet_detection_service()
     
     def get_listener(self):
         return self._message_listener
     
-    def _initialize_droplet_detection_service(self):
-        try:
-            self._initialization_attempts += 1
+    # def _initialize_droplet_detection_service(self):
+    #     try:
+    #         self._initialization_attempts += 1
 
-            # first method: check if we already have dropbot_controller plugin reference
-            if self._dropbot_controller_plugin and hasattr(self._dropbot_controller_plugin, 'dropbot_controller'):
-                self._droplet_detection_service.initialize(self._dropbot_controller_plugin.dropbot_controller)
-                logger.info("droplet detection service initializaed with cached dropbot controller")
-                return
+    #         # first method: check if we already have dropbot_controller plugin reference
+    #         if self._dropbot_controller_plugin and hasattr(self._dropbot_controller_plugin, 'dropbot_controller'):
+    #             self._droplet_detection_service.initialize(self._dropbot_controller_plugin.dropbot_controller)
+    #             logger.info("droplet detection service initializaed with cached dropbot controller")
+    #             return
             
-            # second method: find dropbot_controller plugin from application
-            if self._find_dropbot_controller_plugin():
-                if hasattr(self._dropbot_controller_plugin, 'dropbot_controller'):
-                    self._droplet_detection_service.initialize(self._dropbot_controller_plugin.dropbot_controller) 
-                    logger.info("droplet detection service intialized by finding dropbot_controller plugin from application")
-                    return
-                else:
-                    logger.info(f"dropbot_controller plugin found but dropbot_controller attribute not found (attemp {self._initialization_attempts})")
+    #         # second method: find dropbot_controller plugin from application
+    #         if self._find_dropbot_controller_plugin():
+    #             if hasattr(self._dropbot_controller_plugin, 'dropbot_controller'):
+    #                 self._droplet_detection_service.initialize(self._dropbot_controller_plugin.dropbot_controller) 
+    #                 logger.info("droplet detection service intialized by finding dropbot_controller plugin from application")
+    #                 return
+    #             else:
+    #                 logger.info(f"dropbot_controller plugin found but dropbot_controller attribute not found (attemp {self._initialization_attempts})")
             
-            # third method: retry after a delay
-            if self._initialization_attempts < self._max_initialization_attempts:
-                logger.info(f"retrying droplet detection service initializaiton (attempt {self._initialization_attempts}/{self._max_initialization_attempts})")
-                QTimer.singleShot(500, self._initialize_droplet_detection_service())
-            else:
-                logger.info("could not initialize droplet detection service after max. attempts")
+    #         # third method: retry after a delay
+    #         if self._initialization_attempts < self._max_initialization_attempts:
+    #             logger.info(f"retrying droplet detection service initializaiton (attempt {self._initialization_attempts}/{self._max_initialization_attempts})")
+    #             QTimer.singleShot(500, self._initialize_droplet_detection_service())
+    #         else:
+    #             logger.info("could not initialize droplet detection service after max. attempts")
 
-        except Exception as e:
-            logger.info(f"failed to initialize droplet detection service (attempt {self._initialization_attempts}/{self._max_initialization_attempts}): {e}")
+    #     except Exception as e:
+    #         logger.info(f"failed to initialize droplet detection service (attempt {self._initialization_attempts}/{self._max_initialization_attempts}): {e}")
 
-            # retry if not exceeded maximum initialization attempts
-            if self._initialization_attempts < self._max_initialization_attempts:
-                logger.info(f"retrying droplet detection service initializaiton (attempt {self._initialization_attempts}/{self._max_initialization_attempts})")
-                QTimer.singleShot(500, self._initialize_droplet_detection_service())
+    #         # retry if not exceeded maximum initialization attempts
+    #         if self._initialization_attempts < self._max_initialization_attempts:
+    #             logger.info(f"retrying droplet detection service initializaiton (attempt {self._initialization_attempts}/{self._max_initialization_attempts})")
+    #             QTimer.singleShot(500, self._initialize_droplet_detection_service())
 
-    def _find_dropbot_controller_plugin(self):
-        """find and cache the dropbot_controller plugin and dropbot_controller attribute"""
-        try:
-            # first method: try via application instance
-            app_instance = None
-            qt_app = QApplication.instance()
-            if qt_app:
-                for widget in qt_app.allWidgets():
-                    if hasattr(widget, 'application') and widget.application:
-                        app_instance = widget.application
-                        break
+    # def _find_dropbot_controller_plugin(self):
+    #     """find and cache the dropbot_controller plugin and dropbot_controller attribute"""
+    #     try:
+    #         # first method: try via application instance
+    #         app_instance = None
+    #         qt_app = QApplication.instance()
+    #         if qt_app:
+    #             for widget in qt_app.allWidgets():
+    #                 if hasattr(widget, 'application') and widget.application:
+    #                     app_instance = widget.application
+    #                     break
             
-            if app_instance:
-                logger.info("found an app instance with Qt Widgets")
+    #         if app_instance:
+    #             logger.info("found an app instance with Qt Widgets")
 
-                # try via plugin_manager._plugins
-                if hasattr(app_instance, 'plugin_manager') and hasattr(app_instance.plugin_manager, '_plugins'):
-                    for plugin in app_instance.plugin_manager._plugins:
-                        if hasattr(plugin, 'id'):
-                            logger.debug(f"Checking plugin with ID: {plugin.id}")
-                            if plugin.id == 'dropbot_controller.plugin':
-                                self._dropbot_controller_plugin = plugin
-                                logger.info(f"Found dropbot controller plugin via plugin_manager._plugins: {plugin}")
-                                return True
+    #             # try via plugin_manager._plugins
+    #             if hasattr(app_instance, 'plugin_manager') and hasattr(app_instance.plugin_manager, '_plugins'):
+    #                 for plugin in app_instance.plugin_manager._plugins:
+    #                     if hasattr(plugin, 'id'):
+    #                         logger.debug(f"Checking plugin with ID: {plugin.id}")
+    #                         if plugin.id == 'dropbot_controller.plugin':
+    #                             self._dropbot_controller_plugin = plugin
+    #                             logger.info(f"Found dropbot controller plugin via plugin_manager._plugins: {plugin}")
+    #                             return True
                 
-                # try via plugins attribute
-                if hasattr(app_instance, 'plugins'):
-                    for plugin in app_instance.plugins:
-                        if hasattr(plugin, 'id'):
-                            logger.debug(f"Checking plugin with ID: {plugin.id}")
-                            if plugin.id == 'dropbot_controller.plugin':
-                                self._dropbot_controller_plugin = plugin
-                                logger.info(f"Found dropbot controller plugin via plugins: {plugin}")
-                                return True
+    #             # try via plugins attribute
+    #             if hasattr(app_instance, 'plugins'):
+    #                 for plugin in app_instance.plugins:
+    #                     if hasattr(plugin, 'id'):
+    #                         logger.debug(f"Checking plugin with ID: {plugin.id}")
+    #                         if plugin.id == 'dropbot_controller.plugin':
+    #                             self._dropbot_controller_plugin = plugin
+    #                             logger.info(f"Found dropbot controller plugin via plugins: {plugin}")
+    #                             return True
 
-            # second method: try direct access via application attribute
-            if hasattr(self, 'application') and self.application:
-                app_instance = self.application
-                logger.debug("Found application instance via self.application")
+    #         # second method: try direct access via application attribute
+    #         if hasattr(self, 'application') and self.application:
+    #             app_instance = self.application
+    #             logger.debug("Found application instance via self.application")
                 
-                if hasattr(app_instance, 'plugin_manager') and hasattr(app_instance.plugin_manager, '_plugins'):
-                    for plugin in app_instance.plugin_manager._plugins:
-                        if hasattr(plugin, 'id') and plugin.id == 'dropbot_controller.plugin':
-                            self._dropbot_controller_plugin = plugin
-                            logger.info(f"Found dropbot controller plugin via self.application: {plugin}")
-                            return True
+    #             if hasattr(app_instance, 'plugin_manager') and hasattr(app_instance.plugin_manager, '_plugins'):
+    #                 for plugin in app_instance.plugin_manager._plugins:
+    #                     if hasattr(plugin, 'id') and plugin.id == 'dropbot_controller.plugin':
+    #                         self._dropbot_controller_plugin = plugin
+    #                         logger.info(f"Found dropbot controller plugin via self.application: {plugin}")
+    #                         return True
             
-            logger.info("Could not find dropbot controller plugin")
-            return False
+    #         logger.info("Could not find dropbot controller plugin")
+    #         return False
         
-        except Exception as e:
-            logger.info(f"Error searching for dropbot controller plugin: {e}")
-            return False
+    #     except Exception as e:
+    #         logger.info(f"Error searching for dropbot controller plugin: {e}")
+    #         return False
                 
-    def get_droplet_detection_service(self):
-        return self._droplet_detection_service  
+    # def get_droplet_detection_service(self):
+    #     return self._droplet_detection_service  

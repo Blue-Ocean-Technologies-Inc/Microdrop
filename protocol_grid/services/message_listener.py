@@ -5,7 +5,8 @@ from PySide6.QtCore import Signal, QObject
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from microdrop_utils._logger import get_logger
-from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
+from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
+                                       DROPBOT_CONNECTED, DROPLETS_DETECTED)
 from protocol_grid.consts import DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME
 
 logger = get_logger(__name__)
@@ -14,6 +15,7 @@ logger = get_logger(__name__)
 class MessageListenerSignalEmitter(QObject):
     device_viewer_message_received = Signal(str, str)  # message, topic
     dropbot_connection_changed = Signal(bool)  # dropbot connection status
+    droplets_detected = Signal(str)  # droplet detection response
 
 
 class MessageListener(HasTraits):
@@ -42,6 +44,10 @@ class MessageListener(HasTraits):
             elif topic == DROPBOT_DISCONNECTED:
                 logger.info(f"Received dropbot disconnected signal: {topic}")
                 self.signal_emitter.dropbot_connection_changed.emit(False)
+
+            elif topic == DROPLETS_DETECTED:
+                logger.info(f"Received droplets detected response: {topic}")
+                self.signal_emitter.droplets_detected.emit(message)
                 
             else:
                 logger.info(f"Unhandled message topic: {topic}")

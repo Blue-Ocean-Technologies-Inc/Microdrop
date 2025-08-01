@@ -2,7 +2,8 @@ import os
 
 from PySide6.QtCore import Qt
 
-from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
+from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
+                                       DROPBOT_CONNECTED, DROPLETS_DETECTED)
 
 # # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -22,6 +23,7 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_DISCONNECTED,
         CHIP_INSERTED,
         DROPBOT_CONNECTED,
+        DROPLETS_DETECTED,
         # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
