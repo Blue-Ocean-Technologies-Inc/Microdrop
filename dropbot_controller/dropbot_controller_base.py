@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+import time
 
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
 from traits.api import Instance, Dict
@@ -17,6 +18,7 @@ from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEV
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
+from .services.global_proxy_state_manager import GlobalProxyStateManager
 
 from traits.api import HasTraits, provides, Bool, Str
 from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
@@ -36,6 +38,9 @@ class DropbotControllerBase(HasTraits):
     """
     proxy = Instance(DramatiqDropbotSerialProxy)
     dropbot_connection_active = Bool(False)
+    
+    # global proxy state manager
+    proxy_state_manager = Instance(GlobalProxyStateManager)
 
     ##########################################################
     # 'IDramatiqControllerBase' interface.
@@ -46,6 +51,11 @@ class DropbotControllerBase(HasTraits):
     listener_name = Str(f"{PKG}_listener")
     
     timestamps = Dict(str, datetime)
+    
+    def __init__(self, **traits):
+        super().__init__(**traits)
+        # get global instance
+        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def __del__(self):
         """Cleanup when the controller is destroyed."""
@@ -63,6 +73,7 @@ class DropbotControllerBase(HasTraits):
             finally:
                 self.proxy = None
                 self.dropbot_connection_active = False
+                self.proxy_state_manager.set_proxy(None)
 
     def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """
@@ -79,7 +90,7 @@ class DropbotControllerBase(HasTraits):
         # find the topics hierarchy: first element is the head topic. Last element is the specific topic
         topics_tree = topic.split("/")
         head_topic = topics_tree[0]
-        primary_sub_topic = topics_tree[1]
+        primary_sub_topic = topics_tree[1] #if len(topics_tree) > 1 else ""
         specific_sub_topic = topics_tree[-1]
 
         # set requested method to None for now
@@ -154,34 +165,61 @@ class DropbotControllerBase(HasTraits):
 
     # proxy signal handlers done this way so that these methods can be overrided externally
 
-    def _on_dropbot_proxy_connected(self):
+    def _on_dropbot_proxy_connected(self):        
+        # set proxy in global state manager with port information
+        port_name = getattr(self.proxy, 'port', None)
+        self.proxy_state_manager.set_proxy(self.proxy, port_name)
         
-        # Initialize switching boards
-        self.proxy.initialize_switching_boards()
+        # Initialize switching boards with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.proxy.initialize_switching_boards()
+                logger.info(f"Switching boards initialized successfully on attempt {attempt + 1}")
+                break
+            except Exception as e:
+                logger.warning(f"Switching board initialization attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error("Failed to initialize switching boards after all retries")
+                    return
+                time.sleep(0.5)
         
-        # Initial Proxy State Update
-        # TODO: capacitance update interval should be set by the UI [default 100ms]
-        self.proxy.update_state(capacitance_update_interval_ms=100,
-                                hv_output_selected=False,
-                                hv_output_enabled=False,
-                                event_mask=EVENT_CHANNELS_UPDATED |
-                                            EVENT_SHORTS_DETECTED |
-                                            EVENT_ENABLE)
+        # Validate proxy state after initialization
+        if not self.proxy_state_manager.validate_proxy_state():
+            logger.error("Proxy state validation failed after initialization")
+            return
         
-        # Connect proxy signals
-        logger.debug(f"Connecting DropBot BLINKER signals to handlers")
-        self.proxy.signals.signal('halted').connect(self._halted_event_wrapper, weak=False)
-        self.proxy.signals.signal('output_enabled').connect(self._output_state_changed_wrapper, weak=False)
-        self.proxy.signals.signal('output_disabled').connect(self._output_state_changed_wrapper, weak=False)
-        self.proxy.signals.signal('capacitance-updated').connect(self._capacitance_updated_wrapper)
-        self.proxy.signals.signal('shorts-detected').connect(self._shorts_detected_wrapper)
-        
-        # If the feedback capacitor is < 300nF, disable the chip load
-        # saturation check to prevent false positive triggers.
-        if self.proxy.config.C16 < 0.3e-6:
-            self.proxy.update_state(chip_load_range_margin=-1)
+        # Configure proxy settings
+        try:
+            self.proxy.update_state(
+                capacitance_update_interval_ms=100,
+                hv_output_selected=False,
+                hv_output_enabled=False,
+                event_mask=EVENT_CHANNELS_UPDATED | EVENT_SHORTS_DETECTED | EVENT_ENABLE
+            )
+            
+            # Connect proxy signals
+            logger.debug("Connecting DropBot signals to handlers")
+            self.proxy.signals.signal('halted').connect(self._halted_event_wrapper, weak=False)
+            self.proxy.signals.signal('output_enabled').connect(self._output_state_changed_wrapper, weak=False)
+            self.proxy.signals.signal('output_disabled').connect(self._output_state_changed_wrapper, weak=False)
+            self.proxy.signals.signal('capacitance-updated').connect(self._capacitance_updated_wrapper)
+            self.proxy.signals.signal('shorts-detected').connect(self._shorts_detected_wrapper)
+            
+            # Configure feedback capacitor
+            if self.proxy.config.C16 < 0.3e-6:
+                self.proxy.update_state(chip_load_range_margin=-1)
 
-        self.proxy.turn_off_all_channels()
+            # Turn off all channels
+            self.proxy.turn_off_all_channels()
+            
+            # Final state validation
+            self.proxy_state_manager.validate_proxy_state()
+            
+            logger.info("Enhanced proxy connection setup completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error during enhanced proxy setup: {e}")
     
     @staticmethod
     def _capacitance_updated_wrapper(signal: dict[str, str]):

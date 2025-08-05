@@ -106,10 +106,6 @@ class ProtocolRunnerController(QObject):
         # droplet detection state
         self._waiting_for_droplet_check = False
         self._droplet_check_failed = False
-        self._droplet_check_timeout_timer = QTimer()
-        self._droplet_check_timeout_timer.setSingleShot(True)
-        self._droplet_check_timeout_timer.timeout.connect(self._on_droplet_check_timeout)
-        self._droplet_detection_timeout_ms = 1000  # 1 second timeout
         self._expected_electrodes_for_check = []
 
     def connect_droplet_detection_listener(self, message_listener):
@@ -187,9 +183,6 @@ class ProtocolRunnerController(QObject):
             # flag to indicate waiting for droplet check
             self._waiting_for_droplet_check = True
             
-            # start timeout timer
-            self._droplet_check_timeout_timer.start(self._droplet_detection_timeout_ms)
-            
             # send droplet detection request
             publish_message(topic=DETECT_DROPLETS, message="")
             logger.info(f"Sent droplet detection request for channels: {expected_channels}")
@@ -205,8 +198,6 @@ class ProtocolRunnerController(QObject):
         try:
             response = json.loads(response_json)
             
-            # stop timeout timer
-            self._droplet_check_timeout_timer.stop()
             self._waiting_for_droplet_check = False
             
             if response.get('success', False):
@@ -233,17 +224,6 @@ class ProtocolRunnerController(QObject):
         except Exception as e:
             logger.error(f"Error processing droplet detection response: {e}")
             self._handle_droplet_detection_failure(self._expected_electrodes_for_check, [])
-
-    def _on_droplet_check_timeout(self):
-        if not self._waiting_for_droplet_check:
-            return
-        
-        logger.warning("Droplet detection request timed out")
-        self._waiting_for_droplet_check = False
-        
-        # retry
-        logger.info("Retrying droplet detection request")
-        QTimer.singleShot(100, self._perform_droplet_detection_check)
 
     def _handle_droplet_detection_failure(self, expected_channels, detected_channels):
         """show dialog and pause."""

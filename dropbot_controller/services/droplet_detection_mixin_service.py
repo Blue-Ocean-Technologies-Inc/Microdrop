@@ -3,11 +3,11 @@ import time
 import numpy as np
 from typing import Dict, List, Optional
 
-from traits.api import provides, HasTraits, Str, Float, Dict as TraitsDict
+from traits.api import provides, HasTraits, Str, Float, Instance, Int
 
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
+from .global_proxy_state_manager import GlobalProxyStateManager
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from dropbot_controller.consts import DROPLETS_DETECTED
 
@@ -26,10 +26,20 @@ class DropletDetectionMixinService(HasTraits):
 
     id = Str('droplet_detection_mixin_service')
     name = Str('Droplet Detection Mixin Service')
+
+    # use global proxy state manager
+    proxy_state_manager = Instance(GlobalProxyStateManager)
     
-    # to track original frequency for restoration
+    # Settings for droplet detection
     _original_frequency = Float(10000.0)
-    # _detection_in_progress = Dict(key_trait=Str(), value_trait=bool)
+    _original_voltage = Float(100.0)
+    _detection_timeout = Float(10.0)  # seconds
+    _max_detection_retries = Int(2)
+
+    def __init__(self, **traits):
+        super().__init__(**traits)
+        # get global instance
+        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def on_detect_droplets_request(self, message):
         """
@@ -43,47 +53,192 @@ class DropletDetectionMixinService(HasTraits):
                 self._publish_error_response("Dropbot proxy not available")
                 return
             
-            # store original frequency
-            self._original_frequency = self.proxy.frequency
-            logger.debug(f"Stored original frequency: {self._original_frequency} Hz")
+            result = self._perform_safe_droplet_detection()
             
-            # set frequency to 1000Hz for detection
-            self.proxy.frequency = DROPLET_DETECTION_FREQUENCY
-            logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz for detection")
+            if result['success']:
+                self._publish_success_response(result['detected_channels'])
+            else:
+                self._publish_error_response(result['error'])
+                
+        except Exception as e:
+            logger.error(f"Critical error in droplet detection: {e}")
+            self._publish_error_response(f"Critical error: {str(e)}")
+
+    def _perform_safe_droplet_detection(self) -> Dict[str, any]:
+        """Perform droplet detection with enhanced safety measures."""
+        
+        for attempt in range(self._max_detection_retries + 1):
+            try:
+                logger.debug(f"Droplet detection attempt {attempt + 1}")
+                
+                with self.proxy_state_manager.safe_proxy_access("droplet_detection", timeout=self._detection_timeout):
+                    
+                    # Validate proxy state before starting
+                    if not self._validate_detection_preconditions():
+                        continue
+                    
+                    # Store original settings
+                    original_state = self._store_original_settings()
+                    
+                    try:
+                        # Prepare for detection
+                        self._prepare_for_detection()
+                        
+                        # Perform actual detection
+                        detected_channels = self._execute_droplet_detection()
+                        
+                        return {
+                            'success': True,
+                            'detected_channels': detected_channels,
+                            'error': None
+                        }
+                        
+                    finally:
+                        # Always restore original state
+                        self._restore_original_settings(original_state)
+                
+            except Exception as e:
+                logger.warning(f"Droplet detection attempt {attempt + 1} failed: {e}")
+                
+                if attempt < self._max_detection_retries:
+                    logger.info(f"Retrying droplet detection in 1 second...")
+                    time.sleep(1)
+                else:
+                    return {
+                        'success': False,
+                        'detected_channels': [],
+                        'error': f"All detection attempts failed. Last error: {str(e)}"
+                    }
+        
+        return {
+            'success': False,
+            'detected_channels': [],
+            'error': "Maximum detection attempts exceeded"
+        }
+
+    def _validate_detection_preconditions(self) -> bool:
+        """Validate that proxy is ready for droplet detection."""
+        try:
+            proxy = self.proxy_state_manager.proxy
             
-            # small delay to let frequency settle
-            time.sleep(0.01)
+            # Check basic proxy state
+            channel_count = proxy.number_of_channels
+            if channel_count != 120:
+                logger.error(f"Invalid channel count for detection: {channel_count}")
+                return False
             
-            # Perform droplet detection on all channels
-            detected_drops = self.proxy.get_drops(channels=None) # check all channels
+            # Check state consistency
+            current_state = proxy.state_of_channels
+            if len(current_state) != channel_count:
+                logger.error(f"State inconsistency detected: {len(current_state)} != {channel_count}")
+                return False
             
-            detected_channels = []
-            for drop_array in detected_drops:
-                detected_channels.extend(drop_array.tolist())
-            
-            # convert to integers to ensure JSON serialization works
-            detected_channels = [int(ch) for ch in detected_channels]
-            
-            logger.info(f"Detected droplets on channels: {detected_channels}")
-            
-            # restore original frequency
-            self.proxy.frequency = self._original_frequency
-            logger.debug(f"Restored frequency to {self._original_frequency} Hz")
-            
-            self._publish_success_response(detected_channels)
+            return True
             
         except Exception as e:
-            logger.error(f"Error during droplet detection: {e}")
-            
-            # restore frequency even if detection fails for any reason
+            logger.error(f"Precondition validation failed: {e}")
+            return False
+
+    def _store_original_settings(self) -> Dict[str, any]:
+        """Store original proxy settings for restoration."""
+        try:
+            proxy = self.proxy_state_manager.proxy
+            return {
+                'state': np.copy(proxy.state_of_channels),
+                'frequency': proxy.frequency,
+                'voltage': proxy.voltage
+            }
+        except Exception as e:
+            logger.error(f"Failed to store original settings: {e}")
+            return {}
+
+    def _prepare_for_detection(self):
+        """Prepare proxy for droplet detection."""
+        proxy = self.proxy_state_manager.proxy
+        
+        # Turn off all channels
+        logger.debug("Turning off all channels for droplet detection")
+        proxy.turn_off_all_channels()
+        
+        # Small delay for channel settling
+        time.sleep(0.05)
+        
+        # Set detection frequency
+        proxy.frequency = DROPLET_DETECTION_FREQUENCY
+        logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
+        
+        # Small delay for frequency settling
+        time.sleep(0.05)
+
+    def _execute_droplet_detection(self) -> List[int]:
+        """Execute the actual droplet detection."""
+        proxy = self.proxy_state_manager.proxy
+        
+        # Perform droplet detection
+        logger.debug("Executing droplet detection")
+        detected_drops = proxy.get_drops(channels=None)
+        
+        if detected_drops is None:
+            logger.warning("Droplet detection returned None")
+            return []
+        
+        # Process results
+        detected_channels = []
+        current_channel_count = proxy.number_of_channels
+        
+        for drop_array in detected_drops:
+            if drop_array is not None and len(drop_array) > 0:
+                # Validate drop array size
+                if len(drop_array) > current_channel_count:
+                    logger.warning(f"Drop array too large: {len(drop_array)} > {current_channel_count}")
+                    continue
+                detected_channels.extend(drop_array.tolist())
+        
+        # Validate and filter channel numbers
+        validated_channels = []
+        for ch in detected_channels:
             try:
-                if hasattr(self, 'proxy') and self.proxy is not None:
-                    self.proxy.frequency = self._original_frequency
-                    logger.debug(f"Restored frequency after error to {self._original_frequency} Hz")
-            except Exception as restore_error:
-                logger.error(f"Failed to restore frequency after error: {restore_error}")
+                ch_int = int(ch)
+                if 0 <= ch_int < current_channel_count:
+                    validated_channels.append(ch_int)
+                else:
+                    logger.warning(f"Invalid channel number: {ch_int}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid channel value: {ch}, error: {e}")
+        
+        logger.info(f"Detected droplets on channels: {validated_channels}")
+        return validated_channels
+
+    def _restore_original_settings(self, original_settings: Dict[str, any]):
+        """Restore original proxy settings."""
+        if not original_settings:
+            logger.warning("No original settings to restore")
+            return
+        
+        try:
+            proxy = self.proxy_state_manager.proxy
             
-            self._publish_error_response(str(e))
+            # Restore frequency
+            if 'frequency' in original_settings:
+                proxy.frequency = original_settings['frequency']
+                logger.debug(f"Restored frequency to {original_settings['frequency']} Hz")
+            
+            # Restore voltage
+            if 'voltage' in original_settings:
+                proxy.voltage = original_settings['voltage']
+                logger.debug(f"Restored voltage to {original_settings['voltage']} V")
+            
+            # Restore electrode state
+            if 'state' in original_settings:
+                original_state = original_settings['state']
+                if len(original_state) == proxy.number_of_channels:
+                    proxy.state_of_channels = original_state
+                    logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
+                else:
+                    logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to restore original settings: {e}")
 
     def _publish_success_response(self, detected_channels: List[int]):
         """Publish successful droplet detection response."""
