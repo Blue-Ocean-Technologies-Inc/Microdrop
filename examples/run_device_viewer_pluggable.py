@@ -34,7 +34,7 @@ def main(args, plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
-    app_instance.setFont(QFont(LABEL_FONT_FAMILY, 10))
+    app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
 
     if plugins is None:
         plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS
