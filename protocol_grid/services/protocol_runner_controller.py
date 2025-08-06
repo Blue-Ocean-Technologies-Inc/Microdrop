@@ -234,13 +234,13 @@ class ProtocolRunnerController(QObject):
             # check if all expected channels have droplets
             missing_channels = set(expected_channels) - set(detected_channels)
             
-            if missing_channels:
-                logger.warning(f"Missing droplets on channels: {list(missing_channels)}")
-                self._handle_droplet_detection_failure(expected_channels, detected_channels)
-            else:
-                logger.info("All expected droplets detected successfully")
-                self._waiting_for_droplet_check = False
-                self._proceed_to_next_step()
+            # if missing_channels:
+            logger.warning(f"Missing droplets on channels: {list(missing_channels)}")
+            self._handle_droplet_detection_failure(expected_channels, detected_channels)
+            # else:
+            #     logger.info("All expected droplets detected successfully")
+            #     self._waiting_for_droplet_check = False
+            #     self._proceed_to_next_step()
                 
         except Exception as e:
             logger.error(f"Error processing droplet detection response: {e}")
@@ -253,34 +253,14 @@ class ProtocolRunnerController(QObject):
 
         # Ensure all channels are integers for consistent handling
         expected_channels = [int(ch) for ch in expected_channels]
+        expected_channels.sort()
         detected_channels = [int(ch) for ch in detected_channels]
+        missing_channels = set(expected_channels) - set(detected_channels)
         
         # convert channels back to electrode IDs for display
-        expected_electrodes = []
-        detected_electrodes = []
-        missing_electrodes = []
-        
-        # get channel-to-electrode mapping
-        if self._current_index < len(self._run_order):
-            step_info = self._run_order[self._current_index]
-            step = step_info["step"]
-            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
-            
-            if device_state:
-                channel_to_id = {channel: electrode_id for electrode_id, channel in device_state.id_to_channel.items()}
-                
-                for ch in expected_channels:
-                    electrode_id = channel_to_id.get(ch, f"Channel_{ch}")
-                    expected_electrodes.append(electrode_id)
-                
-                for ch in detected_channels:
-                    electrode_id = channel_to_id.get(ch, f"Channel_{ch}")
-                    detected_electrodes.append(electrode_id)
-                
-                missing_channels = set(expected_channels) - set(detected_channels)
-                for ch in missing_channels:
-                    electrode_id = channel_to_id.get(ch, f"Channel_{ch}")
-                    missing_electrodes.append(electrode_id)
+        expected_electrodes = [str(ch) for ch in expected_channels]
+        detected_electrodes = [str(ch) for ch in detected_channels]
+        missing_electrodes = [str(ch) for ch in missing_channels]
         
         # step is completed, we are just paused at the end of it
         if not self._is_paused:
