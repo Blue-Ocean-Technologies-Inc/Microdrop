@@ -12,7 +12,8 @@ from pyface.qt.QtWidgets import QTextBrowser
 from traits.api import Str
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
-                                  ROW_TYPE_ROLE, STEP_TYPE)
+                                  ROW_TYPE_ROLE, STEP_TYPE,
+                                  DARK_MODE_STYLESHEET, LIGHT_MODE_STYLESHEET)
 from microdrop_application.application import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
@@ -45,7 +46,7 @@ class InformationPanel(QWidget):
         self.experiment_label = QLabel("Experiment: ")
         self.experiment_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
-        self.open_button = QPushButton("Open...")
+        self.open_button = QPushButton("folder_open")
         self.open_button.setMaximumWidth(80)
         self.open_button.setToolTip("Open current experiment directory")
         
