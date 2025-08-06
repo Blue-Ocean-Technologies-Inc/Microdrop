@@ -616,6 +616,7 @@ class PGCWidget(QWidget):
         for repeat_idx in range(repeat_n):
             run_order.extend(flat_run[start_idx:])
 
+        droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         
@@ -623,6 +624,9 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
         self.protocol_runner.set_run_order(run_order)        
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
+
+        # set droplet check mode
+        self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
         
         self.protocol_runner.start()
 
@@ -649,10 +653,14 @@ class PGCWidget(QWidget):
 
     def _play_pause_resume_protocol(self):
         # self.sync_to_state()
+        droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         preview_mode = self.navigation_bar.is_preview_mode()
         
         self._disable_phase_navigation()
+
+        # update droplet check state in case it was changed while paused
+        self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
         
         self.protocol_runner.resume(advanced_mode=advanced_mode, preview_mode=preview_mode)
         self._protocol_running = True
@@ -749,6 +757,7 @@ class PGCWidget(QWidget):
             "rep_total": 1
         }]
         
+        droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
         
@@ -758,6 +767,9 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_run_order(run_order)
         
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
+
+        # set droplet check mode for single step execution
+        self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
         
         self.protocol_runner.start()
         
@@ -829,6 +841,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_last.setEnabled(enabled)
         
         checkbox_enabled = not self._protocol_running
+        self.navigation_bar.set_droplet_check_enabled(checkbox_enabled)
         self.navigation_bar.set_preview_mode_enabled(checkbox_enabled)
         self.navigation_bar.set_advanced_user_mode_enabled(checkbox_enabled)
     
