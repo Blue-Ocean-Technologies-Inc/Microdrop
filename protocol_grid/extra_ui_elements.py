@@ -195,6 +195,10 @@ class NavigationBar(QWidget):
         
         # right-align checkboxes
         checkbox_layout.addStretch()
+
+        self.droplet_check_checkbox = QCheckBox("Droplet Check")
+        self.droplet_check_checkbox.setToolTip("When checked, droplet detection will be performed at the end of each step")
+        checkbox_layout.addWidget(self.droplet_check_checkbox)
         
         self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
         self.advanced_user_mode_checkbox.setToolTip("When checked, navigation buttons remain enabled during protocol execution for advanced users")
@@ -255,17 +259,24 @@ class NavigationBar(QWidget):
 
                 }}
             """
+        self.droplet_check_checkbox.setStyleSheet(checkbox_style)
         self.advanced_user_mode_checkbox.setStyleSheet(checkbox_style)
         self.preview_mode_checkbox.setStyleSheet(checkbox_style)
     
     def update_theme_styling(self):
         self._apply_checkbox_styling()
+
+    def is_droplet_check_enabled(self):
+        return self.droplet_check_checkbox.isChecked()
     
     def is_preview_mode(self):
         return self.preview_mode_checkbox.isChecked()
 
     def is_advanced_user_mode(self):
         return self.advanced_user_mode_checkbox.isChecked()
+    
+    def set_droplet_check_enabled(self, enabled):
+        self.droplet_check_checkbox.setEnabled(enabled)
 
     def set_preview_mode_enabled(self, enabled):
         self.preview_mode_checkbox.setEnabled(enabled)

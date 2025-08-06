@@ -43,17 +43,29 @@ class DropletDetectionMixinService(HasTraits):
 
     def on_detect_droplets_request(self, message):
         """
-        Handle droplet detection request. detection is performed on all channels.
+        Handle droplet detection request.
+        
+        Parameters
+        ----------
+        message : str
+            Empty string to check all channels,
+            or JSON array of channel numbers for detection on specific channels.
         """
         try:
-            logger.info("Starting droplet detection")
+            # Parse message to determine detection mode
+            target_channels = self._parse_detection_message(message)
+            
+            if target_channels is None:
+                logger.info("Starting detection on all channels")
+            else:
+                logger.info(f"Starting targeted droplet detection for channels: {target_channels}")
             
             # check if proxy is available
             if not hasattr(self, 'proxy') or self.proxy is None:
                 self._publish_error_response("Dropbot proxy not available")
                 return
             
-            result = self._perform_safe_droplet_detection()
+            result = self._perform_safe_droplet_detection(target_channels)
             
             if result['success']:
                 self._publish_success_response(result['detected_channels'])
@@ -64,7 +76,47 @@ class DropletDetectionMixinService(HasTraits):
             logger.error(f"Critical error in droplet detection: {e}")
             self._publish_error_response(f"Critical error: {str(e)}")
 
-    def _perform_safe_droplet_detection(self) -> Dict[str, any]:
+    def _parse_detection_message(self, message):
+        """
+        Extract target channels from message.
+        
+        Parameters
+        ----------
+        message : str
+            Empty string to check all channels,
+            or JSON array of channel numbers for detection on specific channels.
+            
+        Returns
+        -------
+        list or None
+            List of specific channel numbers, or None for all channels.
+        """
+        if not message or message.strip() == "":
+            # empty message: detect on all channels
+            return None
+        
+        try:
+            channels = json.loads(message)
+            if isinstance(channels, list):
+                target_channels = []
+                for ch in channels:
+                    try:
+                        ch_int = int(ch)
+                        if 0 <= ch_int < 120:  # Assuming 120 channels max
+                            target_channels.append(ch_int)
+                            
+                    except (ValueError, TypeError):
+                        logger.info(f"Invalid channel value: {ch}, skipping")
+                
+                return target_channels if target_channels else None
+            else:
+                logger.info(f"Message is not a list: {message}, falling back to full detection")
+                return None
+        except json.JSONDecodeError:
+            logger.info(f"Invalid JSON message: {message}, falling back to full detection")
+            return None
+
+    def _perform_safe_droplet_detection(self, target_channels=None) -> Dict[str, any]:
         """Perform droplet detection with enhanced safety measures."""
         
         for attempt in range(self._max_detection_retries + 1):
@@ -85,7 +137,7 @@ class DropletDetectionMixinService(HasTraits):
                         self._prepare_for_detection()
                         
                         # Perform actual detection
-                        detected_channels = self._execute_droplet_detection()
+                        detected_channels = self._execute_droplet_detection(target_channels)
                         
                         return {
                             'success': True,
@@ -170,13 +222,32 @@ class DropletDetectionMixinService(HasTraits):
         # Small delay for frequency settling
         time.sleep(0.05)
 
-    def _execute_droplet_detection(self) -> List[int]:
-        """Execute the actual droplet detection."""
+    def _execute_droplet_detection(self, target_channels=None) -> List[int]:
+        """
+        Execute the actual droplet detection.
+        
+        Parameters
+        ----------
+        target_channels : list or None
+            List of channel numbers to check, or None detection on all channels.
+            
+        Returns
+        -------
+        list
+            List of channels where droplets were detected.
+        """
         proxy = self.proxy_state_manager.proxy
         
+        # convert target channels to numpy array if specified
+        channels_array = None
+        if target_channels is not None:
+            channels_array = np.array(target_channels, dtype=int)
+            logger.debug(f"Performing targeted detection on {len(channels_array)} channels")
+        else:
+            logger.debug("Performing full-device detection")
+        
         # Perform droplet detection
-        logger.debug("Executing droplet detection")
-        detected_drops = proxy.get_drops(channels=None)
+        detected_drops = proxy.get_drops(channels=channels_array)
         
         if detected_drops is None:
             logger.warning("Droplet detection returned None")
@@ -249,7 +320,7 @@ class DropletDetectionMixinService(HasTraits):
         }
         
         publish_message(topic=DROPLETS_DETECTED, message=json.dumps(response))
-        logger.debug(f"Published successful droplet detection response: {response}")
+        logger.debug(f"Published successful droplet detection response: {len(detected_channels)} channels")
 
     def _publish_error_response(self, error_message: str):
         """Publish error droplet detection response."""
@@ -260,4 +331,4 @@ class DropletDetectionMixinService(HasTraits):
         }
         
         publish_message(topic=DROPLETS_DETECTED, message=json.dumps(response))
-        logger.debug(f"Published error droplet detection response: {response}")
+        logger.debug(f"Published error droplet detection response: {error_message}")
