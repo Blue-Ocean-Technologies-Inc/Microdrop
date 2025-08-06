@@ -4,6 +4,10 @@ from PySide6.QtCore import Qt
 
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED)
+from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
+                                   WHITE, BLACK, GREY)
+
+ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 # # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -88,3 +92,59 @@ group_defaults = {
     "Trail Length": "",
     "Run Time": "",
 }
+
+DARK_MODE_STYLESHEET = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 4px 8px 4px 8px;
+                background-color: {WHITE};
+                color: {BLACK};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {WHITE};
+                background-color: {GREY['light']};
+            }}
+            QToolTip {{
+                background-color: {BLACK};
+                color: {WHITE};
+                padding: 4px 8px 4px 8px;
+                font-size: 12pt;
+                border-radius: 4px;
+            }}
+        """
+
+LIGHT_MODE_STYLESHEET = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 4px 8px 4px 8px;
+                background-color: {BLACK};
+                color: {WHITE};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {WHITE};
+                background-color: {GREY['light']};
+            }}
+            QToolTip {{
+                background-color: {WHITE};
+                color: {BLACK};
+                padding: 4px 8px 4px 8px;
+                font-size: 12pt;
+                border-radius: 4px;
+            }}
+        """
