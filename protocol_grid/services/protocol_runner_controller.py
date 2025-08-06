@@ -110,6 +110,10 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_failed = False
         self._expected_electrodes_for_check = []
 
+        # track droplet detection attempts per step
+        self._droplet_check_attempted_for_step = {}  # {step_index: True/False}
+        self._droplet_check_skipped_until_phase_nav = False  # skip droplet check unless phase navigation occurs
+
     def connect_droplet_detection_listener(self, message_listener):
         """Connect to droplet detection response signals."""
         if message_listener and hasattr(message_listener, 'signal_emitter'):
@@ -135,6 +139,17 @@ class ProtocolRunnerController(QObject):
             logger.debug("Skipping droplet check: no current step")
             return False
         
+        # check if droplet detection was already attempted for this step
+        if self._droplet_check_attempted_for_step.get(self._current_index, False):
+            # if skipping until phase navigation, do not check
+            if self._droplet_check_skipped_until_phase_nav:
+                logger.debug(f"Skipping droplet check for step {self._current_index} - already attempted and skipped until phase nav")
+                return False
+            else:
+                # phase navigation occurred, allow re-check
+                logger.debug(f"Allowing droplet check for step {self._current_index} - phase navigation reset")
+                # do not return
+
         step_info = self._run_order[self._current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
@@ -155,6 +170,13 @@ class ProtocolRunnerController(QObject):
     def _perform_droplet_detection_check(self):
         """perform droplet detection check at the end of a step."""
         try:
+            if not self._should_perform_droplet_check():
+                self._proceed_to_next_step()
+                return
+            
+            # mark attempted droplet detection for this step
+            self._droplet_check_attempted_for_step[self._current_index] = True
+
             step_info = self._run_order[self._current_index]
             step = step_info["step"]
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
@@ -260,10 +282,46 @@ class ProtocolRunnerController(QObject):
                     electrode_id = channel_to_id.get(ch, f"Channel_{ch}")
                     missing_electrodes.append(electrode_id)
         
-        # pause
-        self._is_paused = True
-        self._pause_time = time.time()
-        self._status_timer.stop()
+        # step is completed, we are just paused at the end of it
+        if not self._is_paused:
+            self._is_paused = True
+            import time
+            self._pause_time = time.time()
+            self._status_timer.stop()
+            
+            # set up pause state as if step just completed normally
+            current_time = self._pause_time
+            if self._start_time:
+                self._elapsed_time = current_time - self._start_time
+            if self._step_start_time:
+                self._step_elapsed_time = current_time - self._step_start_time
+            
+            # no remaining time since step is technically complete
+            self._remaining_phase_time = 0.0
+            self._remaining_step_time = 0.0
+            self._was_in_phase = False
+            
+            # set phase navigation to last phase of the step
+            if self._current_execution_plan:
+                self._paused_phase_index = len(self._current_execution_plan) - 1
+                self._original_pause_phase_index = self._paused_phase_index
+                self._navigated_phase_index = self._paused_phase_index
+                self._phase_navigation_step_elapsed = self._step_elapsed_time
+                self._original_step_time_remaining = 0.0
+            else:
+                self._paused_phase_index = 0
+                self._original_pause_phase_index = 0
+                self._navigated_phase_index = 0
+                self._phase_navigation_step_elapsed = self._step_elapsed_time
+                self._original_step_time_remaining = 0.0
+                
+        else:
+            # already paused - preserve existing pause state but ensure navigation is set correctly
+            # this means we were paused at step completion and droplet detection failed
+            if self._current_execution_plan:
+                # ensure we are navigated to the last phase
+                self._navigated_phase_index = len(self._current_execution_plan) - 1
+                self._paused_phase_index = self._navigated_phase_index
         
         # show dialog on main thread
         QTimer.singleShot(50, lambda: self._show_droplet_detection_failure_dialog(
@@ -289,16 +347,28 @@ class ProtocolRunnerController(QObject):
             if result == QDialog.Accepted:
                 # User chose to continue
                 logger.info("User chose to continue despite droplet detection failure")
-                self._droplet_check_failed = False
+                # self._droplet_check_failed = False
                 self._resume_after_droplet_dialog()
             else:
                 logger.info("User chose to stay paused due to droplet detection failure")
                 # stay paused - user can manually resume or stop
+                self._remain_paused_after_droplet_dialog()
                 
         except Exception as e:
             logger.error(f"Error showing droplet detection failure dialog: {e}")
             # if error, resume automatically to avoid getting stuck
             self._resume_after_droplet_dialog()
+
+    def _remain_paused_after_droplet_dialog(self):
+        self._droplet_check_failed = False
+
+        # mark that we should skip droplet detection until phase navigation occurs
+        self._droplet_check_skipped_until_phase_nav = True
+        
+        # remain paused
+        self._status_timer.stop()
+        
+        logger.info("Remaining paused at step end - phase navigation enabled")
 
     def _resume_after_droplet_dialog(self):
         if not self._is_paused:
@@ -318,6 +388,9 @@ class ProtocolRunnerController(QObject):
         self._pause_time = None
         
         self._status_timer.start()
+
+        # clear the skip flag since we are continuing from same phase
+        self._droplet_check_skipped_until_phase_nav = False
         
         self._proceed_to_next_step()
 
@@ -483,6 +556,10 @@ class ProtocolRunnerController(QObject):
 
         if self._droplet_check_failed:
             self._droplet_check_failed = False
+            
+            # clear skip flag since we are continuing to next step
+            self._droplet_check_skipped_until_phase_nav = False
+            
             self._proceed_to_next_step()
             return
         
@@ -724,6 +801,10 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_failed = False
         self._expected_electrodes_for_check = []
 
+        # clear droplet detection tracking
+        self._droplet_check_attempted_for_step = {}
+        self._droplet_check_skipped_until_phase_nav = False
+
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
 
@@ -878,6 +959,9 @@ class ProtocolRunnerController(QObject):
             self._elapsed_time = current_time - self._start_time
         
         self._current_index = target_index
+
+        # clear droplet detection tracking for navigation
+        self._droplet_check_skipped_until_phase_nav = False
         
         self._current_execution_plan = []
         self._current_phase_index = 0
@@ -1508,6 +1592,11 @@ class ProtocolRunnerController(QObject):
         if self._navigated_phase_index > 0:
             self._navigated_phase_index -= 1
             self._phase_navigation_mode = True
+
+            # clear droplet check skip flag - phase navigation resets droplet detection
+            if self._droplet_check_skipped_until_phase_nav:
+                self._droplet_check_skipped_until_phase_nav = False
+
             self._publish_phase_navigation_state()
             logger.info(f"Navigated to previous phase: {self._navigated_phase_index + 1}/{len(self._current_execution_plan)}")
             return True
