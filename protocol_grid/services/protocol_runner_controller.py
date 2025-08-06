@@ -9,7 +9,8 @@ from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
+from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
+                                       SET_REALTIME_MODE)
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -330,6 +331,8 @@ class ProtocolRunnerController(QObject):
         self._preview_mode = preview_mode
 
     def start(self):
+        publish_message(topic=SET_REALTIME_MODE, message=str(True))
+        
         if self._is_running:
             return
         self._is_running = True
@@ -599,6 +602,8 @@ class ProtocolRunnerController(QObject):
         self._qt_debounce_pause_resume(self._internal_resume)
 
     def stop(self):
+        publish_message(topic=SET_REALTIME_MODE, message=str(False))
+
         if hasattr(self, '_current_message_dialog'):
             self._current_message_dialog.close()
             delattr(self, '_current_message_dialog')
@@ -1051,7 +1056,7 @@ class ProtocolRunnerController(QObject):
             self._on_step_completed_by_phases()
 
     def _on_protocol_finished(self):
-        # VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
+        publish_message(topic=SET_REALTIME_MODE, message=str(False))
 
         # message with last executed step
         if self._current_index > 0 and self._current_index <= len(self._run_order):
