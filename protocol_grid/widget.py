@@ -1286,38 +1286,77 @@ class PGCWidget(QWidget):
             self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
-        self.button_layout_1 = QHBoxLayout()
+        button_style = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 4px 8px 4px 8px;
+                background-color: {WHITE};
+                color: {BLACK};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {WHITE};
+                background-color: {GREY['light']};
+            }}
+            QToolTip {{
+                background-color: {BLACK};
+                color: {WHITE};
+                padding: 4px 8px 4px 8px;
+                font-size: 12pt;
+                border-radius: 4px;
+            }}
+        """
+        # dark = is_dark_mode()
+        # self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)
+
+        self.setStyleSheet(button_style)
+
+        self.button_layout = QHBoxLayout()
         
-        self.btn_add_step = QPushButton("Add Step")
-        self.btn_add_step_into = QPushButton("Add Step Into")
-        self.btn_add_group = QPushButton("Add Group")
-        self.btn_add_group_into = QPushButton("Add Group Into")
+        self.btn_add_step = QPushButton("add_2")
+        self.btn_add_step.setToolTip("Add Step")
+
+        self.btn_add_step_into = QPushButton("subdirectory_arrow_left")
+        self.btn_add_step_into.setToolTip("Add Step Into")
+
+        self.btn_add_group = QPushButton("ad_group")
+        self.btn_add_group.setToolTip("Add Group")
+
+        self.btn_add_group_into = QPushButton("move_group")
+        self.btn_add_group_into.setToolTip("Add Group Into")
+
+        self.btn_import = QPushButton("file_save")
+        self.btn_import.setToolTip("Import")
+
+        self.btn_import_into = QPushButton("file_export")
+        self.btn_import_into.setToolTip("Export")
+
+        self.btn_export = QPushButton("input")
+        self.btn_export.setToolTip("Import Into")
         
         self.btn_add_step.clicked.connect(self.add_step)
         self.btn_add_step_into.clicked.connect(self.add_step_into)
         self.btn_add_group.clicked.connect(self.add_group)
         self.btn_add_group_into.clicked.connect(self.add_group_into)
-        
-        self.button_layout_1.addWidget(self.btn_add_step)
-        self.button_layout_1.addWidget(self.btn_add_step_into)
-        self.button_layout_1.addWidget(self.btn_add_group)
-        self.button_layout_1.addWidget(self.btn_add_group_into)
-        self.button_layout_1.addStretch()
-        
-        self.button_layout_2 = QHBoxLayout()
-        
-        self.btn_import = QPushButton("Import from JSON")
-        self.btn_import_into = QPushButton("Import Into")
-        self.btn_export = QPushButton("Export to JSON")
-        
         self.btn_import.clicked.connect(self.import_from_json)
         self.btn_import_into.clicked.connect(self.import_into_json)
         self.btn_export.clicked.connect(self.export_to_json)
         
-        self.button_layout_2.addWidget(self.btn_import)
-        self.button_layout_2.addWidget(self.btn_import_into)
-        self.button_layout_2.addWidget(self.btn_export)
-        self.button_layout_2.addStretch()
+        self.button_layout.addWidget(self.btn_add_step)
+        self.button_layout.addWidget(self.btn_add_step_into)
+        self.button_layout.addWidget(self.btn_add_group)
+        self.button_layout.addWidget(self.btn_add_group_into)
+        self.button_layout.addWidget(self.btn_import)
+        self.button_layout.addWidget(self.btn_import_into)
+        self.button_layout.addWidget(self.btn_export)
+        self.button_layout.addStretch()
         
     def setup_header_context_menu(self):
         header = self.tree.header()
@@ -2560,13 +2599,16 @@ class PGCWidget(QWidget):
         
     def event(self, event):
         if event.type() == QEvent.PaletteChange:
+            logger.info("processing palette change")
             self._processing_palette_change = True
             try:                
                 self.clear_highlight()
                 if hasattr(self, 'navigation_bar'):
                     self.navigation_bar.update_theme_styling()
+                    logger.info("processing palette change on navigation bar")
                 if hasattr(self, 'information_panel'):
                     self.information_panel.update_theme_styling()
+                    logger.info("processing palette change on information panel")
 
                 QTimer.singleShot(50, self._refresh_model_after_theme_change)
             finally:
