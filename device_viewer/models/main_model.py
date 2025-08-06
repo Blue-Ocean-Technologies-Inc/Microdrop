@@ -27,9 +27,9 @@ class MainModel(RouteLayerManager, Electrodes):
     # To change the mode, set the mode property and clean up any references/inconsistencies
     mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
 
+    # Editor related properties
     mode_name = Property(Str, observe="mode")
     editable = Property(Bool, observe="mode")
-
     message = Str("") # Message to display in the table view
 
     # calibration related properties

@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QPoint
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEvent
 
@@ -15,8 +15,9 @@ class ElectrodeScene(QGraphicsScene):
     Handles identifying mouse action across the scene.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, dockpane, parent=None):
         super().__init__(parent)
+        self.dockpane = dockpane
         self.left_mouse_pressed = False
         self.right_mouse_pressed = False
         self.is_drag = False

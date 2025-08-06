@@ -1,5 +1,4 @@
 # enthought imports
-from math import log
 import dramatiq
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
@@ -17,6 +16,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 # local imports
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
+from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
@@ -63,6 +63,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     layer_ui = None
     mode_picker_view = None
 
+    # Readings
+    last_capacitance = Float()  # Last capacitance reading
+
     # Variables
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
@@ -89,7 +92,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model = MainModel(undo_manager=self.undo_manager)
         self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
-        self.scene = ElectrodeScene()
+        self.scene = ElectrodeScene(self)
 
         self.device_view = AutoFitGraphicsView(self.scene)
         self.device_view.setObjectName('device_view')
@@ -115,6 +118,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model and self.device_view:
             self.device_view.display_state_signal.emit(message)
 
+    def _on_capacitance_updated_triggered(self, message):
+        """
+        Handle capacitance updates from the device viewer.
+        """
+        capacitance_str = json.loads(message).get('capacitance', None)
+        if capacitance_str is not None:
+            capacitance = float(capacitance_str.split("pF")[0])
+            self.last_capacitance = capacitance
 
     # ------- Device View class methods -------------------------
     def set_interaction_service(self, new_model):
@@ -323,9 +334,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.camera_control_widget = CameraControlWidget(self.model)
         self.camera_control_widget.setParent(container)
 
+        # calibration_view code
+        self.calibration_view = CalibrationView(self.model)
+        self.calibration_view.setParent(container)
+
         # Add widgets to layouts
         left_stack.addWidget(self.camera_control_widget)
         left_stack.addWidget(self.alpha_view_ui.control)
+        left_stack.addWidget(self.calibration_view)
         left_stack.addWidget(self.layer_ui.control)
         left_stack.addWidget(self.mode_picker_view)
         

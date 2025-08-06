@@ -12,7 +12,8 @@ logger = get_logger(__name__)
 
 
 class ElectrodeInteractionControllerService(HasTraits):
-    """Service to handle electrode interactions. Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class."""
+    """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
+    Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class."""
 
     #: Model
     model = Instance(MainModel)
