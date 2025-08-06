@@ -1008,23 +1008,52 @@ class ProtocolRunnerController(QObject):
             
             # also include electrodes from the last phase of each individual path/loop
             # in case some paths finished earlier than others
-            for path in device_state.paths:
-                if PathExecutionService.is_loop_path(path):
-                    # For loops, get the last electrode of the cycle
-                    if len(path) > 1:
-                        last_electrode = path[-1] 
-                        if last_electrode in device_state.id_to_channel:
-                            channel = device_state.id_to_channel[last_electrode]
-                            expected_channels.add(channel)
-                else:
-                    # For open paths, get the last electrode
-                    if path:
-                        last_electrode = path[-1]
-                        if last_electrode in device_state.id_to_channel:
-                            channel = device_state.id_to_channel[last_electrode]
-                            expected_channels.add(channel)
+            last_phase_electrodes = self._get_individual_path_last_phase_electrodes(step, device_state)
+            
+            for electrode_id in last_phase_electrodes:
+                if electrode_id in device_state.id_to_channel:
+                    channel = device_state.id_to_channel[electrode_id]
+                    expected_channels.add(channel)
         
         return list(expected_channels)
+    
+    def _get_individual_path_last_phase_electrodes(self, step, device_state):
+        """Get electrodes that are active in the last phase of each individual path/loop."""
+        last_phase_electrodes = set()
+        
+        if not device_state.has_paths():
+            return last_phase_electrodes
+        
+        # get required step parameters
+        trail_length = int(step.parameters.get("Trail Length", "1"))
+        trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+        
+        # calculate effective repetitions and phases for each path
+        for i, path in enumerate(device_state.paths):
+            is_loop = PathExecutionService.is_loop_path(path)
+            
+            if is_loop:
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                cycle_length = len(cycle_phases)
+                
+                if cycle_length > 0:
+                    # loop path: first phase will always be the same as last phase
+                    electrode_indices = cycle_phases[0]
+            else:
+                # for open paths: get electrodes from the final phase
+                cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                
+                if cycle_phases:
+                    # last phase
+                    electrode_indices = cycle_phases[-1]
+                    
+            # convert electrode indices to electrode IDs
+            for electrode_idx in electrode_indices:
+                if electrode_idx < len(path):
+                    electrode_id = path[electrode_idx]
+                    last_phase_electrodes.add(electrode_id)
+        
+        return last_phase_electrodes
     
     def _publish_advanced_pause_message(self):
         if not self._is_running or self._current_index >= len(self._run_order):
