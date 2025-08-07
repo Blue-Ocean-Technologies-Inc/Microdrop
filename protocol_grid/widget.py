@@ -365,13 +365,15 @@ class PGCWidget(QWidget):
 
         # handle auto-save and new experiment creation based on mode
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        preview_mode = self.navigation_bar.is_preview_mode()
         
-        if advanced_mode:
-            # advanced mode: show dialog and handle response
-            self._handle_advanced_mode_completion()
-        else:
-            # regular mode: auto-save and create new experiment
-            self._handle_regular_mode_completion()
+        if not preview_mode:
+            if advanced_mode:
+                # advanced mode: show dialog and handle response
+                self._handle_advanced_mode_completion()
+            else:
+                # regular mode: auto-save and create new experiment
+                self._handle_regular_mode_completion()
         
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
@@ -2587,6 +2589,7 @@ class PGCWidget(QWidget):
                 QTimer.singleShot(50, self._refresh_model_after_theme_change)
             finally:
                 QTimer.singleShot(100, self._reset_palette_change_flag)
+            self._processing_palette_change = False
         return super().event(event)
 
 if __name__ == "__main__":

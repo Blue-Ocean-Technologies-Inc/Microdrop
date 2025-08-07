@@ -22,7 +22,7 @@ from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
 from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
                                    WHITE, BLACK, GREY)
 
-ICON_FONT_FAMILY = "Material Symbols Outlined"
+LABEL_FONT_FAMILY = "Inter"
 
 
 class InformationPanel(QWidget):
@@ -647,12 +647,20 @@ class ExperimentCompleteDialog(QDialog):
         
         button_layout = QHBoxLayout()
         button_layout.addStretch()
+
+        button_style = f"""
+            QPushButton {{ 
+                font-family: {LABEL_FONT_FAMILY}; 
+            }}
+        """
         
         no_button = QPushButton("NO")
+        no_button.setStyleSheet(button_style)
         no_button.setMinimumWidth(100)
         no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
+        yes_button.setStyleSheet(button_style)
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
