@@ -1,15 +1,15 @@
 from math import log
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene
-from PySide6.QtCore import Slot, QTimer, QStandardPaths
-from PySide6.QtGui import QImage, QPainter
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem
+from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
+from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
 import time
 import subprocess
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
-from device_viewer.utils.camera import qimage_to_cv_image
+from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,21 +18,26 @@ ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class CameraControlWidget(QWidget):
 
-    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, scene: QGraphicsScene):
+    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene):
         super().__init__()
         self.model = model
         self.capture_session = capture_session
         self.scene = scene
+        self.pixmap_item = pixmap_item
         self.video_item = video_item  # The video item for the camera feed
         self.camera = None  # Will be set when a camera is selected
-        self.available_cameras = None
+        self.qt_available_cameras = None
+        self.cv2_available_cameras = []  # List of available cameras using OpenCV
         self.camera_formats = None  # Will be set when a camera is selected
         self.recording_timer = QTimer()  # Timer to handle recording state
-        self.recording_timer.timeout.connect(lambda: None)  # Placeholder for recording logic
         self.video_writer = None  # Video writer for recording
         self.recording_file_path = None  # Path to the video file being recorded
         self.frame_count = 0  # Frame count for video recording
         self.record_start_ts = None  # Timestamp when recording starts
+
+        self.cap = None  # OpenCV VideoCapture object
+        self.frame_input = None
+        self.frame_input_timer = QTimer()  # Timer to handle frame input
 
         self.capture_success_timer = QTimer() # Timer to reset the capture button style after a successful capture
         self.capture_success_timer.setSingleShot(True)
@@ -104,6 +109,7 @@ class CameraControlWidget(QWidget):
         self.camera_refresh_button.clicked.connect(self.populate_camera_list)
         self.camera_combo.currentIndexChanged.connect(self.set_camera_model)
         self.resolution_combo.currentIndexChanged.connect(self.set_resolution)
+        self.frame_input_timer.timeout.connect(self.render_frame)
         self.model.observe(self.on_mode_changed, "mode")
 
         self.populate_camera_list()
@@ -118,32 +124,67 @@ class CameraControlWidget(QWidget):
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
         old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
-        self.available_cameras = QMediaDevices.videoInputs()
         self.camera_combo.clear()
-        # Add descriptions to the combo box
-        for camera in self.available_cameras:
-            self.camera_combo.addItem(camera.description())
+        self.qt_available_cameras = [] #QMediaDevices.videoInputs()
+        self.cv2_available_cameras = []
 
-        # Set the current index to the previously selected camera if it exists
-        if old_camera_name:
-            for i, camera in enumerate(self.available_cameras):
-                if camera.description() == old_camera_name:
-                    self.camera_combo.setCurrentIndex(i)
-                    break
+        if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
+            # Add descriptions to the combo box
+            for camera in self.qt_available_cameras:
+                self.camera_combo.addItem(camera.description())
+
+            # Set the current index to the previously selected camera if it exists
+            if old_camera_name:
+                for i, camera in enumerate(self.qt_available_cameras):
+                    if camera.description() == old_camera_name:
+                        self.camera_combo.setCurrentIndex(i)
+                        break
+        else:  # No cameras found, use cv2 to list cameras
+            logger.warning("No cameras found using Qt. Attempting to list cameras using OpenCV.")
+            for i in range(5):  # Check first 5 indices for cameras
+                self.cv2_available_cameras.append(i)
+                self.camera_combo.addItem(f"Camera #{i}")
 
     def set_camera_model(self, index):
         if self.camera:
             # If you already have a camera instance, delete or stop it
             self.camera.stop()
             self.camera = None
-        if 0 <= index < len(self.available_cameras):
-            self.camera = QCamera(self.available_cameras[index])
-            self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.available_cameras[index].videoFormats()))
-            self.capture_session.setCamera(self.camera)
-            self.camera.start()
-        
-        self.populate_resolution_list()
 
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+        if self.frame_input_timer.isActive():
+            self.frame_input_timer.stop()
+
+        if len(self.qt_available_cameras) > 0:
+            self.video_item.setVisible(True)
+            self.pixmap_item.setVisible(False)  # Hide the pixmap item if using Qt
+            if 0 <= index < len(self.qt_available_cameras):
+                self.camera = QCamera(self.qt_available_cameras[index])
+                self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                self.capture_session.setCamera(self.camera)
+                self.camera.start()
+        else: # If no Qt cameras are available, use OpenCV camera
+            self.video_item.setVisible(False)
+            self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
+            if 0 <= index < len(self.cv2_available_cameras):
+                self.cap = cv2.VideoCapture(self.cv2_available_cameras[index])
+                self.frame_input_timer.start(30)  # Start the timer to render frames every 30 ms
+
+        #self.populate_resolution_list()
+
+    @Slot()
+    def render_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        image = cv_image_to_qimage(frame)
+
+        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
+        self.scene.update()  # Update the scene to reflect the new pixmap
     def populate_resolution_list(self):
         """Populate the resolution combo box with available resolutions."""
         if self.camera:

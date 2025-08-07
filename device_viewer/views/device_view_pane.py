@@ -4,7 +4,7 @@ import dramatiq
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
-from pyface.qt.QtGui import QGraphicsScene
+from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame
 from pyface.qt.QtCore import Qt, QTimer, QSizeF
@@ -71,6 +71,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
     message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
     video_item = None  # The video item for the camera feed
+    opencv_pixmap = None  # Pixmap item for OpenCV images
     debounce_timer = None  # Timer to debounce state messages
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
@@ -289,11 +290,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
         self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
+        self.opencv_pixmap = QGraphicsPixmapItem()
+        self.opencv_pixmap.setZValue(-100)  # Set a low z-value to ensure the pixmap is behind other items
+        self.opencv_pixmap.setVisible(False)  # Initially hide the pixmap item
 
         scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
         self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
         self.capture_session.setVideoOutput(self.video_item)
         self.scene.addItem(self.video_item)
+        self.scene.addItem(self.opencv_pixmap)  # Add the pixmap item to the scene
 
         # Create debounce timer
         self.debounce_timer = QTimer()
@@ -327,7 +332,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.scene)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene)
         self.camera_control_widget.setParent(container)
 
         # calibration_view code
@@ -388,11 +393,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
+        if self.opencv_pixmap:
+            self.opencv_pixmap.setTransform(self.model.camera_perspective.transformation)
 
     @observe("model.alpha_map.items.[alpha, visible]")
     def _alpha_change(self, event):
         if self.video_item:
             self.video_item.setOpacity(self.model.get_alpha("video"))
+        if self.opencv_pixmap:
+            self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
 def create_line():
     line = QFrame()
