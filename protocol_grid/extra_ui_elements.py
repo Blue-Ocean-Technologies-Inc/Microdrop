@@ -47,7 +47,6 @@ class InformationPanel(QWidget):
         self.experiment_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.open_button = QPushButton("folder_open")
-        self.open_button.setMaximumWidth(80)
         self.open_button.setToolTip("Open current experiment directory")
         
         # layout.addWidget(self.device_label)
@@ -56,45 +55,16 @@ class InformationPanel(QWidget):
         layout.addWidget(self.open_button, alignment=Qt.AlignLeft | Qt.AlignVCenter)
                 
         self.setLayout(layout)
-        self.setFixedHeight(80)
     
     def apply_styling(self):
         dark = is_dark_mode()
         
         if dark:
             text_color = WHITE
-            button_style = f"""
-                QPushButton {{
-                    background-color: {GREY['dark']};
-                    color: {WHITE};
-                    border: 1px solid {GREY['light']};
-                    border-radius: 3px;
-                    padding: 4px 8px;
-                }}
-                QPushButton:hover {{
-                    background-color: {GREY['light']};
-                }}
-                QPushButton:pressed {{
-                    background-color: {GREY['dark']};
-                }}
-            """
+            button_style = DARK_MODE_STYLESHEET
         else:
             text_color = BLACK
-            button_style = f"""
-                QPushButton {{
-                    background-color: {WHITE};
-                    color: {BLACK};
-                    border: 1px solid {GREY['light']};
-                    border-radius: 3px;
-                    padding: 4px 8px;
-                }}
-                QPushButton:hover {{
-                    background-color: {GREY['light']};
-                }}
-                QPushButton:pressed {{
-                    background-color: {GREY['dark']};
-                }}
-            """
+            button_style = LIGHT_MODE_STYLESHEET
         
         label_style = f"QLabel {{ color: {text_color}; }}"
         
@@ -215,38 +185,13 @@ class NavigationBar(QWidget):
         self.setLayout(main_layout)
         
         # apply initial styling
-        self._apply_navigation_bar_styling()
+        self._apply_styling()
     
-    def _apply_navigation_bar_styling(self):
-        button_style = f"""
-            QPushButton {{ 
-                font-family: {ICON_FONT_FAMILY}; 
-                font-size: 22px; 
-                padding: 2px 2px 2px 2px;
-                background-color: {WHITE};
-                color: {BLACK};
-            }} 
-            QPushButton:hover {{ 
-                color: {SECONDARY_SHADE[700]}; 
-                background-color: {GREY['light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {GREY['dark']};
-            }}
-            QPushButton:disabled {{
-                color: {WHITE};
-                background-color: {GREY['light']};
-            }}
-        """
-        self.setStyleSheet(button_style)
-        
-        # apply theme-appropriate styling for checkboxes and labels
-        self._apply_checkbox_styling()
-    
-    def _apply_checkbox_styling(self):
+    def _apply_styling(self):
         dark = is_dark_mode()
         
         if dark:
+            button_style = DARK_MODE_STYLESHEET
             checkbox_style = f"""
                 QCheckBox {{
                     color: {WHITE};
@@ -254,18 +199,20 @@ class NavigationBar(QWidget):
                 }}
             """
         else:
+            button_style = LIGHT_MODE_STYLESHEET
             checkbox_style = f"""
                 QCheckBox {{
                     color: {BLACK};
 
                 }}
             """
+        self.setStyleSheet(button_style)
         self.droplet_check_checkbox.setStyleSheet(checkbox_style)
         self.advanced_user_mode_checkbox.setStyleSheet(checkbox_style)
         self.preview_mode_checkbox.setStyleSheet(checkbox_style)
     
     def update_theme_styling(self):
-        self._apply_checkbox_styling()
+        self._apply_styling()
 
     def is_droplet_check_enabled(self):
         return self.droplet_check_checkbox.isChecked()

@@ -14,7 +14,8 @@ from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, Prot
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE, 
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
-                                  group_defaults, protocol_grid_fields, protocol_grid_column_widths)
+                                  group_defaults, protocol_grid_fields, protocol_grid_column_widths,
+                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
                                              InformationPanel, ExperimentCompleteDialog,
@@ -113,8 +114,7 @@ class PGCWidget(QWidget):
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.tree)
-        layout.addLayout(self.button_layout_1)  # Add/Insert buttons
-        layout.addLayout(self.button_layout_2)  # Import/Export buttons
+        layout.addLayout(self.button_layout)
         self.setLayout(layout)
         
         self._programmatic_change = False
@@ -1286,37 +1286,8 @@ class PGCWidget(QWidget):
             self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
-        button_style = f"""
-            QPushButton {{ 
-                font-family: {ICON_FONT_FAMILY}; 
-                font-size: 22px; 
-                padding: 4px 8px 4px 8px;
-                background-color: {WHITE};
-                color: {BLACK};
-            }} 
-            QPushButton:hover {{ 
-                color: {SECONDARY_SHADE[700]}; 
-                background-color: {GREY['light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {GREY['dark']};
-            }}
-            QPushButton:disabled {{
-                color: {WHITE};
-                background-color: {GREY['light']};
-            }}
-            QToolTip {{
-                background-color: {BLACK};
-                color: {WHITE};
-                padding: 4px 8px 4px 8px;
-                font-size: 12pt;
-                border-radius: 4px;
-            }}
-        """
-        # dark = is_dark_mode()
-        # self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)
-
-        self.setStyleSheet(button_style)
+        dark = is_dark_mode()
+        self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)
 
         self.button_layout = QHBoxLayout()
         
@@ -2598,17 +2569,16 @@ class PGCWidget(QWidget):
         self.restore_selection(saved_selection)
         
     def event(self, event):
-        if event.type() == QEvent.PaletteChange:
-            logger.info("processing palette change")
+        if event.type() == QEvent.Paint:
             self._processing_palette_change = True
-            try:                
+            try:
+                dark = is_dark_mode()
+                self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)                
                 self.clear_highlight()
                 if hasattr(self, 'navigation_bar'):
                     self.navigation_bar.update_theme_styling()
-                    logger.info("processing palette change on navigation bar")
                 if hasattr(self, 'information_panel'):
                     self.information_panel.update_theme_styling()
-                    logger.info("processing palette change on information panel")
 
                 QTimer.singleShot(50, self._refresh_model_after_theme_change)
             finally:
