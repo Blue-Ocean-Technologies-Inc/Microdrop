@@ -4,7 +4,7 @@ import dramatiq
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
-from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem
+from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame
 from pyface.qt.QtCore import Qt, QTimer, QSizeF
@@ -386,15 +386,22 @@ class DeviceViewerDockPane(TraitsDockPane):
             channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map, self.model.electrode_scale)
 
     @observe("model.camera_perspective.transformation")
+    @observe("model.camera_perspective.camera_resolution")
     def camera_perspective_change_handler(self, event):
         """
         Handle changes to the camera perspective transformation.
         This is used to update the scene's transformation when the camera perspective changes.
         """
+        if not self.model.camera_perspective.camera_resolution:
+            return
+        
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
         if self.opencv_pixmap:
-            self.opencv_pixmap.setTransform(self.model.camera_perspective.transformation)
+            scale = QTransform()
+            scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
+                        self.scene.height() / self.model.camera_perspective.camera_resolution[1])
+            self.opencv_pixmap.setTransform(scale * self.model.camera_perspective.transformation)
 
     @observe("model.alpha_map.items.[alpha, visible]")
     def _alpha_change(self, event):

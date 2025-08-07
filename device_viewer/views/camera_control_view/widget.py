@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
-from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
@@ -125,7 +125,7 @@ class CameraControlWidget(QWidget):
         """Populate the camera combo box with available cameras."""
         old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
         self.camera_combo.clear()
-        self.qt_available_cameras = [] #QMediaDevices.videoInputs()
+        self.qt_available_cameras = QMediaDevices.videoInputs()
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
@@ -211,10 +211,10 @@ class CameraControlWidget(QWidget):
             ]
 
             current_resolution = (int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-            logger.info(f"Current resolution: {current_resolution}")
-            if current_resolution in common_resolutions:
-                common_resolutions.remove(current_resolution)  # Remove current resolution if it exists in the list
-            common_resolutions.insert(0, current_resolution)  # Add current resolution as the first option
+            if current_resolution != (0, 0):
+                if current_resolution in common_resolutions:
+                    common_resolutions.remove(current_resolution)  # Remove current resolution if it exists in the list
+                common_resolutions.insert(0, current_resolution)  # Add current resolution as the first option
 
             for width, height in common_resolutions:
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -227,23 +227,27 @@ class CameraControlWidget(QWidget):
                     self.resolution_combo.addItem(f"{width}x{height}")
             
             # Set the current index to the first resolution
-            self.resolution_combo.setCurrentIndex(0)
             self.set_resolution(0)  # Set the resolution to the first item in the list
         
 
     def set_resolution(self, index):
         """Set the camera resolution based on the selected index."""
+        if self.resolution_combo.count() == 0:
+            logger.warning("No resolutions available to set.")
+            return
+
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
                 format = self.camera_formats[index]
                 self.camera.setCameraFormat(format)
+                self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
         else:
             if self.cap:
                 resolution = self.resolution_combo.itemText(index)
                 width, height = map(int, resolution.split('x'))
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-                logger.info(f"Set OpenCV camera resolution to {width}x{height}")
+                self.model.camera_perspective.camera_resolution = (width, height)
 
     def get_next_image_id(self):
         """Generate a unique image ID for captured images."""
@@ -258,7 +262,11 @@ class CameraControlWidget(QWidget):
         if self.model.camera_perspective:
             painter = QPainter(image)
             options = QStyleOptionGraphicsItem()
-            painter.setTransform(self.model.camera_perspective.transformation)
+            scale = QTransform()
+            if self.using_opencv:
+                scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
+                           self.scene.height() / self.model.camera_perspective.camera_resolution[1])
+            painter.setTransform(scale * self.model.camera_perspective.transformation)
             if self.using_opencv:
                 # If using OpenCV, draw the pixmap item
                 self.pixmap_item.paint(painter, options, None)
