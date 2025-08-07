@@ -123,6 +123,7 @@ class PGCWidget(QWidget):
         
         self._programmatic_change = False
         self._block_aggregation = False
+        self._restoring_selection = False
         self._sync_timer = QTimer()
         self._sync_timer.setSingleShot(True)
         self._sync_timer.timeout.connect(self._delayed_sync)
@@ -1312,11 +1313,11 @@ class PGCWidget(QWidget):
         self.btn_import = QPushButton("file_save")
         self.btn_import.setToolTip("Import")
 
-        self.btn_import_into = QPushButton("file_export")
-        self.btn_import_into.setToolTip("Export")
+        self.btn_export = QPushButton("file_export")
+        self.btn_export.setToolTip("Export")
 
-        self.btn_export = QPushButton("input")
-        self.btn_export.setToolTip("Import Into")
+        self.btn_import_into = QPushButton("input")
+        self.btn_import_into.setToolTip("Import Into")
         
         self.btn_add_step.clicked.connect(self.add_step)
         self.btn_add_step_into.clicked.connect(self.add_step_into)
@@ -1344,7 +1345,9 @@ class PGCWidget(QWidget):
         if hasattr(self, '_processing_device_viewer_message') and self._processing_device_viewer_message:
             return
         if self._programmatic_change:
-            return            
+            return    
+        if hasattr(self, '_restoring_selection') and self._restoring_selection:
+            return        
         if self._protocol_running:
             return
         selected_paths = self.get_selected_paths()
@@ -2564,32 +2567,51 @@ class PGCWidget(QWidget):
         saved_selection = self.save_selection()
         
         self._programmatic_change = True
+        self._restoring_selection = True
         try:
             self._clean_group_parameters_recursive(self.state.sequence)            
             # reload model from clean state
-            self.load_from_state()            
+            # self.load_from_state() 
+            self.save_column_settings()
+            self.state.assign_uids_to_all_steps()
+            self.state_to_model()
+            self.setup_headers()
+            self.tree.expandAll()
+            self.update_all_group_aggregations()
+            self.update_step_dev_fields()
+            self.restore_column_settings()           
         finally:
             self._programmatic_change = False
             
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
+        try:
+            self.restore_scroll_positions(scroll_pos)
+            self.restore_selection(saved_selection)
+        finally:
+            self._restoring_selection = False
         
     def event(self, event):
         if event.type() == QEvent.PaletteChange:
-            self._processing_palette_change = True
-            try:
-                dark = is_dark_mode()
-                self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)                
-                self.clear_highlight()
-                if hasattr(self, 'navigation_bar'):
-                    self.navigation_bar.update_theme_styling()
-                if hasattr(self, 'information_panel'):
-                    self.information_panel.update_theme_styling()
+            if not getattr(self, '_processing_palette_change', False):
+                self._processing_palette_change = True
+                try:
+                    dark = is_dark_mode()
+                    self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)                
+                    self.clear_highlight()
+                    if hasattr(self, 'navigation_bar'):
+                        self.navigation_bar.update_theme_styling()
+                    if hasattr(self, 'information_panel'):
+                        self.information_panel.update_theme_styling()
 
-                QTimer.singleShot(50, self._refresh_model_after_theme_change)
-            finally:
-                QTimer.singleShot(100, self._reset_palette_change_flag)
-            self._processing_palette_change = False
+                    # Only trigger model refresh if not during selection restoration or protocol running
+                    if (not getattr(self, '_restoring_selection', False) and 
+                        not self._protocol_running and 
+                        not getattr(self, '_programmatic_change', False)):
+                        QTimer.singleShot(50, self._refresh_model_after_theme_change)
+                        
+                finally:
+                    QTimer.singleShot(100, self._reset_palette_change_flag)
+                self._processing_palette_change = False
+        
         return super().event(event)
 
 if __name__ == "__main__":
