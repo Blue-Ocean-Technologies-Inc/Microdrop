@@ -1,5 +1,4 @@
-from math import log
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
@@ -28,6 +27,7 @@ class CameraControlWidget(QWidget):
         self.camera = None  # Will be set when a camera is selected
         self.qt_available_cameras = None
         self.cv2_available_cameras = []  # List of available cameras using OpenCV
+        self.using_opencv = False  # Flag to indicate if OpenCV is being used for camera
         self.camera_formats = None  # Will be set when a camera is selected
         self.recording_timer = QTimer()  # Timer to handle recording state
         self.video_writer = None  # Video writer for recording
@@ -129,6 +129,8 @@ class CameraControlWidget(QWidget):
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
+            self.using_opencv = False  # Using Qt cameras
+            
             # Add descriptions to the combo box
             for camera in self.qt_available_cameras:
                 self.camera_combo.addItem(camera.description())
@@ -140,6 +142,7 @@ class CameraControlWidget(QWidget):
                         self.camera_combo.setCurrentIndex(i)
                         break
         else:  # No cameras found, use cv2 to list cameras
+            self.using_opencv = True  # Using OpenCV cameras
             logger.warning("No cameras found using Qt. Attempting to list cameras using OpenCV.")
             for i in range(5):  # Check first 5 indices for cameras
                 self.cv2_available_cameras.append(i)
@@ -158,7 +161,7 @@ class CameraControlWidget(QWidget):
         if self.frame_input_timer.isActive():
             self.frame_input_timer.stop()
 
-        if len(self.qt_available_cameras) > 0:
+        if not self.using_opencv:  # If Qt cameras are available
             self.video_item.setVisible(True)
             self.pixmap_item.setVisible(False)  # Hide the pixmap item if using Qt
             if 0 <= index < len(self.qt_available_cameras):
@@ -173,7 +176,7 @@ class CameraControlWidget(QWidget):
                 self.cap = cv2.VideoCapture(self.cv2_available_cameras[index])
                 self.frame_input_timer.start(30)  # Start the timer to render frames every 30 ms
 
-        #self.populate_resolution_list()
+        self.populate_resolution_list()
 
     @Slot()
     def render_frame(self):
@@ -187,18 +190,60 @@ class CameraControlWidget(QWidget):
         self.scene.update()  # Update the scene to reflect the new pixmap
     def populate_resolution_list(self):
         """Populate the resolution combo box with available resolutions."""
-        if self.camera:
+        if not self.using_opencv:
+            if self.camera:
+                self.resolution_combo.clear()
+
+                for format in self.camera_formats:
+                    res = format.resolution()
+                    self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+        else:
+            # For OpenCV, we can set a fixed resolution or use the camera's default
             self.resolution_combo.clear()
 
-            for format in self.camera_formats:
-                res = format.resolution()
-                self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+            common_resolutions = [
+                (640, 480),
+                (800, 600),
+                (1024, 768),
+                (1280, 720),
+                (1920, 1080),
+                (3840, 2160),
+            ]
+
+            current_resolution = (int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+            logger.info(f"Current resolution: {current_resolution}")
+            if current_resolution in common_resolutions:
+                common_resolutions.remove(current_resolution)  # Remove current resolution if it exists in the list
+            common_resolutions.insert(0, current_resolution)  # Add current resolution as the first option
+
+            for width, height in common_resolutions:
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                
+                actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+                if (actual_width, actual_height) == (width, height):
+                    self.resolution_combo.addItem(f"{width}x{height}")
+            
+            # Set the current index to the first resolution
+            self.resolution_combo.setCurrentIndex(0)
+            self.set_resolution(0)  # Set the resolution to the first item in the list
+        
 
     def set_resolution(self, index):
         """Set the camera resolution based on the selected index."""
-        if self.camera and 0 <= index < len(self.camera_formats):
-            format = self.camera_formats[index]
-            self.camera.setCameraFormat(format)
+        if not self.using_opencv:
+            if self.camera and 0 <= index < len(self.camera_formats):
+                format = self.camera_formats[index]
+                self.camera.setCameraFormat(format)
+        else:
+            if self.cap:
+                resolution = self.resolution_combo.itemText(index)
+                width, height = map(int, resolution.split('x'))
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                logger.info(f"Set OpenCV camera resolution to {width}x{height}")
 
     def get_next_image_id(self):
         """Generate a unique image ID for captured images."""
@@ -212,8 +257,13 @@ class CameraControlWidget(QWidget):
 
         if self.model.camera_perspective:
             painter = QPainter(image)
+            options = QStyleOptionGraphicsItem()
             painter.setTransform(self.model.camera_perspective.transformation)
-            self.video_item.paint(painter, None, None)
+            if self.using_opencv:
+                # If using OpenCV, draw the pixmap item
+                self.pixmap_item.paint(painter, options, None)
+            else:
+                self.video_item.paint(painter, options, None)
             painter.end()
         return image
     # Callbacks
