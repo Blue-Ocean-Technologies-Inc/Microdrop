@@ -234,13 +234,13 @@ class ProtocolRunnerController(QObject):
             # check if all expected channels have droplets
             missing_channels = set(expected_channels) - set(detected_channels)
             
-            # if missing_channels:
-            logger.warning(f"Missing droplets on channels: {list(missing_channels)}")
-            self._handle_droplet_detection_failure(expected_channels, detected_channels)
-            # else:
-            #     logger.info("All expected droplets detected successfully")
-            #     self._waiting_for_droplet_check = False
-            #     self._proceed_to_next_step()
+            if missing_channels:
+                logger.warning(f"Missing droplets on channels: {list(missing_channels)}")
+                self._handle_droplet_detection_failure(expected_channels, detected_channels)
+            else:
+                logger.info("All expected droplets detected successfully")
+                self._waiting_for_droplet_check = False
+                self._proceed_to_next_step()
                 
         except Exception as e:
             logger.error(f"Error processing droplet detection response: {e}")
@@ -1185,25 +1185,6 @@ class ProtocolRunnerController(QObject):
             self._perform_droplet_detection_check()
         else:
             self._proceed_to_next_step() 
-
-        
-        # # Reset phase tracking
-        # self._current_execution_plan = []
-        # self._current_phase_index = 0
-        # self._total_step_phases_completed = 0
-        # self._phase_start_time = None
-        # self._phase_elapsed_time = 0.0
-        # self._remaining_phase_time = 0.0
-        # self._remaining_step_time = 0.0
-        # self._was_in_phase = False
-        # self._paused_phase_index = 0
-        
-        # self._current_index += 1
-        
-        # if self._current_index >= len(self._run_order):
-        #     self._on_protocol_finished()
-        # else:
-        #     self._execute_next_step()
 
     def _on_step_timeout(self):
         if not self._is_running or self._is_paused:
