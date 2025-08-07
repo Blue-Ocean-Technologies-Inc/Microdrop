@@ -46,7 +46,7 @@ protocol_grid_fields = [
     "Max. Path Length", "Run Time"
 ]
 protocol_grid_column_widths = [
-    120, 70, 70, 70, 70, 70, 80, 70, 110, 80, 90, 50, 120, 60, 100, 120, 90
+    120, 70, 80, 70, 70, 70, 90, 80, 130, 100, 100, 50, 140, 70, 110, 140, 90
 ]
 hidden_fields = ["UID"]
 all_fields = protocol_grid_fields + hidden_fields
@@ -93,7 +93,7 @@ group_defaults = {
     "Run Time": "",
 }
 
-DARK_MODE_STYLESHEET = f"""
+LIGHT_MODE_STYLESHEET = f"""
             QPushButton {{ 
                 font-family: {ICON_FONT_FAMILY}; 
                 font-size: 22px; 
@@ -113,20 +113,20 @@ DARK_MODE_STYLESHEET = f"""
                 background-color: {GREY['light']};
             }}
             QToolTip {{
-                background-color: {BLACK};
-                color: {WHITE};
+                background-color: {WHITE};
+                color: {BLACK};
                 padding: 4px 8px 4px 8px;
                 font-size: 12pt;
                 border-radius: 4px;
             }}
         """
 
-LIGHT_MODE_STYLESHEET = f"""
+DARK_MODE_STYLESHEET = f"""
             QPushButton {{ 
                 font-family: {ICON_FONT_FAMILY}; 
                 font-size: 22px; 
                 padding: 4px 8px 4px 8px;
-                background-color: {BLACK};
+                background-color: {GREY['dark']};
                 color: {WHITE};
             }} 
             QPushButton:hover {{ 
@@ -137,12 +137,12 @@ LIGHT_MODE_STYLESHEET = f"""
                 background-color: {GREY['dark']};
             }}
             QPushButton:disabled {{
-                color: {WHITE};
-                background-color: {GREY['light']};
+                color: {GREY['dark']};
+                background-color: {BLACK};
             }}
             QToolTip {{
-                background-color: {WHITE};
-                color: {BLACK};
+                background-color: {GREY['dark']};
+                color: {WHITE};
                 padding: 4px 8px 4px 8px;
                 font-size: 12pt;
                 border-radius: 4px;
