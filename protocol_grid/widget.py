@@ -2573,7 +2573,7 @@ class PGCWidget(QWidget):
         self.restore_selection(saved_selection)
         
     def event(self, event):
-        if event.type() == QEvent.Paint:
+        if event.type() == QEvent.PaletteChange:
             self._processing_palette_change = True
             try:
                 dark = is_dark_mode()
