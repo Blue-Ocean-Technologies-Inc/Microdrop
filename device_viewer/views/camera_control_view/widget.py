@@ -5,6 +5,7 @@ from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, Q
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
 import time
+import os
 import subprocess
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
@@ -125,7 +126,7 @@ class CameraControlWidget(QWidget):
         """Populate the camera combo box with available cameras."""
         old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
         self.camera_combo.clear()
-        self.qt_available_cameras = QMediaDevices.videoInputs()
+        self.qt_available_cameras = QMediaDevices.videoInputs() if os.getenv("USE_CV2", "0") != "1" else []
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
