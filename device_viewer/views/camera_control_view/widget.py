@@ -6,6 +6,9 @@ from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
 import time
 import os
+import ctypes
+import ctypes.util
+import signal
 import subprocess
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
@@ -175,6 +178,8 @@ class CameraControlWidget(QWidget):
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
             if 0 <= index < len(self.cv2_available_cameras):
                 self.cap = cv2.VideoCapture(self.cv2_available_cameras[index])
+                self.cap.set(cv2.CAP_PROP_FPS, 30)  # Set a default FPS
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'mp4v'))
                 self.frame_input_timer.start(30)  # Start the timer to render frames every 30 ms
 
         self.populate_resolution_list()
@@ -301,7 +306,18 @@ class CameraControlWidget(QWidget):
             if frames_per_second:
                 # Use ffmpeg to recode with the correct frame rate
                 logger.info(f"Re-encoding video with {frames_per_second} FPS.")
-                subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4; rm {self.recording_file_path}""", shell=True)
+
+                PR_SET_PDEATHSIG = 1
+
+                def set_pdeathsig(): # https://blog.raylu.net/2021/04/01/set_pdeathsig.html
+                    libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
+                    if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL) != 0:
+                        raise OSError(ctypes.get_errno(), 'SET_PDEATHSIG')
+
+                subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4 && rm {self.recording_file_path}""",
+                                 shell=True, 
+                                 preexec_fn=set_pdeathsig,
+                                 stdin=subprocess.DEVNULL)
                 logger.info("Video re-encoded successfully.")
 
             self.video_writer = None
