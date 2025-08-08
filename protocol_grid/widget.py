@@ -29,6 +29,10 @@ from protocol_grid.state.device_state import (DeviceState, device_state_from_dev
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
+from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
+                                   WHITE, BLACK, GREY)
+
+ICON_FONT_FAMILY = "Material Symbols Outlined"
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -113,8 +117,7 @@ class PGCWidget(QWidget):
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.tree)
-        layout.addLayout(self.button_layout_1)  # Add/Insert buttons
-        layout.addLayout(self.button_layout_2)  # Import/Export buttons
+        layout.addLayout(self.button_layout)
         self.setLayout(layout)
         
         self._programmatic_change = False
