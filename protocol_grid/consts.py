@@ -29,6 +29,7 @@ ACTOR_TOPIC_DICT = {
         CHIP_INSERTED,
         DROPBOT_CONNECTED,
         DROPLETS_DETECTED,
+        CALIBRATION_DATA,
         # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
