@@ -31,8 +31,8 @@ class CalibrationView(QWidget):
         self.update_capacitance_labels()
 
     def update_capacitance_labels(self, event=None):
-        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance if self.model.liquid_capacitance is not None else "-"} pF")
-        self.filler_capacitance_label.setText(f"C_f: {self.model.filler_capacitance if self.model.filler_capacitance is not None else "-"} pF")
+        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance if self.model.liquid_capacitance is not None else '-'} pF")
+        self.filler_capacitance_label.setText(f"C_f: {self.model.filler_capacitance if self.model.filler_capacitance is not None else '-'} pF")
 
     def reset_capacitance(self):
         self.model.liquid_capacitance = None

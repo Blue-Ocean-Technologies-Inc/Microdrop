@@ -60,7 +60,7 @@ class ListChangeCommand(AbstractCommand):
 
     def undo(self):
         for event in reversed(self.event_stack):
-            logger.debug(f"Undoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
+            logger.debug(f"Undoing list mod {self.event.object}, added {event['added']}, removed {event['removed']} at {event['index']}")
             for _ in event["added"]:
                 self.event.object.pop(event["index"])
             for item in reversed(event["removed"]):
@@ -68,7 +68,7 @@ class ListChangeCommand(AbstractCommand):
 
     def redo(self):
         for event in self.event_stack:
-            logger.debug(f"Redoing list mod {self.event.object}, added {event["added"]}, removed {event["removed"]} at {event["index"]}")
+            logger.debug(f"Redoing list mod {self.event.object}, added {event['added']}, removed {event['removed']} at {event['index']}")
             for _ in event["removed"]:
                 self.event.object.pop(event["index"])
             for item in reversed(event["added"]):
