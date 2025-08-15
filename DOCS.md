@@ -117,3 +117,22 @@ On Linux/Mac (probably) you can use strace on the device path itself to snoop al
 ```bash
 strace -s 256 -P <device path> -e trace=write,read -o trace.log -f python <script name>
 ```
+
+# Useful Enviroment Variables
+
+#### USE_CV2=1
+
+Set when you want to force the camera backend to use the opencv fallback even if it *can* use QMultimedia. Useful for testing/development.
+
+#### DEBUG_QT_PLUGINS=1
+
+Set to see debug logs from Qt plugins
+
+#### QT_LOGGING_RULES="*=true"
+
+Set when you want the maximal level for Qt-level debugs logs. These can be filtered down to your liking.
+
+#### QT_FFMPEG_\[DECODING/ENCODING\]_HW_DEVICE_TYPES=
+
+Set to blank when you want to force software encoding/decoding for Qt's FFMPEG backend. See [here](https://doc.qt.io/qt-6/advanced-ffmpeg-configuration.html)
+
