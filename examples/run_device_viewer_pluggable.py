@@ -1,3 +1,4 @@
+from logging import root
 import os
 import platform
 import sys
@@ -22,12 +23,18 @@ from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_
                                     DEFAULT_APPLICATION)
 from microdrop_utils._logger import get_logger
 from microdrop_utils.font_helpers import load_font_family
+from microdrop_utils.root_dir_utils import get_project_root
+
 logger = get_logger(__name__)
 
-INTER_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
+root = get_project_root()
+
+os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "") # Add root to PATH for PyInstaller. Should do nothing normal operation
+
+INTER_FONT_PATH = root / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
 LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
 
-MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
+MATERIAL_SYMBOLS_FONT_PATH = root / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
 ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
 
 def main(args, plugins=None, contexts=None, application=None, persist=False):
