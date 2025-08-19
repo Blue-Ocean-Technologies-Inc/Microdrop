@@ -8,7 +8,7 @@ from pyface.qt.QtCore import Qt, Slot, QTimer, Signal
 from pyface.qt.QtGui import QPixmap, QMovie
 
 from traits.api import Str, Instance
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
