@@ -72,18 +72,8 @@ class CameraControlWidget(QWidget):
         self.camera_refresh_button = QPushButton("refresh")
         self.camera_refresh_button.setToolTip("Refresh Camera List")
 
-        # recording buttons
-        recording_layout = QHBoxLayout()
-        self.record_button = QPushButton("videocam")
-        self.record_button.setToolTip("Start Recording")
-        self.stop_record_button = QPushButton("stop")
-        self.stop_record_button.setToolTip("Stop Recording")
-        self.capture_image_button = QPushButton("photo_camera")
-        self.capture_image_button.setToolTip("Capture Image")
-
-        recording_layout.addWidget(self.record_button)
-        recording_layout.addWidget(self.stop_record_button)
-        recording_layout.addWidget(self.capture_image_button)
+        self.camera_on_button = QPushButton("videocam")
+        self.camera_on_button.setToolTip("Camera On")
 
         # btn_layout
         btn_layout = QHBoxLayout()
@@ -92,6 +82,27 @@ class CameraControlWidget(QWidget):
             btn_layout.addWidget(btn)
         btn_layout.addWidget(self.button_reset)
         btn_layout.addWidget(self.camera_refresh_button)
+        btn_layout.addWidget(self.camera_on_button)
+
+        # recording buttons
+        recording_layout = QHBoxLayout()
+
+        self.record_button = QPushButton("camera")
+        self.record_button.setToolTip("Start Recording")
+
+        self.stop_record_button = QPushButton("stop")
+        self.stop_record_button.setToolTip("Stop Recording")
+
+        self.capture_image_button = QPushButton("photo_camera")
+        self.capture_image_button.setToolTip("Capture Image")
+
+        self.camera_off_button = QPushButton("videocam_off")
+        self.camera_off_button.setToolTip("Camera Off")
+
+        recording_layout.addWidget(self.record_button)
+        recording_layout.addWidget(self.stop_record_button)
+        recording_layout.addWidget(self.capture_image_button)
+        recording_layout.addWidget(self.camera_off_button)
         
         # Main layout
         layout = QVBoxLayout()
@@ -104,6 +115,8 @@ class CameraControlWidget(QWidget):
 
         self.sync_buttons_and_label()
 
+        self.camera_on_button.clicked.connect(lambda: self.camera.start() if self.camera else None)
+        self.camera_off_button.clicked.connect(lambda: self.camera.stop() if self.camera else None)
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
