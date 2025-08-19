@@ -15,3 +15,7 @@
 demo*.json
 demo*.png
 demo*.dot
+
+# pyinstaller generated files
+**/dist
+**/build
