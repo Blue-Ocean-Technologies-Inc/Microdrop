@@ -5,7 +5,6 @@ from pathlib import Path
 from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT, ICON_RESET_WRENCH
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 
-MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent.parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class CalibrationView(QWidget):
