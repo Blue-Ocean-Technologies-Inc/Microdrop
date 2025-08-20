@@ -182,11 +182,11 @@ def basic_listener_actor_routine(
         "_on_sensor_triggered".
     """
     
-
-    logger.info(
-        f"{parent_obj.name}: Received message: '{timestamped_message}' "
-        f"from topic: {topic} at {timestamped_message.timestamp}"
-    )
+    if topic != 'dropbot/signals/capacitance_updated' and topic != 'ui/protocol_grid/display_state':
+        logger.info(
+            f"{parent_obj.name}: Received message: '{timestamped_message}' "
+            f"from topic: {topic} at {timestamped_message.timestamp}"
+        )
 
     # Split the topic into parts and take the last segment as the key.
     topic_parts = topic.split("/")
