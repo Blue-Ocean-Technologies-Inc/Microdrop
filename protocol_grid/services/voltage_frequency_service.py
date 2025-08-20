@@ -90,3 +90,5 @@ class VoltageFrequencyService:
             logger.info(f"Published immediate frequency: {frequency}Hz (advanced mode edit)")
         except Exception as e:
             logger.info(f"Failed to publish immediate frequency: {e}")
+
+

@@ -208,6 +208,8 @@ class PGCWidget(QWidget):
                         self.on_calibration_message
                     )
 
+                    self.protocol_runner.connect_droplet_detection_listener(message_listener)
+
                     logger.info("connected to message listener successfully")
                     return
                 else:

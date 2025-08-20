@@ -3,7 +3,8 @@ import os
 from PySide6.QtCore import Qt
 
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
-                                       DROPBOT_CONNECTED, DROPLETS_DETECTED)
+                                       DROPBOT_CONNECTED, DROPLETS_DETECTED,
+                                       CAPACITANCE_UPDATED)
 from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
                                    WHITE, BLACK, GREY)
 
@@ -30,6 +31,7 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_CONNECTED,
         DROPLETS_DETECTED,
         CALIBRATION_DATA,
+        CAPACITANCE_UPDATED,
         # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }

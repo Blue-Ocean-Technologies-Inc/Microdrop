@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QDialog, QApplication
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
@@ -114,11 +115,21 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_attempted_for_step = {}  # {step_index: True/False}
         self._droplet_check_skipped_until_phase_nav = False  # skip droplet check unless phase navigation occurs
 
+        # volume threshold service
+        self._volume_threshold_service = VolumeThresholdService(self)
+        self._volume_threshold_service.threshold_reached.connect(self._on_volume_threshold_reached)
+        self._volume_threshold_mode_active = False
+        self._current_phase_volume_threshold = 0.0
+        self._current_phase_target_capacitance = None
+
     def connect_droplet_detection_listener(self, message_listener):
         """Connect to droplet detection response signals."""
         if message_listener and hasattr(message_listener, 'signal_emitter'):
             message_listener.signal_emitter.droplets_detected.connect(
                 self._on_droplets_detected_response
+            )
+            message_listener.signal_emitter.capacitance_updated.connect(
+                self._volume_threshold_service.update_capacitance
             )
             logger.info("Connected to droplet detection signals")
 
@@ -785,6 +796,12 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_attempted_for_step = {}
         self._droplet_check_skipped_until_phase_nav = False
 
+        # stop volume threshold monitoring
+        self._volume_threshold_service.stop_monitoring()
+        self._volume_threshold_mode_active = False
+        self._current_phase_volume_threshold = 0.0
+        self._current_phase_target_capacitance = None
+
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
 
@@ -883,6 +900,15 @@ class ProtocolRunnerController(QObject):
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
+
+            # check for volume threshold mode
+            try:
+                volume_threshold = float(step.parameters.get("Volume Threshold", "0.0"))
+            except (ValueError, TypeError):
+                volume_threshold = 0.0
+            
+            self._current_phase_volume_threshold = volume_threshold
+            self._volume_threshold_mode_active = volume_threshold > 0.0
             
             # create and publish message immediately
             msg_model = PathExecutionService.create_dynamic_device_state_message(
@@ -914,11 +940,63 @@ class ProtocolRunnerController(QObject):
             self._current_phase_index += 1
             
             duration_ms = int(plan_item["duration"] * 1000)
+
+            # start volume threshold monitoring if enabled
+            if self._volume_threshold_mode_active and not self._preview_mode:
+                target_capacitance = self._volume_threshold_service.calculate_target_capacitance(
+                    volume_threshold,
+                    plan_item["activated_electrodes"],
+                    self.protocol_state
+                )
+                
+                if target_capacitance is not None:
+                    self._current_phase_target_capacitance = target_capacitance
+                    monitoring_started = self._volume_threshold_service.start_monitoring(
+                        target_capacitance, 
+                        plan_item["duration"]
+                    )
+                    if monitoring_started:
+                        logger.info(f"Volume threshold mode active for phase: {volume_threshold}, "
+                                f"target capacitance: {target_capacitance}pF")
+                    else:
+                        logger.warning("Failed to start volume threshold monitoring")
+                        self._volume_threshold_mode_active = False
+                else:
+                    logger.warning("Could not calculate target capacitance, disabling volume threshold mode for this phase")
+                    self._volume_threshold_mode_active = False
+
             self._phase_timer.start(duration_ms)
                            
         except Exception as e:
             logger.error(f"Error in phase execution: {e}")
             self.signals.protocol_error.emit(str(e))
+
+    def _on_volume_threshold_reached(self):
+        """Handle early phase completion when volume threshold is reached."""
+        if not self._is_running or self._is_paused:
+            return
+            
+        if not self._volume_threshold_mode_active:
+            return
+        
+        logger.info(f"Volume threshold reached, advancing phase early")
+        
+        # since we are advancing early
+        self._phase_timer.stop()
+        
+        # Update phase timing for early completion
+        current_time = time.time()
+        if self._phase_start_time:
+            self._phase_elapsed_time = current_time - self._phase_start_time
+        
+        self._total_step_phases_completed += 1
+        
+        # Reset threshold monitoring state
+        self._volume_threshold_mode_active = False
+        self._current_phase_target_capacitance = None
+        
+        # Continue to next phase
+        self._execute_next_phase()
 
     def jump_to_step_by_path(self, step_path):
         if not self._is_running or not self._run_order:
@@ -1155,6 +1233,15 @@ class ProtocolRunnerController(QObject):
         if not self._is_running or self._is_paused:
             return
         
+        # if we were in volume threshold mode, warn if threshold not met
+        if self._volume_threshold_mode_active:
+            logger.info(f"Phase completed by duration timeout - volume threshold not reached "
+                    f"(target: {self._current_phase_target_capacitance}pF)")
+            # Stop monitoring since phase completed by timeout
+            self._volume_threshold_service.stop_monitoring()
+            self._volume_threshold_mode_active = False
+            self._current_phase_target_capacitance = None
+            
         self._total_step_phases_completed += 1
         
         # reset phase timing
