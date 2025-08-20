@@ -55,9 +55,9 @@ if linux_redis_location.exists(): # Linux location
 elif window_redis_location.exists(): # Windows location
     datas.append((window_redis_location, "."))
 datas.append((Path(pyface.__file__).parent / "images", "pyface/images"))
-datas.append((Path(teensy_minimal_rpc.__file__).parent / "static", "teensy_minimal_rpc/static"))
-datas.append((Path(dramatiq.__file__).parent / "brokers" / "redis" , "dramatiq/brokers/redis")) # Dramatiq redis proxy Lua scripts
-datas.append((Path(microdrop_utils.__file__).parent / "redis.conf", "microdrop_utils/redis.conf"))
+datas.append((Path(teensy_minimal_rpc.__file__).parent / "static", Path("teensy_minimal_rpc") / "static"))
+datas.append((Path(dramatiq.__file__).parent / "brokers" / "redis" , Path("dramatiq") / "brokers" / "redis")) # Dramatiq redis proxy Lua scripts
+datas.append((Path(microdrop_utils.__file__).parent / "redis.conf", Path("microdrop_utils") / "redis.conf"))
 datas.append((Path(microdrop_application.__file__).parent, "microdrop_application")) # icon + splash + resources
 datas.append((Path(device_viewer.__file__).parent, "device_viewer")) # device SVG
 datas.append((Path(dropbot_status.__file__).parent, "dropbot_status")) # status images + html
