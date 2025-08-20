@@ -1,13 +1,12 @@
 """
 Specific dialog type implementations for different message cases.
 
-This module provides specialized dialog classes that inherit from BaseMessageDialog
-and implement specific behaviors for different types of user interactions.
+This module provides specialized dialog classes that inherit from 
+BaseMessageDialog and implement specific behaviors for different types 
+of user interactions.
 """
 
 from typing import Optional, Dict, Any
-from PySide6.QtWidgets import QLabel, QTextBrowser
-from PySide6.QtGui import QFont
 
 from .base_message_dialog import BaseMessageDialog
 
@@ -78,7 +77,7 @@ class ErrorAlertDialog(BaseMessageDialog):
         
         # Set default size for error dialogs with details to be larger
         if error_details and 'size' not in kwargs:
-            kwargs['size'] = (600, 450)  # Larger default size for error dialogs with details
+            kwargs['size'] = (600, 450)  # Larger default size for error dialogs
         
         super().__init__(
             parent=parent,
@@ -202,7 +201,6 @@ class QuestionDialog(BaseMessageDialog):
     
     def __init__(
         self,
-        parent=None,
         title: str = "Question",
         message: str = "Please select an option:",
         yes_text: str = "Yes",
@@ -217,7 +215,6 @@ class QuestionDialog(BaseMessageDialog):
         }
         
         super().__init__(
-            parent=parent,
             title=title,
             message=message,
             dialog_type=self.TYPE_QUESTION,
@@ -230,8 +227,9 @@ class DetectionIssueDialog(BaseMessageDialog):
     """
     Dialog for displaying detection issues with expected vs actual results.
     
-    Shows a warning with detailed breakdown of expected, detected, and missing items.
-    Useful for droplet detection, device validation, and similar scenarios.
+    Shows a warning with detailed breakdown of expected, detected, and 
+    missing items. Useful for droplet detection, device validation, and 
+    similar scenarios.
     """
     
     def __init__(
@@ -272,7 +270,12 @@ class DetectionIssueDialog(BaseMessageDialog):
         # Add question after the details
         self._add_question(question)
     
-    def _add_detection_details(self, expected: Optional[str], detected: Optional[str], missing: Optional[str]):
+    def _add_detection_details(
+        self, 
+        expected: Optional[str], 
+        detected: Optional[str], 
+        missing: Optional[str]
+    ):
         """Add detailed breakdown of detection results using the same method as error details."""
         # Build plain text with bold categories using simple formatting
         details_text = ""
@@ -288,7 +291,9 @@ class DetectionIssueDialog(BaseMessageDialog):
         
         if details_text:
             # Use the same method that error details uses - this gives us the nice tall, scrollable section
-            self.add_details_with_copy(details_text.strip(), "Detection Results:")
+            self.add_details_with_copy(
+                details_text.strip(), "Detection Results:"
+            )
     
     def _add_question(self, question: str):
         """Add question text after the details."""
@@ -301,13 +306,14 @@ class DetectionIssueDialog(BaseMessageDialog):
         question_font.setPointSize(11)
         question_font.setWeight(QFont.Weight.Medium)
         question_label.setFont(question_font)
-        question_label.setStyleSheet(f"color: {self.TEXT_COLOR}; margin-top: 15px;")
+        question_label.setStyleSheet(
+            f"color: {self.TEXT_COLOR}; margin-top: 15px; font-size: 13px;"
+        )
         question_label.setWordWrap(True)
         question_label.setAlignment(Qt.AlignCenter)
         
         # Add to dialog
         self.additional_content_layout.addWidget(question_label)
-    
 
     def continue_anyway(self):
         """Handle continue anyway action."""
@@ -352,10 +358,14 @@ def show_unsaved_changes(parent=None, **kwargs) -> int:
     return UnsavedChangesDialog(parent=parent, **kwargs).show_dialog()
 
 
-def show_error_alert(parent=None, message: str = "",
-                      error_details: Optional[str] = None,
-                      save_button_text: str = "Save", exit_button_text: str = "Exit",
-                      **kwargs) -> int:
+def show_error_alert(
+    parent=None, 
+    message: str = "",
+    error_details: Optional[str] = None,
+    save_button_text: str = "Save", 
+    exit_button_text: str = "Exit",
+    **kwargs
+) -> int:
     """Show an error alert dialog with customizable button text."""
     dialog = ErrorAlertDialog(
         parent=parent, message=message,
@@ -371,9 +381,13 @@ def show_error_alert(parent=None, message: str = "",
     return dialog.show_dialog()
 
 
-def show_success(parent=None, message: str = "", 
-                 save_button_text: str = "OK", exit_button_text: str = "Exit",
-                 **kwargs) -> int:
+def show_success(
+    parent=None, 
+    message: str = "", 
+    save_button_text: str = "OK", 
+    exit_button_text: str = "Exit",
+    **kwargs
+) -> int:
     """Show a success dialog with customizable button text."""
     dialog = SuccessDialog(parent=parent, message=message, **kwargs)
     
@@ -386,9 +400,13 @@ def show_success(parent=None, message: str = "",
     return dialog.show_dialog()
 
 
-def show_information(parent=None, message: str = "",
-                     ok_button_text: str = "OK", exit_button_text: str = "Exit",
-                     **kwargs) -> int:
+def show_information(
+    parent=None, 
+    message: str = "",
+    ok_button_text: str = "OK", 
+    exit_button_text: str = "Exit",
+    **kwargs
+) -> int:
     """Show an information dialog with customizable button text."""
     dialog = InformationDialog(parent=parent, message=message, **kwargs)
     
@@ -401,9 +419,13 @@ def show_information(parent=None, message: str = "",
     return dialog.show_dialog()
 
 
-def show_question(parent=None, message: str = "",
-                  yes_text: str = "Yes", no_text: str = "No",
-                  **kwargs) -> int:
+def show_question(
+    parent=None, 
+    message: str = "",
+    yes_text: str = "Yes", 
+    no_text: str = "No",
+    **kwargs
+) -> int:
     """Show a question dialog."""
     return QuestionDialog(
         parent=parent,

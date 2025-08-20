@@ -17,7 +17,7 @@ from PySide6.QtGui import QFont, QPixmap, QColor, QPainter, QPainterPath
 
 from microdrop_style.colors import (
     PRIMARY_COLOR, ERROR_COLOR, WARNING_COLOR,
-    SUCCESS_COLOR, INFO_COLOR, WHITE, BLACK, GREY
+    SUCCESS_COLOR, INFO_COLOR, WHITE
 )
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_utils.font_helpers import load_font_family
@@ -26,7 +26,15 @@ from microdrop_utils.font_helpers import load_font_family
 class TriangleIconWidget(QWidget):
     """Custom widget to draw a triangle background for warning icons."""
     
-    def __init__(self, icon_text: str, font: QFont, color: QColor, size: int = 64, text_y_offset: float = 0.6, parent=None):
+    def __init__(
+        self, 
+        icon_text: str, 
+        font: QFont, 
+        color: QColor, 
+        size: int = 64, 
+        text_y_offset: float = 0.6, 
+        parent=None
+    ):
         super().__init__(parent)
         self.icon_text = icon_text
         self.font = font
@@ -54,26 +62,32 @@ class TriangleIconWidget(QWidget):
         # H 114.221 (horizontal line to x=114.221)
         path.lineTo(114.221 * scale_x, 118.048 * scale_y)
         
-        # C 121.521,118.048 126.221,110.348 122.921,103.848 (cubic bezier curve)
-        path.cubicTo(121.521 * scale_x, 118.048 * scale_y,
-                     126.221 * scale_x, 110.348 * scale_y,
-                     122.921 * scale_x, 103.848 * scale_y)
+        # C 121.521,118.048 126.221,110.348 122.921,103.848 (cubic bezier)
+        path.cubicTo(
+            121.521 * scale_x, 118.048 * scale_y,
+            126.221 * scale_x, 110.348 * scale_y,
+            122.921 * scale_x, 103.848 * scale_y
+        )
         
         # L 70.721,11.348 (line to)
         path.lineTo(70.721 * scale_x, 11.348 * scale_y)
         
-        # C 67.12,4.149 56.821,4.149 53.221,11.348 (cubic bezier curve)
-        path.cubicTo(67.12 * scale_x, 4.149 * scale_y,
-                     56.821 * scale_x, 4.149 * scale_y,
-                     53.221 * scale_x, 11.348 * scale_y)
+        # C 67.12,4.149 56.821,4.149 53.221,11.348 (cubic bezier)
+        path.cubicTo(
+            67.12 * scale_x, 4.149 * scale_y,
+            56.821 * scale_x, 4.149 * scale_y,
+            53.221 * scale_x, 11.348 * scale_y
+        )
         
         # L 1.021,103.848 (line to)
         path.lineTo(1.021 * scale_x, 103.848 * scale_y)
         
-        # C -2.179,110.348 2.521,118.048 9.821,118.048 (cubic bezier curve)
-        path.cubicTo(-2.179 * scale_x, 110.348 * scale_y,
-                     2.521 * scale_x, 118.048 * scale_y,
-                     9.821 * scale_x, 118.048 * scale_y)
+        # C -2.179,110.348 2.521,118.048 9.821,118.048 (cubic bezier)
+        path.cubicTo(
+            -2.179 * scale_x, 110.348 * scale_y,
+            2.521 * scale_x, 118.048 * scale_y,
+            9.821 * scale_x, 118.048 * scale_y
+        )
         
         # Z (close path) - automatic with QPainterPath.closeSubpath()
         path.closeSubpath()
@@ -88,12 +102,14 @@ class TriangleIconWidget(QWidget):
         # Calculate the visual center of the triangle (not the widget rectangle)
         # Triangle's visual center is slightly lower than geometric center
         triangle_center_x = width / 2
-        triangle_center_y = height * self.text_y_offset  # Configurable vertical position
+        triangle_center_y = height * self.text_y_offset
         
         # Create a rectangle centered on the triangle's visual center
         from PySide6.QtCore import QPoint
         text_rect = self.rect()
-        text_rect.moveCenter(QPoint(int(triangle_center_x), int(triangle_center_y)))
+        text_rect.moveCenter(
+            QPoint(int(triangle_center_x), int(triangle_center_y))
+        )
         
         painter.drawText(text_rect, Qt.AlignCenter, self.icon_text)
 
@@ -114,8 +130,8 @@ class BaseMessageDialog(QDialog):
     ICON_FONT_SIZE = 36  # Size of the icon font in points
     
     # Triangle icon configuration
-    TRIANGLE_ICON_SIZE = 64  # Size of the triangle widget (width and height)
-    TRIANGLE_TEXT_Y_OFFSET = 0.6  # Vertical position of text within triangle (0.0 = top, 1.0 = bottom)
+    TRIANGLE_ICON_SIZE = 64  # Size of the triangle widget
+    TRIANGLE_TEXT_Y_OFFSET = 0.6  # Vertical position of text within triangle
     
     # Color configuration - all colors used in dialogs
     LIGHT_ACCENT_FACTOR = 0.9  # How light to make the background accent
@@ -170,6 +186,11 @@ class BaseMessageDialog(QDialog):
         TYPE_SUCCESS: "check",         # check icon
         TYPE_QUESTION: "question_mark"          # help icon (keeping as is)
     }
+    
+    # Class-level font caching for performance
+    _text_font_family = None
+    _icon_font_family = None
+    _fonts_loaded = False
     
     def __init__(
         self, 
@@ -244,21 +265,40 @@ class BaseMessageDialog(QDialog):
         # Check if dialog has a fixed small size
         current_size = self.size()
         if current_size.isValid():
-            width, height = current_size.width(), current_size.height()
+            height = current_size.height()
             if height <= 400 and (message_length > 200 or line_count > 4):
                 return True
                 
         return False
     
     def _setup_fonts(self):
-        """Setup font families for the dialog."""
-        # Load Inter font for text
-        inter_font_path = Path(__file__).parent.parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
-        self.text_font_family = load_font_family(inter_font_path) or "Inter"
+        """Setup font families for the dialog with caching for performance."""
+        # Only load fonts once for all dialog instances
+        if not self._fonts_loaded:
+            # Load Inter font for text
+            inter_font_path = (
+                Path(__file__).parent.parent.parent / "microdrop_style" / 
+                "fonts" / "Inter-VariableFont_opsz,wght.ttf"
+            )
+            self._text_font_family = (
+                load_font_family(inter_font_path) or "Inter"
+            )
+            
+            # Load Material Symbols for icons
+            icon_font_path = (
+                Path(__file__).parent.parent.parent / "microdrop_style" / 
+                "icons" / "Material_Symbols_Outlined" / 
+                "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
+            )
+            self._icon_font_family = (
+                load_font_family(icon_font_path) or ICON_FONT_FAMILY
+            )
+            
+            self._fonts_loaded = True
         
-        # Load Material Symbols for icons
-        icon_font_path = Path(__file__).parent.parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
-        self.icon_font_family = load_font_family(icon_font_path) or ICON_FONT_FAMILY
+        # Use cached fonts
+        self.text_font_family = self._text_font_family
+        self.icon_font_family = self._icon_font_family
     
     def _setup_ui(self):
         """Setup the user interface components."""
@@ -289,7 +329,7 @@ class BaseMessageDialog(QDialog):
         
         # Close button in top right corner
         close_layout = QHBoxLayout()
-        close_layout.setContentsMargins(0, 0, 0, 5)  # Small margin below close button
+        close_layout.setContentsMargins(0, 0, 0, 5)
         close_layout.addStretch()
         self.close_button = QPushButton("×")
         self.close_button.setObjectName("closeButton")
@@ -305,10 +345,14 @@ class BaseMessageDialog(QDialog):
         # Icon - centered with custom shapes for different types
         if self.dialog_type == self.TYPE_WARNING:
             # Use custom triangle widget for warnings
-            icon_text = self.TYPE_ICONS.get(self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO])
+            icon_text = self.TYPE_ICONS.get(
+                self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO]
+            )
             icon_font = QFont(self.icon_font_family)
             icon_font.setPointSize(self.ICON_FONT_SIZE)
-            dialog_color = QColor(self.TYPE_COLORS.get(self.dialog_type, WARNING_COLOR))
+            dialog_color = QColor(
+                self.TYPE_COLORS.get(self.dialog_type, WARNING_COLOR)
+            )
             self.icon_widget = TriangleIconWidget(
                 icon_text, 
                 icon_font, 
@@ -324,11 +368,15 @@ class BaseMessageDialog(QDialog):
             if self.icon_path and Path(self.icon_path).exists():
                 # Custom icon from file
                 pixmap = QPixmap(self.icon_path)
-                scaled_pixmap = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(
+                    32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
                 self.icon_label.setPixmap(scaled_pixmap)
             else:
                 # Material icon
-                icon_text = self.TYPE_ICONS.get(self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO])
+                icon_text = self.TYPE_ICONS.get(
+                    self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO]
+                )
                 self.icon_label.setText(icon_text)
                 icon_font = QFont(self.icon_font_family)
                 icon_font.setPointSize(self.ICON_FONT_SIZE)
@@ -409,7 +457,9 @@ class BaseMessageDialog(QDialog):
             
             # Create widget to hold scrollable content
             scroll_widget = QWidget()
-            scroll_widget.setStyleSheet(f"background-color: {self.DIALOG_BG_COLOR};")
+            scroll_widget.setStyleSheet(
+                f"background-color: {self.DIALOG_BG_COLOR};"
+            )
             scroll_layout = QVBoxLayout(scroll_widget)
             scroll_layout.setContentsMargins(0, 0, 0, 0)
             scroll_layout.setSpacing(15)
@@ -440,7 +490,9 @@ class BaseMessageDialog(QDialog):
             self.message_label.setFont(message_font)
             self.message_label.setWordWrap(True)
             self.message_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-            self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.message_label.setSizePolicy(
+                QSizePolicy.Expanding, QSizePolicy.Expanding
+            )
             
             content_layout.addWidget(self.message_label)
             
@@ -491,7 +543,9 @@ class BaseMessageDialog(QDialog):
                 "continue anyway" in button_text.lower()):
                 button.setObjectName("exitButton")
             else:
-                button.setObjectName(f"{button_text.lower().replace(' ', '')}Button")
+                button.setObjectName(
+                    f"{button_text.lower().replace(' ', '')}Button"
+                )
             
             # Button font
             button_font = QFont(self.text_font_family)
@@ -505,10 +559,14 @@ class BaseMessageDialog(QDialog):
             
             # Connect button action
             if "action" in config and callable(config["action"]):
-                button.clicked.connect(lambda checked, action=config["action"]: action())
+                button.clicked.connect(
+                    lambda checked, action=config["action"]: action()
+                )
             
             # Emit signal when clicked
-            button.clicked.connect(lambda checked, text=button_text: self.button_clicked.emit(text))
+            button.clicked.connect(
+                lambda checked, text=button_text: self.button_clicked.emit(text)
+            )
             
             self.buttons[button_text] = button
             button_layout.addWidget(button)
@@ -523,7 +581,9 @@ class BaseMessageDialog(QDialog):
         dialog_color = self.TYPE_COLORS.get(self.dialog_type, INFO_COLOR)
         
         # Create light accent background based on theme color
-        light_accent_bg = self._lighten_color(dialog_color, self.LIGHT_ACCENT_FACTOR)
+        light_accent_bg = self._lighten_color(
+            dialog_color, self.LIGHT_ACCENT_FACTOR
+        )
         
         # Dialog styling with themed light background
         self.setStyleSheet(f"""
@@ -605,12 +665,16 @@ class BaseMessageDialog(QDialog):
             }}
             
             QPushButton#exitButton:hover {{
-                background-color: {self._darken_color(self.EXIT_BUTTON_COLOR, 0.05)};
+                background-color: {self._darken_color(
+                    self.EXIT_BUTTON_COLOR, 0.05
+                )};
                 border-color: {self._darken_color(self.BORDER_COLOR, 0.1)};
             }}
             
             QPushButton#exitButton:pressed {{
-                background-color: {self._darken_color(self.EXIT_BUTTON_COLOR, 0.1)};
+                background-color: {self._darken_color(
+                    self.EXIT_BUTTON_COLOR, 0.1
+                )};
             }}
             
             QPushButton#copyButton {{
@@ -667,8 +731,12 @@ class BaseMessageDialog(QDialog):
         """Center the dialog on its parent or screen."""
         if self.parent():
             parent_geometry = self.parent().geometry()
-            x = parent_geometry.x() + (parent_geometry.width() - self.width()) // 2
-            y = parent_geometry.y() + (parent_geometry.height() - self.height()) // 2
+            x = parent_geometry.x() + (
+                parent_geometry.width() - self.width()
+            ) // 2
+            y = parent_geometry.y() + (
+                parent_geometry.height() - self.height()
+            ) // 2
             self.move(x, y)
         else:
             # Center on screen
@@ -711,7 +779,9 @@ class BaseMessageDialog(QDialog):
                     reg,
                     r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
                 )
-                apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                apps_use_light_theme, _ = winreg.QueryValueEx(
+                    key, "AppsUseLightTheme"
+                )
                 return apps_use_light_theme == 0
             except Exception:
                 return False
@@ -729,11 +799,11 @@ class BaseMessageDialog(QDialog):
         """Darken a hex color by a factor."""
         try:
             color = QColor(color_hex)
-            h, s, l, a = color.getHsl()
-            l = max(0, int(l * (1 - factor)))
-            new_color = QColor.fromHsl(h, s, l, a)
+            h, s, lightness, a = color.getHsl()
+            lightness = max(0, int(lightness * (1 - factor)))
+            new_color = QColor.fromHsl(h, s, lightness, a)
             return new_color.name()
-        except:
+        except Exception:
             return color_hex
     
     def _lighten_color(self, color_hex: str, factor: float) -> str:
@@ -749,7 +819,7 @@ class BaseMessageDialog(QDialog):
             
             new_color = QColor(r, g, b, a)
             return new_color.name()
-        except:
+        except Exception:
             return "#F8F9FA"  # Fallback light gray
     
     def _get_icon_shape_style(self) -> str:
@@ -789,7 +859,7 @@ class BaseMessageDialog(QDialog):
         # Details label
         label = QLabel(details_label)
         label_font = QFont(self.text_font_family)
-        label_font.setPointSize(10)
+        label_font.setPointSize(12)
         label_font.setWeight(QFont.Weight.Bold)
         label.setFont(label_font)
         label.setStyleSheet(f"color: {self.TEXT_COLOR};")
@@ -813,9 +883,11 @@ class BaseMessageDialog(QDialog):
         html_text = html_text.replace('\n', '<br>')
         
         # Better monospace styling for tracebacks and code
-        details_browser.setHtml(f"""<div style='font-family: "Consolas", "Monaco", "Courier New", monospace; 
-                                font-size: 11px; line-height: 1.4; white-space: pre-wrap; 
-                                color: #2d2d2d;'>{html_text}</div>""")
+        details_browser.setHtml(
+            f"""<div style='font-family: "Consolas", "Monaco", "Courier New", 
+            monospace; font-size: 11px; line-height: 1.4; 
+            white-space: pre-wrap; color: #2d2d2d;'>{html_text}</div>"""
+        )
         
         # Header with copy button
         header_layout = QHBoxLayout()
@@ -834,7 +906,9 @@ class BaseMessageDialog(QDialog):
         copy_button.setFont(copy_font)
         
         # Connect copy functionality
-        copy_button.clicked.connect(lambda: self._copy_to_clipboard(details_text))
+        copy_button.clicked.connect(
+            lambda: self._copy_to_clipboard(details_text)
+        )
         
         header_layout.addWidget(copy_button)
         
@@ -869,7 +943,9 @@ class BaseMessageDialog(QDialog):
                 "continue anyway" in new_text.lower()):
                 button.setObjectName("exitButton")
             else:
-                button.setObjectName(f"{new_text.lower().replace(' ', '')}Button")
+                button.setObjectName(
+                    f"{new_text.lower().replace(' ', '')}Button"
+                )
     
     def show_dialog(self) -> int:
         """Show the dialog and return the result."""
