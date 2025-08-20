@@ -14,9 +14,9 @@ import os
 import logging
 from pathlib import Path
 
-# Add the project root to Python path so we can import the dialog modules
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
