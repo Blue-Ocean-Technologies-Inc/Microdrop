@@ -47,11 +47,13 @@ import dropbot_status
 
 datas = []
 
-if (Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "redis-server").exists(): # Linux location
-    datas.append((Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "redis-server", "."))
-elif (Path(pyface.__file__).parent.parent.parent.parent.parent / "Scripts" / "redis-server").exists(): # Windows location
-    datas.append((Path(pyface.__file__).parent.parent.parent.parent.parent / "Scripts" / "redis-server", "."))
-datas.append((Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "redis-server", "."))
+window_redis_location = Path(pyface.__file__).parent.parent.parent.parent / "Scripts" / "redis-server.exe"
+linux_redis_location = Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "redis-server"
+
+if linux_redis_location.exists(): # Linux location
+    datas.append((linux_redis_location, "."))
+elif window_redis_location.exists(): # Windows location
+    datas.append((window_redis_location, "."))
 datas.append((Path(pyface.__file__).parent / "images", "pyface/images"))
 datas.append((Path(teensy_minimal_rpc.__file__).parent / "static", "teensy_minimal_rpc/static"))
 datas.append((Path(dramatiq.__file__).parent / "brokers" / "redis" , "dramatiq/brokers/redis")) # Dramatiq redis proxy Lua scripts
