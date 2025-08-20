@@ -76,6 +76,10 @@ class ErrorAlertDialog(BaseMessageDialog):
             "Save": {"action": self.acknowledge_error}
         }
         
+        # Set default size for error dialogs with details to be larger
+        if error_details and 'size' not in kwargs:
+            kwargs['size'] = (600, 450)  # Larger default size for error dialogs with details
+        
         super().__init__(
             parent=parent,
             title=title,
@@ -162,6 +166,13 @@ class InformationDialog(BaseMessageDialog):
             "OK": {"action": self.acknowledge_info}
         }
         
+        # Auto-resize for long information content
+        if len(message) > 300 or message.count('\n') > 6:
+            if 'size' not in kwargs:
+                kwargs['size'] = (600, 450)
+            if 'resizable' not in kwargs:
+                kwargs['resizable'] = True
+        
         super().__init__(
             parent=parent,
             title=title,
@@ -241,6 +252,10 @@ class DetectionIssueDialog(BaseMessageDialog):
             pause_button_text: {"action": self.pause_and_review}
         }
         
+        # Set default size for detection issue dialogs to be larger
+        if 'size' not in kwargs:
+            kwargs['size'] = (600, 450)  # Larger default size for detection dialogs
+        
         super().__init__(
             parent=parent,
             title=title,
@@ -263,13 +278,13 @@ class DetectionIssueDialog(BaseMessageDialog):
         details_text = ""
         
         if expected is not None:
-            details_text += f"**Expected:** {expected}\n\n"
+            details_text += f"**Expected:**\t{expected}\n"
         
         if detected is not None:
-            details_text += f"**Detected:** {detected}\n\n"
+            details_text += f"**Detected:**\t{detected}\n"
         
         if missing is not None:
-            details_text += f"**Missing:** {missing}"
+            details_text += f"**Missing:**\t{missing}"
         
         if details_text:
             # Use the same method that error details uses - this gives us the nice tall, scrollable section

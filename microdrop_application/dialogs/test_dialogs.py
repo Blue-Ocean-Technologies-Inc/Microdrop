@@ -3,24 +3,23 @@
 Standalone Dialog Test Application
 
 A simple test application to demonstrate and test all custom dialog types.
-Run this file directly to open a test interface with buttons for each dialog type.
+Run this file directly to open a test interface with buttons for each
+dialog type.
 
 Usage:
     python test_dialogs.py
 """
 
 import sys
-import os
 import logging
 from pathlib import Path
 
-from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QGroupBox, QScrollArea, QCheckBox, QTextEdit
+    QPushButton, QLabel, QGroupBox, QScrollArea, QCheckBox
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -28,10 +27,11 @@ from PySide6.QtGui import QFont
 # Import our custom dialog system
 from microdrop_application.dialogs import (
     show_error_alert, show_success, show_information, show_question,
-    show_detection_issue, UnsavedChangesDialog, ErrorAlertDialog, 
-    SuccessDialog, InformationDialog, DetectionIssueDialog
+    show_detection_issue, UnsavedChangesDialog, InformationDialog
 )
-from microdrop_application.dialogs.base_message_dialog import BaseMessageDialog
+from microdrop_application.dialogs.base_message_dialog import (
+    BaseMessageDialog
+)
 from microdrop_application.dialogs.logger_integration import DialogLogger
 
 
@@ -269,9 +269,12 @@ class DialogTestWindow(QMainWindow):
             parent=self,
             title="Information",
             message="This is an information dialog. It provides general "
-                   "information to the user without requiring immediate action."
+                    "information to the user without requiring immediate "
+                    "action."
         )
-        self.statusBar().showMessage(f"Information dialog result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Information dialog result: {self.decode_dialog_result(result)}"
+        )
     
     def show_success_dialog(self):
         """Show a success dialog."""
@@ -279,9 +282,11 @@ class DialogTestWindow(QMainWindow):
             parent=self,
             title="Success",
             message="The operation completed successfully! All files have "
-                   "been processed and saved to the specified location."
+                    "been processed and saved to the specified location."
         )
-        self.statusBar().showMessage(f"Success dialog result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Success dialog result: {self.decode_dialog_result(result)}"
+        )
     
     def show_warning_dialog(self):
         """Show a warning dialog using UnsavedChangesDialog."""
@@ -289,10 +294,12 @@ class DialogTestWindow(QMainWindow):
             parent=self,
             title="Warning",
             message="This is a warning dialog. It alerts the user to "
-                   "potential issues that may require attention."
+                    "potential issues that may require attention."
         )
         result = dialog.show_dialog()
-        self.statusBar().showMessage(f"Warning dialog result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Warning dialog result: {self.decode_dialog_result(result)}"
+        )
     
     def show_error_dialog(self):
         """Show a basic error dialog."""
@@ -300,9 +307,11 @@ class DialogTestWindow(QMainWindow):
             parent=self,
             title="Error",
             message="An error has occurred while processing your request. "
-                   "Please check your settings and try again."
+                    "Please check your settings and try again."
         )
-        self.statusBar().showMessage(f"Error dialog result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Error dialog result: {self.decode_dialog_result(result)}"
+        )
     
     # Advanced dialog methods
     def show_error_with_details(self):
@@ -311,15 +320,19 @@ class DialogTestWindow(QMainWindow):
             parent=self,
             title="Connection Error",
             message="Failed to connect to the DropBot device. Please check "
-                   "the connection and try again.",
+                    "the connection and try again.",
             error_details="""Traceback (most recent call last):
   File "dropbot_controller.py", line 123, in connect_device
     device = serial.Serial(port, baudrate=115200, timeout=5)
   File "/usr/lib/python3.9/site-packages/serial/__init__.py", line 240
-    raise SerialException(msg.errno, "could not open port {}: {}".format(self._port, msg))
-serial.serialutil.SerialException: [Errno 2] could not open port /dev/ttyUSB0: [Errno 2] No such file or directory: '/dev/ttyUSB0'"""
+    raise SerialException(msg.errno, "could not open port {}: {}".format(
+        self._port, msg))
+serial.serialutil.SerialException: [Errno 2] could not open port 
+/dev/ttyUSB0: [Errno 2] No such file or directory: '/dev/ttyUSB0'"""
         )
-        self.statusBar().showMessage(f"Error with details result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Error with details result: {self.decode_dialog_result(result)}"
+        )
     
     def show_question_dialog(self):
         """Show a question dialog."""
@@ -327,7 +340,7 @@ serial.serialutil.SerialException: [Errno 2] could not open port /dev/ttyUSB0: [
             parent=self,
             title="Confirm Action",
             message="Are you sure you want to delete the selected protocol? "
-                   "This action cannot be undone.",
+                    "This action cannot be undone.",
             yes_text="Delete",
             no_text="Cancel"
         )
@@ -339,20 +352,24 @@ serial.serialutil.SerialException: [Errno 2] could not open port /dev/ttyUSB0: [
         result = show_detection_issue(
             parent=self,
             title="Droplet Detection Issue",
-            message="Some droplets weren't detected during this step.\nContinuing may affect the results of xxxxxx.",
-            question="Would you like to continue with the protocol or pause and review?",
+            message="Some droplets weren't detected during this step.\n"
+                    "Continuing may affect the results of xxxxxx.",
+            question="Would you like to continue with the protocol or "
+                     "pause and review?",
             expected="droplets at electrode032, electrode047, electrode020",
             detected="droplets at None",
             missing="droplets at electrode032, electrode047, electrode020"
         )
-        self.statusBar().showMessage(f"Detection issue result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Detection issue result: {self.decode_dialog_result(result)}"
+        )
     
     def show_unsaved_changes(self):
         """Show an unsaved changes dialog."""
         dialog = UnsavedChangesDialog(
             parent=self,
             message="You have unsaved changes to the current experiment. "
-                   "What would you like to do?"
+                    "What would you like to do?"
         )
         result = dialog.show_dialog()
         action = "Save" if result == BaseMessageDialog.Accepted else "Exit"
@@ -392,29 +409,35 @@ serial.serialutil.SerialException: [Errno 2] could not open port /dev/ttyUSB0: [
         )
         
         result = dialog.show_dialog()
-        self.statusBar().showMessage(f"Custom buttons result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Custom buttons result: {self.decode_dialog_result(result)}"
+        )
     
     def show_large_dialog(self):
         """Show a larger dialog with more content."""
-        large_message = """This is a demonstration of a larger dialog with more content.
-
-The dialog system automatically handles text wrapping and can accommodate longer messages. This is useful for:
-
-• Detailed error explanations
-• Step-by-step instructions
-• Important warnings or notices
-• Configuration information
-• Help text and documentation
-
-The dialog will automatically size itself appropriately while maintaining good readability and visual hierarchy."""
+        large_message = (
+            "This is a demonstration of a larger dialog with more content.\n\n"
+            "The dialog system automatically handles text wrapping and can "
+            "accommodate longer messages. This is useful for:\n\n"
+            "• Detailed error explanations\n"
+            "• Step-by-step instructions\n"
+            "• Important warnings or notices\n"
+            "• Configuration information\n"
+            "• Help text and documentation\n\n"
+            "The dialog will automatically size itself appropriately while "
+            "maintaining good readability and visual hierarchy."
+        )
         
         result = show_information(
             parent=self,
             title="Large Content Dialog",
             message=large_message,
-            size=(600, 400)
+            resizable=True,
+            size=(600, 500)
         )
-        self.statusBar().showMessage(f"Large dialog result: {self.decode_dialog_result(result)}")
+        self.statusBar().showMessage(
+            f"Large dialog result: {self.decode_dialog_result(result)}"
+        )
     
     def show_non_modal_dialog(self):
         """Show a non-modal dialog."""
@@ -422,7 +445,7 @@ The dialog will automatically size itself appropriately while maintaining good r
             parent=self,
             title="Non-Modal Dialog",
             message="This is a non-modal dialog. You can interact with the "
-                   "main window while this dialog is open.",
+                    "main window while this dialog is open.",
             modal=False
         )
         dialog.show()  # Use show() instead of show_dialog() for non-modal
@@ -440,20 +463,27 @@ The dialog will automatically size itself appropriately while maintaining good r
     
     def log_error(self):
         """Log an error message."""
-        error_msg = ("This is an error logged through the logger integration system. "
-                    "It automatically shows a dialog when dialogs are enabled.")
+        error_msg = (
+            "This is an error logged through the logger integration "
+            "system. It automatically shows a dialog when dialogs are "
+            "enabled."
+        )
         
-        # Use the dialog logger method which should log to console AND show dialog
+        # Use the dialog logger method which should log to console AND 
+        # show dialog
         self.dialog_logger.error_with_dialog(error_msg)
         
         self.statusBar().showMessage("Error logged")
     
     def log_warning(self):
         """Log a warning message."""
-        warning_msg = ("This is a warning message from the logger. It shows as a "
-                      "warning-style dialog.")
+        warning_msg = (
+            "This is a warning message from the logger. It shows as a "
+            "warning-style dialog."
+        )
         
-        # Use the dialog logger method which should log to console AND show dialog
+        # Use the dialog logger method which should log to console AND 
+        # show dialog
         self.dialog_logger.warning_with_dialog(warning_msg)
         
         self.statusBar().showMessage("Warning logged")
@@ -462,7 +492,8 @@ The dialog will automatically size itself appropriately while maintaining good r
         """Log an info message."""
         info_msg = "This is an informational message from the logger system."
         
-        # Use the dialog logger method which should log to console AND show dialog
+        # Use the dialog logger method which should log to console AND 
+        # show dialog
         self.dialog_logger.info_with_dialog(info_msg)
         
         self.statusBar().showMessage("Info logged")
@@ -471,7 +502,8 @@ The dialog will automatically size itself appropriately while maintaining good r
         """Log a success message."""
         success_msg = "This is a success message logged through the system!"
         
-        # Use the dialog logger method which should log to console AND show dialog
+        # Use the dialog logger method which should log to console AND 
+        # show dialog
         self.dialog_logger.success_with_dialog(success_msg)
         
         self.statusBar().showMessage("Success logged")
@@ -479,26 +511,26 @@ The dialog will automatically size itself appropriately while maintaining good r
     # Real-world example methods
     def show_connection_error(self):
         """Show a realistic connection error."""
-        result = show_error_alert(
+        show_error_alert(
             parent=self,
             title="DropBot Connection Failed",
             message="Unable to establish connection with DropBot device.\n\n"
-                   "Please check:\n"
-                   "• Device is powered on\n"
-                   "• USB cable is securely connected\n"
-                   "• Device drivers are properly installed\n"
-                   "• No other applications are using the device",
+                    "Please check:\n"
+                    "• Device is powered on\n"
+                    "• USB cable is securely connected\n"
+                    "• Device drivers are properly installed\n"
+                    "• No other applications are using the device",
             error_details="SerialException: could not open port /dev/ttyUSB0"
         )
         self.statusBar().showMessage("Connection error dialog shown")
     
     def show_save_success(self):
         """Show a realistic save success message."""
-        result = show_success(
+        show_success(
             parent=self,
             title="Protocol Saved",
             message="Protocol 'Mixing_Experiment_v2.json' has been saved "
-                   "successfully to the protocols folder."
+                    "successfully to the protocols folder."
         )
         self.statusBar().showMessage("Save success dialog shown")
     
@@ -508,8 +540,8 @@ The dialog will automatically size itself appropriately while maintaining good r
             parent=self,
             title="Unsaved Protocol Changes",
             message="You have made changes to the current protocol that "
-                   "haven't been saved.\n\nSave changes before switching "
-                   "to a different protocol?",
+                    "haven't been saved.\n\nSave changes before switching "
+                    "to a different protocol?",
             yes_text="Save Changes",
             no_text="Discard Changes"
         )
@@ -535,10 +567,12 @@ Capabilities:
 Last calibration: 2024-01-15
 Connection: USB (/dev/ttyUSB0)"""
         
-        result = show_information(
+        show_information(
             parent=self,
             title="Device Information",
-            message=device_info
+            message=device_info,
+            resizable=True,
+            size=(500, 450)
         )
         self.statusBar().showMessage("Device info dialog shown")
     

@@ -228,6 +228,28 @@ class BaseMessageDialog(QDialog):
         # Position dialog
         self._center_on_parent()
     
+    def _should_use_scrolling(self) -> bool:
+        """Determine if the dialog should use scrolling based on content length."""
+        # Use scrolling if:
+        # 1. Message is very long (>500 characters)
+        # 2. Message has many lines (>8 lines)
+        # 3. Dialog has a fixed size that might not accommodate content
+        message_length = len(self.message_text)
+        line_count = self.message_text.count('\n') + 1
+        
+        # Check if content is likely to be too long
+        if message_length > 500 or line_count > 8:
+            return True
+            
+        # Check if dialog has a fixed small size
+        current_size = self.size()
+        if current_size.isValid():
+            width, height = current_size.width(), current_size.height()
+            if height <= 400 and (message_length > 200 or line_count > 4):
+                return True
+                
+        return False
+    
     def _setup_fonts(self):
         """Setup font families for the dialog."""
         # Load Inter font for text
@@ -336,21 +358,95 @@ class BaseMessageDialog(QDialog):
         content_layout.setContentsMargins(25, 10, 25, 25)
         content_layout.setSpacing(15)
         
-        # Message text
-        self.message_label = QLabel(self.message_text)
-        self.message_label.setObjectName("messageLabel")
-        message_font = QFont(self.text_font_family)
-        message_font.setPointSize(12)
-        self.message_label.setFont(message_font)
-        self.message_label.setWordWrap(True)
-        self.message_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Check if we need scrolling for long content
+        needs_scrolling = self._should_use_scrolling()
         
-        content_layout.addWidget(self.message_label)
-        
-        # Additional content area for subclasses
-        self.additional_content_layout = QVBoxLayout()
-        content_layout.addLayout(self.additional_content_layout)
+        if needs_scrolling:
+            # Create scroll area for long content
+            from PySide6.QtWidgets import QScrollArea
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            
+            # Set consistent styling regardless of dark/light mode
+            scroll_area.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: {self.DIALOG_BG_COLOR};
+                    border: 1px solid {self.BORDER_COLOR};
+                    border-radius: 4px;
+                }}
+                QScrollArea QWidget {{
+                    background-color: {self.DIALOG_BG_COLOR};
+                }}
+                QScrollBar:vertical {{
+                    background-color: #F0F0F0;
+                    width: 12px;
+                    border-radius: 6px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background-color: #C0C0C0;
+                    border-radius: 6px;
+                    min-height: 20px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background-color: #A0A0A0;
+                }}
+                QScrollBar:horizontal {{
+                    background-color: #F0F0F0;
+                    height: 12px;
+                    border-radius: 6px;
+                }}
+                QScrollBar::handle:horizontal {{
+                    background-color: #C0C0C0;
+                    border-radius: 6px;
+                    min-width: 20px;
+                }}
+                QScrollBar::handle:horizontal:hover {{
+                    background-color: #A0A0A0;
+                }}
+            """)
+            
+            # Create widget to hold scrollable content
+            scroll_widget = QWidget()
+            scroll_widget.setStyleSheet(f"background-color: {self.DIALOG_BG_COLOR};")
+            scroll_layout = QVBoxLayout(scroll_widget)
+            scroll_layout.setContentsMargins(0, 0, 0, 0)
+            scroll_layout.setSpacing(15)
+            
+            # Message text in scroll area
+            self.message_label = QLabel(self.message_text)
+            self.message_label.setObjectName("messageLabel")
+            message_font = QFont(self.text_font_family)
+            message_font.setPointSize(12)
+            self.message_label.setFont(message_font)
+            self.message_label.setWordWrap(True)
+            self.message_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            
+            scroll_layout.addWidget(self.message_label)
+            
+            # Additional content area for subclasses
+            self.additional_content_layout = QVBoxLayout()
+            scroll_layout.addLayout(self.additional_content_layout)
+            
+            scroll_area.setWidget(scroll_widget)
+            content_layout.addWidget(scroll_area)
+        else:
+            # Standard layout for shorter content
+            self.message_label = QLabel(self.message_text)
+            self.message_label.setObjectName("messageLabel")
+            message_font = QFont(self.text_font_family)
+            message_font.setPointSize(12)
+            self.message_label.setFont(message_font)
+            self.message_label.setWordWrap(True)
+            self.message_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            
+            content_layout.addWidget(self.message_label)
+            
+            # Additional content area for subclasses
+            self.additional_content_layout = QVBoxLayout()
+            content_layout.addLayout(self.additional_content_layout)
         
         self.main_layout.addWidget(self.content_frame, 1)
     
@@ -716,7 +812,10 @@ class BaseMessageDialog(QDialog):
         # Replace newlines with HTML breaks for proper formatting
         html_text = html_text.replace('\n', '<br>')
         
-        details_browser.setHtml(f"<div style='font-family: monospace; font-size: 11px;'>{html_text}</div>")
+        # Better monospace styling for tracebacks and code
+        details_browser.setHtml(f"""<div style='font-family: "Consolas", "Monaco", "Courier New", monospace; 
+                                font-size: 11px; line-height: 1.4; white-space: pre-wrap; 
+                                color: #2d2d2d;'>{html_text}</div>""")
         
         # Header with copy button
         header_layout = QHBoxLayout()
