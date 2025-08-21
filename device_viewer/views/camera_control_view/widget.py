@@ -6,6 +6,7 @@ from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 import cv2
 import time
 import os
+import sys
 import ctypes
 import ctypes.util
 import signal
@@ -327,10 +328,14 @@ class CameraControlWidget(QWidget):
                     if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL) != 0:
                         raise OSError(ctypes.get_errno(), 'SET_PDEATHSIG')
 
-                subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4 && rm {self.recording_file_path}""",
-                                 shell=True, 
-                                 preexec_fn=set_pdeathsig,
-                                 stdin=subprocess.DEVNULL)
+                if sys.platform.startswith("linux"):
+                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
+                                    shell=True, 
+                                    preexec_fn=set_pdeathsig,
+                                    stdin=subprocess.DEVNULL)
+                else:
+                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
+                                    shell=True)
                 logger.info("Video re-encoded successfully.")
 
             self.video_writer = None
