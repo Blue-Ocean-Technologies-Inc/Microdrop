@@ -50,18 +50,10 @@ datas = []
 window_redis_location = Path(pyface.__file__).parent.parent.parent.parent / "Scripts" / "redis-server.exe"
 linux_redis_location = Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "redis-server"
 
-windows_ffmpeg_location = Path(pyface.__file__).parent.parent.parent.parent / "Library" / "bin" / "ffmpeg.exe"
-linux_ffmpeg_location = Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "ffmpeg"
-
 if linux_redis_location.exists():
     datas.append((linux_redis_location, "."))
 elif window_redis_location.exists():
     datas.append((window_redis_location, "."))
-
-if linux_ffmpeg_location.exists():
-    datas.append((linux_ffmpeg_location, "."))
-elif windows_ffmpeg_location.exists():
-    datas.append((windows_ffmpeg_location, "."))
 
 datas.append((Path(pyface.__file__).parent / "images", "pyface/images"))
 datas.append((Path(teensy_minimal_rpc.__file__).parent / "static", Path("teensy_minimal_rpc") / "static"))
@@ -107,4 +99,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=ROOT / "microdrop_application" / "microdrop.ico"
 )
