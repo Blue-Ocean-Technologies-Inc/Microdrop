@@ -6,8 +6,8 @@ from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictCha
 from pyface.api import FileDialog, OK
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame
-from pyface.qt.QtCore import Qt, QTimer, QSizeF
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame, QPushButton, QSizePolicy
+from pyface.qt.QtCore import Qt, QTimer, QSizeF, Signal
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -308,7 +308,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Layout init
         container = QWidget(parent)
         layout = QHBoxLayout(container)
-        left_stack = QVBoxLayout()
+        right_stack_container = QWidget()
+        right_stack_container.setMaximumWidth(350)
+        right_stack = QVBoxLayout(right_stack_container)
 
         # alpha_view code
         alpha_view = generate_alpha_view(self.model)
@@ -340,18 +342,31 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.calibration_view.setParent(container)
 
         # Add widgets to layouts
-        left_stack.addWidget(self.camera_control_widget)
-        left_stack.addWidget(create_line())  # Add a separator line
-        left_stack.addWidget(self.alpha_view_ui.control)
-        left_stack.addWidget(create_line())  # Add a separator line
-        left_stack.addWidget(self.calibration_view)
-        left_stack.addWidget(create_line())  # Add a separator line
-        left_stack.addWidget(self.layer_ui.control)
-        left_stack.addWidget(create_line())  # Add a separator line
-        left_stack.addWidget(self.mode_picker_view)
-        
+        right_stack.addWidget(self.camera_control_widget)
+        right_stack.addWidget(create_line())  # Add a separator line
+        right_stack.addWidget(self.alpha_view_ui.control)
+        right_stack.addWidget(create_line())  # Add a separator line
+        right_stack.addWidget(self.calibration_view)
+        right_stack.addWidget(create_line())  # Add a separator line
+        right_stack.addWidget(self.layer_ui.control)
+        right_stack.addWidget(create_line())  # Add a separator line
+        right_stack.addWidget(self.mode_picker_view)
+
+        reveal_button = QPushButton("arrow_forward_ios") # Default to reveal
+
+        def reveal_button_handler():
+            is_visible = not right_stack_container.isVisible()
+            right_stack_container.setVisible(is_visible)
+            reveal_button.setText("arrow_forward_ios" if is_visible else "arrow_back_ios")
+
+        reveal_button.setToolTip("Reveal Hidden Controls")
+        reveal_button.setStyleSheet("font-family: Material Symbols Outlined; font-size: 30px; margin-left: 3px; margin-right: 3px; padding-left: 3px;")
+        reveal_button.clicked.connect(reveal_button_handler)
+        reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
+
         layout.addWidget(self.device_view)
-        layout.addLayout(left_stack)
+        layout.addWidget(reveal_button)
+        layout.addWidget(right_stack_container)
 
         return container
 
