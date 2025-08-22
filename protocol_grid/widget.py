@@ -165,23 +165,14 @@ class PGCWidget(QWidget):
         
         dialog_action = DropbotDisconnectedBeforeRunDialogAction()
         
-        def show_dialog_safe():
-            try:
-                preview_mode_requested = dialog_action.perform(self)
-                if preview_mode_requested:
-                    self.navigation_bar.preview_mode_checkbox.setChecked(True)
-                    logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
-                return False
-            except Exception as e:
-                logger.info(f"Error showing dropbot disconnection dialog: {e}")
-                return False
-        
         # for immediate protocol execution requests, block and show dialog
         try:
             preview_mode_requested = dialog_action.perform(self)
             if preview_mode_requested:
                 self.navigation_bar.preview_mode_checkbox.setChecked(True)
                 logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
+                # Return True to allow protocol to proceed in preview mode
+                return True
             return False
         except Exception as e:
             logger.info(f"Error showing dropbot disconnection dialog: {e}")
