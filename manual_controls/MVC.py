@@ -38,7 +38,7 @@ class ToggleEditor(QtEditor):
                 padding: 2px;
             }}
             QPushButton:hover {{
-                background-color: {GREY["light"]};
+                background-color: {GREY["lighter"]};
             }}
             QPushButton:checked {{
                 background-color: {INFO_COLOR};
