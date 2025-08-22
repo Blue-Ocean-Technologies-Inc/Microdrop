@@ -96,20 +96,32 @@ group_defaults = {
     "Run Time": "",
 }
 
+BUTTON_MIN_WIDTH = 40
+BUTTON_MIN_HEIGHT = 26
+BUTTON_BORDER_RADIUS = 4
+
+BUTTON_STYLE = f"""
+QPushButton {{ 
+    font-family: {ICON_FONT_FAMILY}; 
+    font-size: 22px; 
+    padding: 4px 8px 4px 8px;
+    border-radius: {BUTTON_BORDER_RADIUS}px;
+    min-width: {BUTTON_MIN_WIDTH}px;
+    min-height: {BUTTON_MIN_HEIGHT}px;
+}} 
+QPushButton:hover {{ 
+    color: {SECONDARY_SHADE[700]}; 
+    background-color: {GREY['light']};
+}}
+QPushButton:pressed {{
+    background-color: {GREY['dark']};
+}}"""
+
 LIGHT_MODE_STYLESHEET = f"""
+            {BUTTON_STYLE}
             QPushButton {{ 
-                font-family: {ICON_FONT_FAMILY}; 
-                font-size: 22px; 
-                padding: 4px 8px 4px 8px;
                 background-color: {WHITE};
                 color: {BLACK};
-            }} 
-            QPushButton:hover {{ 
-                color: {SECONDARY_SHADE[700]}; 
-                background-color: {GREY['light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {GREY['dark']};
             }}
             QPushButton:disabled {{
                 color: {WHITE};
@@ -125,19 +137,10 @@ LIGHT_MODE_STYLESHEET = f"""
         """
 
 DARK_MODE_STYLESHEET = f"""
+            {BUTTON_STYLE}
             QPushButton {{ 
-                font-family: {ICON_FONT_FAMILY}; 
-                font-size: 22px; 
-                padding: 4px 8px 4px 8px;
                 background-color: {GREY['dark']};
                 color: {WHITE};
-            }} 
-            QPushButton:hover {{ 
-                color: {SECONDARY_SHADE[700]}; 
-                background-color: {GREY['light']};
-            }}
-            QPushButton:pressed {{
-                background-color: {GREY['dark']};
             }}
             QPushButton:disabled {{
                 color: {GREY['dark']};

@@ -19,10 +19,12 @@ from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
+from microdrop_style.colors import (WHITE, BLACK)
 
 LABEL_FONT_FAMILY = "Inter"
+
+# Button styling constants
+BUTTON_SPACING = 2
 
 
 class InformationPanel(QWidget):
@@ -33,26 +35,33 @@ class InformationPanel(QWidget):
         self.apply_styling()
     
     def setup_ui(self):
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(3)
+        
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(5, 5, 5, 5)
+        text_layout.setSpacing(3)
         
         # self.device_label = QLabel("Device: ")
         # self.device_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.protocol_label = QLabel("Protocol: untitled [not modified]")
-        self.protocol_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.protocol_label.setAlignment(Qt.AlignLeft)
         
         self.experiment_label = QLabel("Experiment: ")
-        self.experiment_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.experiment_label.setAlignment(Qt.AlignLeft)
+        
+        # layout.addWidget(self.device_label)
+        text_layout.addWidget(self.protocol_label)
+        text_layout.addWidget(self.experiment_label)
         
         self.open_button = QPushButton("folder_open")
         self.open_button.setToolTip("Open current experiment directory")
         
-        # layout.addWidget(self.device_label)
-        layout.addWidget(self.protocol_label)
-        layout.addWidget(self.experiment_label)
-        layout.addWidget(self.open_button, alignment=Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addLayout(text_layout)
+        layout.addWidget(self.open_button, alignment=Qt.AlignLeft)
+        layout.addStretch()
                 
         self.setLayout(layout)
     
@@ -98,7 +107,7 @@ class NavigationBar(QWidget):
         # HLayout: Navigation buttons
         self.button_layout = QHBoxLayout()
         self.button_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_layout.setSpacing(0)
+        self.button_layout.setSpacing(BUTTON_SPACING)
 
         # main navigation buttons
         self.btn_first = QPushButton(ICON_FIRST)
@@ -133,7 +142,7 @@ class NavigationBar(QWidget):
         self.play_phase_container = QWidget()
         self.play_phase_layout = QHBoxLayout(self.play_phase_container)
         self.play_phase_layout.setContentsMargins(0, 0, 0, 0)
-        self.play_phase_layout.setSpacing(0)
+        self.play_phase_layout.setSpacing(BUTTON_SPACING)
         
         self.play_phase_layout.addWidget(self.btn_play)
         
@@ -141,13 +150,18 @@ class NavigationBar(QWidget):
             btn.setVisible(False)
             self.play_phase_layout.addWidget(btn)
         
-        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last]:
+        # Set consistent sizing for all buttons
+        all_buttons = [
+            self.btn_first, self.btn_prev, self.btn_play,
+            self.btn_stop, self.btn_next, self.btn_last,
+            self.btn_prev_phase, self.btn_resume, self.btn_next_phase
+        ]
+        
+        for btn in all_buttons:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        for btn in [self.btn_prev_phase, self.btn_resume, self.btn_next_phase]:
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        self.play_phase_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.play_phase_container.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         # add in correct order
         self.button_layout.addWidget(self.btn_first)
@@ -168,17 +182,24 @@ class NavigationBar(QWidget):
         checkbox_layout.addStretch()
 
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip("When checked, droplet detection will be performed at the end of each step")
-        checkbox_layout.addWidget(self.droplet_check_checkbox)
+        self.droplet_check_checkbox.setToolTip(
+            "When checked, droplet detection will be performed at the end of each step"
+        )
         
         self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
-        self.advanced_user_mode_checkbox.setToolTip("When checked, navigation buttons remain enabled during protocol execution for advanced users")
-        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+        self.advanced_user_mode_checkbox.setToolTip(
+            "When checked, navigation buttons remain enabled during protocol execution for advanced users"
+        )
         
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
-        self.preview_mode_checkbox.setToolTip("When checked, no hardware messages will be sent during protocol execution")
-        checkbox_layout.addWidget(self.preview_mode_checkbox)
+        self.preview_mode_checkbox.setToolTip(
+            "When checked, no hardware messages will be sent during protocol execution"
+        )
         
+        checkbox_layout.addWidget(self.preview_mode_checkbox)
+        checkbox_layout.addWidget(self.droplet_check_checkbox)
+        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+            
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
         
@@ -195,7 +216,6 @@ class NavigationBar(QWidget):
             checkbox_style = f"""
                 QCheckBox {{
                     color: {WHITE};
-
                 }}
             """
         else:
@@ -203,7 +223,6 @@ class NavigationBar(QWidget):
             checkbox_style = f"""
                 QCheckBox {{
                     color: {BLACK};
-
                 }}
             """
         self.setStyleSheet(button_style)
@@ -254,7 +273,7 @@ class NavigationBar(QWidget):
             
         self._phase_navigation_active = False
         
-        # Hide the phase  buttons
+        # Hide the phase buttons
         self.btn_prev_phase.setVisible(False)
         self.btn_resume.setVisible(False) 
         self.btn_next_phase.setVisible(False)
