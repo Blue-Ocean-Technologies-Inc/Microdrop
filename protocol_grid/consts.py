@@ -5,8 +5,12 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
+from microdrop_style.colors import (
+    PRIMARY_SHADE, SECONDARY_SHADE, GREY, BLACK, WHITE
+)
+from microdrop_style.button_styles import (
+    get_button_style, get_button_dimensions, BUTTON_SPACING
+)
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
@@ -96,61 +100,45 @@ group_defaults = {
     "Run Time": "",
 }
 
-BUTTON_MIN_WIDTH = 40
-BUTTON_MIN_HEIGHT = 26
+# Button styling constants (now imported from button_styles)
+BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4
 
-BUTTON_STYLE = f"""
-QPushButton {{ 
-    font-family: {ICON_FONT_FAMILY}; 
-    font-size: 22px; 
-    padding: 4px 8px 4px 8px;
-    border-radius: {BUTTON_BORDER_RADIUS}px;
-    min-width: {BUTTON_MIN_WIDTH}px;
-    min-height: {BUTTON_MIN_HEIGHT}px;
-}} 
-QPushButton:hover {{ 
-    color: {SECONDARY_SHADE[700]}; 
-    background-color: {GREY['light']};
-}}
-QPushButton:pressed {{
-    background-color: {GREY['dark']};
-}}"""
+# Get button styles based on theme
+def get_light_mode_stylesheet():
+    """Get light mode stylesheet with button styles."""
+    return f"""
+        {get_button_style("light", "default")}
+        QPushButton:disabled {{
+            color: {WHITE};
+            background-color: {GREY['light']};
+        }}
+        QToolTip {{
+            background-color: {WHITE};
+            color: {BLACK};
+            padding: 4px 8px 4px 8px;
+            font-size: 12pt;
+            border-radius: 4px;
+        }}
+    """
 
-LIGHT_MODE_STYLESHEET = f"""
-            {BUTTON_STYLE}
-            QPushButton {{ 
-                background-color: {WHITE};
-                color: {BLACK};
-            }}
-            QPushButton:disabled {{
-                color: {WHITE};
-                background-color: {GREY['light']};
-            }}
-            QToolTip {{
-                background-color: {WHITE};
-                color: {BLACK};
-                padding: 4px 8px 4px 8px;
-                font-size: 12pt;
-                border-radius: 4px;
-            }}
-        """
+def get_dark_mode_stylesheet():
+    """Get dark mode stylesheet with button styles."""
+    return f"""
+        {get_button_style("dark", "default")}
+        QPushButton:disabled {{
+            color: {GREY['dark']};
+            background-color: {BLACK};
+        }}
+        QToolTip {{
+            background-color: {GREY['dark']};
+            color: {WHITE};
+            padding: 4px 8px 4px 8px;
+            font-size: 12pt;
+            border-radius: 4px;
+        }}
+    """
 
-DARK_MODE_STYLESHEET = f"""
-            {BUTTON_STYLE}
-            QPushButton {{ 
-                background-color: {GREY['dark']};
-                color: {WHITE};
-            }}
-            QPushButton:disabled {{
-                color: {GREY['dark']};
-                background-color: {BLACK};
-            }}
-            QToolTip {{
-                background-color: {GREY['dark']};
-                color: {WHITE};
-                padding: 4px 8px 4px 8px;
-                font-size: 12pt;
-                border-radius: 4px;
-            }}
-        """
+# Legacy constants for backward compatibility
+LIGHT_MODE_STYLESHEET = get_light_mode_stylesheet()
+DARK_MODE_STYLESHEET = get_dark_mode_stylesheet()

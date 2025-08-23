@@ -11,20 +11,26 @@ from pyface.action.api import Action
 from pyface.qt.QtWidgets import QTextBrowser
 from traits.api import Str
 
-from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
-                                  ROW_TYPE_ROLE, STEP_TYPE,
-                                  DARK_MODE_STYLESHEET, LIGHT_MODE_STYLESHEET)
+from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
+                                  fixed_fields, ROW_TYPE_ROLE, STEP_TYPE,
+                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
 from microdrop_application.application import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
 from microdrop_style.colors import (WHITE, BLACK)
+from microdrop_style.button_styles import (
+    get_button_dimensions, BUTTON_SPACING, get_button_style
+)
 
 LABEL_FONT_FAMILY = "Inter"
 
-# Button styling constants
-BUTTON_SPACING = 2
+# Button styling constants (now imported from button_styles)
+BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("navigation")
+BUTTON_MAX_WIDTH = 60
+BUTTON_BORDER_RADIUS = 8
+BUTTON_PADDING = 8
 
 
 class InformationPanel(QWidget):
