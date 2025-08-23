@@ -66,9 +66,7 @@ class InformationPanel(QWidget):
         self.setLayout(layout)
     
     def apply_styling(self):
-        dark = is_dark_mode()
-        
-        if dark:
+        if is_dark_mode():
             text_color = WHITE
             button_style = DARK_MODE_STYLESHEET
         else:
@@ -209,9 +207,7 @@ class NavigationBar(QWidget):
         self._apply_styling()
     
     def _apply_styling(self):
-        dark = is_dark_mode()
-        
-        if dark:
+        if is_dark_mode():
             button_style = DARK_MODE_STYLESHEET
             checkbox_style = f"""
                 QCheckBox {{
@@ -368,6 +364,53 @@ class StatusBar(QWidget):
         self.setLayout(layout)
         
         self.setFixedHeight(25)
+        
+        # Apply initial styling
+        self._apply_styling()
+    
+    def _apply_styling(self):
+        """Apply theme-specific styling to all labels and input fields."""
+        if is_dark_mode():
+            text_color = WHITE
+            input_style = f"""
+                QLineEdit {{
+                    color: {WHITE};
+                    background-color: #2d2d2d;
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    padding: 2px;
+                }}
+            """
+        else:
+            text_color = BLACK
+            input_style = f"""
+                QLineEdit {{
+                    color: {BLACK};
+                    background-color: white;
+                    border: 1px solid #cccccc;
+                    border-radius: 3px;
+                    padding: 2px;
+                }}
+            """
+        
+        label_style = f"QLabel {{ color: {text_color}; }}"
+        
+        # Apply styling to all labels
+        all_labels = [
+            self.lbl_total_time, self.lbl_step_time, self.lbl_repeat_protocol,
+            self.lbl_repeat_protocol_status, self.lbl_step_progress,
+            self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step
+        ]
+        
+        for label in all_labels:
+            label.setStyleSheet(label_style)
+        
+        # Apply styling to input field
+        self.edit_repeat_protocol.setStyleSheet(input_style)
+    
+    def update_theme_styling(self):
+        """Update theme styling when theme changes."""
+        self._apply_styling()
 
 
 class EditContextMenu(QMenu):

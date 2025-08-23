@@ -144,6 +144,11 @@ class PGCWidget(QWidget):
 
         # calibration data tracking
         self._last_free_mode_active_electrodes = []
+        
+        # Connect to application palette changes to ensure theme updates are detected
+        app = QApplication.instance()
+        if app:
+            app.paletteChanged.connect(self._on_application_palette_changed)
 
     # ---------- DropBot connection ----------
     def _is_dropbot_connected(self):
@@ -385,8 +390,8 @@ class PGCWidget(QWidget):
         if getattr(self, '_processing_palette_change', False):
             return
             
-        dark = is_dark_mode()
-        fg = QBrush(QColor("white" if dark else "black"))
+        fg = QBrush(QColor("white" if is_dark_mode() else "black"))
+        
         def clear_recursive(parent):
             for row in range(parent.rowCount()):
                 for col in range(parent.columnCount()):
@@ -1351,8 +1356,8 @@ class PGCWidget(QWidget):
             self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
-        dark = is_dark_mode()
-        self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)
+        self.setStyleSheet(DARK_MODE_STYLESHEET 
+                           if is_dark_mode() else LIGHT_MODE_STYLESHEET)
 
         self.button_layout = QHBoxLayout()
         
@@ -2663,8 +2668,9 @@ class PGCWidget(QWidget):
             if not getattr(self, '_processing_palette_change', False):
                 self._processing_palette_change = True
                 try:
-                    dark = is_dark_mode()
-                    self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)                
+                    logger.critical("palette change")
+                    self.setStyleSheet(DARK_MODE_STYLESHEET 
+                                       if is_dark_mode() else LIGHT_MODE_STYLESHEET)                
                     self.clear_highlight()
                     if hasattr(self, 'navigation_bar'):
                         self.navigation_bar.update_theme_styling()
@@ -2682,6 +2688,49 @@ class PGCWidget(QWidget):
                 self._processing_palette_change = False
         
         return super().event(event)
+
+    def _on_application_palette_changed(self):
+        """Handle application palette changes (system theme switches)."""
+        if not getattr(self, '_processing_palette_change', False):
+            self._processing_palette_change = True
+            try:                
+                # Update main widget styling
+                self.setStyleSheet(DARK_MODE_STYLESHEET 
+                                   if is_dark_mode() else LIGHT_MODE_STYLESHEET)
+                
+                # Clear highlights
+                self.clear_highlight()
+                
+                # Update all UI components
+                if hasattr(self, 'navigation_bar'):
+                    self.navigation_bar.update_theme_styling()
+                if hasattr(self, 'information_panel'):
+                    self.information_panel.update_theme_styling()
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.update_theme_styling()
+                
+                # Update any open dialogs
+                self._update_theme_styling_for_dialogs()
+                
+                # Refresh model if needed
+                if (not getattr(self, '_restoring_selection', False) and 
+                    not self._protocol_running and 
+                    not getattr(self, '_programmatic_change', False)):
+                    QTimer.singleShot(50, self._refresh_model_after_theme_change)
+                    
+            finally:
+                QTimer.singleShot(100, self._reset_palette_change_flag)
+            self._processing_palette_change = False
+    
+    def _update_theme_styling_for_dialogs(self):
+        """Update theme styling for any open dialogs."""
+        # Find and update any open dialogs
+        for dialog in self.findChildren(QDialog):
+            if hasattr(dialog, 'update_theme_styling'):
+                try:
+                    dialog.update_theme_styling()
+                except Exception as e:
+                    logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
