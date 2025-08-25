@@ -206,6 +206,8 @@ class PGCWidget(QWidget):
 
                     self.protocol_runner.connect_droplet_detection_listener(message_listener)
 
+                    self._setup_advanced_mode_sync()
+
                     logger.info("connected to message listener successfully")
                     return
                 else:
@@ -217,6 +219,33 @@ class PGCWidget(QWidget):
 
         except Exception as e:
             logger.info(f"Error setting up message listener: {e}")
+
+    def _setup_advanced_mode_sync(self):
+        """Set up synchronization between menu and NavigationBar for advanced mode."""
+        try:
+            if self._protocol_grid_plugin:
+                self._protocol_grid_plugin.set_widget_reference(self)
+                
+                self.navigation_bar.advanced_user_mode_checkbox.stateChanged.connect(
+                    self._on_advanced_mode_checkbox_changed
+                )
+                
+                logger.info("Advanced mode synchronization set up")
+        except Exception as e:
+            logger.error(f"Error setting up advanced mode sync: {e}")
+
+    def _on_advanced_mode_checkbox_changed(self, state):
+        try:
+            if self._protocol_grid_plugin:
+                checked = state == 2  # Qt.Checked
+                current_plugin_state = self._protocol_grid_plugin.get_advanced_mode_state()
+                
+                # only update if state actually changed to avoid infinite loops
+                if checked != current_plugin_state:
+                    self._protocol_grid_plugin.set_advanced_mode_state(checked)
+                    logger.debug(f"Advanced mode updated from checkbox: {checked}")
+        except Exception as e:
+            logger.error(f"Error handling advanced mode checkbox change: {e}")
 
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:

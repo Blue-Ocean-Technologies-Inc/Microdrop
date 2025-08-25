@@ -194,6 +194,7 @@ class NavigationBar(QWidget):
         self.advanced_user_mode_checkbox.setToolTip(
             "When checked, navigation buttons remain enabled during protocol execution for advanced users"
         )
+        self.advanced_user_mode_checkbox.setVisible(False)
         
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
         self.preview_mode_checkbox.setToolTip(
@@ -202,7 +203,7 @@ class NavigationBar(QWidget):
         
         checkbox_layout.addWidget(self.preview_mode_checkbox)
         checkbox_layout.addWidget(self.droplet_check_checkbox)
-        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+        # checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
             
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
