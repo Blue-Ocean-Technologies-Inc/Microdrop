@@ -136,3 +136,31 @@ Set when you want the maximal level for Qt-level debugs logs. These can be filte
 
 Set to blank when you want to force software encoding/decoding for Qt's FFMPEG backend. See [here](https://doc.qt.io/qt-6/advanced-ffmpeg-configuration.html)
 
+# Building
+
+We use pyinstaller to build the application into a single mostly statically linked executable. When porting to a new platform, you will probably have to modify pyinstaller.spec with some plaform specific file locations (which vary for conda/pip for example). The .spec file should be valid Python code so set syntax highlighting accordingly. Currently build for Windows/Linux works, the caveat being that cross-platform building isn't supported by pyinstaller (so you will need to build on 3 machines for 3 different platforms).
+
+### Common Build Errors
+
+#### Cannot import SSL / Cannot find version
+
+This seems to be the first dynamically linked binary that pyinstaller looks for. On Linux, this might resolve to system SSL imports (not correct version) and on Windows this is likely just not found. This is a weird error since it comes from redis-py (python redis client), and the actual error get silenced for some reason in their code. Add "import ssl" to the run script so you can see the actual error.
+
+The issue is that pyinstaller cannot find conda's dynamic imports, so the fix is to help it. On linux this is as simple as
+```bash
+LD_LIBRARY_PATH=/home/numberisnan/miniconda3/envs/microdrop/lib pyinstaller pyinstaller.spec -y
+```
+...replaced with the actual path to your env's lib folder (you can also just export it to set it for the rest of the shell session). In Windows this should be adding the similar path to PATH (keep in mind the the folder structure is different for Windows/Conda, so you might have to manually locate the folder with the correct DLL).
+
+#### Cannot import libraries
+
+Check that you are in the conda environment while building, then make sure that you are running the correct python. I found that paralell conda installations (miniconda3 and micromamba for example) have unpredictable behviour (python resolves to micromamba, but pyinstaller uses miniconda's python). To be explicit, first find a way to invoke the correct python binary (full path reference, PATH modification etc). For the latter you know you have this right when
+```bash
+where python # Windows
+which python # Linux
+```
+resolves to the correct directory. 
+ Then invoke pyinstaller as so
+```bash
+python -m PyInstaller pyinstaller.spec -y
+```
