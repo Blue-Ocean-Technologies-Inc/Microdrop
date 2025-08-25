@@ -647,13 +647,16 @@ class StepMessageDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
+        # Use centralized button styles
         no_button = QPushButton("NO")
-        no_button.setMinimumWidth(80)
+        no_button.setStyleSheet(get_button_style("light", "default"))
+        no_button.setMinimumWidth(100)
         no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
-        yes_button.setMinimumWidth(80)
+        yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
 
         button_layout.addWidget(yes_button)
@@ -716,19 +719,14 @@ class ExperimentCompleteDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        button_style = f"""
-            QPushButton {{ 
-                font-family: {LABEL_FONT_FAMILY}; 
-            }}
-        """
-        
+        # Use centralized button styles
         no_button = QPushButton("NO")
-        no_button.setStyleSheet(button_style)
+        no_button.setStyleSheet(get_button_style("light", "default"))
         no_button.setMinimumWidth(100)
         no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
-        yes_button.setStyleSheet(button_style)
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
@@ -910,40 +908,17 @@ class DropletDetectionFailureDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
+        # Use centralized button styles
         no_button = QPushButton("NO (Stay Paused)")
+        no_button.setStyleSheet(get_button_style("light", "default"))
         no_button.setMinimumWidth(120)
         no_button.clicked.connect(self.reject)
-        no_button.setStyleSheet("""
-            QPushButton {
-                background-color: #cc3300;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #aa2200;
-            }
-        """)
         
         yes_button = QPushButton("YES (Continue)")
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(120)
         yes_button.clicked.connect(self.accept)
-        yes_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0055aa;
-            }
-        """)
         
         button_layout.addWidget(yes_button)
         button_layout.addWidget(no_button)

@@ -13,6 +13,10 @@ ICON_AUTOMATION      = "\uf421"  # automation
 ICON_VISIBILITY      = "\ue8f4"  # eye open
 ICON_VISIBILITY_OFF  = "\ue8f5"  # eye closed
 
+# DEVICE VIEWER ICONS
+ICON_VIEW_3D         = "\ue8b4"  # view_in_ar (3D view)
+ICON_REFRESH         = "\ue5d5"  # refresh
+
 # PROTOCOL GRID ICONS
 ICON_FIRST           = "\ue045"  # first
 ICON_PREVIOUS        = "\ue020"  # previous

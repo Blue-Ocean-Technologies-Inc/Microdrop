@@ -107,37 +107,13 @@ BUTTON_BORDER_RADIUS = 4
 # Get button styles based on theme
 def get_light_mode_stylesheet():
     """Get light mode stylesheet with button styles."""
-    return f"""
-        {get_button_style("light", "default")}
-        QPushButton:disabled {{
-            color: {WHITE};
-            background-color: {GREY['light']};
-        }}
-        QToolTip {{
-            background-color: {WHITE};
-            color: {BLACK};
-            padding: 4px 8px 4px 8px;
-            font-size: 12pt;
-            border-radius: 4px;
-        }}
-    """
+    from microdrop_style.button_styles import get_complete_stylesheet
+    return get_complete_stylesheet("light", "default")
 
 def get_dark_mode_stylesheet():
     """Get dark mode stylesheet with button styles."""
-    return f"""
-        {get_button_style("dark", "default")}
-        QPushButton:disabled {{
-            color: {GREY['dark']};
-            background-color: {BLACK};
-        }}
-        QToolTip {{
-            background-color: {GREY['dark']};
-            color: {WHITE};
-            padding: 4px 8px 4px 8px;
-            font-size: 12pt;
-            border-radius: 4px;
-        }}
-    """
+    from microdrop_style.button_styles import get_complete_stylesheet
+    return get_complete_stylesheet("dark", "default")
 
 # Legacy constants for backward compatibility
 LIGHT_MODE_STYLESHEET = get_light_mode_stylesheet()

@@ -22,13 +22,17 @@ from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_
                                     DEFAULT_APPLICATION)
 from microdrop_utils._logger import get_logger
 from microdrop_utils.font_helpers import load_font_family
-logger = get_logger(__name__)
+from microdrop_style.font_paths import load_material_symbols_font
 
+# Font paths
 INTER_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
 LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
 
-MATERIAL_SYMBOLS_FONT_PATH = Path(__file__).parent.parent / "microdrop_style" / "icons" / "Material_Symbols_Outlined" / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
-ICON_FONT_FAMILY = load_font_family(MATERIAL_SYMBOLS_FONT_PATH) or "Material Symbols Outlined"
+# Load the Material Symbols font using the clean API
+ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
+
+logger = get_logger(__name__)
+
 
 def main(args, plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""

@@ -263,7 +263,8 @@ class MicrodropSidebar(QToolBar):
             color_str = "black"
         for btn, _ in self.menu_buttons:
             btn.set_color(color_str)
-        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % color_str)
+        # Apply hamburger button stylesheet with three color placeholders (normal, hover, pressed)
+        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % (color_str, color_str, color_str))
 
 
 class SidebarMenuButton(QFrame):
