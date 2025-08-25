@@ -315,7 +315,7 @@ class StatusBar(QWidget):
         repeat_layout.setSpacing(2)
         
         self.lbl_repeat_protocol = QLabel("Repeat Protocol:")
-        self.lbl_repeat_protocol.setFixedWidth(100)
+        self.lbl_repeat_protocol.setFixedWidth(140)
         self.lbl_repeat_protocol.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.lbl_repeat_protocol_status = QLabel("1/")
@@ -332,7 +332,7 @@ class StatusBar(QWidget):
         
         repeat_widget = QWidget()
         repeat_widget.setLayout(repeat_layout)
-        repeat_widget.setFixedWidth(150)
+        repeat_widget.setFixedWidth(170)
         repeat_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         repeat_widget.setFixedHeight(20)
 
