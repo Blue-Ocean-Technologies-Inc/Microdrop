@@ -231,6 +231,30 @@ class DeviceViewerDockPane(TraitsDockPane):
             capacitance = float(capacitance_str.split("pF")[0])
             self.last_capacitance = capacitance
 
+    def _on_screen_capture_triggered(self, message):
+        """
+        Handle screen capture events from the device viewer.
+        """
+        logger.debug(f"Screen capture triggered: {message}")
+        if self.model and self.camera_control_widget:
+            self.camera_control_widget.screen_capture_signal.emit()
+
+    def _on_screen_recording_triggered(self, message):
+        """
+        Handle screen recording events from the device viewer.
+        """
+        logger.debug(f"Screen recording triggered: {message}")
+        if self.model and self.camera_control_widget:
+            self.camera_control_widget.screen_recording_signal.emit(message.lower() == "true")
+
+    def _on_camera_active_triggered(self, message):
+        """
+        Handle camera activation events from the device viewer.
+        """
+        logger.debug(f"Camera activation triggered: {message}")
+        if self.model and self.camera_control_widget:
+            self.camera_control_widget.camera_active_signal.emit(message.lower() == "true")
+
     # ------- Device View class methods -------------------------
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""

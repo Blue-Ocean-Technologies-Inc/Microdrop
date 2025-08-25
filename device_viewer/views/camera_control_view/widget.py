@@ -22,6 +22,11 @@ logger = get_logger(__name__)
 
 class CameraControlWidget(QWidget):
 
+    # Signals - we use them to not have to set up another dramatiq listener here. Listener is in device_view_pane.py
+    camera_active_signal = Signal(bool)
+    screen_capture_signal = Signal()
+    screen_recording_signal = Signal(bool)
+
     def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene):
         super().__init__()
         self.model = model
@@ -39,6 +44,11 @@ class CameraControlWidget(QWidget):
         self.recording_file_path = None  # Path to the video file being recorded
         self.frame_count = 0  # Frame count for video recording
         self.record_start_ts = None  # Timestamp when recording starts
+
+        # Signal connectors
+        self.camera_active_signal.connect(self.on_camera_active)
+        self.screen_capture_signal.connect(self.capture_button_handler)
+        self.screen_recording_signal.connect(self.on_recording_active)
 
         self.cap = None  # OpenCV VideoCapture object
         self.frame_input = None
@@ -121,8 +131,8 @@ class CameraControlWidget(QWidget):
 
         self.sync_buttons_and_label()
 
-        self.camera_on_button.clicked.connect(lambda: self.camera.start() if self.camera else None)
-        self.camera_off_button.clicked.connect(lambda: self.camera.stop() if self.camera else None)
+        self.camera_on_button.clicked.connect(self.turn_on_camera)
+        self.camera_off_button.clicked.connect(self.turn_off_camera)
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
@@ -136,6 +146,14 @@ class CameraControlWidget(QWidget):
         self.model.observe(self.on_mode_changed, "mode")
 
         self.populate_camera_list()
+
+    def turn_on_camera(self):
+        if self.camera:
+            self.camera.start()
+
+    def turn_off_camera(self):
+        if self.camera:
+            self.camera.stop()
 
     def _apply_theme_styling(self):
         """Apply theme-aware styling to the widget."""
@@ -156,6 +174,22 @@ class CameraControlWidget(QWidget):
         """Update styling when theme changes."""
         icon_button_style = get_complete_stylesheet(theme, "default")
         self.setStyleSheet(icon_button_style)
+
+    # --------------------- Callbacks ---------------------------------------
+    @Slot(bool)
+    def on_camera_active(self, active):
+        if active:
+            self.turn_on_camera()
+        else:
+            self.turn_off_camera()
+
+    @Slot(bool)
+    def on_recording_active(self, active):
+        if active:
+            self.video_record_start()
+        else:
+            self.video_record_stop()
+
 
     def on_mode_changed(self, event):
         self.sync_buttons_and_label()
