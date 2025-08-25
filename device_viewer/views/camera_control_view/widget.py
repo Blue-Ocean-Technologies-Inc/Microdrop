@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
@@ -15,6 +15,7 @@ import subprocess
 from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
 from microdrop_utils._logger import get_logger
+from microdrop_style.button_styles import get_complete_stylesheet
 
 logger = get_logger(__name__)
 
