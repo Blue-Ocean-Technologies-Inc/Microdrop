@@ -74,7 +74,7 @@ def start_workers(**kwargs) -> 'dramatiq.worker.Worker':
     
     # Flush any old messages, start the worker, then run your app logic
     BROKER.flush_all()
-    worker = Worker(broker=BROKER, worker_timeout=100, worker_threads=1, **kwargs)
+    worker = Worker(broker=BROKER, worker_timeout=100, worker_threads=2, **kwargs)
     worker.start()
 
     return worker

@@ -12,7 +12,7 @@
 **/*.log
 **/*test*.html
 *.svg
-demo*.json
+*.json
 demo*.png
 demo*.dot
 

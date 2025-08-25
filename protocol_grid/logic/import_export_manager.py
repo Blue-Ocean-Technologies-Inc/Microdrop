@@ -1,5 +1,4 @@
-from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
-from protocol_grid.state.device_state import DeviceState
+from protocol_grid.state.protocol_state import ProtocolStep, ProtocolGroup
 
 
 class ImportExportManager:
@@ -15,6 +14,8 @@ class ImportExportManager:
             for g in flat_json.get("groups", [])
         }       
         fields = flat_json.get("fields", [])
+        protocol_id_to_channel = flat_json.get("id_to_channel", {})
+        
         group_objs = {}
 
         def get_parent_group_id(step_id):
@@ -33,6 +34,7 @@ class ImportExportManager:
                     "Description": meta.get("Description", group_id),
                     "ID": group_id,
                     "Repetitions": meta.get("Repetitions", "1")
+                    # "Force": ""  # Ensure Force field exists for groups
                 },
                 name=meta.get("Description", group_id),
                 elements=[]
@@ -76,12 +78,20 @@ class ImportExportManager:
             if "UID" not in params:
                 params["UID"] = ""  # Will be assigned later if needed
             
+            # ensure Force field exists (backwards compatibility)
+            if "Force" not in params:
+                params["Force"] = ""
+            
             step_obj = ProtocolStep(
                 parameters=params,
                 name=step.get("Description", "Step")
             )
             if "device_state" in step:
                 step_obj.device_state.from_dict(step["device_state"])
+            
+            if protocol_id_to_channel:
+                step_obj.device_state.id_to_channel = protocol_id_to_channel.copy()
+            
             if parent_group_id:
                 group = get_or_create_group(parent_group_id)
                 group.elements.append(step_obj)

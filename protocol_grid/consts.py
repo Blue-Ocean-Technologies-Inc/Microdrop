@@ -2,6 +2,13 @@ import os
 
 from PySide6.QtCore import Qt
 
+from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
+                                       DROPBOT_CONNECTED, DROPLETS_DETECTED)
+from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
+                                   WHITE, BLACK, GREY)
+
+ICON_FONT_FAMILY = "Material Symbols Outlined"
+
 # # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -17,6 +24,11 @@ CALIBRATION_DATA = "ui/calibration_data"
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,
+        DROPBOT_DISCONNECTED,
+        CHIP_INSERTED,
+        DROPBOT_CONNECTED,
+        DROPLETS_DETECTED,
+        # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
 
@@ -26,11 +38,14 @@ ROW_TYPE_ROLE = Qt.UserRole + 1
 
 protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
-    "Duration", "Voltage", "Frequency", 
+    "Duration", "Voltage", "Force", "Frequency", 
     "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay", "Video", 
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
+]
+protocol_grid_column_widths = [
+    120, 70, 80, 70, 70, 70, 90, 80, 130, 100, 100, 50, 140, 70, 110, 140, 90
 ]
 hidden_fields = ["UID"]
 all_fields = protocol_grid_fields + hidden_fields
@@ -52,6 +67,7 @@ step_defaults = {
     "Repetitions": "1",
     "Duration": "1.0",
     "Voltage": "100.0",
+    "Force": "",
     "Frequency": "10000",
     "Message": "",
     "Repeat Duration": "0.0",
@@ -72,14 +88,62 @@ group_defaults = {
     "Duration": "1.0",
     "Voltage": "",
     "Frequency": "",
-    "Message": "",
-    "Repeat Duration": "",
     "Trail Length": "",
-    "Trail Overlay": "",
-    "Video": "",
-    "Volume Threshold": "",
-    "Magnet": "",
-    "Magnet Height": "",   
-    "Max. Path Length": "",
-    "Run Time": "" 
+    "Run Time": "",
 }
+
+LIGHT_MODE_STYLESHEET = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 4px 8px 4px 8px;
+                background-color: {WHITE};
+                color: {BLACK};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {WHITE};
+                background-color: {GREY['light']};
+            }}
+            QToolTip {{
+                background-color: {WHITE};
+                color: {BLACK};
+                padding: 4px 8px 4px 8px;
+                font-size: 12pt;
+                border-radius: 4px;
+            }}
+        """
+
+DARK_MODE_STYLESHEET = f"""
+            QPushButton {{ 
+                font-family: {ICON_FONT_FAMILY}; 
+                font-size: 22px; 
+                padding: 4px 8px 4px 8px;
+                background-color: {GREY['dark']};
+                color: {WHITE};
+            }} 
+            QPushButton:hover {{ 
+                color: {SECONDARY_SHADE[700]}; 
+                background-color: {GREY['light']};
+            }}
+            QPushButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QPushButton:disabled {{
+                color: {GREY['dark']};
+                background-color: {BLACK};
+            }}
+            QToolTip {{
+                background-color: {GREY['dark']};
+                color: {WHITE};
+                padding: 4px 8px 4px 8px;
+                font-size: 12pt;
+                border-radius: 4px;
+            }}
+        """

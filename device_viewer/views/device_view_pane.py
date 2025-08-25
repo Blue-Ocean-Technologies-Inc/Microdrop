@@ -1,5 +1,4 @@
 # enthought imports
-from venv import create
 import dramatiq
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
