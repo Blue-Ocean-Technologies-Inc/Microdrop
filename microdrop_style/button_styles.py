@@ -88,6 +88,12 @@ QPushButton:disabled {{
     opacity: 0.6;
 }}
 
+QPushButton:checked {{
+    background-color: {SECONDARY_SHADE[800]};
+    border-color: {SECONDARY_SHADE[900]};
+    color: {WHITE};
+}}
+
 {TOOLTIP_STYLE}
 """
 
