@@ -34,6 +34,7 @@ ERROR_COLOR = "#B00020"
 WARNING_COLOR = "#F5A623"
 
 GREY = {
+    "lighter": "#BCBCBC",
     "light": "#D1D1D1",
     "dark":  "#575757"
 }

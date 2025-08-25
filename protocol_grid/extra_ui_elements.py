@@ -11,18 +11,26 @@ from pyface.action.api import Action
 from pyface.qt.QtWidgets import QTextBrowser
 from traits.api import Str
 
-from protocol_grid.consts import (protocol_grid_fields, field_groupings, fixed_fields,
-                                  ROW_TYPE_ROLE, STEP_TYPE,
-                                  DARK_MODE_STYLESHEET, LIGHT_MODE_STYLESHEET)
+from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
+                                  fixed_fields, ROW_TYPE_ROLE, STEP_TYPE,
+                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
 from microdrop_application.application import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
+from microdrop_style.colors import (WHITE, BLACK)
+from microdrop_style.button_styles import (
+    get_button_dimensions, BUTTON_SPACING, get_button_style
+)
 
 LABEL_FONT_FAMILY = "Inter"
+
+# Button styling constants (now imported from button_styles)
+BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("navigation")
+BUTTON_MAX_WIDTH = 60
+BUTTON_BORDER_RADIUS = 8
+BUTTON_PADDING = 8
 
 
 class InformationPanel(QWidget):
@@ -33,33 +41,38 @@ class InformationPanel(QWidget):
         self.apply_styling()
     
     def setup_ui(self):
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(3)
+        
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(5, 5, 5, 5)
+        text_layout.setSpacing(3)
         
         # self.device_label = QLabel("Device: ")
         # self.device_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.protocol_label = QLabel("Protocol: untitled [not modified]")
-        self.protocol_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.protocol_label.setAlignment(Qt.AlignLeft)
         
         self.experiment_label = QLabel("Experiment: ")
-        self.experiment_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.experiment_label.setAlignment(Qt.AlignLeft)
+        
+        # layout.addWidget(self.device_label)
+        text_layout.addWidget(self.protocol_label)
+        text_layout.addWidget(self.experiment_label)
         
         self.open_button = QPushButton("folder_open")
         self.open_button.setToolTip("Open current experiment directory")
         
-        # layout.addWidget(self.device_label)
-        layout.addWidget(self.protocol_label)
-        layout.addWidget(self.experiment_label)
-        layout.addWidget(self.open_button, alignment=Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addLayout(text_layout)
+        layout.addWidget(self.open_button, alignment=Qt.AlignLeft)
+        layout.addStretch()
                 
         self.setLayout(layout)
     
     def apply_styling(self):
-        dark = is_dark_mode()
-        
-        if dark:
+        if is_dark_mode():
             text_color = WHITE
             button_style = DARK_MODE_STYLESHEET
         else:
@@ -98,7 +111,7 @@ class NavigationBar(QWidget):
         # HLayout: Navigation buttons
         self.button_layout = QHBoxLayout()
         self.button_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_layout.setSpacing(0)
+        self.button_layout.setSpacing(BUTTON_SPACING)
 
         # main navigation buttons
         self.btn_first = QPushButton(ICON_FIRST)
@@ -133,7 +146,7 @@ class NavigationBar(QWidget):
         self.play_phase_container = QWidget()
         self.play_phase_layout = QHBoxLayout(self.play_phase_container)
         self.play_phase_layout.setContentsMargins(0, 0, 0, 0)
-        self.play_phase_layout.setSpacing(0)
+        self.play_phase_layout.setSpacing(BUTTON_SPACING)
         
         self.play_phase_layout.addWidget(self.btn_play)
         
@@ -141,13 +154,18 @@ class NavigationBar(QWidget):
             btn.setVisible(False)
             self.play_phase_layout.addWidget(btn)
         
-        for btn in [self.btn_first, self.btn_prev, self.btn_play, self.btn_stop, self.btn_next, self.btn_last]:
+        # Set consistent sizing for all buttons
+        all_buttons = [
+            self.btn_first, self.btn_prev, self.btn_play,
+            self.btn_stop, self.btn_next, self.btn_last,
+            self.btn_prev_phase, self.btn_resume, self.btn_next_phase
+        ]
+        
+        for btn in all_buttons:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        for btn in [self.btn_prev_phase, self.btn_resume, self.btn_next_phase]:
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        self.play_phase_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.play_phase_container.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         # add in correct order
         self.button_layout.addWidget(self.btn_first)
@@ -168,17 +186,24 @@ class NavigationBar(QWidget):
         checkbox_layout.addStretch()
 
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip("When checked, droplet detection will be performed at the end of each step")
-        checkbox_layout.addWidget(self.droplet_check_checkbox)
+        self.droplet_check_checkbox.setToolTip(
+            "When checked, droplet detection will be performed at the end of each step"
+        )
         
         self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
-        self.advanced_user_mode_checkbox.setToolTip("When checked, navigation buttons remain enabled during protocol execution for advanced users")
-        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+        self.advanced_user_mode_checkbox.setToolTip(
+            "When checked, navigation buttons remain enabled during protocol execution for advanced users"
+        )
         
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
-        self.preview_mode_checkbox.setToolTip("When checked, no hardware messages will be sent during protocol execution")
-        checkbox_layout.addWidget(self.preview_mode_checkbox)
+        self.preview_mode_checkbox.setToolTip(
+            "When checked, no hardware messages will be sent during protocol execution"
+        )
         
+        checkbox_layout.addWidget(self.preview_mode_checkbox)
+        checkbox_layout.addWidget(self.droplet_check_checkbox)
+        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+            
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
         
@@ -188,14 +213,11 @@ class NavigationBar(QWidget):
         self._apply_styling()
     
     def _apply_styling(self):
-        dark = is_dark_mode()
-        
-        if dark:
+        if is_dark_mode():
             button_style = DARK_MODE_STYLESHEET
             checkbox_style = f"""
                 QCheckBox {{
                     color: {WHITE};
-
                 }}
             """
         else:
@@ -203,7 +225,6 @@ class NavigationBar(QWidget):
             checkbox_style = f"""
                 QCheckBox {{
                     color: {BLACK};
-
                 }}
             """
         self.setStyleSheet(button_style)
@@ -254,7 +275,7 @@ class NavigationBar(QWidget):
             
         self._phase_navigation_active = False
         
-        # Hide the phase  buttons
+        # Hide the phase buttons
         self.btn_prev_phase.setVisible(False)
         self.btn_resume.setVisible(False) 
         self.btn_next_phase.setVisible(False)
@@ -349,6 +370,53 @@ class StatusBar(QWidget):
         self.setLayout(layout)
         
         self.setFixedHeight(25)
+        
+        # Apply initial styling
+        self._apply_styling()
+    
+    def _apply_styling(self):
+        """Apply theme-specific styling to all labels and input fields."""
+        if is_dark_mode():
+            text_color = WHITE
+            input_style = f"""
+                QLineEdit {{
+                    color: {WHITE};
+                    background-color: #2d2d2d;
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    padding: 2px;
+                }}
+            """
+        else:
+            text_color = BLACK
+            input_style = f"""
+                QLineEdit {{
+                    color: {BLACK};
+                    background-color: white;
+                    border: 1px solid #cccccc;
+                    border-radius: 3px;
+                    padding: 2px;
+                }}
+            """
+        
+        label_style = f"QLabel {{ color: {text_color}; }}"
+        
+        # Apply styling to all labels
+        all_labels = [
+            self.lbl_total_time, self.lbl_step_time, self.lbl_repeat_protocol,
+            self.lbl_repeat_protocol_status, self.lbl_step_progress,
+            self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step
+        ]
+        
+        for label in all_labels:
+            label.setStyleSheet(label_style)
+        
+        # Apply styling to input field
+        self.edit_repeat_protocol.setStyleSheet(input_style)
+    
+    def update_theme_styling(self):
+        """Update theme styling when theme changes."""
+        self._apply_styling()
 
 
 class EditContextMenu(QMenu):
@@ -579,13 +647,16 @@ class StepMessageDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
+        # Use centralized button styles
         no_button = QPushButton("NO")
-        no_button.setMinimumWidth(80)
+        no_button.setStyleSheet(get_button_style("light", "default"))
+        no_button.setMinimumWidth(100)
         no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
-        yes_button.setMinimumWidth(80)
+        yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
 
         button_layout.addWidget(yes_button)
@@ -648,19 +719,14 @@ class ExperimentCompleteDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        button_style = f"""
-            QPushButton {{ 
-                font-family: {LABEL_FONT_FAMILY}; 
-            }}
-        """
-        
+        # Use centralized button styles
         no_button = QPushButton("NO")
-        no_button.setStyleSheet(button_style)
+        no_button.setStyleSheet(get_button_style("light", "default"))
         no_button.setMinimumWidth(100)
         no_button.clicked.connect(self.reject)        
         
         yes_button = QPushButton("YES")
-        yes_button.setStyleSheet(button_style)
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(100)
         yes_button.clicked.connect(self.accept)
@@ -842,40 +908,17 @@ class DropletDetectionFailureDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
+        # Use centralized button styles
         no_button = QPushButton("NO (Stay Paused)")
+        no_button.setStyleSheet(get_button_style("light", "default"))
         no_button.setMinimumWidth(120)
         no_button.clicked.connect(self.reject)
-        no_button.setStyleSheet("""
-            QPushButton {
-                background-color: #cc3300;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #aa2200;
-            }
-        """)
         
         yes_button = QPushButton("YES (Continue)")
+        yes_button.setStyleSheet(get_button_style("light", "default"))
         yes_button.setDefault(True)
         yes_button.setMinimumWidth(120)
         yes_button.clicked.connect(self.accept)
-        yes_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0055aa;
-            }
-        """)
         
         button_layout.addWidget(yes_button)
         button_layout.addWidget(no_button)

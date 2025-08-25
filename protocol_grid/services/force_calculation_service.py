@@ -29,16 +29,16 @@ class ForceCalculationService:
         try:
             # validate inputs
             if (liquid_capacitance is None or filler_capacitance is None or
-                liquid_capacitance <= 0 or filler_capacitance <= 0):
-                logger.debug("Invalid capacitance values for force calculation")
+                liquid_capacitance < 0 or filler_capacitance < 0):
+                logger.info("Invalid capacitance values for force calculation")
                 return None
                 
             if not active_electrodes:
-                logger.debug("No active electrodes for force calculation")
+                logger.info("No active electrodes for force calculation")
                 return None
                 
             if liquid_capacitance <= filler_capacitance:
-                logger.debug("Liquid capacitance must be greater than filler capacitance")
+                logger.info("Liquid capacitance must be greater than filler capacitance")
                 return None
             
             # calculate total area of active electrodes
@@ -47,35 +47,39 @@ class ForceCalculationService:
                 if electrode_id in electrode_areas:
                     total_area += electrode_areas[electrode_id]
                 else:
-                    logger.debug(f"No area data for electrode {electrode_id}")
+                    logger.info(f"No area data for electrode {electrode_id}")
                     return None
             
             if total_area <= 0:
-                logger.debug("Total area of active electrodes is zero or negative")
+                logger.info("Total area of active electrodes is zero or negative")
                 return None
             
             # capacitance_difference = liquid_capacitance - filler_capacitance 
             capacitance_per_unit_area =  (liquid_capacitance - filler_capacitance) / total_area
-            
-            logger.debug(f"Calculated capacitance per unit area: {capacitance_per_unit_area}")
+            logger.info(f"liquid capacitance: {liquid_capacitance}")
+            logger.info(f"filler capacitance: {filler_capacitance}")
+            logger.info(f"total area: {total_area}")
+            logger.info(f"Calculated capacitance per unit area: {capacitance_per_unit_area}")
             return capacitance_per_unit_area
             
         except Exception as e:
-            logger.error(f"Error calculating capacitance per unit area: {e}")
+            logger.info(f"Error calculating capacitance per unit area: {e}")
             return None
     
     @staticmethod
     def calculate_force_for_step(voltage: float, 
-                               capacitance_per_unit_area: float,
-                               activated_electrodes: Dict[str, bool],
-                               electrode_areas: Dict[str, float]) -> Optional[float]:
+                            capacitance_per_unit_area: float,
+                            step_activated_electrodes: Dict[str, bool],
+                            calibration_active_electrodes: List[str],
+                            electrode_areas: Dict[str, float]) -> Optional[float]:
         """
         Calculate force for a specific step.
         
         Args:
             voltage: Step voltage
             capacitance_per_unit_area: Capacitance per unit area from calibration
-            activated_electrodes: Dictionary of electrode activation states
+            step_activated_electrodes: Dictionary of electrode activation states for THIS step
+            calibration_active_electrodes: List of electrodes that were active during calibration
             electrode_areas: Dictionary mapping electrode IDs to their areas
             
         Returns:
@@ -83,21 +87,27 @@ class ForceCalculationService:
         """
         try:
             if voltage <= 0 or capacitance_per_unit_area <= 0:
+                logger.info(f"!!RETURNED!! voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
                 return None
-            
+            logger.info(f"voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
             total_force = 0.0
             
-            for electrode_id, is_active in activated_electrodes.items():
-                if is_active and electrode_id in electrode_areas:
+            # FIXED: Use calibration electrodes for force calculation, not step electrodes
+            # Only calculate force for electrodes that were active during calibration
+            for electrode_id in calibration_active_electrodes:
+                if electrode_id in electrode_areas:
                     electrode_area = electrode_areas[electrode_id]
-                    # F = (C_per_unit_area * V²) / 2
-                    force = (capacitance_per_unit_area * voltage * voltage) / 2.0
+                    logger.info(f"calibration electrode {electrode_id}, area: {electrode_area}")
+                    # F = (electrode_area * C_per_unit_area * V²) / 2
+                    force = (electrode_area * capacitance_per_unit_area * voltage * voltage) / 2.0
+                    logger.info(f"force contribution from {electrode_id}: {force}")
                     total_force += force
             
+            logger.info(f"returned total force: {total_force}")
             return total_force if total_force > 0 else None
             
         except Exception as e:
-            logger.error(f"Error calculating force for step: {e}")
+            logger.info(f"Error calculating force for step: {e}")
             return None
     
     @staticmethod
@@ -137,7 +147,8 @@ class ForceCalculationService:
             force = ForceCalculationService.calculate_force_for_step(
                 voltage,
                 capacitance_per_unit_area,
-                device_state.activated_electrodes,
+                device_state.activated_electrodes,  # Step electrodes (not used in calculation)
+                active_electrodes_from_calibration,  # Calibration electrodes (used for calculation)
                 calibration_data['electrode_areas']
             )
             
@@ -152,10 +163,10 @@ class ForceCalculationService:
                 
                 if force_item:
                     force_item.setText(f"{force:.2f}")
-                    logger.debug(f"Updated force for step to {force:.2f}")
+                    logger.info(f"Updated force for step to {force:.2f}")
             
         except Exception as e:
-            logger.error(f"Error updating step force: {e}")
+            logger.info(f"Error updating step force: {e}")
     
     @staticmethod
     def update_all_step_forces_in_model(model, protocol_state):
@@ -168,7 +179,7 @@ class ForceCalculationService:
         """
         try:
             if not protocol_state.has_complete_calibration_data():
-                logger.debug("Incomplete calibration data, skipping force updates")
+                logger.info("Incomplete calibration data, skipping force updates")
                 return
             
             from protocol_grid.consts import protocol_grid_fields, STEP_TYPE, ROW_TYPE_ROLE
@@ -187,13 +198,13 @@ class ForceCalculationService:
                                     desc_item, protocol_state, voltage
                                 )
                             except ValueError:
-                                logger.debug(f"Invalid voltage value: {voltage_item.text()}")
+                                logger.info(f"Invalid voltage value: {voltage_item.text()}")
                     elif desc_item and desc_item.hasChildren():
                         update_recursive(desc_item)
             
             update_recursive(model.invisibleRootItem())
-            logger.debug("Updated forces for all steps")
+            logger.info("Updated forces for all steps")
             
         except Exception as e:
-            logger.error(f"Error updating all step forces: {e}")
+            logger.info(f"Error updating all step forces: {e}")
 

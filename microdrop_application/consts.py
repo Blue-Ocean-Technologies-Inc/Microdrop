@@ -12,7 +12,7 @@ PKG_name = PKG.title().replace("_", " ")
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {}
 
-scibots_icon_path = Path(__file__).parent/ "resources" / "scibots-icon.png"
+scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 
 sidebar_menu_options = [
             ("File", ICON_FOLDER_OPEN),
@@ -25,13 +25,33 @@ sidebar_menu_options = [
             ("Exit", ICON_CANCEL),
         ]
 
-hamburger_btn_stylesheet = "QPushButton { font-size: 24px; background: none; border: none; color: %s;}"
+# Custom hamburger button stylesheet without hover effects for sidebar compatibility
+hamburger_btn_stylesheet = """QPushButton {
+    font-size: 24px;
+    background: none;
+    border: none;
+    color: %s;
+    padding: 8px;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background: none;
+    color: %s;
+}
+QPushButton:pressed {
+    background: none;
+    color: %s;
+}
+QPushButton:disabled {
+    background: none;
+    color: #666666;
+}"""
 
 sidebar_stylesheet = """QPushButton {
-                background: none;
-                border: none;
-                font-size:2em;
-                text-align: left;
-                padding-left: 8px;
-                color: %s; }
-                """
+    background: none;
+    border: none;
+    font-size: 2em;
+    text-align: left;
+    padding-left: 8px;
+    color: %s;
+}"""

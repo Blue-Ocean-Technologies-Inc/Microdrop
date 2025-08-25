@@ -5,8 +5,8 @@ from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictCha
 from pyface.api import FileDialog, OK
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QFrame, QPushButton, QSizePolicy
-from pyface.qt.QtCore import Qt, QTimer, QSizeF, Signal
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QLabel, QFrame, QPushButton
+from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -40,6 +40,7 @@ from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 import json
 
 logger = get_logger(__name__)
+
 
 class DeviceViewerDockPane(TraitsDockPane):
     """
@@ -97,6 +98,109 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view = AutoFitGraphicsView(self.scene)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
+
+        # Apply initial theme styling
+        self._apply_initial_theme_styling()
+        
+        # Connect to application palette changes for theme updates
+        QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
+    
+    def _on_application_palette_changed(self):
+        """Handle application palette changes for theme updates"""
+        try:
+            from microdrop_application.application import is_dark_mode
+            theme = "dark" if is_dark_mode() else "light"
+            self._update_theme_styling(theme)
+        except Exception as e:
+            logger.debug(f"Error handling palette change: {e}")
+    
+    def _apply_initial_theme_styling(self):
+        """Apply initial theme styling when the UI is first built"""
+        try:
+            from microdrop_application.application import is_dark_mode
+            theme = "dark" if is_dark_mode() else "light"
+            self._update_theme_styling(theme)
+        except Exception as e:
+            logger.debug(f"Error applying initial theme: {e}")
+            # Fallback to light theme
+            self._update_theme_styling("light")
+
+    def _update_theme_styling(self, theme):
+        """Update theme styling for all child components"""
+        if hasattr(self, 'mode_picker_view'):
+            self.mode_picker_view.update_theme_styling(theme)
+        if hasattr(self, 'camera_control_widget'):
+            self.camera_control_widget.update_theme_styling(theme)
+        if hasattr(self, 'calibration_view'):
+            self.calibration_view.update_theme_styling(theme)
+        
+        # Update section label styling based on theme
+        section_style = self._get_section_label_style(theme)
+        button_style = self._get_camera_button_style(theme)
+        
+        for i in range(self.left_stack.count()):
+            widget = self.left_stack.widget(i)
+            if isinstance(widget, QLabel) and widget.text() in ["Camera Controls", "Capacitance Calibration", "Paths"]:
+                widget.setStyleSheet(section_style)
+        
+        # Update camera control buttons if they exist
+        if hasattr(self, 'camera_controls_container'):
+            for child in self.camera_controls_container.findChildren(QPushButton):
+                child.setStyleSheet(button_style)
+
+    def _get_section_label_style(self, theme):
+        """Get section label styling based on theme"""
+        if theme == "dark":
+            return """
+                QLabel {
+                    color: #CCCCCC;
+                    font-size: 12px;
+                    font-weight: bold;
+                    padding: 4px 0px 2px 0px;
+                    margin-bottom: 4px;
+                }
+            """
+        else:  # light theme
+            return """
+                QLabel {
+                    color: #333333;
+                    font-size: 12px;
+                    font-weight: bold;
+                    padding: 4px 0px 2px 0px;
+                    margin-bottom: 4px;
+                }
+            """
+    
+    def _get_camera_button_style(self, theme):
+        """Get camera control button styling based on theme"""
+        if theme == "dark":
+            return """
+                QPushButton {
+                    background-color: #444444;
+                    border: 1px solid #666666;
+                    border-radius: 4px;
+                    font-family: "Material Symbols Outlined";
+                    font-size: 16px;
+                    color: #FFFFFF;
+                }
+                QPushButton:hover {
+                    background-color: #555555;
+                }
+            """
+        else:  # light theme
+            return """
+                QPushButton {
+                    background-color: #E0E0E0;
+                    border: 1px solid #CCCCCC;
+                    border-radius: 4px;
+                    font-family: "Material Symbols Outlined";
+                    font-size: 16px;
+                    color: #333333;
+                }
+                QPushButton:hover {
+                    background-color: #D0D0D0;
+                }
+            """
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
@@ -314,7 +418,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         alpha_view = generate_alpha_view(self.model)
         self.alpha_view_ui = self.model.edit_traits(view=alpha_view)
-        self.alpha_view_ui.control.setFixedWidth(250) # Set widget to fixed width
+        # Remove fixed width to allow stretching - set minimum width instead
+        self.alpha_view_ui.control.setMinimumWidth(290)
+        # Ensure the alpha view can expand horizontally
+        self.alpha_view_ui.control.setSizePolicy(QSizePolicy.Expanding, 
+                                                 QSizePolicy.Expanding)
         self.alpha_view_ui.control.setParent(container)
 
         # device_view code
@@ -325,7 +433,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
-        self.layer_ui.control.setFixedWidth(250) # Set widget to fixed width
+        # Remove fixed width to allow stretching - set minimum width instead
+        self.layer_ui.control.setMinimumWidth(200)
+        # Ensure the layer view can expand horizontally (same as alpha view)
+        self.layer_ui.control.setSizePolicy(QSizePolicy.Expanding, 
+                                            QSizePolicy.Expanding)
         self.layer_ui.control.setParent(container)
 
         # mode_picker_view code
@@ -368,6 +480,27 @@ class DeviceViewerDockPane(TraitsDockPane):
         layout.addWidget(right_stack_container)
 
         return container
+
+    def _apply_initial_theme_styling(self):
+        """Apply the correct theme styling when components are first created."""
+        try:
+            # Import here to avoid circular imports
+            from microdrop_application.application import is_dark_mode
+            
+            theme = "dark" if is_dark_mode() else "light"
+            
+            # Update all components with the current theme
+            if hasattr(self, 'mode_picker_view') and self.mode_picker_view:
+                self.mode_picker_view.update_theme_styling(theme)
+            
+            if hasattr(self, 'camera_control_widget') and self.camera_control_widget:
+                self.camera_control_widget.update_theme_styling(theme)
+                
+            if hasattr(self, 'calibration_view') and self.calibration_view:
+                self.calibration_view.update_theme_styling(theme)
+                
+        except Exception as e:
+            logger.debug(f"Error applying initial theme styling: {e}")
 
     def set_view_from_model(self, new_model):
         self.remove_current_layer()

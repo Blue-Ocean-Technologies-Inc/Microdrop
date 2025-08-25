@@ -15,17 +15,17 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 
 from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
-from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
+from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 
 from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
 
 logger = get_logger(__name__, level="DEBUG")
 
-red = ERROR_COLOR
-yellow = WARNING_COLOR
-green = SUCCESS_COLOR
-
+disconnected_color = GREY["lighter"]  #ERROR_COLOR
+connected_no_device_color = WARNING_COLOR
+connected_color = SUCCESS_COLOR
+BORDER_RADIUS = 4
 
 class DropBotStatusLabel(QLabel):
     """
@@ -149,21 +149,21 @@ class DropBotStatusLabel(QLabel):
                 # dropbot ready to use: give greenlight and display chip.
                 self.dropbot_chip_status.setText("Inserted")
                 img_path = DROPBOT_CHIP_INSERTED_IMAGE
-                status_color = green
+                status_color = connected_color
 
             # dropbot connected but no chip inside. Yellow signal.
             else:
                 logger.info("Chip Not Inserted")
                 self.dropbot_chip_status.setText("Not Inserted")
                 img_path = DROPBOT_IMAGE
-                status_color = yellow
+                status_color = connected_no_device_color
 
         else:
             # dropbot not there. Red light.
             self.dropbot_connected = False
             logger.critical("Dropbot Disconnected")
             img_path = DROPBOT_IMAGE
-            status_color = red
+            status_color = disconnected_color
             self.dropbot_connection_status.setText("Disconnected")
             self.dropbot_chip_status.setText("Not inserted")
 
@@ -174,7 +174,7 @@ class DropBotStatusLabel(QLabel):
         self.dropbot_icon.setPixmap(pixmap.scaled(self.dropbot_icon.size(), 
                                                   Qt.AspectRatioMode.KeepAspectRatio, 
                                                   Qt.TransformationMode.SmoothTransformation))
-        self.dropbot_icon.setStyleSheet(f'QLabel {{ background-color : {status_color} ; }}')
+        self.dropbot_icon.setStyleSheet(f'QLabel {{ background-color : {status_color}; border-radius: {BORDER_RADIUS}px; }}')
 
     def update_capacitance_reading(self, capacitance):
         self.dropbot_capacitance_reading.setText(capacitance)

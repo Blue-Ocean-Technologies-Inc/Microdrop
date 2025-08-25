@@ -13,6 +13,7 @@ from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGrid
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE, 
+                                  CALIBRATION_DATA,
                                   GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
                                   group_defaults, protocol_grid_fields, protocol_grid_column_widths,
                                   LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
@@ -25,6 +26,7 @@ from protocol_grid.services.protocol_runner_controller import ProtocolRunnerCont
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.services.force_calculation_service import ForceCalculationService
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
                                               device_state_to_device_viewer_message)
@@ -140,6 +142,14 @@ class PGCWidget(QWidget):
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
 
+        # calibration data tracking
+        self._last_free_mode_active_electrodes = []
+        
+        # Connect to application palette changes to ensure theme updates are detected
+        app = QApplication.instance()
+        if app:
+            app.paletteChanged.connect(self._on_application_palette_changed)
+
     # ---------- DropBot connection ----------
     def _is_dropbot_connected(self):
         if self._protocol_grid_plugin and hasattr(self._protocol_grid_plugin, 'dropbot_connected'):
@@ -160,23 +170,14 @@ class PGCWidget(QWidget):
         
         dialog_action = DropbotDisconnectedBeforeRunDialogAction()
         
-        def show_dialog_safe():
-            try:
-                preview_mode_requested = dialog_action.perform(self)
-                if preview_mode_requested:
-                    self.navigation_bar.preview_mode_checkbox.setChecked(True)
-                    logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
-                return False
-            except Exception as e:
-                logger.info(f"Error showing dropbot disconnection dialog: {e}")
-                return False
-        
         # for immediate protocol execution requests, block and show dialog
         try:
             preview_mode_requested = dialog_action.perform(self)
             if preview_mode_requested:
                 self.navigation_bar.preview_mode_checkbox.setChecked(True)
                 logger.info("Preview mode enabled by user request from dropbot disconnection dialog")
+                # Return True to allow protocol to proceed in preview mode
+                return True
             return False
         except Exception as e:
             logger.info(f"Error showing dropbot disconnection dialog: {e}")
@@ -198,6 +199,13 @@ class PGCWidget(QWidget):
                     # connect protocol runner to droplet detection responses
                     self.protocol_runner.connect_droplet_detection_listener(message_listener)
 
+                    # connect to calibration_data messages
+                    message_listener.signal_emitter.calibration_data_received.connect(
+                        self.on_calibration_message
+                    )
+
+                    self.protocol_runner.connect_droplet_detection_listener(message_listener)
+
                     logger.info("connected to message listener successfully")
                     return
                 else:
@@ -215,51 +223,106 @@ class PGCWidget(QWidget):
             return        
         if self._protocol_running:
             return
-        self._processing_device_viewer_message = True
-        self._programmatic_change = True
+        # self._processing_device_viewer_message = True
+        # self._programmatic_change = True
 
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
+        # scroll_pos = self.save_scroll_positions()
+        # saved_selection = self.save_selection()
         
         try:
-            dv_msg = DeviceViewerMessageModel.deserialize(message)            
-            if not dv_msg.step_id:
-                return
+            dv_msg = DeviceViewerMessageModel.deserialize(message)
+            logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
+            # if dv_msg.free_mode:
+            # if dv_msg.step_id is None:
+            active_electrodes = []
+            for channel_str, is_active in dv_msg.channels_activated.items():
+                if is_active:
+                    # convert channel to electrode ID (if possible)
+                    for electrode_id, channel in dv_msg.id_to_channel.items():
+                        if channel == int(channel_str):
+                            active_electrodes.append(electrode_id)
+                            break
+                    else:
+                        # Use channel directly if no electrode ID mapping found
+                        active_electrodes.append(f"electrode{channel_str.zfill(3)}")
                 
-            target_item, target_path = self._find_step_by_uid(dv_msg.step_id)
-            if not target_item:
-                return  # no step found with matching UID
-            
-            current_step_id = self._last_selected_step_id
-            current_published_id = self._last_published_step_id
-            
-            # get current device state to check id_to_channel
-            current_device_state = target_item.data(Qt.UserRole + 100)
-            current_id_to_channel = current_device_state.id_to_channel if current_device_state else {}
-            
-            device_state = device_state_from_device_viewer_message(dv_msg)
-            
-            # check if id_to_channel mapping has changed
-            if device_state.id_to_channel != current_id_to_channel:
-                self._apply_id_to_channel_mapping_to_all_steps(device_state.id_to_channel, device_state.route_colors)
-            else:
-                target_item.setData(device_state, Qt.UserRole + 100)
-            
-            self.model_to_state()
-            
-            # Restore the selection state to prevent false "deselection" detection
-            self._last_selected_step_id = current_step_id
-            self._last_published_step_id = current_published_id
-            
-            # Restore scroll and selection BEFORE clearing blocking flags
-            self.restore_scroll_positions(scroll_pos)
-            self.restore_selection(saved_selection)
-        
+            if active_electrodes:
+                self._last_free_mode_active_electrodes = active_electrodes
+                logger.info(f"Updated tracked active electrodes: {active_electrodes}")
+
+            if dv_msg.step_id:
+                self._processing_device_viewer_message = True
+                self._programmatic_change = True
+
+                scroll_pos = self.save_scroll_positions()
+                saved_selection = self.save_selection()
+                
+                target_item, target_path = self._find_step_by_uid(dv_msg.step_id)
+                if not target_item:
+                    return
+                
+                current_step_id = self._last_selected_step_id
+                current_published_id = self._last_published_step_id
+                
+                current_device_state = target_item.data(Qt.UserRole + 100)
+                current_id_to_channel = current_device_state.id_to_channel if current_device_state else {}
+                
+                device_state = device_state_from_device_viewer_message(dv_msg)
+                
+                if device_state.id_to_channel != current_id_to_channel:
+                    self._apply_id_to_channel_mapping_to_all_steps(device_state.id_to_channel, device_state.route_colors)
+                else:
+                    target_item.setData(device_state, Qt.UserRole + 100)
+                
+                self.model_to_state()
+                
+                self._last_selected_step_id = current_step_id
+                self._last_published_step_id = current_published_id
+                
+                self._restoring_selection = True
+                try:
+                    self.restore_scroll_positions(scroll_pos)
+                    self.restore_selection(saved_selection)
+                finally:
+                    self._restoring_selection = False
+                    
         except Exception as e:
             logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
         finally:
             self._processing_device_viewer_message = False
-            self._programmatic_change = False        
+            self._programmatic_change = False       
+
+    def on_calibration_message(self, message, topic):
+        try:
+            if topic != CALIBRATION_DATA:
+                return
+                
+            calibration_data = json.loads(message)
+            
+            liquid_capacitance = calibration_data.get('liquid_capacitance')
+            filler_capacitance = calibration_data.get('filler_capacitance')
+            electrode_areas = calibration_data.get('electrode_areas', {})
+            electrode_scale = calibration_data.get('electrode_scale', 1.0)
+            
+            self.state.set_calibration_data(
+                liquid_capacitance, filler_capacitance, electrode_areas, electrode_scale
+            )
+            
+            # FIXED: Use the most recent active electrodes as calibration electrodes
+            # This captures the electrodes that were active just before calibration
+            if self._last_free_mode_active_electrodes:
+                self.state.set_active_electrodes_from_calibration(self._last_free_mode_active_electrodes)
+                logger.info(f"Set calibration electrodes to: {self._last_free_mode_active_electrodes}")
+            
+            logger.info(f"Received calibration data: liquid={liquid_capacitance}, filler={filler_capacitance}, scale={electrode_scale}")
+            
+            # update force on all steps if we have complete data
+            if self.state.has_complete_calibration_data():
+                ForceCalculationService.update_all_step_forces_in_model(self.model, self.state)
+                logger.info("Updated all step forces with new calibration data")
+                
+        except Exception as e:
+            logger.error(f"Error processing calibration message: {e}")
     # -------------------------------------
 
     # ---------- Information Panel Methods ----------
@@ -327,8 +390,8 @@ class PGCWidget(QWidget):
         if getattr(self, '_processing_palette_change', False):
             return
             
-        dark = is_dark_mode()
-        fg = QBrush(QColor("white" if dark else "black"))
+        fg = QBrush(QColor("white" if is_dark_mode() else "black"))
+        
         def clear_recursive(parent):
             for row in range(parent.rowCount()):
                 for col in range(parent.columnCount()):
@@ -1293,8 +1356,8 @@ class PGCWidget(QWidget):
             self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
-        dark = is_dark_mode()
-        self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)
+        self.setStyleSheet(DARK_MODE_STYLESHEET 
+                           if is_dark_mode() else LIGHT_MODE_STYLESHEET)
 
         self.button_layout = QHBoxLayout()
         
@@ -1666,6 +1729,8 @@ class PGCWidget(QWidget):
             self.tree.expandAll()
             self.update_all_group_aggregations()
             self.update_step_dev_fields()
+            if self.state.has_complete_calibration_data():
+                ForceCalculationService.update_all_step_forces_in_model(self.model, self.state)
         finally:
             self._programmatic_change = False
             self._loading_from_file = False
@@ -1742,6 +1807,15 @@ class PGCWidget(QWidget):
             return
 
         field = protocol_grid_fields[col]
+
+        if field == "Voltage" and not self._programmatic_change:
+            desc_item = parent.child(row, 0)
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                try:
+                    voltage = float(item.text() or "0")
+                    ForceCalculationService.update_step_force_in_model(desc_item, self.state, voltage)
+                except ValueError:
+                    logger.debug(f"Invalid voltage value for force calculation: {item.text()}")
 
         if field in ("Video", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
@@ -2594,8 +2668,9 @@ class PGCWidget(QWidget):
             if not getattr(self, '_processing_palette_change', False):
                 self._processing_palette_change = True
                 try:
-                    dark = is_dark_mode()
-                    self.setStyleSheet(DARK_MODE_STYLESHEET if dark else LIGHT_MODE_STYLESHEET)                
+                    logger.critical("palette change")
+                    self.setStyleSheet(DARK_MODE_STYLESHEET 
+                                       if is_dark_mode() else LIGHT_MODE_STYLESHEET)                
                     self.clear_highlight()
                     if hasattr(self, 'navigation_bar'):
                         self.navigation_bar.update_theme_styling()
@@ -2613,6 +2688,49 @@ class PGCWidget(QWidget):
                 self._processing_palette_change = False
         
         return super().event(event)
+
+    def _on_application_palette_changed(self):
+        """Handle application palette changes (system theme switches)."""
+        if not getattr(self, '_processing_palette_change', False):
+            self._processing_palette_change = True
+            try:                
+                # Update main widget styling
+                self.setStyleSheet(DARK_MODE_STYLESHEET 
+                                   if is_dark_mode() else LIGHT_MODE_STYLESHEET)
+                
+                # Clear highlights
+                self.clear_highlight()
+                
+                # Update all UI components
+                if hasattr(self, 'navigation_bar'):
+                    self.navigation_bar.update_theme_styling()
+                if hasattr(self, 'information_panel'):
+                    self.information_panel.update_theme_styling()
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.update_theme_styling()
+                
+                # Update any open dialogs
+                self._update_theme_styling_for_dialogs()
+                
+                # Refresh model if needed
+                if (not getattr(self, '_restoring_selection', False) and 
+                    not self._protocol_running and 
+                    not getattr(self, '_programmatic_change', False)):
+                    QTimer.singleShot(50, self._refresh_model_after_theme_change)
+                    
+            finally:
+                QTimer.singleShot(100, self._reset_palette_change_flag)
+            self._processing_palette_change = False
+    
+    def _update_theme_styling_for_dialogs(self):
+        """Update theme styling for any open dialogs."""
+        # Find and update any open dialogs
+        for dialog in self.findChildren(QDialog):
+            if hasattr(dialog, 'update_theme_styling'):
+                try:
+                    dialog.update_theme_styling()
+                except Exception as e:
+                    logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

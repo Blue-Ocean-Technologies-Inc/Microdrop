@@ -18,7 +18,6 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 
-ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 class CameraControlWidget(QWidget):
 
@@ -48,7 +47,8 @@ class CameraControlWidget(QWidget):
         self.capture_success_timer.setSingleShot(True)
         self.capture_success_timer.timeout.connect(self.reset_capture_button_style)
 
-        self.setStyleSheet(f"QPushButton {{ font-family: { ICON_FONT_FAMILY }; font-size: 22px; padding: 2px 2px 2px 2px; }} QPushButton:hover {{ color: { SECONDARY_SHADE[700] }; }} QPushButton:checked {{ background-color: { SECONDARY_SHADE[900] }; color: { WHITE }; }}")
+        # Apply theme-aware styling
+        self._apply_theme_styling()
 
         # Camera Combo Box
         self.camera_combo = QComboBox()
@@ -104,6 +104,7 @@ class CameraControlWidget(QWidget):
         recording_layout.addWidget(self.stop_record_button)
         recording_layout.addWidget(self.capture_image_button)
         recording_layout.addWidget(self.camera_off_button)
+        btn_layout.addStretch()  # Add stretch to push buttons to the left and expand the layout
         
         # Main layout
         layout = QVBoxLayout()
@@ -113,6 +114,9 @@ class CameraControlWidget(QWidget):
         layout.addLayout(recording_layout)
         layout.addLayout(btn_layout)
         self.setLayout(layout)
+        
+        # Set size policy to allow horizontal expansion but keep natural height
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.sync_buttons_and_label()
 
@@ -132,8 +136,28 @@ class CameraControlWidget(QWidget):
 
         self.populate_camera_list()
 
+    def _apply_theme_styling(self):
+        """Apply theme-aware styling to the widget."""
+        try:
+            # Import here to avoid circular imports
+            from microdrop_application.application import is_dark_mode
+            
+            theme = "dark" if is_dark_mode() else "light"
+            # Use complete stylesheet with tooltips for icon buttons
+            icon_button_style = get_complete_stylesheet(theme, "default")
+            self.setStyleSheet(icon_button_style)
+        except Exception as e:
+            # Fallback to light theme if there's an error
+            icon_button_style = get_complete_stylesheet("light", "default")
+            self.setStyleSheet(icon_button_style)
+
+    def update_theme_styling(self, theme="light"):
+        """Update styling when theme changes."""
+        icon_button_style = get_complete_stylesheet(theme, "default")
+        self.setStyleSheet(icon_button_style)
+
     def on_mode_changed(self, event):
-            self.sync_buttons_and_label()
+        self.sync_buttons_and_label()
 
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
@@ -384,4 +408,5 @@ class CameraControlWidget(QWidget):
         """Reset the camera control widget to its initial state."""
         self.model.camera_perspective.reset()
         if self.model.mode == "camera-edit":
-            self.model.mode = "camera-place"  # Reset to camera-place mode after reset
+            # Reset to camera-place mode after reset
+            self.model.mode = "camera-place"
