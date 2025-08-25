@@ -1,20 +1,24 @@
 import dramatiq
-from traits.api import HasTraits, Range, Bool, provides, Instance, Str
+from traits.api import HasTraits, Range, Bool, provides, Instance
 from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
 from microdrop_utils._logger import get_logger
-from microdrop_utils.dramatiq_controller_base import (IDramatiqControllerBase, 
-                                                      basic_listener_actor_routine, 
-                                                      generate_class_method_dramatiq_listener_actor)
+from microdrop_utils.dramatiq_controller_base import (
+    IDramatiqControllerBase, 
+    basic_listener_actor_routine, 
+    generate_class_method_dramatiq_listener_actor
+)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.decorators import debounce
 from microdrop_utils.timestamped_message import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
-from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
-from microdrop_style.colors import INFO_COLOR, SECONDARY_COLOR, GREY
+from dropbot_controller.consts import (
+    SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
+)
+from microdrop_style.colors import GREY, SUCCESS_COLOR
 
 from .consts import PKG_name, listener_name
 
@@ -25,32 +29,72 @@ logger = get_logger(__name__, level="DEBUG")
 class ToggleEditor(QtEditor):
     
     def init(self, parent):
-        self.control = QPushButton()  # The button is the control that will be displayed in the editor
+        # The button is the control that will be displayed in the editor
+        self.control = QPushButton()
         self.control.setCheckable(True)
         self.control.setChecked(self.value)
         self.control.clicked.connect(self.click_handler)
-        self.control.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {GREY["dark"]};
-                font-weight: bold;
-                max-width: 100px;
-                border-radius: 10px;
-                padding: 2px;
-            }}
-            QPushButton:hover {{
-                background-color: {GREY["lighter"]};
-            }}
-            QPushButton:checked {{
-                background-color: {INFO_COLOR};
-            }}
-            QPushButton:checked:hover {{
-                background-color: {SECONDARY_COLOR};
-            }}
-        """)
+        
+        # Set max-width to 100px
+        self.control.setMaximumWidth(100)
+        
+        # Apply initial styling based on current state
+        self._apply_toggle_styling()
+        
+        # Connect to button state changes to update styling
+        self.control.toggled.connect(self._apply_toggle_styling)
+
+    def _apply_toggle_styling(self):
+        """Apply styling based on the button's checked state"""
+        if self.control.isChecked():
+            # ON state - SUCCESS_COLOR
+            style = f"""
+                QPushButton {{
+                    background-color: {SUCCESS_COLOR};
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    max-width: 100px;
+                }}
+                QPushButton:hover {{
+                    background-color: {SUCCESS_COLOR};
+                    opacity: 0.9;
+                }}
+                QPushButton:pressed {{
+                    background-color: {SUCCESS_COLOR};
+                    opacity: 0.8;
+                }}
+            """
+        else:
+            # OFF state - GREY["lighter"]
+            style = f"""
+                QPushButton {{
+                    background-color: {GREY["lighter"]};
+                    color: #333333;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    max-width: 100px;
+                }}
+                QPushButton:hover {{
+                    background-color: {GREY["lighter"]};
+                    opacity: 0.9;
+                }}
+                QPushButton:pressed {{
+                    background-color: {GREY["lighter"]};
+                    opacity: 0.8;
+                }}
+            """
+        
+        self.control.setStyleSheet(style)
 
     def click_handler(self):
         '''Update the trait value to the button state. The value change will also invoke the _setattr method.'''
-        self.value = self.control.isChecked() # Monitor the button state, don't simply invert self.value because it will trigger the _setattr method multiple times
+        # Monitor the button state, don't simply invert self.value because it will trigger the _setattr method multiple times
+        self.value = self.control.isChecked()
         # This assignment and the setChecked() in update_editor keep the control.isChecked synced with the model
         # In this case, the 'isChecked' property only exists to store state in a place readable by the view, and has no visual effect
 
@@ -68,6 +112,9 @@ class ToggleEditor(QtEditor):
         else:
             self.control.setChecked(False)
             self.control.setText("Off")
+        
+        # Update styling after changing the state
+        self._apply_toggle_styling()
 
 
 class ToggleEditorFactory(BasicEditorFactory):
@@ -89,23 +136,27 @@ class ManualControlModel(HasTraits):
 
 ManualControlView = View(
     Group(
-Group(        Item(
-            name='voltage',
-            label='Voltage (V)',
-            resizable=True,
-        ),
-        Item(
-            name='frequency',
-            label='Frequency (Hz)',
-            resizable=True,
-        ),
-        Item(
-            name='realtime_mode',
-            label='Realtime Mode',
-            style='custom',
-            resizable=True,
-            editor=ToggleEditorFactory(),
-        ),), show_border=True, padding=10,
+        Group(
+            Item(
+                name='voltage',
+                label='Voltage (V)',
+                resizable=True,
+            ),
+            Item(
+                name='frequency',
+                label='Frequency (Hz)',
+                resizable=True,
+            ),
+            Item(
+                name='realtime_mode',
+                label='Realtime Mode',
+                style='custom',
+                resizable=True,
+                editor=ToggleEditorFactory(),
+            ),
+        ), 
+        show_border=True, 
+        padding=10,
     ),
     title=PKG_name,
     resizable=True,
@@ -173,7 +224,7 @@ class ManualControlControl(Controller):
 
     @timestamped_value('disconnected_message')
     def _on_disconnected_triggered(self, message):
-        logger.debug(f"Disconnected from dropbot")
+        logger.debug("Disconnected from dropbot")
         self.model.realtime_mode = False
 
 
