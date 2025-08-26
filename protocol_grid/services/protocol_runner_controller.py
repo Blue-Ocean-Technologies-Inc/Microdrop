@@ -1,5 +1,6 @@
 import time
 import json
+from typing import Optional, Dict
 
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
@@ -121,6 +122,61 @@ class ProtocolRunnerController(QObject):
         self._volume_threshold_mode_active = False
         self._current_phase_volume_threshold = 0.0
         self._current_phase_target_capacitance = None
+
+    # --------- data logging ----------
+    def set_data_logger(self, data_logger):
+        """Set reference to data logger for context updates."""
+        self._data_logger = data_logger
+
+    def _get_current_logging_context(self) -> Optional[Dict]:
+        """Get current execution context for data logging."""
+        if not self._is_running or self._preview_mode or self._current_index >= len(self._run_order):
+            return None
+        
+        try:
+            step_info = self._run_order[self._current_index]
+            step = step_info["step"]
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            
+            if not device_state:
+                return None
+            
+            # get current phase electrodes
+            phase_electrodes = self._get_current_phase_electrodes()
+            
+            # convert electrode IDs to channel numbers
+            actuated_channels = []
+            for electrode_id, is_active in phase_electrodes.items():
+                if is_active and electrode_id in device_state.id_to_channel:
+                    channel = device_state.id_to_channel[electrode_id]
+                    actuated_channels.append(channel)
+            
+            # calculate actuated area
+            actuated_area = 0.0
+            if hasattr(step, 'device_state') and step.device_state:
+                # get calibration data from protocol state for electrode areas
+                if hasattr(self, 'protocol_state') and hasattr(self.protocol_state, 'get_calibration_data'):
+                    try:
+                        calibration_data = self.protocol_state.get_calibration_data()
+                        electrode_areas = calibration_data.get('electrode_areas', {})
+                        
+                        for electrode_id in phase_electrodes:
+                            if phase_electrodes[electrode_id] and electrode_id in electrode_areas:
+                                actuated_area += electrode_areas[electrode_id]
+                    except Exception as e:
+                        logger.debug(f"Could not get electrode areas for data logging: {e}")
+                        # Area remains 0 if calibration data not available
+            
+            return {
+                'step_id': step.parameters.get("ID", ""),
+                'actuated_channels': sorted(actuated_channels),
+                'actuated_area': actuated_area
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting logging context: {e}")
+            return None
+    # ---------------------------------
 
     def connect_droplet_detection_listener(self, message_listener):
         """Connect to droplet detection response signals."""
@@ -816,6 +872,12 @@ class ProtocolRunnerController(QObject):
             self._on_protocol_finished()
             return
         
+        # update data logger context
+        if hasattr(self, '_data_logger') and self._data_logger:
+            context = self._get_current_logging_context()
+            if context:
+                self._data_logger.set_protocol_context(context)
+
         try:
             step_info = self._run_order[self._current_index]
             step = step_info["step"]
@@ -889,6 +951,12 @@ class ProtocolRunnerController(QObject):
         if self._current_phase_index >= len(self._current_execution_plan):
             self._on_step_completed_by_phases()
             return
+        
+        # update data logger context for current phase
+        if hasattr(self, '_data_logger') and self._data_logger:
+            context = self._get_current_logging_context()
+            if context:
+                self._data_logger.set_protocol_context(context)
             
         try:
             plan_item = self._current_execution_plan[self._current_phase_index]
