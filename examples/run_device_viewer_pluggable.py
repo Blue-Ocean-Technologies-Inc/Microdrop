@@ -69,7 +69,7 @@ def main(args, plugins=None, contexts=None, application=None, persist=False):
             app.exit()
         else: # It's a backend application, so we call Application.stop() since exit() doesn't exist
             app.stop()
-        exit(0)
+        sys.exit(0)
 
     # Register signal handlers
     signal.signal(signal.SIGINT, stop_app)
