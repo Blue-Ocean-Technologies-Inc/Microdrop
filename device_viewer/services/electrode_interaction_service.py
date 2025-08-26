@@ -206,7 +206,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.electrode_view_layer.redraw_reference_rect(self.model)
             elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
                 self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
-            self.preferences.set("camera.perspective_matrix", qtransform_serialize(self.model.camera_perspective.transformation))
+            self.preferences.set("camera.transformation", qtransform_serialize(self.model.camera_perspective.transformation))
     
     @observe("model.mode")
     def clear_prespective_rect_on_mode_change(self, event):

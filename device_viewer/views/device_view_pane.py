@@ -14,6 +14,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
+from device_viewer.utils.camera import qtransform_deserialize
 from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
@@ -92,6 +93,12 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.model = MainModel(undo_manager=self.undo_manager)
         self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+
+        self.preferences = self.task.window.application.preferences_helper.preferences
+        # Load preferences to model
+        transform = self.preferences.get("camera.transformation")
+        if transform: # If preference exists
+            self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
         self.scene = ElectrodeScene(self)
 
@@ -470,7 +477,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.preferences)
         self.camera_control_widget.setParent(container)
 
         # calibration_view code

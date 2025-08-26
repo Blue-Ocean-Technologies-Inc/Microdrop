@@ -3,6 +3,7 @@ from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signa
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
+from apptools.preferences.api import Preferences
 import cv2
 import time
 import os
@@ -27,8 +28,9 @@ class CameraControlWidget(QWidget):
     screen_capture_signal = Signal()
     screen_recording_signal = Signal(bool)
 
-    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene):
+    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
+        self.preferences = preferences
         self.model = model
         self.capture_session = capture_session
         self.scene = scene
