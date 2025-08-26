@@ -1396,12 +1396,12 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
     
     def _handle_checkbox_change(self, parent, row, field):
-        if field == "Video":
-            video_col = protocol_grid_fields.index("Video")
-            video_item = parent.child(row, video_col)
-            if video_item:
-                checked = self._is_checkbox_checked(video_item)
-                video_item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+        if field in ("Video", "Capture", "Record"):
+            col = protocol_grid_fields.index(field)
+            item = parent.child(row, col)
+            if item:
+                checked = self._is_checkbox_checked(item)
+                item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
                 
         elif field == "Magnet":
             magnet_col = protocol_grid_fields.index("Magnet")
@@ -1707,7 +1707,7 @@ class PGCWidget(QWidget):
                     if not item:
                         continue
                         
-                    if field in ("Video", "Magnet"):
+                    if field in ("Video", "Capture", "Record", "Magnet"):
                         check_state = item.data(Qt.CheckStateRole)
                         if check_state is not None:
                             checked = check_state == Qt.Checked or check_state == 2
@@ -1894,7 +1894,7 @@ class PGCWidget(QWidget):
                 except ValueError:
                     logger.debug(f"Invalid voltage value for force calculation: {item.text()}")
 
-        if field in ("Video", "Magnet"):
+        if field in ("Video", "Capture", "Record", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
             if not self._protocol_running or (self._protocol_running and self.navigation_bar.is_advanced_user_mode() and self._is_advanced_mode_field_editable(field)):
                 self.sync_to_state()
