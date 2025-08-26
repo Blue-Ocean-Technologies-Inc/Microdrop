@@ -266,7 +266,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
             model=new_model,
-            electrode_view_layer=self.current_electrode_layer
+            electrode_view_layer=self.current_electrode_layer,
+            application=self.task.window.application
         )
 
         # Update the scene with the interaction service

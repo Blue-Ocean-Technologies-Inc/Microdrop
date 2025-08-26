@@ -13,6 +13,7 @@ PKG_name = PKG.title().replace("_", " ")
 ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
+application_home_directory = Path.home() / ".microdrop_next_gen"
 
 sidebar_menu_options = [
             ("File", ICON_FOLDER_OPEN),
@@ -50,7 +51,7 @@ QPushButton:disabled {
 sidebar_stylesheet = """QPushButton {
     background: none;
     border: none;
-    font-size: 2em;
+    font-size: 2em;: Invalid line ('[""]') (matched as neither section nor keyword) at line 1. 
     text-align: left;
     padding-left: 8px;
     color: %s;

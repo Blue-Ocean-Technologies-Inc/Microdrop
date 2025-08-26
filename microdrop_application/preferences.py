@@ -7,7 +7,9 @@ from envisage.ui.tasks.api import PreferencesPane
 
 
 class MicrodropPreferences(PreferencesHelper):
-    """The preferences helper, inspired by envisage one for the Attractors application."""
+    """The preferences helper, inspired by envisage one for the Attractors application.
+    The underlying preference object is the global default since we do not pass a
+    Preference object. See source code for PreferencesHelper for more details."""
 
     #### 'PreferencesHelper' interface ########################################
 

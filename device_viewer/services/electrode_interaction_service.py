@@ -1,20 +1,25 @@
-from math import e
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 from microdrop_utils._logger import get_logger
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
 from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
+from device_viewer.utils.camera import qtransform_serialize, qtransform_deserialize
+from microdrop_application.consts import application_home_directory
 
 logger = get_logger(__name__)
 
-
 class ElectrodeInteractionControllerService(HasTraits):
     """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
-    Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class."""
+    Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class.
+
+    The following should be passed as kwargs to the constructor:
+    - model: The main model instance.
+    - electrode_view_layer: The current electrode layer view.
+    - application: The main Envisage application instance.
+    """
 
     #: Model
     model = Instance(MainModel)
@@ -28,6 +33,10 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
+
+    def __init__(self, **traits):
+        super().__init__(**traits)
+        self.preferences = self.application.preferences_helper.preferences
 
     # -------------------- Helpers ------------------------
 
@@ -197,6 +206,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.electrode_view_layer.redraw_reference_rect(self.model)
             elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
                 self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
+            self.preferences.set("camera.perspective_matrix", qtransform_serialize(self.model.camera_perspective.transformation))
     
     @observe("model.mode")
     def clear_prespective_rect_on_mode_change(self, event):

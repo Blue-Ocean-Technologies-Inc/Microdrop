@@ -29,7 +29,7 @@ from microdrop_utils.font_helpers import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
-                     hamburger_btn_stylesheet)
+                     hamburger_btn_stylesheet, application_home_directory)
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -49,7 +49,13 @@ class MicrodropApplication(TasksApplication):
 
     #: The directory on the local file system used to persist window layout
     #: information.
-    state_location = Path.home() / ".microdrop_next_gen"
+    state_location = application_home_directory
+
+    #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
+    home = application_home_directory
+
+    #: We dont use this directory but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+    user_data = application_home_directory
 
     #: The filename that the application uses to persist window layout
     #: information.
