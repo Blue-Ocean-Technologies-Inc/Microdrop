@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
 import cv2
@@ -210,6 +210,7 @@ class CameraControlWidget(QWidget):
         
         self.camera_combo.clear()
         self.qt_available_cameras = QMediaDevices.videoInputs() if os.getenv("USE_CV2", "0") != "1" else []
+        self.qt_available_cameras.append(None)
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
@@ -218,14 +219,14 @@ class CameraControlWidget(QWidget):
             # Add descriptions to the combo box
             self.camera_combo.blockSignals(True)  # Block signals
             for camera in self.qt_available_cameras:
-                self.camera_combo.addItem(camera.description()) # Going from 0 -> 1 items sends a hidden currentIndexChanged!
+                self.camera_combo.addItem(camera.description() if camera else "<No Camera>")
             self.camera_combo.blockSignals(False)  # Re-enable signals
 
             # Set the current index to the previously selected camera if it exists (make sure something is selected here)
             if old_camera_name:
                 found_flag = False
                 for i, camera in enumerate(self.qt_available_cameras):
-                    if camera.description() == old_camera_name:
+                    if camera and camera.description() == old_camera_name:
                         self.camera_combo.setCurrentIndex(i)
                         found_flag = True
                         break
@@ -257,10 +258,11 @@ class CameraControlWidget(QWidget):
             self.video_item.setVisible(True)
             self.pixmap_item.setVisible(False)  # Hide the pixmap item if using Qt
             if 0 <= index < len(self.qt_available_cameras):
-                self.camera = QCamera(self.qt_available_cameras[index])
-                self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
-                self.capture_session.setCamera(self.camera)
-                self.camera.start()
+                if self.qt_available_cameras[index]: # Camera is not None
+                    self.camera = QCamera(self.qt_available_cameras[index])
+                    self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                    self.capture_session.setCamera(self.camera)
+                    self.camera.start()
         else: # If no Qt cameras are available, use OpenCV camera
             self.video_item.setVisible(False)
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
