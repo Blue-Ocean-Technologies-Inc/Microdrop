@@ -27,6 +27,7 @@ from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.services.force_calculation_service import ForceCalculationService
+from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import (DeviceState, device_state_from_device_viewer_message,
                                               device_state_to_device_viewer_message)
@@ -62,6 +63,9 @@ class PGCWidget(QWidget):
 
         self.experiment_manager = ExperimentManager()
         self.experiment_manager.initialize()  
+
+        self.protocol_data_logger = ProtocolDataLogger(self)
+        self.protocol_runner.set_data_logger(self.protocol_data_logger)
 
         self.protocol_state_tracker = ProtocolStateTracker()        
         
@@ -204,7 +208,11 @@ class PGCWidget(QWidget):
                         self.on_calibration_message
                     )
 
-                    self.protocol_runner.connect_droplet_detection_listener(message_listener)
+                    message_listener.signal_emitter.capacitance_updated.connect(
+                    self.protocol_data_logger.log_capacitance_data
+                    )
+
+                    self._setup_advanced_mode_sync()
 
                     logger.info("connected to message listener successfully")
                     return
@@ -217,6 +225,33 @@ class PGCWidget(QWidget):
 
         except Exception as e:
             logger.info(f"Error setting up message listener: {e}")
+
+    def _setup_advanced_mode_sync(self):
+        """Set up synchronization between menu and NavigationBar for advanced mode."""
+        try:
+            if self._protocol_grid_plugin:
+                self._protocol_grid_plugin.set_widget_reference(self)
+                
+                self.navigation_bar.advanced_user_mode_checkbox.stateChanged.connect(
+                    self._on_advanced_mode_checkbox_changed
+                )
+                
+                logger.info("Advanced mode synchronization set up")
+        except Exception as e:
+            logger.error(f"Error setting up advanced mode sync: {e}")
+
+    def _on_advanced_mode_checkbox_changed(self, state):
+        try:
+            if self._protocol_grid_plugin:
+                checked = state == 2  # Qt.Checked
+                current_plugin_state = self._protocol_grid_plugin.get_advanced_mode_state()
+                
+                # only update if state actually changed to avoid infinite loops
+                if checked != current_plugin_state:
+                    self._protocol_grid_plugin.set_advanced_mode_state(checked)
+                    logger.debug(f"Advanced mode updated from checkbox: {checked}")
+        except Exception as e:
+            logger.error(f"Error handling advanced mode checkbox change: {e}")
 
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
@@ -318,11 +353,31 @@ class PGCWidget(QWidget):
             
             # update force on all steps if we have complete data
             if self.state.has_complete_calibration_data():
+                self._update_data_logger_calibration()
                 ForceCalculationService.update_all_step_forces_in_model(self.model, self.state)
                 logger.info("Updated all step forces with new calibration data")
                 
         except Exception as e:
             logger.error(f"Error processing calibration message: {e}")
+
+    def _update_data_logger_calibration(self):
+        """Update data logger with latest capacitance per unit area."""
+        try:                
+            calibration_data = self.state.get_calibration_data()
+            active_electrodes = self.state.get_active_electrodes_from_calibration()
+            
+            c_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
+                calibration_data['liquid_capacitance'],
+                calibration_data['filler_capacitance'],
+                active_electrodes,
+                calibration_data['electrode_areas']
+            )
+            
+            if c_unit_area is not None:
+                self.protocol_data_logger.update_capacitance_per_unit_area(c_unit_area)
+                
+        except Exception as e:
+            logger.error(f"Error updating data logger calibration: {e}")
     # -------------------------------------
 
     # ---------- Information Panel Methods ----------
@@ -426,6 +481,9 @@ class PGCWidget(QWidget):
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state() 
+        
+        # stop data logging and save file
+        self.protocol_data_logger.stop_logging()
 
         # handle auto-save and new experiment creation based on mode
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
@@ -458,6 +516,12 @@ class PGCWidget(QWidget):
                 self.protocol_state_tracker.set_saved_protocol(saved_path)
                 self._update_protocol_display()
                 logger.info(f"Protocol auto-saved to: {saved_path}")
+
+            # save data file    
+            data_file_path = self.protocol_data_logger.save_data_file()
+            if data_file_path:
+                logger.info(f"Protocol data saved to: {data_file_path}")
+                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
             
             # initialize new experiment
             new_experiment_id = self.experiment_manager.initialize_new_experiment()
@@ -472,6 +536,12 @@ class PGCWidget(QWidget):
     def _handle_advanced_mode_completion(self):
         """handle protocol completion in advanced mode: show dialog."""       
         try:
+            # save data file
+            data_file_path = self.protocol_data_logger.save_data_file()
+            if data_file_path:
+                logger.info(f"Protocol data saved to: {data_file_path}")
+                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
+
             dialog = ExperimentCompleteDialog(self)
             result = dialog.exec()
             
@@ -689,6 +759,12 @@ class PGCWidget(QWidget):
         droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
+
+        # start data logging
+        self.protocol_data_logger.start_logging(
+            self.experiment_manager.get_experiment_directory(),
+            preview_mode
+        )
         
         self.protocol_runner.set_preview_mode(preview_mode)
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
@@ -853,6 +929,9 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
         
     def stop_protocol(self):
+        # stop data logging
+        self.protocol_data_logger.stop_logging()
+
         self.protocol_runner.stop()
         self.clear_highlight()
         self.reset_status_bar()
@@ -1319,12 +1398,12 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
     
     def _handle_checkbox_change(self, parent, row, field):
-        if field == "Video":
-            video_col = protocol_grid_fields.index("Video")
-            video_item = parent.child(row, video_col)
-            if video_item:
-                checked = self._is_checkbox_checked(video_item)
-                video_item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
+        if field in ("Video", "Capture", "Record"):
+            col = protocol_grid_fields.index(field)
+            item = parent.child(row, col)
+            if item:
+                checked = self._is_checkbox_checked(item)
+                item.setData(Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
                 
         elif field == "Magnet":
             magnet_col = protocol_grid_fields.index("Magnet")
@@ -1630,7 +1709,7 @@ class PGCWidget(QWidget):
                     if not item:
                         continue
                         
-                    if field in ("Video", "Magnet"):
+                    if field in ("Video", "Capture", "Record", "Magnet"):
                         check_state = item.data(Qt.CheckStateRole)
                         if check_state is not None:
                             checked = check_state == Qt.Checked or check_state == 2
@@ -1817,7 +1896,7 @@ class PGCWidget(QWidget):
                 except ValueError:
                     logger.debug(f"Invalid voltage value for force calculation: {item.text()}")
 
-        if field in ("Video", "Magnet"):
+        if field in ("Video", "Capture", "Record", "Magnet"):
             self._handle_checkbox_change(parent, row, field)
             if not self._protocol_running or (self._protocol_running and self.navigation_bar.is_advanced_user_mode() and self._is_advanced_mode_field_editable(field)):
                 self.sync_to_state()

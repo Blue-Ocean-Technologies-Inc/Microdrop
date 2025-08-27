@@ -194,6 +194,7 @@ class NavigationBar(QWidget):
         self.advanced_user_mode_checkbox.setToolTip(
             "When checked, navigation buttons remain enabled during protocol execution for advanced users"
         )
+        self.advanced_user_mode_checkbox.setVisible(False)
         
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
         self.preview_mode_checkbox.setToolTip(
@@ -202,7 +203,7 @@ class NavigationBar(QWidget):
         
         checkbox_layout.addWidget(self.preview_mode_checkbox)
         checkbox_layout.addWidget(self.droplet_check_checkbox)
-        checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
+        # checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
             
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
@@ -314,7 +315,7 @@ class StatusBar(QWidget):
         repeat_layout.setSpacing(2)
         
         self.lbl_repeat_protocol = QLabel("Repeat Protocol:")
-        self.lbl_repeat_protocol.setFixedWidth(100)
+        self.lbl_repeat_protocol.setFixedWidth(140)
         self.lbl_repeat_protocol.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         self.lbl_repeat_protocol_status = QLabel("1/")
@@ -331,7 +332,7 @@ class StatusBar(QWidget):
         
         repeat_widget = QWidget()
         repeat_widget.setLayout(repeat_layout)
-        repeat_widget.setFixedWidth(150)
+        repeat_widget.setFixedWidth(170)
         repeat_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         repeat_widget.setFixedHeight(20)
 

@@ -90,21 +90,10 @@ class ForceCalculationService:
                 logger.info(f"!!RETURNED!! voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
                 return None
             logger.info(f"voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
-            total_force = 0.0
+            force = (capacitance_per_unit_area * voltage * voltage) / 2.0
             
-            # FIXED: Use calibration electrodes for force calculation, not step electrodes
-            # Only calculate force for electrodes that were active during calibration
-            for electrode_id in calibration_active_electrodes:
-                if electrode_id in electrode_areas:
-                    electrode_area = electrode_areas[electrode_id]
-                    logger.info(f"calibration electrode {electrode_id}, area: {electrode_area}")
-                    # F = (electrode_area * C_per_unit_area * V²) / 2
-                    force = (electrode_area * capacitance_per_unit_area * voltage * voltage) / 2.0
-                    logger.info(f"force contribution from {electrode_id}: {force}")
-                    total_force += force
-            
-            logger.info(f"returned total force: {total_force}")
-            return total_force if total_force > 0 else None
+            logger.info(f"returned force: {force}")
+            return force if force > 0 else None
             
         except Exception as e:
             logger.info(f"Error calculating force for step: {e}")
