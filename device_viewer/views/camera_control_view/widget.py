@@ -202,7 +202,12 @@ class CameraControlWidget(QWidget):
 
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
-        old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        preferences_camera = self.preferences.get("camera.selected_camera", None)
+        if preferences_camera:
+            old_camera_name = preferences_camera
+        else:
+            old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        
         self.camera_combo.clear()
         self.qt_available_cameras = QMediaDevices.videoInputs() if os.getenv("USE_CV2", "0") != "1" else []
         self.cv2_available_cameras = []
@@ -211,15 +216,23 @@ class CameraControlWidget(QWidget):
             self.using_opencv = False  # Using Qt cameras
             
             # Add descriptions to the combo box
+            self.camera_combo.blockSignals(True)  # Block signals
             for camera in self.qt_available_cameras:
-                self.camera_combo.addItem(camera.description())
+                self.camera_combo.addItem(camera.description()) # Going from 0 -> 1 items sends a hidden currentIndexChanged!
+            self.camera_combo.blockSignals(False)  # Re-enable signals
 
-            # Set the current index to the previously selected camera if it exists
+            # Set the current index to the previously selected camera if it exists (make sure something is selected here)
             if old_camera_name:
+                found_flag = False
                 for i, camera in enumerate(self.qt_available_cameras):
                     if camera.description() == old_camera_name:
                         self.camera_combo.setCurrentIndex(i)
+                        found_flag = True
                         break
+                if not found_flag:
+                    self.camera_combo.setCurrentIndex(0)
+            else:
+                self.camera_combo.setCurrentIndex(0)
         else:  # No cameras found, use cv2 to list cameras
             self.using_opencv = True  # Using OpenCV cameras
             logger.warning("No cameras found using Qt. Attempting to list cameras using OpenCV.")
@@ -259,25 +272,23 @@ class CameraControlWidget(QWidget):
 
         self.populate_resolution_list()
 
-    @Slot()
-    def render_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        image = cv_image_to_qimage(frame)
-
-        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
-        self.scene.update()  # Update the scene to reflect the new pixmap
     def populate_resolution_list(self):
         """Populate the resolution combo box with available resolutions."""
         if not self.using_opencv:
             if self.camera:
                 self.resolution_combo.clear()
 
-                for format in self.camera_formats:
-                    res = format.resolution()
+                resolutions = [format.resolution() for format in self.camera_formats]
+
+                preferences_resolution = self.preferences.get("camera.resolution", None)
+
+                for res in resolutions:
                     self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+
+                if preferences_resolution:
+                    index = self.resolution_combo.findText(preferences_resolution)
+                    if index != -1:
+                        self.resolution_combo.setCurrentIndex(index)
         else:
             # For OpenCV, we can set a fixed resolution or use the camera's default
             self.resolution_combo.clear()
@@ -319,6 +330,7 @@ class CameraControlWidget(QWidget):
 
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
+                self.preferences.set("camera.resolution", self.resolution_combo.itemText(index))
                 format = self.camera_formats[index]
                 self.camera.setCameraFormat(format)
                 self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
@@ -355,7 +367,19 @@ class CameraControlWidget(QWidget):
                 self.video_item.paint(painter, options, None)
             painter.end()
         return image
-    # Callbacks
+    
+    # ------------------------ Callbacks -------------------------------
+
+    @Slot()
+    def render_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        image = cv_image_to_qimage(frame)
+
+        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
+        self.scene.update()  # Update the scene to reflect the new pixmap
 
     @Slot()
     def capture_button_handler(self):
