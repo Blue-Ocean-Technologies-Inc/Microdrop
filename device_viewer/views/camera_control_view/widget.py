@@ -150,10 +150,12 @@ class CameraControlWidget(QWidget):
         self.populate_camera_list()
 
     def turn_on_camera(self):
+        self.preferences.set("camera.camera_state", "on")
         if self.camera:
             self.camera.start()
 
     def turn_off_camera(self):
+        self.preferences.set("camera.camera_state", "off")
         if self.camera:
             self.camera.stop()
 
@@ -262,7 +264,8 @@ class CameraControlWidget(QWidget):
                     self.camera = QCamera(self.qt_available_cameras[index])
                     self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
                     self.capture_session.setCamera(self.camera)
-                    self.camera.start()
+                    if self.preferences.get("camera.camera_state", "off") == "on":
+                        self.camera.start()
         else: # If no Qt cameras are available, use OpenCV camera
             self.video_item.setVisible(False)
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
