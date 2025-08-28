@@ -112,7 +112,7 @@ class ElectrodeScene(QGraphicsScene):
                 self.interaction_service.handle_perspective_edit(event.scenePos())
 
         if self.right_mouse_pressed:
-            if mode in ("edit", "draw", "edit-draw"):
+            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
                 connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
                 endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
                 if connection_item:
@@ -184,6 +184,10 @@ class ElectrodeScene(QGraphicsScene):
         self.interaction_service.model.configure_traits(view=scale_edit_view)
 
     def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
+        if event.modifiers() & Qt.ControlModifier:
+            # If control is pressed, we do not show the context menu
+            return super().contextMenuEvent(event)
+
         context_menu = QMenu()
         context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
         context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
