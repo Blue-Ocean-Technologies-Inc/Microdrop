@@ -334,22 +334,14 @@ class PGCWidget(QWidget):
                 
             calibration_data = json.loads(message)
             
-            liquid_capacitance = calibration_data.get('liquid_capacitance')
-            filler_capacitance = calibration_data.get('filler_capacitance')
-            electrode_areas = calibration_data.get('electrode_areas', {})
-            electrode_scale = calibration_data.get('electrode_scale', 1.0)
+            liquid_capacitance_over_area = calibration_data.get('liquid_capacitance_over_area')
+            filler_capacitance_over_area = calibration_data.get('filler_capacitance_over_area')
             
             self.state.set_calibration_data(
-                liquid_capacitance, filler_capacitance, electrode_areas, electrode_scale
+                liquid_capacitance_over_area, filler_capacitance_over_area
             )
             
-            # FIXED: Use the most recent active electrodes as calibration electrodes
-            # This captures the electrodes that were active just before calibration
-            if self._last_free_mode_active_electrodes:
-                self.state.set_active_electrodes_from_calibration(self._last_free_mode_active_electrodes)
-                logger.info(f"Set calibration electrodes to: {self._last_free_mode_active_electrodes}")
-            
-            logger.info(f"Received calibration data: liquid={liquid_capacitance}, filler={filler_capacitance}, scale={electrode_scale}")
+            logger.info(f"Received calibration data: liquid={liquid_capacitance_over_area}, filler={filler_capacitance_over_area}")
             
             # update force on all steps if we have complete data
             if self.state.has_complete_calibration_data():
@@ -364,13 +356,10 @@ class PGCWidget(QWidget):
         """Update data logger with latest capacitance per unit area."""
         try:                
             calibration_data = self.state.get_calibration_data()
-            active_electrodes = self.state.get_active_electrodes_from_calibration()
             
             c_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
-                calibration_data['liquid_capacitance'],
-                calibration_data['filler_capacitance'],
-                active_electrodes,
-                calibration_data['electrode_areas']
+                calibration_data['liquid_capacitance_over_area'],
+                calibration_data['filler_capacitance_over_area']
             )
             
             if c_unit_area is not None:
