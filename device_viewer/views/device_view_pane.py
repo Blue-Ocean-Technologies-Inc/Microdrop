@@ -245,7 +245,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Screen capture triggered: {message}")
         if self.model and self.camera_control_widget:
-            self.camera_control_widget.screen_capture_signal.emit()
+            capture_data = None
+            if message and message.strip():
+                try:
+                    capture_data = json.loads(message)
+                except (json.JSONDecodeError, TypeError):
+                    logger.debug("Screen capture message is not JSON, using default capture")
+            
+            self.camera_control_widget.screen_capture_signal.emit(capture_data)
 
     def _on_screen_recording_triggered(self, message):
         """
@@ -253,7 +260,23 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Screen recording triggered: {message}")
         if self.model and self.camera_control_widget:
-            self.camera_control_widget.screen_recording_signal.emit(message.lower() == "true")
+            recording_data = None
+            if message and message.strip():
+                try:
+                    recording_data = json.loads(message)
+                    if isinstance(recording_data, dict):
+                        action = recording_data.get("action", "").lower()
+                        if action in ["start", "stop"]:
+                            self.camera_control_widget.screen_recording_signal.emit(recording_data)
+                        else:
+                            is_start = message.lower() == "true"
+                            self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                    else:
+                        is_start = message.lower() == "true"
+                        self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                except (json.JSONDecodeError, TypeError):
+                    is_start = message.lower() == "true"
+                    self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
 
     def _on_camera_active_triggered(self, message):
         """

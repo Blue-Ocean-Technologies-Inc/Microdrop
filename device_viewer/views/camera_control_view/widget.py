@@ -12,6 +12,8 @@ import ctypes
 import ctypes.util
 import signal
 import subprocess
+import json
+from pathlib import Path
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
@@ -26,8 +28,8 @@ class CameraControlWidget(QWidget):
 
     # Signals - we use them to not have to set up another dramatiq listener here. Listener is in device_view_pane.py
     camera_active_signal = Signal(bool)
-    screen_capture_signal = Signal()
-    screen_recording_signal = Signal(bool)
+    screen_capture_signal = Signal(object)
+    screen_recording_signal = Signal(object)
 
     def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
@@ -219,11 +221,21 @@ class CameraControlWidget(QWidget):
             self.turn_off_camera()
 
     @Slot(bool)
-    def on_recording_active(self, active):
-        if active:
-            self.video_record_start()
+    def on_recording_active(self, recording_data):
+        if isinstance(recording_data, dict):
+            action = recording_data.get("action", "").lower()
+            if action == "start":
+                directory = recording_data.get("directory")
+                step_description = recording_data.get("step_description")
+                step_id = recording_data.get("step_id")
+                self.video_record_start(directory, step_description, step_id)
+            elif action == "stop":
+                self.video_record_stop()
         else:
-            self.video_record_stop()
+            if recording_data:
+                self.video_record_start()
+            else:
+                self.video_record_stop()
 
 
     def on_mode_changed(self, event):
@@ -418,14 +430,37 @@ class CameraControlWidget(QWidget):
         self.scene.update()  # Update the scene to reflect the new pixmap
 
     @Slot()
-    def capture_button_handler(self):
+    def capture_button_handler(self, capture_data=None):
         """Callback for when the capture button is pressed."""
+        directory = None
+        step_description = None
+        step_id = None
+        
+        # extract data if provided
+        if isinstance(capture_data, dict):
+            directory = capture_data.get("directory")
+            step_description = capture_data.get("step_description")
+            step_id = capture_data.get("step_id")
+            
         # Ensure camera is on for capture
         was_camera_off = not self.ensure_camera_on()
         
         # Capture the image
         image = self.get_transformed_frame()
-        image.save(f"{QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)}/captured_image_{self.get_next_image_id()}.png", "PNG")
+
+        # generate filename
+        filename = self._generate_capture_filename(step_description, step_id)
+
+        # determine save path
+        if directory:
+            save_path = Path(directory) / filename
+            # Ensure directory exists
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            # use default location
+            save_path = Path(QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)) / filename
+
+        image.save(str(save_path), "PNG")
         logger.info("Image captured successfully")
         
         # Show status bar message
@@ -508,13 +543,24 @@ class CameraControlWidget(QWidget):
                 self.restore_camera_state()
 
     @Slot()
-    def video_record_start(self):
+    def video_record_start(self, directory=None, step_description=None, step_id=None):
         """Start video recording."""
         if not self.video_writer:
             # Ensure camera is on for recording
             was_camera_off = not self.ensure_camera_on()
             
-            self.recording_file_path = f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4"
+            # generate filename
+            filename = self._generate_recording_filename(step_description, step_id)
+            
+            # determine save path
+            if directory:
+                self.recording_file_path = str(Path(directory) / filename)
+                # ensuring directory exists
+                Path(directory).mkdir(parents=True, exist_ok=True)
+            else:
+                # Use default Movies location
+                self.recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
+
             self.video_writer = cv2.VideoWriter(self.recording_file_path,
                                         cv2.VideoWriter_fourcc(*'mp4v'),
                                         30,  # Frame rate
@@ -526,7 +572,7 @@ class CameraControlWidget(QWidget):
             self.record_toggle_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
             self.record_toggle_button.setChecked(True)  # Ensure it's checked
             self.is_recording = True
-            logger.info("Video recording started.")
+            logger.info(f"Video recording started: {self.recording_file_path}")
             
             # Show status bar message
             try:
@@ -601,3 +647,27 @@ class CameraControlWidget(QWidget):
             self.camera_toggle_button.setText("videocam_off")
             self.camera_toggle_button.setToolTip("Camera Off")
             self.camera_toggle_button.setChecked(False)
+
+    def _generate_capture_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{timestamp}.png"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.png"
+        else:
+            return f"captured_image_{timestamp}.png"
+        
+    def _generate_recording_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{timestamp}.mp4"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.mp4"
+        else:
+            return f"video_recording_{timestamp}.mp4"

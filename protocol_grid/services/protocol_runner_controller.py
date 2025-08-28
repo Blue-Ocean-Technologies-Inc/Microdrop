@@ -10,7 +10,8 @@ from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
-from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
+from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAMERA_ACTIVE,
+                                  DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
 from microdrop_utils._logger import get_logger
@@ -122,6 +123,114 @@ class ProtocolRunnerController(QObject):
         self._volume_threshold_mode_active = False
         self._current_phase_volume_threshold = 0.0
         self._current_phase_target_capacitance = None
+
+        # camera state
+        self._step_recording_active = False
+        self._current_recording_step = None
+
+    # --------- camera controls ----------
+    def _is_checkbox_checked(self, item_or_value):
+        if item_or_value is None:
+            return False
+        
+        if isinstance(item_or_value, str):
+            return item_or_value == "1"
+        elif isinstance(item_or_value, bool):
+            return item_or_value
+        elif isinstance(item_or_value, int):
+            return item_or_value == 1
+        else:
+            try:
+                return str(item_or_value) == "1"
+            except:
+                return False
+        
+    def _handle_camera_controls(self, step_info):
+        if self._preview_mode:
+            logger.debug("Skipping camera controls in preview mode")
+            return
+            
+        try:
+            step = step_info["step"]
+            experiment_dir = str(self.experiment_manager.get_experiment_directory())
+            
+            # Video control
+            video_enabled = self._is_checkbox_checked(step.parameters.get("Video", "0"))
+            if video_enabled == False:
+                self._publish_camera_video_control("false")
+            else:
+                self._publish_camera_video_control("true")
+            
+            # Capture control  
+            capture_enabled = self._is_checkbox_checked(step.parameters.get("Capture", "0"))
+            if capture_enabled:
+                step_id = step.parameters.get("ID", "")
+                step_description = step.parameters.get("Description", "Step")
+                self._publish_camera_capture_control(step_id, step_description, experiment_dir)
+            
+            # Recording control
+            record_enabled = self._is_checkbox_checked(step.parameters.get("Record", "0"))
+            if record_enabled:
+                step_id = step.parameters.get("ID", "")
+                step_description = step.parameters.get("Description", "Step")
+                self._start_step_recording(step_id, step_description, experiment_dir)
+                
+        except Exception as e:
+            logger.error(f"Error handling camera controls: {e}")
+
+
+    def _publish_camera_video_control(self, active):
+        """Publish camera video control message."""
+        try:
+            if active == "true":
+                publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="true")
+            else:
+                publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="false")
+            logger.info(f"Published camera video control: active={active}")
+        except Exception as e:
+            logger.error(f"Error publishing camera video control: {e}")
+
+    def _publish_camera_capture_control(self, step_id, step_description, experiment_dir):
+        """Publish camera capture control message."""
+        try:
+            message_data = {
+                "directory": experiment_dir,
+                "step_description": step_description,
+                "step_id": step_id
+            }
+            publish_message(topic=DEVICE_VIEWER_SCREEN_CAPTURE, message=json.dumps(message_data))
+            logger.info(f"Published camera capture control for step {step_id}")
+        except Exception as e:
+            logger.error(f"Error publishing camera capture control: {e}")
+
+    def _start_step_recording(self, step_id, step_description, experiment_dir):
+        """Start step recording."""
+        try:
+            message_data = {
+                "action": "start",
+                "directory": experiment_dir,
+                "step_description": step_description,
+                "step_id": step_id
+            }
+            publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+            self._step_recording_active = True
+            self._current_recording_step = step_id
+            logger.info(f"Started recording for step {step_id}")
+        except Exception as e:
+            logger.error(f"Error starting step recording: {e}")
+
+    def _stop_step_recording(self):
+        """Stop step recording."""
+        if hasattr(self, '_step_recording_active') and self._step_recording_active:
+            try:
+                message_data = {"action": "stop"}
+                publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+                self._step_recording_active = False
+                self._current_recording_step = None
+                logger.info("Stopped recording for step")
+            except Exception as e:
+                logger.error(f"Error stopping step recording: {e}")
+    # ------------------------------------
 
     # --------- data logging ----------
     def set_data_logger(self, data_logger):
@@ -884,6 +993,10 @@ class ProtocolRunnerController(QObject):
             path = step_info["path"]
             rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
 
+            # handle camera controls for Video/Capture/Record
+            if not self._preview_mode:
+                self._handle_camera_controls(step_info)
+
             logger.info(f"Executing step {self._current_index + 1}/{len(self._run_order)}: "
                         f"{step.parameters.get('Description', 'Step')} (rep {rep_idx}/{rep_total})")
             
@@ -1319,6 +1432,9 @@ class ProtocolRunnerController(QObject):
         self._execute_next_phase()
 
     def _on_step_completed_by_phases(self):
+        if hasattr(self, '_step_recording_active') and self._step_recording_active:
+            self._stop_step_recording()
+
         if not self._is_running or self._is_paused:
             return
         

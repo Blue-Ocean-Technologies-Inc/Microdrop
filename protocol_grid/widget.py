@@ -67,6 +67,8 @@ class PGCWidget(QWidget):
         self.protocol_data_logger = ProtocolDataLogger(self)
         self.protocol_runner.set_data_logger(self.protocol_data_logger)
 
+        self.protocol_runner.experiment_manager = self.experiment_manager
+
         self.protocol_state_tracker = ProtocolStateTracker()        
         
         self._column_visibility = {}
