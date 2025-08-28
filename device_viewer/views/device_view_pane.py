@@ -14,6 +14,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 # local imports
 # TODO: maybe get these from an extension point for very granular control
+from device_viewer.utils.camera import qtransform_deserialize
 from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
@@ -95,6 +96,12 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.model = MainModel(undo_manager=self.undo_manager)
         self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+
+        self.preferences = self.task.window.application.preferences_helper.preferences
+        # Load preferences to model
+        transform = self.preferences.get("camera.transformation")
+        if transform: # If preference exists
+            self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
         self.scene = ElectrodeScene(self)
 
@@ -327,7 +334,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.publish_electrode_update()
             logger.info("Electrode update sent")
 
-    @observe("model.liquid_capacitance, model.filler_capacitance, model.electrode_scale")
+    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
     def calibration_change_handler(self, event=None):
         """
         Handle changes to the calibration values and publish a message.
@@ -401,10 +408,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         Publish a message with the current calibration values.
         """
         message = {
-            "liquid_capacitance": self.model.liquid_capacitance,
-            "filler_capacitance": self.model.filler_capacitance,
-            "electrode_areas": self.model.get_electrode_areas_scaled(),
-            "electrode_scale": self.model.electrode_scale
+            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area,
+            "filler_capacitance_over_area": self.model.filler_capacitance_over_area,
         }
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
@@ -471,7 +476,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.preferences)
         self.camera_control_widget.setParent(container)
 
         # calibration_view code

@@ -127,3 +127,17 @@ class Electrodes(HasTraits):
                 areas[electrode_id] = area * (self.svg_model.pixel_scale ** 2)
             return areas
         return {}
+    
+    def get_activated_electrode_area_mm2(self) -> float | None:
+        """
+        Get the areas of all activated electrodes in mm^2
+        :return: Dictionary of electrode id to area in mm^2
+        """
+        if self.svg_model is not None:
+            total_area = 0.0
+            for electrode_id, channel in self.electrode_ids_channels_map.items():
+                if self.channels_states_map.get(channel, False):
+                    area = self.svg_model.electrode_areas.get(electrode_id, 0)
+                    total_area += area * (self.svg_model.pixel_scale ** 2)
+            return total_area
+        return None

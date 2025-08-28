@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
+from apptools.preferences.api import Preferences
 import cv2
 import time
 import os
@@ -28,8 +29,9 @@ class CameraControlWidget(QWidget):
     screen_capture_signal = Signal()
     screen_recording_signal = Signal(bool)
 
-    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene):
+    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
+        self.preferences = preferences
         self.model = model
         self.capture_session = capture_session
         self.scene = scene
@@ -149,6 +151,7 @@ class CameraControlWidget(QWidget):
         self.check_initial_camera_state()
 
     def turn_on_camera(self):
+        self.preferences.set("camera.camera_state", "on")
         if self.camera:
             self.camera.start()
             self.is_camera_on = True
@@ -157,6 +160,7 @@ class CameraControlWidget(QWidget):
             self.camera_toggle_button.setChecked(True)
 
     def turn_off_camera(self):
+        self.preferences.set("camera.camera_state", "off")
         if self.camera:
             self.camera.stop()
             self.is_camera_on = False
@@ -231,24 +235,38 @@ class CameraControlWidget(QWidget):
 
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
-        old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        preferences_camera = self.preferences.get("camera.selected_camera", None)
+        if preferences_camera:
+            old_camera_name = preferences_camera
+        else:
+            old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        
         self.camera_combo.clear()
         self.qt_available_cameras = QMediaDevices.videoInputs() if os.getenv("USE_CV2", "0") != "1" else []
+        self.qt_available_cameras.append(None)
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
             self.using_opencv = False  # Using Qt cameras
             
             # Add descriptions to the combo box
+            self.camera_combo.blockSignals(True)  # Block signals
             for camera in self.qt_available_cameras:
-                self.camera_combo.addItem(camera.description())
+                self.camera_combo.addItem(camera.description() if camera else "<No Camera>")
+            self.camera_combo.blockSignals(False)  # Re-enable signals
 
-            # Set the current index to the previously selected camera if it exists
+            # Set the current index to the previously selected camera if it exists (make sure something is selected here)
             if old_camera_name:
+                found_flag = False
                 for i, camera in enumerate(self.qt_available_cameras):
-                    if camera.description() == old_camera_name:
+                    if camera and camera.description() == old_camera_name:
                         self.camera_combo.setCurrentIndex(i)
+                        found_flag = True
                         break
+                if not found_flag:
+                    self.camera_combo.setCurrentIndex(0)
+            else:
+                self.camera_combo.setCurrentIndex(0)
         else:  # No cameras found, use cv2 to list cameras
             self.using_opencv = True  # Using OpenCV cameras
             logger.warning("No cameras found using Qt. Attempting to list cameras using OpenCV.")
@@ -273,10 +291,12 @@ class CameraControlWidget(QWidget):
             self.video_item.setVisible(True)
             self.pixmap_item.setVisible(False)  # Hide the pixmap item if using Qt
             if 0 <= index < len(self.qt_available_cameras):
-                self.camera = QCamera(self.qt_available_cameras[index])
-                self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
-                self.capture_session.setCamera(self.camera)
-                self.camera.start()
+                if self.qt_available_cameras[index]: # Camera is not None
+                    self.camera = QCamera(self.qt_available_cameras[index])
+                    self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                    self.capture_session.setCamera(self.camera)
+                    if self.preferences.get("camera.camera_state", "off") == "on":
+                        self.camera.start()
         else: # If no Qt cameras are available, use OpenCV camera
             self.video_item.setVisible(False)
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
@@ -288,25 +308,23 @@ class CameraControlWidget(QWidget):
 
         self.populate_resolution_list()
 
-    @Slot()
-    def render_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        image = cv_image_to_qimage(frame)
-
-        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
-        self.scene.update()  # Update the scene to reflect the new pixmap
     def populate_resolution_list(self):
         """Populate the resolution combo box with available resolutions."""
         if not self.using_opencv:
             if self.camera:
                 self.resolution_combo.clear()
 
-                for format in self.camera_formats:
-                    res = format.resolution()
+                resolutions = [format.resolution() for format in self.camera_formats]
+
+                preferences_resolution = self.preferences.get("camera.resolution", None)
+
+                for res in resolutions:
                     self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+
+                if preferences_resolution:
+                    index = self.resolution_combo.findText(preferences_resolution)
+                    if index != -1:
+                        self.resolution_combo.setCurrentIndex(index)
         else:
             # For OpenCV, we can set a fixed resolution or use the camera's default
             self.resolution_combo.clear()
@@ -348,6 +366,7 @@ class CameraControlWidget(QWidget):
 
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
+                self.preferences.set("camera.resolution", self.resolution_combo.itemText(index))
                 format = self.camera_formats[index]
                 self.camera.setCameraFormat(format)
                 self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
@@ -384,7 +403,19 @@ class CameraControlWidget(QWidget):
                 self.video_item.paint(painter, options, None)
             painter.end()
         return image
-    # Callbacks
+    
+    # ------------------------ Callbacks -------------------------------
+
+    @Slot()
+    def render_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        image = cv_image_to_qimage(frame)
+
+        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
+        self.scene.update()  # Update the scene to reflect the new pixmap
 
     @Slot()
     def capture_button_handler(self):
