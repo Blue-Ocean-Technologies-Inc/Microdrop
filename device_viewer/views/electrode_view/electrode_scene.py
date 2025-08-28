@@ -187,6 +187,8 @@ class ElectrodeScene(QGraphicsScene):
         context_menu = QMenu()
         context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
         context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
+        context_menu.addAction("Reset Electrodes", self.interaction_service.model.reset_electrode_states)
+        context_menu.addSeparator()
         context_menu.addAction("Find Liquid", self.action_1)
         context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
         context_menu.exec(event.screenPos())
