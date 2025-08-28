@@ -223,6 +223,7 @@ class CameraControlWidget(QWidget):
             for camera in self.qt_available_cameras:
                 self.camera_combo.addItem(camera.description() if camera else "<No Camera>")
             self.camera_combo.blockSignals(False)  # Re-enable signals
+            self.camera_combo.setCurrentIndex(-1) # No selection initially, so selection at position 0 fires if chosen by below logic
 
             # Set the current index to the previously selected camera if it exists (make sure something is selected here)
             if old_camera_name:
