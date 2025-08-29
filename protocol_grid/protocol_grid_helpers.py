@@ -40,7 +40,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         
         if field == "Force":
             return None            
-        if field in ("Video", "Magnet"):
+        if field in ("Video", "Capture", "Record", "Magnet"):
             editor = QCheckBox(parent)
             return editor
         elif field in ("Magnet Height"):
@@ -99,7 +99,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         
         if field == "Force":
             return            
-        if field in ("Video", "Magnet"):
+        if field in ("Video", "Capture", "Record", "Magnet"):
             check_state = index.model().data(index, Qt.CheckStateRole)
             if check_state is not None:
                 checked = check_state == Qt.Checked or check_state == 2
@@ -189,7 +189,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                 if hidden_field in overrides:
                     item.setData(overrides[hidden_field], Qt.UserRole + 1000 + hash(hidden_field) % 1000)
 
-        if row_type == STEP_TYPE and field in ("Video", "Magnet"):
+        if row_type == STEP_TYPE and field in ("Video", "Capture", "Record", "Magnet"):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             
@@ -225,7 +225,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             else:
                 item.setEditable(False)
                 item.setText("")
-                if field in ("Video", "Magnet"):
+                if field in ("Video", "Capture", "Record", "Magnet"):
                     item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
                     item.setData(None, Qt.CheckStateRole)
         elif row_type == STEP_TYPE and field == "ID":

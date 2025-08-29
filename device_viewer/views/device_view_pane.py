@@ -38,6 +38,9 @@ from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
+from microdrop_style.button_styles import get_complete_stylesheet
+from microdrop_application.application import is_dark_mode
+            
 import json
 
 logger = get_logger(__name__)
@@ -115,7 +118,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_application_palette_changed(self):
         """Handle application palette changes for theme updates"""
         try:
-            from microdrop_application.application import is_dark_mode
             theme = "dark" if is_dark_mode() else "light"
             self._update_theme_styling(theme)
         except Exception as e:
@@ -124,7 +126,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _apply_initial_theme_styling(self):
         """Apply initial theme styling when the UI is first built"""
         try:
-            from microdrop_application.application import is_dark_mode
             theme = "dark" if is_dark_mode() else "light"
             self._update_theme_styling(theme)
         except Exception as e:
@@ -244,7 +245,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Screen capture triggered: {message}")
         if self.model and self.camera_control_widget:
-            self.camera_control_widget.screen_capture_signal.emit()
+            capture_data = None
+            if message and message.strip():
+                try:
+                    capture_data = json.loads(message)
+                except (json.JSONDecodeError, TypeError):
+                    logger.debug("Screen capture message is not JSON, using default capture")
+            
+            self.camera_control_widget.screen_capture_signal.emit(capture_data)
 
     def _on_screen_recording_triggered(self, message):
         """
@@ -252,7 +260,23 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Screen recording triggered: {message}")
         if self.model and self.camera_control_widget:
-            self.camera_control_widget.screen_recording_signal.emit(message.lower() == "true")
+            recording_data = None
+            if message and message.strip():
+                try:
+                    recording_data = json.loads(message)
+                    if isinstance(recording_data, dict):
+                        action = recording_data.get("action", "").lower()
+                        if action in ["start", "stop"]:
+                            self.camera_control_widget.screen_recording_signal.emit(recording_data)
+                        else:
+                            is_start = message.lower() == "true"
+                            self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                    else:
+                        is_start = message.lower() == "true"
+                        self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                except (json.JSONDecodeError, TypeError):
+                    is_start = message.lower() == "true"
+                    self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
 
     def _on_camera_active_triggered(self, message):
         """
@@ -493,15 +517,24 @@ class DeviceViewerDockPane(TraitsDockPane):
         right_stack.addWidget(create_line())  # Add a separator line
         right_stack.addWidget(self.mode_picker_view)
 
-        reveal_button = QPushButton("arrow_forward_ios") # Default to reveal
+        reveal_button = QPushButton("chevron_right") # Default to reveal
 
         def reveal_button_handler():
             is_visible = not right_stack_container.isVisible()
             right_stack_container.setVisible(is_visible)
-            reveal_button.setText("arrow_forward_ios" if is_visible else "arrow_back_ios")
+            reveal_button.setText("chevron_right" if is_visible else "chevron_left")
 
         reveal_button.setToolTip("Reveal Hidden Controls")
-        reveal_button.setStyleSheet("font-family: Material Symbols Outlined; font-size: 30px; margin-left: 3px; margin-right: 3px; padding-left: 3px;")
+        
+        # Import and apply centralized button styles with proper tooltip styling
+        try:
+            theme = "dark" if is_dark_mode() else "light"
+            narrow_style = get_complete_stylesheet(theme, "narrow")
+            reveal_button.setStyleSheet(narrow_style)
+        except ImportError:
+            # Fallback to custom styling if centralized styles aren't available
+            reveal_button.setStyleSheet("font-family: Material Symbols Outlined; font-size: 30px; margin-left: 3px; margin-right: 3px; padding-left: 3px;")
+        
         reveal_button.clicked.connect(reveal_button_handler)
         reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
 
@@ -514,9 +547,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _apply_initial_theme_styling(self):
         """Apply the correct theme styling when components are first created."""
         try:
-            # Import here to avoid circular imports
-            from microdrop_application.application import is_dark_mode
-            
+            # Import here to avoid circular imports            
             theme = "dark" if is_dark_mode() else "light"
             
             # Update all components with the current theme

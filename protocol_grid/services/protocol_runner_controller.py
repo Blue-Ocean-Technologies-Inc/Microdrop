@@ -1,5 +1,6 @@
 import time
 import json
+from typing import Optional, Dict
 
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
@@ -9,7 +10,8 @@ from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
-from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
+from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAMERA_ACTIVE,
+                                  DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
 from microdrop_utils._logger import get_logger
@@ -121,6 +123,169 @@ class ProtocolRunnerController(QObject):
         self._volume_threshold_mode_active = False
         self._current_phase_volume_threshold = 0.0
         self._current_phase_target_capacitance = None
+
+        # camera state
+        self._step_recording_active = False
+        self._current_recording_step = None
+
+    # --------- camera controls ----------
+    def _is_checkbox_checked(self, item_or_value):
+        if item_or_value is None:
+            return False
+        
+        if isinstance(item_or_value, str):
+            return item_or_value == "1"
+        elif isinstance(item_or_value, bool):
+            return item_or_value
+        elif isinstance(item_or_value, int):
+            return item_or_value == 1
+        else:
+            try:
+                return str(item_or_value) == "1"
+            except:
+                return False
+        
+    def _handle_camera_controls(self, step_info):
+        if self._preview_mode:
+            logger.debug("Skipping camera controls in preview mode")
+            return
+            
+        try:
+            step = step_info["step"]
+            experiment_dir = str(self.experiment_manager.get_experiment_directory())
+            
+            # Video control
+            video_enabled = self._is_checkbox_checked(step.parameters.get("Video", "0"))
+            if video_enabled == False:
+                self._publish_camera_video_control("false")
+            else:
+                self._publish_camera_video_control("true")
+            
+            # Capture control  
+            capture_enabled = self._is_checkbox_checked(step.parameters.get("Capture", "0"))
+            if capture_enabled:
+                step_id = step.parameters.get("ID", "")
+                step_description = step.parameters.get("Description", "Step")
+                self._publish_camera_capture_control(step_id, step_description, experiment_dir)
+            
+            # Recording control
+            record_enabled = self._is_checkbox_checked(step.parameters.get("Record", "0"))
+            if record_enabled:
+                step_id = step.parameters.get("ID", "")
+                step_description = step.parameters.get("Description", "Step")
+                self._start_step_recording(step_id, step_description, experiment_dir)
+                
+        except Exception as e:
+            logger.error(f"Error handling camera controls: {e}")
+
+
+    def _publish_camera_video_control(self, active):
+        """Publish camera video control message."""
+        try:
+            if active == "true":
+                publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="true")
+            else:
+                publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="false")
+            logger.info(f"Published camera video control: active={active}")
+        except Exception as e:
+            logger.error(f"Error publishing camera video control: {e}")
+
+    def _publish_camera_capture_control(self, step_id, step_description, experiment_dir):
+        """Publish camera capture control message."""
+        try:
+            message_data = {
+                "directory": experiment_dir,
+                "step_description": step_description,
+                "step_id": step_id
+            }
+            publish_message(topic=DEVICE_VIEWER_SCREEN_CAPTURE, message=json.dumps(message_data))
+            logger.info(f"Published camera capture control for step {step_id}")
+        except Exception as e:
+            logger.error(f"Error publishing camera capture control: {e}")
+
+    def _start_step_recording(self, step_id, step_description, experiment_dir):
+        """Start step recording."""
+        try:
+            message_data = {
+                "action": "start",
+                "directory": experiment_dir,
+                "step_description": step_description,
+                "step_id": step_id
+            }
+            publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+            self._step_recording_active = True
+            self._current_recording_step = step_id
+            logger.info(f"Started recording for step {step_id}")
+        except Exception as e:
+            logger.error(f"Error starting step recording: {e}")
+
+    def _stop_step_recording(self):
+        """Stop step recording."""
+        if hasattr(self, '_step_recording_active') and self._step_recording_active:
+            try:
+                message_data = {"action": "stop"}
+                publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+                self._step_recording_active = False
+                self._current_recording_step = None
+                logger.info("Stopped recording for step")
+            except Exception as e:
+                logger.error(f"Error stopping step recording: {e}")
+    # ------------------------------------
+
+    # --------- data logging ----------
+    def set_data_logger(self, data_logger):
+        """Set reference to data logger for context updates."""
+        self._data_logger = data_logger
+
+    def _get_current_logging_context(self) -> Optional[Dict]:
+        """Get current execution context for data logging."""
+        if not self._is_running or self._preview_mode or self._current_index >= len(self._run_order):
+            return None
+        
+        try:
+            step_info = self._run_order[self._current_index]
+            step = step_info["step"]
+            device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+            
+            if not device_state:
+                return None
+            
+            # get current phase electrodes
+            phase_electrodes = self._get_current_phase_electrodes()
+            
+            # convert electrode IDs to channel numbers
+            actuated_channels = []
+            for electrode_id, is_active in phase_electrodes.items():
+                if is_active and electrode_id in device_state.id_to_channel:
+                    channel = device_state.id_to_channel[electrode_id]
+                    actuated_channels.append(channel)
+            
+            # calculate actuated area
+            actuated_area = 0.0
+            if hasattr(step, 'device_state') and step.device_state:
+                # get calibration data from protocol state for electrode areas
+                if hasattr(self, 'protocol_state') and hasattr(self.protocol_state, 'get_calibration_data'):
+                    try:
+                        calibration_data = self.protocol_state.get_calibration_data()
+                        electrode_areas = calibration_data.get('electrode_areas', {})
+                        
+                        for electrode_id in phase_electrodes:
+                            if phase_electrodes[electrode_id] and electrode_id in electrode_areas:
+                                actuated_area += electrode_areas[electrode_id]
+                    except Exception as e:
+                        logger.debug(f"Could not get electrode areas for data logging: {e}")
+                        # Area remains 0 if calibration data not available
+            
+            return {
+                'step_id': step.parameters.get("ID", ""),
+                'actuated_channels': sorted(actuated_channels),
+                'actuated_area': actuated_area
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting logging context: {e}")
+            return None
+    # ---------------------------------
 
     def connect_droplet_detection_listener(self, message_listener):
         """Connect to droplet detection response signals."""
@@ -816,11 +981,21 @@ class ProtocolRunnerController(QObject):
             self._on_protocol_finished()
             return
         
+        # update data logger context
+        if hasattr(self, '_data_logger') and self._data_logger:
+            context = self._get_current_logging_context()
+            if context:
+                self._data_logger.set_protocol_context(context)
+
         try:
             step_info = self._run_order[self._current_index]
             step = step_info["step"]
             path = step_info["path"]
             rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
+
+            # handle camera controls for Video/Capture/Record
+            if not self._preview_mode:
+                self._handle_camera_controls(step_info)
 
             logger.info(f"Executing step {self._current_index + 1}/{len(self._run_order)}: "
                         f"{step.parameters.get('Description', 'Step')} (rep {rep_idx}/{rep_total})")
@@ -889,6 +1064,12 @@ class ProtocolRunnerController(QObject):
         if self._current_phase_index >= len(self._current_execution_plan):
             self._on_step_completed_by_phases()
             return
+        
+        # update data logger context for current phase
+        if hasattr(self, '_data_logger') and self._data_logger:
+            context = self._get_current_logging_context()
+            if context:
+                self._data_logger.set_protocol_context(context)
             
         try:
             plan_item = self._current_execution_plan[self._current_phase_index]
@@ -1251,6 +1432,9 @@ class ProtocolRunnerController(QObject):
         self._execute_next_phase()
 
     def _on_step_completed_by_phases(self):
+        if hasattr(self, '_step_recording_active') and self._step_recording_active:
+            self._stop_step_recording()
+
         if not self._is_running or self._is_paused:
             return
         

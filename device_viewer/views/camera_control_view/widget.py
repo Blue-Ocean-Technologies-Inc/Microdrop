@@ -12,10 +12,13 @@ import ctypes
 import ctypes.util
 import signal
 import subprocess
+import json
+from pathlib import Path
 
-from microdrop_style.colors import SECONDARY_SHADE, WHITE, SUCCESS_COLOR
+from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
 from microdrop_utils._logger import get_logger
+from microdrop_utils.status_bar_utils import set_status_bar_message
 from microdrop_style.button_styles import get_complete_stylesheet
 
 logger = get_logger(__name__)
@@ -25,8 +28,8 @@ class CameraControlWidget(QWidget):
 
     # Signals - we use them to not have to set up another dramatiq listener here. Listener is in device_view_pane.py
     camera_active_signal = Signal(bool)
-    screen_capture_signal = Signal()
-    screen_recording_signal = Signal(bool)
+    screen_capture_signal = Signal(object)
+    screen_recording_signal = Signal(object)
 
     def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
@@ -56,10 +59,6 @@ class CameraControlWidget(QWidget):
         self.frame_input = None
         self.frame_input_timer = QTimer()  # Timer to handle frame input
 
-        self.capture_success_timer = QTimer() # Timer to reset the capture button style after a successful capture
-        self.capture_success_timer.setSingleShot(True)
-        self.capture_success_timer.timeout.connect(self.reset_capture_button_style)
-
         # Apply theme-aware styling
         self._apply_theme_styling()
 
@@ -83,49 +82,51 @@ class CameraControlWidget(QWidget):
         self.button_reset = QPushButton("frame_reload")
         self.button_reset.setToolTip("Reset Camera Perspective")
 
-        self.camera_refresh_button = QPushButton("refresh")
+        self.camera_refresh_button = QPushButton("flip_camera_ios")
         self.camera_refresh_button.setToolTip("Refresh Camera List")
 
-        self.camera_on_button = QPushButton("videocam")
-        self.camera_on_button.setToolTip("Camera On")
+        # Single toggle button for recording
+        self.record_toggle_button = QPushButton("album")
+        self.record_toggle_button.setToolTip("Start Recording Video")
+        self.record_toggle_button.setCheckable(True)
+        self.is_recording = False
 
-        # btn_layout
-        btn_layout = QHBoxLayout()
-        for btn in [self.button_align]:
-            btn.setCheckable(True)
-            btn_layout.addWidget(btn)
-        btn_layout.addWidget(self.button_reset)
-        btn_layout.addWidget(self.camera_refresh_button)
-        btn_layout.addWidget(self.camera_on_button)
-
-        # recording buttons
-        recording_layout = QHBoxLayout()
-
-        self.record_button = QPushButton("camera")
-        self.record_button.setToolTip("Start Recording")
-
-        self.stop_record_button = QPushButton("stop")
-        self.stop_record_button.setToolTip("Stop Recording")
-
-        self.capture_image_button = QPushButton("photo_camera")
+        self.capture_image_button = QPushButton("camera")
         self.capture_image_button.setToolTip("Capture Image")
 
-        self.camera_off_button = QPushButton("videocam_off")
-        self.camera_off_button.setToolTip("Camera Off")
 
-        recording_layout.addWidget(self.record_button)
-        recording_layout.addWidget(self.stop_record_button)
-        recording_layout.addWidget(self.capture_image_button)
-        recording_layout.addWidget(self.camera_off_button)
-        btn_layout.addStretch()  # Add stretch to push buttons to the left and expand the layout
+        # Single toggle button for camera on/off
+        self.camera_toggle_button = QPushButton("videocam_off")
+        self.camera_toggle_button.setToolTip("Camera Off")
+        self.camera_toggle_button.setCheckable(True)
+        self.is_camera_on = False
+        self.camera_was_off_before_action = False  # Track if camera was off before capture/record
+
+        # top buttons
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self.capture_image_button)
+        # top_layout.addWidget(self.record_button)
+        # recording_layout.addWidget(self.stop_record_button)
+
+        top_layout.addWidget(self.camera_toggle_button)
+        top_layout.addWidget(self.camera_refresh_button)
+        
+        # bottom buttons
+        bottom_layout = QHBoxLayout()
+        for btn in [self.record_toggle_button, self.button_align]:
+            btn.setCheckable(True)
+            bottom_layout.addWidget(btn)
+        bottom_layout.addWidget(self.button_reset)
+        
+        # bottom_layout.addStretch()  # Add stretch to push buttons to the left and expand the layout
         
         # Main layout
         layout = QVBoxLayout()
 
         layout.addLayout(self.camera_select_layout)
         layout.addLayout(self.resolution_select_layout)
-        layout.addLayout(recording_layout)
-        layout.addLayout(btn_layout)
+        layout.addLayout(top_layout)
+        layout.addLayout(bottom_layout)
         self.setLayout(layout)
         
         # Set size policy to allow horizontal expansion but keep natural height
@@ -133,13 +134,12 @@ class CameraControlWidget(QWidget):
 
         self.sync_buttons_and_label()
 
-        self.camera_on_button.clicked.connect(self.turn_on_camera)
-        self.camera_off_button.clicked.connect(self.turn_off_camera)
+        # Connect toggle buttons with proper toggle logic
+        self.camera_toggle_button.clicked.connect(self.toggle_camera)
         self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
-        self.record_button.clicked.connect(self.video_record_start)
-        self.stop_record_button.clicked.connect(self.video_record_stop)
+        self.record_toggle_button.clicked.connect(self.toggle_recording)
         self.recording_timer.timeout.connect(self.video_record_frame_handler)
         self.camera_refresh_button.clicked.connect(self.populate_camera_list)
         self.camera_combo.currentIndexChanged.connect(self.set_camera_model)
@@ -148,16 +148,49 @@ class CameraControlWidget(QWidget):
         self.model.observe(self.on_mode_changed, "mode")
 
         self.populate_camera_list()
+        
+        # Check initial camera state
+        self.check_initial_camera_state()
 
     def turn_on_camera(self):
         self.preferences.set("camera.camera_state", "on")
         if self.camera:
             self.camera.start()
+            self.is_camera_on = True
+            self.camera_toggle_button.setText("videocam")
+            self.camera_toggle_button.setToolTip("Camera On")
+            self.camera_toggle_button.setChecked(True)
 
     def turn_off_camera(self):
         self.preferences.set("camera.camera_state", "off")
         if self.camera:
             self.camera.stop()
+            self.is_camera_on = False
+            self.camera_toggle_button.setText("videocam_off")
+            self.camera_toggle_button.setToolTip("Camera Off")
+            self.camera_toggle_button.setChecked(False)
+
+    def toggle_camera(self):
+        """Toggle camera on/off state."""
+        if self.is_camera_on:
+            self.turn_off_camera()
+            self.is_camera_on = False
+            self.camera_toggle_button.setText("videocam_off")
+            self.camera_toggle_button.setToolTip("Camera Off")
+            self.camera_toggle_button.setChecked(False)
+        else:
+            self.turn_on_camera()
+            self.is_camera_on = True
+            self.camera_toggle_button.setText("videocam")
+            self.camera_toggle_button.setToolTip("Camera On")
+            self.camera_toggle_button.setChecked(True)
+
+    def toggle_recording(self):
+        """Toggle recording on/off state."""
+        if self.is_recording:
+            self.video_record_stop()
+        else:
+            self.video_record_start()
 
     def _apply_theme_styling(self):
         """Apply theme-aware styling to the widget."""
@@ -188,11 +221,21 @@ class CameraControlWidget(QWidget):
             self.turn_off_camera()
 
     @Slot(bool)
-    def on_recording_active(self, active):
-        if active:
-            self.video_record_start()
+    def on_recording_active(self, recording_data):
+        if isinstance(recording_data, dict):
+            action = recording_data.get("action", "").lower()
+            if action == "start":
+                directory = recording_data.get("directory")
+                step_description = recording_data.get("step_description")
+                step_id = recording_data.get("step_id")
+                self.video_record_start(directory, step_description, step_id)
+            elif action == "stop":
+                self.video_record_stop()
         else:
-            self.video_record_stop()
+            if recording_data:
+                self.video_record_start()
+            else:
+                self.video_record_stop()
 
 
     def on_mode_changed(self, event):
@@ -388,13 +431,58 @@ class CameraControlWidget(QWidget):
         self.scene.update()  # Update the scene to reflect the new pixmap
 
     @Slot()
-    def capture_button_handler(self):
+    def capture_button_handler(self, capture_data=None):
         """Callback for when the capture button is pressed."""
-        self.capture_image_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]};")
+        directory = None
+        step_description = None
+        step_id = None
+        
+        # extract data if provided
+        if isinstance(capture_data, dict):
+            directory = capture_data.get("directory")
+            step_description = capture_data.get("step_description")
+            step_id = capture_data.get("step_id")
+            
+        # Ensure camera is on for capture
+        was_camera_off = not self.ensure_camera_on()
+        
+        # Capture the image
         image = self.get_transformed_frame()
-        image.save(f"{QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)}/captured_image_{self.get_next_image_id()}.png", "PNG")
-        self.capture_image_button.setStyleSheet(f"background-color: {SUCCESS_COLOR};")  # Indicate success with a different color
-        self.capture_success_timer.start(1000)  # Reset style after 2 seconds
+
+        # generate filename
+        filename = self._generate_capture_filename(step_description, step_id)
+
+        # determine save path
+        if directory:
+            save_path = Path(directory) / "captures" / filename 
+            # Ensure directory exists
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            # use default location
+            save_path = Path(QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)) / filename
+
+        image.save(str(save_path), "PNG")
+        logger.info("Image captured successfully")
+        
+        # Show status bar message
+        try:
+            # Try to find the main window through the widget hierarchy
+            parent = self.parent()
+            while parent and not hasattr(parent, '_statusbar'):
+                parent = parent.parent()
+            
+            if parent and hasattr(parent, '_statusbar'):
+                set_status_bar_message("Image captured successfully", parent, 5000)
+            else:
+                # Fallback to using GUI.invoke_later
+                from pyface.api import GUI
+                GUI.invoke_later(set_status_bar_message, "Image captured successfully", None, 5000)
+        except Exception as e:
+            logger.debug(f"Failed to show status bar message: {e}")
+        
+        # Restore camera state if we turned it on
+        if was_camera_off:
+            self.restore_camera_state()
 
     @Slot()
     def video_record_stop(self):
@@ -431,14 +519,50 @@ class CameraControlWidget(QWidget):
 
             self.video_writer = None
             self.recording_file_path = None  # Reset the recording file path
-            self.record_button.setStyleSheet("")
-            self.stop_record_button.setStyleSheet("")
+            self.record_toggle_button.setStyleSheet("")
+            self.record_toggle_button.setChecked(False)  # Ensure it's unchecked
+            self.is_recording = False
+            
+            # Show status bar message
+            try:
+                # Try to find the main window through the widget hierarchy
+                parent = self.parent()
+                while parent and not hasattr(parent, '_statusbar'):
+                    parent = parent.parent()
+                
+                if parent and hasattr(parent, '_statusbar'):
+                    set_status_bar_message("Video recording stopped and saved", parent, 5000)
+                else:
+                    # Fallback to using GUI.invoke_later
+                    from pyface.api import GUI
+                    GUI.invoke_later(set_status_bar_message, "Video recording stopped and saved", None, 5000)
+            except Exception as e:
+                logger.debug(f"Failed to show status bar message: {e}")
+            
+            # Restore camera state if we turned it on for recording
+            if hasattr(self, 'camera_was_off_before_action') and self.camera_was_off_before_action:
+                self.restore_camera_state()
 
     @Slot()
-    def video_record_start(self):
+    def video_record_start(self, directory=None, step_description=None, step_id=None):
         """Start video recording."""
         if not self.video_writer:
-            self.recording_file_path = f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4"
+            # Ensure camera is on for recording
+            was_camera_off = not self.ensure_camera_on()
+            
+            # generate filename
+            filename = self._generate_recording_filename(step_description, step_id)
+            
+            # determine save path
+            if directory:
+                save_path = Path(directory) / "recordings" / filename
+                # Ensure directory exists
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                self.recording_file_path = str(save_path)
+            else:
+                # Use default Movies location
+                self.recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
+
             self.video_writer = cv2.VideoWriter(self.recording_file_path,
                                         cv2.VideoWriter_fourcc(*'mp4v'),
                                         30,  # Frame rate
@@ -447,9 +571,26 @@ class CameraControlWidget(QWidget):
             self.recording_timer.start(1000/30) # Example: record every 1/30th of a second
             self.frame_count = 0  # Reset frame count
             self.record_start_ts = time.time()  # Set the start timestamp
-            self.record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
-            self.stop_record_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
-            logger.info("Video recording started.")
+            self.record_toggle_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
+            self.record_toggle_button.setChecked(True)  # Ensure it's checked
+            self.is_recording = True
+            logger.info(f"Video recording started: {self.recording_file_path}")
+            
+            # Show status bar message
+            try:
+                # Try to find the main window through the widget hierarchy
+                parent = self.parent()
+                while parent and not hasattr(parent, '_statusbar'):
+                    parent = parent.parent()
+                
+                if parent and hasattr(parent, '_statusbar'):
+                    set_status_bar_message("Video recording started", parent, 5000)
+                else:
+                    # Fallback to using GUI.invoke_later
+                    from pyface.api import GUI
+                    GUI.invoke_later(set_status_bar_message, "Video recording started", None, 5000)
+            except Exception as e:
+                logger.debug(f"Failed to show status bar message: {e}")
         else:
             logger.warning("Video recording is already in progress.")
         
@@ -462,11 +603,6 @@ class CameraControlWidget(QWidget):
             self.video_writer.write(qimage_to_cv_image(frame))
             self.frame_count += 1
 
-    @Slot()
-    def reset_capture_button_style(self):
-        """Reset the capture button style to its default state."""
-        self.capture_image_button.setStyleSheet("")
-
     def set_mode(self, mode):
         self.model.mode = mode
         self.sync_buttons_and_label()
@@ -477,3 +613,63 @@ class CameraControlWidget(QWidget):
         if self.model.mode == "camera-edit":
             # Reset to camera-place mode after reset
             self.model.mode = "camera-place"
+
+    def ensure_camera_on(self):
+        """Ensure camera is on, return True if it was already on, False if we had to turn it on."""
+        if not self.is_camera_on:
+            self.camera_was_off_before_action = True
+            self.turn_on_camera()
+            return False
+        return True
+
+    def restore_camera_state(self):
+        """Restore camera to previous state if we turned it on for an action."""
+        if self.camera_was_off_before_action:
+            self.turn_off_camera()
+            self.camera_was_off_before_action = False
+
+    def check_initial_camera_state(self):
+        """Check the initial camera state and update button accordingly."""
+        # Check if camera is currently active
+        if hasattr(self, 'camera') and self.camera:
+            # For Qt cameras, we can check if they're active
+            if hasattr(self.camera, 'isActive') and self.camera.isActive():
+                self.is_camera_on = True
+                self.camera_toggle_button.setText("videocam")
+                self.camera_toggle_button.setToolTip("Camera On")
+                self.camera_toggle_button.setChecked(True)
+            else:
+                self.is_camera_on = False
+                self.camera_toggle_button.setText("videocam_off")
+                self.camera_toggle_button.setToolTip("Camera Off")
+                self.camera_toggle_button.setChecked(False)
+        else:
+            # No camera instance, assume off
+            self.is_camera_on = False
+            self.camera_toggle_button.setText("videocam_off")
+            self.camera_toggle_button.setToolTip("Camera Off")
+            self.camera_toggle_button.setChecked(False)
+
+    def _generate_capture_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description and step_id:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{step_id}_{timestamp}.png"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.png"
+        else:
+            return f"captured_image_{timestamp}.png"
+        
+    def _generate_recording_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description and step_id:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{step_id}_{timestamp}.mp4"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.mp4"
+        else:
+            return f"video_recording_{timestamp}.mp4"

@@ -1,4 +1,4 @@
-import math
+from pint import UnitRegistry
 from typing import Dict, List, Optional, Tuple
 from PySide6.QtCore import Qt
 
@@ -6,59 +6,39 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 
+ureg = UnitRegistry()
+
 class ForceCalculationService:
     """Service for calculating forces based on calibration data and voltages."""
     
     @staticmethod
-    def calculate_capacitance_per_unit_area(liquid_capacitance: float, 
-                                          filler_capacitance: float,
-                                          active_electrodes: List[str],
-                                          electrode_areas: Dict[str, float]) -> Optional[float]:
+    def calculate_capacitance_per_unit_area(liquid_capacitance_over_area: float, 
+                                          filler_capacitance_over_area: float):
         """
         Calculate capacitance per unit area from calibration data.
         
         Args:
-            liquid_capacitance: Total liquid capacitance
-            filler_capacitance: Total filler capacitance  
-            active_electrodes: List of electrode IDs that were active during calibration
-            electrode_areas: Dictionary mapping electrode IDs to their areas
+            liquid_capacitance_over_area: Total liquid capacitance
+            filler_capacitance_over_area: Total filler capacitance  
             
         Returns:
             Capacitance per unit area, or None if calculation not possible
         """
         try:
             # validate inputs
-            if (liquid_capacitance is None or filler_capacitance is None or
-                liquid_capacitance < 0 or filler_capacitance < 0):
+            if (liquid_capacitance_over_area is None or filler_capacitance_over_area is None or
+                liquid_capacitance_over_area < 0 or filler_capacitance_over_area < 0):
                 logger.info("Invalid capacitance values for force calculation")
                 return None
                 
-            if not active_electrodes:
-                logger.info("No active electrodes for force calculation")
-                return None
-                
-            if liquid_capacitance <= filler_capacitance:
+            if liquid_capacitance_over_area <= filler_capacitance_over_area:
                 logger.info("Liquid capacitance must be greater than filler capacitance")
                 return None
             
-            # calculate total area of active electrodes
-            total_area = 0.0
-            for electrode_id in active_electrodes:
-                if electrode_id in electrode_areas:
-                    total_area += electrode_areas[electrode_id]
-                else:
-                    logger.info(f"No area data for electrode {electrode_id}")
-                    return None
-            
-            if total_area <= 0:
-                logger.info("Total area of active electrodes is zero or negative")
-                return None
-            
             # capacitance_difference = liquid_capacitance - filler_capacitance 
-            capacitance_per_unit_area =  (liquid_capacitance - filler_capacitance) / total_area
-            logger.info(f"liquid capacitance: {liquid_capacitance}")
-            logger.info(f"filler capacitance: {filler_capacitance}")
-            logger.info(f"total area: {total_area}")
+            capacitance_per_unit_area =  liquid_capacitance_over_area - filler_capacitance_over_area
+            logger.info(f"liquid capacitance over area: {liquid_capacitance_over_area}")
+            logger.info(f"filler capacitance over area: {filler_capacitance_over_area}")
             logger.info(f"Calculated capacitance per unit area: {capacitance_per_unit_area}")
             return capacitance_per_unit_area
             
@@ -68,19 +48,13 @@ class ForceCalculationService:
     
     @staticmethod
     def calculate_force_for_step(voltage: float, 
-                            capacitance_per_unit_area: float,
-                            step_activated_electrodes: Dict[str, bool],
-                            calibration_active_electrodes: List[str],
-                            electrode_areas: Dict[str, float]) -> Optional[float]:
+                            capacitance_per_unit_area: float):
         """
         Calculate force for a specific step.
         
         Args:
             voltage: Step voltage
             capacitance_per_unit_area: Capacitance per unit area from calibration
-            step_activated_electrodes: Dictionary of electrode activation states for THIS step
-            calibration_active_electrodes: List of electrodes that were active during calibration
-            electrode_areas: Dictionary mapping electrode IDs to their areas
             
         Returns:
             Total force, or None if calculation not possible
@@ -90,21 +64,24 @@ class ForceCalculationService:
                 logger.info(f"!!RETURNED!! voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
                 return None
             logger.info(f"voltage: {voltage}, capacitance/area: {capacitance_per_unit_area}")
-            total_force = 0.0
             
-            # FIXED: Use calibration electrodes for force calculation, not step electrodes
-            # Only calculate force for electrodes that were active during calibration
-            for electrode_id in calibration_active_electrodes:
-                if electrode_id in electrode_areas:
-                    electrode_area = electrode_areas[electrode_id]
-                    logger.info(f"calibration electrode {electrode_id}, area: {electrode_area}")
-                    # F = (electrode_area * C_per_unit_area * V²) / 2
-                    force = (electrode_area * capacitance_per_unit_area * voltage * voltage) / 2.0
-                    logger.info(f"force contribution from {electrode_id}: {force}")
-                    total_force += force
+            # create pint quantities with proper units
+            cap_quantity = ureg.Quantity(capacitance_per_unit_area, 'pF/mm**2')
+            voltage_quantity = ureg.Quantity(voltage, 'V')
             
-            logger.info(f"returned total force: {total_force}")
-            return total_force if total_force > 0 else None
+            # calculate force: F = (C/A × V²) / 2
+            force_quantity = cap_quantity * (voltage_quantity ** 2) / 2
+            
+            # convert to desired unit (mN/m)
+            force_in_target_units = force_quantity.to('mN/m')
+            
+            logger.info(f"calculated force with units: {force_in_target_units}")
+            
+            # return magnitude (numerical value) in mN/m
+            force_magnitude = force_in_target_units.magnitude
+            
+            logger.info(f"returned force magnitude: {force_magnitude} mN/m")
+            return force_magnitude if force_magnitude > 0 else None
             
         except Exception as e:
             logger.info(f"Error calculating force for step: {e}")
@@ -125,14 +102,11 @@ class ForceCalculationService:
                 return
             
             calibration_data = protocol_state.get_calibration_data()
-            active_electrodes_from_calibration = protocol_state.get_active_electrodes_from_calibration()
             
             # Calculate capacitance per unit area
             capacitance_per_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
-                calibration_data['liquid_capacitance'],
-                calibration_data['filler_capacitance'],
-                active_electrodes_from_calibration,
-                calibration_data['electrode_areas']
+                calibration_data['liquid_capacitance_over_area'],
+                calibration_data['filler_capacitance_over_area']
             )
             
             if capacitance_per_unit_area is None:
@@ -146,10 +120,7 @@ class ForceCalculationService:
             # Calculate force for this step
             force = ForceCalculationService.calculate_force_for_step(
                 voltage,
-                capacitance_per_unit_area,
-                device_state.activated_electrodes,  # Step electrodes (not used in calculation)
-                active_electrodes_from_calibration,  # Calibration electrodes (used for calculation)
-                calibration_data['electrode_areas']
+                capacitance_per_unit_area
             )
             
             if force is not None:

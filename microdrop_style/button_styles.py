@@ -155,6 +155,18 @@ QPushButton {{
 }}
 """
 
+# Narrow button styles (for reveal/hide controls)
+NARROW_BUTTON_STYLE = f"""
+{BASE_BUTTON_STYLE}
+QPushButton {{
+    font-size: 30px;
+    min-width: 24px;
+    max-width: 24px;
+    padding: 3px 3px;
+    margin: 0px;
+}}
+"""
+
 # Large button styles
 LARGE_BUTTON_STYLE = f"""
 {BASE_BUTTON_STYLE}
@@ -250,7 +262,7 @@ def get_button_style(theme="light", button_type="default"):
     
     Args:
         theme (str): 'light' or 'dark'
-        button_type (str): 'default', 'navigation', 'small', 'large', 
+        button_type (str): 'default', 'navigation', 'small', 'narrow', 'large', 
                           'primary', 'secondary', 'danger', 'success'
     
     Returns:
@@ -265,6 +277,8 @@ def get_button_style(theme="light", button_type="default"):
         return NAVIGATION_BUTTON_STYLE
     elif button_type == "small":
         return SMALL_BUTTON_STYLE
+    elif button_type == "narrow":
+        return NARROW_BUTTON_STYLE
     elif button_type == "large":
         return LARGE_BUTTON_STYLE
     elif button_type == "primary":
@@ -316,7 +330,7 @@ def get_button_dimensions(button_type="default"):
     Get button dimensions based on button type.
     
     Args:
-        button_type (str): 'default', 'navigation', 'small', 'large'
+        button_type (str): 'default', 'navigation', 'small', 'narrow', 'large'
     
     Returns:
         tuple: (min_width, min_height)
@@ -325,6 +339,8 @@ def get_button_dimensions(button_type="default"):
         return (44, 32)
     elif button_type == "small":
         return (32, 24)
+    elif button_type == "narrow":
+        return (24, 26)
     elif button_type == "large":
         return (56, 40)
     else:

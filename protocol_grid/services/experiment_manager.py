@@ -53,24 +53,10 @@ class ExperimentManager:
             self._initialized = True
     
     def _get_base_experiments_directory(self):
-        # find Microdrop root directory by looking for the script file
-        #TODO: this assumes the script is always located in a known path relative to the Microdrop root.
-        # change this logic if/when the structure changes.
-        current_file = Path(__file__)
-        microdrop_root = None
-        
-        # walk up to find Microdrop root
-        for parent in current_file.parents:
-            if (parent / "examples" / "run_device_viewer_pluggable.py").exists():
-                microdrop_root = parent
-                break
-        
-        if not microdrop_root:
-            # fallback: assuming this file is located in Microdrop/protocol_grid/services/
-            #TODO: check if this is correct before deployment
-            microdrop_root = current_file.parents[2]
-            
-        return microdrop_root / "experiment_logs"
+        """
+        Get base experiments directory.
+        """
+        return Path("experiment_logs")
     
     def _generate_experiment_id(self):
         timestamp = datetime.now()

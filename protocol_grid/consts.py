@@ -50,7 +50,8 @@ protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
     "Duration", "Voltage", "Force", "Frequency", 
     "Message", "Repeat Duration",
-    "Trail Length", "Trail Overlay", "Video", 
+    "Trail Length", "Trail Overlay",
+    "Video", "Capture", "Record",
     "Volume Threshold", "Magnet", "Magnet Height",
     "Max. Path Length", "Run Time"
 ]
@@ -63,11 +64,11 @@ fixed_fields = {"Description", "ID"}
 field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
                 "Repeat Duration", "Repetitions", 
-                "Trail Length", "Video", "Volume Threshold", 
+                "Trail Length", "Video", "Capture", "Record", "Volume Threshold", 
                 "Magnet", "Magnet Height", "Trail Overlay"
             ] and f not in fixed_fields]),
             ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length", 
-                                "Trail Overlay", "Video"]),
+                                "Trail Overlay", "Video", "Capture", "Record"]),
             ("Dropbot:", ["Volume Threshold"]),
             ("Magnet:", ["Magnet", "Magnet Height"]),
         ]
@@ -84,6 +85,8 @@ step_defaults = {
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Video": "1",
+    "Capture": "1",
+    "Record": "1",
     "Volume Threshold": "0.00",
     "Magnet": "0",
     "Magnet Height": "0",    

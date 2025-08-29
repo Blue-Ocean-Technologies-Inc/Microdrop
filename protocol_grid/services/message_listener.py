@@ -38,7 +38,7 @@ class MessageListener(HasTraits):
     def listener_actor_routine(self, message, topic):
         try:
             if topic == DEVICE_VIEWER_STATE_CHANGED:
-                logger.info(f"Received device viewer message on topic: {topic}, message: {message}")
+                # logger.info(f"Received device viewer message on topic: {topic}, message: {message}")
                 self.signal_emitter.device_viewer_message_received.emit(message, topic)
                 
             elif topic in [CHIP_INSERTED, DROPBOT_CONNECTED]:
@@ -54,12 +54,12 @@ class MessageListener(HasTraits):
                 self.signal_emitter.droplets_detected.emit(message)
 
             elif topic == CALIBRATION_DATA:
-                logger.info(f"Received calibration data, passing for now")
+                logger.info(f"Received calibration data: {message}")
                 self.signal_emitter.calibration_data_received.emit(message, topic)
                 # pass
 
             elif topic == CAPACITANCE_UPDATED:
-                logger.info("Received capacitance updated message")
+                # logger.info("Received capacitance updated message")
                 self.signal_emitter.capacitance_updated.emit(message)
                 
             else:
