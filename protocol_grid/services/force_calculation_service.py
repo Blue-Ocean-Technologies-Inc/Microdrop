@@ -54,8 +54,8 @@ class ForceCalculationService:
         
         Args:
             voltage: Step voltage
-            capacitance_per_unit_area: Capacitance per unit area from calibration
-            
+            capacitance_per_unit_area: Capacitance per unit area from calibration (in pF/mm^2)
+
         Returns:
             Total force, or None if calculation not possible
         """

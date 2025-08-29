@@ -58,7 +58,7 @@ class CalibrationView(QWidget):
         self.capacitance_reset_button.setStyleSheet(button_style)
 
     def update_capacitance_labels(self, event=None):
-        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance_over_area if self.model.liquid_capacitance_over_area is not None else '-'} pF")
+        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance_over_area if self.model.liquid_capacitance_over_area is not None else '-'} pF") # TODO: Units are wrong, use pint to generate correct units
         self.filler_capacitance_label.setText(f"C_f: {self.model.filler_capacitance_over_area if self.model.filler_capacitance_over_area is not None else '-'} pF")
 
     def reset_capacitance(self):
