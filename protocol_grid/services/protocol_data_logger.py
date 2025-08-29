@@ -8,8 +8,11 @@ from PySide6.QtCore import QObject, Signal
 
 from microdrop_utils._logger import get_logger
 from protocol_grid.services.force_calculation_service import ForceCalculationService
+from pint import UnitRegistry
 
 logger = get_logger(__name__)
+
+ureg = UnitRegistry()
 
 class ProtocolDataLogger(QObject):
     """Service for logging capacitance data during protocol execution."""
@@ -29,7 +32,7 @@ class ProtocolDataLogger(QObject):
         
         self._columns = [
             "elapsed_time", 
-            "capacitance_pf",
+            "capacitance_pF",
             "voltage",
             "force_per_unit_area",
             "step_id",
@@ -64,13 +67,6 @@ class ProtocolDataLogger(QObject):
     def update_capacitance_per_unit_area(self, c_unit_area: float):
         self._latest_capacitance_per_unit_area = c_unit_area
         logger.debug(f"Updated capacitance per unit area: {c_unit_area}")
-    
-    def _format_elapsed_time(self, elapsed_seconds: float) -> str:
-        """Format elapsed seconds as HH:MM:SS."""
-        hours = int(elapsed_seconds // 3600)
-        minutes = int((elapsed_seconds % 3600) // 60)
-        seconds = int(elapsed_seconds % 60)
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     
     def log_capacitance_data(self, capacitance_message: str):
         if not self._is_logging_active or self._preview_mode:
@@ -122,13 +118,15 @@ class ProtocolDataLogger(QObject):
             if self._protocol_start_timestamp is None:
                 self._protocol_start_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 self._protocol_start_time = current_time
-                elapsed_time_str = "00:00:00"
+                elapsed_time = 0.0
             else:
-                elapsed_seconds = current_time - self._protocol_start_time
-                elapsed_time_str = self._format_elapsed_time(elapsed_seconds)
+                elapsed_time = current_time - self._protocol_start_time
+            
+            # Round to millisecond precision (3 decimal places)
+            elapsed_time = round(elapsed_time, 3)
             
             data_entry = {
-                "elapsed_time": elapsed_time_str,
+                "elapsed_time": elapsed_time,
                 "capacitance_pf": capacitance_value,
                 "voltage": voltage_value,
                 "force_per_unit_area": force,
@@ -138,7 +136,7 @@ class ProtocolDataLogger(QObject):
             }
             
             self._data_entries.append(data_entry)
-            logger.debug(f"Logged data entry: step={step_id}, channels={len(actuated_channels)}, force={force}")
+            logger.debug(f"Logged data entry: step={step_id}, channels={len(actuated_channels)}, force={force}, elapsed={elapsed_time}s")
             
         except Exception as e:
             logger.error(f"Error logging capacitance data: {e}. message: {capacitance_message}")
@@ -148,9 +146,19 @@ class ProtocolDataLogger(QObject):
             return None
             
         try:
-            # force = 0.5 x capacitance_per_unit_area x voltage^2
-            force = 0.5 * self._latest_capacitance_per_unit_area * (voltage ** 2)
-            return round(force, 6)
+            # create pint quantities with proper units
+            cap_quantity = ureg.Quantity(self._latest_capacitance_per_unit_area, 'pF/mm**2')
+            voltage_quantity = ureg.Quantity(voltage, 'V')
+            
+            # calculate force: F = (C/A × V²) / 2
+            force_quantity = cap_quantity * (voltage_quantity ** 2) / 2
+            
+            # convert to desired unit (mN/m)
+            force_in_target_units = force_quantity.to('mN/m')
+            
+            # return magnitude (numerical value) in mN/m
+            return round(force_in_target_units.magnitude, 2)
+            
         except Exception as e:
             logger.error(f"Error calculating force: {e}")
             return None
@@ -170,7 +178,7 @@ class ProtocolDataLogger(QObject):
             for col in self._columns:
                 value = entry.get(col)
                 if value is None:
-                    if col in ["force_per_unit_area", "actuated_area_mm2", "capacitance_pf", "voltage"]:
+                    if col in ["force_per_unit_area", "actuated_area_mm2", "capacitance_pf", "voltage", "elapsed_time"]:
                         value = 0.0
                     elif col == "actuated_channels":
                         value = []
@@ -186,25 +194,88 @@ class ProtocolDataLogger(QObject):
         
         return result
     
-    def save_data_file(self):
-        """save accumulated data to JSON file."""
-        if not self._data_entries or not self._experiment_directory:
-            logger.info("No data to save or no experiment directory")
-            return None
+    def save_data_file(self, save_directory: Path = None):
+        """save accumulated data to JSON and CSV files."""
+        if not self._data_entries:
+            logger.info("No data to save")
+            return None, None
+            
+        # use provided directory or fall back to experiment directory
+        target_directory = save_directory or self._experiment_directory
+        if not target_directory:
+            logger.error("No target directory specified for saving data files")
+            return None, None
             
         try:
-            data_file_path = self._experiment_directory / "data.json"
+            # Ensure target directory exists
+            target_directory = Path(target_directory)
+            target_directory.mkdir(parents=True, exist_ok=True)
             
+            # save JSON file
+            json_file_path = target_directory / "data.json"
             columnar_data = self._convert_to_columnar_format()
             
-            with open(data_file_path, "w") as f:
+            with open(json_file_path, "w") as f:
                 json.dump(columnar_data, f, separators=(',', ':'))
             
-            logger.info(f"Saved {len(self._data_entries)} data entries to: {data_file_path}")
-            return str(data_file_path)
+            logger.info(f"Saved {len(self._data_entries)} data entries to JSON: {json_file_path}")
+            
+            # save CSV file
+            csv_file_path = self._save_as_csv(target_directory, columnar_data)
+            
+            return str(json_file_path), str(csv_file_path)
             
         except Exception as e:
-            logger.error(f"Error saving data file: {e}")
+            logger.error(f"Error saving data files: {e}")
+            return None, None
+    
+    def _save_as_csv(self, target_directory: Path, columnar_data: Dict) -> str:
+        try:
+            csv_file_path = target_directory / "data.csv"
+            
+            start_timestamp = columnar_data.get('start_timestamp')
+            columns = columnar_data.get('columns', [])
+            data_values = columnar_data.get('data', [])
+            
+            if not columns or not data_values:
+                logger.warning("Empty or invalid data format for CSV")
+                return None
+            
+            # ddd start_timestamp column
+            csv_columns = ['start_timestamp'] + columns
+            
+            # prepare data
+            num_rows = len(data_values[0]) if data_values else 0
+            
+            with open(csv_file_path, 'w', newline='') as csvfile:
+                import csv
+                writer = csv.writer(csvfile)
+                
+                writer.writerow(csv_columns)
+                
+                for row_idx in range(num_rows):
+                    row_data = []
+                    
+                    # add start_timestamp only to first row, empty for others
+                    if row_idx == 0:
+                        row_data.append(start_timestamp or '')
+                    else:
+                        row_data.append('')
+                    
+                    for col_idx in range(len(columns)):
+                        if col_idx < len(data_values):
+                            value = data_values[col_idx][row_idx] if row_idx < len(data_values[col_idx]) else ''
+                            row_data.append(value)
+                        else:
+                            row_data.append('')
+                    
+                    writer.writerow(row_data)
+            
+            logger.info(f"Saved CSV file: {csv_file_path}")
+            return str(csv_file_path)
+            
+        except Exception as e:
+            logger.error(f"Error saving CSV file: {e}")
             return None
     
     def get_data_entry_count(self) -> int:
@@ -250,11 +321,6 @@ class ProtocolDataLogger(QObject):
             if start_timestamp:
                 df['start_timestamp'] = start_timestamp
             
-            if 'elapsed_time' in df.columns:
-                # elapsed_time is already in HH:MM:SS format, kept as string for now
-                # can be converted to timedelta if needed for calculations
-                pass
-            
             logger.info(f"Loaded DataFrame with {len(df)} rows and {len(df.columns)} columns")
             logger.info(f"Protocol started at: {start_timestamp}")
             return df
@@ -264,32 +330,4 @@ class ProtocolDataLogger(QObject):
             return None
         except Exception as e:
             logger.error(f"Error loading data as DataFrame: {e}")
-            return None
-    
-    @staticmethod
-    def save_dataframe_as_csv(file_path: str, output_path: str = None):
-        """
-        Load JSON data and save as CSV file.
-        
-        Args:
-            file_path: Path to the JSON data file
-            output_path: Path for output CSV (optional, defaults to same directory)
-        """
-        try:
-            df = ProtocolDataLogger.load_data_as_dataframe(file_path)
-            
-            if df is None or df.empty:
-                logger.warning("No data to save as CSV")
-                return None
-            
-            if output_path is None:
-                json_path = Path(file_path)
-                output_path = json_path.parent / (json_path.stem + ".csv")
-            
-            df.to_csv(output_path, index=False)
-            logger.info(f"Saved CSV file: {output_path}")
-            return str(output_path)
-            
-        except Exception as e:
-            logger.error(f"Error saving CSV file: {e}")
             return None
