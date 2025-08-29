@@ -33,8 +33,8 @@ class MainModel(RouteLayerManager, Electrodes):
     message = Str("") # Message to display in the table view
 
     # calibration related properties
-    liquid_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the liquid in F (Farads)
-    filler_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the filler in F (Farads)
+    liquid_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the liquid in pF/mm^2
+    filler_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the filler in pF/mm^2
     electrode_scale = Float(1.0)  # The scale of the electrode area in pixels to mm
 
     # message model properties

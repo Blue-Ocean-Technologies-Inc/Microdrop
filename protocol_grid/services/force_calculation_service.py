@@ -18,11 +18,11 @@ class ForceCalculationService:
         Calculate capacitance per unit area from calibration data.
         
         Args:
-            liquid_capacitance_over_area: Total liquid capacitance
-            filler_capacitance_over_area: Total filler capacitance  
-            
+            liquid_capacitance_over_area: Total liquid capacitance (in pF/mm^2)
+            filler_capacitance_over_area: Total filler capacitance (in pF/mm^2)
+
         Returns:
-            Capacitance per unit area, or None if calculation not possible
+            Capacitance per unit area (in pF/mm^2), or None if calculation not possible
         """
         try:
             # validate inputs
@@ -53,11 +53,11 @@ class ForceCalculationService:
         Calculate force for a specific step.
         
         Args:
-            voltage: Step voltage
+            voltage: Step voltage (V)
             capacitance_per_unit_area: Capacitance per unit area from calibration (in pF/mm^2)
 
         Returns:
-            Total force, or None if calculation not possible
+            Total force (in mN/m), or None if calculation not possible
         """
         try:
             if voltage <= 0 or capacitance_per_unit_area <= 0:

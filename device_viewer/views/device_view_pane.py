@@ -68,7 +68,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     mode_picker_view = None
 
     # Readings
-    last_capacitance = Float()  # Last capacitance reading
+    last_capacitance = Float()  # Last capacitance reading (in pF)
 
     # Variables
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
@@ -431,8 +431,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         Publish a message with the current calibration values.
         """
         message = {
-            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area,
-            "filler_capacitance_over_area": self.model.filler_capacitance_over_area,
+            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area, # In pF/mm^2
+            "filler_capacitance_over_area": self.model.filler_capacitance_over_area, # In pF/mm^2
         }
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
