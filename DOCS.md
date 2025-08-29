@@ -12,7 +12,7 @@ MessageRouterPlugin, ElectrodeControllerPlugin, DropbotControllerPlugin
 
 The Message Router (found in message_router), Plugin A and B are all Envisage plugins.
 
-When MessageRouterPlugin is loaded (from the run script, so only one instance/Envisage App), it creates a new  MessageRouterActor (found in microdrop_utils/dramatiq_pub_sub_helpers), which creates a MessageRouterData with a static random queue number (since its not referenced anywhere else im assuming its not used)
+When MessageRouterPlugin is loaded (from the run script, so only one instance/Envisage App), it creates a new  MessageRouterActor (found in microdrop_utils/dramatiq_pub_sub_helpers), which creates a MessageRouterData with a static random queue number (only used to disambiguate listener names from different instances in the Redis hash).
 
 It then listens on that queue and for every (message, topic) pair it receives and propagates the messages to every subscriber to the topic. The idea is to hack dramatiq into a full pub/sub system, which does not support broadcast messages otherwise.
 
@@ -22,7 +22,7 @@ An example of how it works can be found in /examples/tests/tests_with_redis_serv
 
 ### Dramatiq Controller
 
-If you find any class methods of the form "_on_{topic}_triggered" in frontend code, with no referenced anywhere else in the codebase, its probably being triggered by microdrop_utils/dramatiq_controller_base.py. These trigger when Dramatiq detects a topic of that form for relevant classes.
+If you find any class methods of the form "_on_{topic}_triggered" in frontend code, with no referenced anywhere else in the codebase, its probably being triggered by microdrop_utils/dramatiq_controller_base.py. These trigger when Dramatiq detects a topic of that form for relevant classes. They are convention only used in this application, and usually called implicitly by a listener_actor for a dramatiq-emabled python object.
 
 ### Dropbot Controller
 
@@ -98,6 +98,9 @@ or
 ```bash
 micromamba env create -f environment.yml
 ```
+
+Be sure to look out for any errors. If certain pip depedancies fail to install then try doing them manually. 
+
 ### To delete environment
 
 Remember to deactivate the conda env first
@@ -151,6 +154,8 @@ The issue is that pyinstaller cannot find conda's dynamic imports, so the fix is
 LD_LIBRARY_PATH=/home/numberisnan/miniconda3/envs/microdrop/lib pyinstaller pyinstaller.spec -y
 ```
 ...replaced with the actual path to your env's lib folder (you can also just export it to set it for the rest of the shell session). In Windows this should be adding the similar path to PATH (keep in mind the the folder structure is different for Windows/Conda, so you might have to manually locate the folder with the correct DLL).
+
+Setting pyinstaller binaries and pathex don't seem to work, so this hacky solution will have to do for now.
 
 #### Cannot import libraries
 
