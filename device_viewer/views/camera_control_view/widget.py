@@ -506,14 +506,25 @@ class CameraControlWidget(QWidget):
                     libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
                     if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL) != 0:
                         raise OSError(ctypes.get_errno(), 'SET_PDEATHSIG')
+                
+                scale_factor = 30 / frames_per_second
+                out_path = f"{self.recording_file_path}@{int(frames_per_second)}fps.mp4"
+
+                cmd = [
+                    "ffmpeg",
+                    "-itsscale", str(scale_factor),   # must be before -i
+                    "-i", self.recording_file_path,
+                    "-c", "copy",
+                    out_path,
+                ]
 
                 if sys.platform.startswith("linux"):
-                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
-                                    shell=True, 
+                    subprocess.Popen(" ".join(cmd),
+                                    shell=True,
                                     preexec_fn=set_pdeathsig,
                                     stdin=subprocess.DEVNULL)
                 else:
-                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
+                    subprocess.Popen(cmd,
                                     shell=True)
                 logger.info("Video re-encoded successfully.")
 
