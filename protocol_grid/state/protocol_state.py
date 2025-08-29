@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from protocol_grid.consts import protocol_grid_fields
 from protocol_grid.state.device_state import DeviceState
 
+
 class ProtocolStep:
     def __init__(self, parameters=None, name="Step"):
         self.name = name

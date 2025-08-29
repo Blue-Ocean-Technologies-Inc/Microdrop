@@ -1,7 +1,7 @@
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup
 from pyface.action.api import ActionItem
-from traits.api import Bool, Instance, Property, observe
+from traits.api import Bool, Instance
 
 from microdrop_utils._logger import get_logger
 

@@ -45,8 +45,6 @@ class ImportExportManager:
                 parent_group.elements.append(group)
             return group
 
-        steps_by_id = {step["ID"]: step for step in steps}
-        groups_by_id = {g["ID"]: g for g in flat_json.get("groups", [])}
         combined = []
         step_ids = set()
         group_ids = set()

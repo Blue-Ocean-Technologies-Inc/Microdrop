@@ -10,8 +10,10 @@ from protocol_grid.consts import PROTOCOL_GRID_LISTENER_NAME
 
 logger = get_logger(__name__)
 
+
 class DeviceViewerListenerSignalEmitter(QObject):
     device_viewer_message_received = Signal(str, str)
+
 
 class DeviceViewerListenerController(HasTraits):
     """

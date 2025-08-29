@@ -1,5 +1,4 @@
 from typing import List, Dict, Optional
-import json
 
 from device_viewer.models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
@@ -20,7 +19,7 @@ class DeviceState:
     def longest_path_length(self):
         if not self.paths:
             return 0
-        return max(len(path) for path in self.paths)#.values())
+        return max(len(path) for path in self.paths)
 
     def has_paths(self):
         return len(self.paths) > 0
@@ -29,9 +28,7 @@ class DeviceState:
                             repeat_duration: float, trail_length: int = 1, trail_overlay: int = 0):
         if not self.has_paths():
             calculated_time = step_duration * repetitions
-        else:
-            has_loops = any(len(path) >= 2 and path[0] == path[-1] for path in self.paths)
-            
+        else:     
             # calculate phases for loops and open paths separately with per-path repetitions
             max_open_path_length = 0
             max_loop_total_phases = 0

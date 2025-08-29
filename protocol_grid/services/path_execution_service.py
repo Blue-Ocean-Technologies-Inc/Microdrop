@@ -12,6 +12,7 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class PathExecutionService:
 
     @staticmethod
@@ -163,9 +164,7 @@ class PathExecutionService:
         
         if not device_state.has_paths():
             return duration
-        
-        has_loops = PathExecutionService.has_any_loops(device_state)
-                
+                        
         max_open_path_length = 0
         max_loop_total_phases = 0
         
@@ -260,9 +259,7 @@ class PathExecutionService:
                 "step_description": step_description
             })
             return execution_plan
-        
-        has_loops = PathExecutionService.has_any_loops(device_state)
-                
+                        
         # calculate effective repetitions for each path
         path_repetitions = {}
         path_info = []
@@ -330,12 +327,10 @@ class PathExecutionService:
                         # Determine which repetition and phase within that repetition
                         if phase_idx < (effective_repetitions - 1) * cycle_length:
                             # Intermediate repetitions (no return phase)
-                            current_repetition = phase_idx // cycle_length
                             phase_in_cycle = phase_idx % cycle_length
                             is_return_phase = False
                         else:
                             # Last repetition (with return phase)
-                            current_repetition = effective_repetitions - 1
                             phase_in_last_rep = phase_idx - (effective_repetitions - 1) * cycle_length
                             if phase_in_last_rep < cycle_length:
                                 phase_in_cycle = phase_in_last_rep
@@ -345,11 +340,9 @@ class PathExecutionService:
                                 is_return_phase = True
                     else:
                         if phase_idx < cycle_length:
-                            current_repetition = 0
                             phase_in_cycle = phase_idx
                             is_return_phase = False
                         else:
-                            current_repetition = 0
                             phase_in_cycle = 0
                             is_return_phase = True
                     
@@ -444,8 +437,7 @@ class PathExecutionService:
     
     @staticmethod
     def get_empty_device_state() -> DeviceState:
-        return DeviceState()
-    
+        return DeviceState()    
 
     @staticmethod
     def create_hardware_electrode_message(device_state: DeviceState, active_electrodes: Dict[str, bool]) -> str:

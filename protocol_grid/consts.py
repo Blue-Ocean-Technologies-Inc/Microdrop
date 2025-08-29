@@ -5,12 +5,7 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from microdrop_style.colors import (
-    PRIMARY_SHADE, SECONDARY_SHADE, GREY, BLACK, WHITE
-)
-from microdrop_style.button_styles import (
-    get_button_style, get_button_dimensions, BUTTON_SPACING
-)
+from microdrop_style.button_styles import get_button_dimensions
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 

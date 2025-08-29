@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from PySide6.QtCore import QObject, Signal, QTimer
 
 from microdrop_utils._logger import get_logger

@@ -1,6 +1,6 @@
 import numpy as np
-from typing import Dict, List, Optional, Set
-from PySide6.QtCore import QObject, Signal, QTimer
+from typing import Dict
+from PySide6.QtCore import QObject, Signal
 
 from microdrop_utils._logger import get_logger
 from protocol_grid.state.device_state import DeviceState

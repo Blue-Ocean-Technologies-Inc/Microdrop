@@ -909,8 +909,6 @@ class ProtocolRunnerController(QObject):
             # select the current step that was being executed
             if step_uid:
                 self.signals.select_step.emit(step_uid)
-
-        # VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
         
         self._is_running = False
         self._is_paused = False
@@ -1509,9 +1507,6 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
-        
-        # if self._should_show_completion_dialog():
-        #     self._show_experiment_complete_dialog()
         
         self.signals.protocol_finished.emit()
 

@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
 from microdrop_application.application import is_dark_mode
-from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
+from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
@@ -21,7 +21,6 @@ from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog
                                              NavigationBar, StatusBar, make_separator,
                                              InformationPanel, ExperimentCompleteDialog,
                                              DropbotDisconnectedBeforeRunDialogAction)
-from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
@@ -33,8 +32,6 @@ from protocol_grid.state.device_state import (DeviceState, device_state_from_dev
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 from microdrop_utils._logger import get_logger
@@ -190,7 +187,6 @@ class PGCWidget(QWidget):
             return False
     #-----------------------------------------
 
-
     # ---------- Message Handling ----------    
     def _setup_listener(self):
         try:
@@ -260,17 +256,10 @@ class PGCWidget(QWidget):
             return        
         if self._protocol_running:
             return
-        # self._processing_device_viewer_message = True
-        # self._programmatic_change = True
-
-        # scroll_pos = self.save_scroll_positions()
-        # saved_selection = self.save_selection()
         
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
-            # if dv_msg.free_mode:
-            # if dv_msg.step_id is None:
             active_electrodes = []
             for channel_str, is_active in dv_msg.channels_activated.items():
                 if is_active:
@@ -512,7 +501,6 @@ class PGCWidget(QWidget):
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
                 logger.info(f"Protocol data saved to: {data_file_path}")
-                # csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
             
             # initialize new experiment
             new_experiment_id = self.experiment_manager.initialize_new_experiment()
@@ -531,7 +519,6 @@ class PGCWidget(QWidget):
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
                 logger.info(f"Protocol data saved to: {data_file_path}")
-                # csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
 
             dialog = ExperimentCompleteDialog(self)
             result = dialog.exec()

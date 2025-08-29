@@ -1,6 +1,6 @@
 import dramatiq
 
-from traits.api import HasTraits, Str, Instance
+from traits.api import HasTraits, Instance
 from PySide6.QtCore import Signal, QObject
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor

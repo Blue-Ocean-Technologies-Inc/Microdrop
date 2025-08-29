@@ -1,4 +1,3 @@
-import os
 import sys
 import shutil
 import subprocess
@@ -36,7 +35,6 @@ class ExperimentManager:
             self._experiment_id = self._generate_experiment_id()
             
             # create directory
-            #TODO: change this to a more appropriate location (System Documents) after dev
             self._experiment_directory = self._base_experiments_dir / self._experiment_id
             self._experiment_directory.mkdir(parents=True, exist_ok=True)
             
@@ -64,7 +62,6 @@ class ExperimentManager:
     
     def _register_cleanup_on_exit(self):
         """cleanup function to run when application exits."""
-        app_instance = QApplication.instance() or QApplication(sys.argv)
         app = QApplication.instance()
         if app:
             app.aboutToQuit.connect(self._cleanup_on_exit)
