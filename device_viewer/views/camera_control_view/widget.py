@@ -453,7 +453,7 @@ class CameraControlWidget(QWidget):
 
         # determine save path
         if directory:
-            save_path = Path(directory) / filename
+            save_path = Path(directory) / "captures" / filename 
             # Ensure directory exists
             save_path.parent.mkdir(parents=True, exist_ok=True)
         else:
@@ -554,9 +554,10 @@ class CameraControlWidget(QWidget):
             
             # determine save path
             if directory:
-                self.recording_file_path = str(Path(directory) / filename)
-                # ensuring directory exists
-                Path(directory).mkdir(parents=True, exist_ok=True)
+                save_path = Path(directory) / "recordings" / filename
+                # Ensure directory exists
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                self.recording_file_path = str(save_path)
             else:
                 # Use default Movies location
                 self.recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
@@ -651,10 +652,10 @@ class CameraControlWidget(QWidget):
     def _generate_capture_filename(self, step_description=None, step_id=None):
         timestamp = self.get_next_image_id()
         
-        if step_description:
+        if step_description and step_id:
             clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
             clean_desc = clean_desc.replace(' ', '_')
-            return f"{clean_desc}_{timestamp}.png"
+            return f"{clean_desc}_{step_id}_{timestamp}.png"
         elif step_id:
             return f"step_{step_id}_{timestamp}.png"
         else:
@@ -663,10 +664,10 @@ class CameraControlWidget(QWidget):
     def _generate_recording_filename(self, step_description=None, step_id=None):
         timestamp = self.get_next_image_id()
         
-        if step_description:
+        if step_description and step_id:
             clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
             clean_desc = clean_desc.replace(' ', '_')
-            return f"{clean_desc}_{timestamp}.mp4"
+            return f"{clean_desc}_{step_id}_{timestamp}.mp4"
         elif step_id:
             return f"step_{step_id}_{timestamp}.mp4"
         else:
