@@ -10,12 +10,13 @@ from PySide6.QtGui import QPixmap
 # local imports
 from microdrop_utils._logger import get_logger
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
-from microdrop_utils.decorators import timestamped_value
+from microdrop_utils.decorators import timestamped_value, debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 
 from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
+from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude, ureg
 
 from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
@@ -26,6 +27,23 @@ disconnected_color = GREY["lighter"]  #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
+
+
+def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type='percentage'):
+    if old_value == '-' and new_value != '-':
+        update_fn(new_value)
+
+    elif old_value != '-' and new_value != '-':
+        change = 0
+
+        if threshold_type == 'percentage':
+            change = ureg_quant_percent_change(old=old_value, new=new_value)
+
+        elif threshold_type == 'absolute_diff':
+            change = abs(ureg_diff(old=old_value, new=new_value))
+
+        if change > threshold:
+            update_fn(new_value)
 
 class DropBotStatusLabel(QLabel):
     """
@@ -193,6 +211,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def __init__(self):
         super().__init__()
 
+        self.capacitances = []
         # flag for if no pwoer is true or not
         self.no_power_dialog = None
         self.no_power = None
@@ -257,10 +276,27 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
         if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
-            capacitance = json.loads(body).get('capacitance', '-')
-            voltage = json.loads(body).get('voltage', '-')
-            self.status_label.update_capacitance_reading(capacitance)
-            self.status_label.update_voltage_reading(voltage)
+            new_capacitance = json.loads(body).get('capacitance', '-')
+            new_voltage = json.loads(body).get('voltage', '-')
+
+            old_capacitance = self.status_label.dropbot_capacitance_reading.text()
+            old_voltage = self.status_label.dropbot_voltage_reading.text()
+            
+            self.capacitances.append(get_ureg_magnitude(new_capacitance))
+
+            if len(self.capacitances) == 5:
+                new_capacitance = sum(self.capacitances) / len(self.capacitances)
+                new_capacitance = new_capacitance * ureg.picofarad
+                new_capacitance = f"{new_capacitance:.4g~P}"
+                self.capacitances = []
+
+            else:
+                new_capacitance = old_capacitance
+
+
+            _maybe_update(old_capacitance, new_capacitance, self.status_label.update_capacitance_reading, threshold=3, threshold_type='absolute_diff')
+            _maybe_update(old_voltage, new_voltage, self.status_label.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
+
 
     ####### Dropbot Icon Image Control Methods ###########
 
