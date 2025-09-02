@@ -59,7 +59,7 @@ class MessageListener(HasTraits):
                 # pass
 
             elif topic == CAPACITANCE_UPDATED:
-                logger.info("Received capacitance updated message")
+                logger.debug("Received capacitance updated message")
                 self.signal_emitter.capacitance_updated.emit(message)
                 
             else:
