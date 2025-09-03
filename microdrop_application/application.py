@@ -181,7 +181,7 @@ class MicrodropSidebar(QToolBar):
         self.setMovable(False)
         self.setFloatable(False)
         self.setAllowedAreas(Qt.LeftToolBarArea)
-        self.setFixedWidth(160)
+        #self.setFixedWidth(160)
         self.setObjectName("PermanentLeftToolbar")
 
         container = QWidget()
