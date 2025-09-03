@@ -102,7 +102,7 @@ class DropletDetectionMixinService(HasTraits):
                 for ch in channels:
                     try:
                         ch_int = int(ch)
-                        if 0 <= ch_int < 120:  # Assuming 120 channels max
+                        if 0 <= ch_int < int(self.proxy_state_manager.proxy.number_of_channels):
                             target_channels.append(ch_int)
                             
                     except (ValueError, TypeError):
