@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 
 # local imports
+from microdrop_application.dialogs import show_success
 from microdrop_utils._logger import get_logger
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
 from microdrop_utils.decorators import timestamped_value, debounce
@@ -332,7 +333,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
     ##################################################################################################
 
-    ########## Warning methods ################
+    ########## Warning dialogs ################
     def _on_show_warning_triggered(self, body): # This is not controlled by the dramatiq controller! Called manually in dramatiq_dropbot_status_controller.py
         body = json.loads(body)
 
@@ -402,3 +403,14 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
                                   "the DropBot is restarted (e.g. unplug all cables and plug back in).")
 
         self.halted_popup.exec()
+
+    def _on_drops_detected_triggered(self, message):
+        message_obj = json.loads(message)
+
+        dialog_text = f"Droplets detected in following channels:\n{message_obj['detected_channels']} "
+
+        result = show_success(
+            parent=self,
+            title="Droplets Detected",
+            message=dialog_text
+        )

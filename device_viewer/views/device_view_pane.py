@@ -31,7 +31,7 @@ from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
 from ..consts import listener_name
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
@@ -402,6 +402,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         for channel in self.model.channels_electrode_ids_map: # Make sure all channels are explicitly included
             message_obj[channel] = self.model.channels_states_map.get(channel, False)
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
+
+    def publish_detect_droplet(self):
+        message_obj = [key for key, val in self.model.channels_states_map.items() if val]
+        publish_message(topic=DETECT_DROPLETS, message=json.dumps(message_obj))
 
     def publish_calibration_message(self):
         """
