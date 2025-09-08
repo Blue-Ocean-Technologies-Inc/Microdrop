@@ -177,30 +177,30 @@ class MicrodropSidebar(QToolBar):
         super().__init__("Permanent Sidebar", parent)
         self.task = task
         
-        self.setOrientation(Qt.Vertical)
-        self.setMovable(False)
-        self.setFloatable(False)
-        self.setAllowedAreas(Qt.LeftToolBarArea)
+        #self.setOrientation(Qt.Vertical)
+        #self.setMovable(False)
+       # self.setFloatable(False)
+       # self.setAllowedAreas(Qt.LeftToolBarArea)
         #self.setFixedWidth(160)
         self.setObjectName("PermanentLeftToolbar")
 
         container = QWidget()
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(0, 10, 0, 10) 
-        self.layout.setSpacing(15) 
-        self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+       # self.layout.setContentsMargins(0, 10, 0, 10)
+       # self.layout.setSpacing(15)
+       # self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # Logo
         self.logo_label = QLabel()
         pixmap = QPixmap(scibots_icon_path)
         if not pixmap.isNull():
             self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
-        self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        #self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
 
         # Hamburger button
         self.hamburger_btn = QPushButton()
-        self.hamburger_btn.setFixedSize(QSize(40, 40))
+       # self.hamburger_btn.setFixedSize(QSize(40, 40))
         self.hamburger_btn.setText("☰")
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
         self.hamburger_btn.setCursor(Qt.PointingHandCursor)

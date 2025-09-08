@@ -18,7 +18,7 @@ from device_viewer.plugin import DeviceViewerPlugin
 FRONTEND_PLUGINS = [
     TasksPlugin,
     MicrodropPlugin,
-    DropbotStatusPlotPlugin,
+    # DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,
     ManualControlsPlugin,
