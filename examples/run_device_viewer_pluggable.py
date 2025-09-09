@@ -41,7 +41,7 @@ ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
 logger = get_logger(__name__)
 
 
-def main(args, plugins=None, contexts=None, application=None, persist=False):
+def main(plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
@@ -85,4 +85,4 @@ def main(args, plugins=None, contexts=None, application=None, persist=False):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
