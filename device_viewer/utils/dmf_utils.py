@@ -6,12 +6,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Union, TypedDict
 from shapely.geometry import Polygon
-from nptyping import NDArray, Float, Shape
+#from nptyping import NDArray, Float, Shape
 
 
 class ElectrodeDict(TypedDict):
     channel: int
-    path: NDArray[Shape['*, 1, 1'], Float]
+    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
+
 
 
 class SvgUtil:
@@ -34,9 +35,9 @@ class SvgUtil:
         self.x_shift = None
         self.y_shift = None
         self.neighbours: dict[str, list[str]] = {}
-        self.roi: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
-        self.connections: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.connections = {}
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -71,13 +72,13 @@ class SvgUtil:
         if modify:
             tree.write(filename)
 
-    def get_electrode_center(self, electrode: str) -> NDArray[Shape['*, 1, 1'], Float]:
+    def get_electrode_center(self, electrode: str) -> np.ndarray:
         """
         Get the center of an electrode
         """
         return np.mean(self.electrodes[electrode]['path'], axis=0)
 
-    def find_neighbours(self, path: NDArray[Shape['*, 1, 1'], Float], threshold: float = 10) -> list[str]:
+    def find_neighbours(self, path: np.ndarray, threshold: float = 10) -> list[str]:
         """
         Find the neighbours of a path
         """
@@ -149,7 +150,7 @@ class SvgUtil:
             except KeyError:
                 pass
 
-    def svg_to_points(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
+    def svg_to_points(self, obj) -> list[np.ndarray]:
         """
         Converts the svg file to points
         """
@@ -163,7 +164,7 @@ class SvgUtil:
 
         return paths
 
-    def svg_to_paths(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
+    def svg_to_paths(self, obj) -> list[np.ndarray]:
         """
         Converts the svg file to paths
         """
