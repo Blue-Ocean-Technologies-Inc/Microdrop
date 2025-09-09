@@ -82,7 +82,7 @@ Dramatiq is a fast and reliable distributed task processing library for Python. 
 
 ### **Prerequisites**
 
-1. **Python 3.11** 
+1. **Python 3.12** 
 
 We are using redis since it can be installed from the binstar anaconda channel.
 
