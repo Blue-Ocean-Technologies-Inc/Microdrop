@@ -153,6 +153,7 @@ class CameraControlWidget(QWidget):
     def turn_on_camera(self):
         if self.camera:
             self.camera.start()
+
             self.is_camera_on = True
             self.camera_toggle_button.setText("videocam")
             self.camera_toggle_button.setToolTip("Camera On")
@@ -278,7 +279,7 @@ class CameraControlWidget(QWidget):
                 self.camera = QCamera(self.qt_available_cameras[index])
                 self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
                 self.capture_session.setCamera(self.camera)
-                self.camera.start()
+                # self.camera.start() # Starts camera on app startup. Should wait for the camera button to be clicked first.
         else: # If no Qt cameras are available, use OpenCV camera
             self.video_item.setVisible(False)
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
