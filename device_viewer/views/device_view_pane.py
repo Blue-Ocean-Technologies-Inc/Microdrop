@@ -1,5 +1,6 @@
 # enthought imports
 import dramatiq
+from PySide6.QtWidgets import QScrollArea
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
@@ -40,6 +41,7 @@ from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
+from microdrop_utils.pyside_helpers import CollapsibleBox
             
 import json
 
@@ -472,6 +474,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
         # Remove fixed width to allow stretching - set minimum width instead
         self.layer_ui.control.setMinimumWidth(200)
+        self.layer_ui.control.setMinimumHeight(200)
         # Ensure the layer view can expand horizontally (same as alpha view)
         self.layer_ui.control.setSizePolicy(QSizePolicy.Expanding, 
                                             QSizePolicy.Expanding)
@@ -490,15 +493,32 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.calibration_view.setParent(container)
 
         # Add widgets to layouts
-        right_stack.addWidget(self.camera_control_widget)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.alpha_view_ui.control)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.calibration_view)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.layer_ui.control)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.mode_picker_view)
+        # right_stack.addWidget(self.camera_control_widget)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.alpha_view_ui.control)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.calibration_view)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.layer_ui.control)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.mode_picker_view)
+
+        right_stack.addWidget(
+            CollapsibleBox("Camera Controls", content_widget=self.camera_control_widget)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Alpha View", content_widget=self.alpha_view_ui.control)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Calibration", content_widget=self.calibration_view)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Layer", content_widget=self.layer_ui.control)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Mode Picker", content_widget=self.mode_picker_view)
+        )
+        right_stack.addStretch()
 
         reveal_button = QPushButton("chevron_right") # Default to reveal
 
@@ -523,7 +543,19 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         layout.addWidget(self.device_view)
         layout.addWidget(reveal_button)
-        layout.addWidget(right_stack_container)
+
+        # Configure scroll area for the device viewer editor widgets
+
+        scroll_area = QScrollArea()
+
+        scroll_area.setWidgetResizable(True)  # Lets the canvas resize properly
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        scroll_area.setWidget(right_stack_container)
+
+        # Now, 'scroll_area' is the final widget you add to your main window's layout.
+        # main_layout.addWidget(scroll_area)
+        layout.addWidget(scroll_area)
 
         return container
 
