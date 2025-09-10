@@ -15,7 +15,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 # local imports
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.utils.camera import qtransform_deserialize
-from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
+from device_viewer.views.alpha_view.alpha_table import alpha_table_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
@@ -453,8 +453,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         right_stack = QVBoxLayout(right_stack_container)
 
         # alpha_view code
-        alpha_view = generate_alpha_view(self.model)
-        self.alpha_view_ui = self.model.edit_traits(view=alpha_view)
+
+        self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
         # Remove fixed width to allow stretching - set minimum width instead
         self.alpha_view_ui.control.setMinimumWidth(290)
         # Ensure the alpha view can expand horizontally
