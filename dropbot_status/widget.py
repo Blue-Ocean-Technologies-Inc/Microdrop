@@ -53,7 +53,7 @@ class DropBotStatusLabel(QLabel):
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(400, 120)
+        self.setFixedSize(325, 120)
         self.setContentsMargins(10, 10, 10, 10)
 
         # Main horizontal layout to hold icon and grid
@@ -78,7 +78,7 @@ class DropBotStatusLabel(QLabel):
         bold_font.setBold(True)
 
         # Create label pairs (static label + value label)
-        self.connection_label = QLabel("Status:")
+        self.connection_label = QLabel("Connection:")
         self.connection_label.setFont(bold_font)
         self.dropbot_connection_status = QLabel()
         
@@ -161,7 +161,7 @@ class DropBotStatusLabel(QLabel):
         if dropbot_connected:
             self.dropbot_connected = True
             logger.info("Dropbot Connected")
-            self.dropbot_connection_status.setText("Connected")
+            self.dropbot_connection_status.setText("Active")
 
             if chip_inserted:
                 logger.info("Chip Inserted")
@@ -183,7 +183,7 @@ class DropBotStatusLabel(QLabel):
             logger.critical("Dropbot Disconnected")
             img_path = DROPBOT_IMAGE
             status_color = disconnected_color
-            self.dropbot_connection_status.setText("Disconnected")
+            self.dropbot_connection_status.setText("Inactive")
             self.dropbot_chip_status.setText("Not inserted")
 
         pixmap = QPixmap(img_path)
@@ -221,6 +221,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.chip_inserted_message = TimestampedMessage("", 0)
         self.realtime_mode_message = TimestampedMessage("", 0)
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins for compactness
 
         self.status_label = DropBotStatusLabel()
         self.layout.addWidget(self.status_label)
