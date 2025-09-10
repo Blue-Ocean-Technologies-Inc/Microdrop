@@ -454,8 +454,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         right_stack_container.setMaximumWidth(350)
         right_stack = QVBoxLayout(right_stack_container)
 
-        # alpha_view code
+        # device_view code
+        self.device_view.setParent(container)
+        self.device_view.display_state_signal.connect(self.apply_message_model)
 
+        #### Side Bar #####
+
+        # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
         # Remove fixed width to allow stretching - set minimum width instead
         self.alpha_view_ui.control.setMinimumWidth(290)
@@ -463,10 +468,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.alpha_view_ui.control.setSizePolicy(QSizePolicy.Expanding, 
                                                  QSizePolicy.Expanding)
         self.alpha_view_ui.control.setParent(container)
-
-        # device_view code
-        self.device_view.setParent(container)
-        self.device_view.display_state_signal.connect(self.apply_message_model)
 
         # layer_view code
         layer_view = RouteLayerView
@@ -523,9 +524,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         reveal_button = QPushButton("chevron_right") # Default to reveal
 
         def reveal_button_handler():
-            is_visible = not right_stack_container.isVisible()
-            right_stack_container.setVisible(is_visible)
-            reveal_button.setText("chevron_right" if is_visible else "chevron_left")
+            # 1. Check the current visibility of the scroll_area
+            is_now_visible = not scroll_area.isVisible()
+
+            # 2. Toggle the visibility of the entire scroll_area
+            scroll_area.setVisible(is_now_visible)
+
+            # 3. Update the button icon based on the new state
+            #    (chevron_right to hide, chevron_left to reveal)
+            reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
 
         reveal_button.setToolTip("Reveal Hidden Controls")
         
