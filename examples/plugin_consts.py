@@ -46,6 +46,7 @@ BACKEND_CONTEXT = [
 ]
 
 FRONTEND_CONTEXT = [
+redis_server_context
 ]
 
 BACKEND_APPLICATION = Application

@@ -36,6 +36,8 @@ from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
 from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
                                    WHITE, BLACK, GREY)
 
+from microdrop_utils.pyside_helpers import CollapsibleBox
+
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 from microdrop_utils._logger import get_logger
 
@@ -117,14 +119,19 @@ class PGCWidget(QWidget):
         self.status_bar = StatusBar(self)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.information_panel)
-        layout.addWidget(make_separator())
+
+        layout.addWidget(CollapsibleBox("Info", self.information_panel))
+
         layout.addWidget(self.navigation_bar)
         layout.addWidget(make_separator())
+
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
+
         layout.addWidget(self.tree)
+
         layout.addLayout(self.button_layout)
+
         self.setLayout(layout)
         
         self._programmatic_change = False

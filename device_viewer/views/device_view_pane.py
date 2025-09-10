@@ -1,5 +1,6 @@
 # enthought imports
 import dramatiq
+from PySide6.QtWidgets import QScrollArea
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 from pyface.api import FileDialog, OK
@@ -15,7 +16,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 # local imports
 # TODO: maybe get these from an extension point for very granular control
 from device_viewer.utils.camera import qtransform_deserialize
-from device_viewer.views.alpha_view.alpha_table import generate_alpha_view
+from device_viewer.views.alpha_view.alpha_table import alpha_table_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
@@ -40,6 +41,7 @@ from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
+from microdrop_utils.pyside_helpers import CollapsibleBox
             
 import json
 
@@ -452,9 +454,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         right_stack_container.setMaximumWidth(350)
         right_stack = QVBoxLayout(right_stack_container)
 
+        # device_view code
+        self.device_view.setParent(container)
+        self.device_view.display_state_signal.connect(self.apply_message_model)
+
+        #### Side Bar #####
+
         # alpha_view code
-        alpha_view = generate_alpha_view(self.model)
-        self.alpha_view_ui = self.model.edit_traits(view=alpha_view)
+        self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
         # Remove fixed width to allow stretching - set minimum width instead
         self.alpha_view_ui.control.setMinimumWidth(290)
         # Ensure the alpha view can expand horizontally
@@ -462,16 +469,13 @@ class DeviceViewerDockPane(TraitsDockPane):
                                                  QSizePolicy.Expanding)
         self.alpha_view_ui.control.setParent(container)
 
-        # device_view code
-        self.device_view.setParent(container)
-        self.device_view.display_state_signal.connect(self.apply_message_model)
-
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
         # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
         # Remove fixed width to allow stretching - set minimum width instead
         self.layer_ui.control.setMinimumWidth(200)
+        self.layer_ui.control.setMinimumHeight(200)
         # Ensure the layer view can expand horizontally (same as alpha view)
         self.layer_ui.control.setSizePolicy(QSizePolicy.Expanding, 
                                             QSizePolicy.Expanding)
@@ -490,22 +494,45 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.calibration_view.setParent(container)
 
         # Add widgets to layouts
-        right_stack.addWidget(self.camera_control_widget)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.alpha_view_ui.control)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.calibration_view)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.layer_ui.control)
-        right_stack.addWidget(create_line())  # Add a separator line
-        right_stack.addWidget(self.mode_picker_view)
+        # right_stack.addWidget(self.camera_control_widget)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.alpha_view_ui.control)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.calibration_view)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.layer_ui.control)
+        # right_stack.addWidget(create_line())  # Add a separator line
+        # right_stack.addWidget(self.mode_picker_view)
+
+        right_stack.addWidget(
+            CollapsibleBox("Camera Controls", content_widget=self.camera_control_widget)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Alpha View", content_widget=self.alpha_view_ui.control)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Calibration", content_widget=self.calibration_view)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Layer", content_widget=self.layer_ui.control)
+        )
+        right_stack.addWidget(
+            CollapsibleBox("Mode Picker", content_widget=self.mode_picker_view)
+        )
+        right_stack.addStretch()
 
         reveal_button = QPushButton("chevron_right") # Default to reveal
 
         def reveal_button_handler():
-            is_visible = not right_stack_container.isVisible()
-            right_stack_container.setVisible(is_visible)
-            reveal_button.setText("chevron_right" if is_visible else "chevron_left")
+            # 1. Check the current visibility of the scroll_area
+            is_now_visible = not scroll_area.isVisible()
+
+            # 2. Toggle the visibility of the entire scroll_area
+            scroll_area.setVisible(is_now_visible)
+
+            # 3. Update the button icon based on the new state
+            #    (chevron_right to hide, chevron_left to reveal)
+            reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
 
         reveal_button.setToolTip("Reveal Hidden Controls")
         
@@ -523,7 +550,19 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         layout.addWidget(self.device_view)
         layout.addWidget(reveal_button)
-        layout.addWidget(right_stack_container)
+
+        # Configure scroll area for the device viewer editor widgets
+
+        scroll_area = QScrollArea()
+
+        scroll_area.setWidgetResizable(True)  # Lets the canvas resize properly
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        scroll_area.setWidget(right_stack_container)
+
+        # Now, 'scroll_area' is the final widget you add to your main window's layout.
+        # main_layout.addWidget(scroll_area)
+        layout.addWidget(scroll_area)
 
         return container
 
