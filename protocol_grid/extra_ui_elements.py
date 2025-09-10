@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
-                               QFrame, QToolButton, QWidget, 
+                               QFrame, QToolButton, QWidget, QScrollArea,
                                QCheckBox, QDialogButtonBox, QApplication)
 from PySide6.QtGui import QAction, QCursor
 
@@ -295,12 +295,19 @@ class NavigationBar(QWidget):
         return self._phase_navigation_active
 
 
-class StatusBar(QWidget):
+class StatusBar(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout()
+
+        # 1. Create a container widget for all the status bar items.
+        #    This widget will be the one that actually scrolls.
+        scroll_content = QWidget()
+
+        # 2. The layout is now applied to the container widget, not the main class.
+        layout = QHBoxLayout(scroll_content)
         layout.setContentsMargins(5, 0, 5, 0)
         layout.setSpacing(10)
+
 
         self.lbl_total_time = QLabel("Total Time: 0.00 s")
         self.lbl_total_time.setFixedWidth(120)
@@ -368,9 +375,18 @@ class StatusBar(QWidget):
         # push everything to the left
         layout.addStretch()
 
-        self.setLayout(layout)
-        
-        self.setFixedHeight(25)
+        # --- Configure the QScrollArea itself ---
+
+        # 3. Set the container as the scroll area's widget.
+        self.setWidget(scroll_content)
+        self.setWidgetResizable(True)
+
+        # 4. We only want a horizontal scrollbar, never a vertical one.
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # 5. Adjust the height to account for the scrollbar itself.
+        self.setFixedHeight(40)
         
         # Apply initial styling
         self._apply_styling()
