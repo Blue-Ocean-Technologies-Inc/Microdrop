@@ -8,7 +8,7 @@ class CollapsibleBox(QWidget):
     hides or shows its content widget.
     """
 
-    def __init__(self, title="", parent=None, content_widget=None):
+    def __init__(self, title, content_widget, parent=None):
         super(CollapsibleBox, self).__init__(parent)
 
         # Main layout with zero margins or spacing
