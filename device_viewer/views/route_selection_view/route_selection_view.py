@@ -55,7 +55,8 @@ layer_table_editor = TableEditor(
     show_lines=False,
     selected="selected_layer",
     sortable=False,
-    reorderable=True
+    reorderable=True,
+    show_column_labels=False
 )
 
 class RouteLayerHandler(Handler):
