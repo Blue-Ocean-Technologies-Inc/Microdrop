@@ -7,11 +7,11 @@ alpha_table_view = View(
     TableEditor(
 
         columns=[
-            ObjectColumn(name='value', label='Value', editable=False),
-            NumericColumn(name='alpha', label='Alpha', resize_mode="stretch"),
-            VisibleColumn(name='visible', label='Visible', horizontal_alignment='center', width=10, editable=False),
+            ObjectColumn(name='key', label='Value', editable=False,),
+            NumericColumn(name='alpha', label='Alpha'),
+            VisibleColumn(name='visible', label='Visible', editable=False),
         ],
 
-        show_column_labels=False
+        show_column_labels=False,
     ))
 )

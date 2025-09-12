@@ -57,7 +57,7 @@ class MainModel(RouteLayerManager, Electrodes):
         super().traits_init(**traits)
 
         # Initialize the alpha map with default values
-        self.alpha_map = [AlphaValue(key, default_alphas[key]) for key in default_alphas.keys()]
+        self.alpha_map = [AlphaValue(key=key, alpha=default_alphas[key]) for key in default_alphas.keys()]
 
     # ------------------------- Properties ------------------------
 
@@ -92,23 +92,23 @@ class MainModel(RouteLayerManager, Electrodes):
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
         for alpha_value in self.alpha_map:
-            if alpha_value.value == key:
+            if alpha_value.key == key:
                 return alpha_value.alpha if alpha_value.visible else 0.0
         return 1.0 # Default alpha if not found
     
     def set_alpha(self, key: str, alpha: float):
         """Set the alpha value for a given key."""
         for alpha_value in self.alpha_map:
-            if alpha_value.value == key:
+            if alpha_value.key == key:
                 alpha_value.alpha = alpha
                 return
         # If not found, add a new alpha value
-        self.alpha_map.append(AlphaValue(value=key, alpha=alpha))
+        self.alpha_map.append(AlphaValue(key=key, alpha=alpha))
 
     def set_visible(self, key: str, visible: bool):
         """Set the visibility of a given alpha value."""
         for alpha_value in self.alpha_map:
-            if alpha_value.value == key:
+            if alpha_value.key == key:
                 alpha_value.visible = visible
                 return
     
