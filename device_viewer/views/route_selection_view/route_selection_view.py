@@ -25,7 +25,7 @@ class ColorRenderer(QStyledItemDelegate):
 
         painter.restore()
 
-class ColorColumn(ObjectColumn): 
+class ColorColumn(ObjectColumn):
     def __init__(self, **traits): # Stolen from traitsui/extra/checkbox_column.py
         """Initializes the object."""
         super().__init__(**traits)
@@ -47,9 +47,9 @@ class VisibleColumn(ObjectColumn):
 
 layer_table_editor = TableEditor(
     columns=[
-        ColorColumn(name='color', editable=False, width=10),
-        ObjectColumn(name='name', label='Label', resize_mode="resize_to_contents", editable=False,),
-        VisibleColumn(name='visible', editable=False, horizontal_alignment='center', width=10),
+        ColorColumn(name='color', editable=False, width=20),
+        ObjectColumn(name='name', label='Label', resize_mode="stretch", editable=False),
+        VisibleColumn(name='visible', editable=False, horizontal_alignment='center', width=20),
     ],
     menu=RouteLayerMenu,
     show_lines=False,

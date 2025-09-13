@@ -482,7 +482,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
-        self.layer_ui.control.setFixedWidth(268)
+        self.layer_ui.control.setFixedWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-20)
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
