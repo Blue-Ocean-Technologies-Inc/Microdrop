@@ -463,7 +463,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         scroll_area.setVisible(True)
 
         scroll_content = QWidget()
-        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-2) # offset by 2
         scroll_layout = QVBoxLayout(scroll_content)
 
 
