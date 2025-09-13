@@ -5,7 +5,3 @@ class AlphaValue(HasTraits):
     key = Str()  # The key for the alpha value
     alpha = Float()  # The alpha value associated with the key
     visible = Bool(True)  # Whether the alpha value is visible in the UI
-
-    def __init__(self, value: str, alpha: float):
-        self.value = value
-        self.alpha = alpha

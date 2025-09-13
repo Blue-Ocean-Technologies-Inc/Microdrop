@@ -48,11 +48,11 @@ class Route(HasTraits):
         elif self.is_loop():
             loop_count = self.count_loops()
             if loop_count > 1:
-                return f"{loop_count}x loop at {self.get_channel_from_id(self.route[0], channel_map)}"
+                return f"{loop_count}x loop @ {self.get_channel_from_id(self.route[0], channel_map)}"
             else:
-                return f"Loop at {self.get_channel_from_id(self.route[0], channel_map)}"
+                return f"Loop @ {self.get_channel_from_id(self.route[0], channel_map)}"
         else:
-            return f"Path from {self.get_channel_from_id(self.route[0], channel_map)} to {self.get_channel_from_id(self.route[-1], channel_map)}"
+            return f"Path: {self.get_channel_from_id(self.route[0], channel_map)} --> {self.get_channel_from_id(self.route[-1], channel_map)}"
 
     @staticmethod
     def is_segment(from_a, to_a, from_b, to_b) -> bool:

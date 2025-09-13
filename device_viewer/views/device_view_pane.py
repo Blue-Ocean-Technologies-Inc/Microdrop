@@ -33,7 +33,7 @@ from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
-from ..consts import listener_name
+from ..consts import listener_name, DEVICE_VIEWER_SIDEBAR_WIDTH
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
 from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
@@ -42,7 +42,8 @@ from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
 from microdrop_utils.pyside_helpers import CollapsibleBox
-            
+
+
 import json
 
 logger = get_logger(__name__)
@@ -447,81 +448,78 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.publish_model_message)
 
-        # Layout init
-        container = QWidget(parent)
-        layout = QHBoxLayout(container)
-        right_stack_container = QWidget()
-        right_stack_container.setMaximumWidth(350)
-        right_stack = QVBoxLayout(right_stack_container)
+        # Layout init for device view and its property editor right-side bar
+        # left side will house device viewer; right side a collapsible scrollable stack of collapsible widgets
+        main_layout = QHBoxLayout()
+        main_container = QWidget()
+
+        # --- Right Side: Collapsible Scroll Area ---
+
+        # Create the Scroll Area and its container
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+        # Initially hide the scroll area
+        scroll_area.setVisible(True)
+
+        scroll_content = QWidget()
+        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-2) # offset by 2
+        scroll_layout = QVBoxLayout(scroll_content)
+
+
 
         # device_view code
-        self.device_view.setParent(container)
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
-        #### Side Bar #####
+        #### Side Bar widgets init #####
 
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
-        # Remove fixed width to allow stretching - set minimum width instead
-        self.alpha_view_ui.control.setMinimumWidth(290)
-        # Ensure the alpha view can expand horizontally
-        self.alpha_view_ui.control.setSizePolicy(QSizePolicy.Expanding, 
-                                                 QSizePolicy.Expanding)
-        self.alpha_view_ui.control.setParent(container)
+
+
+        self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
-        # self.layer_ui.control is the underlying Qt widget which we have to access to attach to layout
-        # Remove fixed width to allow stretching - set minimum width instead
-        self.layer_ui.control.setMinimumWidth(200)
-        self.layer_ui.control.setMinimumHeight(200)
-        # Ensure the layer view can expand horizontally (same as alpha view)
-        self.layer_ui.control.setSizePolicy(QSizePolicy.Expanding, 
-                                            QSizePolicy.Expanding)
-        self.layer_ui.control.setParent(container)
+        # -20 on there to have some padding on the side so nothing gets cut
+        self.layer_ui.control.setFixedWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-20)
+        self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
         self.mode_picker_view = ModePicker(self.model, self)
-        self.mode_picker_view.setParent(container)
+        self.mode_picker_view.setParent(main_container)
 
         # camera_control_widget code
         self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.preferences)
-        self.camera_control_widget.setParent(container)
+        self.camera_control_widget.setParent(main_container)
 
         # calibration_view code
         self.calibration_view = CalibrationView(self.model)
-        self.calibration_view.setParent(container)
+        self.calibration_view.setParent(main_container)
 
-        # Add widgets to layouts
-        # right_stack.addWidget(self.camera_control_widget)
-        # right_stack.addWidget(create_line())  # Add a separator line
-        # right_stack.addWidget(self.alpha_view_ui.control)
-        # right_stack.addWidget(create_line())  # Add a separator line
-        # right_stack.addWidget(self.calibration_view)
-        # right_stack.addWidget(create_line())  # Add a separator line
-        # right_stack.addWidget(self.layer_ui.control)
-        # right_stack.addWidget(create_line())  # Add a separator line
-        # right_stack.addWidget(self.mode_picker_view)
-
-        right_stack.addWidget(
+        scroll_layout.addWidget(
             CollapsibleBox("Camera Controls", content_widget=self.camera_control_widget)
         )
-        right_stack.addWidget(
+        scroll_layout.addWidget(
             CollapsibleBox("Alpha View", content_widget=self.alpha_view_ui.control)
         )
-        right_stack.addWidget(
+        scroll_layout.addWidget(
             CollapsibleBox("Calibration", content_widget=self.calibration_view)
         )
-        right_stack.addWidget(
-            CollapsibleBox("Layer", content_widget=self.layer_ui.control)
+        scroll_layout.addWidget(
+            CollapsibleBox("Routes", content_widget=self.layer_ui.control)
         )
-        right_stack.addWidget(
+        scroll_layout.addWidget(
             CollapsibleBox("Mode Picker", content_widget=self.mode_picker_view)
         )
-        right_stack.addStretch()
+        scroll_layout.addStretch()
 
-        reveal_button = QPushButton("chevron_right") # Default to reveal
+        scroll_area.setWidget(scroll_content)
+
+        reveal_button = QPushButton("chevron_right")
+
+        # Create a button to show/hide the scroll area
 
         def reveal_button_handler():
             # 1. Check the current visibility of the scroll_area
@@ -534,8 +532,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             #    (chevron_right to hide, chevron_left to reveal)
             reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
 
-        reveal_button.setToolTip("Reveal Hidden Controls")
-        
         # Import and apply centralized button styles with proper tooltip styling
         try:
             theme = "dark" if is_dark_mode() else "light"
@@ -544,27 +540,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         except ImportError:
             # Fallback to custom styling if centralized styles aren't available
             reveal_button.setStyleSheet("font-family: Material Symbols Outlined; font-size: 30px; margin-left: 3px; margin-right: 3px; padding-left: 3px;")
-        
+
+        reveal_button.setToolTip("Reveal Hidden Controls")
         reveal_button.clicked.connect(reveal_button_handler)
         reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
 
-        layout.addWidget(self.device_view)
-        layout.addWidget(reveal_button)
+        ####### Assemble main layout ################
+        main_layout.addWidget(self.device_view, 1) # left side
+        main_layout.addWidget(reveal_button) # middle
+        main_layout.addWidget(scroll_area) # right side
 
-        # Configure scroll area for the device viewer editor widgets
+        main_container.setLayout(main_layout)
 
-        scroll_area = QScrollArea()
-
-        scroll_area.setWidgetResizable(True)  # Lets the canvas resize properly
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        scroll_area.setWidget(right_stack_container)
-
-        # Now, 'scroll_area' is the final widget you add to your main window's layout.
-        # main_layout.addWidget(scroll_area)
-        layout.addWidget(scroll_area)
-
-        return container
+        return main_container
 
     def _apply_initial_theme_styling(self):
         """Apply the correct theme styling when components are first created."""

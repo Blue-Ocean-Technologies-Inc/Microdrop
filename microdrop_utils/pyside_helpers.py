@@ -19,16 +19,16 @@ class CollapsibleBox(QWidget):
         # The clickable header
         self.toggle_button = QToolButton(self)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.toggle_button.setArrowType(Qt.RightArrow)
+        self.toggle_button.setArrowType(Qt.DownArrow)
         self.toggle_button.setText(str(title))
         self.toggle_button.setCheckable(True)
-        self.toggle_button.setChecked(False)  # Start collapsed
+        self.toggle_button.setChecked(True)  # Start Revealed
         self.toggle_button.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
 
         # Set the content widget directly
         self.content_widget = content_widget
         if self.content_widget:
-            self.content_widget.setVisible(False)  # Start hidden
+            self.content_widget.setVisible(True)  # Start Revealed
 
         # Connect the button's click to the toggle function
         self.toggle_button.toggled.connect(self._on_toggled)
