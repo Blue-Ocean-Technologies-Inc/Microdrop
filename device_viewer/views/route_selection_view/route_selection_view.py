@@ -47,9 +47,9 @@ class VisibleColumn(ObjectColumn):
 
 layer_table_editor = TableEditor(
     columns=[
-        ColorColumn(name='color', width=20, editable=False),
-        ObjectColumn(name='name', label='Label', resize_mode="stretch", editable=False),
-        VisibleColumn(name='visible', editable=False, horizontal_alignment='center', width=20),
+        ColorColumn(name='color', editable=False, width=10),
+        ObjectColumn(name='name', label='Label', resize_mode="resize_to_contents", editable=False,),
+        VisibleColumn(name='visible', editable=False, horizontal_alignment='center', width=10),
     ],
     menu=RouteLayerMenu,
     show_lines=False,
