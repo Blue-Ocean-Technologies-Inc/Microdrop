@@ -41,7 +41,7 @@ from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
-from microdrop_utils.pyside_helpers import CollapsibleBox
+from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
 
 import json
@@ -476,14 +476,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
 
-
+        # Configure alpha view UI to size to content
         self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
         # -20 on there to have some padding on the side so nothing gets cut
-        self.layer_ui.control.setFixedWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-20)
+        self.layer_ui.control.setFixedWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-10)
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
@@ -499,19 +499,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.calibration_view.setParent(main_container)
 
         scroll_layout.addWidget(
-            CollapsibleBox("Camera Controls", content_widget=self.camera_control_widget)
+            CollapsibleVStackBox("Camera Controls", control_widgets=[self.camera_control_widget, self.alpha_view_ui.control])
         )
         scroll_layout.addWidget(
-            CollapsibleBox("Alpha View", content_widget=self.alpha_view_ui.control)
+            CollapsibleVStackBox("Paths", control_widgets=[self.layer_ui.control, self.mode_picker_view])
         )
         scroll_layout.addWidget(
-            CollapsibleBox("Calibration", content_widget=self.calibration_view)
-        )
-        scroll_layout.addWidget(
-            CollapsibleBox("Routes", content_widget=self.layer_ui.control)
-        )
-        scroll_layout.addWidget(
-            CollapsibleBox("Mode Picker", content_widget=self.mode_picker_view)
+            CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
         )
         scroll_layout.addStretch()
 
