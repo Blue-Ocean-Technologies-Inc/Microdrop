@@ -59,7 +59,7 @@ class DropBotStatusLabel(QLabel):
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(400, 120)
+        self.setFixedSize(325, 120)
         self.setContentsMargins(10, 10, 10, 10)
 
         # Main horizontal layout to hold icon and grid
@@ -329,20 +329,22 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
         message = json.loads(body)
 
-        self.filler_capacitance_over_area = float(message.get('filler_capacitance_over_area', 0.0))
-        self.liquid_capacitance_over_area = float(message.get('liquid_capacitance_over_area', 0.0))
+        self.filler_capacitance_over_area = message.get('filler_capacitance_over_area', 0.0)
+        self.liquid_capacitance_over_area = message.get('liquid_capacitance_over_area', 0.0)
 
-        self.pressure = self.liquid_capacitance_over_area - self.filler_capacitance_over_area
+        if self.filler_capacitance_over_area and self.liquid_capacitance_over_area:
 
-        voltage = self.status_label.dropbot_voltage_reading.text()
+            self.pressure = self.liquid_capacitance_over_area - self.filler_capacitance_over_area
 
-        force = ForceCalculationService.calculate_force_for_step(
-            get_ureg_magnitude(voltage),
-            self.pressure
-        )
+            voltage = self.status_label.dropbot_voltage_reading.text()
 
-        self.status_label.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
-        self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+            force = ForceCalculationService.calculate_force_for_step(
+                get_ureg_magnitude(voltage),
+                self.pressure
+            )
+
+            self.status_label.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
+            self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
 
     ####### Dropbot Icon Image Control Methods ###########
 
