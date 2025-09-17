@@ -173,10 +173,6 @@ class ManualControlControl(Controller):
     realtime_mode_message = Instance(TimestampedMessage)
     disconnected_message = Instance(TimestampedMessage)
 
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
     def _realtime_mode_message_default(self):
         return TimestampedMessage("", 0)
         
