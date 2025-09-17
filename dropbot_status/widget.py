@@ -6,6 +6,7 @@ import os
 from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, QTextBrowser, QGridLayout
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
+from pint import UnitRegistry
 
 # local imports
 from microdrop_application.dialogs import show_success
@@ -14,6 +15,7 @@ from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBot
 from microdrop_utils.decorators import timestamped_value, debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
+from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
@@ -24,6 +26,8 @@ from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, NUM_CAPACITANCE_
 
 logger = get_logger(__name__, level="DEBUG")
 
+ureg = UnitRegistry()
+
 disconnected_color = GREY["lighter"]  #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
@@ -33,6 +37,7 @@ BORDER_RADIUS = 4
 def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type='percentage'):
     if old_value == '-' and new_value != '-':
         update_fn(new_value)
+        return "updated"
 
     elif old_value != '-' and new_value != '-':
         change = 0
@@ -45,6 +50,7 @@ def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type=
 
         if change > threshold:
             update_fn(new_value)
+            return "updated"
 
 class DropBotStatusLabel(QLabel):
     """
@@ -53,7 +59,7 @@ class DropBotStatusLabel(QLabel):
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(325, 120)
+        self.setFixedSize(400, 120)
         self.setContentsMargins(10, 10, 10, 10)
 
         # Main horizontal layout to hold icon and grid
@@ -220,6 +226,13 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.connected_message = TimestampedMessage("", 0) # We initialize it timestamp 0 so any message will be newer. The string is not important.
         self.chip_inserted_message = TimestampedMessage("", 0)
         self.realtime_mode_message = TimestampedMessage("", 0)
+
+        self.filler_capacitance_over_area = 0 # Initialize calibration data values
+        self.liquid_capacitance_over_area = 0 # Both of these are in pF/mm^2
+        self.pressure = 0
+        self.active_electrodes = []
+        self.electrode_areas = {}
+
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins for compactness
 
@@ -283,7 +296,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
             old_capacitance = self.status_label.dropbot_capacitance_reading.text()
             old_voltage = self.status_label.dropbot_voltage_reading.text()
-            
+
             self.capacitances.append(get_ureg_magnitude(new_capacitance))
 
             if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
@@ -297,8 +310,39 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
 
             _maybe_update(old_capacitance, new_capacitance, self.status_label.update_capacitance_reading, threshold=3, threshold_type='absolute_diff')
-            _maybe_update(old_voltage, new_voltage, self.status_label.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
+            voltage_update_result = _maybe_update(old_voltage, new_voltage, self.status_label.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
 
+            if voltage_update_result == "updated":
+                force = None
+
+                if self.pressure:
+                    force = ForceCalculationService.calculate_force_for_step(
+                        get_ureg_magnitude(new_voltage),
+                        self.pressure
+                    )
+
+                self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+
+    ################## Calibration data #########################
+
+    def _on_calibration_data_triggered(self, body):
+
+        message = json.loads(body)
+
+        self.filler_capacitance_over_area = float(message.get('filler_capacitance_over_area', 0.0))
+        self.liquid_capacitance_over_area = float(message.get('liquid_capacitance_over_area', 0.0))
+
+        self.pressure = self.liquid_capacitance_over_area - self.filler_capacitance_over_area
+
+        voltage = self.status_label.dropbot_voltage_reading.text()
+
+        force = ForceCalculationService.calculate_force_for_step(
+            get_ureg_magnitude(voltage),
+            self.pressure
+        )
+
+        self.status_label.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
+        self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
 
     ####### Dropbot Icon Image Control Methods ###########
 
@@ -334,7 +378,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
     ##################################################################################################
 
-    ########## Warning dialogs ################
+    ########## Warning methods ################
     def _on_show_warning_triggered(self, body): # This is not controlled by the dramatiq controller! Called manually in dramatiq_dropbot_status_controller.py
         body = json.loads(body)
 

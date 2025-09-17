@@ -78,11 +78,8 @@ class ProtocolState:
         self._uid_counter = 1
 
         # calibration data storage
-        self._liquid_capacitance = None
-        self._filler_capacitance = None
-        self._electrode_areas = {}
-        self._electrode_scale = 1.0
-        self._active_electrodes_from_calibration = []
+        self._liquid_capacitance_over_area = None
+        self._filler_capacitance_over_area = None
 
     def get_next_uid(self):
         uid = self._uid_counter
@@ -170,11 +167,8 @@ class ProtocolState:
             "fields": self.fields,
             "id_to_channel": protocol_id_to_channel,
             "_uid_counter": self._uid_counter,
-            "_liquid_capacitance": self._liquid_capacitance,
-            "_filler_capacitance": self._filler_capacitance,
-            "_electrode_areas": self._electrode_areas,
-            "_electrode_scale": self._electrode_scale,
-            "_active_electrodes_from_calibration": self._active_electrodes_from_calibration
+            "_liquid_capacitance_over_area": self._liquid_capacitance_over_area,
+            "_filler_capacitance_over_area": self._filler_capacitance_over_area,
         }
     
     def from_dict(self, data):
@@ -188,11 +182,8 @@ class ProtocolState:
         self._uid_counter = data.get("_uid_counter", 1)
 
         # NEW: Load calibration data
-        self._liquid_capacitance = data.get("_liquid_capacitance")
-        self._filler_capacitance = data.get("_filler_capacitance")
-        self._electrode_areas = data.get("_electrode_areas", {})
-        self._electrode_scale = data.get("_electrode_scale", 1.0)
-        self._active_electrodes_from_calibration = data.get("_active_electrodes_from_calibration", [])
+        self._liquid_capacitance_over_area = data.get("_liquid_capacitance_over_area")
+        self._filler_capacitance_over_area = data.get("_filler_capacitance_over_area")
 
         self.update_uid_counter_from_sequence()
         
@@ -293,35 +284,21 @@ class ProtocolState:
         next_ = self.redo_stack.pop()
         self.from_dict(next_)
 
-    def set_calibration_data(self, liquid_capacitance, filler_capacitance, electrode_areas, electrode_scale):
+    def set_calibration_data(self, liquid_capacitance_over_area, filler_capacitance_over_area):
         """Store calibration data"""
-        self._liquid_capacitance = liquid_capacitance
-        self._filler_capacitance = filler_capacitance
-        self._electrode_areas = electrode_areas.copy() if electrode_areas else {}
-        self._electrode_scale = electrode_scale
+        self._liquid_capacitance_over_area = liquid_capacitance_over_area
+        self._filler_capacitance_over_area = filler_capacitance_over_area
 
     def get_calibration_data(self):
         """Get stored calibration data."""
         return {
-            'liquid_capacitance': self._liquid_capacitance,
-            'filler_capacitance': self._filler_capacitance,
-            'electrode_areas': self._electrode_areas.copy(),
-            'electrode_scale': self._electrode_scale
+            'liquid_capacitance_over_area': self._liquid_capacitance_over_area,
+            'filler_capacitance_over_area': self._filler_capacitance_over_area,
         }
-
-    def set_active_electrodes_from_calibration(self, active_electrodes):
-        """Store the active electrodes from the last calibration."""
-        self._active_electrodes_from_calibration = active_electrodes.copy() if active_electrodes else []
-
-    def get_active_electrodes_from_calibration(self):
-        """Get the active electrodes from calibration."""
-        return self._active_electrodes_from_calibration.copy()
 
     def has_complete_calibration_data(self):
         """Check if all required calibration data is available for force calculations."""
-        return (self._liquid_capacitance is not None and 
-                self._filler_capacitance is not None and
-                self._liquid_capacitance >= 0 and 
-                self._filler_capacitance >= 0 and
-                self._electrode_areas and
-                self._active_electrodes_from_calibration)
+        return (self._liquid_capacitance_over_area is not None and 
+                self._filler_capacitance_over_area is not None and
+                self._liquid_capacitance_over_area >= 0 and 
+                self._filler_capacitance_over_area >= 0)

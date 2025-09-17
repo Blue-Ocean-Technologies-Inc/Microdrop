@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QVideoFrameInput, QVideoFrame
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
 import cv2
@@ -12,6 +12,8 @@ import ctypes
 import ctypes.util
 import signal
 import subprocess
+import json
+from pathlib import Path
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
@@ -26,8 +28,8 @@ class CameraControlWidget(QWidget):
 
     # Signals - we use them to not have to set up another dramatiq listener here. Listener is in device_view_pane.py
     camera_active_signal = Signal(bool)
-    screen_capture_signal = Signal()
-    screen_recording_signal = Signal(bool)
+    screen_capture_signal = Signal(object)
+    screen_recording_signal = Signal(object)
 
     def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
@@ -151,15 +153,16 @@ class CameraControlWidget(QWidget):
         self.check_initial_camera_state()
 
     def turn_on_camera(self):
+        self.preferences.set("camera.camera_state", "on")
         if self.camera:
             self.camera.start()
-
             self.is_camera_on = True
             self.camera_toggle_button.setText("videocam")
             self.camera_toggle_button.setToolTip("Camera On")
             self.camera_toggle_button.setChecked(True)
 
     def turn_off_camera(self):
+        self.preferences.set("camera.camera_state", "off")
         if self.camera:
             self.camera.stop()
             self.is_camera_on = False
@@ -218,11 +221,21 @@ class CameraControlWidget(QWidget):
             self.turn_off_camera()
 
     @Slot(bool)
-    def on_recording_active(self, active):
-        if active:
-            self.video_record_start()
+    def on_recording_active(self, recording_data):
+        if isinstance(recording_data, dict):
+            action = recording_data.get("action", "").lower()
+            if action == "start":
+                directory = recording_data.get("directory")
+                step_description = recording_data.get("step_description")
+                step_id = recording_data.get("step_id")
+                self.video_record_start(directory, step_description, step_id)
+            elif action == "stop":
+                self.video_record_stop()
         else:
-            self.video_record_stop()
+            if recording_data:
+                self.video_record_start()
+            else:
+                self.video_record_stop()
 
 
     def on_mode_changed(self, event):
@@ -234,24 +247,39 @@ class CameraControlWidget(QWidget):
 
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
-        old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        preferences_camera = self.preferences.get("camera.selected_camera", None)
+        if preferences_camera:
+            old_camera_name = preferences_camera
+        else:
+            old_camera_name = self.camera_combo.currentText() if self.camera_combo.currentText() else None
+        
         self.camera_combo.clear()
         self.qt_available_cameras = QMediaDevices.videoInputs() if os.getenv("USE_CV2", "0") != "1" else []
+        self.qt_available_cameras.append(None)
         self.cv2_available_cameras = []
 
         if len(self.qt_available_cameras) > 0: # We can use Qt camera detection
             self.using_opencv = False  # Using Qt cameras
             
             # Add descriptions to the combo box
+            self.camera_combo.blockSignals(True)  # Block signals
             for camera in self.qt_available_cameras:
-                self.camera_combo.addItem(camera.description())
+                self.camera_combo.addItem(camera.description() if camera else "<No Camera>")
+            self.camera_combo.blockSignals(False)  # Re-enable signals
+            self.camera_combo.setCurrentIndex(-1) # No selection initially, so selection at position 0 fires if chosen by below logic
 
-            # Set the current index to the previously selected camera if it exists
+            # Set the current index to the previously selected camera if it exists (make sure something is selected here)
             if old_camera_name:
+                found_flag = False
                 for i, camera in enumerate(self.qt_available_cameras):
-                    if camera.description() == old_camera_name:
+                    if camera and camera.description() == old_camera_name:
                         self.camera_combo.setCurrentIndex(i)
+                        found_flag = True
                         break
+                if not found_flag:
+                    self.camera_combo.setCurrentIndex(0)
+            else:
+                self.camera_combo.setCurrentIndex(0)
         else:  # No cameras found, use cv2 to list cameras
             self.using_opencv = True  # Using OpenCV cameras
             logger.warning("No cameras found using Qt. Attempting to list cameras using OpenCV.")
@@ -276,10 +304,12 @@ class CameraControlWidget(QWidget):
             self.video_item.setVisible(True)
             self.pixmap_item.setVisible(False)  # Hide the pixmap item if using Qt
             if 0 <= index < len(self.qt_available_cameras):
-                self.camera = QCamera(self.qt_available_cameras[index])
-                self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
-                self.capture_session.setCamera(self.camera)
-                # self.camera.start() # Starts camera on app startup. Should wait for the camera button to be clicked first.
+                if self.qt_available_cameras[index]: # Camera is not None
+                    self.camera = QCamera(self.qt_available_cameras[index])
+                    self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                    self.capture_session.setCamera(self.camera)
+                    if self.preferences.get("camera.camera_state", "off") == "on":
+                        self.camera.start()
         else: # If no Qt cameras are available, use OpenCV camera
             self.video_item.setVisible(False)
             self.pixmap_item.setVisible(True)  # Show the pixmap item if using OpenCV
@@ -291,25 +321,23 @@ class CameraControlWidget(QWidget):
 
         self.populate_resolution_list()
 
-    @Slot()
-    def render_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        image = cv_image_to_qimage(frame)
-
-        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
-        self.scene.update()  # Update the scene to reflect the new pixmap
     def populate_resolution_list(self):
         """Populate the resolution combo box with available resolutions."""
         if not self.using_opencv:
             if self.camera:
                 self.resolution_combo.clear()
 
-                for format in self.camera_formats:
-                    res = format.resolution()
+                resolutions = [format.resolution() for format in self.camera_formats]
+
+                preferences_resolution = self.preferences.get("camera.resolution", None)
+
+                for res in resolutions:
                     self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+
+                if preferences_resolution:
+                    index = self.resolution_combo.findText(preferences_resolution)
+                    if index != -1:
+                        self.resolution_combo.setCurrentIndex(index)
         else:
             # For OpenCV, we can set a fixed resolution or use the camera's default
             self.resolution_combo.clear()
@@ -351,6 +379,7 @@ class CameraControlWidget(QWidget):
 
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
+                self.preferences.set("camera.resolution", self.resolution_combo.itemText(index))
                 format = self.camera_formats[index]
                 self.camera.setCameraFormat(format)
                 self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
@@ -387,17 +416,52 @@ class CameraControlWidget(QWidget):
                 self.video_item.paint(painter, options, None)
             painter.end()
         return image
-    # Callbacks
+    
+    # ------------------------ Callbacks -------------------------------
 
     @Slot()
-    def capture_button_handler(self):
+    def render_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        image = cv_image_to_qimage(frame)
+
+        self.pixmap_item.setPixmap(QPixmap.fromImage(image))
+        self.scene.update()  # Update the scene to reflect the new pixmap
+
+    @Slot()
+    def capture_button_handler(self, capture_data=None):
         """Callback for when the capture button is pressed."""
+        directory = None
+        step_description = None
+        step_id = None
+        
+        # extract data if provided
+        if isinstance(capture_data, dict):
+            directory = capture_data.get("directory")
+            step_description = capture_data.get("step_description")
+            step_id = capture_data.get("step_id")
+            
         # Ensure camera is on for capture
         was_camera_off = not self.ensure_camera_on()
         
         # Capture the image
         image = self.get_transformed_frame()
-        image.save(f"{QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)}/captured_image_{self.get_next_image_id()}.png", "PNG")
+
+        # generate filename
+        filename = self._generate_capture_filename(step_description, step_id)
+
+        # determine save path
+        if directory:
+            save_path = Path(directory) / "captures" / filename 
+            # Ensure directory exists
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            # use default location
+            save_path = Path(QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)) / filename
+
+        image.save(str(save_path), "PNG")
         logger.info("Image captured successfully")
         
         # Show status bar message
@@ -442,14 +506,25 @@ class CameraControlWidget(QWidget):
                     libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
                     if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL) != 0:
                         raise OSError(ctypes.get_errno(), 'SET_PDEATHSIG')
+                
+                scale_factor = 30 / frames_per_second
+                out_path = f"{self.recording_file_path}@{int(frames_per_second)}fps.mp4"
+
+                cmd = [
+                    "ffmpeg",
+                    "-itsscale", str(scale_factor),   # must be before -i
+                    "-i", self.recording_file_path,
+                    "-c", "copy",
+                    out_path,
+                ]
 
                 if sys.platform.startswith("linux"):
-                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
-                                    shell=True, 
+                    subprocess.Popen(" ".join(cmd),
+                                    shell=True,
                                     preexec_fn=set_pdeathsig,
                                     stdin=subprocess.DEVNULL)
                 else:
-                    subprocess.Popen(f"""ffmpeg -i {self.recording_file_path} -filter:v "setpts=(30/{frames_per_second})*PTS" {self.recording_file_path}@{int(frames_per_second)}fps.mp4""",
+                    subprocess.Popen(cmd,
                                     shell=True)
                 logger.info("Video re-encoded successfully.")
 
@@ -480,13 +555,25 @@ class CameraControlWidget(QWidget):
                 self.restore_camera_state()
 
     @Slot()
-    def video_record_start(self):
+    def video_record_start(self, directory=None, step_description=None, step_id=None):
         """Start video recording."""
         if not self.video_writer:
             # Ensure camera is on for recording
             was_camera_off = not self.ensure_camera_on()
             
-            self.recording_file_path = f"{QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)}/video_recording_{self.get_next_image_id()}.mp4"
+            # generate filename
+            filename = self._generate_recording_filename(step_description, step_id)
+            
+            # determine save path
+            if directory:
+                save_path = Path(directory) / "recordings" / filename
+                # Ensure directory exists
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                self.recording_file_path = str(save_path)
+            else:
+                # Use default Movies location
+                self.recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
+
             self.video_writer = cv2.VideoWriter(self.recording_file_path,
                                         cv2.VideoWriter_fourcc(*'mp4v'),
                                         30,  # Frame rate
@@ -498,7 +585,7 @@ class CameraControlWidget(QWidget):
             self.record_toggle_button.setStyleSheet(f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};")
             self.record_toggle_button.setChecked(True)  # Ensure it's checked
             self.is_recording = True
-            logger.info("Video recording started.")
+            logger.info(f"Video recording started: {self.recording_file_path}")
             
             # Show status bar message
             try:
@@ -573,3 +660,27 @@ class CameraControlWidget(QWidget):
             self.camera_toggle_button.setText("videocam_off")
             self.camera_toggle_button.setToolTip("Camera Off")
             self.camera_toggle_button.setChecked(False)
+
+    def _generate_capture_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description and step_id:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{step_id}_{timestamp}.png"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.png"
+        else:
+            return f"captured_image_{timestamp}.png"
+        
+    def _generate_recording_filename(self, step_description=None, step_id=None):
+        timestamp = self.get_next_image_id()
+        
+        if step_description and step_id:
+            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            clean_desc = clean_desc.replace(' ', '_')
+            return f"{clean_desc}_{step_id}_{timestamp}.mp4"
+        elif step_id:
+            return f"step_{step_id}_{timestamp}.mp4"
+        else:
+            return f"video_recording_{timestamp}.mp4"

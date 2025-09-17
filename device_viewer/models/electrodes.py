@@ -43,7 +43,7 @@ class Electrodes(HasTraits):
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
     # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
     channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
-    electrode_ids_channels_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
+    electrode_ids_channels_map = Property(Dict(Str, Int), observe='electrodes.items.channel')
 
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     channels_states_map = Dict(Int, Bool, {})
@@ -127,3 +127,17 @@ class Electrodes(HasTraits):
                 areas[electrode_id] = area * (self.svg_model.pixel_scale ** 2)
             return areas
         return {}
+    
+    def get_activated_electrode_area_mm2(self) -> float | None:
+        """
+        Get the areas of all activated electrodes in mm^2
+        :return: Dictionary of electrode id to area in mm^2
+        """
+        if self.svg_model is not None:
+            total_area = 0.0
+            for electrode_id, channel in self.electrode_ids_channels_map.items():
+                if self.channels_states_map.get(channel, False):
+                    area = self.svg_model.electrode_areas.get(electrode_id, 0)
+                    total_area += area * (self.electrode_scale ** 2)
+            return total_area
+        return None

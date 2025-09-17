@@ -112,7 +112,7 @@ class ElectrodeScene(QGraphicsScene):
                 self.interaction_service.handle_perspective_edit(event.scenePos())
 
         if self.right_mouse_pressed:
-            if mode in ("edit", "draw", "edit-draw"):
+            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
                 connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
                 endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
                 if connection_item:
@@ -165,7 +165,7 @@ class ElectrodeScene(QGraphicsScene):
             logger.warning("No capacitance value available to set for filler capacitance.")
             return
         
-        self.interaction_service.model.filler_capacitance = self.dockpane.last_capacitance
+        self.interaction_service.model.filler_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
 
     def measure_liquid_capacitance(self):
         """Placeholder for measuring liquid capacitance."""
@@ -177,16 +177,22 @@ class ElectrodeScene(QGraphicsScene):
             logger.warning("No capacitance value available to set for liquid capacitance.")
             return
 
-        self.interaction_service.model.liquid_capacitance = self.dockpane.last_capacitance
+        self.interaction_service.model.liquid_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
 
     def adjust_electrode_area(self):
         """Placeholder for adjusting electrode area."""
         self.interaction_service.model.configure_traits(view=scale_edit_view)
 
     def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
+        if event.modifiers() & Qt.ControlModifier:
+            # If control is pressed, we do not show the context menu
+            return super().contextMenuEvent(event)
+
         context_menu = QMenu()
         context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
         context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
+        context_menu.addAction("Reset Electrodes", self.interaction_service.model.reset_electrode_states)
+        context_menu.addSeparator()
         context_menu.addAction("Find Liquid", self.detect_droplet)
         context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
         context_menu.exec(event.screenPos())

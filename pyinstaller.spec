@@ -54,6 +54,18 @@ if linux_redis_location.exists():
     datas.append((linux_redis_location, "."))
 elif window_redis_location.exists():
     datas.append((window_redis_location, "."))
+else:
+    print("Warning: redis-server executable not found, dramatiq with redis broker will not work.")
+
+linux_ffmpeg_location = Path(pyface.__file__).parent.parent.parent.parent.parent / "bin" / "ffmpeg"
+window_ffmpeg_location = Path(pyface.__file__).parent.parent.parent.parent / "Scripts" / "ffmpeg.exe"
+
+if linux_ffmpeg_location.exists():
+    datas.append((linux_ffmpeg_location, "."))
+elif window_ffmpeg_location.exists():
+    datas.append((window_ffmpeg_location, "."))
+else:
+    print("Warning: ffmpeg executable not found, video processing may not work.")
 
 datas.append((Path(pyface.__file__).parent / "images", "pyface/images"))
 datas.append((Path(teensy_minimal_rpc.__file__).parent / "static", Path("teensy_minimal_rpc") / "static"))

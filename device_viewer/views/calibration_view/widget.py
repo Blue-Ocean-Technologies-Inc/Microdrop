@@ -22,8 +22,8 @@ class CalibrationView(QWidget):
         self._apply_theme_styling()
 
         self.capacitance_reset_button.clicked.connect(self.reset_capacitance)
-        self.model.observe(self.update_capacitance_labels, "liquid_capacitance")
-        self.model.observe(self.update_capacitance_labels, "filler_capacitance")
+        self.model.observe(self.update_capacitance_labels, "liquid_capacitance_over_area")
+        self.model.observe(self.update_capacitance_labels, "filler_capacitance_over_area")
 
         layout = QHBoxLayout()
         layout.addWidget(self.liquid_capacitance_label)
@@ -58,10 +58,10 @@ class CalibrationView(QWidget):
         self.capacitance_reset_button.setStyleSheet(button_style)
 
     def update_capacitance_labels(self, event=None):
-        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance if self.model.liquid_capacitance is not None else '-'} pF")
-        self.filler_capacitance_label.setText(f"C_f: {self.model.filler_capacitance if self.model.filler_capacitance is not None else '-'} pF")
+        self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance_over_area:.4f} pF/mm^2" if self.model.liquid_capacitance_over_area is not None else 'C_l: -')
+        self.filler_capacitance_label.setText(f"C_f: {self.model.filler_capacitance_over_area:.4f} pF/mm^2" if self.model.filler_capacitance_over_area is not None else 'C_f: -')
 
     def reset_capacitance(self):
-        self.model.liquid_capacitance = None
-        self.model.filler_capacitance = None
+        self.model.liquid_capacitance_over_area = None
+        self.model.filler_capacitance_over_area = None
         
