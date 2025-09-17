@@ -19,7 +19,7 @@ from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEV
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude, ureg
 
-from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
+from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, NUM_CAPACITANCE_READINGS_AVERAGED
 
 
 logger = get_logger(__name__, level="DEBUG")
@@ -286,7 +286,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             
             self.capacitances.append(get_ureg_magnitude(new_capacitance))
 
-            if len(self.capacitances) == 5:
+            if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
                 new_capacitance = sum(self.capacitances) / len(self.capacitances)
                 new_capacitance = new_capacitance * ureg.picofarad
                 new_capacitance = f"{new_capacitance:.4g~P}"
