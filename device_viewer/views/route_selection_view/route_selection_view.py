@@ -1,63 +1,10 @@
-from typing import Any
-from traitsui.api import View, VGroup, Item, ObjectColumn, TableEditor, Label, Handler, Action
-from traitsui.extras.checkbox_column import CheckboxColumn
+from traitsui.api import View, VGroup, Item, ObjectColumn, TableEditor, Handler
 from traitsui.ui import UIInfo
-from pyface.qt.QtGui import QColor, QFont
-from pyface.qt.QtWidgets import QStyledItemDelegate
 
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
-from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF
 
-class ColorRenderer(QStyledItemDelegate):
-    def paint(self, painter, option, index):
-        value = index.data()
-        color = QColor(value)
-
-        painter.save()
-
-        # Draw the rectangle with the given color
-        rect = option.rect
-        painter.setBrush(color)
-        painter.setPen(color)
-        painter.drawRect(rect)
-
-        painter.restore()
-
-class ColorColumn(ObjectColumn):
-    def __init__(self, **traits): # Stolen from traitsui/extra/checkbox_column.py
-        """Initializes the object."""
-        super().__init__(**traits)
-
-        # force the renderer to be our color renderer
-        self.renderer = ColorRenderer()
-
-class VisibleColumn(ObjectColumn):
-    def __init__(self, **traits: Any):
-        super().__init__(**traits)
-        self.format_func = self.formatter
-        self.text_font = QFont(ICON_FONT_FAMILY, 15)
-
-    def formatter(self, value): # No self since were just passing it as a function
-        return ICON_VISIBILITY if value else ICON_VISIBILITY_OFF
-    
-    def on_click(self, object):
-        object.visible = not object.visible
-
-layer_table_editor = TableEditor(
-    columns=[
-        ColorColumn(name='color', editable=False, width=20),
-        ObjectColumn(name='name', label='Label', resize_mode="stretch", editable=False),
-        VisibleColumn(name='visible', editable=False, horizontal_alignment='center', width=20),
-    ],
-    menu=RouteLayerMenu,
-    show_lines=False,
-    selected="selected_layer",
-    sortable=False,
-    reorderable=True,
-    show_column_labels=False
-)
+from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn
 
 class RouteLayerHandler(Handler):
     # For these handlers, info is as usual, and rows is a list of rows that the action is acting on
@@ -82,6 +29,22 @@ class RouteLayerHandler(Handler):
 
     def cancel_merge_layer(self, info, rows):
         info.object.mode = "edit"
+
+
+layer_table_editor = TableEditor(
+    columns=[
+        ColorColumn(name='color', label="", editable=False, width=16),
+        ObjectColumn(name='name', label="", resize_mode="stretch", editable=False),
+        VisibleColumn(name='visible', label="", editable=False, horizontal_alignment='center', width=16)
+    ],
+    menu=RouteLayerMenu,
+    show_lines=False,
+    selected="selected_layer",
+    sortable=False,
+    reorderable=True,
+    show_column_labels=False,
+    show_row_labels=False,
+)
 
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
 RouteLayerView = View(
