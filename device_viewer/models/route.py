@@ -52,7 +52,7 @@ class Route(HasTraits):
             else:
                 return f"Loop @ {self.get_channel_from_id(self.route[0], channel_map)}"
         else:
-            return f"Path: {self.get_channel_from_id(self.route[0], channel_map)} --> {self.get_channel_from_id(self.route[-1], channel_map)}"
+            return f"Path: {self.get_channel_from_id(self.route[0], channel_map)} -> {self.get_channel_from_id(self.route[-1], channel_map)}"
 
     @staticmethod
     def is_segment(from_a, to_a, from_b, to_b) -> bool:

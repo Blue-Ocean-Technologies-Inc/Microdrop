@@ -29,7 +29,7 @@ from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import RouteLayerManager, Route
-from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name
+from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
@@ -484,10 +484,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         scroll_area.setVisible(True)
 
         scroll_content = QWidget()
-        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-2) # offset by 2
+        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
         scroll_layout = QVBoxLayout(scroll_content)
-
-
 
         # device_view code
         self.device_view.display_state_signal.connect(self.apply_message_model)
@@ -497,14 +495,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
 
-        # Configure alpha view UI to size to content
+        self.alpha_view_ui.control.setMinimumHeight(ALPHA_VIEW_MIN_HEIGHT)
+        self.alpha_view_ui.control.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
         self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
-        # -20 on there to have some padding on the side so nothing gets cut
-        self.layer_ui.control.setFixedWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-10)
+
+        self.layer_ui.control.setMinimumHeight(LAYERS_VIEW_MIN_HEIGHT)
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
