@@ -41,12 +41,13 @@ class DropletDetectionMixinService(HasTraits):
         Handle droplet detection request.
         
         Parameters
-        ---------
-        message (str): A JSON string that is a dict[str, float]
-            Contains channel id as the key, and corresponding total scaled area as the value:
-            That is the sum of the electrode areas affected by the channel on the chip
+        ----------
+        message : str
+            Empty string to check all channels,
+            or JSON array of channel numbers for detection on specific channels.
         """
         try:
+
             channels = json.loads(message)
             
             # check if proxy is available
@@ -81,6 +82,7 @@ class DropletDetectionMixinService(HasTraits):
 
             # Store and restore settings safely
             original_state = self._store_original_settings()
+
             try:
                 self._prepare_for_detection()
                 return self._execute_droplet_detection(channels)
@@ -203,12 +205,11 @@ class DropletDetectionMixinService(HasTraits):
         time.sleep(0.05)
         
         # Set detection frequency
-        if proxy.frequency > DROPLET_DETECTION_FREQUENCY:
-            proxy.update_state(frequency=DROPLET_DETECTION_FREQUENCY)
-            logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
+        proxy.frequency = DROPLET_DETECTION_FREQUENCY
+        logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
 
-            # Small delay for frequency settling
-            time.sleep(0.05)
+        # Small delay for frequency settling
+        time.sleep(0.05)
 
     def _restore_original_settings(self, original_settings: Dict[str, any]):
         """Restore original proxy settings."""
@@ -221,22 +222,22 @@ class DropletDetectionMixinService(HasTraits):
             
             # Restore frequency
             if 'frequency' in original_settings:
-                proxy.update_state(frequency=original_settings['frequency'])
+                proxy.frequency = original_settings['frequency']
                 logger.debug(f"Restored frequency to {original_settings['frequency']} Hz")
             
-            # # Restore voltage
-            # if 'voltage' in original_settings:
-            #     proxy.update_state(frequency=original_settings['voltage'])
-            #     logger.debug(f"Restored voltage to {original_settings['voltage']} V")
+            # Restore voltage
+            if 'voltage' in original_settings:
+                proxy.voltage = original_settings['voltage']
+                logger.debug(f"Restored voltage to {original_settings['voltage']} V")
             
-            # # Restore electrode state
-            # if 'state' in original_settings:
-            #     original_state = original_settings['state']
-            #     if len(original_state) == proxy.number_of_channels:
-            #         proxy.state_of_channels = original_state
-            #         logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
-            #     else:
-            #         logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
+            # Restore electrode state
+            if 'state' in original_settings:
+                original_state = original_settings['state']
+                if len(original_state) == proxy.number_of_channels:
+                    proxy.state_of_channels = original_state
+                    logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
+                else:
+                    logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
                     
         except Exception as e:
             logger.error(f"Failed to restore original settings: {e}")
