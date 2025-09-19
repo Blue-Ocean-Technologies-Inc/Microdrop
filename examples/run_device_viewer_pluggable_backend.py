@@ -14,7 +14,7 @@ def main(args):
     plugins = REQUIRED_PLUGINS + BACKEND_PLUGINS
     contexts = BACKEND_CONTEXT + REQUIRED_CONTEXT
     
-    run_device_viewer_pluggable(args, plugins=plugins, contexts=contexts, application=BACKEND_APPLICATION, persist=True)
+    run_device_viewer_pluggable(plugins=plugins, contexts=contexts, application=BACKEND_APPLICATION, persist=True)
 
 
 if __name__ == "__main__":
