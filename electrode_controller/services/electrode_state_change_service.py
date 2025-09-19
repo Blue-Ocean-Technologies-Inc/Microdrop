@@ -3,7 +3,7 @@ from traits.api import provides, HasTraits, Str, Instance
 
 # interface imports from microdrop plugins
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
-from dropbot_controller.services.global_proxy_state_manager import GlobalProxyStateManager
+
 # microdrop utils imports
 from microdrop_utils._logger import get_logger
 
@@ -26,15 +26,6 @@ class ElectrodeStateChangeMixinService(HasTraits):
     name = Str('Electrode state change Mixin')
 
     ######################################## Methods to Expose #############################################
-
-    
-    # use global proxy state manager
-    proxy_state_manager = Instance(GlobalProxyStateManager)
-
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        # get global instance
-        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def on_electrodes_state_change_request(self, message):
         try:

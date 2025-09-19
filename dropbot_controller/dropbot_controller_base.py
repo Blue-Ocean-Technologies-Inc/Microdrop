@@ -51,11 +51,6 @@ class DropbotControllerBase(HasTraits):
     listener_name = Str(f"{PKG}_listener")
     
     timestamps = Dict(str, datetime)
-    
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        # get global instance
-        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def __del__(self):
         """Cleanup when the controller is destroyed."""
@@ -141,6 +136,9 @@ class DropbotControllerBase(HasTraits):
                     f" {self.listener_name}; Received message: {timestamped_message} from topic: {topic} Failed to execute due to "
                     f"error: {err_msg}")
 
+
+    ### Initial traits values ######
+
     def traits_init(self):
         """
         This function needs to be here to let the listener be initialized to the default value automatically.
@@ -159,11 +157,9 @@ class DropbotControllerBase(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
-    ######################################################################
-    # Proxy signal handlers
-    #######################################################################
-
-    # proxy signal handlers done this way so that these methods can be overrided externally
+    def _proxy_state_manager_default(self):
+        # get global instance
+        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def _on_dropbot_proxy_connected(self):        
         # set proxy in global state manager with port information
@@ -220,7 +216,13 @@ class DropbotControllerBase(HasTraits):
             
         except Exception as e:
             logger.error(f"Error during enhanced proxy setup: {e}")
-    
+
+    ######################################################################
+    # Proxy signal handlers
+    #######################################################################
+
+    # proxy signal handlers done this way so that these methods can be overrided externally
+
     @staticmethod
     def _capacitance_updated_wrapper(signal: dict[str, str]):
         capacitance = float(signal.get('new_value', 0.0)) * ureg.farad

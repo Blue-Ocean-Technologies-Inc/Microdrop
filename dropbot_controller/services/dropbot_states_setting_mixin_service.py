@@ -21,19 +21,12 @@ class DropbotStatesSettingMixinService(HasTraits):
     id = Str('dropbot_states_setting_mixin_service')
     name = Str('Dropbot States Setting Mixin')
     
-    # use global proxy state manager
-    proxy_state_manager = Instance(GlobalProxyStateManager)
-    
     realtime_mode = Bool(False)
     # TODO: Get these from a config file
     voltage = Float(30)
     frequency = Float(1000)
 
     ######################################## Methods to Expose #############################################
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        # get global instance
-        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def on_set_voltage_request(self, message):
         """
