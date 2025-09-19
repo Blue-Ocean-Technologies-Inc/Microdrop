@@ -430,8 +430,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
     def publish_detect_droplet(self):
-        message_obj = [key for key, val in self.model.channels_states_map.items() if val]
-        publish_message(topic=DETECT_DROPLETS, message=json.dumps(message_obj))
+        publish_message(topic=DETECT_DROPLETS, message=json.dumps(list(self.model.channels_electrode_ids_map.keys())))
 
     def publish_calibration_message(self):
         """
