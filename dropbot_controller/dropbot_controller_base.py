@@ -5,7 +5,6 @@ import time
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
 from traits.api import Instance, Dict
 import dramatiq
-from dramatiq.middleware import CurrentMessage
 
 # unit handling
 from pint import UnitRegistry
@@ -141,10 +140,6 @@ class DropbotControllerBase(HasTraits):
 
     def traits_init(self):
         """
-        This function needs to be here to let the listener be initialized to the default value automatically.
-        We just do it manually here to make the code clearer.
-        We can also do other initialization routines here if needed.
-
         This is equivalent to doing:
 
         def __init__(self, **traits):
@@ -157,8 +152,6 @@ class DropbotControllerBase(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
-    def _proxy_state_manager_default(self):
-        # get global instance
         self.proxy_state_manager = GlobalProxyStateManager.get_instance()
 
     def _on_dropbot_proxy_connected(self):        
