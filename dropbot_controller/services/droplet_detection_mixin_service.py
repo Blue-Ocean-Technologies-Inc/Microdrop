@@ -1,15 +1,13 @@
 import json
 import time
-import numpy as np
-from typing import Dict, List, Optional
+from typing import Optional, Dict
 
+import numpy as np
 import pandas as pd
-from svgwrite.data.pattern import frequency
-from traits.api import provides, HasTraits, Str, Float, Instance, Int
+from traits.api import provides, HasTraits, Str, Int, List, Float
 
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .global_proxy_state_manager import GlobalProxyStateManager
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from dropbot_controller.consts import DROPLETS_DETECTED
 
@@ -17,6 +15,11 @@ logger = get_logger(__name__, level="DEBUG")
 
 # Constants for droplet detection
 DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection
+
+class DetectionResult(HasTraits):
+    """A structured data class for droplet detection results."""
+    detected_channels = List(Int)
+    error = Str("")
 
 
 @provides(IDropbotControlMixinService)
@@ -28,6 +31,9 @@ class DropletDetectionMixinService(HasTraits):
 
     id = Str('droplet_detection_mixin_service')
     name = Str('Droplet Detection Mixin Service')
+
+    _detection_timeout = Float(10.0)  # seconds
+    _max_detection_retries = Int(2)
 
     #--------- IDropbotControlMixinService Interface ---------------------------
     def on_detect_droplets_request(self, message):
@@ -41,121 +47,115 @@ class DropletDetectionMixinService(HasTraits):
             or JSON array of channel numbers for detection on specific channels.
         """
         try:
-            # Parse message to determine detection mode
-            target_channels = self._parse_detection_message(message)
 
-            if target_channels is None:
-                logger.info("Starting detection on all channels")
-            else:
-                logger.info(f"Starting targeted droplet detection for channels: {target_channels}")
+            channels = json.loads(message)
             
             # check if proxy is available
             if not hasattr(self, 'proxy') or self.proxy is None:
-                self._publish_error_response("Dropbot proxy not available")
+                self._publish_detection_response(error_message="Dropbot proxy not available")
                 return
             
-            result = self._perform_safe_droplet_detection(target_channels)
-            
-            if result['success']:
-                self._publish_success_response(result['detected_channels'])
-            else:
-                self._publish_error_response(result['error'])
+            result: DetectionResult = self._perform_safe_droplet_detection(channels)
+
+            self._publish_detection_response(detected_channels=result.detected_channels, error_message=result.error)
+
                 
         except Exception as e:
             logger.error(f"Critical error in droplet detection: {e}")
-            self._publish_error_response(f"Critical error: {str(e)}")
+            self._publish_detection_response(error_message=f"Critical error: {str(e)}")
 
-    def _parse_detection_message(self, message):
+    def _attempt_single_detection(self, channels: list[int]):
         """
-        Extract target channels from message.
+        Performs one attempt at droplet detection, restoring state upon completion.
+
+        Returns:
+            A list of detected channel integers on success.
+
+        Raises:
+            DetectionPreconditionError: If preconditions are not met.
+            Exception: For other failures during the detection process.
+        """
+        with self.proxy_state_manager.safe_proxy_access("droplet_detection", timeout=self._detection_timeout):
+            # Validate proxy state before starting
+            if not self._validate_detection_preconditions():
+                raise Exception("Validation of preconditions failed.")
+
+            # Store and restore settings safely
+            original_state = self._store_original_settings()
+
+            try:
+                self._prepare_for_detection()
+                return self._execute_droplet_detection(channels)
+            finally:
+                self._restore_original_settings(original_state)
+
+    def _perform_safe_droplet_detection(self, channels: list[int]) -> DetectionResult:
+        """
+        Performs droplet detection with retries and safety measures.
+
+        This method orchestrates multiple detection attempts, handling exceptions
+        and ensuring a consistent result format.
+        """
+        last_error: Optional[Exception] = None
+        total_attempts = self._max_detection_retries + 1
+
+        for attempt in range(total_attempts):
+            try:
+                logger.debug(f"Droplet detection attempt {attempt + 1}/{total_attempts}")
+
+                # Execute a single, isolated detection attempt.
+                detected_channels = self._attempt_single_detection(channels)
+
+                # If the attempt succeeds, return the result immediately.
+                return DetectionResult(detected_channels=detected_channels, error="")
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Attempt {attempt + 1} failed: {e}")
+
+                # If more attempts are left, wait before retrying.
+                if attempt < self._max_detection_retries:
+                    logger.info("Retrying detection in 1 second...")
+                    time.sleep(1)
+
+        # If the loop completes, all attempts have failed.
+        error_message = f"All {total_attempts} detection attempts failed. Last error: {last_error}"
+        logger.error(error_message)
+        return DetectionResult(detected_channels=[], error=error_message)
+
+    def _execute_droplet_detection(self, channels: list[int]) -> list[int]:
+        """
+        Execute the actual droplet detection.
 
         Parameters
         ----------
-        message : str
-            Empty string to check all channels,
-            or JSON array of channel numbers for detection on specific channels.
+        channels : list or None
+            List of channel numbers to check
 
         Returns
         -------
-        list or None
-            List of specific channel numbers, or None for all channels.
+        list
+            List of channels where droplets were detected.
         """
-        if not message or message.strip() == "":
-            # empty message: detect on all channels
-            return None
+        proxy = self.proxy_state_manager.proxy
 
-        try:
-            channels = json.loads(message)
-            if isinstance(channels, list):
-                target_channels = []
-                for ch in channels:
-                    try:
-                        ch_int = int(ch)
-                        if 0 <= ch_int < int(self.proxy_state_manager.proxy.number_of_channels):
-                            target_channels.append(ch_int)
+        capacitances = pd.Series(proxy.channel_capacitances(channels), index=channels) * 1e12 # scale to log values in in pF units
 
-                    except (ValueError, TypeError):
-                        logger.info(f"Invalid channel value: {ch}, skipping")
+        logger.critical(f"Capacitances: {capacitances}")
+        logger.critical(f"Minimum Capacitance: {capacitances.min()}")
 
-                return target_channels if target_channels else None
-            else:
-                logger.info(f"Message is not a list: {message}, falling back to full detection")
-                return None
-        except json.JSONDecodeError:
-            logger.info(f"Invalid JSON message: {message}, falling back to full detection")
-            return None
+        liquid_channels = capacitances[capacitances > 10 * capacitances.min()]
 
-    def _perform_safe_droplet_detection(self, target_channels=None) -> Dict[str, any]:
-        """Perform droplet detection with enhanced safety measures."""
-        
-        for attempt in range(self._max_detection_retries + 1):
-            try:
-                logger.debug(f"Droplet detection attempt {attempt + 1}")
-                
-                with self.proxy_state_manager.safe_proxy_access("droplet_detection", timeout=self._detection_timeout):
-                    
-                    # Validate proxy state before starting
-                    if not self._validate_detection_preconditions():
-                        continue
-                    
-                    # Store original settings
-                    original_state = self._store_original_settings()
-                    
-                    try:
-                        # Prepare for detection
-                        self._prepare_for_detection()
-                        
-                        # Perform actual detection
-                        detected_channels = self._execute_droplet_detection(target_channels)
-                        
-                        return {
-                            'success': True,
-                            'detected_channels': detected_channels,
-                            'error': None
-                        }
-                        
-                    finally:
-                        # Always restore original state
-                        self._restore_original_settings(original_state)
-                
-            except Exception as e:
-                logger.warning(f"Droplet detection attempt {attempt + 1} failed: {e}")
-                
-                if attempt < self._max_detection_retries:
-                    logger.info(f"Retrying droplet detection in 1 second...")
-                    time.sleep(1)
-                else:
-                    return {
-                        'success': False,
-                        'detected_channels': [],
-                        'error': f"All detection attempts failed. Last error: {str(e)}"
-                    }
-        
-        return {
-            'success': False,
-            'detected_channels': [],
-            'error': "Maximum detection attempts exceeded"
-        }
+        logger.critical(f"Liquid channels: {liquid_channels}")
+
+        detected_drops = liquid_channels.index.tolist()
+
+        if detected_drops is None:
+            logger.warning("Droplet detection returned None")
+            return []
+
+        return detected_drops
+
 
     def _validate_detection_preconditions(self) -> bool:
         """Validate that proxy is ready for droplet detection."""
@@ -211,64 +211,6 @@ class DropletDetectionMixinService(HasTraits):
         # Small delay for frequency settling
         time.sleep(0.05)
 
-    def _execute_droplet_detection(self, target_channels=None) -> List[int]:
-        """
-        Execute the actual droplet detection.
-        
-        Parameters
-        ----------
-        target_channels : list or None
-            List of channel numbers to check, or None detection on all channels.
-            
-        Returns
-        -------
-        list
-            List of channels where droplets were detected.
-        """
-        proxy = self.proxy_state_manager.proxy
-        
-        # convert target channels to numpy array if specified
-        channels_array = None
-        if target_channels is not None:
-            channels_array = np.array(target_channels, dtype=int)
-            logger.debug(f"Performing targeted detection on {len(channels_array)} channels")
-        else:
-            logger.debug("Performing full-device detection")
-        
-        # Perform droplet detection
-        detected_drops = proxy.get_drops(channels=channels_array)
-
-        if detected_drops is None:
-            logger.warning("Droplet detection returned None")
-            return []
-
-        # Process results
-        detected_channels = []
-        current_channel_count = proxy.number_of_channels
-        
-        for drop_array in detected_drops:
-            if drop_array is not None and len(drop_array) > 0:
-                # Validate drop array size
-                if len(drop_array) > current_channel_count:
-                    logger.warning(f"Drop array too large: {len(drop_array)} > {current_channel_count}")
-                    continue
-                detected_channels.extend(drop_array.tolist())
-        
-        # Validate and filter channel numbers
-        validated_channels = []
-        for ch in detected_channels:
-            try:
-                ch_int = int(ch)
-                if 0 <= ch_int < current_channel_count:
-                    validated_channels.append(ch_int)
-                else:
-                    logger.warning(f"Invalid channel number: {ch_int}")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid channel value: {ch}, error: {e}")
-
-        logger.info(f"Detected droplets on channels: {validated_channels}")
-        return validated_channels
-
     def _restore_original_settings(self, original_settings: Dict[str, any]):
         """Restore original proxy settings."""
         if not original_settings:
@@ -300,24 +242,39 @@ class DropletDetectionMixinService(HasTraits):
         except Exception as e:
             logger.error(f"Failed to restore original settings: {e}")
 
-    def _publish_success_response(self, detected_channels: List[int]):
-        """Publish successful droplet detection response."""
-        response = {
-            "success": True,
-            "detected_channels": detected_channels,
-            "error": None
-        }
-        
-        publish_message(topic=DROPLETS_DETECTED, message=json.dumps(response))
-        logger.debug(f"Published successful droplet detection response: {len(detected_channels)} channels")
+    def _publish_detection_response(
+            self,
+            detected_channels: Optional[list[int]] = None,
+            error_message: Optional[str] = None
+    ):
+        """
+        Publishes a droplet detection response for success or failure cases.
 
-    def _publish_error_response(self, error_message: str):
-        """Publish error droplet detection response."""
+        If an `error_message` is provided, it publishes a failure response.
+        Otherwise, it publishes a success response with the `detected_channels`.
+
+        Args:
+            detected_channels: A list of channel integers for a success response.
+            error_message: A string describing an error, indicating a failure response.
+        """
+        # Determine if the operation was successful based on the presence of an error message.
+
+        if error_message == "":
+            # For a success case, use the provided channels or an empty list.
+            channels = detected_channels if detected_channels is not None else []
+            log_msg = f"Published successful droplet detection response: {len(channels)} channels"
+        else:
+            # For an error case, the channel list is always empty.
+            channels = []
+            log_msg = f"Published error droplet detection response: {error_message}"
+
+        # Construct the response payload.
         response = {
-            "success": False,
-            "detected_channels": [],
-            "error": error_message
+            "success": error_message == "",
+            "detected_channels": channels,
+            "error": error_message,
         }
-        
+
+        # Publish the JSON-serialized message and log the action.
         publish_message(topic=DROPLETS_DETECTED, message=json.dumps(response))
-        logger.debug(f"Published error droplet detection response: {error_message}")
+        logger.debug(log_msg)
