@@ -35,13 +35,19 @@ class DropletDetectionMixinService(HasTraits):
         Handle droplet detection request.
         
         Parameters
-        ---------
-        message (str): A JSON string that is a dict[str, float]
-            Contains channel id as the key, and corresponding total scaled area as the value:
-            That is the sum of the electrode areas affected by the channel on the chip
+        ----------
+        message : str
+            Empty string to check all channels,
+            or JSON array of channel numbers for detection on specific channels.
         """
         try:
-            channels_areas_mapping = json.loads(message)
+            # Parse message to determine detection mode
+            target_channels = self._parse_detection_message(message)
+
+            if target_channels is None:
+                logger.info("Starting detection on all channels")
+            else:
+                logger.info(f"Starting targeted droplet detection for channels: {target_channels}")
             
             # check if proxy is available
             if not hasattr(self, 'proxy') or self.proxy is None:
@@ -58,6 +64,46 @@ class DropletDetectionMixinService(HasTraits):
         except Exception as e:
             logger.error(f"Critical error in droplet detection: {e}")
             self._publish_error_response(f"Critical error: {str(e)}")
+
+    def _parse_detection_message(self, message):
+        """
+        Extract target channels from message.
+
+        Parameters
+        ----------
+        message : str
+            Empty string to check all channels,
+            or JSON array of channel numbers for detection on specific channels.
+
+        Returns
+        -------
+        list or None
+            List of specific channel numbers, or None for all channels.
+        """
+        if not message or message.strip() == "":
+            # empty message: detect on all channels
+            return None
+
+        try:
+            channels = json.loads(message)
+            if isinstance(channels, list):
+                target_channels = []
+                for ch in channels:
+                    try:
+                        ch_int = int(ch)
+                        if 0 <= ch_int < int(self.proxy_state_manager.proxy.number_of_channels):
+                            target_channels.append(ch_int)
+
+                    except (ValueError, TypeError):
+                        logger.info(f"Invalid channel value: {ch}, skipping")
+
+                return target_channels if target_channels else None
+            else:
+                logger.info(f"Message is not a list: {message}, falling back to full detection")
+                return None
+        except json.JSONDecodeError:
+            logger.info(f"Invalid JSON message: {message}, falling back to full detection")
+            return None
 
     def _perform_safe_droplet_detection(self, target_channels=None) -> Dict[str, any]:
         """Perform droplet detection with enhanced safety measures."""
@@ -159,12 +205,11 @@ class DropletDetectionMixinService(HasTraits):
         time.sleep(0.05)
         
         # Set detection frequency
-        if proxy.frequency > DROPLET_DETECTION_FREQUENCY:
-            proxy.update_state(frequency=DROPLET_DETECTION_FREQUENCY)
-            logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
+        proxy.frequency = DROPLET_DETECTION_FREQUENCY
+        logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
 
-            # Small delay for frequency settling
-            time.sleep(0.05)
+        # Small delay for frequency settling
+        time.sleep(0.05)
 
     def _execute_droplet_detection(self, target_channels=None) -> List[int]:
         """
@@ -188,53 +233,39 @@ class DropletDetectionMixinService(HasTraits):
             channels_array = np.array(target_channels, dtype=int)
             logger.debug(f"Performing targeted detection on {len(channels_array)} channels")
         else:
-            channels_array = np.array(list(range(0, 50)), dtype=int)
             logger.debug("Performing full-device detection")
         
         # Perform droplet detection
-        # detected_drops = proxy.get_drops(channels=channels_array, capacitance_threshold=5e-12)
-
-        capacitances = pd.Series(proxy
-                                 .channel_capacitances(channels_array),
-                                 index=channels_array) * 1e12
-
-        logger.critical(f"Capacitances: {capacitances}")
-        logger.critical(f"Minimum Capacitance: {capacitances.min()}")
-
-        liquid_channels = capacitances[capacitances > 10 * capacitances.min()]
-
-        detected_drops = liquid_channels.index.tolist()
+        detected_drops = proxy.get_drops(channels=channels_array)
 
         if detected_drops is None:
             logger.warning("Droplet detection returned None")
             return []
 
-        return detected_drops
-
         # Process results
         detected_channels = []
         current_channel_count = proxy.number_of_channels
         
-        # for drop_array in detected_drops:
-        #     if drop_array is not None and len(drop_array) > 0:
-        #         # Validate drop array size
-        #         if len(drop_array) > current_channel_count:
-        #             logger.warning(f"Drop array too large: {len(drop_array)} > {current_channel_count}")
-        #             continue
-        #         detected_channels.extend(drop_array.tolist())
+        for drop_array in detected_drops:
+            if drop_array is not None and len(drop_array) > 0:
+                # Validate drop array size
+                if len(drop_array) > current_channel_count:
+                    logger.warning(f"Drop array too large: {len(drop_array)} > {current_channel_count}")
+                    continue
+                detected_channels.extend(drop_array.tolist())
         
         # Validate and filter channel numbers
-        # validated_channels = []
-        # for ch in detected_channels:
-        #     try:
-        #         ch_int = int(ch)
-        #         if 0 <= ch_int < current_channel_count:
-        #             validated_channels.append(ch_int)
-        #         else:
-        #             logger.warning(f"Invalid channel number: {ch_int}")
-        #     except (ValueError, TypeError) as e:
-        #         logger.warning(f"Invalid channel value: {ch}, error: {e}")
-        #
+        validated_channels = []
+        for ch in detected_channels:
+            try:
+                ch_int = int(ch)
+                if 0 <= ch_int < current_channel_count:
+                    validated_channels.append(ch_int)
+                else:
+                    logger.warning(f"Invalid channel number: {ch_int}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid channel value: {ch}, error: {e}")
+
         logger.info(f"Detected droplets on channels: {validated_channels}")
         return validated_channels
 
@@ -249,22 +280,22 @@ class DropletDetectionMixinService(HasTraits):
             
             # Restore frequency
             if 'frequency' in original_settings:
-                proxy.update_state(frequency=original_settings['frequency'])
+                proxy.frequency = original_settings['frequency']
                 logger.debug(f"Restored frequency to {original_settings['frequency']} Hz")
             
-            # # Restore voltage
-            # if 'voltage' in original_settings:
-            #     proxy.update_state(frequency=original_settings['voltage'])
-            #     logger.debug(f"Restored voltage to {original_settings['voltage']} V")
+            # Restore voltage
+            if 'voltage' in original_settings:
+                proxy.voltage = original_settings['voltage']
+                logger.debug(f"Restored voltage to {original_settings['voltage']} V")
             
-            # # Restore electrode state
-            # if 'state' in original_settings:
-            #     original_state = original_settings['state']
-            #     if len(original_state) == proxy.number_of_channels:
-            #         proxy.state_of_channels = original_state
-            #         logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
-            #     else:
-            #         logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
+            # Restore electrode state
+            if 'state' in original_settings:
+                original_state = original_settings['state']
+                if len(original_state) == proxy.number_of_channels:
+                    proxy.state_of_channels = original_state
+                    logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
+                else:
+                    logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
                     
         except Exception as e:
             logger.error(f"Failed to restore original settings: {e}")
