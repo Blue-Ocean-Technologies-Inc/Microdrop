@@ -1,7 +1,9 @@
+import dramatiq
+
 from ..common import redis_client
 import pytest
 from redis.exceptions import ConnectionError
-from microdrop_utils.redis_manager import RedisHashDictProxy
+from microdrop_utils.redis_manager import RedisHashDictProxy, get_redis_hash_proxy
 
 
 @pytest.fixture(scope="function")
@@ -108,3 +110,21 @@ def test_key_not_found(redis_dict):
     """
     with pytest.raises(KeyError):
         _ = redis_dict["non_existent_key"]
+
+def test_get_redis_proxy_is_singleton_per_hash():
+    """
+    Tests that the factory returns the same instance for the same hash_name
+    but different instances for different hash_names.
+    """
+    # Get two instances for the SAME hash name
+    proxy_a1 = get_redis_hash_proxy(redis_client(), "app_settings")
+    proxy_a2 = get_redis_hash_proxy(redis_client(), "app_settings")
+
+    # Get one instance for a DIFFERENT hash name
+    proxy_b = get_redis_hash_proxy(redis_client(), "user_sessions")
+
+    # 1. Assert that calls with the same parameter return the same object
+    assert proxy_a1 is proxy_a2
+
+    # 2. Assert that calls with different parameters return different objects
+    assert proxy_a1 is not proxy_b

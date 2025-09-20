@@ -10,11 +10,11 @@ def redis_server_context():
     Ensures proper startup and shutdown routines.
     """
 
-    start_redis_server()
+    proc = start_redis_server()
     client = redis_client()
     client.flushall()  # clear all keys in keys databases in Redis
 
     yield  # This is where the main logic will execute within the context
     client.flushall()
     # Shutdown routine
-    stop_redis_server()
+    stop_redis_server(proc)
