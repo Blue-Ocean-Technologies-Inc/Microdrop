@@ -17,6 +17,7 @@ correct_path_array = np.array(
 )
 
 sample_svg_path = Path(TEST_PATH) / "device_svg_files" / "2x3device.svg"
+sample_svg_path_with_scale = Path(TEST_PATH) / "device_svg_files" / "2x3device_with_scale.svg"
 sample_svg_valid_channels_states_map = Path(TEST_PATH) / "valid_2x3_device_electrodes_states_map.json"
 sample_svg_valid_channels_electrode_ids_map = Path(TEST_PATH) / "valid_2x3_device_channels_electrode_ids_map.json"
 
@@ -36,9 +37,14 @@ def test_electrodes_initialization():
     electrodes = Electrodes()
     electrodes.set_electrodes_from_svg_file(sample_svg_path)
 
+    electrodes_with_scale = Electrodes()
+
+    electrodes_with_scale.set_electrodes_from_svg_file(sample_svg_path_with_scale)
+
     # Add an assertion to validate successful setup.
     # Check if 92 electrodes initialized here which is true for the sample device
     assert len(electrodes) == 92
+    assert len(electrodes_with_scale) == 92
 
 
 def test_electrode_creation_traits_check_fail():

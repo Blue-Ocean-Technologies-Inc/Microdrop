@@ -68,8 +68,10 @@ class SvgUtil:
                 pass
                 # self.connections = self.svg_to_points(child)
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
-                self.pixel_scale = float(child.find("scale").text)
-                print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
+                scale = child.find("scale")
+                if scale:
+                    self.pixel_scale = float(scale.text)
+                    print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
 
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
