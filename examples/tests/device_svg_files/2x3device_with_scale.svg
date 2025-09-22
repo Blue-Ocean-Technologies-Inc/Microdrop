@@ -1,0 +1,249 @@
+<ns0:svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ns0="http://www.w3.org/2000/svg" xmlns:ns1="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:ns2="http://www.inkscape.org/namespaces/inkscape" xmlns:ns4="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" height="136.9203" version="1.2" width="138.8951" id="svg235" ns1:docname="2x3device.svg" ns2:version="1.0beta2 (e219a97, 2020-01-08)">
+  <ns0:metadata id="metadata239">
+    <rdf:RDF>
+      <ns4:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </ns4:Work>
+    </rdf:RDF>
+    <scale>0.34</scale>
+  </ns0:metadata>
+  <ns1:namedview pagecolor="#ffffff" bordercolor="#666666" ns2:document-rotation="0" borderopacity="1" objecttolerance="10" gridtolerance="10" guidetolerance="10" ns2:pageopacity="0" ns2:pageshadow="2" ns2:window-width="1920" ns2:window-height="1002" id="namedview237" showgrid="false" ns2:zoom="10.854672" ns2:cx="61.804865" ns2:cy="65.590317" ns2:window-x="-8" ns2:window-y="-8" ns2:window-maximized="1" ns2:current-layer="layer4" />
+  <ns0:defs id="defs2" />
+  <ns0:g style="display:inline" ns2:groupmode="layer" id="layer4" ns2:label="ROI">
+    <ns0:path d="M 23.051897,56.058563 H 115.84323 V 80.861712 H 23.051897 Z" style="fill:none;stroke:#ff0000;stroke-width:0.5;stroke-miterlimit:4;stroke-dasharray:none" id="rect1252" />
+  </ns0:g>
+  <ns0:g id="layer1" ns2:groupmode="layer" ns2:label="Device" ns1:insensitive="true">
+    <ns0:path d="M 29.03221,74.702264 H 23.051897 V 80.861713 H 29.03221 Z" data-channels="119" id="electrode000" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 22.982999,74.619587 H 29.101109 V 68.501477 H 22.982999 Z" data-channels="118" id="electrode001" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.233,80.820376 V 74.702264 H 29.252685 V 80.820376 Z" data-channels="114" id="electrode002" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,83.962107 V 81.249263 L 109.36513,80.903053 H 103.93945 L 103.59324,81.249263 V 83.962107 V 86.674952 L 103.93945,87.021162 H 109.36513 L 109.71135,86.674952 Z" data-channels="67" id="electrode003" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 53.835361,80.820376 V 74.702264 H 47.855047 V 80.820376 Z" data-channels="102" id="electrode004" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 41.433786,74.702264 H 35.453472 V 80.861713 H 41.433786 Z" data-channels="105" id="electrode005" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.183786,74.619587 H 35.301896 V 68.501477 H 29.183786 Z" data-channels="113" id="electrode006" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.384573,74.619587 H 41.502685 V 68.501477 H 35.384573 Z" data-channels="111" id="electrode007" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,84.003444 V 81.2906 L 84.561984,80.94439 H 79.136296 L 78.790085,81.2906 V 84.003444 V 86.716289 L 79.136296,87.062502 H 84.561984 L 84.908197,86.716289 Z" data-channels="82" id="electrode008" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.036148,74.702264 H 54.055833 V 80.861713 H 60.036148 Z" data-channels="97" id="electrode009" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 72.506622,68.501477 H 66.38851 V 74.619587 H 72.506622 Z" data-channels="90" id="electrode010" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 78.858984,80.861713 H 84.839298 V 74.702264 H 78.858984 Z" data-channels="81" id="electrode011" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 97.30977,68.501477 H 91.191661 V 74.619587 H 97.30977 Z" data-channels="74" id="electrode012" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.86292,62.218014 H 115.84324 V 56.058565 H 109.86292 Z" data-channels="56" id="electrode013" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 103.51056,62.300688 H 97.392447 V 68.4188 H 103.51056 Z" data-channels="48" id="electrode014" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 85.05977,56.099902 V 62.218014 H 91.040085 V 56.099902 Z" data-channels="41" id="electrode015" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 97.30977,62.300688 H 91.191661 V 68.4188 H 97.30977 Z" data-channels="45" id="electrode016" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,62.300688 H 103.59324 V 68.4188 H 109.71135 Z" data-channels="54" id="electrode017" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 97.461346,62.218014 H 103.44166 V 56.058565 H 97.461346 Z" data-channels="46" id="electrode018" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 91.108984,62.300688 H 84.990874 V 68.4188 H 91.108984 Z" data-channels="42" id="electrode019" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 78.858984,62.218014 H 84.839298 V 56.058565 H 78.858984 Z" data-channels="38" id="electrode020" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 91.260559,62.218014 H 97.240874 V 56.058565 H 91.260559 Z" data-channels="44" id="electrode021" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,62.300688 H 78.790085 V 68.4188 H 84.908197 Z" data-channels="40" id="electrode022" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.301896,37.580217 H 29.183786 V 43.698327 V 49.816439 H 35.301896 V 43.698327 Z" data-channels="10" id="electrode023" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.384573,43.698327 V 45.255414 H 41.433786 V 3.9168324 L 37.569181,0 H 26.916502 L 23.051897,3.9168324 V 45.255414 H 29.101109 V 43.698327 V 37.580217 V 37.49754 H 35.384573 Z" data-channels="9" id="electrode024" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,37.580217 H 103.59324 V 43.698327 V 49.816439 H 109.71135 V 43.698327 Z" data-channels="50" id="electrode025" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.79402,43.698327 V 45.255414 H 115.84324 V 3.9168324 L 111.97863,0 H 101.32595 L 97.461346,3.9168324 V 45.255414 H 103.51056 V 43.698327 V 37.580217 V 37.49754 H 109.79402 Z" data-channels="49" id="electrode026" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 119.05387,56.058565 H 116.06371 V 62.218014 L 115.99481,62.300688 V 66.889272 H 119.05387 Z" data-channels="58" id="electrode027" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 19.841267,66.889272 H 22.900322 V 62.300688 L 22.831424,62.218014 V 56.058565 H 19.841267 Z" data-channels="2" id="electrode028" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.105046,37.580217 H 53.986937 V 43.698327 V 49.816439 H 60.105046 V 43.698327 Z" data-channels="20" id="electrode029" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.187723,43.698327 V 45.255414 H 66.236937 V 3.9168324 L 62.372332,0 H 51.719651 L 47.855047,3.9168324 V 45.255414 H 53.90426 V 43.698327 V 37.580217 V 37.49754 H 60.187723 Z" data-channels="26" id="electrode030" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,37.580217 H 78.790085 V 43.698327 V 49.816439 H 84.908197 V 43.698327 Z" data-channels="36" id="electrode031" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.990874,43.698327 V 45.255414 H 91.040085 V 3.9168324 L 87.17548,0 H 76.522799 L 72.658195,3.9168324 V 45.255414 H 78.707408 V 43.698327 V 37.580217 V 37.49754 H 84.990874 Z" data-channels="34" id="electrode032" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 78.707408,68.501477 H 72.589299 V 74.619587 H 78.707408 Z" data-channels="86" id="electrode033" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 91.260559,80.861713 H 97.240874 V 74.702264 H 91.260559 Z" data-channels="75" id="electrode034" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.990874,99.422737 H 78.707408 V 99.34006 V 93.221951 V 91.664863 H 72.658195 V 133.00345 L 76.522799,136.92027 H 87.17548 L 91.040085,133.00345 V 91.664863 H 84.990874 V 93.221951 Z" data-channels="85" id="electrode035" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,93.221951 V 87.103839 H 78.790085 V 93.221951 V 99.34006 H 84.908197 Z" data-channels="83" id="electrode036" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.183786,86.674952 L 29.529997,87.021162 H 34.955685 L 35.301896,86.674952 V 83.962107 V 81.249263 L 34.955685,80.903053 H 29.529997 L 29.183786,81.249263 V 83.962107 Z" data-channels="115" id="electrode037" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 53.986937,86.716289 L 54.333148,87.062502 H 59.758836 L 60.105046,86.716289 V 84.003444 V 81.2906 L 59.758836,80.94439 H 54.333148 L 53.986937,81.2906 V 84.003444 Z" data-channels="98" id="electrode038" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 66.38851,74.702264 V 80.820376 H 72.437723 V 74.702264 Z" data-channels="91" id="electrode039" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.256622,74.702264 V 80.820376 H 66.305833 V 74.702264 Z" data-channels="95" id="electrode040" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.79402,99.422737 H 103.51056 V 99.34006 V 93.221951 V 91.664863 H 97.461346 V 133.00345 L 101.32595,136.92027 H 111.97863 L 115.84324,133.00345 V 91.664863 H 109.79402 V 93.221951 Z" data-channels="70" id="electrode041" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,93.221951 V 87.103839 H 103.59324 V 93.221951 V 99.34006 H 109.71135 Z" data-channels="69" id="electrode042" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 19.841267,80.861713 H 22.831424 V 74.702264 L 22.900322,74.619587 V 70.031006 H 19.841267 Z" data-channels="117" id="electrode043" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 119.05387,70.031006 H 115.99481 V 74.619587 L 116.06371,74.702264 V 80.861713 H 119.05387 Z" data-channels="61" id="electrode044" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 115.91213,62.300688 H 109.79402 V 68.4188 H 115.91213 Z" data-channels="57" id="electrode045" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 103.66213,56.099902 V 62.218014 H 109.64245 V 56.099902 Z" data-channels="53" id="electrode046" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 47.786148,68.4188 H 53.90426 V 62.300688 H 47.786148 Z" data-channels="18" id="electrode047" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 53.986937,68.4188 H 60.105046 V 62.300688 H 53.986937 Z" data-channels="16" id="electrode048" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 47.634575,56.058565 H 41.654258 V 62.218014 H 47.634575 Z" data-channels="12" id="electrode049" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 41.585362,68.4188 H 47.703471 V 62.300688 H 41.585362 Z" data-channels="13" id="electrode050" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 47.855047,56.099902 V 62.218014 H 53.835361 V 56.099902 Z" data-channels="17" id="electrode051" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 41.433786,56.058565 H 35.453472 V 62.218014 H 41.433786 Z" data-channels="14" id="electrode052" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.183786,68.4188 H 35.301896 V 62.300688 H 29.183786 Z" data-channels="6" id="electrode053" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.384573,68.4188 H 41.502685 V 62.300688 H 35.384573 Z" data-channels="8" id="electrode054" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 72.658195,80.861713 H 78.638512 V 74.702264 H 72.658195 Z" data-channels="87" id="electrode055" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,68.501477 H 78.790085 V 74.619587 H 84.908197 Z" data-channels="79" id="electrode056" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 19.75859,66.889272 V 56.058565 L 18.38189,54.690713 V 25.55069 L 14.517285,21.63386 H 3.8646046 H 0 V 66.889272 Z" data-channels="30" id="electrode057" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 138.89513,66.889272 V 21.63386 H 135.03053 H 124.37785 L 120.51324,25.55069 V 54.690713 L 119.13654,56.058565 V 66.889272 Z" data-channels="30" id="electrode058" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,68.501477 H 103.59324 V 74.619587 H 109.71135 Z" data-channels="65" id="electrode059" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 97.461346,80.861713 H 103.44166 V 74.702264 H 97.461346 Z" data-channels="73" id="electrode060" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.86292,80.861713 H 115.84324 V 74.702264 H 109.86292 Z" data-channels="63" id="electrode061" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 103.51056,68.501477 H 97.392447 V 74.619587 H 103.51056 Z" data-channels="71" id="electrode062" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.64245,80.820376 V 74.702264 H 103.66213 V 80.820376 Z" data-channels="66" id="electrode063" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 115.91213,68.501477 H 109.79402 V 74.619587 H 115.91213 Z" data-channels="62" id="electrode064" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 53.986937,74.619587 H 60.105046 V 68.501477 H 53.986937 Z" data-channels="103" id="electrode065" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 47.786148,74.619587 H 53.90426 V 68.501477 H 47.786148 Z" data-channels="101" id="electrode066" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 41.585362,74.619587 H 47.703471 V 68.501477 H 41.585362 Z" data-channels="106" id="electrode067" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 47.634575,74.702264 H 41.654258 V 80.861713 H 47.634575 Z" data-channels="107" id="electrode068" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 72.658195,62.218014 H 78.638512 V 56.058565 H 72.658195 Z" data-channels="32" id="electrode069" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 78.707408,62.300688 H 72.589299 V 68.4188 H 78.707408 Z" data-channels="33" id="electrode070" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 72.506622,62.300688 H 66.38851 V 68.4188 H 72.506622 Z" data-channels="29" id="electrode071" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 66.305833,62.300688 H 60.187723 V 68.4188 H 66.305833 Z" data-channels="25" id="electrode072" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 119.13654,70.031006 V 80.861713 L 120.51324,82.229565 V 111.36959 L 124.37785,115.28642 H 135.03053 H 138.89513 V 70.031006 Z" data-channels="89" id="electrode073" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 0,70.031006 V 115.28642 H 3.8646046 H 14.517285 L 18.38189,111.36959 V 82.229565 L 19.75859,80.861713 V 70.031006 Z" data-channels="89" id="electrode074" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.301896,93.221951 V 87.103839 H 29.183786 V 93.221951 V 99.34006 H 35.301896 Z" data-channels="109" id="electrode075" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 35.384573,99.422737 H 29.101109 V 99.34006 V 93.221951 V 91.664863 H 23.051897 V 133.00345 L 26.916502,136.92027 H 37.569181 L 41.433786,133.00345 V 91.664863 H 35.384573 V 93.221951 Z" data-channels="110" id="electrode076" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.105046,93.221951 V 87.103839 H 53.986937 V 93.221951 V 99.34006 H 60.105046 Z" data-channels="99" id="electrode077" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.187723,99.422737 H 53.90426 V 99.34006 V 93.221951 V 91.664863 H 47.855047 V 133.00345 L 51.719651,136.92027 H 62.372332 L 66.236937,133.00345 V 91.664863 H 60.187723 V 93.221951 Z" data-channels="93" id="electrode078" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 66.305833,68.501477 H 60.187723 V 74.619587 H 66.305833 Z" data-channels="94" id="electrode079" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 91.108984,68.501477 H 84.990874 V 74.619587 H 91.108984 Z" data-channels="77" id="electrode080" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 91.040085,80.820376 V 74.702264 H 85.05977 V 80.820376 Z" data-channels="78" id="electrode081" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 72.437723,62.218014 V 56.099902 H 66.38851 V 62.218014 Z" data-channels="28" id="electrode082" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 66.305833,62.218014 V 56.099902 H 60.256622 V 62.218014 Z" data-channels="24" id="electrode083" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 60.036148,56.058565 H 54.055833 V 62.218014 H 60.036148 Z" data-channels="22" id="electrode084" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 84.908197,50.203986 L 84.561984,49.857776 H 79.136296 L 78.790085,50.203986 V 52.91683 V 55.629675 L 79.136296,55.975888 H 84.561984 L 84.908197,55.629675 V 52.91683 Z" data-channels="37" id="electrode085" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 109.71135,50.245326 L 109.36513,49.899116 H 103.93945 L 103.59324,50.245326 V 52.95817 V 55.671014 L 103.93945,56.017225 H 109.36513 L 109.71135,55.671014 V 52.95817 Z" data-channels="52" id="electrode086" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.252685,56.099902 V 62.218014 H 35.233 V 56.099902 Z" data-channels="5" id="electrode087" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 22.982999,68.4188 H 29.101109 V 62.300688 H 22.982999 Z" data-channels="1" id="electrode088" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.03221,56.058565 H 23.051897 V 62.218014 H 29.03221 Z" data-channels="0" id="electrode089" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 29.183786,52.95817 V 55.671014 L 29.529997,56.017225 H 34.955685 L 35.301896,55.671014 V 52.95817 V 50.245326 L 34.955685,49.899116 H 29.529997 L 29.183786,50.245326 Z" data-channels="4" id="electrode090" style="fill:#000000" ns2:connector-curvature="0" />
+    <ns0:path d="M 53.986937,52.91683 V 55.629675 L 54.333148,55.975888 H 59.758836 L 60.105046,55.629675 V 52.91683 V 50.203986 L 59.758836,49.857776 H 54.333148 L 53.986937,50.203986 Z" data-channels="21" id="electrode091" style="fill:#000000" ns2:connector-curvature="0" />
+  </ns0:g>
+  <ns0:g id="layer2" ns2:groupmode="layer" ns2:label="Connections" ns1:insensitive="true">
+    <ns0:line id="line0" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="26.042101" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line1" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="32.242802" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line2" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="21.3708" y1="77.781998" y2="75.446404" />
+    <ns0:line id="line3" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="32.242802" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line4" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="21.3708" y1="71.560501" y2="75.446404" />
+    <ns0:line id="line5" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="26.042101" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line6" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="38.4436" y1="77.761299" y2="77.781998" />
+    <ns0:line id="line7" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="77.761299" y2="71.560501" />
+    <ns0:line id="line8" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="77.761299" y2="83.962097" />
+    <ns0:line id="line9" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="83.962097" y2="93.221901" />
+    <ns0:line id="line10" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="83.962097" y2="77.761299" />
+    <ns0:line id="line11" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="57.046001" y1="77.761299" y2="77.781998" />
+    <ns0:line id="line12" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="50.8452" y1="77.761299" y2="71.560501" />
+    <ns0:line id="line13" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="44.644402" y1="77.761299" y2="77.781998" />
+    <ns0:line id="line14" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="38.4436" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line15" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="44.644402" y1="77.781998" y2="77.781998" />
+    <ns0:line id="line16" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="38.4436" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line17" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line18" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="38.4436" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line19" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="44.644402" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line20" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="84.003403" y2="77.781998" />
+    <ns0:line id="line21" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="84.003403" y2="93.221901" />
+    <ns0:line id="line22" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="77.781998" y2="84.003403" />
+    <ns0:line id="line23" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="63.2812" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line24" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line25" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="75.648399" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line26" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="69.413101" y1="71.560501" y2="77.761299" />
+    <ns0:line id="line27" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="69.447601" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line28" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="63.246799" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line29" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="75.648399" y1="77.781998" y2="77.781998" />
+    <ns0:line id="line30" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line31" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="88.049896" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line32" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="94.250702" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line33" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="94.250702" y1="71.560501" y2="77.781998" />
+    <ns0:line id="line34" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="100.4515" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line35" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="88.049896" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line36" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="117.5243" y1="59.138302" y2="61.4739" />
+    <ns0:line id="line37" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="112.8531" y1="59.138302" y2="65.359703" />
+    <ns0:line id="line38" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="106.6523" y1="59.138302" y2="59.159" />
+    <ns0:line id="line39" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="94.250702" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line40" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="106.6523" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line41" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="100.4515" y1="65.359703" y2="59.138302" />
+    <ns0:line id="line42" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="100.4515" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line43" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="88.049896" y1="59.159" y2="65.359703" />
+    <ns0:line id="line44" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="81.849098" y1="59.159" y2="59.138302" />
+    <ns0:line id="line45" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="94.250702" y1="59.159" y2="59.138302" />
+    <ns0:line id="line46" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="88.049896" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line47" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="94.250702" y1="65.359703" y2="59.138302" />
+    <ns0:line id="line48" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="112.8531" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line49" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="65.359703" y2="59.159" />
+    <ns0:line id="line50" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line51" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="94.250702" y1="59.138302" y2="59.138302" />
+    <ns0:line id="line52" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="106.6523" y1="59.138302" y2="59.159" />
+    <ns0:line id="line53" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="81.849098" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line54" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="88.049896" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line55" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="59.138302" y2="65.359703" />
+    <ns0:line id="line56" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="75.648399" y1="59.138302" y2="59.138302" />
+    <ns0:line id="line57" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="59.138302" y2="52.916801" />
+    <ns0:line id="line58" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line59" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="75.648399" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line60" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="43.698299" y2="22.627701" />
+    <ns0:line id="line61" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="43.698299" y2="52.958199" />
+    <ns0:line id="line62" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="43.698299" y2="22.627701" />
+    <ns0:line id="line63" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="43.698299" y2="52.958199" />
+    <ns0:line id="line64" style="stroke:#000000;stroke-width:0.1" x1="117.5243" x2="112.8531" y1="61.4739" y2="65.359703" />
+    <ns0:line id="line65" style="stroke:#000000;stroke-width:0.1" x1="117.5243" x2="129.01579" y1="61.4739" y2="44.2616" />
+    <ns0:line id="line66" style="stroke:#000000;stroke-width:0.1" x1="21.3708" x2="9.8793001" y1="61.4739" y2="44.2616" />
+    <ns0:line id="line67" style="stroke:#000000;stroke-width:0.1" x1="21.3708" x2="26.042101" y1="61.4739" y2="65.359703" />
+    <ns0:line id="line68" style="stroke:#000000;stroke-width:0.1" x1="21.3708" x2="26.042101" y1="61.4739" y2="59.138302" />
+    <ns0:line id="line69" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="43.698299" y2="22.627701" />
+    <ns0:line id="line70" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="43.698299" y2="52.916801" />
+    <ns0:line id="line71" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="43.698299" y2="22.627701" />
+    <ns0:line id="line72" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="43.698299" y2="52.916801" />
+    <ns0:line id="line73" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="75.648399" y1="71.560501" y2="77.781998" />
+    <ns0:line id="line74" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="81.849098" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line75" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="75.648399" y1="71.560501" y2="65.359703" />
+    <ns0:line id="line76" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="100.4515" y1="77.781998" y2="77.781998" />
+    <ns0:line id="line77" style="stroke:#000000;stroke-width:0.1" x1="94.250702" x2="88.049896" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line78" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="81.849098" y1="114.2926" y2="93.221901" />
+    <ns0:line id="line79" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="83.962097" y2="93.221901" />
+    <ns0:line id="line80" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="84.003403" y2="93.221901" />
+    <ns0:line id="line81" style="stroke:#000000;stroke-width:0.1" x1="69.413101" x2="63.2812" y1="77.761299" y2="77.761299" />
+    <ns0:line id="line82" style="stroke:#000000;stroke-width:0.1" x1="69.413101" x2="75.648399" y1="77.761299" y2="77.781998" />
+    <ns0:line id="line83" style="stroke:#000000;stroke-width:0.1" x1="63.2812" x2="63.246799" y1="77.761299" y2="71.560501" />
+    <ns0:line id="line84" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="114.2926" y2="93.221901" />
+    <ns0:line id="line85" style="stroke:#000000;stroke-width:0.1" x1="21.3708" x2="9.8793001" y1="75.446404" y2="92.658699" />
+    <ns0:line id="line86" style="stroke:#000000;stroke-width:0.1" x1="117.5243" x2="112.8531" y1="75.446404" y2="77.781998" />
+    <ns0:line id="line87" style="stroke:#000000;stroke-width:0.1" x1="117.5243" x2="112.8531" y1="75.446404" y2="71.560501" />
+    <ns0:line id="line88" style="stroke:#000000;stroke-width:0.1" x1="117.5243" x2="129.01579" y1="75.446404" y2="92.658699" />
+    <ns0:line id="line89" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="112.8531" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line90" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="59.159" y2="52.958199" />
+    <ns0:line id="line91" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="57.046001" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line92" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="44.644402" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line93" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="50.8452" y1="65.359703" y2="59.159" />
+    <ns0:line id="line94" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="50.8452" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line95" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line96" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="63.246799" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line97" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="65.359703" y2="59.138302" />
+    <ns0:line id="line98" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="44.644402" y1="59.138302" y2="65.359703" />
+    <ns0:line id="line99" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="50.8452" y1="59.138302" y2="59.159" />
+    <ns0:line id="line100" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="38.4436" y1="59.138302" y2="59.138302" />
+    <ns0:line id="line101" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="38.4436" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line102" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="44.644402" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line103" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="57.046001" y1="59.159" y2="59.138302" />
+    <ns0:line id="line104" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="38.4436" y1="59.138302" y2="65.359703" />
+    <ns0:line id="line105" style="stroke:#000000;stroke-width:0.1" x1="38.4436" x2="32.242802" y1="59.138302" y2="59.159" />
+    <ns0:line id="line106" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="38.4436" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line107" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="65.359703" y2="59.159" />
+    <ns0:line id="line108" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="26.042101" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line109" style="stroke:#000000;stroke-width:0.1" x1="81.849098" x2="88.049896" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line110" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="100.4515" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line111" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="106.6523" y1="71.560501" y2="77.761299" />
+    <ns0:line id="line112" style="stroke:#000000;stroke-width:0.1" x1="106.6523" x2="112.8531" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line113" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="100.4515" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line114" style="stroke:#000000;stroke-width:0.1" x1="100.4515" x2="106.6523" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line115" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="106.6523" y1="77.781998" y2="77.761299" />
+    <ns0:line id="line116" style="stroke:#000000;stroke-width:0.1" x1="112.8531" x2="112.8531" y1="77.781998" y2="71.560501" />
+    <ns0:line id="line117" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="50.8452" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line118" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="63.246799" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line119" style="stroke:#000000;stroke-width:0.1" x1="50.8452" x2="44.644402" y1="71.560501" y2="71.560501" />
+    <ns0:line id="line120" style="stroke:#000000;stroke-width:0.1" x1="44.644402" x2="44.644402" y1="71.560501" y2="77.781998" />
+    <ns0:line id="line121" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="75.648399" y1="59.138302" y2="65.359703" />
+    <ns0:line id="line122" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="69.413101" y1="59.138302" y2="59.159" />
+    <ns0:line id="line123" style="stroke:#000000;stroke-width:0.1" x1="75.648399" x2="69.447601" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line124" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="63.246799" y1="65.359703" y2="65.359703" />
+    <ns0:line id="line125" style="stroke:#000000;stroke-width:0.1" x1="69.447601" x2="69.413101" y1="65.359703" y2="59.159" />
+    <ns0:line id="line126" style="stroke:#000000;stroke-width:0.1" x1="63.246799" x2="63.246799" y1="65.359703" y2="71.560501" />
+    <ns0:line id="line127" style="stroke:#000000;stroke-width:0.1" x1="63.246799" x2="63.2812" y1="65.359703" y2="59.159" />
+    <ns0:line id="line128" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="93.221901" y2="114.2926" />
+    <ns0:line id="line129" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="93.221901" y2="114.2926" />
+    <ns0:line id="line130" style="stroke:#000000;stroke-width:0.1" x1="88.049896" x2="88.049896" y1="71.560501" y2="77.761299" />
+    <ns0:line id="line131" style="stroke:#000000;stroke-width:0.1" x1="69.413101" x2="63.2812" y1="59.159" y2="59.159" />
+    <ns0:line id="line132" style="stroke:#000000;stroke-width:0.1" x1="63.2812" x2="57.046001" y1="59.159" y2="59.138302" />
+    <ns0:line id="line133" style="stroke:#000000;stroke-width:0.1" x1="57.046001" x2="57.046001" y1="59.138302" y2="52.916801" />
+    <ns0:line id="line134" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="26.042101" y1="59.159" y2="59.138302" />
+    <ns0:line id="line135" style="stroke:#000000;stroke-width:0.1" x1="32.242802" x2="32.242802" y1="59.159" y2="52.958199" />
+    <ns0:line id="line136" style="stroke:#000000;stroke-width:0.1" x1="26.042101" x2="26.042101" y1="65.359703" y2="59.138302" />
+  </ns0:g>
+</ns0:svg>
