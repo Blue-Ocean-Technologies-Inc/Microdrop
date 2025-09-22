@@ -67,21 +67,26 @@ class ElectrodeScene(QGraphicsScene):
         if button == Qt.LeftButton:
             self.left_mouse_pressed = True
             electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     self.last_electrode_id_visited = electrode_view.id
+
             elif mode == "auto":
                 if electrode_view:
                     self.interaction_service.handle_autoroute_start(electrode_view.id)
                 else: # No electrode clicked, exit autoroute mode
                     self.interaction_service.set_mode("edit")
-            elif mode == "camera-place":
-                self.interaction_service.handle_reference_point_placement(event.scenePos())
-            elif mode == "camera-edit":
-                self.interaction_service.handle_perspective_edit_start(event.scenePos())
 
             elif mode == "channel-edit":
-                self.interaction_service.handle_electrode_channel_editing(electrode_view.electrode)
+                if electrode_view:
+                    self.interaction_service.handle_electrode_channel_editing(electrode_view.electrode)
+
+            elif mode == "camera-place":
+                self.interaction_service.handle_reference_point_placement(event.scenePos())
+
+            elif mode == "camera-edit":
+                self.interaction_service.handle_perspective_edit_start(event.scenePos())
 
         elif button == Qt.RightButton:
             self.right_mouse_pressed = True
