@@ -3,6 +3,8 @@ import pytest
 import numpy as np
 from traits.trait_errors import TraitError
 
+from device_viewer.models.electrodes import Electrodes
+from device_viewer.utils.dmf_utils import channels_to_svg
 from .common import TEST_PATH
 from pathlib import Path
 
@@ -28,6 +30,14 @@ def valid_electrodes_model_from_svg():
     # Initialize an instance of Electrodes and load the SVG file
     electrodes = Electrodes()
     electrodes.set_electrodes_from_svg_file(sample_svg_path)
+    return electrodes
+
+@pytest.fixture
+def valid_electrodes_model_from_svg_with_scale():
+    from device_viewer.models.electrodes import Electrodes
+    # Initialize an instance of Electrodes and load the SVG file
+    electrodes = Electrodes()
+    electrodes.set_electrodes_from_svg_file(sample_svg_path_with_scale)
     return electrodes
 
 
@@ -136,3 +146,42 @@ def test_electrodes_states_map(valid_electrodes_model_from_svg):
     new_channels_states_map = valid_electrodes_model_from_svg.channels_states_map
 
     assert new_channels_states_map[change_electrode.channel] == True
+
+def test_save_svg_file_init_scale_metadata(valid_electrodes_model_from_svg):
+    # save file that initially does not have a scale, with a scale
+
+    from device_viewer.utils.dmf_utils import channels_to_svg
+
+    new_filename = Path(TEST_PATH) / "test_svg_model_save_init_scale.svg"
+    new_pixel_scale = 0.55
+
+    channels_to_svg(valid_electrodes_model_from_svg.svg_model.filename,
+                    new_filename,
+                    valid_electrodes_model_from_svg.electrode_ids_channels_map,
+                    new_pixel_scale)
+
+    test_saved_electrode = Electrodes()
+    test_saved_electrode.set_electrodes_from_svg_file(new_filename)
+
+    assert test_saved_electrode.svg_model.pixel_scale ==  new_pixel_scale
+
+def test_save_svg_file_edit_scale_metadata(valid_electrodes_model_from_svg_with_scale):
+    # save file that initially does have a scale, with a new scale
+
+    from device_viewer.utils.dmf_utils import channels_to_svg
+
+    # check that the loaded file is as expected
+    assert valid_electrodes_model_from_svg_with_scale.svg_model.pixel_scale == 0.34
+
+    new_filename = Path(TEST_PATH) / "test_svg_model_save_edit_scale.svg"
+    new_pixel_scale = 0.55
+
+    channels_to_svg(valid_electrodes_model_from_svg_with_scale.svg_model.filename,
+                    new_filename,
+                    valid_electrodes_model_from_svg_with_scale.electrode_ids_channels_map,
+                    new_pixel_scale)
+
+    test_saved_electrode = Electrodes()
+    test_saved_electrode.set_electrodes_from_svg_file(new_filename)
+
+    assert test_saved_electrode.svg_model.pixel_scale == new_pixel_scale
