@@ -69,7 +69,7 @@ class SvgUtil:
                 # self.connections = self.svg_to_points(child)
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
-                if scale:
+                if scale is not None:
                     self.pixel_scale = float(scale.text)
                     print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
 

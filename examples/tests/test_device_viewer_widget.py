@@ -36,10 +36,13 @@ def test_electrodes_initialization():
     # Initialize an instance of Electrodes and load the SVG file
     electrodes = Electrodes()
     electrodes.set_electrodes_from_svg_file(sample_svg_path)
+    assert electrodes.svg_model.pixel_scale == 1.0
 
+    # Initialize an instance of electrode, load with svg file with scale metadata.
     electrodes_with_scale = Electrodes()
-
     electrodes_with_scale.set_electrodes_from_svg_file(sample_svg_path_with_scale)
+
+    assert electrodes_with_scale.svg_model.pixel_scale == 0.34
 
     # Add an assertion to validate successful setup.
     # Check if 92 electrodes initialized here which is true for the sample device
