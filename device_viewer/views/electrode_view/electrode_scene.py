@@ -79,6 +79,10 @@ class ElectrodeScene(QGraphicsScene):
                 self.interaction_service.handle_reference_point_placement(event.scenePos())
             elif mode == "camera-edit":
                 self.interaction_service.handle_perspective_edit_start(event.scenePos())
+
+            elif mode == "channel-edit":
+                self.interaction_service.handle_electrode_channel_editing(electrode_view.electrode)
+
         elif button == Qt.RightButton:
             self.right_mouse_pressed = True
 
