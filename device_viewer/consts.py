@@ -8,7 +8,7 @@ PKG_name = PKG.title().replace("_", " ")
 
 listener_name = f"{PKG}_listener"
 
-DEFAULT_SVG_FILE = os.path.join(os.path.dirname(__file__), "2x3device.svg")
+DEFAULT_SVG_FILE = os.path.join(os.path.dirname(__file__), "90_pin_array.svg")
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {

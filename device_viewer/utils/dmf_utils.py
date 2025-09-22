@@ -68,8 +68,10 @@ class SvgUtil:
                 pass
                 # self.connections = self.svg_to_points(child)
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
-                self.pixel_scale = float(child.find("scale").text)
-                print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
+                scale = child.find("scale")
+                if scale is not None:
+                    self.pixel_scale = float(scale.text)
+                    print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
 
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
@@ -252,8 +254,11 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
             electrodes = child
         elif child.tag == "{http://www.w3.org/2000/svg}metadata":
             scale_element = child.find("scale")
-            if scale_element is not None:
-                scale_element.text = str(scale)
+            if scale_element is None:
+                scale_element = ET.SubElement(child, "scale")
+
+            scale_element.text = str(scale)
+
 
     if electrodes is None:
         return
@@ -264,5 +269,7 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
             electrode.attrib["data-channels"] = str(channel)
         else:
             electrode.attrib.pop("data-channels", None)
+
+    ET.indent(root, space="  ")
 
     tree.write(new_filename)
