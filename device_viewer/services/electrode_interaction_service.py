@@ -1,5 +1,7 @@
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
+
+from device_viewer.models.electrodes import Electrode
 from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import MainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
@@ -82,6 +84,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_electrode_hover(self, electrode_view: ElectrodeView):
         self.electrode_hovered = electrode_view
+
+    def handle_electrode_channel_editing(self, electrode: Electrode):
+        self.model.electrode_editing = electrode
 
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
