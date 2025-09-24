@@ -7,14 +7,13 @@ from dropbot_controller.models.dropbot_channels_properties_model import DropbotC
 
 
 def test_message_model_success():
-    """Test that MessageModel accepts a valid JSON string with int keys and bool values."""
+    """Test that JSON model controller accepts valid JSON string, validates it, and sets it to model. """
     json_data = '{"1": true, "2": false, "3": true}'
     parsed_data = {1: True, 2: False, 3: True}
 
     # Instantiate the model and validate
-    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, property_dtype=bool, num_available_channels=120).model
+    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data).model
     assert model.channels_properties_dict == parsed_data
-
 
 def test_message_model_failure_non_boolean_value():
     """Test that MessageModel raises TraitError for JSON with non-boolean values."""
@@ -39,6 +38,21 @@ def test_get_boolean_channels_states_mask():
         model.channels_properties_boolean_mask ==
         np.array([True, False, False, False, False, False, False, False, False, True])
     )
+
+def test_get_boolean_channels_states_mask_no_max_channel():
+    """Test that MessageModel returns the correct mask for the channels and states based on the input json string and
+    max available channels specified
+    """
+    json_data = '{"0": true, "1": false, "9": true}'
+    max_channels = 10
+
+    with pytest.raises(ValueError,
+                       match=re.escape("Set num available channels.")):
+
+        # Instantiate the model and validate
+        model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data).model
+        mask = model.channels_properties_boolean_mask
+
 
 
 def test_get_boolean_channels_states_mask_zero_on():

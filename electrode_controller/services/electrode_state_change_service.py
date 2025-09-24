@@ -39,7 +39,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     num_available_channels=self.proxy.number_of_channels,
                     property_dtype=bool,
                     channel_properties_json=message,
-                )
+                ).model
 
                 # Validate boolean mask size
                 expected_channels = self.proxy.number_of_channels
