@@ -21,10 +21,6 @@ class MicrodropCanvasTaskApplication(TasksApplication):
     # The application's user-visible name.
     name = "Microdrop Canvas"
 
-    #: The directory on the local file system used to persist window layout
-    #: information.
-    state_location = Path.home() / ".microdrop_next_gen"
-
     # branding
     icon = ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
 

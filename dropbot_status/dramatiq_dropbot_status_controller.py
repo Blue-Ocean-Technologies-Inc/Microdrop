@@ -2,6 +2,7 @@ from traits.api import HasTraits, provides, Str
 import dramatiq
 import json
 from traits.api import Instance
+from PySide6.QtCore import Slot
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils._logger import get_logger
@@ -9,6 +10,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
 from microdrop_utils.dramatiq_controller_base import invoke_class_method
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.timestamped_message import TimestampedMessage
 
 logger = get_logger(__name__)
 
@@ -34,9 +36,19 @@ class DramatiqDropbotStatusController(HasTraits):
     # this can be set later by whatever UI view that uses it
     listener_name = Str(desc="Unique identifier for the Dramatiq actor")
 
-    def listener_actor_routine(self, message, topic):
-        logger.debug(f"UI_LISTENER: Received message: {message} from topic: {topic}. Triggering UI Signal")
-        self.view.controller_signal.emit(json.dumps({'message': message, 'topic': topic}))
+    def listener_actor_routine(self, message : TimestampedMessage, topic):
+        logger.debug(f"UI_LISTENER: Received message: {message} from topic: {topic} at {message.timestamp}. Triggering UI Signal")
+        if hasattr(self, 'view') and self.view is not None:
+            try:
+                # We send the message through Qt's signal system since it freezes the UI otherwise
+                self.view.controller_signal.emit(json.dumps({'message': message.serialize(), 'topic': topic}))
+            except RuntimeError as e:
+                if "Signal source has been deleted" in str(e):
+                    logger.warning("View has been deleted, stopping signal emission")
+                else:
+                    raise
+        else:
+            logger.warning("View not available, skipping signal emission")
 
     def traits_init(self):
         """
@@ -56,17 +68,22 @@ class DramatiqDropbotStatusController(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
+    @Slot(str)  
     def controller_signal_handler(self, signal):
         """
         Handle GUI action required for signal triggered by dropbot status listener.
         """
         signal = json.loads(signal)
         topic = signal.get("topic", "")
-        message = signal.get("message", "")
+        message_serialized = signal.get("message", "")
+        message = TimestampedMessage.deserialize(message_serialized)
         head_topic = topic.split('/')[-1]
         sub_topic = topic.split('/')[-2]
         method = f"_on_{head_topic}_triggered"
 
+        if head_topic == "self_tests_progress":
+            return
+        
         err_msg = invoke_class_method(self.view, method, message)
         if err_msg:
 

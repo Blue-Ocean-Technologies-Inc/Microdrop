@@ -10,6 +10,7 @@ from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .services.dropbot_monitor_mixin_service import DropbotMonitorMixinService
 from .services.dropbot_states_setting_mixin_service import DropbotStatesSettingMixinService
 from .services.dropbot_self_tests_mixin_service import DropbotSelfTestsMixinService
+from .services.droplet_detection_mixin_service import DropletDetectionMixinService
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -34,6 +35,7 @@ class DropbotControllerPlugin(Plugin):
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_monitor_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_set_states_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_self_test_service),
+            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_droplet_detection_service),
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
@@ -50,6 +52,10 @@ class DropbotControllerPlugin(Plugin):
         and generate a report.
         """
         return DropbotSelfTestsMixinService
+    
+    def _create_droplet_detection_service(self, *args, **kwargs):
+        """Returns a droplet detection mixin service for detecting droplets on electrodes."""
+        return DropletDetectionMixinService
 
     def start(self):
         """ Initialize the dropbot on plugin start """
@@ -61,4 +67,14 @@ class DropbotControllerPlugin(Plugin):
         services = self.application.get_services(IDropbotControlMixinService) + [DropbotControllerBase]
         logger.debug(f"The following dropbot services are going to be initialized: {services} ")
 
-        self.dropbot_controller = type('DropbotController', tuple(services), {})()
+        # Create a new class that inherits from all services
+        class DropbotController(*services):
+            pass
+
+        self.dropbot_controller = DropbotController()
+
+    def stop(self):
+        """Cleanup when the plugin is stopped."""
+        if hasattr(self, 'dropbot_controller'):
+            self.dropbot_controller.cleanup()
+            logger.info("DropbotController plugin stopped")

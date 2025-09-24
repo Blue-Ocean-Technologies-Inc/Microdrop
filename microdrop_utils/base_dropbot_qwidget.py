@@ -1,9 +1,9 @@
 from PySide6.QtCore import Signal
-import logging
+from microdrop_utils._logger import get_logger
 
 from PySide6.QtWidgets import QWidget
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # =============================================================================

@@ -1,0 +1,19 @@
+from pint import UnitRegistry
+
+ureg = UnitRegistry()
+
+def ureg_quant_percent_change(old, new):
+    old = get_ureg_magnitude(old)
+    new = get_ureg_magnitude(new)
+
+    return 100 * abs(old - new) / old
+
+def ureg_diff(old, new):
+    old = get_ureg_magnitude(old)
+    new = get_ureg_magnitude(new)
+
+
+    return old - new
+
+def get_ureg_magnitude(text):
+    return ureg(text).magnitude

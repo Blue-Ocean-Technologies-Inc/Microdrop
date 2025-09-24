@@ -1,15 +1,21 @@
 # Standard library imports.
 import os.path
 
-from traits.api import List
+from traits.api import List, Str
+from device_viewer.menus import open_file_dialogue_menu_factory, open_svg_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, PREFERENCES, PREFERENCES_PANES, TASKS
-from envisage.ui.tasks.api import TaskFactory
+from envisage.api import Plugin, TASK_EXTENSIONS
+from envisage.ui.tasks.api import TaskFactory, TaskExtension
+from pyface.action.schema.schema_addition import SchemaAddition
 
 # local imports
+from microdrop_application.consts import PKG as microdrop_application_PKG
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class DeviceViewerPlugin(Plugin):
@@ -24,33 +30,30 @@ class DeviceViewerPlugin(Plugin):
     name = PKG_name + " Plugin"
 
     #### Contributions to extension points made by this plugin ################
-
-    preferences = List(contributes_to=PREFERENCES)
-    preferences_panes = List(contributes_to=PREFERENCES_PANES)
-    tasks = List(contributes_to=TASKS)
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
-    ###########################################################################
-    # Protected interface.
-    ###########################################################################
+    task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
-    def _preferences_default(self):
-        filename = os.path.join(os.path.dirname(__file__), "preferences.ini")
-        return ["file://" + filename]
+    contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
-    def _preferences_panes_default(self):
-        from .preferences import DeviceViewerPreferencesPane
+    def _contributed_task_extensions_default(self):
+        from .views.device_view_pane import DeviceViewerDockPane
 
-        return [DeviceViewerPreferencesPane]
+        return [ 
+            TaskExtension(
+                task_id=self.task_id_to_contribute_view,
+                dock_pane_factories=[DeviceViewerDockPane],
+                actions=[
+                    SchemaAddition(
+                        factory=open_file_dialogue_menu_factory,
+                        path='MenuBar/File'
+                    ),
+                    SchemaAddition(
+                        factory=open_svg_dialogue_menu_factory,
+                        path='MenuBar/File'
+                    )
 
-    def _tasks_default(self):
-        from .task import DeviceViewerTask
-
-        return [
-            TaskFactory(
-                id=f"{PKG}.task",
-                name=f"{PKG_name} Widget",
-                factory=DeviceViewerTask,
+                ]
             )
         ]

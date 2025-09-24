@@ -1,12 +1,13 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGraphicsScene
+from PySide6.QtCore import Qt, QPointF, QPoint
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEvent
 
 from .electrode_view_helpers import find_path_item
-from .electrodes_view_base import ElectrodeView
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
+from .scale_edit_view import scale_edit_view
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__)
-
+logger = get_logger(__name__, level='DEBUG')
 
 class ElectrodeScene(QGraphicsScene):
     """
@@ -14,11 +15,13 @@ class ElectrodeScene(QGraphicsScene):
     Handles identifying mouse action across the scene.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, dockpane, parent=None):
         super().__init__(parent)
-        self.electrode_pressed = None
-        self.electrode_channels_visited = []
-        self.electrode_ids_visited = []
+        self.dockpane = dockpane
+        self.left_mouse_pressed = False
+        self.right_mouse_pressed = False
+        self.is_drag = False
+        self.last_electrode_id_visited = None
         self._interaction_service = None
 
     @property
@@ -30,93 +33,176 @@ class ElectrodeScene(QGraphicsScene):
     def interaction_service(self, interaction_service):
         self._interaction_service = interaction_service
 
+    def get_item_under_mouse(self, coordinates: QPointF, object_type):
+        '''
+        Searches for an object with type object_type in the scene at coordinates. This will be able to find items at lower z indexes. 
+        '''
+        # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
+        # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
+        items = self.items(coordinates, deviceTransform=self.views()[0].transform())
+        for item in items:
+            if isinstance(item, object_type):
+                return item
+        return None
+    
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        char = event.text()
+        key = event.key()
+
+        if char.isprintable(): # If an actual char was inputted
+            if char.isdigit(): # It's a digit
+                self.interaction_service.handle_digit_input(char)
+        else:
+            if key == Qt.Key_Backspace:
+                self.interaction_service.handle_backspace()
+
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
-        if event.button() == Qt.LeftButton:
-            self.mouseLeftClickEvent(event)
+        button = event.button()
+        mode = self.interaction_service.get_mode()
 
-            super().mousePressEvent(event)
+        if button == Qt.LeftButton:
+            self.left_mouse_pressed = True
+            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
 
-    def mouseLeftClickEvent(self, event):
-        # Get the item under the mouse click using the scene's coordinates.
-        item = self.itemAt(event.scenePos(), self.views()[0].transform())
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    self.last_electrode_id_visited = electrode_view.id
 
-        # Try to get the parent electrode view if available
-        parent = getattr(item, "parentItem", lambda: None)()
+            elif mode == "auto":
+                if electrode_view:
+                    self.interaction_service.handle_autoroute_start(electrode_view.id)
+                else: # No electrode clicked, exit autoroute mode
+                    self.interaction_service.set_mode("edit")
 
-        # Determine the electrode view: either the parent or the item itself.
-        if isinstance(parent, ElectrodeView):
-            electrode_view = parent
-        elif isinstance(item, ElectrodeView):
-            electrode_view = item
-        else:
-            # Neither the item nor its parent is an ElectrodeView, so exit.
-            return
+            elif mode == "channel-edit":
+                if electrode_view:
+                    self.interaction_service.handle_electrode_channel_editing(electrode_view.electrode)
 
-        # Record the clicked electrode view and initialize route tracking.
-        self.electrode_pressed = electrode_view
+            elif mode == "camera-place":
+                self.interaction_service.handle_reference_point_placement(event.scenePos())
 
-        # Track the visited electrode IDs and channels.
-        self.electrode_channels_visited = [electrode_view.electrode.channel]
-        self.electrode_ids_visited = [electrode_view.id]
+            elif mode == "camera-edit":
+                self.interaction_service.handle_perspective_edit_start(event.scenePos())
+
+        elif button == Qt.RightButton:
+            self.right_mouse_pressed = True
+
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
-        if self.electrode_pressed:
-            # Identify the new item under the mouse cursor using the scene's transform.
-            new_item = self.itemAt(event.scenePos(), self.views()[0].transform())
 
-            # Safely attempt to get the parent of the new item if it exists.
-            parent = getattr(new_item, "parentItem", lambda: None)()
+        mode = self.interaction_service.get_mode()
+        electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+        self.interaction_service.handle_electrode_hover(electrode_view)
 
-            # Determine which item to use: prefer the parent if it's an ElectrodeView,
-            # otherwise use the new_item itself if it's an ElectrodeView.
-            if isinstance(parent, ElectrodeView):
-                electrode_view = parent
-            elif isinstance(new_item, ElectrodeView):
-                electrode_view = new_item
-            else:
-                electrode_view = None
-
+        if self.left_mouse_pressed:
             # Only proceed if we have a valid electrode view.
-            if electrode_view:
-                channel_ = electrode_view.electrode.channel
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
+                        self.last_electrode_id_visited = electrode_view.id
+                    else:
+                        found_connection_item = find_path_item(self, (self.last_electrode_id_visited, electrode_view.id))
+                        if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
+                            self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id)
+                            self.last_electrode_id_visited = electrode_view.id # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
+                            self.is_drag = True # Since more than one electrode is left clicked, its a drag, not a single electrode click
+                        
+            elif mode == "auto":
+                if electrode_view:
+                    self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
+            
+            elif mode == "camera-edit":
+                self.interaction_service.handle_perspective_edit(event.scenePos())
 
-                # Check if this channel differs from the last visited channel.
-                if self.electrode_channels_visited[-1] != channel_:
-                    # Append new channel and electrode ID to their respective lists.
-                    self.electrode_channels_visited.append(channel_)
-                    self.electrode_ids_visited.append(electrode_view.id)
-
-                    # Determine the key for path lookup based on the last two visited electrodes.
-                    src_key = self.electrode_ids_visited[-2]
-                    dst_key = self.electrode_ids_visited[-1]
-                    key = (src_key, dst_key)
-
-                    # Find the corresponding path item and update its visual representation.
-                    found_item = find_path_item(self, key)
-                    found_item.update_color()
-
-                    print(f"path will be {'->'.join(str(i) for i in self.electrode_channels_visited)}")
-
-                # Update the electrode pressed to the current electrode view.
-                self.electrode_pressed = electrode_view
+        if self.right_mouse_pressed:
+            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
+                connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+                endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+                if connection_item:
+                    (from_id, to_id) = connection_item.key
+                    self.interaction_service.handle_route_erase(from_id, to_id)
+                elif endpoint_item:
+                    self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
 
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         """Finalize the drag operation."""
+        button = event.button()
 
-        # If it's a click (not a drag) since only one electrode selected:
-        if len(self.electrode_channels_visited) == 1:
-            if self.interaction_service:
-                self.interaction_service.handle_electrode_click(self.electrode_ids_visited[0])
+        if button == Qt.LeftButton:
+            self.left_mouse_pressed = False
+            mode = self.interaction_service.get_mode()  
+            if mode == "auto":
+                self.interaction_service.handle_autoroute_end()
+            elif mode in ("edit", "draw", "edit-draw"):
+                electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
+                # If it's a click (not a drag) since only one electrode selected:
+                if not self.is_drag and electrode_view:
+                    self.interaction_service.handle_electrode_click(electrode_view.id)
+                
+                # Reset left-click related vars
+                self.is_drag = False
 
-        else:
-            logger.info(self.electrode_channels_visited)
-
-        self.electrode_pressed = None
-        self.electrode_channels_visited = []
+                if mode == "edit-draw": # Go back to draw
+                    self.interaction_service.set_mode("draw")
+            elif mode == "camera-edit":
+                self.interaction_service.handle_perspective_edit_end()
+        elif button == Qt.RightButton:
+            self.right_mouse_pressed = False
+        
         super().mouseReleaseEvent(event)
+
+    def detect_droplet(self):
+        """Placeholder for a context menu action."""
+        self.dockpane.publish_detect_droplet()
+
+    def measure_filler_capacitance(self):
+        """Placeholder for measuring filler capacitance."""
+        if not self.interaction_service.model.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure filler capacitance.")
+            return
+        
+        if self.dockpane.last_capacitance is None:
+            logger.warning("No capacitance value available to set for filler capacitance.")
+            return
+        
+        self.interaction_service.model.filler_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
+
+    def measure_liquid_capacitance(self):
+        """Placeholder for measuring liquid capacitance."""
+        if not self.interaction_service.model.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure liquid capacitance.")
+            return
+        
+        if self.dockpane.last_capacitance is None:
+            logger.warning("No capacitance value available to set for liquid capacitance.")
+            return
+
+        self.interaction_service.model.liquid_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
+
+    def adjust_electrode_area(self):
+        """Placeholder for adjusting electrode area."""
+        self.interaction_service.model.configure_traits(view=scale_edit_view)
+
+    def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
+        if event.modifiers() & Qt.ControlModifier:
+            # If control is pressed, we do not show the context menu
+            return super().contextMenuEvent(event)
+
+        context_menu = QMenu()
+        context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
+        context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
+        context_menu.addAction("Reset Electrodes", self.interaction_service.model.reset_electrode_states)
+        context_menu.addSeparator()
+        context_menu.addAction("Find Liquid", self.detect_droplet)
+        context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
+        context_menu.exec(event.screenPos())
+        return super().contextMenuEvent(event)

@@ -87,7 +87,7 @@ class DeviceViewerWidget(QWidget):
         file_name, _ = QFileDialog.getOpenFileName(self, "Select SVG File", "", "SVG Files (*.svg);;All Files (*)", options=options)
         if file_name:
             new_electrodes_model = Electrodes()
-            new_electrodes_model.set_electrodes_from_svg_file(new_electrodes_model)
+            new_electrodes_model.set_electrodes_from_svg_file(file_name)
             self.change_active_layer(new_electrodes_model)
             self.svg_path_button.setText(os.path.basename(file_name))
 

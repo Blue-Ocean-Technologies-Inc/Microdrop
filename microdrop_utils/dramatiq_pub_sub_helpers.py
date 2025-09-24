@@ -5,18 +5,20 @@ from microdrop_utils.dramatiq_controller_base import DramatiqControllerBase
 from microdrop_utils.redis_manager import RedisHashDictProxy
 
 from microdrop_utils._logger import get_logger
+from microdrop_utils.timestamped_message import TimestampedMessage
 
 logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
 
 
-def publish_message(message, topic, actor_to_send="message_router_actor", queue_name="default", message_kwargs=None, message_options=None):
+def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default", 
+                    message_kwargs=None, message_options=None):
     """
     Publish a message to a given actor with a certain topic
     """
     logger.debug(f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}")
-    # print(f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}")
+
     broker = dramatiq.get_broker()
 
     if message_options is None:
@@ -340,17 +342,17 @@ class MessageRouterActor(DramatiqControllerBase):
     def _listener_actor_method_default(self):
         """returns a default listener actor method for message routing"""
 
-        def listener_actor_method(message: Str, topic: Str):
-            logger.debug(f"MESSAGE_ROUTER: Received message: {message} on topic: {topic}")
+        def listener_actor_method(timestamped_message: TimestampedMessage, topic: Str):
+            logger.debug(f"MESSAGE_ROUTER: Received message: {timestamped_message} on topic: {topic}")
 
             subscribing_actor_queue_info = self.message_router_data.get_subscribers_for_topic(topic)
 
             for subscribing_actor, queue in subscribing_actor_queue_info:
-                logger.debug(f"MESSAGE_ROUTER: Publishing message: {message} to actor: {subscribing_actor}")
+                logger.debug(f"MESSAGE_ROUTER: Publishing message: {timestamped_message} to actor: {subscribing_actor}")    
 
-                publish_message(message, topic, subscribing_actor, queue_name=queue)
+                publish_message(str(timestamped_message), topic, subscribing_actor, queue_name=queue, message_kwargs={"timestamp": timestamped_message._timestamp_ms})
 
             logger.debug(
-                f"MESSAGE_ROUTER: Message: {message} on topic {topic} published to {len(subscribing_actor_queue_info)} subscribers")
+                f"MESSAGE_ROUTER: Message: {timestamped_message} on topic {topic} published to {len(subscribing_actor_queue_info)} subscribers")
 
         return listener_actor_method
