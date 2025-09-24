@@ -3,14 +3,12 @@ from traits.api import provides, HasTraits, Str, Instance
 
 # interface imports from microdrop plugins
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
+from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
 
 # microdrop utils imports
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
-
-# local imports
-from ..models import ElectrodeStateChangeRequestMessageModel
 
 
 @provides(IDropbotControlMixinService)
@@ -37,9 +35,10 @@ class ElectrodeStateChangeMixinService(HasTraits):
             with self.proxy_state_manager.safe_proxy_access("electrode_state_change", timeout=3.0):
                 
                 # Create and validate message model
-                channel_states_map_model = ElectrodeStateChangeRequestMessageModel(
-                    json_message=message,
-                    num_available_channels=self.proxy.number_of_channels
+                channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
+                    num_available_channels=self.proxy.number_of_channels,
+                    property_dtype=bool,
+                    channel_properties_json=message,
                 )
 
                 # Validate boolean mask size

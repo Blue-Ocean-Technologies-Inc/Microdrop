@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pytest
 from traits.api import TraitError
-from ..models import ElectrodeStateChangeRequestMessageModel
+from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
 
 
 def test_message_model_success():
@@ -12,8 +12,8 @@ def test_message_model_success():
     parsed_data = {1: True, 2: False, 3: True}
 
     # Instantiate the model and validate
-    model = ElectrodeStateChangeRequestMessageModel(json_message=json_data)
-    assert model.json_message == parsed_data
+    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, property_dtype=bool, num_available_channels=120).model
+    assert model.channels_properties_dict == parsed_data
 
 
 def test_message_model_failure_non_boolean_value():
@@ -23,7 +23,7 @@ def test_message_model_failure_non_boolean_value():
     with pytest.raises(TraitError,
                        match=re.escape("JSON Message input should be a dictionary with string representation of "
                                        "integer (numeric string) keys and Boolean values.")):
-        ElectrodeStateChangeRequestMessageModel(json_message=json_data)
+        DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data)
 
 
 def test_get_boolean_channels_states_mask():
@@ -34,9 +34,9 @@ def test_get_boolean_channels_states_mask():
     max_channels = 10
 
     # Instantiate the model and validate
-    model = ElectrodeStateChangeRequestMessageModel(json_message=json_data, num_available_channels=max_channels)
+    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
     assert np.all(
-        model.channels_states_boolean_mask ==
+        model.channels_properties_boolean_mask ==
         np.array([True, False, False, False, False, False, False, False, False, True])
     )
 
@@ -49,8 +49,31 @@ def test_get_boolean_channels_states_mask_zero_on():
     max_channels = 10
 
     # Instantiate the model and validate
-    model = ElectrodeStateChangeRequestMessageModel(json_message=json_data, num_available_channels=max_channels)
+    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
     assert np.all(
-        model.channels_states_boolean_mask ==
+        model.channels_properties_boolean_mask ==
+        np.array([False, False, False, False, False, False, False, False, False, False])
+    )
+
+def test_model_from_changed_json():
+    json_data_1 = '{"1": true, "2": false, "3": true}'
+    json_data_2 = '{"1": false, "2": false, "3": false}'
+
+    max_channels = 10
+
+    json_model_factory = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data_1,
+                                                   num_available_channels=max_channels, property_dtype=bool)
+
+    model = json_model_factory.model
+
+    assert np.all(
+        model.channels_properties_boolean_mask ==
+        np.array([False, True, False, True, False, False, False, False, False, False])
+    )
+
+    json_model_factory.channels_properties_json = json_data_2
+
+    assert np.all(
+        model.channels_properties_boolean_mask ==
         np.array([False, False, False, False, False, False, False, False, False, False])
     )
