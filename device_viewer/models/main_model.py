@@ -10,7 +10,7 @@ from .route import RouteLayerManager
 from .electrodes import Electrodes
 from device_viewer.default_settings import default_alphas
 
-class MainModel(HasTraits):
+class DeviceViewMainModel(HasTraits):
 
     # Compose device view model using components
     routes = Instance(RouteLayerManager)

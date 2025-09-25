@@ -28,7 +28,7 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import MainModel
+from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
@@ -59,7 +59,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     undo_manager = Instance(UndoManager)
 
-    model = Instance(MainModel)
+    model = Instance(DeviceViewMainModel)
 
     id = PKG + ".pane"
     name = PKG_name + " Dock Pane"
@@ -98,7 +98,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-        self.model = MainModel(undo_manager=self.undo_manager)
+        self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
         self.model.electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
         self.preferences = self.task.window.application.preferences_helper.preferences

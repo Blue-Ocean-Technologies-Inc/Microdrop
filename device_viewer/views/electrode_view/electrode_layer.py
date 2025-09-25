@@ -7,7 +7,7 @@ from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, Electr
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import MainModel
+from device_viewer.models.main_model import DeviceViewMainModel
 
 logger = get_logger(__name__)
 
@@ -106,7 +106,7 @@ class ElectrodeLayer():
         parent_scene.removeItem(self.reference_rect_item)
 
     ######################## Redraw functions ###########################
-    def redraw_connections_to_scene(self, model: MainModel):
+    def redraw_connections_to_scene(self, model: DeviceViewMainModel):
         # Routes are applied in order, so later routes will apply on top
         # To minimize the number of overlapping Qt calls, we'll apply changes to a dictionary then transfer it to the view at the end
 
@@ -158,7 +158,7 @@ class ElectrodeLayer():
             else:
                 endpoint_view.set_inactive()
     
-    def redraw_electrode_lines(self, model: MainModel):
+    def redraw_electrode_lines(self, model: DeviceViewMainModel):
         """
         Method to redraw the electrode lines in the layer
         """
@@ -166,7 +166,7 @@ class ElectrodeLayer():
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_line_alpha(alpha)
 
-    def redraw_electrode_colors(self, model: MainModel, electrode_hovered: ElectrodeView):
+    def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView):
         alpha = model.get_alpha("electrode_fill")
         
         for electrode_id, electrode_view in self.electrode_views.items():
@@ -182,7 +182,7 @@ class ElectrodeLayer():
 
             electrode_view.update_color(color, alpha)
 
-    def redraw_electrode_labels(self, model: MainModel):
+    def redraw_electrode_labels(self, model: DeviceViewMainModel):
         alpha = model.get_alpha("electrode_text")
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label(alpha)
@@ -194,13 +194,13 @@ class ElectrodeLayer():
         self.electrode_editing_text.setPlainText("Loading...")
         QApplication.processEvents()  # Process events to ensure the scene is cleared immediately
     
-    def redraw_electrode_editing_text(self, model: MainModel):
+    def redraw_electrode_editing_text(self, model: DeviceViewMainModel):
         if model.step_id == None:
             self.electrode_editing_text.setPlainText("Free Mode")
         else:
             self.electrode_editing_text.setPlainText(f"{'Editing' if model.editable else 'Displaying'}: {model.step_label} {'(Free Mode)' if model.free_mode else ''}")
 
-    def redraw_reference_rect(self, model: MainModel, partial_rect=None):
+    def redraw_reference_rect(self, model: DeviceViewMainModel, partial_rect=None):
         if len(model.camera_perspective.reference_rect) == 4:
             # Update the reference rect visualization
             self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))

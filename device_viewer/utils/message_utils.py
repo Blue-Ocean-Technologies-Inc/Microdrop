@@ -1,11 +1,11 @@
 from ..models.messages import DeviceViewerMessageModel
 from ..models.route import RouteLayerManager
 from ..models.electrodes import Electrodes
-from ..models.main_model import MainModel
+from ..models.main_model import DeviceViewMainModel
 
 import copy
 
-def gui_models_to_message_model(model: MainModel) -> DeviceViewerMessageModel:
+def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessageModel:
     """Returns a deep-copied DeviceViewerMessageModel from our existing models"""
     channels_activated = model.electrodes.channels_states_map
     routes = [(layer.route.route, layer.color) for layer in model.routes.layers]

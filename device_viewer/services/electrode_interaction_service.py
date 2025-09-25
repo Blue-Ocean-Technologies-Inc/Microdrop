@@ -3,7 +3,7 @@ from pyface.qt.QtCore import QPointF
 
 from device_viewer.models.electrodes import Electrode
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import MainModel
+from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
@@ -24,7 +24,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     """
 
     #: Model
-    model = Instance(MainModel)
+    model = Instance(DeviceViewMainModel)
 
     #: The current electrode layer view
     electrode_view_layer = Instance(ElectrodeLayer)
