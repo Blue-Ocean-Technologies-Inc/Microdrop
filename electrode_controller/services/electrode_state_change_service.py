@@ -50,11 +50,12 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     return
 
                 # Set electrode state safely
-                self.proxy.state_of_channels = channel_states_map_model.channels_properties_boolean_mask
+                with self.proxy.transaction_lock:
+                    self.proxy.state_of_channels = channel_states_map_model.channels_properties_boolean_mask
                 
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated")
-                logger.critical(f"{self.proxy.state_of_channels}")
+                logger.debug(f"{self.proxy.state_of_channels}")
                 
         except TimeoutError:
             logger.error("Timeout waiting for proxy access for electrode state change")
