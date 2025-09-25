@@ -405,7 +405,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.editable = message_model.editable
 
         # Apply electrode channel mapping
-        for electrode_id, electrode in self.model.electrodes.items():
+        for electrode_id, electrode in self.model.electrodes.electrodes.items():
             electrode.channel = message_model.id_to_channel.get(electrode_id, electrode.channel)
 
         # Apply electrode on/off states
