@@ -1,6 +1,8 @@
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
+from envisage.api import IApplication
+
 from device_viewer.models.electrodes import Electrode
 from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
@@ -35,6 +37,8 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
+
+    application = Instance(IApplication)
 
     def traits_init(self):
         self.preferences = self.application.preferences_helper.preferences
