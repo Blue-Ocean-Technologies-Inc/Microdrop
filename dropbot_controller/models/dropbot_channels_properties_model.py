@@ -16,11 +16,11 @@ class DropbotChannelsPropertiesModel(IDropbotChannelsPropertiesModel):
 
     num_available_channels = Int(desc="Number of available channels at maximum on the dropbot.")
     channels_properties_dict = Dict(Int, Union(Float, Int, Bool), desc="Dictionary of channel properties")
-    channels_properties_boolean_mask = Property(Array, observe="channels_properties_dict", desc="boolean mask representing channel properties.")
+    channels_properties_mask = Property(Array, observe="channels_properties_dict", desc="boolean mask representing channel properties.")
     property_dtype = Enum(int, float, bool, desc="Property type for channel properties array")
 
     @cached_property
-    def _get_channels_properties_boolean_mask(self):
+    def _get_channels_properties_mask(self):
         if self.num_available_channels == 0:
             raise ValueError("Set num available channels.")
 

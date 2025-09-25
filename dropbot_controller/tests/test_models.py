@@ -35,7 +35,7 @@ def test_get_boolean_channels_states_mask():
     # Instantiate the model and validate
     model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
     assert np.all(
-        model.channels_properties_boolean_mask ==
+        model.channels_properties_mask ==
         np.array([True, False, False, False, False, False, False, False, False, True])
     )
 
@@ -51,7 +51,7 @@ def test_get_boolean_channels_states_mask_no_max_channel():
 
         # Instantiate the model and validate
         model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data).model
-        mask = model.channels_properties_boolean_mask
+        mask = model.channels_properties_mask
 
 
 
@@ -65,7 +65,7 @@ def test_get_boolean_channels_states_mask_zero_on():
     # Instantiate the model and validate
     model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
     assert np.all(
-        model.channels_properties_boolean_mask ==
+        model.channels_properties_mask ==
         np.array([False, False, False, False, False, False, False, False, False, False])
     )
 
@@ -81,13 +81,13 @@ def test_model_from_changed_json():
     model = json_model_factory.model
 
     assert np.all(
-        model.channels_properties_boolean_mask ==
+        model.channels_properties_mask ==
         np.array([False, True, False, True, False, False, False, False, False, False])
     )
 
     json_model_factory.channels_properties_json = json_data_2
 
     assert np.all(
-        model.channels_properties_boolean_mask ==
+        model.channels_properties_mask ==
         np.array([False, False, False, False, False, False, False, False, False, False])
     )

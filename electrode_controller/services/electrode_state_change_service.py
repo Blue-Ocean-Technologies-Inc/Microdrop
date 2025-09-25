@@ -43,7 +43,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
 
                 # Validate boolean mask size
                 expected_channels = self.proxy.number_of_channels
-                mask_size = len(channel_states_map_model.channels_properties_boolean_mask)
+                mask_size = len(channel_states_map_model.channels_properties_mask)
                 
                 if mask_size != expected_channels:
                     logger.error(f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}")
@@ -51,7 +51,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
 
                 # Set electrode state safely
                 with self.proxy.transaction_lock:
-                    self.proxy.state_of_channels = channel_states_map_model.channels_properties_boolean_mask
+                    self.proxy.state_of_channels = channel_states_map_model.channels_properties_mask
                 
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated")
