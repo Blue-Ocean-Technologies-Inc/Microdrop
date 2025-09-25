@@ -38,22 +38,23 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
                     num_available_channels=self.proxy.number_of_channels,
                     property_dtype=bool,
-                    channel_properties_json=message,
+                    channels_properties_json=message,
                 ).model
 
                 # Validate boolean mask size
                 expected_channels = self.proxy.number_of_channels
-                mask_size = len(channel_states_map_model.channels_states_boolean_mask)
+                mask_size = len(channel_states_map_model.channels_properties_boolean_mask)
                 
                 if mask_size != expected_channels:
                     logger.error(f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}")
                     return
 
                 # Set electrode state safely
-                self.proxy.state_of_channels = channel_states_map_model.channels_states_boolean_mask
+                self.proxy.state_of_channels = channel_states_map_model.channels_properties_boolean_mask
                 
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated")
+                logger.critical(f"{self.proxy.state_of_channels}")
                 
         except TimeoutError:
             logger.error("Timeout waiting for proxy access for electrode state change")
