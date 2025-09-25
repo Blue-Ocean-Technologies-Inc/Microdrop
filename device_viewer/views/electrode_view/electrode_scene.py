@@ -174,7 +174,7 @@ class ElectrodeScene(QGraphicsScene):
             logger.warning("No capacitance value available to set for filler capacitance.")
             return
         
-        self.interaction_service.model.filler_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
+        self.interaction_service.model.filler_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.electrodes.get_activated_electrode_area_mm2()
 
     def measure_liquid_capacitance(self):
         """Placeholder for measuring liquid capacitance."""
@@ -186,7 +186,7 @@ class ElectrodeScene(QGraphicsScene):
             logger.warning("No capacitance value available to set for liquid capacitance.")
             return
 
-        self.interaction_service.model.liquid_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.get_activated_electrode_area_mm2()
+        self.interaction_service.model.liquid_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.electrodes.get_activated_electrode_area_mm2()
 
     def adjust_electrode_area(self):
         """Placeholder for adjusting electrode area."""
