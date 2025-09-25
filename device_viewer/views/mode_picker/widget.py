@@ -152,8 +152,8 @@ class ModePicker(QWidget):
 
     @if_editable
     def reset_electrodes(self):
-        self.model.reset_electrode_states()
+        self.model.electrodes.reset_electrode_states()
 
     @if_editable
     def reset_routes(self):
-        self.model.reset_route_manager()
+        self.model.routes.reset_route_manager()

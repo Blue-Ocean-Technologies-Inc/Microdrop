@@ -1,5 +1,5 @@
 from typing import Any
-from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Property, DelegatesTo
+from traits.api import HasTraits, List, Enum, Bool, Instance, String, observe, Str, Dict, Int
 from pyface.undo.api import UndoManager
 from queue import Queue
 from collections import Counter
@@ -40,7 +40,7 @@ class Route(HasTraits):
     def count_loops(self) -> int:
         '''Count how many times a path loops'''
         return self.route.count(self.route[0])-1
-    
+
     def get_name(self, channel_map: dict[int, list]) -> str:
         # channel_map is a map of channel id to list of electrode ids
         if len(self.route) == 0:
@@ -232,8 +232,10 @@ class RouteLayer(HasTraits):
 
     # Needs to be passed
     route = Instance(Route, Route()) # Actual route model
-    color = String("red") # String that can be passed to QColor
-    name = String("Unnamed Route") # Name of the route, used in the table editor
+    color = Str("red") # String that can be passed to QColor
+
+    # set name based on channels for electrodes if needed for UI
+    name = Str("")
 
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
@@ -248,8 +250,11 @@ class RouteLayerManager(HasTraits):
 
     autoroute_layer = Instance(RouteLayer)
 
+    message = Str
+
+    mode = Enum("draw", "edit", "merge")
     # --------------------------- Model Helpers --------------------------
-    
+
     def get_available_color(self, exclude=()):
         color_counts = {}
         color_pool = ROUTE_COLOR_POOL
@@ -265,7 +270,7 @@ class RouteLayerManager(HasTraits):
 
         layers_to_add = []
         for i in range(len(new_routes)): # Add in new routes in the same place the old route was, so a new route is preselected
-            if i == 0: # Maintain color of old route for the case of 1 returned, visual persisitance
+            if i == 0: # Maintain color of old route for the case of 1 returned, visual persistence
                 layers_to_add.append(RouteLayer(route=new_routes[i], color=old_route_layer.color))
             else:
                 new_colors = tuple([layer.color for layer in layers_to_add])
@@ -285,9 +290,9 @@ class RouteLayerManager(HasTraits):
         if color == None:
             color = self.get_available_color()
         if index == None:
-            self.layers.append(RouteLayer(route=route, color=color, name=route.get_name(self.channels_electrode_ids_map)))
+            self.layers.append(RouteLayer(route=route, color=color))
         else:
-            self.layers.insert(index, RouteLayer(route=route, color=color, name=route.get_name(self.channels_electrode_ids_map)))
+            self.layers.insert(index, RouteLayer(route=route, color=color))
 
     def merge_layer(self, other_layer) -> bool:
         '''Try to merge other_layer with layer_to_merge. Returns boolean indicating operation's success'''
@@ -297,6 +302,7 @@ class RouteLayerManager(HasTraits):
             self.layer_to_merge = self.layers[index] # ...so set it back
             self.mode = 'merge'
             self.delete_layer(other_layer)
+            return True
         else:
             return False
 
@@ -320,19 +326,9 @@ class RouteLayerManager(HasTraits):
             return None
     
     # --------------------- Observers ------------------------------
-    @observe("layers.items.route.route.items")
-    @observe("channels_electrode_ids_map.items")
-    def update_route_label(self, event):
-        for layer in self.layers:
-            if layer.route.route:
-                # Update the name of the route layer based on the current channel map
-                layer.name = layer.route.get_name(self.channels_electrode_ids_map)
-            else:
-                layer.name = "Null route"
-
     @observe('layers.items')
     def _layers_items_changed(self, event):
-        if self.layer_to_merge != None and self.layer_to_merge not in self.layers: # Clean up merge reference
+        if self.layer_to_merge is not None and self.layer_to_merge not in self.layers: # Clean up merge reference
             self.layer_to_merge = None
             self.mode = "edit"
         

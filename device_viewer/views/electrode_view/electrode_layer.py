@@ -113,19 +113,19 @@ class ElectrodeLayer():
         connection_map = {} # Temporary map to superimpose routes
         endpoint_map = {} # Temporary map to superimpose endpoints
 
-        layers = model.layers
+        layers = model.routes.layers
 
-        if model.selected_layer:
-            layers = layers + [model.selected_layer] # Paint the selected layer again so its always on top
+        if model.routes.selected_layer:
+            layers = layers + [model.routes.selected_layer] # Paint the selected layer again so its always on top
 
-        if model.autoroute_layer:
-            layers = layers + [model.autoroute_layer] # Paint autoroute layer on top
+        if model.routes.autoroute_layer:
+            layers = layers + [model.routes.autoroute_layer] # Paint autoroute layer on top
         
         for i in range(len(layers)):
             route_layer = layers[i]
             color = QColor(route_layer.color)
             z = i # Make sure each route is it own layer. Prevents weird overlap patterns
-            if route_layer == model.selected_layer:
+            if route_layer == model.routes.selected_layer:
                 color = QColor(ROUTE_SELECTED)
             elif route_layer.route.is_loop():
                 if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
@@ -170,12 +170,12 @@ class ElectrodeLayer():
         alpha = model.get_alpha("electrode_fill")
         
         for electrode_id, electrode_view in self.electrode_views.items():
-            if electrode_view.electrode == model.electrode_editing:
+            if electrode_view.electrode == model.electrodes.electrode_editing:
                 color = ELECTRODE_CHANNEL_EDITING
             elif electrode_view.electrode.channel == None:
                 color = ELECTRODE_NO_CHANNEL
             else:
-                color = ELECTRODE_ON if model.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
+                color = ELECTRODE_ON if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
             
             if electrode_hovered == electrode_view:
                 color = QColor(color).lighter(120).name()
