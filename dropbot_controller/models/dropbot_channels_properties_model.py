@@ -24,10 +24,17 @@ class DropbotChannelsPropertiesModel(IDropbotChannelsPropertiesModel):
         if self.num_available_channels == 0:
             raise ValueError("Set num available channels.")
 
+        # Create the base mask of zeros
         mask = np.zeros(self.num_available_channels, dtype=self.property_dtype)
 
-        for key, value in self.channels_properties_dict.items():
-            mask[key] = value
+        # Get the indices (keys) and values from the dictionary
+        indices = list(self.channels_properties_dict.keys())
+        values = list(self.channels_properties_dict.values())
+
+        # Use NumPy's "fancy indexing" to assign all values in one operation
+        # This check prevents an error if the dictionary is empty
+        if indices:
+            mask[indices] = values
 
         return mask
 
