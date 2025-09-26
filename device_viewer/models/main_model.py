@@ -154,7 +154,6 @@ class DeviceViewMainModel(HasTraits):
                 else:
                     layer.name = "Null route"
 
-    @observe("electrodes.svg_model")
     @observe("electrodes.electrode_ids_channels_map")
     def push_globals(self, event):
 
