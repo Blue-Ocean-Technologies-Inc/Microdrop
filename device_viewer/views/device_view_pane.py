@@ -290,6 +290,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model and self.camera_control_widget:
             self.camera_control_widget.camera_active_signal.emit(message.lower() == "true")
 
+    def _on_drops_detected_triggered(self, message):
+        message_obj = json.loads(message)
+
+        detected_channels = message_obj.get("detected_channels", None)
+
+        if detected_channels:
+            detected_channels = {channel: True for channel in detected_channels}
+
+            # Apply electrode on/off states
+            self.model.electrodes.channels_states_map.update(detected_channels)
+
     # ------- Device View class methods -------------------------
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
