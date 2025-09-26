@@ -6,9 +6,13 @@ from traits.has_traits import HasTraits
 
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
+from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from device_viewer.default_settings import default_alphas
+
+from dramatiq import get_broker
+from microdrop_utils.redis_manager import get_redis_hash_proxy
 
 class DeviceViewMainModel(HasTraits):
 
@@ -142,9 +146,19 @@ class DeviceViewMainModel(HasTraits):
         """
         Update label for electrodes path based on channel for electrodes.
         """
-        for layer in self.routes.layers:
-            if layer.route.route:
-                # Update the name of the route layer based on the current channel map
-                layer.name = layer.route.get_name(self.electrodes.channels_electrode_ids_map)
-            else:
-                layer.name = "Null route"
+        if self.routes is not None:
+            for layer in self.routes.layers:
+                if layer.route.route:
+                    # Update the name of the route layer based on the current channel map
+                    layer.name = layer.route.get_name(self.electrodes.channels_electrode_ids_map)
+                else:
+                    layer.name = "Null route"
+
+    @observe("electrodes.svg_model")
+    @observe("electrodes.electrode_ids_channels_map")
+    def push_globals(self, event):
+
+        if event.new:
+            app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
+
+            app_globals["channel_electrode_areas"] = self.electrodes.get_channel_electrode_areas_map()

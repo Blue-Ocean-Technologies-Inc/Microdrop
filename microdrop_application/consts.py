@@ -14,6 +14,7 @@ ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 application_home_directory = Path.home() / ".microdrop_next_gen"
+APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"
 
 sidebar_menu_options = [
             ("File", ICON_FOLDER_OPEN),
