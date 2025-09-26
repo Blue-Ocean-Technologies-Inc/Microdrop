@@ -1,322 +1,219 @@
 import json
 import time
-from typing import Optional, Dict
+from contextlib import contextmanager
+from typing import Dict, Generator, List, Optional, Tuple
 
 import dramatiq
 import numpy as np
 import pandas as pd
-from traits.api import provides, HasTraits, Str, Int, List, Float
+from traits.api import HasTraits, List, Str, Int, Float, provides
 
 from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from microdrop_utils._logger import get_logger
+from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pandas_helpers import map_series_to_array
 from microdrop_utils.redis_manager import get_redis_hash_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
-from dropbot_controller.consts import DROPLETS_DETECTED, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR, \
-    DROPLET_DETECTION_FREQUENCY, \
-    DROPLET_DETECTION_VOLTAGE, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION
-
+from dropbot_controller.consts import (
+    DROPLETS_DETECTED,
+    DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR,
+    DROPLET_DETECTION_FREQUENCY,
+    DROPLET_DETECTION_VOLTAGE,
+    DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION,
+)
 from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
 logger = get_logger(__name__, level="DEBUG")
 
+# --- Constants ---
+PF_SCALE_FACTOR = 1e12  # Scale capacitances to picoFarads for logging
+
+
+# --- Data Structures ---
 class DetectionResult(HasTraits):
     """A structured data class for droplet detection results."""
     detected_channels = List(Int)
     error = Str("")
 
 
+# --- Main Service Class ---
 @provides(IDropbotControlMixinService)
 class DropletDetectionMixinService(HasTraits):
     """
-    A mixin service that provides droplet detection functionality.
-    Automatically manages frequency settings during detection.
+    Provides droplet detection by safely managing hardware state.
     """
-
-    id = Str('droplet_detection_mixin_service')
-    name = Str('Droplet Detection Mixin Service')
+    id = Str("droplet_detection_mixin_service")
+    name = Str("Droplet Detection Mixin Service")
 
     _detection_timeout = Float(10.0)  # seconds
     _max_detection_retries = Int(2)
 
-    #--------- IDropbotControlMixinService Interface ---------------------------
-    def on_detect_droplets_request(self, message):
-        """
-        Handle droplet detection request.
-        
-        Parameters
-        ----------
-        message : str
-            Empty string to check all channels,
-            or JSON array of channel numbers for detection on specific channels.
-        """
+    # --------------------------------------------------------------------------
+    # IDropbotControlMixinService Interface
+    # --------------------------------------------------------------------------
+    def on_detect_droplets_request(self, channels_json_str: str):
+        """Handle a droplet detection request."""
         try:
-
-            channels = json.loads(message)
-            
-            # check if proxy is available
-            if not hasattr(self, 'proxy') or self.proxy is None:
-                self._publish_detection_response(error_message="Dropbot proxy not available")
+            # Check for a valid hardware proxy connection
+            if not hasattr(self, "proxy") or not self.proxy:
+                self._publish_detection_response(error_message="Dropbot proxy not available.")
                 return
-            
-            result: DetectionResult = self._perform_safe_droplet_detection(channels)
 
-            self._publish_detection_response(detected_channels=result.detected_channels, error_message=result.error)
-
-                
+            channels = json.loads(channels_json_str) if channels_json_str else []
+            result = self._perform_safe_droplet_detection(channels)
+            self._publish_detection_response(
+                detected_channels=result.detected_channels, error_message=result.error
+            )
+        except json.JSONDecodeError:
+            self._publish_detection_response(error_message="Invalid JSON in request.")
         except Exception as e:
-            logger.error(f"Critical error in droplet detection: {e}")
+            logger.error(f"Critical error during droplet detection request: {e}", exc_info=True)
             self._publish_detection_response(error_message=f"Critical error: {str(e)}")
 
-    def _attempt_single_detection(self, channels: list[int]):
-        """
-        Performs one attempt at droplet detection, restoring state upon completion.
-
-        Returns:
-            A list of detected channel integers on success.
-
-        Raises:
-            DetectionPreconditionError: If preconditions are not met.
-            Exception: For other failures during the detection process.
-        """
-        with self.proxy_state_manager.safe_proxy_access("droplet_detection", timeout=self._detection_timeout):
-            # Validate proxy state before starting
-            if not self._validate_detection_preconditions():
-                raise Exception("Validation of preconditions failed.")
-
-            # Store and restore settings safely
-            original_state = self._store_original_settings()
-
-            try:
-                self._prepare_for_detection()
-                return self._execute_droplet_detection(channels)
-            finally:
-                self._restore_original_settings(original_state)
-
+    # --------------------------------------------------------------------------
+    # Core Detection Logic
+    # --------------------------------------------------------------------------
     def _perform_safe_droplet_detection(self, channels: list[int]) -> DetectionResult:
-        """
-        Performs droplet detection with retries and safety measures.
-
-        This method orchestrates multiple detection attempts, handling exceptions
-        and ensuring a consistent result format.
-        """
+        """Orchestrate droplet detection with a retry mechanism."""
         last_error: Optional[Exception] = None
         total_attempts = self._max_detection_retries + 1
 
-        for attempt in range(total_attempts):
-            try:
-                logger.debug(f"Droplet detection attempt {attempt + 1}/{total_attempts}")
+        with self._detection_context(self.proxy) as proxy:
+            for attempt in range(total_attempts):
+                try:
+                    logger.debug(f"Droplet detection attempt {attempt + 1}/{total_attempts}")
 
-                # Execute a single, isolated detection attempt.
-                detected_channels = self._attempt_single_detection(channels)
+                    detected = self._execute_detection_steps(proxy, channels)
 
-                # If the attempt succeeds, return the result immediately.
-                return DetectionResult(detected_channels=detected_channels, error="")
+                    return DetectionResult(detected_channels=detected)
 
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                    if attempt < self._max_detection_retries:
+                        time.sleep(1)  # Wait before retrying
 
-                # If more attempts are left, wait before retrying.
-                if attempt < self._max_detection_retries:
-                    logger.info("Retrying detection in 1 second...")
-                    time.sleep(1)
-
-        # If the loop completes, all attempts have failed.
         error_message = f"All {total_attempts} detection attempts failed. Last error: {last_error}"
         logger.error(error_message)
-        return DetectionResult(detected_channels=[], error=error_message)
+        return DetectionResult(error=error_message)
 
-    def _execute_droplet_detection(self, channels: list[int]) -> list[int]:
-        """
-        Execute the actual droplet detection.
+    def _execute_detection_steps(self, proxy: 'DramatiqDropbotSerialProxy', channels: list[int]) -> list[int]:
+        """Run the sequence of operations to detect droplets."""
+        capacitances_array = self._get_capacitances(proxy, channels)
+        normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
 
-        Parameters
-        ----------
-        channels : list or None
-            List of channel numbers to check
+        channels_with_drops = self._find_channels_above_threshold(normalized_caps, threshold_factor)
 
-        Returns
-        -------
-        list
-            List of channels where droplets were detected.
-        """
-        proxy = self.proxy_state_manager.proxy
-
-        capacitances = pd.Series(proxy.channel_capacitances(channels), index=channels) * 1e12 # scale to log values in in pF units
-
-        logger.debug(f"Capacitances: {capacitances}")
-        logger.debug(f"Minimum Capacitance: {capacitances.min()}")
-
-        capacitances_array = map_series_to_array(capacitances)
-
-        logger.debug(f"Capacitances array: {capacitances_array}")
-
-        # Try to normalize the channel capacitances using electrode areas for each channel
-        # if not possible, proceed without normalizing the capacitances
-        microdrop_globals = get_redis_hash_proxy(redis_client=dramatiq.get_broker().client,
-                             hash_name=APP_GLOBALS_REDIS_HASH)
-
-        channel_electrode_areas = microdrop_globals.get("channel_electrode_areas")
-
-        if channel_electrode_areas:
-
-            # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
-            channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
-
-            channel_electrode_areas_model = DropbotChannelsPropertiesModel(
-                num_available_channels=proxy.number_of_channels,
-                property_dtype=float,
-                channels_properties_dict=channel_electrode_areas
-            )
-
-            # get normalized capacitances
-            normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
-
-            logger.debug(f"normalized capacitances: {normalized_capacitances}")
-
-            channels_with_drops = self._get_channels_with_drops(normalized_capacitances,
-                                                                DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR)
-
-        else:
-            logger.warning(f"No channels electrode areas set. Proceeding with droplet detection without area normalized capacitances ...")
-
-            channels_with_drops = (
-                self._get_channels_with_drops(capacitances_array,
-                                              DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION)
-            )
-
-        if len(channels_with_drops) == 0:
-            logger.info("No Droplets were detected.")
-
+        if not channels_with_drops:
+            logger.info("No droplets were detected.")
         return channels_with_drops
 
+    # --------------------------------------------------------------------------
+    # Helper Methods
+    # --------------------------------------------------------------------------
+
     @staticmethod
-    def _get_channels_with_drops(capacitances_array: np.ndarray,
-                                 capacitance_threshold_factor: float) -> list[int]:
+    @contextmanager
+    def _detection_context(proxy) -> Generator['DramatiqDropbotSerialProxy', None, None]:
+        """
+        A context manager to safely set and restore hardware state for detection.
 
-        threshold = capacitance_threshold_factor * np.nanmin(capacitances_array)
+        Temporarily applies detection-specific voltage and frequency settings
+        and guarantees restoration of the original state, even if errors occur.
+        """
+        original_state = proxy.state
+        logger.debug(f"Storing original state:\n {original_state}")
 
-        # Find indices (the channels) where the value is >= threshold AND is not NaN
-        liquid_channels = np.where((capacitances_array > threshold) & (~np.isnan(capacitances_array)))[0]
-
-        logger.info(f"Liquid channels: {liquid_channels}")
-
-        return liquid_channels.tolist()
-
-
-
-    def _validate_detection_preconditions(self) -> bool:
-        """Validate that proxy is ready for droplet detection."""
         try:
-            proxy = self.proxy_state_manager.proxy
-            
-            # Check basic proxy state
-            channel_count = proxy.number_of_channels
-            if channel_count != 120:
-                logger.error(f"Invalid channel count for detection: {channel_count}")
-                return False
-            
-            # Check state consistency
-            current_state = proxy.state_of_channels
-            if len(current_state) != channel_count:
-                logger.error(f"State inconsistency detected: {len(current_state)} != {channel_count}")
-                return False
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Precondition validation failed: {e}")
-            return False
+            with proxy.transaction_lock:
+                proxy.frequency = DROPLET_DETECTION_FREQUENCY
+                proxy.voltage = DROPLET_DETECTION_VOLTAGE # also turns on HV unlike update_state(voltage=num)
+                logger.info(f"Set detection state: F={proxy.frequency}Hz, V={proxy.voltage}V")
+                time.sleep(0.05)  # Allow settings to settle
+                yield proxy
 
-    def _store_original_settings(self) -> Dict[str, any]:
-        """Store original proxy settings for restoration."""
-        try:
-            proxy = self.proxy_state_manager.proxy
-            return {
-                'frequency': proxy.frequency,
-                'voltage': proxy.voltage
-            }
-        except Exception as e:
-            logger.error(f"Failed to store original settings: {e}")
-            return {}
+        finally:
+            # executes after with block. Get lock again.
+            with proxy.transaction_lock:
+                proxy.state = original_state
+            logger.info(f"Restored original state:\n {proxy.state}")
 
-    def _prepare_for_detection(self):
-        """Prepare proxy for droplet detection."""
-        proxy = self.proxy_state_manager.proxy
-        
-        # Turn off all channels
-        logger.debug("Turning off all channels for droplet detection")
-        proxy.turn_off_all_channels()
-        
-        # Small delay for channel settling
-        time.sleep(0.05)
-        
-        # Set detection params
-        proxy.frequency = DROPLET_DETECTION_FREQUENCY
-        proxy.voltage = DROPLET_DETECTION_VOLTAGE
-        logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
-        logger.debug(f"Set voltage to {DROPLET_DETECTION_VOLTAGE} Hz")
+    @staticmethod
+    def _get_capacitances(proxy: 'DramatiqDropbotSerialProxy', channels: list[int]) -> np.ndarray:
+        """Measure and scale capacitances from the hardware."""
+        with proxy.transaction_lock:
+            raw_capacitances = proxy.channel_capacitances(channels or None)
+            capacitances = pd.Series(raw_capacitances, index=channels or proxy.active_channels)
 
-        # Small delay for frequency settling
-        time.sleep(0.05)
+        logger.debug(f"Capacitances (pF): {capacitances * PF_SCALE_FACTOR}")
+        return map_series_to_array(capacitances)
 
-    def _restore_original_settings(self, original_settings: Dict[str, any]):
-        """Restore original proxy settings."""
-        if not original_settings:
-            logger.warning("No original settings to restore")
-            return
-        
-        try:
-            proxy = self.proxy_state_manager.proxy
-            
-            # Restore frequency
-            if 'frequency' in original_settings:
-                proxy.frequency = original_settings['frequency']
-                logger.debug(f"Restored frequency to {original_settings['frequency']} Hz")
-            
-            # Restore voltage
-            if 'voltage' in original_settings:
-                proxy.voltage = original_settings['voltage']
-                logger.debug(f"Restored voltage to {original_settings['voltage']} V")
-                    
-        except Exception as e:
-            logger.error(f"Failed to restore original settings: {e}")
+    @staticmethod
+    def _normalize_capacitances(proxy: 'DramatiqDropbotSerialProxy', capacitances: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Normalize capacitances by electrode area if available."""
 
+        # check if channel areas are set globally
+
+        microdrop_globals = get_redis_hash_proxy(
+            redis_client=dramatiq.get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH
+        )
+        channel_areas_dict = microdrop_globals.get("channel_electrode_areas")
+
+        if not channel_areas_dict:
+            logger.warning("No electrode areas found. Using raw capacitance.")
+            return capacitances, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION
+
+        logger.debug("Normalizing capacitances by electrode area.")
+
+        # preparing channel areas to put through model and get channel-props array: keys need to be ints.
+        channel_areas = {int(k): v for k, v in channel_areas_dict.items()}
+
+        model = DropbotChannelsPropertiesModel(
+            num_available_channels=proxy.number_of_channels,
+            property_dtype=float,
+            channels_properties_dict=channel_areas,
+        )
+
+        # Use np.divide to handle division by zero gracefully if any area is 0
+        normalized_caps = np.divide(
+            capacitances, model.channels_properties_array,
+            out=np.full_like(capacitances, np.nan), where=model.channels_properties_array != 0
+        )
+        return normalized_caps, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR
+
+    @staticmethod
+    def _find_channels_above_threshold(capacitances: np.ndarray, threshold_factor: float) -> list[int]:
+        """Identify channels where capacitance exceeds a dynamic threshold."""
+        if np.all(np.isnan(capacitances)):
+            logger.warning("All capacitance values are NaN.")
+            return []
+
+        threshold = np.nanmin(capacitances) * threshold_factor
+
+        liquid_channels = np.where(
+            (capacitances > threshold) & (~np.isnan(capacitances))
+        )[0]
+
+        liquid_channels = liquid_channels.tolist()
+
+        logger.info(f"Detected liquid in channels: {liquid_channels}")
+        return liquid_channels
+
+    @staticmethod
     def _publish_detection_response(
-            self,
             detected_channels: Optional[list[int]] = None,
             error_message: Optional[str] = None
     ):
-        """
-        Publishes a droplet detection response for success or failure cases.
+        """Publish the droplet detection result (success or failure)."""
+        is_success = not error_message
 
-        If an `error_message` is provided, it publishes a failure response.
-        Otherwise, it publishes a success response with the `detected_channels`.
-
-        Args:
-            detected_channels: A list of channel integers for a success response.
-            error_message: A string describing an error, indicating a failure response.
-        """
-        # Determine if the operation was successful based on the presence of an error message.
-
-        if error_message == "":
-            # For a success case, use the provided channels or an empty list.
-            channels = detected_channels if detected_channels is not None else []
-            log_msg = f"Published successful droplet detection response: {len(channels)} channels"
-        else:
-            # For an error case, the channel list is always empty.
-            channels = []
-            log_msg = f"Published error droplet detection response: {error_message}"
-
-        # Construct the response payload.
         response = {
-            "success": error_message == "",
-            "detected_channels": channels,
-            "error": error_message,
+            "success": is_success,
+            "detected_channels": detected_channels or [],
+            "error": error_message or "",
         }
 
-        # Publish the JSON-serialized message and log the action.
         publish_message(topic=DROPLETS_DETECTED, message=json.dumps(response))
+        log_msg = f"Published detection result: Success={is_success}, Channels={response['detected_channels']}"
         logger.debug(log_msg)
