@@ -1,5 +1,53 @@
 import json
+from typing import Optional, cast
+
 from traits.api import HasTraits, Instance, Str
+
+
+
+#: global redis_hash proxies instances.
+_redis_hash_proxies: dict[str, Optional["RedisHashDictProxy"]] = {}
+
+
+def set_redis_hash_dict_proxy(proxy: 'RedisHashDictProxy'):
+    """
+    Explicitly sets or overrides a shared Redis proxy for its hash name.
+
+    This is useful for dependency injection, especially during testing.
+
+    Args:
+        proxy: The RedisHashDictProxy instance to set as the global for its name.
+    """
+    global _redis_hash_proxies
+    # The dictionary key is the hash_name from the proxy object itself.
+    _redis_hash_proxies[proxy.hash_name] = proxy
+
+
+def get_redis_hash_proxy(redis_client, hash_name: str) -> 'RedisHashDictProxy':
+    """
+    Gets the shared RedisHashDictProxy instance for a specific hash name.
+
+    If no instance exists for the given hash_name, a new one is created,
+    stored, and returned. Subsequent calls for the same hash_name will
+    return the same stored instance.
+
+    Returns:
+      The RedisHashDictProxy instance for the requested hash.
+    """
+    global _redis_hash_proxies
+
+    # Check if an instance for this specific hash_name already exists.
+    if hash_name not in _redis_hash_proxies:
+
+        new_proxy = RedisHashDictProxy(
+            redis_client=redis_client,
+            hash_name=hash_name
+        )
+        set_redis_hash_dict_proxy(new_proxy)
+
+    # The instance is now guaranteed to exist in the dictionary.
+    return _redis_hash_proxies[hash_name]
+
 
 
 class RedisHashDictProxy(HasTraits):

@@ -97,8 +97,9 @@ class DropbotStatesSettingMixinService(HasTraits):
                     self.realtime_mode = True
                     self.proxy.update_state(hv_output_selected=True,
                                             hv_output_enabled=True,
-                                            voltage=self.voltage,
-                                            frequency=self.frequency)
+                                            # voltage=self.voltage,
+                                            # frequency=self.frequency
+                                            )
                     publish_message(topic=REALTIME_MODE_UPDATED, message="True")
                 else:
                     self.realtime_mode = False

@@ -2,19 +2,27 @@ from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float
 from pyface.undo.api import UndoManager
 import uuid
 
+from traits.has_traits import HasTraits
+
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
+from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from device_viewer.default_settings import default_alphas
 
-class MainModel(RouteLayerManager, Electrodes):
+from dramatiq import get_broker
+from microdrop_utils.redis_manager import get_redis_hash_proxy
 
-    # TODO: Move all RouteLayerManager and Electrodes related properties and methods to this class for better comprehension
+class DeviceViewMainModel(HasTraits):
 
-    # ---------------- Model Traits -----------------------
+    # Compose device view model using components
+    routes = Instance(RouteLayerManager)
+    electrodes = Instance(Electrodes)
 
-    undo_manager = Instance(UndoManager)  # Undo manager for the model
+    # ---------------- Device View Traits -----------------------
+
+    undo_manager = Instance(UndoManager)  # Undo manager
 
     # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
     # Edit: User can only extend selected segment
@@ -26,6 +34,7 @@ class MainModel(RouteLayerManager, Electrodes):
     # Camera-Edit: User can edit the perspecive correction of the camera feed
     # To change the mode, set the mode property and clean up any references/inconsistencies
     mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
+
 
     # Editor related properties
     mode_name = Property(Str, observe="mode")
@@ -48,14 +57,15 @@ class MainModel(RouteLayerManager, Electrodes):
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
 
     # ------------------ Camera Model --------------------
-    camera_perspective = Instance(PerspectiveModel, PerspectiveModel()) 
+    camera_perspective = Instance(PerspectiveModel, PerspectiveModel())
 
     # ------------------ Initialization --------------------
 
-    def traits_init(self, **traits):
+    def traits_init(self):
         """Initialize the model with default traits."""
-        super().traits_init(**traits)
 
+        self.electrodes = Electrodes()
+        self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         # Initialize the alpha map with default values
         self.alpha_map = [AlphaValue(key=key, alpha=default_alphas[key]) for key in default_alphas.keys()]
 
@@ -76,7 +86,7 @@ class MainModel(RouteLayerManager, Electrodes):
 
     def _get_editable(self):
         return self.mode != "display"
-    
+
     def _set_editable(self, value: bool):
         if not value:
             self.mode = "display"
@@ -86,8 +96,8 @@ class MainModel(RouteLayerManager, Electrodes):
     # ------------------------ Methods ---------------------------------
 
     def reset(self):
-        self.reset_electrode_states()
-        self.reset_route_manager()
+        self.electrodes.reset_electrode_states()
+        self.routes.reset_route_manager()
 
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
@@ -95,7 +105,7 @@ class MainModel(RouteLayerManager, Electrodes):
             if alpha_value.key == key:
                 return alpha_value.alpha if alpha_value.visible else 0.0
         return 1.0 # Default alpha if not found
-    
+
     def set_alpha(self, key: str, alpha: float):
         """Set the alpha value for a given key."""
         for alpha_value in self.alpha_map:
@@ -111,16 +121,16 @@ class MainModel(RouteLayerManager, Electrodes):
             if alpha_value.key == key:
                 alpha_value.visible = visible
                 return
-    
+
     # ------------------ Observers ------------------------------------
 
     @observe('mode')
     def mode_change(self, event):
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
             self.message = ""
-            self.layer_to_merge = None
+            self.routes.layer_to_merge = None
         if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
-            self.electrode_editing = None
+            self.electrodes.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
             self.camera_perspective.reset_rects() # Reset the rectangles when entering camera-place mode
             self.set_visible("electrode_fill", False)  # Set the fill alpha low for visibility
@@ -128,4 +138,26 @@ class MainModel(RouteLayerManager, Electrodes):
             self.set_visible("electrode_outline", True)  # Keep the outline visible for editing
         if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
             self.set_visible("electrode_fill", True)  # Restore fill visibility
-            self.set_visible("electrode_text", True)  # Restore text visibility
+            self.set_visible("electrode_text", True)  # Restore text
+
+    @observe("routes.layers.items.route.route.items")
+    @observe("electrodes.channels_electrode_ids_map.items")
+    def update_route_label(self, event):
+        """
+        Update label for electrodes path based on channel for electrodes.
+        """
+        if self.routes is not None:
+            for layer in self.routes.layers:
+                if layer.route.route:
+                    # Update the name of the route layer based on the current channel map
+                    layer.name = layer.route.get_name(self.electrodes.channels_electrode_ids_map)
+                else:
+                    layer.name = "Null route"
+
+    @observe("electrodes.electrode_ids_channels_map")
+    def push_globals(self, event):
+
+        if event.new:
+            app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
+
+            app_globals["channel_electrode_areas"] = self.electrodes.get_channel_electrode_areas_map()

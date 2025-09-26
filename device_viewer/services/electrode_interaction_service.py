@@ -1,9 +1,11 @@
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
+from envisage.api import IApplication
+
 from device_viewer.models.electrodes import Electrode
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import MainModel
+from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
@@ -24,7 +26,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     """
 
     #: Model
-    model = Instance(MainModel)
+    model = Instance(DeviceViewMainModel)
 
     #: The current electrode layer view
     electrode_view_layer = Instance(ElectrodeLayer)
@@ -36,8 +38,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
 
-    def __init__(self, **traits):
-        super().__init__(**traits)
+    application = Instance(IApplication)
+
+    def traits_init(self):
         self.preferences = self.application.preferences_helper.preferences
 
     # -------------------- Helpers ------------------------
@@ -86,38 +89,39 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.electrode_hovered = electrode_view
 
     def handle_electrode_channel_editing(self, electrode: Electrode):
-        self.model.electrode_editing = electrode
+        self.model.electrodes.electrode_editing = electrode
 
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
-            new_channel = self.add_digit(self.model.electrode_editing.channel, digit)
+            new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
-                self.model.electrode_editing.channel = new_channel
+                self.model.electrodes.electrode_editing.channel = new_channel
     
     def handle_backspace(self):
         if self.model.mode == "channel-edit":
-            new_channel = self.remove_last_digit(self.model.electrode_editing.channel)
+            new_channel = self.remove_last_digit(self.model.electrodes.electrode_editing.channel)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
-                self.model.electrode_editing.channel = new_channel
+                self.model.electrodes.electrode_editing.channel = new_channel
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
         if self.model.mode == "channel-edit":
             self.model.electrode_editing = self.model.electrodes[electrode_id]
         elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
-            clicked_electrode_channel = self.model[electrode_id].channel
+            clicked_electrode_channel = self.model.electrodes[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
-                self.model.channels_states_map[clicked_electrode_channel] = not self.model.channels_states_map.get(clicked_electrode_channel, False)
+                self.model.electrodes.channels_states_map[clicked_electrode_channel] = \
+                    not self.model.electrodes.channels_states_map.get(clicked_electrode_channel, False)
 
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
         if self.model.mode in ("edit", "edit-draw", "draw"):
             if self.model.mode == "draw": # Create a new layer
-                self.model.add_layer(Route(route=[from_id, to_id]))
-                self.model.selected_layer = self.model.layers[-1] # Select the route we just added
+                self.model.routes.add_layer(Route(route=[from_id, to_id]))
+                self.model.routes.selected_layer = self.model.routes.layers[-1] # Select the route we just added
                 self.model.mode = "edit-draw" # We now want to extend the route we just made
             else: # In some edit mode, try to modify currently selected layer
-                current_route = self.model.get_selected_route()
+                current_route = self.model.routes.get_selected_route()
                 if current_route == None: return
 
                 if current_route.can_add_segment(from_id, to_id):
@@ -125,12 +129,12 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_route_erase(self, from_id, to_id):
         '''Handle a route segment being erased'''
-        current_route = self.model.get_selected_route()
+        current_route = self.model.routes.get_selected_route()
         if current_route == None: return
         
         if current_route.can_remove(from_id, to_id):
             new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
-            self.model.replace_layer(self.model.selected_layer, new_routes)
+            self.model.routes.replace_layer(self.model.routes.selected_layer, new_routes)
     
     def handle_endpoint_erase(self, electrode_id):
         '''Handle the erase being triggered by hovering an endpoint'''
@@ -140,25 +144,25 @@ class ElectrodeInteractionControllerService(HasTraits):
         endpoints = current_route.get_endpoints()
         segments = current_route.get_segments()
         if len(endpoints) == 0 or len(segments) == 0: # Path of length 0 or path length of 1
-            self.model.delete_layer(self.model.selected_layer) # Delete layer
+            self.model.routes.delete_layer(self.model.routes.selected_layer) # Delete layer
         elif electrode_id == endpoints[0]: # Starting endpoint erased
             self.handle_route_erase(*segments[0]) # Delete the first segment
         elif electrode_id == endpoints[1]: # Ending endpoint erased
             self.handle_route_erase(*segments[-1]) # Delete last segment
 
     def handle_autoroute_start(self, from_id): # Run when the user enables autorouting an clicks on an electrode
-        routes = [layer.route for layer in self.model.layers]
-        self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.model.svg_model.neighbours) # Run the BFS and cache the result dict
-        self.model.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
+        routes = [layer.route for layer in self.model.routes.layers]
+        self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.model.electrodes.svg_model.neighbours) # Run the BFS and cache the result dict
+        self.model.routes.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
 
     def handle_autoroute(self, to_id):
-        self.model.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy() # Display cached result from BFS
+        self.model.routes.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy() # Display cached result from BFS
 
     def handle_autoroute_end(self):
         self.autoroute_paths = {}
-        self.model.add_layer(self.model.autoroute_layer.route) # Keep the route, generate a normal color
-        self.model.autoroute_layer = None
-        self.model.selected_layer = self.model.layers[-1] # Select just created layer
+        self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
+        self.model.routes.autoroute_layer = None
+        self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
         self.model.mode = 'edit'
 
     def get_mode(self):
@@ -167,19 +171,19 @@ class ElectrodeInteractionControllerService(HasTraits):
     def set_mode(self, mode):
         self.model.mode = mode
 
-    @observe("model.layers.items.visible")
-    @observe("model.selected_layer")
-    @observe("model.layers.items.route.route.items")
-    @observe("model.layers.items")
-    @observe("model.autoroute_layer.route.route.items")
+    @observe("model.routes.layers.items.visible")
+    @observe("model.routes.selected_layer")
+    @observe("model.routes.layers.items.route.route.items")
+    @observe("model.routes.layers.items")
+    @observe("model.routes.autoroute_layer.route.route.items")
     @observe("model.alpha_map.items.[alpha, visible]")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
     
-    @observe("model.channels_states_map.items")
-    @observe("model.electrode_editing")
-    @observe("model.electrodes.items.channel")
+    @observe("model.electrodes.channels_states_map.items")
+    @observe("model.electrodes.electrode_editing")
+    @observe("model.electrodes.electrodes.items.channel")
     @observe("electrode_hovered")
     @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_state_recolor(self, event):
@@ -191,7 +195,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_lines(self.model)
 
-    @observe("model.electrodes.items.channel")
+    @observe("model.electrodes.electrodes.items.channel")
     @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_channel_change(self, event):
         if self.electrode_view_layer:

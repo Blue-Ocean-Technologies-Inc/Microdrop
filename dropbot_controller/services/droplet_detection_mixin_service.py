@@ -2,19 +2,23 @@ import json
 import time
 from typing import Optional, Dict
 
+import dramatiq
 import numpy as np
 import pandas as pd
 from traits.api import provides, HasTraits, Str, Int, List, Float
 
+from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pandas_helpers import map_series_to_array
+from microdrop_utils.redis_manager import get_redis_hash_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
-from dropbot_controller.consts import DROPLETS_DETECTED
+from dropbot_controller.consts import DROPLETS_DETECTED, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR, DROPLET_DETECTION_FREQUENCY, \
+    DROPLET_DETECTION_VOLTAGE
+
+from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
 logger = get_logger(__name__, level="DEBUG")
-
-# Constants for droplet detection
-DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection
 
 class DetectionResult(HasTraits):
     """A structured data class for droplet detection results."""
@@ -141,14 +145,39 @@ class DropletDetectionMixinService(HasTraits):
 
         capacitances = pd.Series(proxy.channel_capacitances(channels), index=channels) * 1e12 # scale to log values in in pF units
 
-        logger.critical(f"Capacitances: {capacitances}")
-        logger.critical(f"Minimum Capacitance: {capacitances.min()}")
+        logger.debug(f"Capacitances: {capacitances}")
+        logger.debug(f"Minimum Capacitance: {capacitances.min()}")
 
-        liquid_channels = capacitances[capacitances > 10 * capacitances.min()]
+        capacitances_array = map_series_to_array(capacitances)
 
-        logger.critical(f"Liquid channels: {liquid_channels}")
+        logger.debug(f"Capacitances array: {capacitances_array}")
 
-        detected_drops = liquid_channels.index.tolist()
+        # normalize capacitances
+        microdrop_globals = get_redis_hash_proxy(redis_client=dramatiq.get_broker().client,
+                             hash_name=APP_GLOBALS_REDIS_HASH)
+
+        channel_electrode_areas = microdrop_globals["channel_electrode_areas"]
+
+        # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
+        channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
+
+        channel_electrode_areas_model = DropbotChannelsPropertiesModel(
+            num_available_channels=proxy.number_of_channels,
+            property_dtype=float,
+            channels_properties_dict=channel_electrode_areas
+        )
+
+        # get normalized capacitances
+        normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
+        logger.debug(f"normalized capacitances: {normalized_capacitances}")
+
+        threshold = DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR * np.nanmin(normalized_capacitances)
+
+        # Find indices (the channels) where the value is >= threshold AND is not NaN
+        liquid_channels  = np.where((normalized_capacitances > threshold) & (~np.isnan(normalized_capacitances)))[0]
+        logger.info(f"Liquid channels: {liquid_channels}")
+
+        detected_drops = liquid_channels.tolist()
 
         if detected_drops is None:
             logger.warning("Droplet detection returned None")
@@ -185,7 +214,6 @@ class DropletDetectionMixinService(HasTraits):
         try:
             proxy = self.proxy_state_manager.proxy
             return {
-                'state': np.copy(proxy.state_of_channels),
                 'frequency': proxy.frequency,
                 'voltage': proxy.voltage
             }
@@ -204,9 +232,11 @@ class DropletDetectionMixinService(HasTraits):
         # Small delay for channel settling
         time.sleep(0.05)
         
-        # Set detection frequency
+        # Set detection params
         proxy.frequency = DROPLET_DETECTION_FREQUENCY
+        proxy.voltage = DROPLET_DETECTION_VOLTAGE
         logger.debug(f"Set frequency to {DROPLET_DETECTION_FREQUENCY} Hz")
+        logger.debug(f"Set voltage to {DROPLET_DETECTION_VOLTAGE} Hz")
 
         # Small delay for frequency settling
         time.sleep(0.05)
@@ -229,15 +259,6 @@ class DropletDetectionMixinService(HasTraits):
             if 'voltage' in original_settings:
                 proxy.voltage = original_settings['voltage']
                 logger.debug(f"Restored voltage to {original_settings['voltage']} V")
-            
-            # Restore electrode state
-            if 'state' in original_settings:
-                original_state = original_settings['state']
-                if len(original_state) == proxy.number_of_channels:
-                    proxy.state_of_channels = original_state
-                    logger.debug(f"Restored electrode state: {original_state.sum()} active channels")
-                else:
-                    logger.error(f"Cannot restore state: size mismatch {len(original_state)} != {proxy.number_of_channels}")
                     
         except Exception as e:
             logger.error(f"Failed to restore original settings: {e}")

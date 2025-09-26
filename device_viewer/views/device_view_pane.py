@@ -23,11 +23,12 @@ from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.timestamped_message import TimestampedMessage
+from ..models.electrodes import Electrodes
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import MainModel
+from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import RouteLayerManager, Route
 from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
@@ -58,7 +59,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     undo_manager = Instance(UndoManager)
 
-    model = Instance(MainModel)
+    model = Instance(DeviceViewMainModel)
 
     id = PKG + ".pane"
     name = PKG_name + " Dock Pane"
@@ -97,8 +98,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-        self.model = MainModel(undo_manager=self.undo_manager)
-        self.model.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+        self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
+        self.model.electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
         self.preferences = self.task.window.application.preferences_helper.preferences
         # Load preferences to model
@@ -294,8 +295,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         """Handle when the electrodes model changes."""
 
         # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
-        self.set_view_from_model(new_model)
-        logger.debug(f"New Electrode Layer added --> {new_model.svg_model.filename}")
+        self.set_view_from_model(new_model.electrodes)
+        logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
 
         # Initialize the electrode mouse interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
@@ -338,11 +339,11 @@ class DeviceViewerDockPane(TraitsDockPane):
                 return
 
     @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.layers.items.route.route.items") # When a route is modified
-    @observe("model.layers.items") # When an electrode changes state
-    @observe("model.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.channels_states_map.items") # When an electrode changes state
-    @observe("model.electrode_editing") # When an electrode is being edited
+    @observe("model.routes.layers.items.route.route.items") # When a route is modified
+    @observe("model.routes.layers.items") # When an electrode changes state
+    @observe("model.electrodes.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
+    @observe("model.electrodes.electrode_editing") # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
         Handle changes to the model and send a message to the device viewer state change topic.
@@ -353,7 +354,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
             self.debounce_timer.start(200) # Start timeout for sending message
     
-    @observe("model.channels_states_map.items") # When an electrode changes state
+    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
         if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
             logger.info("Sending electrode update")
@@ -404,16 +405,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.editable = message_model.editable
 
         # Apply electrode channel mapping
-        for electrode_id, electrode in self.model.electrodes.items():
+        for electrode_id, electrode in self.model.electrodes.electrodes.items():
             electrode.channel = message_model.id_to_channel.get(electrode_id, electrode.channel)
 
         # Apply electrode on/off states
-        self.model.channels_states_map.update(message_model.channels_activated)
+        self.model.electrodes.channels_states_map.update(message_model.channels_activated)
 
         # Apply routes
         for route, color in message_model.routes:
-            self.model.add_layer(Route(route=route.copy()), None, color)
-        self.model.selected_layer = None
+            self.model.routes.add_layer(Route(route=route.copy()), None, color)
+        self.model.routes.selected_layer = None
 
         self._disable_state_messages = False  # Re-enable state messages after reset
         self._undoing = False
@@ -425,12 +426,12 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def publish_electrode_update(self):
         message_obj = {}
-        for channel in self.model.channels_electrode_ids_map: # Make sure all channels are explicitly included
-            message_obj[channel] = self.model.channels_states_map.get(channel, False)
+        for channel in self.model.electrodes.channels_electrode_ids_map: # Make sure all channels are explicitly included
+            message_obj[channel] = self.model.electrodes.channels_states_map.get(channel, False)
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
     def publish_detect_droplet(self):
-        publish_message(topic=DETECT_DROPLETS, message=json.dumps(list(self.model.channels_electrode_ids_map.keys())))
+        publish_message(topic=DETECT_DROPLETS, message=json.dumps(list(self.model.electrodes.channels_electrode_ids_map.keys())))
 
     def publish_calibration_message(self):
         """
@@ -500,7 +501,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # layer_view code
         layer_view = RouteLayerView
-        self.layer_ui = self.model.edit_traits(view=layer_view)
+        self.layer_ui = self.model.routes.edit_traits(view=layer_view)
 
         self.layer_ui.control.setMinimumHeight(LAYERS_VIEW_MIN_HEIGHT)
         self.layer_ui.control.setParent(main_container)
@@ -586,9 +587,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         except Exception as e:
             logger.debug(f"Error applying initial theme styling: {e}")
 
-    def set_view_from_model(self, new_model):
+    def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
         self.remove_current_layer()
-        self.current_electrode_layer = ElectrodeLayer(new_model)
+        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model)
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -603,8 +604,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             self.model.reset()
             self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
-            self.model.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
-            logger.debug(f"Created electrodes from SVG file: {self.model.svg_model.filename}")
+            self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
+            logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
 
             self.set_interaction_service(self.model)
             logger.info(f"Electrodes model set to {self.model}")
@@ -614,7 +615,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
-            channels_to_svg(self.model.svg_model.filename, new_filename, self.model.electrode_ids_channels_map, self.model.electrode_scale)
+            channels_to_svg(self.model.electrodes.svg_model.filename, new_filename,
+                            self.model.electrodes.electrode_ids_channels_map, self.model.electrode_scale)
 
     @observe("model.camera_perspective.transformation")
     @observe("model.camera_perspective.camera_resolution")
