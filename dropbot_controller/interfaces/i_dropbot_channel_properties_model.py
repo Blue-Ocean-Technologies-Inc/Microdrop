@@ -11,9 +11,9 @@ class IDropbotChannelsPropertiesModel(Interface):
     num_available_channels = Int(desc="Number of available channels at maximum on the dropbot.")
     property_dtype = Enum(int, float, bool, desc="Property type for channel properties array")
     channels_properties_dict = Dict(Int, Union(Float, Int, Bool), desc="Dictionary of channel properties")
-    channels_properties_mask = Property(Array, observe="channels_properties_dict", desc="boolean mask representing channel properties.")
+    channels_properties_array = Property(Array, observe="channels_properties_dict", desc="boolean mask representing channel properties.")
 
-    def _get_channels_properties_mask(self):
+    def _get_channels_properties_array(self):
         """Return a boolean mask representing channel properties."""
 
 class IDropbotChannelsPropertiesModelFromJSON(Interface):
