@@ -13,8 +13,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pandas_helpers import map_series_to_array
 from microdrop_utils.redis_manager import get_redis_hash_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
-from dropbot_controller.consts import DROPLETS_DETECTED, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR, DROPLET_DETECTION_FREQUENCY, \
-    DROPLET_DETECTION_VOLTAGE
+from dropbot_controller.consts import DROPLETS_DETECTED, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR, \
+    DROPLET_DETECTION_FREQUENCY, \
+    DROPLET_DETECTION_VOLTAGE, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION
 
 from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
@@ -152,38 +153,58 @@ class DropletDetectionMixinService(HasTraits):
 
         logger.debug(f"Capacitances array: {capacitances_array}")
 
-        # normalize capacitances
+        # Try to normalize the channel capacitances using electrode areas for each channel
+        # if not possible, proceed without normalizing the capacitances
         microdrop_globals = get_redis_hash_proxy(redis_client=dramatiq.get_broker().client,
                              hash_name=APP_GLOBALS_REDIS_HASH)
 
-        channel_electrode_areas = microdrop_globals["channel_electrode_areas"]
+        channel_electrode_areas = microdrop_globals.get("channel_electrode_areas")
 
-        # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
-        channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
+        if channel_electrode_areas:
 
-        channel_electrode_areas_model = DropbotChannelsPropertiesModel(
-            num_available_channels=proxy.number_of_channels,
-            property_dtype=float,
-            channels_properties_dict=channel_electrode_areas
-        )
+            # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
+            channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
 
-        # get normalized capacitances
-        normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
-        logger.debug(f"normalized capacitances: {normalized_capacitances}")
+            channel_electrode_areas_model = DropbotChannelsPropertiesModel(
+                num_available_channels=proxy.number_of_channels,
+                property_dtype=float,
+                channels_properties_dict=channel_electrode_areas
+            )
 
-        threshold = DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR * np.nanmin(normalized_capacitances)
+            # get normalized capacitances
+            normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
+
+            logger.debug(f"normalized capacitances: {normalized_capacitances}")
+
+            channels_with_drops = self._get_channels_with_drops(normalized_capacitances,
+                                                                DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR)
+
+        else:
+            logger.warning(f"No channels electrode areas set. Proceeding with droplet detection without area normalized capacitances ...")
+
+            channels_with_drops = (
+                self._get_channels_with_drops(capacitances_array,
+                                              DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION)
+            )
+
+        if len(channels_with_drops) == 0:
+            logger.info("No Droplets were detected.")
+
+        return channels_with_drops
+
+    @staticmethod
+    def _get_channels_with_drops(capacitances_array: np.ndarray,
+                                 capacitance_threshold_factor: float) -> list[int]:
+
+        threshold = capacitance_threshold_factor * np.nanmin(capacitances_array)
 
         # Find indices (the channels) where the value is >= threshold AND is not NaN
-        liquid_channels  = np.where((normalized_capacitances > threshold) & (~np.isnan(normalized_capacitances)))[0]
+        liquid_channels = np.where((capacitances_array > threshold) & (~np.isnan(capacitances_array)))[0]
+
         logger.info(f"Liquid channels: {liquid_channels}")
 
-        detected_drops = liquid_channels.tolist()
+        return liquid_channels.tolist()
 
-        if detected_drops is None:
-            logger.warning("Droplet detection returned None")
-            return []
-
-        return detected_drops
 
 
     def _validate_detection_preconditions(self) -> bool:
