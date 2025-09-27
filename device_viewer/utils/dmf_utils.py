@@ -8,6 +8,7 @@ from typing import Union, TypedDict
 from shapely.geometry import Polygon
 #from nptyping import NDArray, Float, Shape
 
+from traits.api import HasTraits, Float
 
 class ElectrodeDict(TypedDict):
     channel: int
@@ -15,7 +16,7 @@ class ElectrodeDict(TypedDict):
 
 
 
-class SvgUtil:
+class SvgUtil(HasTraits):
     float_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
     path_commands = re.compile(r"(?P<move_command>[ML])\s+(?P<x>{0}),\s*(?P<y>{0})\s*|"
                                r"(?P<x_command>[H])\s+(?P<hx>{0})\s*|"
@@ -24,7 +25,10 @@ class SvgUtil:
                                .format(float_pattern))
     style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
 
-    def __init__(self, filename: Union[str, Path] = None):
+    pixel_scale = Float
+
+    def __init__(self, filename: Union[str, Path] = None, **traits):
+        super().__init__(**traits)
         self._filename = filename
         self.max_x = None
         self.max_y = None
