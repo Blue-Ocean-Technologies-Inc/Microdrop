@@ -89,7 +89,7 @@ class Electrodes(HasTraits):
         for k, v in new_model.electrodes.items():
             new_electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
         
-        self.electrode_scale = new_model.pixel_scale
+        # self.electrode_scale = new_model.pixel_scale
         self.electrodes.update(new_electrodes) # Single update to model = single draw
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
@@ -166,6 +166,6 @@ class Electrodes(HasTraits):
             for electrode_id, channel in self.electrode_ids_channels_map.items():
                 if self.channels_states_map.get(channel, False):
                     area = self.svg_model.electrode_areas.get(electrode_id, 0)
-                    total_area += area * (self.electrode_scale ** 2)
+                    total_area += area * (self.svg_model.pixel_scale ** 2)
             return total_area
         return None

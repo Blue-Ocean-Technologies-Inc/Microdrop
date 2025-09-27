@@ -166,7 +166,7 @@ class ElectrodeScene(QGraphicsScene):
 
     def measure_filler_capacitance(self):
         """Placeholder for measuring filler capacitance."""
-        if not self.interaction_service.model.any_electrode_on():
+        if not self.interaction_service.model.electrodes.any_electrode_on():
             logger.warning("No electrodes are on, cannot measure filler capacitance.")
             return
         
@@ -178,7 +178,7 @@ class ElectrodeScene(QGraphicsScene):
 
     def measure_liquid_capacitance(self):
         """Placeholder for measuring liquid capacitance."""
-        if not self.interaction_service.model.any_electrode_on():
+        if not self.interaction_service.model.electrodes.any_electrode_on():
             logger.warning("No electrodes are on, cannot measure liquid capacitance.")
             return
         
