@@ -89,7 +89,7 @@ class Electrodes(HasTraits):
         for k, v in new_model.electrodes.items():
             new_electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
         
-        self.electrode_scale = new_model.pixel_scale
+        # self.electrode_scale = new_model.pixel_scale
         self.electrodes.update(new_electrodes) # Single update to model = single draw
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
