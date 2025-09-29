@@ -124,7 +124,7 @@ class Electrodes(HasTraits):
         if self.svg_model is not None:
             areas = {}
             for electrode_id, area in self.svg_model.electrode_areas.items():
-                areas[electrode_id] = area * (self.svg_model.pixel_scale ** 2)
+                areas[electrode_id] = area * self.svg_model.area_scale
             return areas
         return {}
 
@@ -138,17 +138,13 @@ class Electrodes(HasTraits):
         if self.svg_model is not None:
             channel_electrode_areas_map = {}
 
-            electrode_areas = self.get_electrode_ids_areas_scaled_map()
+            electrode_areas_scaled = self.get_electrode_ids_areas_scaled_map()
 
             # We can iterate over the electrode ids for each channel
             for channel, electrode_ids in self.channels_electrode_ids_map.items():
 
                 # Aggregate the electrode_ids using their area values
-                total_area = sum([electrode_areas[electrode_id] for electrode_id in electrode_ids])
-
-                # the aggregated value was the unscaled total area the channel affects.
-                # This needs to be scaled using information from the svg model
-                total_area_scaled = total_area * (self.svg_model.pixel_scale ** 2)
+                total_area_scaled = sum([electrode_areas_scaled[electrode_id] for electrode_id in electrode_ids])
 
                 # Set channel id scaled area
                 channel_electrode_areas_map[channel] = total_area_scaled
@@ -166,6 +162,6 @@ class Electrodes(HasTraits):
             for electrode_id, channel in self.electrode_ids_channels_map.items():
                 if self.channels_states_map.get(channel, False):
                     area = self.svg_model.electrode_areas.get(electrode_id, 0)
-                    total_area += area * (self.svg_model.pixel_scale ** 2)
+                    total_area += area * (self.svg_model.area_scale ** 2)
             return total_area
         return None

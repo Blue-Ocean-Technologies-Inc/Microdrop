@@ -19,7 +19,6 @@ from dropbot_controller.consts import (
     DROPLETS_DETECTED,
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR,
     DROPLET_DETECTION_FREQUENCY,
-    DROPLET_DETECTION_VOLTAGE,
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION,
 )
 from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
