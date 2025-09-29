@@ -44,7 +44,7 @@ class DeviceViewMainModel(HasTraits):
     # calibration related properties
     liquid_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the liquid in pF/mm^2
     filler_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the filler in pF/mm^2
-    electrode_scale = Property(Float, observe='electrodes.svg_model.pixel_scale')  # The scale of the electrode area in pixels to mm
+    electrode_scale = Property(Float, observe='electrodes.svg_model.area_scale')
 
     # message model properties
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
@@ -72,10 +72,10 @@ class DeviceViewMainModel(HasTraits):
     # ------------------------- Properties ------------------------
 
     def _get_electrode_scale(self):
-        return self.electrodes.svg_model.pixel_scale
+        return self.electrodes.svg_model.area_scale
 
     def _set_electrode_scale(self, value):
-        self.electrodes.svg_model.pixel_scale = value
+        self.electrodes.svg_model.area_scale = value
 
     def _get_mode_name(self):
         return {
