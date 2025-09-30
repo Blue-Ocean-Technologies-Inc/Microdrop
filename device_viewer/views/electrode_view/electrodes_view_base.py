@@ -187,6 +187,12 @@ class ElectrodeView(QGraphicsPathItem):
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
 
+        # Set the tooltip to show on hover
+        self._tooltip_text = f"Electrode ID: {self.id}\n" \
+             f"Channel: {self.electrode.channel}\n" \
+             f"Area (mm²): {self.electrode.area_scaled:.2f}"
+        self.setToolTip(self._tooltip_text)
+
     #################################################################################
     # electrode view protected methods
     ##################################################################################
@@ -229,11 +235,6 @@ class ElectrodeView(QGraphicsPathItem):
         posy = top + (bottom - top - text_size.height()) / 2
         self.text_path.setPos(posx, posy)
 
-        # Set the tooltip to show on hover
-        self.setToolTip(f"Electrode ID: {self.id}\n"
-                        f"Channel: {self.electrode.channel}\n"
-                        f"Area (mm²): {self.electrode.area_scaled:.2f}")
-
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
@@ -256,5 +257,11 @@ class ElectrodeView(QGraphicsPathItem):
         new_color = QColor(self.pen_color)
         new_color.setAlphaF(alpha)
         self.setPen(QPen(new_color, 1))
+
+    def toggle_tooltip(self, checked: bool):
+        if checked:
+            self.setToolTip(self._tooltip_text)
+        else:
+            self.setToolTip("")
 
 
