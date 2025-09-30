@@ -105,6 +105,10 @@ class ElectrodeLayer():
         parent_scene.removeItem(self.electrode_editing_text)
         parent_scene.removeItem(self.reference_rect_item)
 
+    def toggle_electrode_tooltips(self, checked):
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.toggle_tooltip(checked)
+
     ######################## Redraw functions ###########################
     def redraw_connections_to_scene(self, model: DeviceViewMainModel):
         # Routes are applied in order, so later routes will apply on top
