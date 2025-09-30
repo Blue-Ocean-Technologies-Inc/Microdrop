@@ -112,9 +112,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view = AutoFitGraphicsView(self.scene)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
-
-        # Apply initial theme styling
-        self._apply_initial_theme_styling()
         
         # Connect to application palette changes for theme updates
         QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
@@ -131,6 +128,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         """Apply initial theme styling when the UI is first built"""
         try:
             theme = "dark" if is_dark_mode() else "light"
+            logger.info(f"Applying initial theme styling: {theme} mode")
             self._update_theme_styling(theme)
         except Exception as e:
             logger.debug(f"Error applying initial theme: {e}")
@@ -139,80 +137,83 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def _update_theme_styling(self, theme):
         """Update theme styling for all child components"""
+        if hasattr(self, "device_view"):
+            self.device_view.setStyleSheet(get_complete_stylesheet(theme))
+
         if hasattr(self, 'mode_picker_view'):
             self.mode_picker_view.update_theme_styling(theme)
         if hasattr(self, 'camera_control_widget'):
             self.camera_control_widget.update_theme_styling(theme)
         if hasattr(self, 'calibration_view'):
             self.calibration_view.update_theme_styling(theme)
-        
-        # Update section label styling based on theme
-        section_style = self._get_section_label_style(theme)
-        button_style = self._get_camera_button_style(theme)
-        
-        for i in range(self.left_stack.count()):
-            widget = self.left_stack.widget(i)
-            if isinstance(widget, QLabel) and widget.text() in ["Camera Controls", "Capacitance Calibration", "Paths"]:
-                widget.setStyleSheet(section_style)
-        
-        # Update camera control buttons if they exist
-        if hasattr(self, 'camera_controls_container'):
-            for child in self.camera_controls_container.findChildren(QPushButton):
-                child.setStyleSheet(button_style)
 
-    def _get_section_label_style(self, theme):
-        """Get section label styling based on theme"""
-        if theme == "dark":
-            return """
-                QLabel {
-                    color: #CCCCCC;
-                    font-size: 12px;
-                    font-weight: bold;
-                    padding: 4px 0px 2px 0px;
-                    margin-bottom: 4px;
-                }
-            """
-        else:  # light theme
-            return """
-                QLabel {
-                    color: #333333;
-                    font-size: 12px;
-                    font-weight: bold;
-                    padding: 4px 0px 2px 0px;
-                    margin-bottom: 4px;
-                }
-            """
-    
-    def _get_camera_button_style(self, theme):
-        """Get camera control button styling based on theme"""
-        if theme == "dark":
-            return """
-                QPushButton {
-                    background-color: #444444;
-                    border: 1px solid #666666;
-                    border-radius: 4px;
-                    font-family: "Material Symbols Outlined";
-                    font-size: 16px;
-                    color: #FFFFFF;
-                }
-                QPushButton:hover {
-                    background-color: #555555;
-                }
-            """
-        else:  # light theme
-            return """
-                QPushButton {
-                    background-color: #E0E0E0;
-                    border: 1px solid #CCCCCC;
-                    border-radius: 4px;
-                    font-family: "Material Symbols Outlined";
-                    font-size: 16px;
-                    color: #333333;
-                }
-                QPushButton:hover {
-                    background-color: #D0D0D0;
-                }
-            """
+        # Update section label styling based on theme
+    #     section_style = self._get_section_label_style(theme)
+    #     button_style = self._get_camera_button_style(theme)
+    #
+    #     for i in range(self.left_stack.count()):
+    #         widget = self.left_stack.widget(i)
+    #         if isinstance(widget, QLabel) and widget.text() in ["Camera Controls", "Capacitance Calibration", "Paths"]:
+    #             widget.setStyleSheet(section_style)
+    #
+    #     # Update camera control buttons if they exist
+    #     if hasattr(self, 'camera_controls_container'):
+    #         for child in self.camera_controls_container.findChildren(QPushButton):
+    #             child.setStyleSheet(button_style)
+    #
+    # def _get_section_label_style(self, theme):
+    #     """Get section label styling based on theme"""
+    #     if theme == "dark":
+    #         return """
+    #             QLabel {
+    #                 color: #CCCCCC;
+    #                 font-size: 12px;
+    #                 font-weight: bold;
+    #                 padding: 4px 0px 2px 0px;
+    #                 margin-bottom: 4px;
+    #             }
+    #         """
+    #     else:  # light theme
+    #         return """
+    #             QLabel {
+    #                 color: #333333;
+    #                 font-size: 12px;
+    #                 font-weight: bold;
+    #                 padding: 4px 0px 2px 0px;
+    #                 margin-bottom: 4px;
+    #             }
+    #         """
+    #
+    # def _get_camera_button_style(self, theme):
+    #     """Get camera control button styling based on theme"""
+    #     if theme == "dark":
+    #         return """
+    #             QPushButton {
+    #                 background-color: #444444;
+    #                 border: 1px solid #666666;
+    #                 border-radius: 4px;
+    #                 font-family: "Material Symbols Outlined";
+    #                 font-size: 16px;
+    #                 color: #FFFFFF;
+    #             }
+    #             QPushButton:hover {
+    #                 background-color: #555555;
+    #             }
+    #         """
+    #     else:  # light theme
+    #         return """
+    #             QPushButton {
+    #                 background-color: #E0E0E0;
+    #                 border: 1px solid #CCCCCC;
+    #                 border-radius: 4px;
+    #                 font-family: "Material Symbols Outlined";
+    #                 font-size: 16px;
+    #                 color: #333333;
+    #             }
+    #             QPushButton:hover {
+    #                 background-color: #D0D0D0;
+    #             }
+    #         """
 
     # ------- Dramatiq handlers ---------------------------
     def _on_chip_inserted(self, message):
@@ -577,26 +578,11 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         main_container.setLayout(main_layout)
 
-        return main_container
 
-    def _apply_initial_theme_styling(self):
-        """Apply the correct theme styling when components are first created."""
-        try:
-            # Import here to avoid circular imports            
-            theme = "dark" if is_dark_mode() else "light"
-            
-            # Update all components with the current theme
-            if hasattr(self, 'mode_picker_view') and self.mode_picker_view:
-                self.mode_picker_view.update_theme_styling(theme)
-            
-            if hasattr(self, 'camera_control_widget') and self.camera_control_widget:
-                self.camera_control_widget.update_theme_styling(theme)
-                
-            if hasattr(self, 'calibration_view') and self.calibration_view:
-                self.calibration_view.update_theme_styling(theme)
-                
-        except Exception as e:
-            logger.debug(f"Error applying initial theme styling: {e}")
+        # Apply initial theme styling
+        self._apply_initial_theme_styling()
+
+        return main_container
 
     def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
         self.remove_current_layer()
