@@ -183,7 +183,7 @@ class Electrodes(HasTraits):
             for electrode_id, channel in self.electrode_ids_channels_map.items():
                 if self.channels_states_map.get(channel, False):
                     area = self.svg_model.electrode_areas.get(electrode_id, 0)
-                    total_area += area * (self.svg_model.area_scale ** 2)
+                    total_area += area * self.svg_model.area_scale
             return total_area
         return None
 
