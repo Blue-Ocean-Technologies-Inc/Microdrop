@@ -48,6 +48,12 @@ class Electrodes(HasTraits):
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     channels_states_map = Dict(Int, Bool, {})
 
+    #: Map of electrode_areas
+    electrode_ids_areas_scaled_map = Property(Dict(Str, Float), observe=['electrodes.items.channel', 'svg_model.area_scale'])
+    #: Map of channel areas
+    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe='electrode_ids_areas_scaled_map')
+
+
     # ------------------- Magic methods ----------------------------------------------------------------------
     def __getitem__(self, item: Str) -> Electrode:
         return self.electrodes[item]
@@ -80,6 +86,40 @@ class Electrodes(HasTraits):
             electrode_ids_channels_map[electrode_id] = electrode.channel
         
         return electrode_ids_channels_map
+
+    @cached_property
+    def _get_electrode_ids_areas_scaled_map(self) -> dict[str, float]:
+        """
+        Get the areas of all electrodes in mm^2
+        :return: Dictionary of electrode id to area in mm^2
+        """
+        if self.svg_model is not None:
+            areas = {}
+            for electrode_id, area in self.svg_model.electrode_areas.items():
+                areas[electrode_id] = area * self.svg_model.area_scale
+            return areas
+        return {}
+
+    @cached_property
+    def _get_channel_electrode_areas_scaled_map(self):
+        """
+        Get the areas of all electrode area in mm^2 affected by each channel:
+        I.e. If a channel maps to multiple electrode_ids, sum areas and map to channel.
+
+        :return: Dictionary of channel to area in mm^2
+        """
+        if self.svg_model is not None:
+            channel_electrode_areas_map = {}
+
+            # We can iterate over the electrode ids for each channel
+            for channel, electrode_ids in self.channels_electrode_ids_map.items():
+                # Aggregate the electrode_ids using their area values
+                total_area_scaled = sum([self.electrode_ids_areas_scaled_map[electrode_id] for electrode_id in electrode_ids])
+
+                # Set channel id scaled area
+                channel_electrode_areas_map[channel] = total_area_scaled
+
+            return channel_electrode_areas_map
 
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
@@ -115,42 +155,6 @@ class Electrodes(HasTraits):
         :return: True if any electrode is on, False otherwise
         """
         return any(self.channels_states_map.values())
-    
-    def get_electrode_ids_areas_scaled_map(self) -> dict[str, float]:
-        """
-        Get the areas of all electrodes in mm^2
-        :return: Dictionary of electrode id to area in mm^2
-        """
-        if self.svg_model is not None:
-            areas = {}
-            for electrode_id, area in self.svg_model.electrode_areas.items():
-                areas[electrode_id] = area * self.svg_model.area_scale
-            return areas
-        return {}
-
-    def get_channel_electrode_areas_map(self):
-        """
-        Get the areas of all electrode area in mm^2 affected by each channel:
-        I.e. If a channel maps to mulitple electrode_ids, sum areas and map to channel.
-
-        :return: Dictionary of channel to area in mm^2
-        """
-        if self.svg_model is not None:
-            channel_electrode_areas_map = {}
-
-            electrode_areas_scaled = self.get_electrode_ids_areas_scaled_map()
-
-            # We can iterate over the electrode ids for each channel
-            for channel, electrode_ids in self.channels_electrode_ids_map.items():
-
-                # Aggregate the electrode_ids using their area values
-                total_area_scaled = sum([electrode_areas_scaled[electrode_id] for electrode_id in electrode_ids])
-
-                # Set channel id scaled area
-                channel_electrode_areas_map[channel] = total_area_scaled
-
-
-            return channel_electrode_areas_map
 
     def get_activated_electrode_area_mm2(self) -> float | None:
         """
