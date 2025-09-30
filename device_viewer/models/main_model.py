@@ -166,5 +166,5 @@ class DeviceViewMainModel(HasTraits):
 
         if event.new:
             app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
-
-            app_globals["channel_electrode_areas"] = event.new
+            if event.name == "channel_electrode_areas_scaled_map":
+                app_globals["channel_electrode_areas"] = event.new

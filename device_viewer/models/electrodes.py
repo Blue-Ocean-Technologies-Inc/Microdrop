@@ -4,7 +4,6 @@ from collections import defaultdict
 # local
 from ..utils.dmf_utils import SvgUtil
 from microdrop_utils._logger import get_logger
-from ..models.route import RouteLayerManager
 
 # enthought
 from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe
@@ -45,8 +44,8 @@ class Electrodes(HasTraits):
 
     #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
     # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
-    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrodes.items.channel')
     electrode_ids_channels_map = Property(Dict(Str, Int), observe='electrodes.items.channel')
+    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrode_ids_channels_map')
 
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     channels_states_map = Dict(Int, Bool, {})
@@ -55,6 +54,10 @@ class Electrodes(HasTraits):
     electrode_ids_areas_scaled_map = Property(Dict(Str, Float), observe=['electrodes.items.channel', 'svg_model.area_scale'])
     #: Map of channel areas
     channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe='electrode_ids_areas_scaled_map')
+
+    #: Flag indicating electrode areas are being updated in bulk (true on init).
+    # If False: change made on single electrode only.
+    _is_bulk_updating_electrode_areas = Bool(True)
 
 
     # ------------------- Magic methods ----------------------------------------------------------------------
@@ -73,22 +76,33 @@ class Electrodes(HasTraits):
     # -------------------Trait Property getters and setters --------------------------------------------------
 
     @cached_property
-    def _get_channels_electrode_ids_map(self):
-        channel_to_electrode_ids_map = defaultdict(list)
-        for electrode_id, electrode in self.electrodes.items():
-            channel_to_electrode_ids_map[electrode.channel].append(electrode_id)
-
-        logger.debug(f"Found new channel to electrode_ids mapping for each electrode")
-
-        return channel_to_electrode_ids_map
-    
-    @cached_property
     def _get_electrode_ids_channels_map(self):
+        """
+        Creates a map from each electrode ID to its corresponding channel.
+        This is the base property that iterates through the raw data.
+        """
+        logger.debug("Building electrode_id -> channel map...")
         electrode_ids_channels_map = {}
         for electrode_id, electrode in self.electrodes.items():
             electrode_ids_channels_map[electrode_id] = electrode.channel
-        
+
         return electrode_ids_channels_map
+
+    @cached_property
+    def _get_channels_electrode_ids_map(self):
+        """
+        Creates an inverted map from each channel to a list of its electrode IDs.
+        This property depends on and reuses the result from the first property.
+        """
+        logger.debug("Building channel -> electrode_ids map by inverting the first map...")
+        channel_to_electrode_ids_map = defaultdict(list)
+
+        # Call the other cached_property to get the data
+        for electrode_id, channel in self.electrode_ids_channels_map.items():
+            channel_to_electrode_ids_map[channel].append(electrode_id)
+
+        return channel_to_electrode_ids_map
+
 
     @cached_property
     def _get_electrode_ids_areas_scaled_map(self) -> dict[str, float]:
@@ -177,6 +191,31 @@ class Electrodes(HasTraits):
     @observe('electrode_ids_areas_scaled_map')
     def update_electrode_areas(self, event):
         if event.new:
-            for electrode_id, electrode in self.electrodes.items():
-                electrode.area_scaled = event.new[electrode_id]
 
+            self._is_bulk_updating_electrode_areas = True
+            try:
+                for electrode_id, electrode in self.electrodes.items():
+                    electrode.area_scaled = event.new[electrode_id]
+
+            finally:
+                self._is_bulk_updating_electrode_areas = False
+
+    @observe('electrodes.items.area_scaled')
+    def electrode_area_scaled_changed(self, event):
+        """
+        Handle cases when the area information is changed at the electrode level post initialization using the
+        svg model data.
+        """
+
+        # if the previous value is 0.0, then this is just the initialization of this value by the
+        # get_electrode_ids_areas_scaled_map method using the svg model data.
+        # If not, then it is a post init modification of the electrode model area information.
+        if not self._is_bulk_updating_electrode_areas:
+            electrode_id = event.object.id
+            self.electrode_ids_areas_scaled_map[electrode_id] = event.new
+
+            # find channel affected by this electrode.
+            channel_affected = self.electrode_ids_channels_map[electrode_id]
+            # apply change in area to this channel's area
+            area_change = event.new - event.old
+            self.channel_electrode_areas_scaled_map[channel_affected] += area_change
