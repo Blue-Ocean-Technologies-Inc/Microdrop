@@ -26,6 +26,9 @@ class Electrode(HasTraits):
     #: NDArray path to electrode
     path = Array(dtype=Float, shape=(None, 2))
 
+    #: Electrode area in mm^2
+    area_scaled = Float(allow_none=True)
+
 
 class Electrodes(HasTraits):
 
@@ -169,3 +172,11 @@ class Electrodes(HasTraits):
                     total_area += area * (self.svg_model.area_scale ** 2)
             return total_area
         return None
+
+    #### Observer methods ######
+    @observe('electrode_ids_areas_scaled_map')
+    def update_electrode_areas(self, event):
+        if event.new:
+            for electrode_id, electrode in self.electrodes.items():
+                electrode.area_scaled = event.new[electrode_id]
+

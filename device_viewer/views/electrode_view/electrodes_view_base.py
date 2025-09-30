@@ -229,6 +229,11 @@ class ElectrodeView(QGraphicsPathItem):
         posy = top + (bottom - top - text_size.height()) / 2
         self.text_path.setPos(posx, posy)
 
+        # Set the tooltip to show on hover
+        self.setToolTip(f"Electrode ID: {self.id}\n"
+                        f"Channel: {self.electrode.channel}\n"
+                        f"Area (mm²): {self.electrode.area_scaled:.2f}")
+
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
