@@ -96,12 +96,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
                 self.model.electrodes.electrode_editing.channel = new_channel
-    
+
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
+
     def handle_backspace(self):
         if self.model.mode == "channel-edit":
             new_channel = self.remove_last_digit(self.model.electrodes.electrode_editing.channel)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
                 self.model.electrodes.electrode_editing.channel = new_channel
+
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
@@ -230,3 +234,8 @@ class ElectrodeInteractionControllerService(HasTraits):
     def clear_buffer_on_mode_change(self, event):
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer = []
+
+    @observe('model.electrode_scale', post_init=True)
+    def electrode_area_scale_edited(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_all_electrode_tooltips()
