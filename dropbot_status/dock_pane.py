@@ -15,9 +15,9 @@ class DropbotStatusDockPane(DockPane):
 
     def create_contents(self, parent):
         from .dramatiq_dropbot_status_controller import DramatiqDropbotStatusController
-        from .widget import DropBotStatusWidget
+        from .dramatiq_viewcontroller import DramatiqDropBotStatusWidget
 
-        view = DropBotStatusWidget()
+        view = DramatiqDropBotStatusWidget()
         view.controller = DramatiqDropbotStatusController
 
         return view

@@ -3,9 +3,7 @@ import json
 import os
 
 # pyside imports
-from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, QTextBrowser, QGridLayout
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser
 from pint import UnitRegistry
 
 # local imports
@@ -17,12 +15,12 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
-from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION, START_DEVICE_MONITORING, CHIP_CHECK
-from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
+from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION
+from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
 from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude, ureg
 
-from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, NUM_CAPACITANCE_READINGS_AVERAGED
-
+from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
+from .status_label_widget import DropBotStatusViewController
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -52,169 +50,7 @@ def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type=
             update_fn(new_value)
             return "updated"
 
-class DropBotStatusLabel(QLabel):
-    """
-    Class providing some status visuals for when chip has been inserted or not. Or when dropbot has any errors.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.setFixedSize(325, 120)
-        self.setContentsMargins(10, 10, 10, 10)
-
-        # Main horizontal layout to hold icon and grid
-        self.main_layout = QHBoxLayout()
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(10)
-
-        # Add dropbot icon to the left
-        self.dropbot_icon = QLabel()
-        self.dropbot_icon.setFixedSize(100, 100)
-        self.dropbot_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_layout.addWidget(self.dropbot_icon)
-
-        # Create grid layout for status information
-        self.grid_layout = QGridLayout()
-        self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setHorizontalSpacing(10)  # Space between columns
-        self.grid_layout.setVerticalSpacing(1)     # Minimal space between rows
-
-        # Create fonts
-        bold_font = self.font()
-        bold_font.setBold(True)
-
-        # Create label pairs (static label + value label)
-        self.connection_label = QLabel("Connection:")
-        self.connection_label.setFont(bold_font)
-        self.dropbot_connection_status = QLabel()
-        
-        self.chip_label = QLabel("Chip Status:")
-        self.chip_label.setFont(bold_font)
-        self.dropbot_chip_status = QLabel()
-        
-        self.capacitance_label = QLabel("Capacitance:")
-        self.capacitance_label.setFont(bold_font)
-        self.dropbot_capacitance_reading = QLabel("-")
-        
-        self.voltage_label = QLabel("Voltage:")
-        self.voltage_label.setFont(bold_font)
-        self.dropbot_voltage_reading = QLabel("-")
-
-        self.pressure_label = QLabel("c<sub>device</sub>:")
-        self.pressure_label.setFont(bold_font)
-        self.dropbot_pressure_reading = QLabel("-")
-
-        self.force_label = QLabel("Force")
-        self.force_label.setFont(bold_font)
-        self.dropbot_force_reading = QLabel("-")
-
-        # Set initial status
-        self.update_status_icon(dropbot_connected=False, chip_inserted=False)
-
-        # Add pairs to grid - labels in column 0, values in column 1
-        self.grid_layout.addWidget(self.connection_label, 0, 0)
-        self.grid_layout.addWidget(self.dropbot_connection_status, 0, 1)
-        
-        self.grid_layout.addWidget(self.chip_label, 1, 0)
-        self.grid_layout.addWidget(self.dropbot_chip_status, 1, 1)
-        
-        self.grid_layout.addWidget(self.capacitance_label, 2, 0)
-        self.grid_layout.addWidget(self.dropbot_capacitance_reading, 2, 1)
-        
-        self.grid_layout.addWidget(self.voltage_label, 3, 0)
-        self.grid_layout.addWidget(self.dropbot_voltage_reading, 3, 1)
-
-        self.grid_layout.addWidget(self.pressure_label, 4, 0)
-        self.grid_layout.addWidget(self.dropbot_pressure_reading, 4, 1)
-
-        self.grid_layout.addWidget(self.force_label, 5, 0)
-        self.grid_layout.addWidget(self.dropbot_force_reading, 5, 1)
-
-        # Add the grid to the main layout
-        self.main_layout.addLayout(self.grid_layout)
-        
-        # Add stretch to the right
-        self.main_layout.addStretch(1)
-
-        self.setLayout(self.main_layout)
-        self.dropbot_connected = False
-
-    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
-        """
-        Update status based on if device connected and chip inserted or not. Follows this flowchart:
-
-        Is Dropbot Connected?
-            |          \
-            n            y
-            |             \
-        Disconnected       Is Chip Inserted?
-            |                   |          \
-           Red                  n            y
-                                |             \
-                            Not Inserted   Inserted
-                                |             |
-                              Yellow        Green
-
-        If the timestamp is provided, we only update the status if the timestamp is after the most recent status message.
-        This is to avoid updating the status if the message is older than the most recent status message.
-        """
-        if dropbot_connected is None:
-            dropbot_connected = self.dropbot_connected
-
-        if chip_inserted:
-            dropbot_connected = True # If chip is inserted dropbot must be connected
-        
-        if dropbot_connected:
-            self.dropbot_connected = True
-            logger.info("Dropbot Connected")
-            self.dropbot_connection_status.setText("Active")
-
-            if chip_inserted:
-                logger.info("Chip Inserted")
-                # dropbot ready to use: give greenlight and display chip.
-                self.dropbot_chip_status.setText("Inserted")
-                img_path = DROPBOT_CHIP_INSERTED_IMAGE
-                status_color = connected_color
-
-            # dropbot connected but no chip inside. Yellow signal.
-            else:
-                logger.info("Chip Not Inserted")
-                self.dropbot_chip_status.setText("Not Inserted")
-                img_path = DROPBOT_IMAGE
-                status_color = connected_no_device_color
-
-        else:
-            # dropbot not there. Red light.
-            self.dropbot_connected = False
-            logger.critical("Dropbot Disconnected")
-            img_path = DROPBOT_IMAGE
-            status_color = disconnected_color
-            self.dropbot_connection_status.setText("Inactive")
-            self.dropbot_chip_status.setText("Not inserted")
-
-        pixmap = QPixmap(img_path)
-        if pixmap.isNull():
-            logger.error(f"Failed to load image: {img_path}")
-        # Always scale to fit the label size
-        self.dropbot_icon.setPixmap(pixmap.scaled(self.dropbot_icon.size(), 
-                                                  Qt.AspectRatioMode.KeepAspectRatio, 
-                                                  Qt.TransformationMode.SmoothTransformation))
-        self.dropbot_icon.setStyleSheet(f'QLabel {{ background-color : {status_color}; border-radius: {BORDER_RADIUS}px; }}')
-
-    def update_capacitance_reading(self, capacitance):
-        self.dropbot_capacitance_reading.setText(capacitance)
-
-    def update_voltage_reading(self, voltage):
-        self.dropbot_voltage_reading.setText(voltage)
-
-    def update_pressure_reading(self, pressure):
-        self.dropbot_pressure_reading.setText(pressure)
-
-    def update_force_reading(self, force):
-        self.dropbot_force_reading.setText(force)
-
-
-class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
+class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
     def __init__(self):
         super().__init__()
 
@@ -236,8 +72,9 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins for compactness
 
-        self.status_label = DropBotStatusLabel()
-        self.layout.addWidget(self.status_label)
+        # Instantiate the new DropBotStatusWidget, which is now the View
+        self.status_widget = DropBotStatusViewController()
+        self.layout.addWidget(self.status_widget)
 
     ###################################################################################################################
     # Publisher methods
@@ -294,8 +131,8 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             new_capacitance = json.loads(body).get('capacitance', '-')
             new_voltage = json.loads(body).get('voltage', '-')
 
-            old_capacitance = self.status_label.dropbot_capacitance_reading.text()
-            old_voltage = self.status_label.dropbot_voltage_reading.text()
+            old_capacitance = self.status_widget.get_capacitance_reading()
+            old_voltage = self.status_widget.get_voltage_reading()
 
             self.capacitances.append(get_ureg_magnitude(new_capacitance))
 
@@ -309,8 +146,8 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
                 new_capacitance = old_capacitance
 
 
-            _maybe_update(old_capacitance, new_capacitance, self.status_label.update_capacitance_reading, threshold=3, threshold_type='absolute_diff')
-            voltage_update_result = _maybe_update(old_voltage, new_voltage, self.status_label.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
+            _maybe_update(old_capacitance, new_capacitance, self.status_widget.update_capacitance_reading, threshold=3, threshold_type='absolute_diff')
+            voltage_update_result = _maybe_update(old_voltage, new_voltage, self.status_widget.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
 
             if voltage_update_result == "updated":
                 force = None
@@ -321,7 +158,7 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
                         self.pressure
                     )
 
-                self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+                self.status_widget.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
 
     ################## Calibration data #########################
 
@@ -336,26 +173,26 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
             self.pressure = self.liquid_capacitance_over_area - self.filler_capacitance_over_area
 
-            voltage = self.status_label.dropbot_voltage_reading.text()
+            voltage = self.status_widget.get_voltage_reading()
 
             force = ForceCalculationService.calculate_force_for_step(
                 get_ureg_magnitude(voltage),
                 self.pressure
             )
 
-            self.status_label.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
-            self.status_label.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+            self.status_widget.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
+            self.status_widget.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
 
     ####### Dropbot Icon Image Control Methods ###########
 
     @timestamped_value('connected_message')
     def _on_disconnected_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=False)
+        self.status_widget.update_status(dropbot_connected=False)
         self._on_realtime_mode_updated_triggered(TimestampedMessage("False", None), force_update=True) # Set realtime mode to False when disconnected
 
     @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
-        self.status_label.update_status_icon(dropbot_connected=True)
+        self.status_widget.update_status(dropbot_connected=True)
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
@@ -367,16 +204,16 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             logger.error(f"Invalid chip inserted value: {body}")
             chip_inserted = False
         logger.debug(f"Chip inserted: {chip_inserted}")
-        self.status_label.update_status_icon(chip_inserted=chip_inserted)
+        self.status_widget.update_status(dropbot_connected=True, chip_inserted=chip_inserted)
 
     @timestamped_value('realtime_mode_message')
     def _on_realtime_mode_updated_triggered(self, body):
         self.realtime_mode = body == 'True'
         if not self.realtime_mode:
-            self.status_label.update_capacitance_reading(capacitance='-')
-            self.status_label.update_voltage_reading(voltage='-')
-            self.status_label.update_pressure_reading(pressure='-')
-            self.status_label.update_force_reading(force='-')
+            self.status_widget.update_capacitance_reading(capacitance='-')
+            self.status_widget.update_voltage_reading(voltage='-')
+            self.status_widget.update_pressure_reading(pressure='-')
+            self.status_widget.update_force_reading(force='-')
 
     ##################################################################################################
 
