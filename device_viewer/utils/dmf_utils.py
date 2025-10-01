@@ -8,7 +8,7 @@ from typing import Union, TypedDict
 from shapely.geometry import Polygon
 #from nptyping import NDArray, Float, Shape
 
-from traits.api import HasTraits, Float
+from traits.api import HasTraits, Float, Dict, Str
 
 DPI=96
 
@@ -31,6 +31,7 @@ class SvgUtil(HasTraits):
     style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
 
     area_scale = Float
+    electrode_areas_scaled = Dict(Str, Float)
 
     def __init__(self, filename: Union[str, Path] = None, **traits):
         super().__init__(**traits)
@@ -85,6 +86,7 @@ class SvgUtil(HasTraits):
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
             self.electrode_areas = self.find_electrode_areas()
+            self.electrode_areas_scaled = {key: value * self.area_scale for key, value in self.electrode_areas.items()}
             if len(self.connections.items()) == 0:
                 self.neighbours = self.find_neighbours_all()
                 self.neighbours_to_points()

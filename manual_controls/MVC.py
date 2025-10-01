@@ -192,7 +192,7 @@ class ManualControlControl(Controller):
 
     # This callback will not call update_editor() when it is not debounced!
     # This is likely because update_editor is only called by 'external' trait changes, and the new thread spawned by the decorator appears as such
-    @debounce(wait_seconds=0.3)
+    @debounce(wait_seconds=1)
     def realtime_mode_setattr(self, info, object, traitname, value):
         publish_message(
             topic=SET_REALTIME_MODE,

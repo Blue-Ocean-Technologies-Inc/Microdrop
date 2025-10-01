@@ -1,11 +1,11 @@
-from PySide6.QtCore import Qt, QPointF, QPoint
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QKeyEvent, QAction
 from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEvent
 
 from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
-from .scale_edit_view import scale_edit_view
 from microdrop_utils._logger import get_logger
+from .scale_edit_view import ScaleEditViewController
 
 logger = get_logger(__name__, level='DEBUG')
 
@@ -17,9 +17,11 @@ class ElectrodeScene(QGraphicsScene):
 
     def __init__(self, dockpane, parent=None):
         super().__init__(parent)
+        self.electrode_tooltip_visible = True
         self.dockpane = dockpane
         self.left_mouse_pressed = False
         self.right_mouse_pressed = False
+        self.electrode_view_right_clicked = None
         self.is_drag = False
         self.last_electrode_id_visited = None
         self._interaction_service = None
@@ -90,6 +92,7 @@ class ElectrodeScene(QGraphicsScene):
 
         elif button == Qt.RightButton:
             self.right_mouse_pressed = True
+            self.electrode_view_right_clicked = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
 
         super().mousePressEvent(event)
 
@@ -188,9 +191,17 @@ class ElectrodeScene(QGraphicsScene):
 
         self.interaction_service.model.liquid_capacitance_over_area = self.dockpane.last_capacitance / self.interaction_service.model.electrodes.get_activated_electrode_area_mm2()
 
-    def adjust_electrode_area(self):
+    def adjust_electrode_area_scale(self):
         """Placeholder for adjusting electrode area."""
-        self.interaction_service.model.configure_traits(view=scale_edit_view)
+        
+        scale_edit_view_controller = ScaleEditViewController(model=self.electrode_view_right_clicked.electrode,
+                                                             electrode_interaction_service=self.interaction_service)
+        scale_edit_view_controller.configure_traits()
+
+    def handle_toggle_electrode_tooltips(self, checked):
+        """Handle toggle electrode tooltip."""
+        self.electrode_tooltip_visible = checked
+        self.interaction_service.handle_toggle_electrode_tooltip(checked)
 
     def contextMenuEvent(self, event : QGraphicsSceneContextMenuEvent):
         if event.modifiers() & Qt.ControlModifier:
@@ -200,9 +211,19 @@ class ElectrodeScene(QGraphicsScene):
         context_menu = QMenu()
         context_menu.addAction("Measure Liquid Capacitance", self.measure_liquid_capacitance)
         context_menu.addAction("Measure Filler Capacitance", self.measure_filler_capacitance)
-        context_menu.addAction("Reset Electrodes", self.interaction_service.model.electrodes.reset_electrode_states)
         context_menu.addSeparator()
+        context_menu.addAction("Reset Electrodes", self.interaction_service.model.electrodes.reset_electrode_states)
         context_menu.addAction("Find Liquid", self.detect_droplet)
-        context_menu.addAction("Adjust Electrode Area", self.adjust_electrode_area)
+        context_menu.addAction("Adjust Electrode Area Scale", self.adjust_electrode_area_scale)
+        context_menu.addSeparator()
+
+        # tooltip enabled by default
+        tooltip_toggle_action = QAction("Enable Electrode Tooltip", checkable=True,
+                                        checked=self.electrode_tooltip_visible)
+
+        tooltip_toggle_action.triggered.connect(self.handle_toggle_electrode_tooltips)
+
+        context_menu.addAction(tooltip_toggle_action)
+
         context_menu.exec(event.screenPos())
         return super().contextMenuEvent(event)

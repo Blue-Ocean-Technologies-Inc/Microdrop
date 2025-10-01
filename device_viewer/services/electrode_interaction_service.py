@@ -165,6 +165,10 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
         self.model.mode = 'edit'
 
+    def handle_toggle_electrode_tooltip(self, checked):
+        '''Handle toggle electrode tooltip.'''
+        self.electrode_view_layer.toggle_electrode_tooltips(checked)
+
     def get_mode(self):
         return self.model.mode
     
