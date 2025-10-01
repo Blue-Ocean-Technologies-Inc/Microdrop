@@ -1,6 +1,7 @@
 # library imports
 import math
 import numpy as np
+from traits.observation.observe import observe
 
 # local imports
 from microdrop_utils._logger import get_logger
@@ -11,6 +12,7 @@ from pyface.qt.QtCore import Qt, QPointF
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
                              QGraphicsItem)
 
+from microdrop_utils.decorators import debounce
 from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
 from device_viewer.models.electrodes import Electrode
 
@@ -187,15 +189,20 @@ class ElectrodeView(QGraphicsPathItem):
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
 
-        # Set the tooltip to show on hover
-        _tooltip_text = f"Electrode ID: {self.id}\n" \
-             f"Channel: {self.electrode.channel}\n" \
-             f"Area (mm²): {self.electrode.area_scaled:.2f}"
-        self.setToolTip(_tooltip_text)
+        # Show electrode info on hover
+        self.setToolTip(self._tooltip_text)
 
     #################################################################################
     # electrode view protected methods
     ##################################################################################
+
+    @property
+    def _tooltip_text(self):
+        _tooltip_text = f"Electrode ID: {self.id}\n" \
+                        f"Channel: {self.electrode.channel}\n" \
+                        f"Area (mm²): {self.electrode.area_scaled:.2f}"
+
+        return _tooltip_text
 
     def _fit_text_in_path(self, alpha = 1.0, default_font_size: int = 8):
         """
@@ -258,14 +265,16 @@ class ElectrodeView(QGraphicsPathItem):
         new_color.setAlphaF(alpha)
         self.setPen(QPen(new_color, 1))
 
+    def update_tooltip(self):
+        # if tooltip toggled on, it's not empty: Needs updating to show new information.
+        if self.toolTip():
+            self.setToolTip(self._tooltip_text)
+            logger.debug(f"{self.id}: Redrew electrode tooltip")
+
     def toggle_tooltip(self, checked: bool):
         if checked:
             # Set the tooltip to show on hover
-            _tooltip_text = f"Electrode ID: {self.id}\n" \
-                            f"Channel: {self.electrode.channel}\n" \
-                            f"Area (mm²): {self.electrode.area_scaled:.2f}"
-
-            self.setToolTip(_tooltip_text)
+            self.setToolTip(self._tooltip_text)
         else:
             self.setToolTip("")
 

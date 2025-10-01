@@ -219,10 +219,19 @@ class ElectrodeLayer():
             self.reference_rect_path_item.setPath(path)
             self.reference_rect_path_item.setVisible(True)
             self.reference_rect_item.setVisible(False)  # Hide the polygon item if we're using a path
-    
+
     def clear_reference_rect(self):
         """Reset the reference rectangle to its initial state."""
         self.reference_rect_item.setPolygon(QPolygonF())
         self.reference_rect_item.setVisible(False)
         self.reference_rect_path_item.setPath(QPainterPath())
         self.reference_rect_path_item.setVisible(False)
+
+    def redraw_electrode_tooltip(self, changed_electrode_id):
+        logger.debug(f"redraw_electrode_tooltip: {changed_electrode_id}")
+        self.electrode_views[changed_electrode_id].update_tooltip()
+
+    def redraw_all_electrode_tooltips(self):
+        logger.debug(f"redraw_all_electrode_tooltips")
+        for changed_electrode_id in self.electrode_views:
+            self.redraw_electrode_tooltip(changed_electrode_id)
