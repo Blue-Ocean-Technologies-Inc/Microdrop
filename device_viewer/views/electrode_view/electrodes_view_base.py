@@ -11,6 +11,7 @@ from pyface.qt.QtCore import Qt, QPointF
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
                              QGraphicsItem)
 
+from microdrop_utils.decorators import debounce
 from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
 from device_viewer.models.electrodes import Electrode
 
@@ -117,6 +118,7 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         self.electrode_id = electrode_id
         self.set_inactive()
 
+
     def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0):
         """
         Set connection item to visually active
@@ -159,6 +161,8 @@ class ElectrodeView(QGraphicsPathItem):
         self.electrode = electrode
         self.id = id_
         self.alphas = default_alphas
+
+        self.setToolTip(f"Electrode Channel: {self.electrode.channel}")
 
         self.path = QPainterPath()
         self.path.moveTo(path_data[0][0], path_data[0][1])
@@ -251,5 +255,10 @@ class ElectrodeView(QGraphicsPathItem):
         new_color = QColor(self.pen_color)
         new_color.setAlphaF(alpha)
         self.setPen(QPen(new_color, 1))
+
+    @debounce(0.3)
+    def update_tooltip(self):
+        print(self.electrode.channel)
+        self.setToolTip(f"Electrode_id: {self.electrode.channel}")
 
 

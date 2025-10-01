@@ -156,20 +156,29 @@ class DropletDetectionMixinService(HasTraits):
         microdrop_globals = get_redis_hash_proxy(redis_client=dramatiq.get_broker().client,
                              hash_name=APP_GLOBALS_REDIS_HASH)
 
-        channel_electrode_areas = microdrop_globals["channel_electrode_areas"]
+        # initialize normalized capacitance as capacitance array:
+        normalized_capacitances = capacitances_array
 
-        # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
-        channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
+        # try to get normalization factors
+        channel_electrode_areas = microdrop_globals.get("channel_electrode_areas")
+        if channel_electrode_areas is not None:
 
-        channel_electrode_areas_model = DropbotChannelsPropertiesModel(
-            num_available_channels=proxy.number_of_channels,
-            property_dtype=float,
-            channels_properties_dict=channel_electrode_areas
-        )
+            # channel_electrode_areas to pass through model to get mask. Ensure keys are ints.
+            channel_electrode_areas = {int(key): val for key, val in channel_electrode_areas.items()}
 
-        # get normalized capacitances
-        normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
-        logger.debug(f"normalized capacitances: {normalized_capacitances}")
+            channel_electrode_areas_model = DropbotChannelsPropertiesModel(
+                num_available_channels=proxy.number_of_channels,
+                property_dtype=float,
+                channels_properties_dict=channel_electrode_areas
+            )
+
+
+            # get normalized capacitances
+            normalized_capacitances = capacitances_array / channel_electrode_areas_model.channels_properties_array
+            logger.debug(f"normalized capacitances: {normalized_capacitances}")
+
+        else:
+            logger.warning("Channel Electrode Area info unavailable to normalize channel capacitances for finding droplets.")
 
         threshold = DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR * np.nanmin(normalized_capacitances)
 

@@ -1,11 +1,13 @@
 # sys imports
 import json
 import os
+import sys
 
 # pyside imports
-from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, QTextBrowser, QGridLayout
+from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QMessageBox, QHBoxLayout, QDialog, \
+    QTextBrowser, QGridLayout, QApplication, QMainWindow
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QFont
 from pint import UnitRegistry
 
 # local imports
@@ -52,123 +54,133 @@ def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type=
             update_fn(new_value)
             return "updated"
 
-class DropBotStatusLabel(QLabel):
+
+class DropBotStatusLabel(QWidget):
     """
-    Class providing some status visuals for when chip has been inserted or not. Or when dropbot has any errors.
+    Class providing a RESIZABLE status visual for the DropBot.
+    The contents scale dynamically with the widget's size.
     """
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(325, 120)
-        self.setContentsMargins(10, 10, 10, 10)
+        # --- Base values for scaling calculations ---
+        self.base_height = 120
+        self.base_font_size = 9.0
+        self.setMinimumSize(160, 75)
+        self.setMaximumSize(325, 125)  # Set a reasonable minimum size
 
         # Main horizontal layout to hold icon and grid
-        self.main_layout = QHBoxLayout()
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(10)
+        self.main_layout = QHBoxLayout(self)
 
         # Add dropbot icon to the left
         self.dropbot_icon = QLabel()
-        self.dropbot_icon.setFixedSize(100, 100)
         self.dropbot_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.main_layout.addWidget(self.dropbot_icon)
 
         # Create grid layout for status information
         self.grid_layout = QGridLayout()
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setHorizontalSpacing(10)  # Space between columns
-        self.grid_layout.setVerticalSpacing(1)     # Minimal space between rows
-
-        # Create fonts
-        bold_font = self.font()
-        bold_font.setBold(True)
 
         # Create label pairs (static label + value label)
-        self.connection_label = QLabel("Connection:")
-        self.connection_label.setFont(bold_font)
-        self.dropbot_connection_status = QLabel()
-        
-        self.chip_label = QLabel("Chip Status:")
-        self.chip_label.setFont(bold_font)
-        self.dropbot_chip_status = QLabel()
-        
-        self.capacitance_label = QLabel("Capacitance:")
-        self.capacitance_label.setFont(bold_font)
-        self.dropbot_capacitance_reading = QLabel("-")
-        
-        self.voltage_label = QLabel("Voltage:")
-        self.voltage_label.setFont(bold_font)
-        self.dropbot_voltage_reading = QLabel("-")
+        # We store all text labels in a list for easy font updates.
+        self.text_labels = []
+        self.bold_labels = []
 
-        self.pressure_label = QLabel("c<sub>device</sub>:")
-        self.pressure_label.setFont(bold_font)
-        self.dropbot_pressure_reading = QLabel("-")
+        self.connection_label = self._create_label("Connection:", bold=True)
+        self.dropbot_connection_status = self._create_label("Inactive")
+        self.chip_label = self._create_label("Chip Status:", bold=True)
+        self.dropbot_chip_status = self._create_label("Not Inserted")
+        self.capacitance_label = self._create_label("Capacitance:", bold=True)
+        self.dropbot_capacitance_reading = self._create_label("-")
+        self.voltage_label = self._create_label("Voltage:", bold=True)
+        self.dropbot_voltage_reading = self._create_label("-")
 
-        self.force_label = QLabel("Force")
-        self.force_label.setFont(bold_font)
-        self.dropbot_force_reading = QLabel("-")
-
-        # Set initial status
-        self.update_status_icon(dropbot_connected=False, chip_inserted=False)
-
-        # Add pairs to grid - labels in column 0, values in column 1
+        # Add pairs to grid
         self.grid_layout.addWidget(self.connection_label, 0, 0)
         self.grid_layout.addWidget(self.dropbot_connection_status, 0, 1)
-        
         self.grid_layout.addWidget(self.chip_label, 1, 0)
         self.grid_layout.addWidget(self.dropbot_chip_status, 1, 1)
-        
         self.grid_layout.addWidget(self.capacitance_label, 2, 0)
         self.grid_layout.addWidget(self.dropbot_capacitance_reading, 2, 1)
-        
         self.grid_layout.addWidget(self.voltage_label, 3, 0)
         self.grid_layout.addWidget(self.dropbot_voltage_reading, 3, 1)
 
-        self.grid_layout.addWidget(self.pressure_label, 4, 0)
-        self.grid_layout.addWidget(self.dropbot_pressure_reading, 4, 1)
+        # --- THIS IS THE KEY CHANGE ---
+        # Set a proportional width ratio for the columns (e.g., 1:2).
+        # This ensures column sizes scale consistently relative to each other.
+        self.grid_layout.setColumnStretch(0, 1)  # Column 0 gets 1 part of the available space.
+        self.grid_layout.setColumnStretch(1, 2)  # Column 1 gets 2 parts of the available space.
+        # -----------------------------
 
-        self.grid_layout.addWidget(self.force_label, 5, 0)
-        self.grid_layout.addWidget(self.dropbot_force_reading, 5, 1)
-
-        # Add the grid to the main layout
         self.main_layout.addLayout(self.grid_layout)
-        
-        # Add stretch to the right
-        self.main_layout.addStretch(1)
 
-        self.setLayout(self.main_layout)
-        self.dropbot_connected = False
+        # Store the current status to re-apply pixmap on resize
+        self._current_pixmap_path = DROPBOT_IMAGE
+        self.update_status_icon(dropbot_connected=False, chip_inserted=False)
 
-    def update_status_icon(self, dropbot_connected=None, chip_inserted=False):
+
+    def _create_label(self, text, bold=False):
+        """Helper to create a QLabel and add it to the correct list for font scaling."""
+        label = QLabel(text)
+        if bold:
+            self.bold_labels.append(label)
+        else:
+            self.text_labels.append(label)
+        return label
+
+    def _update_font_sizes(self, scale_factor):
+        """Helper to apply scaled font size to all labels."""
+        font_size = self.base_font_size * scale_factor
+
+        # Regular font
+        font = QFont()
+        font.setPointSizeF(font_size)
+        for label in self.text_labels:
+            label.setFont(font)
+
+        # Bold font
+        bold_font = QFont()
+        bold_font.setPointSizeF(font_size)
+        bold_font.setBold(True)
+        for label in self.bold_labels:
+            label.setFont(bold_font)
+
+    def resizeEvent(self, event):
         """
-        Update status based on if device connected and chip inserted or not. Follows this flowchart:
-
-        Is Dropbot Connected?
-            |          \
-            n            y
-            |             \
-        Disconnected       Is Chip Inserted?
-            |                   |          \
-           Red                  n            y
-                                |             \
-                            Not Inserted   Inserted
-                                |             |
-                              Yellow        Green
-
-        If the timestamp is provided, we only update the status if the timestamp is after the most recent status message.
-        This is to avoid updating the status if the message is older than the most recent status message.
+        This is the core of the responsive behavior. It is called whenever the widget is resized.
         """
-        if dropbot_connected is None:
-            dropbot_connected = self.dropbot_connected
+        super().resizeEvent(event)
 
-        if chip_inserted:
-            dropbot_connected = True # If chip is inserted dropbot must be connected
-        
+        # 1. Calculate the scale factor based on current height vs. base height
+        scale = self.height() / self.base_height
+
+        # 2. Scale the icon size (make it a square that fits nicely)
+        icon_size = int(self.height() * 0.85)  # Icon is 85% of the widget's height
+        self.dropbot_icon.setFixedSize(icon_size, icon_size)
+
+        # 3. Scale the font sizes for all text labels
+        self._update_font_sizes(scale)
+
+        # 4. Scale the layout spacing and margins
+        self.main_layout.setSpacing(int(15 * scale))
+        self.main_layout.setContentsMargins(int(10 * scale), int(10 * scale), int(10 * scale), int(10 * scale))
+        self.grid_layout.setHorizontalSpacing(int(10 * scale))
+
+        # 5. Rescale the pixmap to fit the newly sized icon label
+        pixmap = QPixmap(self._current_pixmap_path)
+        if not pixmap.isNull():
+            self.dropbot_icon.setPixmap(pixmap.scaled(
+                self.dropbot_icon.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            ))
+
+    def update_status_icon(self, dropbot_connected=False, chip_inserted=False):
+        """Update status based on device connection and chip insertion."""
         if dropbot_connected:
             self.dropbot_connected = True
             logger.info("Dropbot Connected")
             self.dropbot_connection_status.setText("Active")
-
             if chip_inserted:
                 logger.info("Chip Inserted")
                 # dropbot ready to use: give greenlight and display chip.
@@ -182,7 +194,6 @@ class DropBotStatusLabel(QLabel):
                 self.dropbot_chip_status.setText("Not Inserted")
                 img_path = DROPBOT_IMAGE
                 status_color = connected_no_device_color
-
         else:
             # dropbot not there. Red light.
             self.dropbot_connected = False
@@ -192,13 +203,16 @@ class DropBotStatusLabel(QLabel):
             self.dropbot_connection_status.setText("Inactive")
             self.dropbot_chip_status.setText("Not inserted")
 
+        self._current_pixmap_path = img_path  # Store for resize events
         pixmap = QPixmap(img_path)
         if pixmap.isNull():
             logger.error(f"Failed to load image: {img_path}")
         # Always scale to fit the label size
-        self.dropbot_icon.setPixmap(pixmap.scaled(self.dropbot_icon.size(), 
-                                                  Qt.AspectRatioMode.KeepAspectRatio, 
-                                                  Qt.TransformationMode.SmoothTransformation))
+        self.dropbot_icon.setPixmap(pixmap.scaled(
+            self.dropbot_icon.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ))
         self.dropbot_icon.setStyleSheet(f'QLabel {{ background-color : {status_color}; border-radius: {BORDER_RADIUS}px; }}')
 
     def update_capacitance_reading(self, capacitance):
@@ -234,10 +248,10 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.electrode_areas = {}
 
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins for compactness
 
         self.status_label = DropBotStatusLabel()
         self.layout.addWidget(self.status_label)
+
 
     ###################################################################################################################
     # Publisher methods
@@ -461,3 +475,12 @@ class DropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             title="Droplets Detected",
             message=dialog_text
         )
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = QMainWindow()
+    window.setWindowTitle("Resizable DropBot Status Demo")
+    main_widget = DropBotStatusWidget()
+    window.setCentralWidget(main_widget)
+    window.show()
+    sys.exit(app.exec())

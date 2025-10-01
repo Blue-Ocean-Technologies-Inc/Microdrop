@@ -1,3 +1,5 @@
+from functools import wraps
+
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
@@ -96,12 +98,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
                 self.model.electrodes.electrode_editing.channel = new_channel
-    
+
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
+
     def handle_backspace(self):
         if self.model.mode == "channel-edit":
             new_channel = self.remove_last_digit(self.model.electrodes.electrode_editing.channel)
             if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
                 self.model.electrodes.electrode_editing.channel = new_channel
+
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
