@@ -4,8 +4,8 @@ from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEv
 
 from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
-from .scale_edit_view import scale_edit_view
 from microdrop_utils._logger import get_logger
+from .scale_edit_view import ScaleEditViewController
 
 logger = get_logger(__name__, level='DEBUG')
 
@@ -21,6 +21,7 @@ class ElectrodeScene(QGraphicsScene):
         self.dockpane = dockpane
         self.left_mouse_pressed = False
         self.right_mouse_pressed = False
+        self.electrode_view_right_clicked = None
         self.is_drag = False
         self.last_electrode_id_visited = None
         self._interaction_service = None
@@ -91,6 +92,7 @@ class ElectrodeScene(QGraphicsScene):
 
         elif button == Qt.RightButton:
             self.right_mouse_pressed = True
+            self.electrode_view_right_clicked = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
 
         super().mousePressEvent(event)
 
@@ -191,7 +193,10 @@ class ElectrodeScene(QGraphicsScene):
 
     def adjust_electrode_area_scale(self):
         """Placeholder for adjusting electrode area."""
-        self.interaction_service.model.configure_traits(view=scale_edit_view)
+        
+        scale_edit_view_controller = ScaleEditViewController(model=self.electrode_view_right_clicked.electrode,
+                                                             electrode_interaction_service=self.interaction_service)
+        scale_edit_view_controller.configure_traits()
 
     def handle_toggle_electrode_tooltips(self, checked):
         """Handle toggle electrode tooltip."""

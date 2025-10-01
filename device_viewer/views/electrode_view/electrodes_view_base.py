@@ -188,10 +188,10 @@ class ElectrodeView(QGraphicsPathItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
 
         # Set the tooltip to show on hover
-        self._tooltip_text = f"Electrode ID: {self.id}\n" \
+        _tooltip_text = f"Electrode ID: {self.id}\n" \
              f"Channel: {self.electrode.channel}\n" \
              f"Area (mm²): {self.electrode.area_scaled:.2f}"
-        self.setToolTip(self._tooltip_text)
+        self.setToolTip(_tooltip_text)
 
     #################################################################################
     # electrode view protected methods
@@ -260,7 +260,12 @@ class ElectrodeView(QGraphicsPathItem):
 
     def toggle_tooltip(self, checked: bool):
         if checked:
-            self.setToolTip(self._tooltip_text)
+            # Set the tooltip to show on hover
+            _tooltip_text = f"Electrode ID: {self.id}\n" \
+                            f"Channel: {self.electrode.channel}\n" \
+                            f"Area (mm²): {self.electrode.area_scaled:.2f}"
+
+            self.setToolTip(_tooltip_text)
         else:
             self.setToolTip("")
 

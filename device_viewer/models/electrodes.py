@@ -51,9 +51,9 @@ class Electrodes(HasTraits):
     channels_states_map = Dict(Int, Bool, {})
 
     #: Map of electrode_areas
-    electrode_ids_areas_scaled_map = Property(Dict(Str, Float), observe=['electrodes.items.channel', 'svg_model.area_scale'])
-    #: Map of channel areas
-    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe='electrode_ids_areas_scaled_map')
+    electrode_ids_areas_scaled_map = Property(Dict(Str, Float), observe='svg_model.electrode_areas_scaled')
+    #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
+    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['electrode_ids_areas_scaled_map', 'channels_electrode_ids_map'])
 
     #: Flag indicating electrode areas are being updated in bulk (true on init).
     # If False: change made on single electrode only.
@@ -103,7 +103,6 @@ class Electrodes(HasTraits):
 
         return channel_to_electrode_ids_map
 
-
     @cached_property
     def _get_electrode_ids_areas_scaled_map(self) -> dict[str, float]:
         """
@@ -111,11 +110,25 @@ class Electrodes(HasTraits):
         :return: Dictionary of electrode id to area in mm^2
         """
         if self.svg_model is not None:
-            areas = {}
-            for electrode_id, area in self.svg_model.electrode_areas.items():
-                areas[electrode_id] = area * self.svg_model.area_scale
-            return areas
+            # get the mapping from the svg object
+            area_map = self.svg_model.electrode_areas_scaled
+
+            # update component electrode areas
+            self.update_electrode_areas(area_map)
+
+            return area_map
         return {}
+
+    def _set_electrode_ids_areas_scaled_map(self, value: dict[str, float]):
+        """
+        Get the areas of all electrodes in mm^2
+        :return: Dictionary of electrode id to area in mm^2
+        """
+        if self.svg_model is not None:
+            # set new value
+            self.svg_model.electrode_areas_scaled = value
+            # update component electrode areas
+            self.update_electrode_areas(value)
 
     @cached_property
     def _get_channel_electrode_areas_scaled_map(self):
@@ -188,28 +201,28 @@ class Electrodes(HasTraits):
         return None
 
     #### Observer methods ######
-    @observe('electrode_ids_areas_scaled_map')
-    def update_electrode_areas(self, event):
+    @observe('svg_model:area_scale', post_init=True)
+    def svg_model_area_scaled_changed(self, event):
         if event.new:
+            self.electrode_ids_areas_scaled_map = \
+                {key: value * event.new for key, value in self.electrode_ids_areas_scaled_map.items()}
 
-            self._is_bulk_updating_electrode_areas = True
-            try:
-                for electrode_id, electrode in self.electrodes.items():
-                    electrode.area_scaled = event.new[electrode_id]
+    def update_electrode_areas(self, electrode_areas):
 
-            finally:
-                self._is_bulk_updating_electrode_areas = False
+        self._is_bulk_updating_electrode_areas = True
+        try:
+            for electrode_id, electrode in self.electrodes.items():
+                electrode.area_scaled = electrode_areas[electrode_id]
 
-    @observe('electrodes.items.area_scaled')
+        finally:
+            self._is_bulk_updating_electrode_areas = False
+
+    @observe('electrodes:items:area_scaled', post_init=True)
     def electrode_area_scaled_changed(self, event):
         """
-        Handle cases when the area information is changed at the electrode level post initialization using the
-        svg model data.
+        Handle cases when the area information is changed at the electrode level post init.
         """
 
-        # if the previous value is 0.0, then this is just the initialization of this value by the
-        # get_electrode_ids_areas_scaled_map method using the svg model data.
-        # If not, then it is a post init modification of the electrode model area information.
         if not self._is_bulk_updating_electrode_areas:
             electrode_id = event.object.id
             self.electrode_ids_areas_scaled_map[electrode_id] = event.new
