@@ -13,6 +13,9 @@ from device_viewer.default_settings import default_alphas
 
 from dramatiq import get_broker
 from microdrop_utils.redis_manager import get_redis_hash_proxy
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 class DeviceViewMainModel(HasTraits):
 
@@ -164,7 +167,8 @@ class DeviceViewMainModel(HasTraits):
     @observe("electrodes.channel_electrode_areas_scaled_map")
     def push_globals(self, event):
 
-        if event.new:
+        if event.new != event.old:
+            logger.info(f"push_globals: {event.name}: {event.new}")
             app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
             if event.name == "channel_electrode_areas_scaled_map":
                 app_globals["channel_electrode_areas"] = event.new

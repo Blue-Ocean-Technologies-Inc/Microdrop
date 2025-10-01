@@ -94,12 +94,12 @@ class Electrodes(HasTraits):
         Creates an inverted map from each channel to a list of its electrode IDs.
         This property depends on and reuses the result from the first property.
         """
-        logger.debug("Building channel -> electrode_ids map by inverting the first map...")
+
         channel_to_electrode_ids_map = defaultdict(list)
 
-        # Call the other cached_property to get the data
-        for electrode_id, channel in self.electrode_ids_channels_map.items():
-            channel_to_electrode_ids_map[channel].append(electrode_id)
+        if self.electrode_ids_channels_map:
+            for electrode_id, channel in self.electrode_ids_channels_map.items():
+                channel_to_electrode_ids_map[channel].append(electrode_id)
 
         return channel_to_electrode_ids_map
 
@@ -138,9 +138,10 @@ class Electrodes(HasTraits):
 
         :return: Dictionary of channel to area in mm^2
         """
-        if self.svg_model is not None:
-            channel_electrode_areas_map = {}
+        channel_electrode_areas_map = {}
 
+
+        if self.channels_electrode_ids_map and self.electrode_ids_areas_scaled_map:
             # We can iterate over the electrode ids for each channel
             for channel, electrode_ids in self.channels_electrode_ids_map.items():
                 # Aggregate the electrode_ids using their area values
@@ -149,7 +150,7 @@ class Electrodes(HasTraits):
                 # Set channel id scaled area
                 channel_electrode_areas_map[channel] = total_area_scaled
 
-            return channel_electrode_areas_map
+        return channel_electrode_areas_map
 
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
@@ -158,7 +159,7 @@ class Electrodes(HasTraits):
         new_electrodes = {}
         for k, v in new_model.electrodes.items():
             new_electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
-        
+
         # self.electrode_scale = new_model.pixel_scale
         self.electrodes.update(new_electrodes) # Single update to model = single draw
 
@@ -174,7 +175,7 @@ class Electrodes(HasTraits):
 
         self.svg_model = SvgUtil(svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
-    
+
     def reset_electrode_states(self):
         self.channels_states_map.clear()
         self.electrode_editing = None
