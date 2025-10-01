@@ -140,7 +140,6 @@ class Electrodes(HasTraits):
         """
         channel_electrode_areas_map = {}
 
-
         if self.channels_electrode_ids_map and self.electrode_ids_areas_scaled_map:
             # We can iterate over the electrode ids for each channel
             for channel, electrode_ids in self.channels_electrode_ids_map.items():

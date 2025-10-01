@@ -172,3 +172,10 @@ class DeviceViewMainModel(HasTraits):
             app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
             if event.name == "channel_electrode_areas_scaled_map":
                 app_globals["channel_electrode_areas"] = event.new
+
+    @observe('electrode_scale')
+    def update_stored_capacitances_on_area_scale_change(self, event):
+        # new_area = old_area * new_scale ==> cap/new_area = cap/(old_area * new_scale) = old_cap_over_area / new_scale
+        if event.new:
+            self.liquid_capacitance_over_area /= event.new
+            self.filler_capacitance_over_area /= event.new
