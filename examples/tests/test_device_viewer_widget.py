@@ -46,13 +46,13 @@ def test_electrodes_initialization():
     # Initialize an instance of Electrodes and load the SVG file
     electrodes = Electrodes()
     electrodes.set_electrodes_from_svg_file(sample_svg_path)
-    assert electrodes.svg_model.pixel_scale == 1.0
+    assert electrodes.svg_model.area_scale == 1.0
 
     # Initialize an instance of electrode, load with svg file with scale metadata.
     electrodes_with_scale = Electrodes()
     electrodes_with_scale.set_electrodes_from_svg_file(sample_svg_path_with_scale)
 
-    assert electrodes_with_scale.svg_model.pixel_scale == 0.34
+    assert electrodes_with_scale.svg_model.area_scale == 0.34
 
     # Add an assertion to validate successful setup.
     # Check if 92 electrodes initialized here which is true for the sample device
@@ -163,7 +163,7 @@ def test_save_svg_file_init_scale_metadata(valid_electrodes_model_from_svg):
     test_saved_electrode = Electrodes()
     test_saved_electrode.set_electrodes_from_svg_file(new_filename)
 
-    assert test_saved_electrode.svg_model.pixel_scale ==  new_pixel_scale
+    assert test_saved_electrode.svg_model.area_scale == new_pixel_scale
 
 def test_save_svg_file_edit_scale_metadata(valid_electrodes_model_from_svg_with_scale):
     # save file that initially does have a scale, with a new scale
@@ -171,7 +171,7 @@ def test_save_svg_file_edit_scale_metadata(valid_electrodes_model_from_svg_with_
     from device_viewer.utils.dmf_utils import channels_to_svg
 
     # check that the loaded file is as expected
-    assert valid_electrodes_model_from_svg_with_scale.svg_model.pixel_scale == 0.34
+    assert valid_electrodes_model_from_svg_with_scale.svg_model.area_scale == 0.34
 
     new_filename = Path(TEST_PATH) / "test_svg_model_save_edit_scale.svg"
     new_pixel_scale = 0.55
@@ -184,4 +184,4 @@ def test_save_svg_file_edit_scale_metadata(valid_electrodes_model_from_svg_with_
     test_saved_electrode = Electrodes()
     test_saved_electrode.set_electrodes_from_svg_file(new_filename)
 
-    assert test_saved_electrode.svg_model.pixel_scale == new_pixel_scale
+    assert test_saved_electrode.svg_model.area_scale == new_pixel_scale

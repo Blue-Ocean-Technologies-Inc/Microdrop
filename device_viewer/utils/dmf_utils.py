@@ -10,6 +10,11 @@ from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float
 
+DPI=96
+
+INCH_TO_MM = 25.4
+
+
 class ElectrodeDict(TypedDict):
     channel: int
     path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
@@ -25,7 +30,7 @@ class SvgUtil(HasTraits):
                                .format(float_pattern))
     style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
 
-    pixel_scale = Float
+    area_scale = Float
 
     def __init__(self, filename: Union[str, Path] = None, **traits):
         super().__init__(**traits)
@@ -44,7 +49,7 @@ class SvgUtil(HasTraits):
         self.connections = {}
         self.electrode_centers = {}
         self.electrode_areas = {}
-        self.pixel_scale = 1.0 # Scale from pixels to mm (should be < 1). To scale the area, we need to square this value.
+        self.area_scale = 1.0
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -74,8 +79,8 @@ class SvgUtil(HasTraits):
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
                 if scale is not None:
-                    self.pixel_scale = float(scale.text)
-                    print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
+                    self.area_scale = float(scale.text)
+                    print(f"Pixel scale set to {self.area_scale} from SVG metadata.")
 
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
@@ -197,7 +202,7 @@ class SvgUtil(HasTraits):
                 elif "Z" in match:
                     pass
 
-            paths.append(np.array(moves).reshape((-1, 1, 2)))
+            paths.append(np.array(moves).reshape((-1, 1, 2)) * INCH_TO_MM / DPI)
 
         self.max_x = max([p[..., 0].max() for p in paths])
         self.max_y = max([p[..., 1].max() for p in paths])
@@ -241,6 +246,9 @@ class SvgUtil(HasTraits):
                 electrodes[element.attrib['id']] = {'channel': None,
                                                     'path': (np.array(moves) + transform).reshape((-1, 2))}
 
+            # scale to mm
+            electrodes[element.attrib['id']]['path'] *= INCH_TO_MM / DPI
+
         self.max_x = max([e['path'][..., 0].max() for e in electrodes.values()])
         self.max_y = max([e['path'][..., 1].max() for e in electrodes.values()])
         self.min_x = min([e['path'][..., 0].min() for e in electrodes.values()])
@@ -262,7 +270,6 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
                 scale_element = ET.SubElement(child, "scale")
 
             scale_element.text = str(scale)
-
 
     if electrodes is None:
         return

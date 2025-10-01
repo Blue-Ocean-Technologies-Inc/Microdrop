@@ -19,7 +19,6 @@ from dropbot_controller.consts import (
     DROPLETS_DETECTED,
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR,
     DROPLET_DETECTION_FREQUENCY,
-    DROPLET_DETECTION_VOLTAGE,
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION,
 )
 from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
@@ -127,8 +126,11 @@ class DropletDetectionMixinService(HasTraits):
 
         try:
             with proxy.transaction_lock:
-                proxy.frequency = DROPLET_DETECTION_FREQUENCY
-                proxy.voltage = DROPLET_DETECTION_VOLTAGE # also turns on HV unlike update_state(voltage=num)
+                proxy.update_state(hv_output_enabled=True, hv_output_selected=True,
+                                   frequency=DROPLET_DETECTION_FREQUENCY)
+
+                # proxy.frequency = DROPLET_DETECTION_FREQUENCY
+                # proxy.voltage = DROPLET_DETECTION_VOLTAGE # also turns on HV unlike update_state(voltage=num)
                 logger.info(f"Set detection state: F={proxy.frequency}Hz, V={proxy.voltage}V")
                 time.sleep(0.05)  # Allow settings to settle
                 yield proxy
