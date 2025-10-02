@@ -21,17 +21,28 @@ class DropbotStatusDockPane(DockPane):
             DropBotStatusViewModel,
             DropBotStatusView
         )
+        from .dramatiq_widget import DramatiqDropBotStatusViewModel, DramatiqDropBotStatusView, DramatiqDropBotStatusViewModelSignals
+        from .dramatiq_dropbot_status_controller import DramatiqDropbotStatusController
 
-        # --- Instantiate the MVVM components ---
         model = DropBotStatusModel()
-        view_signals = DropbotStatusViewModelSignals()
 
+        # initialize dramatiq controllable dropbot status UI
+        dramatiq_view_signals = DramatiqDropBotStatusViewModelSignals()
+        dramatiq_view_model = DramatiqDropBotStatusViewModel(
+            model=model,
+            view_signals=dramatiq_view_signals
+        )
+        self.dramatiq_controller = DramatiqDropbotStatusController(ui=dramatiq_view_model,
+                                                                   listener_name=dramatiq_view_model.__class__.__module__.split(".")[0] + "_listener")
+        self.dramatiq_status_view = DramatiqDropBotStatusView(view_model=dramatiq_view_model)
+
+        # initialize displayed UI
+        view_signals = DropbotStatusViewModelSignals()
         view_model = DropBotStatusViewModel(
             model=model,
             view_signals=view_signals
         )
 
-        # The View is the UI component we are testing
-        status_view = DropBotStatusView(view_signals=view_signals)
+        status_view = DropBotStatusView(view_model=view_model)
 
         return status_view

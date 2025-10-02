@@ -1,7 +1,6 @@
 from envisage.application import Application
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.plugin import MicrodropPlugin
-from dropbot_status_plot.plugin import DropbotStatusPlotPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_status.plugin import DropbotStatusPlugin
 from manual_controls.plugin import ManualControlsPlugin

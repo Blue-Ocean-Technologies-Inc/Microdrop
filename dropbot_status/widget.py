@@ -29,6 +29,12 @@ class DropBotStatusModel(HasTraits):
     pressure = Str("-", desc="Pressure reading in kPa")
     force = Str("-", desc="Calculated force in N")
 
+    def reset_readings(self):
+        """Reset the readings reading counter."""
+        self.capacitance = "-"
+        self.voltage = "-"
+        self.pressure = "-"
+        self.force = "-"
 
 
 class DropbotStatusViewModelSignals(QObject):
@@ -111,10 +117,12 @@ class DropBotStatusView(QWidget):
     what the ViewModel tells it.
     """
 
-    def __init__(self, view_signals: 'DropbotStatusViewModelSignals', parent=None):
+    def __init__(self, view_model: 'DropBotStatusViewModel', parent=None):
         super().__init__(parent)
         self.setWindowTitle("DropBot Status")
-        self._view_model_signals = view_signals
+
+        self._view_model = view_model
+        self._view_model_signals = self._view_model.view_signals
 
         # --- Create and lay out child widgets ---
         self.main_layout = QHBoxLayout(self)

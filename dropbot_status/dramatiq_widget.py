@@ -2,14 +2,16 @@
 import json
 import os
 
+from PySide6.QtCore import QObject, Signal, Slot
 # pyside imports
-from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser
+from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser, QWidget
 from pint import UnitRegistry
+from traits.has_traits import HasTraits
+from traits.trait_types import Instance
 
 # local imports
 from microdrop_application.dialogs import show_success
 from microdrop_utils._logger import get_logger
-from microdrop_utils.base_dropbot_qwidget import BaseDramatiqControllableDropBotQWidget
 from microdrop_utils.decorators import timestamped_value, debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
@@ -21,6 +23,7 @@ from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, g
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .status_label_widget import DropBotStatusViewController
+from .widget import DropBotStatusModel
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -32,10 +35,9 @@ connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
 
 
-def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type='percentage'):
+def check_change_significance(old_value, new_value, threshold=60, threshold_type='percentage') -> bool:
     if old_value == '-' and new_value != '-':
-        update_fn(new_value)
-        return "updated"
+        return True
 
     elif old_value != '-' and new_value != '-':
         change = 0
@@ -47,12 +49,26 @@ def _maybe_update(old_value, new_value, update_fn, threshold=60, threshold_type=
             change = abs(ureg_diff(old=old_value, new=new_value))
 
         if change > threshold:
-            update_fn(new_value)
-            return "updated"
+            return True
+    return False
 
-class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
-    def __init__(self):
-        super().__init__()
+
+class DramatiqDropBotStatusViewModelSignals(QObject):
+    """A dedicated QObject to hold signals for UI events, ensuring thread safety."""
+    show_shorts_popup = Signal(dict)
+    show_warning_popup = Signal(dict)
+    show_no_power_dialog = Signal()
+    close_no_power_dialog = Signal()
+    show_halted_popup = Signal(str)
+    show_drops_detected_popup = Signal(dict)
+
+
+class DramatiqDropBotStatusViewModel(HasTraits):
+
+    model = Instance(DropBotStatusModel)
+    view_signals = Instance(DramatiqDropBotStatusViewModelSignals)
+
+    def traits_init(self):
 
         self.capacitances = []
         # flag for if no pwoer is true or not
@@ -69,29 +85,16 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         self.active_electrodes = []
         self.electrode_areas = {}
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins for compactness
-
-        # Instantiate the new DropBotStatusWidget, which is now the View
-        self.status_widget = DropBotStatusViewController()
-        self.layout.addWidget(self.status_widget)
-
     ###################################################################################################################
     # Publisher methods
     ###################################################################################################################
-    def request_detect_shorts(self):
-        logger.info("Detecting shorts...")
-        publish_message("Detect shorts button triggered", DETECT_SHORTS)
-
     def request_retry_connection(self):
         logger.info("Retrying connection...")
         publish_message("Retry connection button triggered", RETRY_CONNECTION)
 
-        if self.no_power_dialog:
-            self.no_power_dialog.close()
-
-        self.no_power = False
-        self.no_power_dialog = None
+        if self.no_power:
+            self.no_power = False
+            self.view_signals.close_no_power_dialog.emit()
 
     ###################################################################################################################
     # Subscriber methods
@@ -111,19 +114,18 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             self.shorts_popup = QMessageBox()
             self.shorts_popup.setFixedSize(300, 200)            
             if len(shorts) == 0:
-                self.shorts_popup.setWindowTitle("No shorts were detected.")  
-                self.shorts_popup.setText("No shorts were detected on any channels.")              
+                title = "No shorts were detected."
+                text = "No shorts were detected on any channels."
             else:
-                self.shorts_popup.setWindowTitle("Shorts Detected")
+                title = "Shorts Detected"
                 shorts_str = str(shorts).strip('[]')
-                self.shorts_popup.setText(f"Shorts were detected on the following channels: \n \n"
+                text = (f"Shorts were detected on the following channels: \n \n"
                                         f"[{shorts_str}] \n \n"
                                         f"You may continue using the DropBot, but the affected channels have "
                                         f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
                                         f"back in).")     
                     
-            self.shorts_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
-            self.shorts_popup.exec()
+            self.view_signals.show_shorts_popup.emit({'title': title, 'text': text})
 
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
@@ -131,8 +133,8 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             new_capacitance = json.loads(body).get('capacitance', '-')
             new_voltage = json.loads(body).get('voltage', '-')
 
-            old_capacitance = self.status_widget.grid_widget.get_capacitance_reading()
-            old_voltage = self.status_widget.get_voltage_reading()
+            old_capacitance = self.model.capacitance
+            old_voltage = self.model.voltage
 
             self.capacitances.append(get_ureg_magnitude(new_capacitance))
 
@@ -146,53 +148,50 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
                 new_capacitance = old_capacitance
 
 
-            _maybe_update(old_capacitance, new_capacitance, self.status_widget.update_capacitance_reading, threshold=3, threshold_type='absolute_diff')
-            voltage_update_result = _maybe_update(old_voltage, new_voltage, self.status_widget.update_voltage_reading, threshold=1, threshold_type='absolute_diff')
+            cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
+            voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
 
-            if voltage_update_result == "updated":
+            if cap_change_significant:
+                self.model.capacitance = new_capacitance
+
+            if voltage_change_significant:
+                self.model.voltage = new_voltage
                 force = None
 
-                if self.pressure:
+                if self.model.pressure != "-":
                     force = ForceCalculationService.calculate_force_for_step(
                         get_ureg_magnitude(new_voltage),
-                        self.pressure
+                        get_ureg_magnitude(self.model.pressure)
                     )
 
-                self.status_widget.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+                self.model.force = f"{force:.4f} mN/m" if force is not None else "-"
 
     ################## Calibration data #########################
 
-    def _on_calibration_data_triggered(self, body):
+    def _on_calibration_data_triggered(self, body_str):
+        data = json.loads(body_str)
+        filler_cap = data.get('filler_capacitance_over_area', 0.0)
+        liquid_cap = data.get('liquid_capacitance_over_area', 0.0)
 
-        message = json.loads(body)
-
-        self.filler_capacitance_over_area = message.get('filler_capacitance_over_area', 0.0)
-        self.liquid_capacitance_over_area = message.get('liquid_capacitance_over_area', 0.0)
-
-        if self.filler_capacitance_over_area and self.liquid_capacitance_over_area:
-
-            self.pressure = self.liquid_capacitance_over_area - self.filler_capacitance_over_area
-
-            voltage = self.status_widget.get_voltage_reading()
-
+        if filler_cap and liquid_cap:
+            self.pressure_value = liquid_cap - filler_cap
             force = ForceCalculationService.calculate_force_for_step(
-                get_ureg_magnitude(voltage),
-                self.pressure
+                get_ureg_magnitude(self.model.voltage),
+                self.pressure_value
             )
-
-            self.status_widget.update_pressure_reading(f"{self.pressure:.4f} pF/mm^2" if self.pressure is not None else "-")
-            self.status_widget.update_force_reading(f"{force:.4f} mN/m" if force is not None else "-")
+            self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
+            self.model.force = f"{force:.4f} mN/m"
 
     ####### Dropbot Icon Image Control Methods ###########
 
     @timestamped_value('connected_message')
     def _on_disconnected_triggered(self, body):
-        self.status_widget.update_status(dropbot_connected=False)
+        self.model.connected = False
         self._on_realtime_mode_updated_triggered(TimestampedMessage("False", None), force_update=True) # Set realtime mode to False when disconnected
 
     @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
-        self.status_widget.update_status(dropbot_connected=True)
+        self.model.connected = True
         
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body : TimestampedMessage):
@@ -204,36 +203,52 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             logger.error(f"Invalid chip inserted value: {body}")
             chip_inserted = False
         logger.debug(f"Chip inserted: {chip_inserted}")
-        self.status_widget.update_status(dropbot_connected=True, chip_inserted=chip_inserted)
+        self.model.chip_inserted = chip_inserted
 
     @timestamped_value('realtime_mode_message')
     def _on_realtime_mode_updated_triggered(self, body):
         self.realtime_mode = body == 'True'
         if not self.realtime_mode:
-            self.status_widget.update_capacitance_reading(capacitance='-')
-            self.status_widget.update_voltage_reading(voltage='-')
-            self.status_widget.update_pressure_reading(pressure='-')
-            self.status_widget.update_force_reading(force='-')
+            self.model.reset_readings()
 
     ##################################################################################################
 
     ########## Warning methods ################
-    def _on_show_warning_triggered(self, body): # This is not controlled by the dramatiq controller! Called manually in dramatiq_dropbot_status_controller.py
-        body = json.loads(body)
-
-        title = body.get('title', ''),
-        message = body.get('message', '')
-
-        self.warning_popup = QMessageBox()
-        self.warning_popup.setWindowTitle(f"WARNING: {title}")
-        self.warning_popup.setText(str(message))
-        self.warning_popup.exec()
-
     def _on_no_power_triggered(self, body):
         if self.no_power:
             return
-
         self.no_power = True
+        self.view_signals.show_no_power_dialog.emit()
+
+    def _on_halted_triggered(self, message):
+        text = (f"DropBot has been halted, reason was {message}.\n\n"
+                "All channels have been disabled until the DropBot is restarted.")
+        self.view_signals.show_halted_popup.emit(text)
+
+
+class DramatiqDropBotStatusView(QWidget):
+    """
+    The View: Manages UI elements only (popups, dialogs).
+    It listens to signals from the ViewModel and delegates user actions back to it.
+    """
+
+    def __init__(self, view_model: DramatiqDropBotStatusViewModel, parent=None):
+        super().__init__(parent)
+        self.view_model = view_model
+        self.no_power_dialog = None  # To hold a reference to the dialog
+
+        # --- Connect signals from the ViewModel to slots in this View ---
+        vm_signals = self.view_model.view_signals
+        vm_signals.show_halted_popup.connect(self.on_show_halted_popup)
+        vm_signals.show_no_power_dialog.connect(self.on_show_no_power)
+        vm_signals.close_no_power_dialog.connect(self.on_close_no_power)
+
+    @Slot(str)
+    def on_show_halted_popup(self, text):
+        QMessageBox.critical(self, "ERROR: DropBot Halted", text)
+
+    @Slot()
+    def on_show_no_power(self):
         # Initialize the dialog
         self.no_power_dialog = QDialog()
         self.no_power_dialog.setWindowTitle("ERROR: No Power")
@@ -248,27 +263,27 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
 
         html_content = f"""
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERROR: No Power</title>
-</head>
-<body>
-    <h3>DropBot currently has no power supply connected.</h3>
-    <strong>Plug in power supply cable<br></strong> <img src='{os.path.dirname(__file__)}{os.sep}images{os.sep}dropbot-power.png' width="104" height="90">
-    <strong><br>Click the "Retry" button after plugging in the power cable to attempt reconnection</strong>
-</body>
-</html>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>ERROR: No Power</title>
+        </head>
+        <body>
+            <h3>DropBot currently has no power supply connected.</h3>
+            <strong>Plug in power supply cable<br></strong> <img src='{os.path.dirname(__file__)}{os.sep}images{os.sep}dropbot-power.png' width="104" height="90">
+            <strong><br>Click the "Retry" button after plugging in the power cable to attempt reconnection</strong>
+        </body>
+        </html>
 
-        """
+                """
 
         self.browser.setHtml(html_content)
 
         # Create the retry button and connect its signal
         self.no_power_retry_button = QPushButton("Retry")
-        self.no_power_retry_button.clicked.connect(self.request_retry_connection)
+        self.no_power_retry_button.clicked.connect(self.view_model.request_retry_connection)
 
         # Add widgets to the layout
         layout.addWidget(self.browser)
@@ -277,24 +292,8 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
         # Show the dialog
         self.no_power_dialog.exec()
 
-    def _on_halted_triggered(self, message):
-        self.halted_popup = QMessageBox()
-        self.halted_popup.setWindowTitle("ERROR: DropBot Halted")
-        self.halted_popup.setButtonText(QMessageBox.StandardButton.Ok, "Close")
-        self.halted_popup.setText(f"DropBot has been halted, reason was {message}."
-                                  "\n\n"
-                                  "All channels have been disabled and high voltage has been turned off until "
-                                  "the DropBot is restarted (e.g. unplug all cables and plug back in).")
-
-        self.halted_popup.exec()
-
-    def _on_drops_detected_triggered(self, message):
-        message_obj = json.loads(message)
-
-        dialog_text = f"Droplets detected in following channels:\n{message_obj['detected_channels']} "
-
-        result = show_success(
-            parent=self,
-            title="Droplets Detected",
-            message=dialog_text
-        )
+    @Slot()
+    def on_close_no_power(self):
+        if self.no_power_dialog:
+            self.no_power_dialog.close()
+            self.no_power_dialog = None
