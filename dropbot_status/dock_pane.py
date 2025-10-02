@@ -14,10 +14,24 @@ class DropbotStatusDockPane(DockPane):
     name = f"{PKG_name} Dock Pane"
 
     def create_contents(self, parent):
-        from .dramatiq_dropbot_status_controller import DramatiqDropbotStatusController
-        from .dramatiq_viewcontroller import DramatiqDropBotStatusWidget
+        # Import all the components from your module
+        from .widget import (
+            DropBotStatusModel,
+            DropbotStatusViewModelSignals,
+            DropBotStatusViewModel,
+            DropBotStatusView
+        )
 
-        view = DramatiqDropBotStatusWidget()
-        view.controller = DramatiqDropbotStatusController
+        # --- Instantiate the MVVM components ---
+        model = DropBotStatusModel()
+        view_signals = DropbotStatusViewModelSignals()
 
-        return view
+        view_model = DropBotStatusViewModel(
+            model=model,
+            view_signals=view_signals
+        )
+
+        # The View is the UI component we are testing
+        status_view = DropBotStatusView(view_signals=view_signals)
+
+        return status_view
