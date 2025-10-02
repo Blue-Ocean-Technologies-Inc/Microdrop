@@ -10,7 +10,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 from microdrop_utils.dramatiq_controller_base import invoke_class_method
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
-from .dramatiq_widget import DramatiqDropBotStatusViewModel
+from .dramatiq_UI import DramatiqDropBotStatusViewModel
 
 logger = get_logger(__name__)
 

@@ -1,10 +1,10 @@
-# The Model: Holds the raw data and state. It knows nothing about the UI.
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 from PySide6.QtCore import Signal, QObject
-from traits.api import HasTraits, Bool, observe, Instance, Str, Enum, Property
+from traits.api import HasTraits, observe, Instance
 
 from dropbot_status.consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
-from dropbot_status.status_label_widget import DropBotIconWidget, DropBotStatusGridWidget
+from dropbot_status.model import DropBotStatusModel
+from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
 from microdrop_utils._logger import get_logger
@@ -15,27 +15,6 @@ disconnected_color = ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
-
-
-class DropBotStatusModel(HasTraits):
-    """Represents the raw state of the DropBot hardware."""
-    # Connection state
-    connected = Bool(False, desc="True if the DropBot is connected")
-    chip_inserted = Bool(False, desc="True if a chip is inserted")
-
-    # Sensor readings
-    capacitance = Str("-", desc="Raw capacitance in pF")
-    voltage = Str("-", desc="Voltage set to device in V")
-    pressure = Str("-", desc="Pressure reading in kPa")
-    force = Str("-", desc="Calculated force in N")
-
-    def reset_readings(self):
-        """Reset the readings reading counter."""
-        self.capacitance = "-"
-        self.voltage = "-"
-        self.pressure = "-"
-        self.force = "-"
-
 
 class DropbotStatusViewModelSignals(QObject):
     # Signals that the View will bind to

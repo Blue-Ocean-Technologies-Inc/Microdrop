@@ -1,6 +1,6 @@
 from traits.api import Instance
 
-from dropbot_status.dramatiq_widget import DramatiqDropBotStatusViewModel
+from dropbot_status.dramatiq_UI import DramatiqDropBotStatusViewModel
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
 

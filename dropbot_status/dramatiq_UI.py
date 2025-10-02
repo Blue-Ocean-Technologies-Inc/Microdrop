@@ -10,20 +10,18 @@ from traits.has_traits import HasTraits
 from traits.trait_types import Instance
 
 # local imports
-from microdrop_application.dialogs import show_success
 from microdrop_utils._logger import get_logger
-from microdrop_utils.decorators import timestamped_value, debounce
+from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
-from dropbot_controller.consts import DETECT_SHORTS, RETRY_CONNECTION
+from dropbot_controller.consts import RETRY_CONNECTION
 from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
 from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude, ureg
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
-from .status_label_widget import DropBotStatusViewController
-from .widget import DropBotStatusModel
+from .model import DropBotStatusModel
 
 logger = get_logger(__name__, level="DEBUG")
 

@@ -4,12 +4,12 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, Q
 from PySide6.QtCore import QTimer
 
 # Import all the components from your module
-from widget import (
-    DropBotStatusModel,
+from displayed_UI import (
     DropbotStatusViewModelSignals,
     DropBotStatusViewModel,
     DropBotStatusView
 )
+from dropbot_status.model import DropBotStatusModel
 
 
 class Window(QMainWindow):
