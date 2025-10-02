@@ -17,13 +17,6 @@ connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
 
-
-class DropbotStatusModel(HasTraits):
-    capacitance = Str("-", desc="Raw capacitance of device in pF")
-    voltage = Str("-", desc="Voltage set to device in V")
-    frequency = Str("-", desc="Frequency of device in Hz")
-    chip_status = Bool(False, desc="is a chip inserted or no")
-
 class DropBotIconWidget(QLabel):
     """
     A scalable widget to display the DropBot's icon and connection status color.
