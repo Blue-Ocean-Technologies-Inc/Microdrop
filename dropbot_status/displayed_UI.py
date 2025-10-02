@@ -6,12 +6,12 @@ from dropbot_status.consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
 from dropbot_status.model import DropBotStatusModel
 from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
 
-from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
+from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, level="DEBUG")
 
-disconnected_color = ERROR_COLOR
+disconnected_color = GREY["lighter"] #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
