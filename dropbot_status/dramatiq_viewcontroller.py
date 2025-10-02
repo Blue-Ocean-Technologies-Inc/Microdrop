@@ -131,7 +131,7 @@ class DramatiqDropBotStatusWidget(BaseDramatiqControllableDropBotQWidget):
             new_capacitance = json.loads(body).get('capacitance', '-')
             new_voltage = json.loads(body).get('voltage', '-')
 
-            old_capacitance = self.status_widget.get_capacitance_reading()
+            old_capacitance = self.status_widget.grid_widget.get_capacitance_reading()
             old_voltage = self.status_widget.get_voltage_reading()
 
             self.capacitances.append(get_ureg_magnitude(new_capacitance))

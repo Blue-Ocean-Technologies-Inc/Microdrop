@@ -7,15 +7,22 @@ from PySide6.QtWidgets import QMainWindow, QGroupBox, QVBoxLayout, QPushButton, 
 
 from dropbot_status.consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
-# --- Set up a basic logger for demonstration ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
+from microdrop_utils._logger import get_logger
 
-# --- Dummy constants for demonstration purposes ---
-BORDER_RADIUS = 10
-connected_color = "#4CAF50"  # Green
-connected_no_device_color = "#FFC107"  # Yellow
-disconnected_color = "#F44336"  # Red
+logger = get_logger(__name__, level="DEBUG")
+
+disconnected_color = ERROR_COLOR
+connected_no_device_color = WARNING_COLOR
+connected_color = SUCCESS_COLOR
+BORDER_RADIUS = 4
+
+
+class DropbotStatusModel(HasTraits):
+    capacitance = Str("-", desc="Raw capacitance of device in pF")
+    voltage = Str("-", desc="Voltage set to device in V")
+    frequency = Str("-", desc="Frequency of device in Hz")
+    chip_status = Bool(False, desc="is a chip inserted or no")
 
 class DropBotIconWidget(QLabel):
     """
@@ -123,33 +130,6 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(force_label, 5, 0)
         layout.addWidget(self.force_reading, 5, 1)
 
-    # --- Public methods to update label text ---
-    def update_connection_status(self, text: str):
-        self.connection_status.setText(text)
-
-    def update_chip_status(self, text: str):
-        self.chip_status.setText(text)
-
-    def update_capacitance_reading(self, capacitance: str):
-        self.capacitance_reading.setText(capacitance)
-
-    def update_voltage_reading(self, voltage: str):
-        self.voltage_reading.setText(voltage)
-
-    def update_pressure_reading(self, pressure: str):
-        self.pressure_reading.setText(pressure)
-
-    def update_force_reading(self, force: str):
-        self.force_reading.setText(force)
-
-    #---------- status getter methods -----------------
-
-    def get_capacitance_reading(self):
-        return self.capacitance_reading.text()
-
-    def get_voltage_reading(self):
-        return self.voltage_reading.text()
-
 
 class DropBotStatusViewController(QWidget):
     """
@@ -188,42 +168,51 @@ class DropBotStatusViewController(QWidget):
             self.dropbot_connected = True
 
         if self.dropbot_connected:
-            self.grid_widget.update_connection_status("Active")
+            self.update_connection_status("Active")
             if chip_inserted:
                 logger.info("Status: Chip Inserted")
                 self.icon_widget.set_pixmap_from_path(DROPBOT_CHIP_INSERTED_IMAGE)
                 self.icon_widget.set_status_color(connected_color)
-                self.grid_widget.update_chip_status("Inserted")
+                self.update_chip_status("Inserted")
             else:
                 logger.info("Status: Connected, No Chip")
                 self.icon_widget.set_pixmap_from_path(DROPBOT_IMAGE)
                 self.icon_widget.set_status_color(connected_no_device_color)
-                self.grid_widget.update_chip_status("Not Inserted")
+                self.update_chip_status("Not Inserted")
         else:
             logger.critical("Status: Disconnected")
             self.icon_widget.set_pixmap_from_path(DROPBOT_IMAGE)
             self.icon_widget.set_status_color(disconnected_color)
-            self.grid_widget.update_connection_status("Inactive")
-            self.grid_widget.update_chip_status("Not Inserted")
+            self.update_connection_status("Inactive")
+            self.update_chip_status("Not Inserted")
 
-    # --- Forwarding methods to the grid widget ---
+    # --- Methods to control the grid widget ---
+    def update_connection_status(self, text: str):
+        self.grid_widget.connection_status.setText(text)
+
+    def update_chip_status(self, text: str):
+        self.grid_widget.chip_status.setText(text)
+
     def update_capacitance_reading(self, capacitance: str):
-        self.grid_widget.update_capacitance_reading(capacitance)
+        self.grid_widget.capacitance_reading.setText(capacitance)
 
     def update_voltage_reading(self, voltage: str):
-        self.grid_widget.update_voltage_reading(voltage)
+        self.grid_widget.voltage_reading.setText(voltage)
 
     def update_pressure_reading(self, pressure: str):
-        self.grid_widget.update_pressure_reading(pressure)
+        self.grid_widget.pressure_reading.setText(pressure)
 
     def update_force_reading(self, force: str):
-        self.grid_widget.update_force_reading(force)
+        self.grid_widget.force_reading.setText(force)
+
+    # methods to get values from model:
+    #---------- status getter methods -----------------
 
     def get_capacitance_reading(self):
-        return self.grid_widget.get_capacitance_reading()
+        return self.grid_widget.capacitance_reading.text()
 
     def get_voltage_reading(self):
-        return self.grid_widget.get_voltage_reading()
+        return self.grid_widget.voltage_reading.text()
 
 
 # --- Test Harness ---
