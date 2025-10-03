@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
+from dropbot.proxy import I2cAddressNotSet
 from traits.api import Instance, Dict
 import dramatiq
 
@@ -17,7 +18,6 @@ from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEV
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
-from .services.global_proxy_state_manager import GlobalProxyStateManager
 
 from traits.api import HasTraits, provides, Bool, Str
 from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
@@ -37,9 +37,6 @@ class DropbotControllerBase(HasTraits):
     """
     proxy = Instance(DramatiqDropbotSerialProxy)
     dropbot_connection_active = Bool(False)
-    
-    # global proxy state manager
-    proxy_state_manager = Instance(GlobalProxyStateManager)
 
     ##########################################################
     # 'IDramatiqControllerBase' interface.
@@ -67,7 +64,6 @@ class DropbotControllerBase(HasTraits):
             finally:
                 self.proxy = None
                 self.dropbot_connection_active = False
-                self.proxy_state_manager.set_proxy(None)
 
     def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """
@@ -152,32 +148,14 @@ class DropbotControllerBase(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
-        self.proxy_state_manager = GlobalProxyStateManager.get_instance()
+    def _on_dropbot_proxy_connected(self):
 
-    def _on_dropbot_proxy_connected(self):        
-        # set proxy in global state manager with port information
-        port_name = getattr(self.proxy, 'port', None)
-        self.proxy_state_manager.set_proxy(self.proxy, port_name)
-        
-        # Initialize switching boards with retry logic
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                self.proxy.initialize_switching_boards()
-                logger.info(f"Switching boards initialized successfully on attempt {attempt + 1}")
-                break
-            except Exception as e:
-                logger.warning(f"Switching board initialization attempt {attempt + 1} failed: {e}")
-                if attempt == max_retries - 1:
-                    logger.error("Failed to initialize switching boards after all retries")
-                    return
-                time.sleep(0.5)
-        
-        # Validate proxy state after initialization
-        if not self.proxy_state_manager.validate_proxy_state():
-            logger.error("Proxy state validation failed after initialization")
-            return
-        
+        if self.proxy.config.i2c_address != 0:
+            self.proxy.initialize_switching_boards()
+
+        else:
+            raise I2cAddressNotSet()
+
         # Configure proxy settings
         try:
             self.proxy.update_state(
@@ -201,9 +179,6 @@ class DropbotControllerBase(HasTraits):
 
             # Turn off all channels
             self.proxy.turn_off_all_channels()
-            
-            # Final state validation
-            self.proxy_state_manager.validate_proxy_state()
             
             logger.info("Enhanced proxy connection setup completed successfully")
             

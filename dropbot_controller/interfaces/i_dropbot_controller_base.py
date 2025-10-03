@@ -1,6 +1,5 @@
 from traits.api import Instance, Bool
 
-from dropbot_controller.services.global_proxy_state_manager import GlobalProxyStateManager
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
@@ -17,8 +16,6 @@ class IDropbotControllerBase(IDramatiqControllerBase):
              "connection is not there, no commands will be processed except searching for a dropbot "
              "connection"
     )
-
-    proxy_state_manager = Instance(GlobalProxyStateManager, desc="Manager to use proxy instances safely")
 
     def _on_dropbot_proxy_connected(self):
         """
