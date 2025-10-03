@@ -214,7 +214,9 @@ class ElectrodeScene(QGraphicsScene):
         context_menu.addSeparator()
         context_menu.addAction("Reset Electrodes", self.interaction_service.model.electrodes.reset_electrode_states)
         context_menu.addAction("Find Liquid", self.detect_droplet)
-        context_menu.addAction("Adjust Electrode Area Scale", self.adjust_electrode_area_scale)
+
+        if self.electrode_view_right_clicked is not None:
+            context_menu.addAction("Adjust Electrode Area Scale", self.adjust_electrode_area_scale)
         context_menu.addSeparator()
 
         # tooltip enabled by default
