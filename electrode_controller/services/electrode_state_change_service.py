@@ -32,7 +32,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 return
 
             # Use safe proxy access for electrode state changes
-            with self.proxy_state_manager.safe_proxy_access("electrode_state_change", timeout=3.0):
+            with self.proxy.transaction_lock:
                 
                 # Create and validate message model
                 channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
@@ -49,9 +49,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     logger.error(f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}")
                     return
 
-                # Set electrode state safely
-                with self.proxy.transaction_lock:
-                    self.proxy.state_of_channels = channel_states_map_model.channels_properties_array
+                self.proxy.state_of_channels = channel_states_map_model.channels_properties_array
                 
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated")

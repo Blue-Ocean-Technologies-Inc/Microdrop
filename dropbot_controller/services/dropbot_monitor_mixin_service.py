@@ -185,6 +185,7 @@ class DropbotMonitorMixinService(HasTraits):
                     self.proxy.terminate()
 
             except dropbot.proxy.NoPower as e:
+                logger.critical("DropBot has no power.")
                 self._no_power = True
                 publish_message(topic=NO_POWER, message=str(e))
                 err = f'{traceback.format_exc()}'

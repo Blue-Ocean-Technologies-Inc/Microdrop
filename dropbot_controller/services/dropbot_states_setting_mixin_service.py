@@ -40,7 +40,7 @@ class DropbotStatesSettingMixinService(HasTraits):
                 logger.error("Proxy not available for voltage setting")
                 return
             
-            with self.proxy_state_manager.safe_proxy_access("set_voltage", timeout=2.0):
+            with self.proxy.transaction_lock:
                 if self.realtime_mode:
                     self.proxy.update_state(voltage=self.voltage)
                 else:
@@ -68,7 +68,7 @@ class DropbotStatesSettingMixinService(HasTraits):
                 logger.error("Proxy not available for frequency setting")
                 return
             
-            with self.proxy_state_manager.safe_proxy_access("set_frequency", timeout=2.0):
+            with self.proxy.transaction_lock:
                 if self.realtime_mode:
                     self.proxy.update_state(frequency=self.frequency)
                 else:
@@ -92,7 +92,7 @@ class DropbotStatesSettingMixinService(HasTraits):
                 logger.error("Proxy not available for realtime mode setting")
                 return
                 
-            with self.proxy_state_manager.safe_proxy_access("set_realtime_mode", timeout=2.0):
+            with self.proxy.transaction_lock:
                 if message == "True":
                     self.realtime_mode = True
                     self.proxy.update_state(hv_output_selected=True,
