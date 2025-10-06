@@ -4,7 +4,10 @@ from functools import wraps
 import datetime as dt
 from tqdm import tqdm
 
-from dropbot.hardware_test import ALL_TESTS
+from dropbot.hardware_test import (ALL_TESTS, system_info, test_system_metrics,
+                                   test_i2c, test_voltage, test_shorts,
+                                   test_on_board_feedback_calibration,
+                                   test_channels)
 
 from dropbot.self_test import (generate_report, plot_test_voltage_results, 
                                plot_test_on_board_feedback_calibration_results, 
