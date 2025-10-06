@@ -17,3 +17,6 @@ def ureg_diff(old, new):
 
 def get_ureg_magnitude(text):
     return ureg(text).magnitude
+
+def trim_to_n_digits(text, n_digits):
+    return f'{ureg.Quantity(text):.{n_digits}g~}'
