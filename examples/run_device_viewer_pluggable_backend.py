@@ -15,13 +15,11 @@ from examples.plugin_consts import *
 
 
 def main(args):
-    REDIS_HOST = "192.168.8.186"
     REDIS_PORT = 50000
 
 
     # Create a Redis client instance
     r = redis.StrictRedis(
-        host=REDIS_HOST,
         port=REDIS_PORT,
         decode_responses=True
     )
