@@ -100,9 +100,9 @@ class DropletDetectionMixinService(HasTraits):
     def _execute_detection_steps(self, proxy: 'DramatiqDropbotSerialProxy', channels: list[int]) -> list[int]:
         """Run the sequence of operations to detect droplets."""
         capacitances_array = self._get_capacitances(proxy, channels)
-        normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
+        # normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
 
-        channels_with_drops = self._find_channels_above_threshold(normalized_caps, threshold_factor)
+        channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold_factor=DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR)
 
         if not channels_with_drops:
             logger.info("No droplets were detected.")
