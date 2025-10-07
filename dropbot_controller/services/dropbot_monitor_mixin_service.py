@@ -92,6 +92,7 @@ class DropbotMonitorMixinService(HasTraits):
     
     def on_retry_connection_request(self, message):
         if self.dropbot_connection_active:
+            logger.info(f"Retry connection request rejected: Dropbot already connected")
             return
         logger.info("Attempting to retry connecting with a dropbot")
         self.monitor_scheduler.resume()
@@ -203,6 +204,8 @@ class DropbotMonitorMixinService(HasTraits):
             finally:
                 if err:
                     logger.error(err)
+                    # reset proxy
+                    self.proxy = None
 
         # if the dropbot is already connected
         else:

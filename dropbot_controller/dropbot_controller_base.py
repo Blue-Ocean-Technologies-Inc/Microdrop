@@ -170,6 +170,7 @@ class DropbotControllerBase(HasTraits):
             self.proxy.signals.signal('output_disabled').connect(self._output_state_changed_wrapper, weak=False)
             self.proxy.signals.signal('capacitance-updated').connect(self._capacitance_updated_wrapper)
             self.proxy.signals.signal('shorts-detected').connect(self._shorts_detected_wrapper)
+            logger.debug("Connected DropBot signals to handlers")
             
             # Configure feedback capacitor
             if self.proxy.config.C16 < 0.3e-6:
