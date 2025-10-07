@@ -14,7 +14,7 @@ def is_redis_running():
     """Check if Redis is running by attempting to connect to it."""
     import redis
     try:
-        client = redis.StrictRedis(host='localhost', port=6379)
+        client = redis.StrictRedis(host='198.168.8.186', port=50000)
         client.ping()
         return True
     except redis.exceptions.ConnectionError:
