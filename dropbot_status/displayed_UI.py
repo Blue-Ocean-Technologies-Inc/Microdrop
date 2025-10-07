@@ -1,6 +1,6 @@
 from functools import wraps
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
 from PySide6.QtCore import Signal, QObject
 from traits.api import HasTraits, observe, Instance
 
@@ -150,8 +150,10 @@ class DropBotStatusView(QWidget):
         self.grid_widget = DropBotStatusGridWidget()
 
         # compose main layout (icon on left, grid on right)
-        self.main_layout.addWidget(self.icon_widget, 1)
-        self.main_layout.addWidget(self.grid_widget, 2)
+        self.main_layout.addWidget(self.icon_widget)
+        self.main_layout.addWidget(self.grid_widget)
+        spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.main_layout.addSpacerItem(spacer)
 
         # --- Data Binding ---
         # Connect ViewModel signals to the appropriate widget slots/methods.
