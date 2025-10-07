@@ -164,14 +164,14 @@ class DeviceViewMainModel(HasTraits):
                     layer.name = "Null route"
 
 
-    @observe("electrodes.channel_electrode_areas_scaled_map")
-    def push_globals(self, event):
-
-        if event.new != event.old:
-            logger.info(f"push_globals: {event.name}: {event.new}")
-            app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
-            if event.name == "channel_electrode_areas_scaled_map":
-                app_globals["channel_electrode_areas"] = event.new
+    # @observe("electrodes.channel_electrode_areas_scaled_map")
+    # def push_globals(self, event):
+    #
+    #     if event.new != event.old:
+    #         logger.info(f"push_globals: {event.name}: {event.new}")
+    #         app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
+    #         if event.name == "channel_electrode_areas_scaled_map":
+    #             app_globals["channel_electrode_areas"] = event.new
 
     @observe('electrode_scale')
     def update_stored_capacitances_on_area_scale_change(self, event):

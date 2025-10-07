@@ -4,7 +4,10 @@ import logging
 from pathlib import Path
 
 LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
-LOGLEVEL = "INFO"
+MIN_APP_LOGLEVEL = "INFO"
+ROOT_LOGLEVEL = "INFO"
+
+DEV_MODE = True
 
 # ANSI color codes
 COLORS = {
@@ -44,7 +47,7 @@ LEVELS = {
 
 
 ROOT_LOGGER = logging.getLogger()
-ROOT_LOGGER.setLevel(LEVELS[LOGLEVEL])
+ROOT_LOGGER.setLevel(LEVELS[ROOT_LOGLEVEL])
 
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
@@ -64,7 +67,7 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
-def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
+def get_logger(name, level=MIN_APP_LOGLEVEL, log_file_path=LOGFILE, dev_mode=DEV_MODE):
 
     Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
     
@@ -94,6 +97,15 @@ def get_logger(name, level=LOGLEVEL, log_file_path=LOGFILE):
 
     # Get the named logger
     logger = logging.getLogger(name)
-    logger.setLevel(max(LEVELS[LOGLEVEL], LEVELS[level]))
+
+    # if dev_mode is given, set log level to given level
+    if dev_mode:
+        level = LEVELS[level]
+
+    # otherwise, filter out based on min app log level
+    else:
+        level = max(LEVELS[MIN_APP_LOGLEVEL], LEVELS[level])
+
+    logger.setLevel(level)
 
     return logger
