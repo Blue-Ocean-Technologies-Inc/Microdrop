@@ -21,7 +21,6 @@ def main(args):
     # Create a Redis client instance
     r = redis.StrictRedis(
         port=REDIS_PORT,
-        decode_responses=True
     )
 
 

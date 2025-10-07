@@ -26,7 +26,6 @@ def main():
     r = redis.StrictRedis(
         host=REDIS_HOST,
         port=REDIS_PORT,
-        decode_responses=True
     )
 
 
