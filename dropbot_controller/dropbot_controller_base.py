@@ -24,7 +24,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__, level="INFO")
 
 
 @provides(IDropbotControllerBase)

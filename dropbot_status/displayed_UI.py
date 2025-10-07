@@ -77,7 +77,13 @@ class DropBotStatusViewModel(HasTraits):
             @wraps(func)
             def wrapper(self, event):
                 # 1. Format the incoming value
-                formatted_value = trim_to_n_digits(event.new, N_DISPLAY_DIGITS)
+                try:
+                    formatted_value = trim_to_n_digits(event.new, N_DISPLAY_DIGITS)
+                except AssertionError:
+                    if event.new == "-":
+                        logger.info(f"{event.new} is not measured by device.")
+                    else:
+                        logger.warning(f"{event.name} changed to value that cannot be parsed. Format needed: '[quantity] [units]'")
 
                 # 2. Get the correct signal from the instance using its name
                 signal_to_emit = getattr(self.view_signals, signal_name)
