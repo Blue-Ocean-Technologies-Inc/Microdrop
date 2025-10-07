@@ -108,12 +108,12 @@ class MicrodropTask(Task):
 
         right = VSplitter(
             top_right,
-            PaneItem("protocol_grid.dock_pane", height=1000),
+            PaneItem("protocol_grid.dock_pane", height=1000), # we want this to take up as much space as it can
         )
 
         return TaskLayout(
             right=right,
-            left=PaneItem("device_viewer.dock_pane", width=1000),
+            left=PaneItem("device_viewer.dock_pane", width=1000), # we want this to take up as much space as it can
         )
 
     ##########################################################
