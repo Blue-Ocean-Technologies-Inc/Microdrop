@@ -38,7 +38,7 @@ class DeviceViewerPlugin(Plugin):
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
     def _contributed_task_extensions_default(self):
-        from .views.device_view_pane import DeviceViewerDockPane
+        from .views.device_view_dock_pane import DeviceViewerDockPane
 
         return [ 
             TaskExtension(

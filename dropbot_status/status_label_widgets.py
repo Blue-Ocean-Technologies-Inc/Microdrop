@@ -19,7 +19,9 @@ class DropBotIconWidget(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(60, 60)
+        self.setMinimumWidth(60)
+        self.setMaximumWidth(106)
+        self.setFixedHeight(106)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 

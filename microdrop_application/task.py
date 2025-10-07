@@ -4,7 +4,7 @@ import dramatiq
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
-from pyface.tasks.api import Task, TaskLayout, Tabbed, PaneItem
+from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
 from pyface.api import GUI
 from traits.api import Instance, provides
 
@@ -100,9 +100,20 @@ class MicrodropTask(Task):
     # ------------------ Trait initializers ---------------------------------
 
     def _default_layout_default(self):
+
+        top_right = HSplitter(
+            PaneItem("dropbot_status.dock_pane"),
+            PaneItem("manual_controls.dock_pane"),
+        )
+
+        right = VSplitter(
+            top_right,
+            PaneItem("protocol_grid.dock_pane", height=1000),
+        )
+
         return TaskLayout(
-            left=PaneItem("microdrop.central_canvas"),
-            right=Tabbed()
+            right=right,
+            left=PaneItem("device_viewer.dock_pane", width=1000),
         )
 
     ##########################################################

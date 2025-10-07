@@ -61,7 +61,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     model = Instance(DeviceViewMainModel)
 
-    id = PKG + ".pane"
+    id = PKG + ".dock_pane"
     name = PKG_name + " Dock Pane"
 
     # Views

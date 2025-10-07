@@ -10,7 +10,7 @@ class DropbotStatusDockPane(DockPane):
     """
     #### 'ITaskPane' interface ################################################
 
-    id = PKG + ".pane"
+    id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
 
     def create_contents(self, parent):
