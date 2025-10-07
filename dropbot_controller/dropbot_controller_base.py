@@ -8,11 +8,9 @@ from traits.api import Instance, Dict
 import dramatiq
 
 # unit handling
-from pint import UnitRegistry
 
+from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
-
-ureg = UnitRegistry()
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL)

@@ -1,7 +1,6 @@
-from pint import UnitRegistry
 
-ureg = UnitRegistry()
-
+# ureg = UnitRegistry()
+from nadamq import ureg
 
 def ureg_quant_percent_change(old, new):
     old = get_ureg_magnitude(old)
