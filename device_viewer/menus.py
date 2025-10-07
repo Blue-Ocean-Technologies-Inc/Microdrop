@@ -9,7 +9,7 @@ def open_file_dialogue_menu_factory(plugin=None):
 
     return DockPaneAction(
         id=PKG + ".open_file_dialogue",
-        dock_pane_id=PKG + ".pane",
+        dock_pane_id=PKG + ".dock_pane",
         name=f"Open SVG File",
         method="open_file_dialog"
     )
@@ -21,7 +21,7 @@ def open_svg_dialogue_menu_factory(plugin=None):
 
     return DockPaneAction(
         id=PKG + ".open_svg_dialogue",
-        dock_pane_id=PKG + ".pane",
+        dock_pane_id=PKG + ".dock_pane",
         name=f"Save to SVG",
         method="open_svg_dialog"
     )

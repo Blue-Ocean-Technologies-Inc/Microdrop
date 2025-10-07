@@ -18,7 +18,7 @@ class PGCDockPane(DockPane):
     """
     #### 'ITaskPane' interface ################################################
 
-    id = Str(PKG + ".widget")
+    id = Str(PKG + ".dock_pane")
     name = Str(PKG_name)
 
     def create_contents(self, parent):
