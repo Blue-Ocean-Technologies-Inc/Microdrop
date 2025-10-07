@@ -75,10 +75,13 @@ class DeviceViewMainModel(HasTraits):
     # ------------------------- Properties ------------------------
 
     def _get_electrode_scale(self):
-        return self.electrodes.svg_model.area_scale
+        if self.electrodes.svg_model is not None:
+            return self.electrodes.svg_model.area_scale
+        return None
 
     def _set_electrode_scale(self, value):
-        self.electrodes.svg_model.area_scale = value
+        if self.electrodes.svg_model is not None:
+            self.electrodes.svg_model.area_scale = value
 
     def _get_mode_name(self):
         return {
@@ -177,5 +180,8 @@ class DeviceViewMainModel(HasTraits):
     def update_stored_capacitances_on_area_scale_change(self, event):
         # new_area = old_area * new_scale ==> cap/new_area = cap/(old_area * new_scale) = old_cap_over_area / new_scale
         if event.new:
-            self.liquid_capacitance_over_area /= event.new
-            self.filler_capacitance_over_area /= event.new
+            if self.liquid_capacitance_over_area:
+                self.liquid_capacitance_over_area /= event.new
+
+            if self.filler_capacitance_over_area:
+                self.filler_capacitance_over_area /= event.new
