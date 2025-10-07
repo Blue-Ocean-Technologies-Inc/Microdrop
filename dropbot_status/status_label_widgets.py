@@ -63,9 +63,6 @@ class DropBotStatusGridWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Use a size policy that prevents horizontal stretching
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(10)
@@ -116,3 +113,12 @@ class DropBotStatusGridWidget(QWidget):
         self.force_reading = QLabel("-")
         layout.addWidget(force_label, 5, 0)
         layout.addWidget(self.force_reading, 5, 1)
+
+
+        # The 'Maximum' policy tells the layout that the widget's size hint
+        # is also its maximum size.
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+
+        # This calculates the ideal size needed to fit all content and
+        # sets it as the maximum size, preventing the widget from stretching.
+        self.setMaximumSize(self.sizeHint())

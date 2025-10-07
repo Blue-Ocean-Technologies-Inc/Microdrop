@@ -32,7 +32,7 @@ class Window(QMainWindow):
         )
 
         # The View is the UI component we are testing
-        self.status_view = DropBotStatusView(view_signals=self.view_signals)
+        self.status_view = DropBotStatusView(view_model=self.view_model)
 
         # 2. --- Create controls that will ONLY interact with the model ---
         self.connect_button = QPushButton("Toggle Connection")
@@ -75,11 +75,15 @@ class Window(QMainWindow):
     def _simulate_backend_updates(self):
         """Simulates receiving new sensor data from a backend."""
         if self.model.connected:
-            cap = f"{random.uniform(10, 50):.2f} pF"
-            volt = f"{random.uniform(3.0, 3.3):.2f} V"
+            cap = f"{random.uniform(10, 50):.5f} pF"
+            volt = f"{random.uniform(1, 100):.5f} V"
+            pressure = f"{random.uniform(1, 100):.4f} pF/mm^2"
+            force = self.model.force = f"{random.uniform(1,100):.4f} mN/m"
             self.model.capacitance = cap
             self.model.voltage = volt
-            print(f"HARNESS: Simulating backend update. Capacitance: {cap}")
+            self.model.pressure = pressure
+            self.model.force = force
+            print(f"HARNESS: Simulating backend update. Capacitance: {cap}; Voltage: {volt}; Pressure: {pressure}; Force: {force}")
         else:
             # If not connected, reset to default values
             self.model.capacitance = "-"

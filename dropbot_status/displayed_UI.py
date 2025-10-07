@@ -1,3 +1,5 @@
+from functools import wraps
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 from PySide6.QtCore import Signal, QObject
 from traits.api import HasTraits, observe, Instance
@@ -8,6 +10,7 @@ from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatus
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 from microdrop_utils._logger import get_logger
+from microdrop_utils.ureg_helpers import trim_to_n_digits
 
 logger = get_logger(__name__, level="DEBUG")
 
@@ -15,6 +18,9 @@ disconnected_color = GREY["lighter"] #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
+
+N_DISPLAY_DIGITS = 3
+
 
 class DropbotStatusViewModelSignals(QObject):
     # Signals that the View will bind to
@@ -57,6 +63,31 @@ class DropBotStatusViewModel(HasTraits):
         else:
             return disconnected_color
 
+    # ----- decorator for emitting formatted measurements ---------
+
+    @staticmethod
+    def format_and_emit_measurements(signal_name: str):
+        """
+        A decorator factory that formats the event.new value from an observer
+        and emits it on a specified signal.
+        """
+
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, event):
+                # 1. Format the incoming value
+                formatted_value = trim_to_n_digits(event.new, N_DISPLAY_DIGITS)
+
+                # 2. Get the correct signal from the instance using its name
+                signal_to_emit = getattr(self.view_signals, signal_name)
+
+                # 3. Emit the formatted value
+                signal_to_emit.emit(formatted_value)
+
+            return wrapper
+
+        return decorator
 
     # --- Trait handlers for sensor readings ---
 
@@ -74,21 +105,24 @@ class DropBotStatusViewModel(HasTraits):
         self.view_signals.icon_path_changed.emit(self._get_icon_path())
 
     @observe("model:capacitance")
+    @format_and_emit_measurements("capacitance_changed")
     def update_capacitance_reading(self, event):
-        self.view_signals.capacitance_changed.emit(event.new)
+        pass
 
     @observe("model:voltage")
+    @format_and_emit_measurements("voltage_changed")
     def update_voltage_reading(self, event):
-        self.view_signals.voltage_changed.emit(event.new)
+        pass
 
     @observe("model:pressure")
+    @format_and_emit_measurements("pressure_changed")
     def update_pressure_reading(self, event):
-        self.view_signals.pressure_changed.emit(event.new)
+        pass
 
     @observe("model:force")
+    @format_and_emit_measurements("force_changed")
     def update_force_reading(self, event):
-        self.view_signals.force_changed.emit(event.new)
-
+        pass
 
 class DropBotStatusView(QWidget):
     """

@@ -5,7 +5,6 @@ import os
 from PySide6.QtCore import QObject, Signal, Slot
 # pyside imports
 from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser, QWidget
-from pint import UnitRegistry
 from traits.has_traits import HasTraits
 from traits.trait_types import Instance
 
@@ -25,7 +24,7 @@ from .model import DropBotStatusModel
 
 logger = get_logger(__name__, level="DEBUG")
 
-ureg = UnitRegistry()
+from microdrop_utils.ureg_helpers import ureg
 
 disconnected_color = GREY["lighter"]  #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR

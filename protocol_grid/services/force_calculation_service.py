@@ -1,4 +1,3 @@
-from pint import UnitRegistry
 from typing import Dict, List, Optional, Tuple
 from PySide6.QtCore import Qt
 
@@ -6,7 +5,7 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 
-ureg = UnitRegistry()
+from microdrop_utils.ureg_helpers import ureg
 
 class ForceCalculationService:
     """Service for calculating forces based on calibration data and voltages."""

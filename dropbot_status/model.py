@@ -10,7 +10,7 @@ class DropBotStatusModel(HasTraits):
     # Sensor readings
     capacitance = Str("-", desc="Raw capacitance in pF")
     voltage = Str("-", desc="Voltage set to device in V")
-    pressure = Str("-", desc="Pressure reading in kPa")
+    pressure = Str("-", desc="Pressure reading in pF/mm^2 ")
     force = Str("-", desc="Calculated force in N")
 
     def reset_readings(self):
