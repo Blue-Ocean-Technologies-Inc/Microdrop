@@ -36,7 +36,7 @@ def debounce(wait_seconds: float = 0.5) -> Callable[[F], F]:
                     fn(*args, **kwargs)
                 except Exception as e:
                     # Log the error but don't let it propagate to avoid breaking the timer
-                    print(f"Error in debounced function: {e}")
+                    logger.warning(f"Error in debounced function {fn}: {e}", exc_info=True)
 
             with lock:
                 if timer is not None:
