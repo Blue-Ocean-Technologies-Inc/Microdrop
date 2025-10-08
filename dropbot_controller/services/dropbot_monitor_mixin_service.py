@@ -110,22 +110,31 @@ class DropbotMonitorMixinService(HasTraits):
 
     def on_disconnected_signal(self, message):
         self.dropbot_connection_active = False
-        if not self._no_power:
-            logger.info(
-                "DropBot disconnected. Attempting to terminate proxy and resume monitoring to find DropBot again.")
 
-            if self.proxy is not None:
-                if self.proxy.monitor is not None:
-                    self.proxy.terminate()
-                    logger.info("Proxy terminated")
-                    self.proxy.monitor = None
-                    self.monitor_scheduler.resume()
-                    logger.info("Sending Signal to Resumed DropBot monitor")
-                    self.on_retry_connection_request(message="")
+        # Terminate the proxy monitor and reset it to None to allow new connection to set the monitor.
+        if self.proxy is not None:
+            if self.proxy.monitor is not None:
+                self.proxy.terminate()
+                logger.info("Proxy terminated")
+                self.proxy.monitor = None
+                logger.info("Sending Signal to Resumed DropBot monitor")
+
+        # if there is no power, we wait for user to send retry connection request; else: we automatically do it
+        if self._no_power:
+            logger.info("There was no power detected before the disconnection. Request retry after supplying power.")
+
+        else:
+            logger.info("DropBot disconnected. Resuming search for dropbot connection.")
+            self.on_retry_connection_request(message="")
 
     def on_connected_signal(self, message):
-        # Conduct a chip check
-        self.dropbot_connection_active = True
+        # set connection active in case it was not changed in the base listener routine.
+        if not self.dropbot_connection_active:
+            self.dropbot_connection_active = True
+
+        # call chip check again in case it was not called in the DramatiqSerialProxy after connection.
+        # if it is a second check, it should not matter since the chip check method is debounced to take into account
+        # rapid chip insertion changes anyway.
         self.on_chip_check_request("")
 
     ################################# Protected methods ######################################
@@ -158,7 +167,6 @@ class DropbotMonitorMixinService(HasTraits):
         - No power to DropBot - power supply not connected
         """
         self._no_power = False
-        err = None
 
         if self.proxy is None or getattr(self, 'proxy.monitor', None) is None:
 
@@ -169,43 +177,37 @@ class DropbotMonitorMixinService(HasTraits):
             try:
                 logger.debug(f"Attempting to create DropBot serial proxy on port {port_name}")
                 self.proxy = DramatiqDropbotSerialProxy(port=port_name)
-                # this will send out a connected signal to the message router if successful
                 logger.info(f"DropBot connected on port {port_name}")
 
+                # this will send out a connected signal to the message router if successful
+                # triggering the self.on_connected_signal method immediately.
                 self._on_dropbot_proxy_connected()
 
-                # once dropbot setup, set connection to active
-                self.dropbot_connection_active = True
+                # once dropbot setup, run on connected routine in case it did not get triggered
+                if not self.dropbot_connection_active:
+                    self.on_connected_signal("")
 
-                # self.on_chip_check_request("")
-                
             except (IOError, AttributeError) as e:
+                logger.error(f"IO or Attribute Error connecting to DropBot: {e}", exc_info=True)
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
-                err = f'{traceback.format_exc()}'
-                if self.proxy is not None:
-                    self.proxy.terminate()
 
             except dropbot.proxy.NoPower as e:
-                logger.critical("DropBot has no power.")
-                self._no_power = True
+                logger.critical("DropBot has no power.", exc_info=True)
                 publish_message(topic=NO_POWER, message=str(e))
-                err = f'{traceback.format_exc()}'
-                if self.proxy is not None:
-                    self.proxy.terminate()
+                self._no_power = True
 
             except Exception as e:
-                err = f'{traceback.format_exc()}'
+                # This is for any other unexpected error during the connection process.
+                logger.error(f"An unexpected error occurred with DropBot: {e}", exc_info=True)
                 publish_message(topic=DROPBOT_ERROR, message=str(e))
-                if self.proxy is not None:
-                    self.proxy.terminate()
 
             ###########################################################################################
 
             finally:
-                if err:
-                    logger.error(err)
-                    # reset proxy
-                    self.proxy = None
+                # If the connection is not active, it means the 'try' block failed or
+                # was never successfully completed: run disconnect routine.
+                if not self.dropbot_connection_active:
+                    self.on_disconnected_signal("")
 
         # if the dropbot is already connected
         else:
