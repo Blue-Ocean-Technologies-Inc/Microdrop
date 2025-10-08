@@ -83,7 +83,7 @@ class DropbotMonitorMixinService(HasTraits):
             logger.info(f"Detected shorts: {shorts_dict}")
             publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
 
-    @debounce(wait_seconds=1.5)
+    @debounce(wait_seconds=1) # take into account rapid chip insertion changes
     def on_chip_check_request(self, message):
         if self.proxy is not None:
             chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
