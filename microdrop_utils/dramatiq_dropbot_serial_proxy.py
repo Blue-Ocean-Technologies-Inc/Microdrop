@@ -33,7 +33,7 @@ class DramatiqDropbotSerialProxy(SerialProxy):
                 return    # already connected, skip
             _connection_state['connected'] = True
             publish_message(f'dropbot_connected', DROPBOT_CONNECTED)
-            publish_message('', CHIP_CHECK)
+            # publish_message('', CHIP_CHECK) # this should be done at the handler for the dropbot connected.
 
         def disconnected_wrapper(f, *args, **kwargs):
             f(*args, **kwargs)
