@@ -95,6 +95,11 @@ def test_clear(redis_dict):
     assert len(redis_dict) == 0
 
 
+def test_update_list_post_clear(redis_dict):
+    test_clear(redis_dict)
+    test_update_list(redis_dict)
+
+
 def test_update_bulk(redis_dict):
     """
     Test updating the hash with a bulk dictionary.
@@ -104,12 +109,18 @@ def test_update_bulk(redis_dict):
     assert redis_dict["key2"] == ["val3", "val4"]
 
 
+def test_update_bulk_post_clear(redis_dict):
+    test_clear(redis_dict)
+    test_update_bulk(redis_dict)
+
+
 def test_key_not_found(redis_dict):
     """
     Test that accessing a non-existent key raises a KeyError.
     """
     with pytest.raises(KeyError):
         _ = redis_dict["non_existent_key"]
+
 
 def test_get_redis_proxy_is_singleton_per_hash():
     """
