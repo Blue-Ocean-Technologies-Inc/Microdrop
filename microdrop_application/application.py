@@ -67,10 +67,6 @@ class MicrodropApplication(TasksApplication):
     # Whether to restore the previous application-level layout when the applicaton is started.
     always_use_default_layout = Property(Bool)
 
-    # what directory to use for the application generated folders/files
-    app_data_dir = Property(Directory)
-    # above two traits are gotten from the preferences file
-
     # branding
     icon = Instance(ImageResource)
     splash_screen = Instance(SplashScreen)
@@ -123,9 +119,6 @@ class MicrodropApplication(TasksApplication):
 
     def _get_always_use_default_layout(self):
         return self.preferences_helper.always_use_default_layout
-
-    def _get_app_data_dir(self):
-        return self.preferences_helper.app_data_dir
 
     @observe('started')
     def _on_application_started(self, event):
