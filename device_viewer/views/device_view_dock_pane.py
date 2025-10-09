@@ -1,8 +1,9 @@
-# enthought imports
+# Site package imports
 import dramatiq
-from PySide6.QtWidgets import QScrollArea
+
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
+
 from pyface.api import FileDialog, OK
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
@@ -13,12 +14,19 @@ from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtMultimedia import QMediaCaptureSession
 
-# local imports
+from PySide6.QtWidgets import QScrollArea
+
+
 # TODO: maybe get these from an extension point for very granular control
+
+# For sidebar
 from device_viewer.utils.camera import qtransform_deserialize
 from device_viewer.views.alpha_view.alpha_table import alpha_table_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
+from device_viewer.views.mode_picker.widget import ModePicker
+
+# Device Viewer electrode and route views
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
@@ -46,17 +54,17 @@ from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route
 from device_viewer.consts import PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# ext consts
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
-from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
 
 import json
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, level="DEBUG")
 
 
 class DeviceViewerDockPane(TraitsDockPane):
@@ -104,11 +112,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
 
+        self.app_preferences = self.task.window.application.preferences_helper.preferences
+        self.device_viewer_preferences = DeviceViewerPreferences(preferences=self.app_preferences)
+
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
-        self.model.electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
+        self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
 
 
         # Load preferences to model
@@ -468,7 +479,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         """Called when the task is activated."""
-        logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
+        logger.debug(f"Device Viewer Task activated. Setting default view with {self.device_viewer_preferences.DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
         # Initialize camera primitives
@@ -609,6 +620,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             svg_file = dialog.path
             logger.info(f"Selected SVG file: {svg_file}")
 
+            # set default value to this
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
+
             self.model.reset()
             self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
             self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
@@ -616,6 +630,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             self.set_interaction_service(self.model)
             logger.info(f"Electrodes model set to {self.model}")
+
 
     def open_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
