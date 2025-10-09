@@ -21,24 +21,33 @@ from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
-from microdrop_utils.timestamped_message import TimestampedMessage
+from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
+
+
+# local imports
 from ..models.electrodes import Electrodes
+from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
+from ..consts import listener_name
+
+# utils imports
 from microdrop_utils._logger import get_logger
+from microdrop_utils.pyside_helpers import CollapsibleVStackBox
+from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.timestamped_message import TimestampedMessage
+from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
+from device_viewer.utils.dmf_utils import channels_to_svg
+
+# models and services
 from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.models.route import RouteLayerManager, Route
-from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
+from device_viewer.models.route import Route
+from device_viewer.consts import PKG, PKG_name
 from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
-from ..consts import listener_name, DEVICE_VIEWER_SIDEBAR_WIDTH
-from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
-from device_viewer.views.mode_picker.widget import ModePicker
-from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
-from device_viewer.utils.dmf_utils import channels_to_svg
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
@@ -101,9 +110,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
         self.model.electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
-        self.preferences = self.task.window.application.preferences_helper.preferences
+
         # Load preferences to model
-        transform = self.preferences.get("camera.transformation")
+        transform = self.app_preferences.get("camera.transformation")
         if transform: # If preference exists
             self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
@@ -491,12 +500,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Create the Scroll Area and its container
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+
+        scroll_area.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
         # Initially hide the scroll area
         scroll_area.setVisible(True)
 
         scroll_content = QWidget()
-        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
+        scroll_content.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
         scroll_layout = QVBoxLayout(scroll_content)
 
         # device_view code
@@ -507,15 +517,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
 
-        self.alpha_view_ui.control.setMinimumHeight(ALPHA_VIEW_MIN_HEIGHT)
-        self.alpha_view_ui.control.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+        self.alpha_view_ui.control.setMinimumHeight(self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT)
+        self.alpha_view_ui.control.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
         self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.routes.edit_traits(view=layer_view)
 
-        self.layer_ui.control.setMinimumHeight(LAYERS_VIEW_MIN_HEIGHT)
+        self.layer_ui.control.setMinimumHeight(self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT)
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
@@ -523,7 +533,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(main_container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.preferences)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.app_preferences)
         self.camera_control_widget.setParent(main_container)
 
         # calibration_view code

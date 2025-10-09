@@ -1,12 +1,13 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Str, Directory
-from traitsui.api import EnumEditor, HGroup, Item, Label, VGroup, View
+from traits.api import Bool, Str
+from traitsui.api import VGroup, View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from microdrop_utils.preferences_UI_helpers import create_traitsui_labeled_item_group
+from device_viewer.consts import preferences_group_style_sheet
+from microdrop_utils.preferences_UI_helpers import create_labeled_group
 
 
 class MicrodropPreferences(PreferencesHelper):
@@ -30,8 +31,8 @@ class MicrodropPreferences(PreferencesHelper):
 
 
 microdrop_tab = PreferencesCategory(
-    id="microdrop.app.startup_preferences",
-    name="Application Startup",
+    id="microdrop.app.general_settings",
+    name="Microdrop General",
 )
 
 
@@ -48,9 +49,13 @@ class MicrodropPreferencesPane(PreferencesPane):
     #### 'AttractorsPreferencesPane' interface ################################
 
     view = View(
+        Item("_"),
         VGroup(
-            create_traitsui_labeled_item_group('always_use_default_layout', show_labels=False),
+            create_labeled_group('always_use_default_layout', group_show_labels=False),
+            Item("_"), # ensure other contributed pane groups are spaced out from this pane's group.
             label="Application Startup",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
         ),
         resizable=True,
     )

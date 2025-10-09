@@ -27,3 +27,12 @@ ACTOR_TOPIC_DICT = {
 DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
+
+# This is a Qt Style Sheet (QSS) string.
+# It targets the title of a QGroupBox widget for the various preference groups.
+preferences_group_style_sheet = """
+        QGroupBox {
+            font-weight: bold;
+            font-size: 12pt;
+        }
+    """

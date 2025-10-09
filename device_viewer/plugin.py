@@ -6,8 +6,8 @@ from device_viewer.menus import open_file_dialogue_menu_factory, open_svg_dialog
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES, PREFERENCES_PANES, PREFERENCES_CATEGORIES
-from envisage.ui.tasks.api import TaskFactory, TaskExtension
+from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
+from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 
 # local imports
@@ -37,19 +37,12 @@ class DeviceViewerPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
-    preferences = List(contributes_to=PREFERENCES)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     ###########################################################################
     # Protected interface.
     ###########################################################################
-
-    def _preferences_default(self):
-        filename = Path(__file__).parent / "preferences.ini"
-        # Manually format the string to match what the envisage.resources.FileResourceProtocol expects
-        # it uses a nonstandard way to parse the url.
-        return [f"file://{filename}"]
 
     def _preferences_panes_default(self):
         from .preferences import DeviceViewerPreferencesPane
