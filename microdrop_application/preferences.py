@@ -6,6 +6,8 @@ from envisage.ui.tasks.api import PreferencesCategory
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
+from microdrop_utils.preferences_UI_helpers import create_traitsui_labeled_item_group
+
 
 class MicrodropPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.
