@@ -25,12 +25,13 @@ class MicrodropPlugin(Plugin):
 
     #### Contributions to extension points made by this plugin ################
 
-    preferences = List(contributes_to=PREFERENCES)
-    preferences_panes = List(contributes_to=PREFERENCES_PANES)
-    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
     tasks = List(contributes_to=TASKS)
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    preferences = List(contributes_to=PREFERENCES)
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     ###########################################################################
     # Protected interface.
