@@ -1,6 +1,7 @@
 from apptools.preferences.api import PreferencesHelper
 from traits.api import Bool, Dict, Str, Directory
 from traitsui.api import EnumEditor, HGroup, Item, Label, VGroup, View
+from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
@@ -14,7 +15,7 @@ class MicrodropPreferences(PreferencesHelper):
     #### 'PreferencesHelper' interface ########################################
 
     # The path to the preference node that contains the preferences.
-    preferences_path = "microdrop"
+    preferences_path = "microdrop.app"
 
     #### Preferences ##########################################################
 
@@ -29,6 +30,12 @@ class MicrodropPreferences(PreferencesHelper):
     app_data_dir = Directory
 
 
+microdrop_tab = PreferencesCategory(
+    id="microdrop.app.startup_preferences",
+    name="Application Startup",
+)
+
+
 class MicrodropPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
 
@@ -37,13 +44,15 @@ class MicrodropPreferencesPane(PreferencesPane):
     # The factory to use for creating the preferences model object.
     model_factory = MicrodropPreferences
 
+    category = microdrop_tab.id
+
     #### 'AttractorsPreferencesPane' interface ################################
 
     view = View(
         VGroup(
             HGroup(
                 Item("always_use_default_layout"),
-                Label("Always use the default active task on startup"),
+                Label("Always use the default layout"),
                 show_labels=False,
             ),
 
@@ -57,7 +66,3 @@ class MicrodropPreferencesPane(PreferencesPane):
         ),
         resizable=True,
     )
-
-    ###########################################################################
-    # Private interface.
-    ###########################################################################

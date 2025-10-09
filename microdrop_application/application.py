@@ -47,15 +47,15 @@ class MicrodropApplication(TasksApplication):
 
     #### 'TasksApplication' interface #########################################
 
-    #: The directory on the local file system used to persist window layout
-    #: information.
-    state_location = application_home_directory
-
     #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
     home = application_home_directory
 
-    #: We dont use this directory but it defaults to "~/enthought" and keeps creating it so we set it to our save location
-    user_data = application_home_directory
+    #: The directory on the local file system used to persist window layout
+    #: information.
+    state_location = application_home_directory / ".save_state"
+
+    #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+    user_data = application_home_directory / "Experimental_Data "
 
     #: The filename that the application uses to persist window layout
     #: information.
