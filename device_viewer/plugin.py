@@ -1,12 +1,12 @@
 # Standard library imports.
-import os.path
+from pathlib import Path
 
 from traits.api import List, Str
 from device_viewer.menus import open_file_dialogue_menu_factory, open_svg_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, TASK_EXTENSIONS
+from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES, PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from envisage.ui.tasks.api import TaskFactory, TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 

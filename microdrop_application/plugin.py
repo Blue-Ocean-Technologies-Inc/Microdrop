@@ -38,7 +38,9 @@ class MicrodropPlugin(Plugin):
 
     def _preferences_default(self):
         filename = Path(__file__).parent / "preferences.ini"
-        return [filename.as_uri()]
+        # Manually format the string to match what the envisage.resources.FileResourceProtocol expects
+        # It uses a nonstandard way to parse the url.
+        return [f"file://{filename}"]
 
     def _preferences_panes_default(self):
         from .preferences import MicrodropPreferencesPane
