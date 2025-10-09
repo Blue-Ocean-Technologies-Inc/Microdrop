@@ -37,6 +37,29 @@ class DeviceViewerPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
+    preferences = List(contributes_to=PREFERENCES)
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    ###########################################################################
+    # Protected interface.
+    ###########################################################################
+
+    def _preferences_default(self):
+        filename = Path(__file__).parent / "preferences.ini"
+        # Manually format the string to match what the envisage.resources.FileResourceProtocol expects
+        # it uses a nonstandard way to parse the url.
+        return [f"file://{filename}"]
+
+    def _preferences_panes_default(self):
+        from .preferences import DeviceViewerPreferencesPane
+
+        return [DeviceViewerPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import device_viewer_tab
+        return [device_viewer_tab]
+
     def _contributed_task_extensions_default(self):
         from .views.device_view_dock_pane import DeviceViewerDockPane
 
