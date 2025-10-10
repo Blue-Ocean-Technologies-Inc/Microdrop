@@ -164,11 +164,12 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
             else:  # result == CANCEL
                 print("Load operation cancelled by user.")
 
-    #### Protected Helper methods ##############
-    def _load_new_file(self, src_file: Union[Path, str], dst_file: Union[Path, str], ):
+    #### Helper methods ##############
+    @staticmethod
+    def load_new_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
         try:
             copy2(src_file, dst_file)
-            print(f"File '{self.file}' was loaded.")
+            print(f"File '{dst_file}' was loaded.")
             return dst_file
 
         except Exception as e:
