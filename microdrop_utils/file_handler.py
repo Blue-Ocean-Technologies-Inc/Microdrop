@@ -1,5 +1,8 @@
 import webbrowser
 from pathlib import Path
+from shutil import copy2
+from typing import Union
+
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,3 +19,14 @@ def open_html_in_browser(file_path):
         webbrowser.open_new_tab(path.resolve().as_uri())
     else:
         logger.error(f"File not found: {path}")
+
+
+def safe_copy_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
+    try:
+        copy2(src_file, dst_file)
+        logger.info(f"File '{dst_file}' was copied from {src_file}.")
+        return dst_file
+
+    except Exception as e:
+        logger.error(f"Error loading file: {e}", exc_info=True)
+        raise

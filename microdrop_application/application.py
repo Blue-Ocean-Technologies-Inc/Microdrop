@@ -6,6 +6,7 @@ from pathlib import Path
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 
 from PySide6.QtCore import QEvent
+from traits.etsconfig.etsconfig import ETSConfig
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -34,6 +35,22 @@ from .consts import (scibots_icon_path, sidebar_menu_options,
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
+# #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
+# home = application_home_directory
+#
+# #: The directory on the local file system used to persist window layout
+# #: information.
+# state_location = application_home_directory / ".save_state"
+#
+# #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+# user_data = application_home_directory / "Experimental_Data "
+
+# set some global consts used application wide
+ETSConfig.company = "Sci-Bots"
+ETSConfig.user_data = str(Path.home() / "Documents" / ETSConfig.company / "Microdrop")
+ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
+
+
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
 
@@ -47,15 +64,15 @@ class MicrodropApplication(TasksApplication):
 
     #### 'TasksApplication' interface #########################################
 
-    #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
-    home = application_home_directory
-
-    #: The directory on the local file system used to persist window layout
-    #: information.
-    state_location = application_home_directory / ".save_state"
-
-    #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
-    user_data = application_home_directory / "Experimental_Data "
+    # #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
+    # home = application_home_directory
+    #
+    # #: The directory on the local file system used to persist window layout
+    # #: information.
+    # state_location = application_home_directory / ".save_state"
+    #
+    # #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+    # user_data = application_home_directory / "Experimental_Data "
 
     #: The filename that the application uses to persist window layout
     #: information.
