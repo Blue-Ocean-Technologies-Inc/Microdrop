@@ -16,6 +16,7 @@ class ResetDefaultFileDemo(HasTraits):
     default_dir = Directory()
     reset_button = Button("Reset to Defaults")
     mod_def_text = Button("Modify")
+    default_user_file = File()
 
     def _default_dir_default(self) -> Path:
         default_dir = Path().home() / "Documents" / "scratch_tests" / "texts_repo"
@@ -25,6 +26,9 @@ class ResetDefaultFileDemo(HasTraits):
         print(f"Default directory is: {default_dir}")
 
         return default_dir
+
+    def _default_user_file_default(self) -> str:
+        return str(Path(self.default_dir) / "sample.txt")
 
     def _file_default(self):
         """Sets the default file path and creates a sample file if needed."""
@@ -36,12 +40,12 @@ class ResetDefaultFileDemo(HasTraits):
             MASTER_FILE.write_text("This is the MASTER copy of the sample file.")
 
         # --- Ensure User's File is a Copy of Master on First Run ---
-        user_file = Path(self.default_dir) / "sample.txt"
-        print(f"Checking for user's default file: {user_file}")
+        default_user_file = Path(self.default_user_file)
+        print(f"Checking for user's default file: {default_user_file}")
         should_overwrite = True
-        if user_file.exists():
+        if default_user_file.exists():
             # If the user's file exists, check if it's different from master
-            if filecmp.cmp(MASTER_FILE, user_file, shallow=False):
+            if filecmp.cmp(MASTER_FILE, default_user_file, shallow=False):
                 print("User's file already exists and matches master.")
                 should_overwrite = False
             else:
@@ -50,10 +54,10 @@ class ResetDefaultFileDemo(HasTraits):
             print("User's default file not found, creating it from master...")
 
         if should_overwrite:
-            # user_file.write_text(MASTER_FILE.read_text())
-            copy2(str(MASTER_FILE), str(user_file))
+            # default_user_file.write_text(MASTER_FILE.read_text())
+            copy2(str(MASTER_FILE), str(default_user_file))
 
-        return str(user_file)
+        return str(default_user_file)
 
     def _reset_button_fired(self):
         """
@@ -71,7 +75,7 @@ class ResetDefaultFileDemo(HasTraits):
                 'file',
                 id='file1',
                 label="File Path",
-                editor=FileEditor(root_path_name='file', filter=['Texts (*.txt)']),
+                editor=FileEditor(filter=['Texts (*.txt)']),
             ),
             # A simple button to trigger the reset action
             Item('reset_button'),
