@@ -13,7 +13,7 @@ PKG_name = PKG.title().replace("_", " ")
 ACTOR_TOPIC_DICT = {}
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
-application_home_directory = Path.home() / ".microdrop_next_gen"
+application_home_directory = Path.home() / "Documents"/ "MicroDropNextGen"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"
 
 sidebar_menu_options = [

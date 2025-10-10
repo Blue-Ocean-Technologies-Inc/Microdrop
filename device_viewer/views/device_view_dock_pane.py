@@ -1,9 +1,12 @@
-# enthought imports
+# Site package imports
+from pathlib import Path
+
 import dramatiq
-from PySide6.QtWidgets import QScrollArea
+
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
-from pyface.api import FileDialog, OK
+
+from pyface.api import FileDialog, OK, confirm, YES, NO
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QLabel, QFrame, QPushButton
@@ -13,41 +16,57 @@ from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtMultimedia import QMediaCaptureSession
 
-# local imports
+from PySide6.QtWidgets import QScrollArea
+
+
 # TODO: maybe get these from an extension point for very granular control
+
+# For sidebar
 from device_viewer.utils.camera import qtransform_deserialize
 from device_viewer.views.alpha_view.alpha_table import alpha_table_view
 from device_viewer.views.calibration_view.widget import CalibrationView
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
+from device_viewer.views.mode_picker.widget import ModePicker
+
+# Device Viewer electrode and route views
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
-from microdrop_utils.timestamped_message import TimestampedMessage
+from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
+from microdrop_utils.file_handler import safe_copy_file
+
+# local imports
 from ..models.electrodes import Electrodes
+from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
+from ..consts import listener_name
+
+# utils imports
 from microdrop_utils._logger import get_logger
-from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.models.route import RouteLayerManager, Route
-from device_viewer.consts import DEFAULT_SVG_FILE, PKG, PKG_name, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
-from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
+from microdrop_utils.pyside_helpers import CollapsibleVStackBox
+from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
-from ..consts import listener_name, DEVICE_VIEWER_SIDEBAR_WIDTH
-from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
-from device_viewer.views.mode_picker.widget import ModePicker
+from microdrop_utils.timestamped_message import TimestampedMessage
 from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 from device_viewer.utils.dmf_utils import channels_to_svg
+
+# models and services
+from device_viewer.models.main_model import DeviceViewMainModel
+from device_viewer.models.route import Route
+from device_viewer.consts import PKG, PKG_name
+from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
+
+# ext consts
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
 from microdrop_application.application import is_dark_mode
-from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
 
 import json
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, level="DEBUG")
 
 
 class DeviceViewerDockPane(TraitsDockPane):
@@ -95,15 +114,22 @@ class DeviceViewerDockPane(TraitsDockPane):
             listener_name=listener_name,
             class_method=self.listener_actor_routine)
 
+        self.app_preferences = self.task.window.application.preferences_helper.preferences
+        self.device_viewer_preferences = DeviceViewerPreferences(preferences=self.app_preferences)
+
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
-        self.model.electrodes.set_electrodes_from_svg_file(DEFAULT_SVG_FILE)
 
-        self.preferences = self.task.window.application.preferences_helper.preferences
+        if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
+            self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
+
+        self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
+
+
         # Load preferences to model
-        transform = self.preferences.get("camera.transformation")
+        transform = self.app_preferences.get("camera.transformation")
         if transform: # If preference exists
             self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
@@ -459,7 +485,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         """Called when the task is activated."""
-        logger.debug(f"Device Viewer Task activated. Setting default view with {DEFAULT_SVG_FILE}...")
+        logger.debug(f"Device Viewer Task activated. Setting default view with {self.device_viewer_preferences.DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
         # Initialize camera primitives
@@ -491,12 +517,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Create the Scroll Area and its container
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+
+        scroll_area.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
         # Initially hide the scroll area
         scroll_area.setVisible(True)
 
         scroll_content = QWidget()
-        scroll_content.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
+        scroll_content.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
         scroll_layout = QVBoxLayout(scroll_content)
 
         # device_view code
@@ -507,15 +534,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
 
-        self.alpha_view_ui.control.setMinimumHeight(ALPHA_VIEW_MIN_HEIGHT)
-        self.alpha_view_ui.control.setMaximumWidth(DEVICE_VIEWER_SIDEBAR_WIDTH)
+        self.alpha_view_ui.control.setMinimumHeight(self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT)
+        self.alpha_view_ui.control.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
         self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.routes.edit_traits(view=layer_view)
 
-        self.layer_ui.control.setMinimumHeight(LAYERS_VIEW_MIN_HEIGHT)
+        self.layer_ui.control.setMinimumHeight(self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT)
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
@@ -523,7 +550,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view.setParent(main_container)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.preferences)
+        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.app_preferences)
         self.camera_control_widget.setParent(main_container)
 
         # calibration_view code
@@ -592,22 +619,108 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.undo_manager.active_stack.clear()
 
-    def open_file_dialog(self):
+    def _on_load_svg_success(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
-        dialog = FileDialog(action='open', wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
-        if dialog.open() == OK:
-            svg_file = dialog.path
-            logger.info(f"Selected SVG file: {svg_file}")
+        svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE # since OK, the default should have changed now.
+        logger.info(f"Selected SVG file: {svg_file}")
 
-            self.model.reset()
-            self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
-            self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
-            logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+        self.model.reset()
+        self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
+        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
 
-            self.set_interaction_service(self.model)
-            logger.info(f"Electrodes model set to {self.model}")
+        self.set_interaction_service(self.model)
+        logger.info(f"Electrodes model set to {self.model}")
 
-    def open_svg_dialog(self):
+    def load_svg_dialog(self):
+        logger.info("\n--- Loading external svg file into device repo ---")
+
+        # --- 1. Open a dialog for the user to select a source file ---
+        # This is decoupled from self.file to allow loading any file at any time.
+        dialog = FileDialog(action='open',
+                            default_path=str(self.device_viewer_preferences.DEFAULT_SVG_FILE),
+                            wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
+
+        if dialog.open() != OK:
+            logger.info("File selection cancelled by user.")
+            return None
+
+        src_file = Path(dialog.path)
+        repo_dir = Path(self.device_viewer_preferences.DEVICE_REPO_DIR)
+
+        # --- 3. Handle case where the selected file is already in the repo ---
+        # We just select it in the UI and do not need to copy anything.
+        if src_file.parent == repo_dir:
+            logger.debug(f"File '{src_file.name}' is already in the repo. Selecting it.")
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = src_file
+            self._on_load_svg_success()
+            return OK
+
+        logger.debug("Checking for chosen file in repo...")
+        dst_file = Path(repo_dir) / src_file.name
+
+        if not dst_file.exists():
+            # --- 4a. No conflict: The file doesn't exist, copy it directly.
+
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+            logger.info(f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before.")
+
+            self._on_load_svg_success()
+            return OK
+
+        else:
+            # --- 4b. Conflict: File exists. Ask the user what to do. ---
+            logger.info(f"File '{dst_file.name}' already exists. Confirm Overwriting.")
+
+            confirm_overwrite = confirm(
+                parent=None,
+                message=f"A file named '{dst_file.name}' already exists in "
+                        "the repository. What would you like to do?",
+                title="Warning: File Already Exists",
+                cancel=True,
+                yes_label="Overwrite",
+                no_label="Save As...",
+            )
+
+            if confirm_overwrite == YES:
+                # --- Overwrite the existing file ---
+                logger.debug(f"User chose to overwrite '{dst_file.name}'.")
+                self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+                self._on_load_svg_success()
+                return OK
+
+            elif confirm_overwrite == NO:
+                # --- Open a 'Save As' dialog to choose a new name ---
+                logger.debug("User chose 'Save As...'. Opening save dialog.")
+
+                dialog = FileDialog(action='save as',
+                                    default_directory=str(repo_dir),
+                                    default_filename=src_file.stem + " - Copy",
+                                    wildcard='Texts (*.txt)')
+
+                ###### Handle Save As Dialog ######################
+                if dialog.open() == OK:
+                    dst_file = dialog.path
+
+                    self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+                    self._on_load_svg_success()
+                    return OK
+
+                else:
+                    logger.debug("Save As dialog cancelled by user.")
+                    return None
+
+                ####################################################
+
+            else:  # result == CANCEL
+                logger.debug("Load operation cancelled by user.")
+                return None
+
+
+    def save_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:

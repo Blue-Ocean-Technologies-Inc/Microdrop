@@ -1,13 +1,13 @@
 # Standard library imports.
-import os.path
+from pathlib import Path
 
 from traits.api import List, Str
-from device_viewer.menus import open_file_dialogue_menu_factory, open_svg_dialogue_menu_factory
+from device_viewer.menus import load_svg_dialog_menu_factory, open_svg_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, TASK_EXTENSIONS
-from envisage.ui.tasks.api import TaskFactory, TaskExtension
+from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
+from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 
 # local imports
@@ -37,6 +37,22 @@ class DeviceViewerPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    ###########################################################################
+    # Protected interface.
+    ###########################################################################
+
+    def _preferences_panes_default(self):
+        from .preferences import DeviceViewerPreferencesPane
+
+        return [DeviceViewerPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import device_viewer_tab
+        return [device_viewer_tab]
+
     def _contributed_task_extensions_default(self):
         from .views.device_view_dock_pane import DeviceViewerDockPane
 
@@ -46,7 +62,7 @@ class DeviceViewerPlugin(Plugin):
                 dock_pane_factories=[DeviceViewerDockPane],
                 actions=[
                     SchemaAddition(
-                        factory=open_file_dialogue_menu_factory,
+                        factory=load_svg_dialog_menu_factory,
                         path='MenuBar/File'
                     ),
                     SchemaAddition(
