@@ -60,11 +60,7 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
             print("User's default file not found, creating it from master...")
 
         if should_overwrite:
-            try:
-                copy2(str(MASTER_FILE), str(default_user_file))
-                print("User's file was successfully loaded")
-            except Exception as e:
-                print(f"User's file could not be loaded: {e}")
+            default_user_file = self._load_new_file(str(MASTER_FILE), str(default_user_file))
 
         return str(default_user_file)
 
@@ -121,7 +117,7 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
         if not dst_file.exists():
             # --- 4a. No conflict: The file doesn't exist, copy it directly.
 
-            self._load_new_file(dst_file, src_file)
+            self.file = self._load_new_file(src_file, dst_file)
 
             print(f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before.")
 
@@ -143,7 +139,7 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
                 # --- Overwrite the existing file ---
                 print(f"User chose to overwrite '{dst_file.name}'.")
 
-                self._load_new_file(dst_file, src_file)
+                self.file = self._load_new_file(src_file, dst_file)
 
             elif confirm_overwrite == NO:
                 # --- Open a 'Save As' dialog to choose a new name ---
@@ -158,7 +154,7 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
                 if dialog.open() == OK:
                     dst_file = dialog.path
 
-                    self._load_new_file(dst_file, src_file)
+                    self.file = self._load_new_file(src_file, dst_file)
 
                 else:
                     print("Save As dialog cancelled by user.")
@@ -169,11 +165,12 @@ class ResetDefaultFileLoadFileDemo(HasTraits):
                 print("Load operation cancelled by user.")
 
     #### Protected Helper methods ##############
-    def _load_new_file(self, dst_file: Union[Path, str], src_file: Union[Path, str]):
+    def _load_new_file(self, src_file: Union[Path, str], dst_file: Union[Path, str], ):
         try:
             copy2(src_file, dst_file)
-            self.file = dst_file
             print(f"File '{self.file}' was loaded.")
+            return dst_file
+
         except Exception as e:
             print(f"Error loading file: {e}")
             raise
