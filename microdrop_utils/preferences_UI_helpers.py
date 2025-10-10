@@ -57,7 +57,7 @@ def create_item_label_pair(
         raise ValueError("label_position must be 'first' or 'last'")
 
 
-def create_labeled_group(
+def create_item_label_group(
         item_name: str,
         label_text: str = None,
         orientation: str = 'horizontal',
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     print("--- Demonstrating create_labeled_group ---")
     labeled_group_demo = TestHarness()
     labeled_group_demo.view = View(
-        create_labeled_group(
+        create_item_label_group(
             'send_notifications',
             orientation='horizontal',
             group_show_border=True,

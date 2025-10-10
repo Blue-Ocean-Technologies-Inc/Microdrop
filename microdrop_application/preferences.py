@@ -6,8 +6,9 @@ from envisage.ui.tasks.api import PreferencesCategory
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from device_viewer.consts import preferences_group_style_sheet
-from microdrop_utils.preferences_UI_helpers import create_labeled_group
+from microdrop_style.text_styles import preferences_group_style_sheet
+
+from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
 
 class MicrodropPreferences(PreferencesHelper):
@@ -46,16 +47,22 @@ class MicrodropPreferencesPane(PreferencesPane):
 
     category = microdrop_tab.id
 
-    #### 'AttractorsPreferencesPane' interface ################################
+    #### 'MicrodropPreferencesPane' interface ################################
 
-    view = View(
-        Item("_"),
-        VGroup(
-            create_labeled_group('always_use_default_layout', group_show_labels=False),
-            Item("_"), # ensure other contributed pane groups are spaced out from this pane's group.
+    app_startup_settings = VGroup(
+            create_item_label_group('always_use_default_layout'),
             label="Application Startup",
             show_border=True,
             style_sheet=preferences_group_style_sheet,
         ),
+
+    view = View(
+
+        Item("_"), # Separator
+
+        app_startup_settings,
+
+        Item("_"),  # ensure other contributed pane groups are spaced out from this pane's group.
+
         resizable=True,
     )

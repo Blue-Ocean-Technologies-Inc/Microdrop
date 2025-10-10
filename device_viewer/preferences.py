@@ -8,9 +8,11 @@ from envisage.ui.tasks.api import PreferencesCategory
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from microdrop_utils.preferences_UI_helpers import create_grid_group, create_labeled_group
+from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
 
-from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, preferences_group_style_sheet
+from microdrop_style.text_styles import preferences_group_style_sheet
+
+from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT
 
 
 class DeviceViewerPreferences(PreferencesHelper):
@@ -48,11 +50,7 @@ class DeviceViewerPreferencesPane(PreferencesPane):
 
     category = device_viewer_tab.id
 
-    #### 'AttractorsPreferencesPane' interface ################################
-
-    # Assume the following imports are present:
-    # from traitsui.api import View, VGroup, Item, FileEditor
-    # from traits_ui_helpers import create_labeled_group, create_grid_group
+    #### 'DeviceViewerPreferencesPane' interface ################################
 
     # This is the list of trait names for the grid layout
     sidebar_setting_items = [
@@ -69,17 +67,14 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
-    # Create the single item for the default layout.
-    # The 'editor' kwarg is passed directly to the Item
-
-    default_svg_setting_group = create_labeled_group(
+    # Create the single item for the default svg for the main view group.
+    default_svg_setting_group = create_item_label_group(
             'DEFAULT_SVG_FILE',
             label_text='Default Device Layout',
             item_editor=FileEditor(
                 filter=['SVG Files (*.svg)|*.svg|All Files (*.*)|*.*'],
                 dialog_style='open'
             ),
-            group_show_labels=True,
         )
 
     main_view_settings = VGroup(
@@ -89,7 +84,6 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         style_sheet=preferences_group_style_sheet,
     ),
 
-    # Construct the final View with the new, cleaner components.
     view = View(
 
         Item("_"),  # Separator
