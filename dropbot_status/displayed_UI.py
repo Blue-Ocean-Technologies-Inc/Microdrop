@@ -12,7 +12,7 @@ from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GR
 from microdrop_utils._logger import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 disconnected_color = GREY["lighter"] #ERROR_COLOR
 connected_no_device_color = WARNING_COLOR
@@ -81,9 +81,11 @@ class DropBotStatusViewModel(HasTraits):
                     formatted_value = trim_to_n_digits(event.new, N_DISPLAY_DIGITS)
                 except AssertionError:
                     if event.new == "-":
-                        logger.info(f"{event.new} is not measured by device.")
+                        logger.info(f"{event.name.title()} is not measured by device. Value is {event.new}")
                     else:
-                        logger.warning(f"{event.name} changed to value that cannot be parsed. Format needed: '[quantity] [units]'")
+                        logger.warning(f"{event.name.title()} changed to value that cannot be parsed. Format needed: '[quantity] [units]'")
+
+                    return
 
                 # 2. Get the correct signal from the instance using its name
                 signal_to_emit = getattr(self.view_signals, signal_name)
