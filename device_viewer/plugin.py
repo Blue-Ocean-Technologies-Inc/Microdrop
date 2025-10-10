@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from traits.api import List, Str
-from device_viewer.menus import open_file_dialogue_menu_factory, open_svg_dialogue_menu_factory
+from device_viewer.menus import load_svg_dialog_menu_factory, open_svg_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
@@ -62,7 +62,7 @@ class DeviceViewerPlugin(Plugin):
                 dock_pane_factories=[DeviceViewerDockPane],
                 actions=[
                     SchemaAddition(
-                        factory=open_file_dialogue_menu_factory,
+                        factory=load_svg_dialog_menu_factory,
                         path='MenuBar/File'
                     ),
                     SchemaAddition(

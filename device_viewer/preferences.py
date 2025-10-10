@@ -38,10 +38,9 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     DEFAULT_SVG_FILE = File
 
-    #### Private traits ##########################################################
-    _DEVICE_REPO_DIR = Directory()
+    DEVICE_REPO_DIR = Directory()
 
-    def __DEVICE_REPO_DIR_default(self) -> Path:
+    def _DEVICE_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Device Repo"
 
         default_dir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +48,6 @@ class DeviceViewerPreferences(PreferencesHelper):
         logger.info(f"Default repo directory is: {default_dir}")
 
         return default_dir
-
 
     def _DEFAULT_SVG_FILE_default(self):
         # --- Define Master File Path (local to the script) ---
@@ -60,7 +58,7 @@ class DeviceViewerPreferences(PreferencesHelper):
             raise FileNotFoundError("Master file not found!.")
 
         # --- Ensure User's File is a Copy of Master on First Run ---
-        default_user_file = Path(self._DEVICE_REPO_DIR) / MASTER_SVG_FILE.name
+        default_user_file = Path(self.DEVICE_REPO_DIR) / MASTER_SVG_FILE.name
         logger.debug(f"Checking for user's default file: {default_user_file}")
 
         should_overwrite = True

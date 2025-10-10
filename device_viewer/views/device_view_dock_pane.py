@@ -1,10 +1,12 @@
 # Site package imports
+from pathlib import Path
+
 import dramatiq
 
 from traits.api import Instance, observe, Str, Float
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 
-from pyface.api import FileDialog, OK
+from pyface.api import FileDialog, OK, confirm, YES, NO
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QLabel, QFrame, QPushButton
@@ -30,7 +32,7 @@ from device_viewer.views.mode_picker.widget import ModePicker
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
-
+from microdrop_utils.file_handler import safe_copy_file
 
 # local imports
 from ..models.electrodes import Electrodes
@@ -119,6 +121,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
+
+        if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
+            self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
+
         self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
 
 
@@ -613,26 +619,108 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.undo_manager.active_stack.clear()
 
-    def open_file_dialog(self):
+    def _on_load_svg_success(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
-        dialog = FileDialog(action='open', wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
-        if dialog.open() == OK:
-            svg_file = dialog.path
-            logger.info(f"Selected SVG file: {svg_file}")
+        svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE # since OK, the default should have changed now.
+        logger.info(f"Selected SVG file: {svg_file}")
 
-            # set default value to this
-            self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
+        self.model.reset()
+        self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
+        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
 
-            self.model.reset()
-            self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
-            self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
-            logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+        self.set_interaction_service(self.model)
+        logger.info(f"Electrodes model set to {self.model}")
 
-            self.set_interaction_service(self.model)
-            logger.info(f"Electrodes model set to {self.model}")
+    def load_svg_dialog(self):
+        logger.info("\n--- Loading external svg file into device repo ---")
+
+        # --- 1. Open a dialog for the user to select a source file ---
+        # This is decoupled from self.file to allow loading any file at any time.
+        dialog = FileDialog(action='open',
+                            default_path=str(self.device_viewer_preferences.DEFAULT_SVG_FILE),
+                            wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
+
+        if dialog.open() != OK:
+            logger.info("File selection cancelled by user.")
+            return None
+
+        src_file = Path(dialog.path)
+        repo_dir = Path(self.device_viewer_preferences.DEVICE_REPO_DIR)
+
+        # --- 3. Handle case where the selected file is already in the repo ---
+        # We just select it in the UI and do not need to copy anything.
+        if src_file.parent == repo_dir:
+            logger.debug(f"File '{src_file.name}' is already in the repo. Selecting it.")
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = src_file
+            self._on_load_svg_success()
+            return OK
+
+        logger.debug("Checking for chosen file in repo...")
+        dst_file = Path(repo_dir) / src_file.name
+
+        if not dst_file.exists():
+            # --- 4a. No conflict: The file doesn't exist, copy it directly.
+
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+            logger.info(f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before.")
+
+            self._on_load_svg_success()
+            return OK
+
+        else:
+            # --- 4b. Conflict: File exists. Ask the user what to do. ---
+            logger.info(f"File '{dst_file.name}' already exists. Confirm Overwriting.")
+
+            confirm_overwrite = confirm(
+                parent=None,
+                message=f"A file named '{dst_file.name}' already exists in "
+                        "the repository. What would you like to do?",
+                title="Warning: File Already Exists",
+                cancel=True,
+                yes_label="Overwrite",
+                no_label="Save As...",
+            )
+
+            if confirm_overwrite == YES:
+                # --- Overwrite the existing file ---
+                logger.debug(f"User chose to overwrite '{dst_file.name}'.")
+                self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+                self._on_load_svg_success()
+                return OK
+
+            elif confirm_overwrite == NO:
+                # --- Open a 'Save As' dialog to choose a new name ---
+                logger.debug("User chose 'Save As...'. Opening save dialog.")
+
+                dialog = FileDialog(action='save as',
+                                    default_directory=str(repo_dir),
+                                    default_filename=src_file.stem + " - Copy",
+                                    wildcard='Texts (*.txt)')
+
+                ###### Handle Save As Dialog ######################
+                if dialog.open() == OK:
+                    dst_file = dialog.path
+
+                    self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+
+                    self._on_load_svg_success()
+                    return OK
+
+                else:
+                    logger.debug("Save As dialog cancelled by user.")
+                    return None
+
+                ####################################################
+
+            else:  # result == CANCEL
+                logger.debug("Load operation cancelled by user.")
+                return None
 
 
-    def open_svg_dialog(self):
+    def save_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:
