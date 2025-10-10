@@ -4,8 +4,8 @@ import logging
 from pathlib import Path
 
 LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
-MIN_APP_LOGLEVEL = "INFO"
-ROOT_LOGLEVEL = "INFO"
+MIN_APP_LOGLEVEL = 'WARNING'
+ROOT_LOGLEVEL = 'WARNING'
 
 DEV_MODE = True
 

@@ -23,7 +23,7 @@ from microdrop_style.colors import GREY, SUCCESS_COLOR
 from .consts import PKG_name, listener_name
 
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 class ToggleEditor(QtEditor):

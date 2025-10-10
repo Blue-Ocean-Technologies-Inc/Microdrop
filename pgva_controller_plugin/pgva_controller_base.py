@@ -29,7 +29,7 @@ from .consts import (
 from .interfaces.i_pgva_controller_base import IPGVAControllerBase
 from .services.pgva_ethernet_communication import PGVAEthernetCommunication
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 
 @provides(IPGVAControllerBase)

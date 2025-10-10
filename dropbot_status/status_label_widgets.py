@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 disconnected_color = ERROR_COLOR
 connected_no_device_color = WARNING_COLOR

@@ -22,7 +22,7 @@ from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, g
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .model import DropBotStatusModel
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 from microdrop_utils.ureg_helpers import ureg
 

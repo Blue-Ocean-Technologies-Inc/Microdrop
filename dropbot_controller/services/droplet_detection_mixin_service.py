@@ -23,7 +23,7 @@ from dropbot_controller.consts import (
 )
 from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__)
 
 # --- Constants ---
 PF_SCALE_FACTOR = 1e12  # Scale capacitances to picoFarads for logging
