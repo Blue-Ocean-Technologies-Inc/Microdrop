@@ -698,7 +698,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 dialog = FileDialog(action='save as',
                                     default_directory=str(repo_dir),
                                     default_filename=src_file.stem + " - Copy",
-                                    wildcard='Texts (*.txt)')
+                                    wildcard='SVG Files (*.svg)|*.svg')
 
                 ###### Handle Save As Dialog ######################
                 if dialog.open() == OK:
