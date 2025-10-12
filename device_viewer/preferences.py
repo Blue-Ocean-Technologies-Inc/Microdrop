@@ -41,7 +41,7 @@ class DeviceViewerPreferences(PreferencesHelper):
     DEVICE_REPO_DIR = Directory()
 
     def _DEVICE_REPO_DIR_default(self) -> Path:
-        default_dir = Path(ETSConfig.user_data) / "Device Repo"
+        default_dir = Path(ETSConfig.user_data) / "Devices"
 
         default_dir.mkdir(parents=True, exist_ok=True)
 
