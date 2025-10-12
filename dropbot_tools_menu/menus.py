@@ -30,12 +30,12 @@ class DramatiqMessagePublishAction(TaskWindowAction):
 
 class RunTests(DramatiqMessagePublishAction):
     num_tests = Int(1, desc="number of tests run")
-    message = Property(Directory, observe="object.application.user_data")
+    message = Property(Directory, observe="object.application.app_data_dir")
     plugin = Any()
 
     def _get_message(self, event=None):
         if self.object and hasattr(self.object, "application"):
-            return self.object.application.user_data
+            return self.object.application.app_data_dir
         return None
 
     def perform(self, event=None):

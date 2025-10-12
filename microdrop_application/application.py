@@ -6,7 +6,6 @@ from pathlib import Path
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 
 from PySide6.QtCore import QEvent
-from traits.etsconfig.etsconfig import ETSConfig
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -35,13 +34,6 @@ from .consts import (scibots_icon_path, sidebar_menu_options,
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
-
-# set some global consts used application wide.
-ETSConfig.company = "Sci-Bots"
-ETSConfig.user_data = str(Path.home() / "Documents" / ETSConfig.company / "Microdrop")
-ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
-
-
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
 
@@ -55,19 +47,15 @@ class MicrodropApplication(TasksApplication):
 
     #### 'TasksApplication' interface #########################################
 
-    ###### DONE USING ETSConfig NOW #################################################################
+    #: The directory on the local file system used to persist window layout
+    #: information.
+    state_location = application_home_directory
 
-    # #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
-    # home = application_home_directory
-    #
-    # #: The directory on the local file system used to persist window layout
-    # #: information.
-    # state_location = application_home_directory / ".save_state"
-    #
-    # #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
-    # user_data = application_home_directory / "Experimental_Data "
+    #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
+    home = application_home_directory
 
-    #################################################################################################
+    #: We dont use this directory but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+    user_data = application_home_directory
 
     #: The filename that the application uses to persist window layout
     #: information.
@@ -78,6 +66,10 @@ class MicrodropApplication(TasksApplication):
 
     # Whether to restore the previous application-level layout when the applicaton is started.
     always_use_default_layout = Property(Bool)
+
+    # what directory to use for the application generated folders/files
+    app_data_dir = Property(Directory)
+    # above two traits are gotten from the preferences file
 
     # branding
     icon = Instance(ImageResource)
@@ -131,6 +123,9 @@ class MicrodropApplication(TasksApplication):
 
     def _get_always_use_default_layout(self):
         return self.preferences_helper.always_use_default_layout
+
+    def _get_app_data_dir(self):
+        return self.preferences_helper.app_data_dir
 
     @observe('started')
     def _on_application_started(self, event):
