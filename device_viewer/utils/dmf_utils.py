@@ -1,24 +1,27 @@
 # -*- coding: utf-8 -*-
 import re
 import numpy as np
+import pandas as pd
 import xml.etree.ElementTree as ET
-
 from pathlib import Path
-from typing import Union, TypedDict
+from typing import Union, TypedDict, Optional
 from shapely.geometry import Polygon
-#from nptyping import NDArray, Float, Shape
 
 from traits.api import HasTraits, Float, Dict, Str
 
-DPI=96
+from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
 
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
+
+DPI=96
 INCH_TO_MM = 25.4
+DOTS_TO_MM = INCH_TO_MM / DPI
 
 
 class ElectrodeDict(TypedDict):
     channel: int
     path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
-
 
 
 class SvgUtil(HasTraits):
@@ -47,6 +50,7 @@ class SvgUtil(HasTraits):
         self.neighbours: dict[str, list[str]] = {}
         self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
+        self.polygons = {}
         self.connections = {}
         self.electrode_centers = {}
         self.electrode_areas = {}
@@ -64,7 +68,7 @@ class SvgUtil(HasTraits):
         self._filename = filename
         self.get_device_paths(self._filename)
 
-    def get_device_paths(self, filename, modify=True):
+    def get_device_paths(self, filename):
         tree = ET.parse(filename)
         root = tree.getroot()
 
@@ -72,11 +76,12 @@ class SvgUtil(HasTraits):
             if "Device" in child.attrib.values():
                 self.set_fill_black(child)
                 self.electrodes = self.svg_to_electrodes(child)
+                self.polygons = self.get_electrode_polygons()
             elif "ROI" in child.attrib.values():
                 self.roi = self.svg_to_paths(child)
             elif "Connections" in child.attrib.values():
-                pass
-                # self.connections = self.svg_to_points(child)
+                self.neighbours = self.extract_connections(root, line_layer='Connections')
+
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
                 if scale is not None:
@@ -87,12 +92,11 @@ class SvgUtil(HasTraits):
             self.find_electrode_centers()
             self.electrode_areas = self.find_electrode_areas()
             self.electrode_areas_scaled = {key: value * self.area_scale for key, value in self.electrode_areas.items()}
-            if len(self.connections.items()) == 0:
-                self.neighbours = self.find_neighbours_all()
-                self.neighbours_to_points()
 
-        if modify:
-            tree.write(filename)
+            if len(self.neighbours.items()) == 0:
+                self.neighbours = self.find_neighbours_all()
+
+            self.neighbours_to_points()
 
     def get_electrode_center(self, electrode: str) -> np.ndarray:
         """
@@ -128,36 +132,102 @@ class SvgUtil(HasTraits):
         """
         return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
 
-    def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
-        """
-        Find the neighbours of all paths
-        """
-        # if threshold is None then try to calculate it by finding the closest two electrodes centers
-        if threshold is None:
-            # Dilate the polygons
-            polygons = self.get_electrode_polygons()
-            distances = sorted([v1.buffer(-0.1).distance(v2.buffer(-0.1)) for k1, v1 in polygons.items()
-                                for k2, v2 in polygons.items() if k1 != k2])
-            average_distance = np.mean(distances[:len(self.electrodes)])
+    def find_neighbours_all(self, buffer_distance: float = None) -> dict[str, list[str]]:
 
-            # Dilate the polygons by the average distance
-            polygons = {k: v.buffer(average_distance) for k, v in polygons.items()}
+        if buffer_distance is None:
+            buffer_distance = sum(self.electrode_areas.values()) / len(self.electrodes.values()) / 100
 
-            # Find the intersecting polygons
-            neighbours = {}
-            for k1, v1 in polygons.items():
-                for k2, v2 in polygons.items():
-                    if k1 != k2:
-                        intersection = v1.intersection(v2)
-                        if intersection.area >= average_distance:
-                            neighbours.setdefault(k1, []).append(k2)
-        else:
-            neighbours = {}
-            for k, v in self.electrodes.items():
-                neighbours[k] = self.find_neighbours(v['path'], threshold)
-                # remove self from neighbours
-                neighbours[k].remove(k)
-        return neighbours
+        neighbors = []
+        for electrode_id_i, poly_i in self.polygons.items():
+            poly_i = poly_i.buffer(buffer_distance).convex_hull
+
+            for electrode_id_j, poly_j in self.polygons.items():
+                poly_j = self.polygons[electrode_id_j]
+                poly_j = poly_j.buffer(buffer_distance).convex_hull
+
+                if electrode_id_i != electrode_id_j and (poly_i.touches(poly_j) or poly_i.intersects(poly_j)):
+                    angle = np.arctan2(poly_i.centroid.x - poly_j.centroid.x,
+                                       poly_i.centroid.y - poly_j.centroid.y)
+
+                    angle = abs(np.degrees(angle))
+                    if angle > 90:
+                        angle = 180 - angle
+                    # if the angle is between 30 and 70 degrees, the polygons are connected diagonally
+                    # so the connections are excluded
+                    if angle < 30 or angle > 70:
+                        neighbors.append((electrode_id_i, electrode_id_j))
+
+        return create_adjacency_dict(neighbors)
+
+    def extract_connections(self, root: ET.Element, line_layer: str = 'Connections',
+                            line_xpath: Optional[str] = None, path_xpath: Optional[str] = None,
+                            namespaces: Optional[dict] = None, buffer_distance: float = None) -> dict:
+        """
+        Parses <line> and <path> elements from a layer to find connections
+        (neighbours) between electrodes. Returns a dictionary mapping each
+        electrode ID to a list of its neighbours.
+        """
+        if namespaces is None:
+            namespaces = {'svg': 'http://www.w3.org/2000/svg',
+                          'inkscape': 'http://www.inkscape.org/namespaces/inkscape'}
+
+        frames = []
+        # List to hold records of form: `[<id>, <x1>, <y1>, <x2>, <y2>]`.
+        coords_columns = ['x1', 'y1', 'x2', 'y2']
+
+        if line_xpath is None:
+            # Define a query to look for `svg:line` elements in the top level of layer of
+            # SVG specified to contain connections.
+            line_xpath = f".//svg:g[@inkscape:label='{line_layer}']/svg:line"
+
+        for line_i in root.findall(line_xpath, namespaces=namespaces):
+            line_i_dict = dict(line_i.items())
+            values = [line_i_dict.get('id')] + [float(line_i_dict[k]) for k in coords_columns]
+            frames.append(values)
+
+        cre_path_ends = re.compile(r'^\s*M\s*(?P<start_x>{0}),\s*(?P<start_y>{0})'
+                                   r'.*((L\s*(?P<end_x>{0}),\s*(?P<end_y>{0}))|'
+                                   r'(V\s*(?P<end_vy>{0}))|'
+                                   r'(H\s*(?P<end_hx>{0})))\D*$'.format(self.float_pattern))
+        if path_xpath is None:
+            path_xpath = f".//svg:g[@inkscape:label='{line_layer}']/svg:path"
+
+        for path_i in root.findall(path_xpath, namespaces=namespaces):
+            path_i_dict = dict(path_i.items())
+            match_i = cre_path_ends.match(path_i_dict.get('d', ''))
+            # Connection `svg:path` matched required format.  Extract start and
+            # end coordinates.
+            if match_i:
+                match_dict_i = match_i.groupdict()
+                if match_dict_i.get('end_vy'):
+                    match_dict_i['end_x'] = match_dict_i['start_x']
+                    match_dict_i['end_y'] = match_dict_i['end_vy']
+                if match_dict_i.get('end_hx'):
+                    match_dict_i['end_x'] = match_dict_i['end_hx']
+                    match_dict_i['end_y'] = match_dict_i['start_y']
+                frames.append([path_i_dict.get('id')] + list(map(float,
+                                                                 (match_dict_i['start_x'], match_dict_i['start_y'],
+                                                                  match_dict_i['end_x'], match_dict_i['end_y']))))
+
+        if not frames:
+            return {}
+
+        df_connection_lines = pd.DataFrame(frames, columns=['id'] + coords_columns)
+
+        _polygons_names = list(self.polygons.keys())
+        _polygons = list(self.polygons.values())
+
+        _lines = (df_connection_lines.drop("id", axis=1) * DOTS_TO_MM).values
+        _line_names = df_connection_lines["id"].values
+
+        tree_query = LinePolygonTreeQueryUtil(
+            polygons=_polygons,
+            polygon_names=_polygons_names,
+            lines=_lines,
+            line_names=_line_names,
+        )
+
+        return tree_query.line_polygon_mapping
 
     def neighbours_to_points(self):
         # Dictionary to store electrode connections
@@ -257,32 +327,3 @@ class SvgUtil(HasTraits):
         self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
 
         return electrodes
-
-def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
-    tree = ET.parse(old_filename)
-    root = tree.getroot()
-
-    electrodes = None
-    for child in root:
-        if "Device" in child.attrib.values():
-            electrodes = child
-        elif child.tag == "{http://www.w3.org/2000/svg}metadata":
-            scale_element = child.find("scale")
-            if scale_element is None:
-                scale_element = ET.SubElement(child, "scale")
-
-            scale_element.text = str(scale)
-
-    if electrodes is None:
-        return
-    
-    for electrode in list(electrodes):
-        channel = electrode_ids_channels_map[electrode.attrib["id"]]
-        if channel is not None:
-            electrode.attrib["data-channels"] = str(channel)
-        else:
-            electrode.attrib.pop("data-channels", None)
-
-    ET.indent(root, space="  ")
-
-    tree.write(new_filename)

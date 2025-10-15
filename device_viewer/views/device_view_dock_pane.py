@@ -1,6 +1,5 @@
 # Site package imports
 from pathlib import Path
-
 import dramatiq
 
 from traits.api import Instance, observe, Str, Float
@@ -18,44 +17,42 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
-
-# TODO: maybe get these from an extension point for very granular control
-
-# For sidebar
-from device_viewer.utils.camera import qtransform_deserialize
-from device_viewer.views.alpha_view.alpha_table import alpha_table_view
-from device_viewer.views.calibration_view.widget import CalibrationView
-from device_viewer.views.camera_control_view.widget import CameraControlWidget
-from device_viewer.views.mode_picker.widget import ModePicker
-
-# Device Viewer electrode and route views
-from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
-from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from device_viewer.views.route_selection_view.route_selection_view import RouteLayerView
-from microdrop_utils.file_handler import safe_copy_file
-
-# local imports
+##### local imports ######
 from ..models.electrodes import Electrodes
 from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from ..consts import listener_name
+from ..utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
+from ..utils.dmf_utils_helpers import channels_to_svg
+
+# models and services
+from ..models.main_model import DeviceViewMainModel
+from ..models.route import Route
+from ..consts import PKG, PKG_name
+from ..services.electrode_interaction_service import ElectrodeInteractionControllerService
+
+# For sidebar
+from ..utils.camera import qtransform_deserialize
+from .alpha_view.alpha_table import alpha_table_view
+from .calibration_view.widget import CalibrationView
+from .camera_control_view.widget import CameraControlWidget
+from .mode_picker.widget import ModePicker
+
+# Device Viewer electrode and route views
+from .electrode_view.electrode_scene import ElectrodeScene
+from .electrode_view.electrode_layer import ElectrodeLayer
+from .route_selection_view.route_selection_view import RouteLayerView
+
 
 # utils imports
+from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils._logger import get_logger
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.timestamped_message import TimestampedMessage
-from device_viewer.utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
-from device_viewer.utils.dmf_utils import channels_to_svg
-
-# models and services
-from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.models.route import Route
-from device_viewer.consts import PKG, PKG_name
-from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 
 # ext consts
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
@@ -66,7 +63,7 @@ from microdrop_application.application import is_dark_mode
 
 import json
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__, level="INFO")
 
 
 class DeviceViewerDockPane(TraitsDockPane):
@@ -626,7 +623,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.model.reset()
         self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # FIXME: Slow! Calculating centers via np.mean
         logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
 
         self.set_interaction_service(self.model)
