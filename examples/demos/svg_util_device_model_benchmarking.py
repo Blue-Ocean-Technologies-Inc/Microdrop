@@ -18,6 +18,7 @@ from shapely.geometry.linestring import LineString
 from traits.api import HasTraits, Float, Dict, Str
 
 from device_viewer.utils.dmf_utils import create_adjacency_dict
+from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil
 
 DPI = 96
 INCH_TO_MM = 25.4
@@ -152,13 +153,22 @@ class SvgUtil(HasTraits):
                     self.neighbours = json.load(f)
             else:
                 self.neighbours = self.find_neighbours_all()
-            self.neighbours2 = self.find_neighbours_all_2()
-
-            if self.neighbours2 == self.neighbours:
-                print('NEW METHOD MATCHES OLD METHOD FOR CONNECTION')
+            # self.neighbours2 = self.find_neighbours_all_2()
+            #
+            # if self.neighbours2 == self.neighbours:
+            #     print('NEW METHOD MATCHES OLD METHOD FOR CONNECTION')
 
             if self.neighbours_extracted == self.neighbours:
+
                 print('EXTRACTION METHOD WORKED')
+
+            else:
+                for keys in self.neighbours:
+                    if sorted(self.neighbours[keys]) == sorted(self.neighbours_extracted[keys]):
+                        print(f'EXTRACTION METHOD WORKED for {keys}')
+                    else:
+                        print(f'EXTRACTION FAILED FOR {keys}')
+
 
 
             # ALWAYS generate connection points from the final neighbours dictionary
@@ -205,7 +215,7 @@ class SvgUtil(HasTraits):
         """
         return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
 
-    @timeit_benchmark(number=1, repeat=1)
+    # @timeit_benchmark(number=1, repeat=1)
     def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
         """
         Find the neighbours of all paths
@@ -237,7 +247,7 @@ class SvgUtil(HasTraits):
                 neighbours[k].remove(k)
         return neighbours
 
-    @timeit_benchmark(number=1, repeat=1)
+    # @timeit_benchmark(number=1, repeat=1)
     def find_neighbours_all_2(self, buffer_distance: float = None) -> dict[str, list[str]]:
 
         if buffer_distance is None:
@@ -389,10 +399,10 @@ class SvgUtil(HasTraits):
 
         return None
 
-    @timeit_benchmark(number=1, repeat=1)
+    # @timeit_benchmark(number=1, repeat=1)
     def extract_connections(self, root: ET.Element, line_layer: str = 'Connections',
                             line_xpath: Optional[str] = None, path_xpath: Optional[str] = None,
-                            namespaces: Optional[dict] = None) -> dict:
+                            namespaces: Optional[dict] = None, buffer_distance: float = None) -> dict:
         """
         Parses <line> and <path> elements from a layer to find connections
         (neighbours) between electrodes. Returns a dictionary mapping each
@@ -445,31 +455,25 @@ class SvgUtil(HasTraits):
 
         df_connection_lines = pd.DataFrame(frames, columns=['id'] + coords_columns)
 
-        df_connection_lines.drop("id")
+        _polygons_names = list(self.polygons.keys())
+        _polygons = list(self.polygons.values())
 
-        polygons = self.polygons
+        _lines = (df_connection_lines.drop("id", axis=1) * DOTS_TO_MM).values
+        _line_names = df_connection_lines["id"].values
 
-        # Use `shapes_canvas.find_shape` to determine shapes overlapped by end
-        # points of each `svg:path` or `svg:line`.
-        df_connections = pd.DataFrame([[self.find_shape(x1, y1, polygons), self.find_shape(x2, y2, polygons)]
-                                       for _, (x1, y1, x2, y2) in df_connection_lines[coords_columns].iterrows()],
-                                      columns=['source', 'target'])
+        if buffer_distance is None:
+            buffer_distance = sum(self.electrode_areas.values()) / len(self.electrodes.values()) / 100
 
+        _polygons = [poly.convex_hull for poly in _polygons]
 
+        tree_query = LinePolygonTreeQueryUtil(
+            polygons=_polygons,
+            polygon_names=_polygons_names,
+            lines=_lines,
+            line_names=_line_names,
+        )
 
-        # df_shape_connections_i = df_connections[df_connections['source'] != df_connections['target']]
-
-        # Order the source and target of each row so the source shape identifier is
-        # always the lowest.
-        df_shape_connections_i.sort_index(axis=1, inplace=True)
-        # Tag each shape connection with the corresponding `svg:line`/`svg:path`
-        # identifier.  May be useful, e.g., in debugging.
-        df_shape_connections_i['line_id'] = df_connection_lines['id']
-        # Remove connections where source or target shape was not matched (e.g., if
-        # one or more end points does not overlap with a shape).
-
-        return create_adjacency_dict(list(df_shape_connections_i.itertuples(index=False, name=None)))
-
+        return create_adjacency_dict(tree_query.line_polygon_mapping.values())
 
 
 try:
@@ -484,7 +488,7 @@ device_90_pin_path = device_repo / "90_pin_array.svg"
 
 # @timeit_benchmark(number=1, repeat=1)
 def main():
-    device_90_pin_model = SvgUtil(device_90_pin_path)
+    # device_90_pin_model = SvgUtil(device_90_pin_path)
     device_120_pin_model = SvgUtil(device_120_pin_path)
 
 main()

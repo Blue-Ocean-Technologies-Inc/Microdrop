@@ -7,7 +7,7 @@ from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, "DEBUG")
 
-class LinePolygonTreeQueryUtilExample:
+class LinePolygonTreeQueryUtil:
     """
     Class using STR Tree queries to find what polygons are intersecting with lines.
     """
@@ -19,7 +19,7 @@ class LinePolygonTreeQueryUtilExample:
             lines (iterable): list of shapely.geometry.Points: Endpoints of line endpoints.
             polygon_names (list): list of polygon names. Should match indexing of polygons.
             line_names  (list): list of shapely.geometry.Polygon. Should match indexing of number of lines.
-                                    Not the number of line endpoints. 
+                                    Not the number of line endpoints.
         """
 
         self.polygons = polygons
@@ -43,7 +43,7 @@ class LinePolygonTreeQueryUtilExample:
         # get shapely Points for the line endpoints
         line_startpoints = [Point(x, y) for x, y in line_startpoint_coords]
         line_endpoints = [Point(x, y) for x, y in line_endpoint_coords]
-        line_points = line_startpoints + line_endpoints
+        line_points = 0
 
         return line_points
 
@@ -55,7 +55,7 @@ class LinePolygonTreeQueryUtilExample:
         logger.debug(list(zip(line_query.take(line_query[0]), self.tree.geometries.take(line_query[1]))))
         logger.debug("-"*1000)
 
-        res_dict = defaultdict(set)
+        res_dict = defaultdict(list)
 
         # transpose to get all pairs of input and tree indices
         for line_point_idx, polygon_idx in line_query.T.tolist():
@@ -63,7 +63,8 @@ class LinePolygonTreeQueryUtilExample:
           line_name = self.line_names[line_point_idx % len(self.line_names)]
           poly_name = self.polygon_names[polygon_idx % len(self.polygon_names)]
 
-          res_dict[line_name].add(poly_name)
+          if poly_name not in res_dict[line_name]:
+            res_dict[line_name].append(poly_name)
 
         logger.debug("-"*1000)
         logger.debug(res_dict)
@@ -159,15 +160,16 @@ if __name__ == "__main__":
 
     # check validity
 
-    expected = defaultdict(set,
-                {'v1-v2': {'v1', 'v2'},
-                 'v2-v3': {'v2', 'v3'},
-                 'v3-v4': {'v3', 'v4'},
-                 'v1-v4': {'v1', 'v4'},
-                 'v1-v3': {'v1', 'v3'},
-                 'v2-v4': {'v2', 'v4'}})
+    expected = {
+        'v1-v2': ['v1', 'v2'],
+        'v2-v3': ['v2', 'v3'],
+        'v3-v4': ['v3', 'v4'],
+        'v1-v4': ['v1', 'v4'],
+        'v1-v3': ['v1', 'v3'],
+        'v2-v4': ['v2', 'v4']
+    }
 
-    util = LinePolygonTreeQueryUtilExample(
+    util = LinePolygonTreeQueryUtil(
         polygons=_polygons,
         lines=_lines,
         line_names=_lines_names,
@@ -182,6 +184,7 @@ if __name__ == "__main__":
             print(expected[key])
 
             print(util.line_points)
+            print(util.polygons)
 
             raise Exception(f"{key} not in {expected}")
 
