@@ -1,11 +1,8 @@
 import json
 import timeit
 import functools
-from collections import defaultdict
-
 from typing import Optional
 import pandas as pd
-
 import re
 import numpy as np
 import xml.etree.ElementTree as ET
@@ -13,7 +10,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Union, TypedDict
 from shapely.geometry import Polygon, Point
-from shapely.geometry.linestring import LineString
 
 from traits.api import HasTraits, Float, Dict, Str
 
@@ -118,7 +114,7 @@ class SvgUtil(HasTraits):
         self._filename = filename
         self.get_device_paths(self._filename)
 
-    def get_device_paths(self, filename, modify=True):
+    def get_device_paths(self, filename, modify=False):
         tree = ET.parse(filename)
         root = tree.getroot()
 
@@ -163,13 +159,24 @@ class SvgUtil(HasTraits):
                 print('EXTRACTION METHOD WORKED')
 
             else:
+                failed_keys = []
                 for keys in self.neighbours:
                     if sorted(self.neighbours[keys]) == sorted(self.neighbours_extracted[keys]):
-                        print(f'EXTRACTION METHOD WORKED for {keys}')
+                        # print(f'EXTRACTION METHOD WORKED for {keys}')
+                        pass
                     else:
                         print(f'EXTRACTION FAILED FOR {keys}')
+                        failed_keys.append(keys)
 
 
+                if len(failed_keys) > 0:
+                    out_msg = f"EXTRACTION FAILED FOR {failed_keys}"
+                else:
+                    out_msg = f"EXTRACTION SUCCESS"
+
+                print("*" * 1000)
+                print(out_msg)
+                print("*" * 1000)
 
             # ALWAYS generate connection points from the final neighbours dictionary
             self.neighbours_to_points()
@@ -464,8 +471,6 @@ class SvgUtil(HasTraits):
         if buffer_distance is None:
             buffer_distance = sum(self.electrode_areas.values()) / len(self.electrodes.values()) / 100
 
-        _polygons = [poly.convex_hull for poly in _polygons]
-
         tree_query = LinePolygonTreeQueryUtil(
             polygons=_polygons,
             polygon_names=_polygons_names,
@@ -473,7 +478,7 @@ class SvgUtil(HasTraits):
             line_names=_line_names,
         )
 
-        return create_adjacency_dict(tree_query.line_polygon_mapping.values())
+        return tree_query.line_polygon_mapping
 
 
 try:
@@ -488,7 +493,7 @@ device_90_pin_path = device_repo / "90_pin_array.svg"
 
 # @timeit_benchmark(number=1, repeat=1)
 def main():
-    # device_90_pin_model = SvgUtil(device_90_pin_path)
+    device_90_pin_model = SvgUtil(device_90_pin_path)
     device_120_pin_model = SvgUtil(device_120_pin_path)
 
 main()

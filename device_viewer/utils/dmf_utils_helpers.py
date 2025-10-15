@@ -1,5 +1,5 @@
 import numpy as np
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
 
@@ -8,69 +8,75 @@ from microdrop_utils._logger import get_logger
 logger = get_logger(__name__, "DEBUG")
 
 class LinePolygonTreeQueryUtil:
-    """
-    Class using STR Tree queries to find what polygons are intersecting with lines.
-    """
+    """Class using STR Tree queries to find what polygons are intersecting with lines."""
 
     def __init__(self, polygons, lines, polygon_names, line_names):
         """
         Args:
             polygons (iterable): list of shapely.geometry.Polygons
-            lines (iterable): list of shapely.geometry.Points: Endpoints of line endpoints.
+            lines (iterable): list of shapely.geometry.LineStrings.
             polygon_names (list): list of polygon names. Should match indexing of polygons.
             line_names  (list): list of shapely.geometry.Polygon. Should match indexing of number of lines.
-                                    Not the number of line endpoints.
         """
 
+        # Add buffer to account for lines just touching.
         self.polygons = polygons
         self.polygon_names = polygon_names
 
-        self.lines = lines
-        self.line_points = self.lines_to_linepoints(self.lines)
+        self.lines = [LineString(line.reshape((2,2))) for line in lines]
         self.line_names = line_names
-
-        # construct the STRTree (Sort-Tile-Recursive Tree)
-        # (https://shapely.readthedocs.io/en/2.1.1/strtree.html)
-        self.tree = STRtree(self.polygons)
 
         self.line_polygon_mapping = self.get_line_polygon_mapping()
 
-    def lines_to_linepoints(self, lines):
-
-        line_startpoint_coords = lines[..., 0:2]
-        line_endpoint_coords = lines[..., 2:4]
-
-        # get shapely Points for the line endpoints
-        line_startpoints = [Point(x, y) for x, y in line_startpoint_coords]
-        line_endpoints = [Point(x, y) for x, y in line_endpoint_coords]
-        line_points = 0
-
-        return line_points
-
-    def get_line_polygon_mapping(self):
+    def get_line_polygon_mapping(self, max_attempts=10, buffer_factor=128):
         # Find the nearest tree geometries to the input geometries
-        line_query = self.tree.query_nearest(self.line_points)
+        # construct the STRTree (Sort-Tile-Recursive Tree)
+        # (https://shapely.readthedocs.io/en/2.1.1/strtree.html)
 
-        logger.debug("-"*1000)
-        logger.debug(list(zip(line_query.take(line_query[0]), self.tree.geometries.take(line_query[1]))))
-        logger.debug("-"*1000)
+        # continue query with changing buffer sizes until we get only 2 hits for each line max attempts times.
+        polygons = self.polygons
+        print(f"Attempt 0/{max_attempts} with no buffer factor to get line polygons")
+        for attempt in range(max_attempts):
+            # We don't use the touches query since we only want polygons intersecting line endpoints.
 
-        res_dict = defaultdict(list)
+            tree = STRtree(polygons)
+            line_query = tree.query(self.lines, 'intersects')
 
-        # transpose to get all pairs of input and tree indices
-        for line_point_idx, polygon_idx in line_query.T.tolist():
-          # modulo returned indices to match indexing of lines, polygons
-          line_name = self.line_names[line_point_idx % len(self.line_names)]
-          poly_name = self.polygon_names[polygon_idx % len(self.polygon_names)]
+            lines_have_2_polygons = np.all(np.unique(line_query[0], return_counts=1)[1] == 2)
 
-          if poly_name not in res_dict[line_name]:
-            res_dict[line_name].append(poly_name)
+            if lines_have_2_polygons:
 
-        logger.debug("-"*1000)
-        logger.debug(res_dict)
-        logger.debug("-"*1000)
+                print(f"SUCCESS: {attempt}/{max_attempts}")
 
-        return res_dict
+                logger.debug("-"*1000)
+                logger.debug(list(zip(line_query.take(line_query[0]), tree.geometries.take(line_query[1]))))
+                logger.debug("-"*1000)
+
+                mapping = {name: set() for name in self.polygon_names}
+
+                for i in range(len(self.lines)):
+                    polygons_line_i = line_query[1, line_query[0] == i]
+
+                    polygon_names_i = [
+                        self.polygon_names[polygons_line_i[i]]
+                        for i in range(len(polygons_line_i))
+                    ]
+
+                    mapping[polygon_names_i[0]].add(polygon_names_i[1])
+                    mapping[polygon_names_i[1]].add(polygon_names_i[0])
+
+                logger.debug("-"*1000)
+                logger.debug(mapping)
+                logger.debug("-"*1000)
+
+                # convert values to list and return
+                return  {key: list(val) for key, val in mapping.items()}
+
+            else:
+                polygons = [poly.buffer(poly.area / buffer_factor) for poly in polygons]
+                print(f"Attempt {attempt+1}/{max_attempts} with buffer factor ~ {buffer_factor / (attempt + 1)} to get line polygons")
+
+        raise ValueError(f"Could not find a solution with each line having only 2 polygons after {max_attempts} attempts.")
 
 
 if __name__ == "__main__":
@@ -113,24 +119,24 @@ if __name__ == "__main__":
             (cx - h, cy + h)  # Top-left
         ]
 
-        # Perturb each corner by adding random noise
-        irregular_corners = []
-        irregularity = side_length / 4  # How much the corners can be moved. 0=perfect square.
-        for x, y in base_corners:
-            noise_x = np.random.uniform(-irregularity, irregularity)
-            noise_y = np.random.uniform(-irregularity, irregularity)
-            irregular_corners.append((x + noise_x, y + noise_y))
+        # # Perturb each corner by adding random noise
+        # irregular_corners = []
+        # irregularity = side_length / 4  # How much the corners can be moved. 0=perfect square.
+        # for x, y in base_corners:
+        #     noise_x = np.random.uniform(-irregularity, irregularity)
+        #     noise_y = np.random.uniform(-irregularity, irregularity)
+        #     irregular_corners.append((x + noise_x, y + noise_y))
 
         # Create the Shapely Polygon object and add it to our list
-        # square = Polygon(base_corners)
-        # polygons.append(square)
-        # polygon_names[f"{square}"] = f"v{i + 1}"
-
-        # Create the Shapely Polygon object
-        irregular_square = Polygon(irregular_corners)
-
-        _polygons.append(irregular_square)
+        square = Polygon(base_corners)
+        _polygons.append(square)
         _polygon_names.append(f"v{i + 1}")
+
+        # # Create the Shapely Polygon object
+        # irregular_square = Polygon(irregular_corners)
+        #
+        # _polygons.append(irregular_square)
+        # _polygon_names.append(f"v{i + 1}")
 
     # for el in polygons:
     #   display(el)
@@ -154,19 +160,17 @@ if __name__ == "__main__":
 
     scale = side_length / 4
 
-    # add noise to the lines
-    _noise = np.random.normal(0, scale, size=_lines.shape)
-    _lines += _noise
+    # # add noise to the lines
+    # _noise = np.random.normal(0, scale, size=_lines.shape)
+    # _lines += _noise
 
     # check validity
 
     expected = {
-        'v1-v2': ['v1', 'v2'],
-        'v2-v3': ['v2', 'v3'],
-        'v3-v4': ['v3', 'v4'],
-        'v1-v4': ['v1', 'v4'],
-        'v1-v3': ['v1', 'v3'],
-        'v2-v4': ['v2', 'v4']
+        'v1': ['v3', 'v2', 'v4'],
+        'v2': ['v3', 'v1', 'v4'],
+        'v3': ['v1', 'v2', 'v4'],
+        'v4': ['v2', 'v3', 'v1']
     }
 
     util = LinePolygonTreeQueryUtil(
