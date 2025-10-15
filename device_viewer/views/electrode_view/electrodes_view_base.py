@@ -16,7 +16,7 @@ from microdrop_utils.decorators import debounce
 from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
 from device_viewer.models.electrodes import Electrode
 
-logger = get_logger(__name__, level='DEBUG')
+logger = get_logger(__name__, level='INFO')
 
 
 # electrode connection lines

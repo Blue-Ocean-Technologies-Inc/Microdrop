@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, "DEBUG")
+logger = get_logger(__name__, "INFO")
 
 class LinePolygonTreeQueryUtil:
     """Class using STR Tree queries to find what polygons are intersecting with lines."""
@@ -35,7 +35,7 @@ class LinePolygonTreeQueryUtil:
 
         # continue query with changing buffer sizes until we get only 2 hits for each line max attempts times.
         polygons = self.polygons
-        print(f"Attempt 0/{max_attempts} with no buffer factor to get line polygons")
+        logger.debug(f"Attempt 0/{max_attempts} with no buffer factor to get line polygons")
         for attempt in range(max_attempts):
             # We don't use the touches query since we only want polygons intersecting line endpoints.
 
@@ -46,7 +46,7 @@ class LinePolygonTreeQueryUtil:
 
             if lines_have_2_polygons:
 
-                print(f"SUCCESS: {attempt}/{max_attempts}")
+                logger.debug(f"SUCCESS: {attempt}/{max_attempts}")
 
                 logger.debug("-"*1000)
                 logger.debug(list(zip(line_query.take(line_query[0]), tree.geometries.take(line_query[1]))))
@@ -74,7 +74,7 @@ class LinePolygonTreeQueryUtil:
 
             else:
                 polygons = [poly.buffer(poly.area / buffer_factor) for poly in polygons]
-                print(f"Attempt {attempt+1}/{max_attempts} with buffer factor ~ {buffer_factor / (attempt + 1)} to get line polygons")
+                logger.debug(f"Attempt {attempt+1}/{max_attempts} with buffer factor ~ {buffer_factor / (attempt + 1)} to get line polygons")
 
         raise ValueError(f"Could not find a solution with each line having only 2 polygons after {max_attempts} attempts.")
 
@@ -184,12 +184,12 @@ if __name__ == "__main__":
 
     for key in res_dict:
         if sorted(res_dict[key]) != sorted(expected[key]):
-            print(res_dict[key])
-            print(expected[key])
+            logger.debug(res_dict[key])
+            logger.debug(expected[key])
 
-            print(util.line_points)
-            print(util.polygons)
+            logger.debug(util.line_points)
+            logger.debug(util.polygons)
 
             raise Exception(f"{key} not in {expected}")
 
-    print("Valid")
+    logger.debug("Valid")
