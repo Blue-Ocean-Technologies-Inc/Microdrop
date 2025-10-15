@@ -31,4 +31,4 @@ ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
 # main view config
-MASTER_SVG_FILE = Path(__file__).parent /  "90_pin_array.svg"
+MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"
