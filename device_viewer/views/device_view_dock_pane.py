@@ -66,7 +66,7 @@ from microdrop_application.application import is_dark_mode
 
 import json
 
-logger = get_logger(__name__, level="DEBUG")
+logger = get_logger(__name__, level="INFO")
 
 
 class DeviceViewerDockPane(TraitsDockPane):
@@ -626,7 +626,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.model.reset()
         self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # Slow! Calculating centers via np.mean
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # FIXME: Slow! Calculating centers via np.mean
         logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
 
         self.set_interaction_service(self.model)
