@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import re
-from collections import defaultdict
 import numpy as np
 import pandas as pd
 import xml.etree.ElementTree as ET
@@ -10,7 +9,7 @@ from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil
+from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -328,69 +327,3 @@ class SvgUtil(HasTraits):
         self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
 
         return electrodes
-
-
-def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
-    tree = ET.parse(old_filename)
-    root = tree.getroot()
-
-    electrodes = None
-    for child in root:
-        if "Device" in child.attrib.values():
-            electrodes = child
-        elif child.tag == "{http://www.w3.org/2000/svg}metadata":
-            scale_element = child.find("scale")
-            if scale_element is None:
-                scale_element = ET.SubElement(child, "scale")
-
-            scale_element.text = str(scale)
-
-    if electrodes is None:
-        return
-    
-    for electrode in list(electrodes):
-        channel = electrode_ids_channels_map[electrode.attrib["id"]]
-        if channel is not None:
-            electrode.attrib["data-channels"] = str(channel)
-        else:
-            electrode.attrib.pop("data-channels", None)
-
-    ET.indent(root, space="  ")
-
-    tree.write(new_filename)
-
-
-def create_adjacency_dict(neighbours) -> dict:
-    """
-    Converts list of source-target pairs into an adjacency dictionary.
-
-    Args:
-        df (pd.DataFrame): DataFrame with 'source' and 'target' columns.
-
-    Returns:
-        dict: A dictionary where keys are IDs and values are lists of
-              connected IDs, with no duplicates.
-    """
-    # Use a defaultdict to automatically handle the creation of new keys.
-    adj_dict = defaultdict(list)
-
-    # Iterate through each connection (row) in the DataFrame.
-    for pairs in neighbours:
-        # check if we have pairs, if not skip:
-        if len(pairs) == 2:
-            source = pairs[0]
-            target = pairs[1]
-
-            # Add the connection in both directions to capture the pairing.
-            adj_dict[source].append(target)
-            adj_dict[target].append(source)
-        else:
-            logger.debug(f"Skipping {pairs} due lack of elements.")
-
-    # Remove duplicates from the lists by converting to a set and back.
-    for key in adj_dict:
-        adj_dict[key] = sorted(list(set(adj_dict[key])))
-
-    # Return the result as a standard dictionary.
-    return dict(adj_dict)
-

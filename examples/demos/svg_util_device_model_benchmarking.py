@@ -13,8 +13,7 @@ from shapely.geometry import Polygon, Point
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils import create_adjacency_dict
-from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil
+from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
 
 DPI = 96
 INCH_TO_MM = 25.4
