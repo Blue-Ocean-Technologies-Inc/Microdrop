@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
+from collections import defaultdict
+
 import numpy as np
 import xml.etree.ElementTree as ET
 
@@ -9,6 +11,12 @@ from shapely.geometry import Polygon
 #from nptyping import NDArray, Float, Shape
 
 from traits.api import HasTraits, Float, Dict, Str
+
+from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil
+
+from microdrop_utils._logger import get_logger
+
+logger = get_logger(__name__)
 
 DPI=96
 
@@ -47,6 +55,7 @@ class SvgUtil(HasTraits):
         self.neighbours: dict[str, list[str]] = {}
         self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
+        self.polygons = {}
         self.connections = {}
         self.electrode_centers = {}
         self.electrode_areas = {}
@@ -72,6 +81,7 @@ class SvgUtil(HasTraits):
             if "Device" in child.attrib.values():
                 self.set_fill_black(child)
                 self.electrodes = self.svg_to_electrodes(child)
+                self.polygons = self.get_electrode_polygons()
             elif "ROI" in child.attrib.values():
                 self.roi = self.svg_to_paths(child)
             elif "Connections" in child.attrib.values():
@@ -89,7 +99,8 @@ class SvgUtil(HasTraits):
             self.electrode_areas_scaled = {key: value * self.area_scale for key, value in self.electrode_areas.items()}
             if len(self.connections.items()) == 0:
                 self.neighbours = self.find_neighbours_all()
-                self.neighbours_to_points()
+
+            self.neighbours_to_points()
 
         if modify:
             tree.write(filename)
@@ -128,37 +139,64 @@ class SvgUtil(HasTraits):
         """
         return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
 
-    def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
-        """
-        Find the neighbours of all paths
-        """
-        # if threshold is None then try to calculate it by finding the closest two electrodes centers
-        if threshold is None:
-            # Dilate the polygons
-            polygons = self.get_electrode_polygons()
-            distances = sorted([v1.buffer(-0.1).distance(v2.buffer(-0.1)) for k1, v1 in polygons.items()
-                                for k2, v2 in polygons.items() if k1 != k2])
-            average_distance = np.mean(distances[:len(self.electrodes)])
+    def find_neighbours_all(self, buffer_distance: float = None) -> dict[str, list[str]]:
 
-            # Dilate the polygons by the average distance
-            polygons = {k: v.buffer(average_distance) for k, v in polygons.items()}
+        if buffer_distance is None:
+            buffer_distance = sum(self.electrode_areas.values()) / len(self.electrodes.values()) / 100
 
-            # Find the intersecting polygons
-            neighbours = {}
-            for k1, v1 in polygons.items():
-                for k2, v2 in polygons.items():
-                    if k1 != k2:
-                        intersection = v1.intersection(v2)
-                        if intersection.area >= average_distance:
-                            neighbours.setdefault(k1, []).append(k2)
-        else:
-            neighbours = {}
-            for k, v in self.electrodes.items():
-                neighbours[k] = self.find_neighbours(v['path'], threshold)
-                # remove self from neighbours
-                neighbours[k].remove(k)
-        return neighbours
+        neighbors = []
+        for electrode_id_i, poly_i in self.polygons.items():
+            poly_i = poly_i.buffer(buffer_distance).convex_hull
 
+            for electrode_id_j, poly_j in self.polygons.items():
+                poly_j = self.polygons[electrode_id_j]
+                poly_j = poly_j.buffer(buffer_distance).convex_hull
+
+                if electrode_id_i != electrode_id_j and (poly_i.touches(poly_j) or poly_i.intersects(poly_j)):
+                    angle = np.arctan2(poly_i.centroid.x - poly_j.centroid.x,
+                                       poly_i.centroid.y - poly_j.centroid.y)
+
+                    angle = abs(np.degrees(angle))
+                    if angle > 90:
+                        angle = 180 - angle
+                    # if the angle is between 30 and 70 degrees, the polygons are connected diagonally
+                    # so the connections are excluded
+                    if angle < 30 or angle > 70:
+                        neighbors.append((electrode_id_i, electrode_id_j))
+
+        return create_adjacency_dict(neighbors)
+
+    # def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
+    #     """
+    #     Find the neighbours of all paths
+    #     """
+    #     # if threshold is None then try to calculate it by finding the closest two electrodes centers
+    #     if threshold is None:
+    #         # Dilate the polygons
+    #         polygons = self.get_electrode_polygons()
+    #         distances = sorted([v1.buffer(-0.1).distance(v2.buffer(-0.1)) for k1, v1 in polygons.items()
+    #                             for k2, v2 in polygons.items() if k1 != k2])
+    #         average_distance = np.mean(distances[:len(self.electrodes)])
+    #
+    #         # Dilate the polygons by the average distance
+    #         polygons = {k: v.buffer(average_distance) for k, v in polygons.items()}
+    #
+    #         # Find the intersecting polygons
+    #         neighbours = {}
+    #         for k1, v1 in polygons.items():
+    #             for k2, v2 in polygons.items():
+    #                 if k1 != k2:
+    #                     intersection = v1.intersection(v2)
+    #                     if intersection.area >= average_distance:
+    #                         neighbours.setdefault(k1, []).append(k2)
+    #     else:
+    #         neighbours = {}
+    #         for k, v in self.electrodes.items():
+    #             neighbours[k] = self.find_neighbours(v['path'], threshold)
+    #             # remove self from neighbours
+    #             neighbours[k].remove(k)
+    #     return neighbours
+    #
     def neighbours_to_points(self):
         # Dictionary to store electrode connections
         self.connections = {}
@@ -258,6 +296,7 @@ class SvgUtil(HasTraits):
 
         return electrodes
 
+
 def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
     tree = ET.parse(old_filename)
     root = tree.getroot()
@@ -286,3 +325,39 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
     ET.indent(root, space="  ")
 
     tree.write(new_filename)
+
+
+def create_adjacency_dict(neighbours) -> dict:
+    """
+    Converts list of source-target pairs into an adjacency dictionary.
+
+    Args:
+        df (pd.DataFrame): DataFrame with 'source' and 'target' columns.
+
+    Returns:
+        dict: A dictionary where keys are IDs and values are lists of
+              connected IDs, with no duplicates.
+    """
+    # Use a defaultdict to automatically handle the creation of new keys.
+    adj_dict = defaultdict(list)
+
+    # Iterate through each connection (row) in the DataFrame.
+    for pairs in neighbours:
+        # check if we have pairs, if not skip:
+        if len(pairs) == 2:
+            source = pairs[0]
+            target = pairs[1]
+
+            # Add the connection in both directions to capture the pairing.
+            adj_dict[source].append(target)
+            adj_dict[target].append(source)
+        else:
+            logger.debug(f"Skipping {pairs} due lack of elements.")
+
+    # Remove duplicates from the lists by converting to a set and back.
+    for key in adj_dict:
+        adj_dict[key] = sorted(list(set(adj_dict[key])))
+
+    # Return the result as a standard dictionary.
+    return dict(adj_dict)
+
