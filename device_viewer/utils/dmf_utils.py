@@ -227,7 +227,7 @@ class SvgUtil(HasTraits):
             line_names=_line_names,
         )
 
-        return tree_query.line_polygon_mapping
+        return tree_query.polygon_neighbours
 
     def neighbours_to_points(self):
         # Dictionary to store electrode connections

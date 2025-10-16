@@ -12,7 +12,7 @@ logger = get_logger(__name__, "INFO")
 class LinePolygonTreeQueryUtil:
     """Class using STR Tree queries to find what polygons are intersecting with lines."""
 
-    def __init__(self, polygons, lines, polygon_names, line_names):
+    def __init__(self, polygons, lines, polygon_names, line_names, auto_find_polygon_neighbours=True):
         """
         Args:
             polygons (iterable): list of shapely.geometry.Polygons
@@ -27,9 +27,10 @@ class LinePolygonTreeQueryUtil:
         self.lines = [LineString(line.reshape((2,2))) for line in lines]
         self.line_names = line_names
 
-        self.line_polygon_mapping = self.get_line_polygon_mapping()
+        if auto_find_polygon_neighbours:
+            self.polygon_neighbours = self.get_polygon_neighbours()
 
-    def get_line_polygon_mapping(self, max_attempts=10, buffer_factor=128):
+    def get_polygon_neighbours(self, max_attempts=10, buffer_factor=128):
         # Find the nearest tree geometries to the input geometries
         # construct the STRTree (Sort-Tile-Recursive Tree: https://shapely.readthedocs.io/en/2.1.1/strtree.html)
         # continue query with changing buffer sizes until we get only 2 hits for each line max attempts times.
@@ -144,7 +145,33 @@ def create_adjacency_dict(neighbours) -> dict:
 
 if __name__ == "__main__":
 
-    # np.random.seed(42)
+    from matplotlib import pyplot as plt
+
+    # func to plot shapely polygons and lines.
+    def plot_shapes_lines(polygons, lines):
+        # Create a new plot
+        fig, ax = plt.subplots()
+
+        # Plot the polygons with a semi-transparent blue color
+        for poly in polygons:
+            x, y = poly.exterior.xy
+            ax.fill(x, y, alpha=0.5, fc='b', ec='none')
+
+        # Plot the line with a contrasting solid red color and a thicker line width
+        for line in lines:
+            x, y = line.xy
+            ax.plot(x, y, color='red', linewidth=3, solid_capstyle='round')
+
+        # Set plot aspect ratio and labels for better visualization
+        ax.set_aspect('equal', 'box')
+        ax.set_title('Shapely Polygons and Lines')
+        plt.xlabel("X-axis")
+        plt.ylabel("Y-axis")
+        plt.grid(True)
+
+        # Show the plot
+        plt.show()
+
 
     # vertices for a square polygon
     v1 = [1., 1.]
@@ -182,27 +209,24 @@ if __name__ == "__main__":
             (cx - h, cy + h)  # Top-left
         ]
 
-        # # Perturb each corner by adding random noise
-        # irregular_corners = []
-        # irregularity = side_length / 4  # How much the corners can be moved. 0=perfect square.
-        # for x, y in base_corners:
-        #     noise_x = np.random.uniform(-irregularity, irregularity)
-        #     noise_y = np.random.uniform(-irregularity, irregularity)
-        #     irregular_corners.append((x + noise_x, y + noise_y))
+        # Perturb each corner by adding random noise
+        irregular_corners = []
+        irregularity = side_length / 4  # How much the corners can be moved. 0=perfect square.
+        for x, y in base_corners:
+            noise_x = np.random.uniform(-irregularity, irregularity)
+            noise_y = np.random.uniform(-irregularity, irregularity)
+            irregular_corners.append((x + noise_x, y + noise_y))
 
         # Create the Shapely Polygon object and add it to our list
-        square = Polygon(base_corners)
-        _polygons.append(square)
-        _polygon_names.append(f"v{i + 1}")
-
-        # # Create the Shapely Polygon object
-        # irregular_square = Polygon(irregular_corners)
-        #
-        # _polygons.append(irregular_square)
+        # square = Polygon(base_corners)
+        # _polygons.append(square)
         # _polygon_names.append(f"v{i + 1}")
 
-    # for el in polygons:
-    #   display(el)
+        # Create the Shapely Polygon object
+        irregular_square = Polygon(irregular_corners)
+
+        _polygons.append(irregular_square)
+        _polygon_names.append(f"v{i + 1}")
 
     logger.debug("-" * 1000)
     logger.debug(_polygons)
@@ -221,11 +245,13 @@ if __name__ == "__main__":
         ]
     )
 
-    scale = side_length / 4
+    scale = side_length / 7
 
     # # add noise to the lines
-    # _noise = np.random.normal(0, scale, size=_lines.shape)
-    # _lines += _noise
+    _noise = np.random.normal(0, scale, size=_lines.shape)
+    _lines += _noise
+
+    _lines_strs = [LineString(points) for points in _lines.reshape(-1, 2, 2)]
 
     # check validity
 
@@ -236,6 +262,9 @@ if __name__ == "__main__":
         'v4': ['v2', 'v3', 'v1']
     }
 
+    plot_shapes_lines(polygons=_polygons,
+                      lines=_lines_strs)
+
     util = LinePolygonTreeQueryUtil(
         polygons=_polygons,
         lines=_lines,
@@ -243,16 +272,18 @@ if __name__ == "__main__":
         polygon_names=_polygon_names
     )
 
-    res_dict = util.line_polygon_mapping
+    expected = {'v1': ['v3', 'v2', 'v4'], 'v2': ['v3', 'v1', 'v4'], 'v3': ['v2', 'v4', 'v1'],
+                'v4': ['v2', 'v3', 'v1']}
 
-    for key in res_dict:
-        if sorted(res_dict[key]) != sorted(expected[key]):
-            logger.debug(res_dict[key])
-            logger.debug(expected[key])
+    map = util.get_polygon_neighbours(max_attempts=0, buffer_factor=0)
 
-            logger.debug(util.line_points)
-            logger.debug(util.polygons)
+    for el in map:
+        if sorted(map[el]) != sorted(expected[el]):
+            print("FAIL")
+            raise Exception(f"{el} not in {expected}")
 
-            raise Exception(f"{key} not in {expected}")
+    print("*" * 1000)
+    print("PASS")
+    print("*" * 1000)
 
-    logger.debug("Valid")
+
