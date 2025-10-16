@@ -132,7 +132,7 @@ class MicrodropApplication(TasksApplication):
     def _get_always_use_default_layout(self):
         return self.preferences_helper.always_use_default_layout
 
-    @observe('started')
+    @observe('application_initialized')
     def _on_application_started(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
