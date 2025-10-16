@@ -18,7 +18,7 @@ from microdrop_utils.hardware_device_monitoring_helpers import check_devices_ava
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
 from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
-    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED
+    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
 
 logger = get_logger(__name__)
 
@@ -91,6 +91,9 @@ class DropbotMonitorMixinService(HasTraits):
         self.proxy.update_state(hv_output_selected=False,
                                 hv_output_enabled=False,
                                 voltage=0)
+        # hv output change means realtime mode has been updated
+        publish_message(topic=REALTIME_MODE_UPDATED, message="False")
+        logger.info(f"HALTED: realtime mode OFF")
         logger.error("Halted DropBot: Disconnect everything and reconnect")
     
     ############################################################
