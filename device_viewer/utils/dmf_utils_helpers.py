@@ -20,8 +20,7 @@ class LinePolygonTreeQueryUtil:
             polygon_names (list): list of polygon names. Should match indexing of polygons.
             line_names  (list): list of shapely.geometry.Polygon. Should match indexing of number of lines.
         """
-
-        # Add buffer to account for lines just touching.
+        
         self.polygons = polygons
         self.polygon_names = polygon_names
 
@@ -32,15 +31,12 @@ class LinePolygonTreeQueryUtil:
 
     def get_line_polygon_mapping(self, max_attempts=10, buffer_factor=128):
         # Find the nearest tree geometries to the input geometries
-        # construct the STRTree (Sort-Tile-Recursive Tree)
-        # (https://shapely.readthedocs.io/en/2.1.1/strtree.html)
-
+        # construct the STRTree (Sort-Tile-Recursive Tree: https://shapely.readthedocs.io/en/2.1.1/strtree.html)
         # continue query with changing buffer sizes until we get only 2 hits for each line max attempts times.
+        
         polygons = self.polygons
         logger.debug(f"Attempt 0/{max_attempts} with no buffer factor to get line polygons")
         for attempt in range(max_attempts):
-            # We don't use the touches query since we only want polygons intersecting line endpoints.
-
             tree = STRtree(polygons)
             line_query = tree.query(self.lines, 'intersects')
 
