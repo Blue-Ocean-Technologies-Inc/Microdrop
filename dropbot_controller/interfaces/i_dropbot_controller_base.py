@@ -23,3 +23,26 @@ class IDropbotControllerBase(IDramatiqControllerBase):
         the new connection. For instance, updating the states as needed, and hooking up the blinker signals emitted
         by the dropbot proxy to appropriate handlers (like the halted event for instance).
         """
+
+    ################################### Exposed Methods ###############################
+
+    def on_topic_request(self, message):
+        """
+        A method that is called when a dropbot topic request is received. This naming convention is to be followed
+        for methods to be exposed. While calling it one would send a message to a topic that is
+        something/dropbot/topic
+
+        'on_chip_check_request' and 'on_detect_shorts_request' should be provided by default.
+        """
+
+    def on_chip_check_request(self, message):
+        """
+        Check if chip is inserted by reading **active low** `OUTPUT_ENABLE_PIN`.
+        """
+
+    def on_detect_shorts_request(self, message):
+        """
+        Detect any shorts on the chip.
+        """
+
+    ####################################################################################

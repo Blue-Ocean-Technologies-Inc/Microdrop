@@ -39,15 +39,17 @@ class DropbotMonitorMixinService(HasTraits):
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
     _no_power = Bool(False) 
 
-
     ######################################## Methods to Expose #############################################
     def on_start_device_monitoring_request(self, hwids_to_check):
         """
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
         """
+
+        # if dropbot already connected, exit after publishing connection and chip details
         if self.dropbot_connection_active:
-            self.on_chip_check_request("")
+            publish_message('dropbot_connected', DROPBOT_CONNECTED)
+            self.on_chip_check_request("") # from base class
             return
 
         if not hwids_to_check:
@@ -77,25 +79,6 @@ class DropbotMonitorMixinService(HasTraits):
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
-    def on_detect_shorts_request(self, message):
-        if self.proxy is not None:
-            shorts_list = self.proxy.detect_shorts()
-            shorts_dict = {'Shorts_detected': shorts_list}
-            logger.info(f"Detected shorts: {shorts_dict}")
-            publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
-
-    @debounce(wait_seconds=1) # take into account rapid chip insertion changes
-    def on_chip_check_request(self, message):
-        if self.proxy is not None:
-            for i in range(10):
-                # sometimes monitor is not created after the proxy initialization immediately.
-                if self.proxy.monitor:
-                    chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
-                    logger.info(f"Chip check result: {chip_check_result}")
-                    publish_message(topic=CHIP_INSERTED, message=f'{chip_check_result}')
-                    return
-                time.sleep(0.1)
-    
     def on_retry_connection_request(self, message):
         if self.dropbot_connection_active:
             logger.info(f"Retry connection request rejected: Dropbot already connected")
@@ -115,7 +98,9 @@ class DropbotMonitorMixinService(HasTraits):
     ############################################################
 
     def on_disconnected_signal(self, message):
-        self.dropbot_connection_active = False
+        # set connection inactive in case it was not changed.
+        if self.dropbot_connection_active:
+            self.dropbot_connection_active = False
 
         # Terminate the proxy monitor and reset it to None to allow new connection to set the monitor.
         if self.proxy is not None:
@@ -134,14 +119,9 @@ class DropbotMonitorMixinService(HasTraits):
             self.on_retry_connection_request(message="")
 
     def on_connected_signal(self, message):
-        # set connection active in case it was not changed in the base listener routine.
+        # set connection active in case it was not changed.
         if not self.dropbot_connection_active:
             self.dropbot_connection_active = True
-
-        # call chip check again in case it was not called in the DramatiqSerialProxy after connection.
-        # if it is a second check, it should not matter since the chip check method is debounced to take into account
-        # rapid chip insertion changes anyway.
-        self.on_chip_check_request("")
 
     ################################# Protected methods ######################################
     def _on_dropbot_port_found(self, event):

@@ -92,21 +92,24 @@ class DropbotControllerBase(HasTraits):
         # 1. Check if it is a dropbot related topic
         if head_topic == 'dropbot':
 
-            # 2. Handle the connected / disconnected signals
+            # Handle the connected / disconnected signals
             if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
                 if topic == DROPBOT_CONNECTED:
                     self.dropbot_connection_active = True
                 else:
                     self.dropbot_connection_active = False
                 requested_method = f"on_{specific_sub_topic}_signal"
+            # Chip inserted means device connected. This message can only come
+            # from the self.proxy, likely from another thread. Update this thread and return.
             elif topic == CHIP_INSERTED and timestamped_message == 'True':
                 self.dropbot_connection_active = True
                 return
+
             # 3. Handle specific dropbot requests that would change dropbot connectivity
             elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
                 requested_method = f"on_{specific_sub_topic}_request"
             
-            # 4. Handle all other requests
+            # Handle all other requests only if dropbot connected
             elif primary_sub_topic == 'requests':
                 if self.dropbot_connection_active:
                     requested_method = f"on_{specific_sub_topic}_request"
@@ -120,6 +123,7 @@ class DropbotControllerBase(HasTraits):
             if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
                 logger.debug(f"DropbotController: Ignoring older message from topic: {topic} received at {timestamped_message.timestamp_dt}")
                 return
+
             self.timestamps[topic] = timestamped_message.timestamp_dt
             
             err_msg = invoke_class_method(self, requested_method, timestamped_message)
@@ -146,7 +150,14 @@ class DropbotControllerBase(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
-    def _on_dropbot_proxy_connected(self):
+    def _on_dropbot_proxy_connected(self) -> bool:
+        """
+        Routine to setup dropbot proxy once connection is made
+
+        Returns:
+            bool: True if connection was made
+
+        """
 
         if self.proxy.config.i2c_address != 0:
             self.proxy.initialize_switching_boards()
@@ -171,6 +182,12 @@ class DropbotControllerBase(HasTraits):
             self.proxy.signals.signal('capacitance-updated').connect(self._capacitance_updated_wrapper)
             self.proxy.signals.signal('shorts-detected').connect(self._shorts_detected_wrapper)
             logger.debug("Connected DropBot signals to handlers")
+
+            # Chip may have been inserted before connecting, so `chip-inserted`
+            # event may have been missed.
+            # Explicitly check if chip is inserted by reading **active low**
+            # `OUTPUT_ENABLE_PIN`.
+            self.on_chip_check_request("")
             
             # Configure feedback capacitor
             if self.proxy.config.C16 < 0.3e-6:
@@ -180,9 +197,12 @@ class DropbotControllerBase(HasTraits):
             self.proxy.turn_off_all_channels()
             
             logger.info("Enhanced proxy connection setup completed successfully")
+
+            return True
             
         except Exception as e:
             logger.error(f"Error during enhanced proxy setup: {e}")
+            return False
 
     ######################################################################
     # Proxy signal handlers
@@ -231,3 +251,27 @@ class DropbotControllerBase(HasTraits):
             publish_message(topic=CHIP_INSERTED, message='False')
         else:
             logger.warn(f"Unknown signal received: {signal}")
+
+    ######################################## Methods to Expose #############################################
+
+    def on_chip_check_request(self, message):
+        """
+        Check if chip is inserted by reading **active low** `OUTPUT_ENABLE_PIN`.
+        """
+        if self.proxy is not None:
+            if self.proxy.monitor is not None:
+                chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
+                logger.info(f"Chip check result: {chip_check_result}")
+                publish_message(topic=CHIP_INSERTED, message=f'{chip_check_result}')
+
+    def on_detect_shorts_request(self, message):
+        if self.proxy is not None:
+            if self.proxy.monitor is not None:
+                shorts_list = self.proxy.detect_shorts()
+                shorts_dict = {'Shorts_detected': shorts_list}
+                logger.info(f"Detected shorts: {shorts_dict}")
+                publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
+
+    ########################################################################################################
+
+
