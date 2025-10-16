@@ -45,15 +45,14 @@ class DramatiqDropbotSerialProxy(SerialProxy):
             publish_message(f'dropbot_disconnected', DROPBOT_DISCONNECTED)
             publish_message('False', CHIP_INSERTED)
         
-        monitor = bnr.ser_async.BaseNodeSerialMonitor(port=self.port)
+        self.monitor = bnr.ser_async.BaseNodeSerialMonitor(port=self.port)
 
-        monitor.connected_event.set = ft.partial(connected_wrapper,
-                                                 monitor.connected_event.set)
-        monitor.disconnected_event.set = ft.partial(disconnected_wrapper, 
-                                                    monitor.disconnected_event.set)
+        self.monitor.connected_event.set = ft.partial(connected_wrapper,
+                                                 self.monitor.connected_event.set)
+        self.monitor.disconnected_event.set = ft.partial(disconnected_wrapper,
+                                                    self.monitor.disconnected_event.set)
 
-        monitor.start()
+        self.monitor.start()
 
-        monitor.connected_event.wait()
-        self.monitor = monitor
+        self.monitor.connected_event.wait()
         return self.monitor
