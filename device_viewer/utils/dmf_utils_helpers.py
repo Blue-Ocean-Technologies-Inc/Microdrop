@@ -296,6 +296,7 @@ class SVGProcessor:
         """
 
         if not len(group_element):
+            logger.debug(f"Skipping {group_element} due to no elements.")
             return None
 
         # List to hold records of form: `[<x1>, <y1>, <x2>, <y2>]`.
