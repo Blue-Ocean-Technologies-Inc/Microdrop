@@ -319,7 +319,7 @@ class SVGProcessor:
                     y2 = float(element.attrib['y2'])
                     lines.append([x1, y1, x2, y2])
                 except KeyError:
-                    print(f"Warning: Skipping malformed <line> element '{element}'.")
+                    logger.warning(f"Warning: Skipping malformed <line> element '{element}'.")
 
             # --- Process <path> elements using svg.path ---
             elif tag == 'path':
@@ -343,7 +343,7 @@ class SVGProcessor:
                             ])
 
                     except (IndexError, ValueError) as e:
-                        print(f"Warning: Could not parse <path> '{element}': {e}")
+                        logger.warning(f"Warning: Could not parse <path> '{element}': {e}")
 
         if len(lines) == 0:
             return None
