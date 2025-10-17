@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import re
 import numpy as np
-import pandas as pd
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Union, TypedDict, Optional
+from typing import Union
 from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
