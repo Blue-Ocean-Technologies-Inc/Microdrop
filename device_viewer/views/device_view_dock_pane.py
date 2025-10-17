@@ -630,7 +630,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.info(f"Electrodes model set to {self.model}")
 
     def load_svg_dialog(self):
-        logger.info("\n--- Loading external svg file into device repo ---")
 
         # --- 1. Open a dialog for the user to select a source file ---
         # This is decoupled from self.file to allow loading any file at any time.
@@ -647,13 +646,15 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # --- 3. Handle case where the selected file is already in the repo ---
         # We just select it in the UI and do not need to copy anything.
+        logger.debug("Checking for chosen file in repo...")
         if src_file.parent == repo_dir:
             logger.debug(f"File '{src_file.name}' is already in the repo. Selecting it.")
             self.device_viewer_preferences.DEFAULT_SVG_FILE = src_file
             self._on_load_svg_success()
             return OK
 
-        logger.debug("Checking for chosen file in repo...")
+        logger.info("\n--- Loading external svg file into device repo ---")
+
         dst_file = Path(repo_dir) / src_file.name
 
         if not dst_file.exists():

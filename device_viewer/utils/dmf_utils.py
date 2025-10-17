@@ -9,7 +9,8 @@ from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
+from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
+    SVGProcessor
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -19,18 +20,8 @@ INCH_TO_MM = 25.4
 DOTS_TO_MM = INCH_TO_MM / DPI
 
 
-class ElectrodeDict(TypedDict):
-    channel: int
-    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
-
-
 class SvgUtil(HasTraits):
     float_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
-    path_commands = re.compile(r"(?P<move_command>[ML])\s+(?P<x>{0}),\s*(?P<y>{0})\s*|"
-                               r"(?P<x_command>[H])\s+(?P<hx>{0})\s*|"
-                               r"(?P<y_command>[V])\s+(?P<vy>{0})\s*|"
-                               r"(?P<command>[Z])"
-                               .format(float_pattern))
     style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
 
     area_scale = Float
@@ -48,7 +39,6 @@ class SvgUtil(HasTraits):
         self.x_shift = None
         self.y_shift = None
         self.neighbours: dict[str, list[str]] = {}
-        self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
         self.polygons = {}
         self.connections = {}
@@ -69,18 +59,21 @@ class SvgUtil(HasTraits):
         self.get_device_paths(self._filename)
 
     def get_device_paths(self, filename):
-        tree = ET.parse(filename)
-        root = tree.getroot()
 
-        for child in root:
+        svg_processor = SVGProcessor(filename=filename)
+
+        for child in svg_processor.root:
             if "Device" in child.attrib.values():
                 self.set_fill_black(child)
-                self.electrodes = self.svg_to_electrodes(child)
+                self.electrodes = svg_processor.svg_to_electrodes(child)
+                self.min_x, self.min_y, self.max_x, self.max_y = svg_processor.get_bounding_box()
+
                 self.polygons = self.get_electrode_polygons()
-            elif "ROI" in child.attrib.values():
-                self.roi = self.svg_to_paths(child)
+
             elif "Connections" in child.attrib.values():
-                self.neighbours = self.extract_connections(root, line_layer='Connections')
+                connection_lines = svg_processor.extract_connections(child)
+                if connection_lines is not None:
+                    self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
@@ -102,7 +95,8 @@ class SvgUtil(HasTraits):
         """
         Get the center of an electrode
         """
-        return np.mean(self.electrodes[electrode]['path'], axis=0)
+        # exclude last element in path that indicates path is closed.
+        return np.mean(self.electrodes[electrode]['path'][:-1], axis=0)
 
     def find_electrode_centers(self):
         self.electrode_centers = {}
@@ -159,75 +153,24 @@ class SvgUtil(HasTraits):
 
         return create_adjacency_dict(neighbors)
 
-    def extract_connections(self, root: ET.Element, line_layer: str = 'Connections',
-                            line_xpath: Optional[str] = None, path_xpath: Optional[str] = None,
-                            namespaces: Optional[dict] = None, buffer_distance: float = None) -> dict:
+    def find_neighbours_all_from_connections(self, connection_lines) -> dict:
         """
         Parses <line> and <path> elements from a layer to find connections
         (neighbours) between electrodes. Returns a dictionary mapping each
         electrode ID to a list of its neighbours.
         """
-        if namespaces is None:
-            namespaces = {'svg': 'http://www.w3.org/2000/svg',
-                          'inkscape': 'http://www.inkscape.org/namespaces/inkscape'}
 
-        frames = []
-        # List to hold records of form: `[<id>, <x1>, <y1>, <x2>, <y2>]`.
-        coords_columns = ['x1', 'y1', 'x2', 'y2']
-
-        if line_xpath is None:
-            # Define a query to look for `svg:line` elements in the top level of layer of
-            # SVG specified to contain connections.
-            line_xpath = f".//svg:g[@inkscape:label='{line_layer}']/svg:line"
-
-        for line_i in root.findall(line_xpath, namespaces=namespaces):
-            line_i_dict = dict(line_i.items())
-            values = [line_i_dict.get('id')] + [float(line_i_dict[k]) for k in coords_columns]
-            frames.append(values)
-
-        cre_path_ends = re.compile(r'^\s*M\s*(?P<start_x>{0}),\s*(?P<start_y>{0})'
-                                   r'.*((L\s*(?P<end_x>{0}),\s*(?P<end_y>{0}))|'
-                                   r'(V\s*(?P<end_vy>{0}))|'
-                                   r'(H\s*(?P<end_hx>{0})))\D*$'.format(self.float_pattern))
-        if path_xpath is None:
-            path_xpath = f".//svg:g[@inkscape:label='{line_layer}']/svg:path"
-
-        for path_i in root.findall(path_xpath, namespaces=namespaces):
-            path_i_dict = dict(path_i.items())
-            match_i = cre_path_ends.match(path_i_dict.get('d', ''))
-            # Connection `svg:path` matched required format.  Extract start and
-            # end coordinates.
-            if match_i:
-                match_dict_i = match_i.groupdict()
-                if match_dict_i.get('end_vy'):
-                    match_dict_i['end_x'] = match_dict_i['start_x']
-                    match_dict_i['end_y'] = match_dict_i['end_vy']
-                if match_dict_i.get('end_hx'):
-                    match_dict_i['end_x'] = match_dict_i['end_hx']
-                    match_dict_i['end_y'] = match_dict_i['start_y']
-                frames.append([path_i_dict.get('id')] + list(map(float,
-                                                                 (match_dict_i['start_x'], match_dict_i['start_y'],
-                                                                  match_dict_i['end_x'], match_dict_i['end_y']))))
-
-        if not frames:
-            return {}
-
-        df_connection_lines = pd.DataFrame(frames, columns=['id'] + coords_columns)
 
         _polygons_names = list(self.polygons.keys())
         _polygons = list(self.polygons.values())
 
-        _lines = (df_connection_lines.drop("id", axis=1) * DOTS_TO_MM).values
-        _line_names = df_connection_lines["id"].values
-
-        tree_query = LinePolygonTreeQueryUtil(
+        tree_query = PolygonNeighborFinder(
             polygons=_polygons,
             polygon_names=_polygons_names,
-            lines=_lines,
-            line_names=_line_names,
+            lines=connection_lines,
         )
 
-        return tree_query.line_polygon_mapping
+        return tree_query.get_polygon_neighbours()
 
     def neighbours_to_points(self):
         # Dictionary to store electrode connections
@@ -254,76 +197,3 @@ class SvgUtil(HasTraits):
                 element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
-
-    def svg_to_paths(self, obj) -> list[np.ndarray]:
-        """
-        Converts the svg file to paths
-        """
-
-        paths = []
-        for path in obj:
-            path = path.attrib["d"]
-            moves = []
-            for match in self.path_commands.findall(path):
-                if ("M" in match) or ("L" in match):
-                    moves.append((float(match[1]), float(match[2])))
-                elif "H" in match:
-                    moves.append((float(match[4]), moves[-1][1]))
-                elif "V" in match:
-                    moves.append((moves[-1][0], (float(match[6]))))
-                elif "Z" in match:
-                    pass
-
-            paths.append(np.array(moves).reshape((-1, 1, 2)) * INCH_TO_MM / DPI)
-
-        self.max_x = max([p[..., 0].max() for p in paths])
-        self.max_y = max([p[..., 1].max() for p in paths])
-        self.min_x = min([p[..., 0].min() for p in paths])
-        self.min_y = min([p[..., 1].min() for p in paths])
-
-        return paths
-
-    def svg_to_electrodes(self, obj: ET.Element) -> dict[str, ElectrodeDict]:
-        """
-        Converts the svg file to paths
-        """
-
-        electrodes: dict[str, ElectrodeDict] = {}
-        try:
-            pattern = r"translate\((?P<x>-?\d+\.\d+),(?P<y>-?\d+\.\d+)\)"
-            match = re.match(pattern, obj.attrib['transform'])
-            x = float(match.group('x'))
-            y = float(match.group('y'))
-            transform = np.array([x, y])
-        except KeyError:
-            transform = np.array([0, 0])
-
-        for element in list(obj):
-            path = element.attrib["d"]
-            moves = []
-            for match in self.path_commands.findall(path):
-                if ("M" in match) or ("L" in match):
-                    moves.append((float(match[1]), float(match[2])))
-                elif "H" in match:
-                    moves.append((float(match[4]), moves[-1][1]))
-                elif "V" in match:
-                    moves.append((moves[-1][0], (float(match[6]))))
-                elif "Z" in match:
-                    pass
-
-            try:
-                electrodes[element.attrib['id']] = {'channel': int(element.attrib['data-channels']),
-                                                    'path': (np.array(moves) + transform).reshape((-1, 2))}
-            except KeyError:
-                electrodes[element.attrib['id']] = {'channel': None,
-                                                    'path': (np.array(moves) + transform).reshape((-1, 2))}
-
-            # scale to mm
-            electrodes[element.attrib['id']]['path'] *= INCH_TO_MM / DPI
-
-        self.max_x = max([e['path'][..., 0].max() for e in electrodes.values()])
-        self.max_y = max([e['path'][..., 1].max() for e in electrodes.values()])
-        self.min_x = min([e['path'][..., 0].min() for e in electrodes.values()])
-        self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
-
-        return electrodes
