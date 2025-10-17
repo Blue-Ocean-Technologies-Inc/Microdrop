@@ -9,11 +9,14 @@ import xml.etree.ElementTree as ET
 
 from pathlib import Path
 from typing import Union, TypedDict
+
+from matplotlib import pyplot as plt
 from shapely.geometry import Polygon, Point
+from shapely.geometry.linestring import LineString
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
+from device_viewer.utils.dmf_utils_helpers import  PolygonNeighborFinder, create_adjacency_dict
 
 DPI = 96
 INCH_TO_MM = 25.4
@@ -467,17 +470,42 @@ class SvgUtil(HasTraits):
         _lines = (df_connection_lines.drop("id", axis=1) * DOTS_TO_MM).values
         _line_names = df_connection_lines["id"].values
 
-        if buffer_distance is None:
-            buffer_distance = sum(self.electrode_areas.values()) / len(self.electrodes.values()) / 100
-
-        tree_query = LinePolygonTreeQueryUtil(
+        tree_query = PolygonNeighborFinder(
             polygons=_polygons,
             polygon_names=_polygons_names,
             lines=_lines,
-            line_names=_line_names,
         )
 
-        return tree_query.polygon_neighbours
+        # func to plot shapely polygons and lines.
+        def plot_shapes_lines(polygons, lines):
+            # Create a new plot
+            fig, ax = plt.subplots()
+
+            fig.set_dpi(300)
+
+            # Plot the polygons with a semi-transparent blue color
+            for poly in polygons:
+                x, y = poly.exterior.xy
+                ax.fill(x, y, alpha=0.5, fc='b', ec='none')
+
+            # Plot the line with a contrasting solid red color and a thicker line width
+            for line in lines:
+                x, y = line.xy
+                ax.plot(x, y, color='red', linewidth=1, solid_capstyle='round')
+
+            # Set plot aspect ratio and labels for better visualization
+            ax.set_aspect('equal', 'box')
+            ax.set_title('Shapely Polygons and Lines')
+            plt.xlabel("X-axis")
+            plt.ylabel("Y-axis")
+            plt.grid(True)
+
+            # Show the plot
+            plt.show()
+
+        plot_shapes_lines(_polygons, [LineString(line.reshape(2,2)) for line in _lines])
+
+        return tree_query.get_polygon_neighbours()
 
 
 try:
@@ -492,7 +520,9 @@ device_90_pin_path = device_repo / "90_pin_array.svg"
 
 # @timeit_benchmark(number=1, repeat=1)
 def main():
-    device_90_pin_model = SvgUtil(device_90_pin_path)
-    device_120_pin_model = SvgUtil(device_120_pin_path)
+    # device_90_pin_model = SvgUtil(device_90_pin_path)
+    # device_120_pin_model = SvgUtil(device_120_pin_path)
+    device = Path.home() / "Sci-Bots" / "Microdrop" / "Devices" / "device.svg"
+    SvgUtil(device)
 
 main()
