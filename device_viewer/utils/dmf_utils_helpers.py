@@ -2,10 +2,11 @@ import re
 from xml.etree import ElementTree as ET
 
 import numpy as np
+import pandas as pd
 from shapely.geometry import Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
-from typing import List, Dict, Set, TypedDict
+from typing import List, Dict, Set, TypedDict, Optional, Any, Union
 
 from svg.path import parse_path
 
@@ -98,7 +99,8 @@ class PolygonNeighborFinder:
     def _build_neighbor_map(self, query_result: np.ndarray) -> Dict[str, List[str]]:
         """Helper method to construct the final neighbor dictionary from query results."""
         # Use a defaultdict or a set for easier adding
-        mapping: Dict[str, Set[str]] = {name: set() for name in self.polygon_names}
+        neighbours_map: Dict[str, Set[str]] = {name: set() for name in self.polygon_names}
+        neighbours_connecting_line_coords_map: Dict[tuple[str,str], tuple[tuple,tuple]] = {}
 
         # Group polygon indices by their corresponding line index
         for line_idx in range(len(self.lines)):
@@ -111,12 +113,15 @@ class PolygonNeighborFinder:
             name1 = self.polygon_names[poly1_idx]
             name2 = self.polygon_names[poly2_idx]
 
+            neighbours_connecting_line_coords_map[(name1, name2)] = (self.lines[0].coords[0], self.lines[0].coords[1])
+            neighbours_connecting_line_coords_map[(name1, name2)] = (self.lines[0].coords[0], self.lines[0].coords[1])
+
             # Register the neighbor relationship symmetrically
-            mapping[name1].add(name2)
-            mapping[name2].add(name1)
+            neighbours_map[name1].add(name2)
+            neighbours_map[name2].add(name1)
 
         # Convert the sets to lists for the final output
-        return {key: list(val) for key, val in mapping.items()}
+        return {key: list(val) for key, val in neighbours_map.items()}
 
 
 def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
@@ -233,6 +238,16 @@ class SVGProcessor:
     def get_bounding_box(self):
         return self.min_x, self.min_y, self.max_x, self.max_y
 
+    @staticmethod
+    def get_transform(element: ET.Element) -> np.ndarray:
+        # Parse the 'transform' attribute of the parent group
+        transform_str = element.attrib.get('transform', '').replace(' ', '')
+        match = re.search(r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)",
+                          transform_str.lower())
+        # Apply the Y transform directly, without negation
+        transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
+        return transform
+
     def svg_to_electrodes(self, group_element: ET.Element) -> Dict[str, ElectrodeDict]:
         """
         Converts path elements within an SVG group into an electrode dictionary,
@@ -242,32 +257,103 @@ class SVGProcessor:
         all_electrode_paths = []
 
         # Parse the 'transform' attribute of the parent group
-        transform_str = group_element.attrib.get('transform', '')
-        match = re.search(r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)", transform_str)
-        # Apply the Y transform directly, without negation
-        transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
+        transform = self.get_transform(group_element)
 
         for element in group_element:
             d_string = element.attrib.get("d", "")
             element_id = element.attrib.get("id")
-            if not d_string or not element_id:
-                continue
 
-            # Parse the path using the original coordinate system
-            path_points = self._parse_path_string(d_string)
+            if d_string and element_id:
+                # Parse the path using the original coordinate system
+                path_points = self._parse_path_string(d_string)
 
-            # Apply all transformations: translation and then scaling
-            transformed_path = (path_points + transform) * DOTS_TO_MM
+                # Apply all transformations: translation and then scaling
+                transformed_path = (path_points + transform) * DOTS_TO_MM
 
-            channel_str = element.attrib.get('data-channels')
-            electrodes[element_id] = {
-                'channel': int(channel_str) if channel_str is not None else None,
-                'path': transformed_path
-            }
-            all_electrode_paths.append(transformed_path)
+                channel_str = element.attrib.get('data-channels')
+                electrodes[element_id] = {
+                    'channel': int(channel_str) if channel_str is not None else None,
+                    'path': transformed_path
+                }
+                all_electrode_paths.append(transformed_path)
+            else:
+                logger.debug(f"Skipping {element} due lack of elements.")
 
         self._update_bounding_box(all_electrode_paths)
         return electrodes
+
+    def extract_connections(self, group_element: ET.Element) -> Union[np.ndarray, None]:
+        """
+        Extracts start and end coordinates from <line> and <path> elements
+        within a specific Inkscape layer of an SVG file.
+
+        Args:
+            group_element: The elements within an SVG group containing the connection lines / paths.
+
+        Returns:
+            A np.array of connection line records, where each record is: [<id>, <x1>, <y1>, <x2>, <y2>].
+            This will be in mm with its group's translation applied as found from the svg.
+        """
+
+        if not len(group_element):
+            return None
+
+        # List to hold records of form: `[<x1>, <y1>, <x2>, <y2>]`.
+        lines = []
+
+        # Parse the 'transform' attribute of the parent group
+        transform = self.get_transform(group_element)
+
+        # 2. Iterate through all elements in the layer
+        for element in group_element:
+            element_id = element.attrib.get('id')
+            if element_id: # Skip elements without an ID
+
+                # Extract the tag name without the namespace prefix
+                tag = element.tag.split('}')[-1]
+
+                # --- Process <line> elements ---
+                if tag == 'line':
+                    try:
+                        x1 = float(element.attrib['x1'])
+                        y1 = float(element.attrib['y1'])
+                        x2 = float(element.attrib['x2'])
+                        y2 = float(element.attrib['y2'])
+                        lines.append([x1, y1, x2, y2])
+                    except KeyError:
+                        print(f"Warning: Skipping malformed <line> element '{element_id}'.")
+
+                # --- Process <path> elements using svg.path ---
+                elif tag == 'path':
+                    d_string = element.attrib.get('d')
+                    if d_string:
+
+                        try:
+                            path_obj = parse_path(d_string)
+                            if path_obj:
+
+                                # The start point is the start of the first segment
+                                start_point = path_obj[0].start
+                                # The end point is the end of the last segment
+                                end_point = path_obj[-1].end
+
+                                lines.append([
+                                    start_point.real,  # x1
+                                    start_point.imag,  # y1
+                                    end_point.real,  # x2
+                                    end_point.imag  # y2
+                                ])
+
+                        except (IndexError, ValueError) as e:
+                            print(f"Warning: Could not parse <path> '{element_id}': {e}")
+
+        if len(lines) == 0:
+            return None
+
+        # convert list to np array to easily apply tranformations
+        lines = np.array(lines)
+        lines = (lines.reshape(-1, 2) + transform).reshape(-1,4) # apply translation to start and end points
+        return lines * DOTS_TO_MM
 
 
 
