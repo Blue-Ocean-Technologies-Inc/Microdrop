@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import re
 import numpy as np
-import pandas as pd
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Union, TypedDict, Optional
+from typing import Union
 from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
@@ -74,6 +73,8 @@ class SvgUtil(HasTraits):
                 connection_lines = svg_processor.extract_connections(child)
                 if connection_lines is not None:
                     self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
+                else:
+                    logger.warning(f"{self.filename} does not have extractable connection elements. Will auto find the connections")
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")

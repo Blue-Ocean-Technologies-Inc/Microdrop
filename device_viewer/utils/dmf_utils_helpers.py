@@ -12,7 +12,7 @@ from svg.path import parse_path
 
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, "DEBUG")
+logger = get_logger(__name__, "INFO")
 
 
 DPI=96
@@ -296,6 +296,7 @@ class SVGProcessor:
         """
 
         if not len(group_element):
+            logger.debug(f"Skipping {group_element} due to no elements.")
             return None
 
         # List to hold records of form: `[<x1>, <y1>, <x2>, <y2>]`.
@@ -306,46 +307,43 @@ class SVGProcessor:
 
         # 2. Iterate through all elements in the layer
         for element in group_element:
-            element_id = element.attrib.get('id')
-            if element_id: # Skip elements without an ID
+            # Extract the tag name without the namespace prefix
+            tag = element.tag.split('}')[-1]
 
-                # Extract the tag name without the namespace prefix
-                tag = element.tag.split('}')[-1]
+            # --- Process <line> elements ---
+            if tag == 'line':
+                try:
+                    x1 = float(element.attrib['x1'])
+                    y1 = float(element.attrib['y1'])
+                    x2 = float(element.attrib['x2'])
+                    y2 = float(element.attrib['y2'])
+                    lines.append([x1, y1, x2, y2])
+                except KeyError:
+                    logger.warning(f"Warning: Skipping malformed <line> element '{element}'.")
 
-                # --- Process <line> elements ---
-                if tag == 'line':
+            # --- Process <path> elements using svg.path ---
+            elif tag == 'path':
+                d_string = element.attrib.get('d')
+                if d_string:
+
                     try:
-                        x1 = float(element.attrib['x1'])
-                        y1 = float(element.attrib['y1'])
-                        x2 = float(element.attrib['x2'])
-                        y2 = float(element.attrib['y2'])
-                        lines.append([x1, y1, x2, y2])
-                    except KeyError:
-                        print(f"Warning: Skipping malformed <line> element '{element_id}'.")
+                        path_obj = parse_path(d_string)
+                        if path_obj:
 
-                # --- Process <path> elements using svg.path ---
-                elif tag == 'path':
-                    d_string = element.attrib.get('d')
-                    if d_string:
+                            # The start point is the start of the first segment
+                            start_point = path_obj[0].start
+                            # The end point is the end of the last segment
+                            end_point = path_obj[-1].end
 
-                        try:
-                            path_obj = parse_path(d_string)
-                            if path_obj:
+                            lines.append([
+                                start_point.real,  # x1
+                                start_point.imag,  # y1
+                                end_point.real,  # x2
+                                end_point.imag  # y2
+                            ])
 
-                                # The start point is the start of the first segment
-                                start_point = path_obj[0].start
-                                # The end point is the end of the last segment
-                                end_point = path_obj[-1].end
-
-                                lines.append([
-                                    start_point.real,  # x1
-                                    start_point.imag,  # y1
-                                    end_point.real,  # x2
-                                    end_point.imag  # y2
-                                ])
-
-                        except (IndexError, ValueError) as e:
-                            print(f"Warning: Could not parse <path> '{element_id}': {e}")
+                    except (IndexError, ValueError) as e:
+                        logger.warning(f"Warning: Could not parse <path> '{element}': {e}")
 
         if len(lines) == 0:
             return None
