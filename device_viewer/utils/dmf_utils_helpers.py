@@ -4,78 +4,112 @@ import numpy as np
 from shapely.geometry import Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
+from typing import List, Dict, Set
 
 from microdrop_utils._logger import get_logger
 
-logger = get_logger(__name__, "INFO")
+logger = get_logger(__name__, "DEBUG")
 
-class LinePolygonTreeQueryUtil:
-    """Class using STR Tree queries to find what polygons are intersecting with lines."""
 
-    def __init__(self, polygons, lines, polygon_names, line_names, auto_find_polygon_neighbours=True):
+class PolygonNeighborFinder:
+    """
+    Finds neighboring polygons based on intersections with a given set of lines.
+
+    This class uses an STRtree for efficient spatial querying. It identifies pairs
+    of polygons that are considered "neighbors" because a line segment intersects
+    both of them.
+    """
+
+    def __init__(self, polygons: List[Polygon], lines: np.ndarray, polygon_names: List[str]):
         """
+        Initializes the finder with geometric and naming data.
+
         Args:
-            polygons (iterable): list of shapely.geometry.Polygons
-            lines (iterable): list of shapely.geometry.LineStrings.
-            polygon_names (list): list of polygon names. Should match indexing of polygons.
-            line_names  (list): list of shapely.geometry.Polygon. Should match indexing of number of lines.
+            polygons: A list of shapely.geometry.Polygon objects.
+            lines: A NumPy array, with shape (N, 4) representing N lines with endpoints [x1, y1, x2, y2].
+            polygon_names: A list of names corresponding to the polygons by index.
         """
-        
+        if not (len(polygons) == len(polygon_names)):
+            raise ValueError("Length of polygons and polygon_names must be the same.")
+
         self.polygons = polygons
         self.polygon_names = polygon_names
+        self.lines = [LineString(line.reshape((2, 2))) for line in lines]
 
-        self.lines = [LineString(line.reshape((2,2))) for line in lines]
-        self.line_names = line_names
+    def get_polygon_neighbours(self, max_attempts: int = 10, buffer_factor: float = 128.0) -> Dict[str, List[str]]:
+        """
+        Attempts to find exactly two intersecting polygons for each line.
 
-        if auto_find_polygon_neighbours:
-            self.polygon_neighbours = self.get_polygon_neighbours()
+        If an immediate intersection query doesn't yield two polygons per line, this
+        method iteratively buffers the polygons and retries the query until the
+        condition is met or max_attempts is reached.
 
-    def get_polygon_neighbours(self, max_attempts=10, buffer_factor=128):
-        # Find the nearest tree geometries to the input geometries
-        # construct the STRTree (Sort-Tile-Recursive Tree: https://shapely.readthedocs.io/en/2.1.1/strtree.html)
-        # continue query with changing buffer sizes until we get only 2 hits for each line max attempts times.
-        
-        polygons = self.polygons
-        logger.debug(f"Attempt 0/{max_attempts} with no buffer factor to get line polygons")
+        Args:
+            max_attempts: The maximum number of times to buffer and retry the query.
+            buffer_factor: A factor used to determine the buffer size, relative to
+                           the polygon's area.
+
+        Returns:
+            A dictionary mapping each polygon name to a list of its neighbors.
+
+        Raises:
+            ValueError: If a solution cannot be found within the given attempts.
+        """
+        # Start with the original polygons
+        current_polygons = self.polygons
+
         for attempt in range(max_attempts):
-            tree = STRtree(polygons)
-            line_query = tree.query(self.lines, 'intersects')
+            # The STRtree must be rebuilt in each iteration because the polygon geometries change.
+            tree = STRtree(current_polygons)
 
-            lines_have_2_polygons = np.all(np.unique(line_query[0], return_counts=1)[1] == 2)
+            # Query the tree to find which lines intersect which polygons.
+            # Returns a 2D array: [line_indices, polygon_indices]
+            query_result = tree.query(self.lines, predicate="intersects")
 
-            if lines_have_2_polygons:
+            line_indices, counts = np.unique(query_result[0], return_counts=True)
 
-                logger.debug(f"SUCCESS: {attempt}/{max_attempts}")
+            # Success is when every single line is found exactly twice.
+            all_lines_found = len(line_indices) == len(self.lines)
+            all_lines_have_two_neighbors = np.all(counts == 2)
 
-                logger.debug("-"*1000)
-                logger.debug(list(zip(line_query.take(line_query[0]), tree.geometries.take(line_query[1]))))
-                logger.debug("-"*1000)
+            if all_lines_found and all_lines_have_two_neighbors:
+                logger.debug(f"SUCCESS: Found solution on attempt {attempt + 1}/{max_attempts}.")
+                return self._build_neighbor_map(query_result)
 
-                mapping = {name: set() for name in self.polygon_names}
+            # --- If not successful, prepare for the next attempt ---
+            logger.debug(
+                f"Attempt {attempt + 1}/{max_attempts} failed. Buffering polygons and retrying."
+            )
+            # Buffer each polygon by a small amount relative to its area
+            current_polygons = [poly.buffer(poly.area / buffer_factor) for poly in current_polygons]
 
-                for i in range(len(self.lines)):
-                    polygons_line_i = line_query[1, line_query[0] == i]
+        raise ValueError(
+            f"Could not find a solution where each line intersects exactly 2 polygons "
+            f"after {max_attempts} attempts."
+        )
 
-                    polygon_names_i = [
-                        self.polygon_names[polygons_line_i[i]]
-                        for i in range(len(polygons_line_i))
-                    ]
+    def _build_neighbor_map(self, query_result: np.ndarray) -> Dict[str, List[str]]:
+        """Helper method to construct the final neighbor dictionary from query results."""
+        # Use a defaultdict or a set for easier adding
+        mapping: Dict[str, Set[str]] = {name: set() for name in self.polygon_names}
 
-                    mapping[polygon_names_i[0]].add(polygon_names_i[1])
-                    mapping[polygon_names_i[1]].add(polygon_names_i[0])
+        # Group polygon indices by their corresponding line index
+        for line_idx in range(len(self.lines)):
+            # Get the indices of polygons that intersected with this line
+            intersecting_poly_indices = query_result[1, query_result[0] == line_idx]
 
-                logger.debug("-"*1000)
-                logger.debug(mapping)
-                logger.debug("-"*1000)
+            # Since we've already checked for success, we know there are exactly two.
+            poly1_idx, poly2_idx = intersecting_poly_indices
 
-                # convert values to list and return
-                return  {key: list(val) for key, val in mapping.items()}
+            name1 = self.polygon_names[poly1_idx]
+            name2 = self.polygon_names[poly2_idx]
 
-            else:
-                polygons = [poly.buffer(poly.area / buffer_factor) for poly in polygons]
-                logger.debug(f"Attempt {attempt+1}/{max_attempts} with buffer factor ~ {buffer_factor / (attempt + 1)} to get line polygons")
+            # Register the neighbor relationship symmetrically
+            mapping[name1].add(name2)
+            mapping[name2].add(name1)
 
-        raise ValueError(f"Could not find a solution with each line having only 2 polygons after {max_attempts} attempts.")
+        # Convert the sets to lists for the final output
+        return {key: list(val) for key, val in mapping.items()}
 
 
 def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
@@ -265,22 +299,23 @@ if __name__ == "__main__":
     plot_shapes_lines(polygons=_polygons,
                       lines=_lines_strs)
 
-    util = LinePolygonTreeQueryUtil(
+    util = PolygonNeighborFinder(
         polygons=_polygons,
         lines=_lines,
-        line_names=_lines_names,
-        polygon_names=_polygon_names
+        polygon_names=_polygon_names,
     )
+
+
 
     expected = {'v1': ['v3', 'v2', 'v4'], 'v2': ['v3', 'v1', 'v4'], 'v3': ['v2', 'v4', 'v1'],
                 'v4': ['v2', 'v3', 'v1']}
 
-    map = util.get_polygon_neighbours(max_attempts=0, buffer_factor=0)
+    map = util.get_polygon_neighbours(max_attempts=1000, buffer_factor=-2**5)
 
     for el in map:
         if sorted(map[el]) != sorted(expected[el]):
             print("FAIL")
-            raise Exception(f"{el} not in {expected}")
+            raise Exception(f"{map[el]} is not the expected map: {expected}")
 
     print("*" * 1000)
     print("PASS")

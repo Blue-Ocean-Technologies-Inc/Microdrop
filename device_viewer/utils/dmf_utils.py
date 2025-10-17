@@ -9,7 +9,7 @@ from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils_helpers import LinePolygonTreeQueryUtil, create_adjacency_dict
+from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -220,14 +220,13 @@ class SvgUtil(HasTraits):
         _lines = (df_connection_lines.drop("id", axis=1) * DOTS_TO_MM).values
         _line_names = df_connection_lines["id"].values
 
-        tree_query = LinePolygonTreeQueryUtil(
+        tree_query = PolygonNeighborFinder(
             polygons=_polygons,
             polygon_names=_polygons_names,
             lines=_lines,
-            line_names=_line_names,
         )
 
-        return tree_query.polygon_neighbours
+        return tree_query.get_polygon_neighbours()
 
     def neighbours_to_points(self):
         # Dictionary to store electrode connections
