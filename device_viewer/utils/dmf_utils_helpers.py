@@ -86,7 +86,7 @@ class PolygonNeighborFinder:
 
             # --- If not successful, prepare for the next attempt ---
             logger.debug(
-                f"Attempt {attempt + 1}/{max_attempts} failed. Buffering polygons and retrying."
+                f"Attempt {attempt + 1}/{max_attempts} failed. Buffering polygons and retrying buffer factor ~ {buffer_factor / (attempt + 1)}."
             )
             # Buffer each polygon by a small amount relative to its area
             current_polygons = [poly.buffer(poly.area / buffer_factor) for poly in current_polygons]
