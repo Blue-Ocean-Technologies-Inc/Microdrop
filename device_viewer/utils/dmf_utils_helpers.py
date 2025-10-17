@@ -1,15 +1,22 @@
+import re
 from xml.etree import ElementTree as ET
 
 import numpy as np
 from shapely.geometry import Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
-from typing import List, Dict, Set
+from typing import List, Dict, Set, TypedDict
+
+from svg.path import parse_path
 
 from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, "DEBUG")
 
+
+DPI=96
+INCH_TO_MM = 25.4
+DOTS_TO_MM = INCH_TO_MM / DPI
 
 class PolygonNeighborFinder:
     """
@@ -175,6 +182,93 @@ def create_adjacency_dict(neighbours) -> dict:
 
     # Return the result as a standard dictionary.
     return dict(adj_dict)
+
+
+class ElectrodeDict(TypedDict):
+    channel: int
+    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
+
+class SVGProcessor:
+    """
+    Parses SVG files to extract path data for electrodes and connections,
+    respecting the original SVG coordinate system (top-left origin).
+    """
+    def __init__(self, filename: str):
+        """Initializes the processor by loading and parsing an SVG file."""
+        tree = ET.parse(filename)
+        self.root = tree.getroot()
+        # Bounding box attributes are initialized
+        self.min_x = self.min_y = self.max_x = self.max_y = None
+
+    @staticmethod
+    def _parse_path_string(d_string: str) -> np.ndarray:
+        """
+        Robustly parses an SVG path 'd' string into an array of vertex
+        coordinates using the original SVG coordinate system.
+
+        Args:
+            d_string: The string from the 'd' attribute of an SVG path.
+
+        Returns:
+            A NumPy array of shape (N, 2) with the path's vertex coordinates.
+        """
+        path = parse_path(d_string)
+        points = []
+        for segment in path:
+            # The endpoint attribute is a complex number (x + yj)
+            end_point = segment.end
+            # Extract real (x) and imag (y) parts directly without flipping
+            points.append((end_point.real, end_point.imag))
+        return np.array(points)
+
+    def _update_bounding_box(self, points_list: List[np.ndarray]):
+        """Efficiently calculates and updates the bounding box from a list of point arrays."""
+        if not points_list:
+            return
+        # Combine all points into a single large array for one-pass calculation
+        all_points = np.vstack(points_list)
+        self.min_x, self.min_y = all_points.min(axis=0)
+        self.max_x, self.max_y = all_points.max(axis=0)
+
+    def get_bounding_box(self):
+        return self.min_x, self.min_y, self.max_x, self.max_y
+
+    def svg_to_electrodes(self, group_element: ET.Element) -> Dict[str, ElectrodeDict]:
+        """
+        Converts path elements within an SVG group into an electrode dictionary,
+        applying transforms, scaling, and calculating the bounding box.
+        """
+        electrodes: Dict[str, ElectrodeDict] = {}
+        all_electrode_paths = []
+
+        # Parse the 'transform' attribute of the parent group
+        transform_str = group_element.attrib.get('transform', '')
+        match = re.search(r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)", transform_str)
+        # Apply the Y transform directly, without negation
+        transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
+
+        for element in group_element:
+            d_string = element.attrib.get("d", "")
+            element_id = element.attrib.get("id")
+            if not d_string or not element_id:
+                continue
+
+            # Parse the path using the original coordinate system
+            path_points = self._parse_path_string(d_string)
+
+            # Apply all transformations: translation and then scaling
+            transformed_path = (path_points + transform) * DOTS_TO_MM
+
+            channel_str = element.attrib.get('data-channels')
+            electrodes[element_id] = {
+                'channel': int(channel_str) if channel_str is not None else None,
+                'path': transformed_path
+            }
+            all_electrode_paths.append(transformed_path)
+
+        self._update_bounding_box(all_electrode_paths)
+        return electrodes
+
 
 
 if __name__ == "__main__":

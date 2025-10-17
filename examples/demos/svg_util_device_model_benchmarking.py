@@ -1,7 +1,7 @@
 import json
 import timeit
 import functools
-from typing import Optional
+from typing import Optional, List, Dict as typing_dict
 import pandas as pd
 import re
 import numpy as np
@@ -13,6 +13,7 @@ from typing import Union, TypedDict
 from matplotlib import pyplot as plt
 from shapely.geometry import Polygon, Point
 from shapely.geometry.linestring import LineString
+from svg.path import parse_path
 
 from traits.api import HasTraits, Float, Dict, Str
 
@@ -95,7 +96,6 @@ class SvgUtil(HasTraits):
         self.x_shift = None
         self.y_shift = None
         self.neighbours: dict[str, list[str]] = {}
-        self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
         self.polygons = None
         self.connections = {}
@@ -126,12 +126,12 @@ class SvgUtil(HasTraits):
                 self.set_fill_black(child)
                 self.electrodes = self.svg_to_electrodes(child)
                 self.polygons = self.get_electrode_polygons()
-            elif "ROI" in child.attrib.values():
-                self.roi = self.svg_to_paths(child)
+
             elif "Connections" in child.attrib.values():
                 print("Found 'Connections' layer, extracting neighbours from SVG.")
                 # The method now returns the neighbours dict directly
                 self.neighbours_extracted = self.extract_connections(root, line_layer='Connections')
+
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 # ... (metadata logic remains the same)
                 scale = child.find("scale")
@@ -312,35 +312,6 @@ class SvgUtil(HasTraits):
             except KeyError:
                 pass
 
-
-    def svg_to_paths(self, obj) -> list[np.ndarray]:
-        """
-        Converts the svg file to paths
-        """
-
-        paths = []
-        for path in obj:
-            path = path.attrib["d"]
-            moves = []
-            for match in self.path_commands.findall(path):
-                if ("M" in match) or ("L" in match):
-                    moves.append((float(match[1]), float(match[2])))
-                elif "H" in match:
-                    moves.append((float(match[4]), moves[-1][1]))
-                elif "V" in match:
-                    moves.append((moves[-1][0], (float(match[6]))))
-                elif "Z" in match:
-                    pass
-
-            paths.append(np.array(moves).reshape((-1, 1, 2)) * DOTS_TO_MM)
-
-        self.max_x = max([p[..., 0].max() for p in paths])
-        self.max_y = max([p[..., 1].max() for p in paths])
-        self.min_x = min([p[..., 0].min() for p in paths])
-        self.min_y = min([p[..., 1].min() for p in paths])
-
-        return paths
-
     # @timeit_benchmark(number=1, repeat=1)
     def svg_to_electrodes(self, obj: ET.Element) -> dict[str, ElectrodeDict]:
         """
@@ -508,21 +479,156 @@ class SvgUtil(HasTraits):
         return tree_query.get_polygon_neighbours()
 
 
-try:
-    from importlib.resources import as_file, files
-except ImportError:
-    from importlib_resources import as_file, files
+class SVGProcessor:
+    """
+    Parses SVG files to extract path data for electrodes and connections,
+    respecting the original SVG coordinate system (top-left origin).
+    """
+    def __init__(self, filename: str):
+        """Initializes the processor by loading and parsing an SVG file."""
+        tree = ET.parse(filename)
+        self.root = tree.getroot()
+        # Bounding box attributes are initialized
+        self.min_x = self.min_y = self.max_x = self.max_y = None
 
-device_repo = files('device_viewer.resources.devices')
+        # ### MODIFICATION: Logic now populates self.neighbours first ###
+        for child in self.root:
+            if "Device" in child.attrib.values():
+                self.electrodes = self.svg_to_electrodes(child)
+            elif "ROI" in child.attrib.values():
+                self.roi = self.svg_to_paths(child)
 
-device_120_pin_path = device_repo / "120_pin_array.svg"
-device_90_pin_path = device_repo / "90_pin_array.svg"
+    @staticmethod
+    def _parse_path_string(d_string: str) -> np.ndarray:
+        """
+        Robustly parses an SVG path 'd' string into an array of vertex
+        coordinates using the original SVG coordinate system.
 
-# @timeit_benchmark(number=1, repeat=1)
-def main():
-    # device_90_pin_model = SvgUtil(device_90_pin_path)
-    # device_120_pin_model = SvgUtil(device_120_pin_path)
-    device = Path.home() / "Sci-Bots" / "Microdrop" / "Devices" / "device.svg"
-    SvgUtil(device)
+        Args:
+            d_string: The string from the 'd' attribute of an SVG path.
 
-main()
+        Returns:
+            A NumPy array of shape (N, 2) with the path's vertex coordinates.
+        """
+        path = parse_path(d_string)
+        points = []
+        for segment in path:
+            # The endpoint attribute is a complex number (x + yj)
+            end_point = segment.end
+            # Extract real (x) and imag (y) parts directly without flipping
+            points.append((end_point.real, end_point.imag))
+        return np.array(points)
+
+    def _update_bounding_box(self, points_list: List[np.ndarray]):
+        """Efficiently calculates and updates the bounding box from a list of point arrays."""
+        if not points_list:
+            return
+        # Combine all points into a single large array for one-pass calculation
+        all_points = np.vstack(points_list)
+        self.min_x, self.min_y = all_points.min(axis=0)
+        self.max_x, self.max_y = all_points.max(axis=0)
+
+    def svg_to_paths(self, group_element: ET.Element) -> List[np.ndarray]:
+        """
+        Converts all path elements within a given SVG group ('g') element to
+        a list of NumPy arrays, applying scaling and calculating the bounding box.
+        """
+        paths = []
+        for element in group_element:
+            d_string = element.attrib.get("d", "")
+            if not d_string:
+                continue
+
+            # Parse the path using the original coordinate system
+            points = self._parse_path_string(d_string)
+
+            # Apply scaling and the required reshape
+            scaled_path = (points * DOTS_TO_MM).reshape((-1, 1, 2))
+            paths.append(scaled_path)
+
+        # Squeeze out the middle dimension for the bounding box helper
+        self._update_bounding_box([p.squeeze() for p in paths])
+        return paths
+
+    def svg_to_electrodes(self, group_element: ET.Element) -> typing_dict[str, ElectrodeDict]:
+        """
+        Converts path elements within an SVG group into an electrode dictionary,
+        applying transforms, scaling, and calculating the bounding box.
+        """
+        electrodes: typing_dict[str, ElectrodeDict] = {}
+        all_electrode_paths = []
+
+        # Parse the 'transform' attribute of the parent group
+        transform_str = group_element.attrib.get('transform', '')
+        match = re.search(r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)", transform_str)
+        # Apply the Y transform directly, without negation
+        transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
+
+        for element in group_element:
+            d_string = element.attrib.get("d", "")
+            element_id = element.attrib.get("id")
+            if not d_string or not element_id:
+                continue
+
+            # Parse the path using the original coordinate system
+            path_points = self._parse_path_string(d_string)
+
+            # Apply all transformations: translation and then scaling
+            transformed_path = (path_points + transform) * DOTS_TO_MM
+
+            channel_str = element.attrib.get('data-channels')
+            electrodes[element_id] = {
+                'channel': int(channel_str) if channel_str is not None else None,
+                'path': transformed_path
+            }
+            all_electrode_paths.append(transformed_path)
+
+        self._update_bounding_box(all_electrode_paths)
+        return electrodes
+
+
+if __name__ == '__main__':
+
+    try:
+        from importlib.resources import as_file, files
+    except ImportError:
+        from importlib_resources import as_file, files
+
+    device_repo = files('device_viewer.resources.devices')
+
+    device_120_pin_path = device_repo / "120_pin_array.svg"
+    device_90_pin_path = device_repo / "90_pin_array.svg"
+
+    # @timeit_benchmark(number=1, repeat=1)
+    def main():
+
+        def check_match(device1, device2 ):
+            match_old_electrodes = sum(
+                [np.all(sv.electrodes[idx]['path'][:-1] == device1.electrodes[idx]['path']) for idx in device2.electrodes]) == len(
+                device2.electrodes)
+
+            if (device1.min_x, device1.min_y, device1.max_x, device1.max_y) == (device2.min_x, device2.min_y, device2.max_x, device2.max_y):
+                match_bounds = True
+            else:
+                match_bounds = False
+
+            print("*" * 1000)
+            if match_old_electrodes and match_bounds:
+                print("GETTING SAME RESULTS")
+            print("*" * 1000)
+
+        # device = SvgUtil(device_90_pin_path)
+        # sv = SVGProcessor(device_90_pin_path)
+        #
+        # check_match(device, sv)
+        #
+        # device = SvgUtil(device_120_pin_path)
+        # sv = SVGProcessor(device_120_pin_path)
+        #
+        # check_match(device, sv)
+
+        device = SvgUtil(device_repo / "2x3device.svg")
+        sv = SVGProcessor(device_repo / "2x3device.svg")
+        check_match(device, sv)
+
+    main()

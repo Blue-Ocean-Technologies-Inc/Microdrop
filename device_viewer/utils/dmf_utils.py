@@ -9,7 +9,8 @@ from shapely.geometry import Polygon
 
 from traits.api import HasTraits, Float, Dict, Str
 
-from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict
+from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
+    SVGProcessor
 
 from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
@@ -17,11 +18,6 @@ logger = get_logger(__name__)
 DPI=96
 INCH_TO_MM = 25.4
 DOTS_TO_MM = INCH_TO_MM / DPI
-
-
-class ElectrodeDict(TypedDict):
-    channel: int
-    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
 
 
 class SvgUtil(HasTraits):
@@ -48,7 +44,6 @@ class SvgUtil(HasTraits):
         self.x_shift = None
         self.y_shift = None
         self.neighbours: dict[str, list[str]] = {}
-        self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
         self.polygons = {}
         self.connections = {}
@@ -69,18 +64,19 @@ class SvgUtil(HasTraits):
         self.get_device_paths(self._filename)
 
     def get_device_paths(self, filename):
-        tree = ET.parse(filename)
-        root = tree.getroot()
 
-        for child in root:
+        svg_processor = SVGProcessor(filename=filename)
+
+        for child in svg_processor.root:
             if "Device" in child.attrib.values():
                 self.set_fill_black(child)
-                self.electrodes = self.svg_to_electrodes(child)
+                self.electrodes = svg_processor.svg_to_electrodes(child)
+                self.min_x, self.min_y, self.max_x, self.max_y = svg_processor.get_bounding_box()
+
                 self.polygons = self.get_electrode_polygons()
-            elif "ROI" in child.attrib.values():
-                self.roi = self.svg_to_paths(child)
+
             elif "Connections" in child.attrib.values():
-                self.neighbours = self.extract_connections(root, line_layer='Connections')
+                self.neighbours = self.extract_connections(svg_processor.root, line_layer='Connections')
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
@@ -161,7 +157,7 @@ class SvgUtil(HasTraits):
 
     def extract_connections(self, root: ET.Element, line_layer: str = 'Connections',
                             line_xpath: Optional[str] = None, path_xpath: Optional[str] = None,
-                            namespaces: Optional[dict] = None, buffer_distance: float = None) -> dict:
+                            namespaces: Optional[dict] = None) -> dict:
         """
         Parses <line> and <path> elements from a layer to find connections
         (neighbours) between electrodes. Returns a dictionary mapping each
@@ -253,76 +249,3 @@ class SvgUtil(HasTraits):
                 element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
-
-    def svg_to_paths(self, obj) -> list[np.ndarray]:
-        """
-        Converts the svg file to paths
-        """
-
-        paths = []
-        for path in obj:
-            path = path.attrib["d"]
-            moves = []
-            for match in self.path_commands.findall(path):
-                if ("M" in match) or ("L" in match):
-                    moves.append((float(match[1]), float(match[2])))
-                elif "H" in match:
-                    moves.append((float(match[4]), moves[-1][1]))
-                elif "V" in match:
-                    moves.append((moves[-1][0], (float(match[6]))))
-                elif "Z" in match:
-                    pass
-
-            paths.append(np.array(moves).reshape((-1, 1, 2)) * INCH_TO_MM / DPI)
-
-        self.max_x = max([p[..., 0].max() for p in paths])
-        self.max_y = max([p[..., 1].max() for p in paths])
-        self.min_x = min([p[..., 0].min() for p in paths])
-        self.min_y = min([p[..., 1].min() for p in paths])
-
-        return paths
-
-    def svg_to_electrodes(self, obj: ET.Element) -> dict[str, ElectrodeDict]:
-        """
-        Converts the svg file to paths
-        """
-
-        electrodes: dict[str, ElectrodeDict] = {}
-        try:
-            pattern = r"translate\((?P<x>-?\d+\.\d+),(?P<y>-?\d+\.\d+)\)"
-            match = re.match(pattern, obj.attrib['transform'])
-            x = float(match.group('x'))
-            y = float(match.group('y'))
-            transform = np.array([x, y])
-        except KeyError:
-            transform = np.array([0, 0])
-
-        for element in list(obj):
-            path = element.attrib["d"]
-            moves = []
-            for match in self.path_commands.findall(path):
-                if ("M" in match) or ("L" in match):
-                    moves.append((float(match[1]), float(match[2])))
-                elif "H" in match:
-                    moves.append((float(match[4]), moves[-1][1]))
-                elif "V" in match:
-                    moves.append((moves[-1][0], (float(match[6]))))
-                elif "Z" in match:
-                    pass
-
-            try:
-                electrodes[element.attrib['id']] = {'channel': int(element.attrib['data-channels']),
-                                                    'path': (np.array(moves) + transform).reshape((-1, 2))}
-            except KeyError:
-                electrodes[element.attrib['id']] = {'channel': None,
-                                                    'path': (np.array(moves) + transform).reshape((-1, 2))}
-
-            # scale to mm
-            electrodes[element.attrib['id']]['path'] *= INCH_TO_MM / DPI
-
-        self.max_x = max([e['path'][..., 0].max() for e in electrodes.values()])
-        self.max_y = max([e['path'][..., 1].max() for e in electrodes.values()])
-        self.min_x = min([e['path'][..., 0].min() for e in electrodes.values()])
-        self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
-
-        return electrodes
