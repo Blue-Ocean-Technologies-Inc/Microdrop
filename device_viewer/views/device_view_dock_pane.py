@@ -117,7 +117,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-        self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
+        self.model = DeviceViewMainModel(undo_manager=self.undo_manager, preferences=self.device_viewer_preferences)
 
         if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
             self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])

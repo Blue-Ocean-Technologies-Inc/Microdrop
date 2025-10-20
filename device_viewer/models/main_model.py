@@ -1,19 +1,14 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Dict
 from pyface.undo.api import UndoManager
 import uuid
 
-from traits.has_traits import HasTraits
-
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
-from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from .route import RouteLayerManager
 from .electrodes import Electrodes
-from device_viewer.default_settings import default_alphas
 
-from dramatiq import get_broker
-from microdrop_utils.redis_manager import get_redis_hash_proxy
 from microdrop_utils._logger import get_logger
+from ..preferences import DeviceViewerPreferences
 
 logger = get_logger(__name__)
 
@@ -22,7 +17,7 @@ class DeviceViewMainModel(HasTraits):
     # Compose device view model using components
     routes = Instance(RouteLayerManager)
     electrodes = Instance(Electrodes)
-
+    preferences = Instance(DeviceViewerPreferences)
     # ---------------- Device View Traits -----------------------
 
     undo_manager = Instance(UndoManager)  # Undo manager
@@ -70,7 +65,7 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         # Initialize the alpha map with default values
-        self.alpha_map = [AlphaValue(key=key, alpha=default_alphas[key]) for key in default_alphas.keys()]
+        self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key]) for key in self.preferences.default_alphas.keys()]
 
     # ------------------------- Properties ------------------------
 
