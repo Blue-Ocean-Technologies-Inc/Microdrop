@@ -12,7 +12,7 @@ from envisage.ui.tasks.api import PreferencesPane
 
 from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
 from microdrop_utils.file_handler import safe_copy_file
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 

@@ -4,7 +4,7 @@ from traits.api import HasTraits, Str, Instance
 from PySide6.QtCore import Signal, QObject
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)

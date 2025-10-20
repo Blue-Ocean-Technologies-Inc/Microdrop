@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 

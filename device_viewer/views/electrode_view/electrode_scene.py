@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEv
 
 from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from .scale_edit_view import ScaleEditViewController
 
 logger = get_logger(__name__, level='DEBUG')

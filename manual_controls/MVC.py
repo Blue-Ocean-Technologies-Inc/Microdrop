@@ -4,7 +4,7 @@ from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase, 
     basic_listener_actor_routine, 

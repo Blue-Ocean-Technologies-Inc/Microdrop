@@ -3,7 +3,7 @@ from collections import defaultdict
 
 # local
 from ..utils.dmf_utils import SvgUtil
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 # enthought
 from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe

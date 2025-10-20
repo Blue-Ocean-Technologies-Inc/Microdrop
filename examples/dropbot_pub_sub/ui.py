@@ -9,7 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from examples.dropbot_pub_sub.dropbot_searcher import check_dropbot_devices_available
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 
 logger = get_logger(__name__)

@@ -14,7 +14,7 @@ from dramatiq.middleware import CurrentMessage
 
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 from .consts import (
     PKG, PGVA_CONNECTED, PGVA_DISCONNECTED, PGVA_PRESSURE_UPDATED, PGVA_VACUUM_UPDATED,

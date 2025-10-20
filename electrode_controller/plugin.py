@@ -8,7 +8,7 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 from .consts import PKG, PKG_name
 
 # microdrop imports
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from .services.electrode_state_change_service import ElectrodeStateChangeMixinService
 
 # Initialize logger

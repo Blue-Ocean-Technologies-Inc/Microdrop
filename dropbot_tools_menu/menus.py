@@ -2,7 +2,7 @@ from dropbot.hardware_test import ALL_TESTS
 from pyface.tasks.action.api import SMenu, TaskWindowAction
 from traits.api import Property, Directory
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 

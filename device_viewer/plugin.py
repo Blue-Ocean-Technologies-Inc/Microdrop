@@ -13,7 +13,7 @@ from pyface.action.schema.schema_addition import SchemaAddition
 # local imports
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 

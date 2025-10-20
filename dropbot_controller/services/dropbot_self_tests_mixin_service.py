@@ -15,7 +15,7 @@ from dropbot.self_test import (generate_report, plot_test_voltage_results,
 from traits.api import provides, HasTraits, Str, Instance
 
 from microdrop_utils.file_handler import open_html_in_browser
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import SHORTS_DETECTED
 

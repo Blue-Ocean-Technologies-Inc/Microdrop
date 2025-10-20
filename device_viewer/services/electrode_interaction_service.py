@@ -4,7 +4,7 @@ from pyface.qt.QtCore import QPointF
 from envisage.api import IApplication
 
 from device_viewer.models.electrodes import Electrode
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
