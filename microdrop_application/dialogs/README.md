@@ -94,7 +94,7 @@ result = dialog.show_dialog()
 ### Adding to Existing Logger
 
 ```python
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_application.dialogs import add_dialog_handler_to_logger
 
 # Add dialog capability to existing Microdrop logger

@@ -1,5 +1,4 @@
 from pathlib import Path
-import time
 
 from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
                                          ICON_HEADSET_MIC, ICON_INFO,
@@ -58,5 +57,3 @@ sidebar_stylesheet = """QPushButton {
     padding-left: 8px;
     color: %s;
 }"""
-
-EXPERIMENT_DIR = f"Exp_{time.strftime('%Y_%m_%d_%H_%M_%S')}"

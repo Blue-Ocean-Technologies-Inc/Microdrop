@@ -3,7 +3,7 @@ import time
 from typing import Dict, List, Optional
 from PySide6.QtCore import QObject, Signal, QTimer
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 logger = get_logger(__name__)

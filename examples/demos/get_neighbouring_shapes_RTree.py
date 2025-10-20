@@ -3,7 +3,7 @@ from shapely.geometry import Point, Polygon
 from shapely.strtree import STRtree
 from collections import defaultdict
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, "DEBUG")
 

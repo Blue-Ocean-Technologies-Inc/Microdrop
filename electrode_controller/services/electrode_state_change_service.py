@@ -6,7 +6,7 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
 
 # microdrop utils imports
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

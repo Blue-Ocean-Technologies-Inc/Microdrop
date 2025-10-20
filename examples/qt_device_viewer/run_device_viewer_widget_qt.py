@@ -11,7 +11,7 @@ from functools import partial
 from PySide6.QtWidgets import QApplication
 import sys
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 if not QApplication.instance():

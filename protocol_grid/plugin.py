@@ -14,7 +14,7 @@ from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPB
 from protocol_grid.services.advanced_mode_menu import advanced_mode_menu_factory
 
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 # This module's package.
 from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT

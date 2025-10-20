@@ -14,7 +14,7 @@ from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAM
                                   DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

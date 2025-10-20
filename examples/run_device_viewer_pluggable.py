@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, 
                                     FRONTEND_CONTEXT, BACKEND_CONTEXT, REQUIRED_CONTEXT, 
                                     DEFAULT_APPLICATION)
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_utils.font_helpers import load_font_family
 from microdrop_utils.root_dir_utils import get_project_root
 

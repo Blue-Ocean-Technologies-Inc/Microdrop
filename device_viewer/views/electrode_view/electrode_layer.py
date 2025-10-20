@@ -5,7 +5,7 @@ from pyface.qt.QtCore import QPointF
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 
 logger = get_logger(__name__)

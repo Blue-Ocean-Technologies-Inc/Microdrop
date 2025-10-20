@@ -4,7 +4,7 @@ import dramatiq
 import uuid
 
 from .consts import ACTOR_TOPIC_ROUTES, PKG, PKG_name
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
 
 # Initialize logger

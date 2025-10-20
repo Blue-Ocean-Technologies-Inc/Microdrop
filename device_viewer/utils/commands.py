@@ -3,7 +3,7 @@ from pyface.undo.abstract_command import AbstractCommand
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 import time
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

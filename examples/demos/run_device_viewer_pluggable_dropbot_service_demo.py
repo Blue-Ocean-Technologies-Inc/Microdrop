@@ -20,7 +20,7 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 # local helpers imports
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

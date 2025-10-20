@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QWidget, QPushButton, QGraphicsScene, QBoxLayout, 
 from device_viewer.models.electrodes import Electrodes
 from device_viewer.utils.auto_fit_graphics_view import AutoFitGraphicsView
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 import os
 

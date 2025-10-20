@@ -14,7 +14,7 @@ from .services.droplet_detection_mixin_service import DropletDetectionMixinServi
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 # Initialize logger
 logger = get_logger(__name__)
 

@@ -4,7 +4,7 @@ from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, C
 import base_node_rpc as bnr
 import functools as ft
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 connection_flags = {"connected": DROPBOT_CONNECTED, "disconnected": DROPBOT_DISCONNECTED}

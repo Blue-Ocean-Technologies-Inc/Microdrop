@@ -1,9 +1,13 @@
+import os
+import time
 import logging
+from pathlib import Path
 
+LOGFILE = f"application_logs{os.sep}application.log.{time.strftime('%Y-%m-%d_%H-%M-%S')}"
 MIN_APP_LOGLEVEL = 'WARNING'
 ROOT_LOGLEVEL = 'WARNING'
 
-DEV_MODE = False
+DEV_MODE = True
 
 # ANSI color codes
 COLORS = {
@@ -41,6 +45,10 @@ LEVELS = {
     "CRITICAL": logging.CRITICAL
 }
 
+
+ROOT_LOGGER = logging.getLogger()
+ROOT_LOGGER.setLevel(LEVELS[ROOT_LOGLEVEL])
+
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
         super().__init__(fmt, datefmt)
@@ -59,22 +67,45 @@ class ColoredFormatter(logging.Formatter):
         
         return super().format(record)
 
+def get_logger(name, level=MIN_APP_LOGLEVEL, log_file_path=LOGFILE, dev_mode=DEV_MODE):
 
-# Create formatters
-log_format = '%(asctime)s.%(msecs)03d [%(levelname)s:%(name)s]: %(message)s File "%(pathname)s", line %(lineno)d'
-date_format = r'%Y-%m-%d %H:%M:%S'
+    Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Create formatters
+    file_formatter = logging.Formatter(
+        '%(asctime)s.%(msecs)03d [%(levelname)s:%(name)s]: %(message)s '
+        'File "%(pathname)s", line %(lineno)d',
+        datefmt=r'%Y-%m-%d %H:%M:%S'
+    )
+    console_formatter = ColoredFormatter(
+        '%(asctime)s.%(msecs)03d [%(levelname)s:%(name)s]: %(message)s '
+        'File "%(pathname)s", line %(lineno)d',
+        datefmt=r'%Y-%m-%d %H:%M:%S'
+    )
 
-# Create formatters
-file_formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
-console_formatter = ColoredFormatter(fmt=log_format, datefmt=date_format)
+    # Create handlers
+    file_handler = logging.FileHandler(log_file_path, mode='a')
+    file_handler.setFormatter(file_formatter)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(console_formatter)
 
-def get_logger(name, level=MIN_APP_LOGLEVEL, dev_mode=DEV_MODE):
+    # Configure root logger
+    ROOT_LOGGER.handlers = []  # Clear existing handlers
+    ROOT_LOGGER.addHandler(file_handler)
+    ROOT_LOGGER.addHandler(console_handler)
 
     # Get the named logger
     logger = logging.getLogger(name)
-    #
+
     # if dev_mode is given, set log level to given level
     if dev_mode:
-        logger.setLevel(LEVELS[level])
+        level = LEVELS[level]
+
+    # otherwise, filter out based on min app log level
+    else:
+        level = max(LEVELS[MIN_APP_LOGLEVEL], LEVELS[level])
+
+    logger.setLevel(level)
 
     return logger

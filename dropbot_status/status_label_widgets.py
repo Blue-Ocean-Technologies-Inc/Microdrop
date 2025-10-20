@@ -2,7 +2,7 @@ from PySide6.QtGui import Qt, QPixmap
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

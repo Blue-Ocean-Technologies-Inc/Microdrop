@@ -32,7 +32,7 @@ from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
                      hamburger_btn_stylesheet, application_home_directory)
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 

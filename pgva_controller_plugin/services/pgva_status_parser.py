@@ -5,7 +5,7 @@ according to the official documentation.
 """
 
 from typing import Dict
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

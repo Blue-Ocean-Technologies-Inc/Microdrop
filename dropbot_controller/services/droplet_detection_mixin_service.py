@@ -9,7 +9,7 @@ import pandas as pd
 from traits.api import HasTraits, List, Str, Int, Float, provides
 
 from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pandas_helpers import map_series_to_array

@@ -10,7 +10,7 @@ from typing import List, Dict, Set, TypedDict, Optional, Any, Union
 
 from svg.path import parse_path
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__, "INFO")
 

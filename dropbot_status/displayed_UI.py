@@ -9,7 +9,7 @@ from dropbot_status.model import DropBotStatusModel
 from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits
 
 logger = get_logger(__name__)

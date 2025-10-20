@@ -8,7 +8,7 @@ from envisage.api import Plugin
 
 from .consts import PKG, PKG_name
 from .pgva_controller_base import PGVAControllerBase
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

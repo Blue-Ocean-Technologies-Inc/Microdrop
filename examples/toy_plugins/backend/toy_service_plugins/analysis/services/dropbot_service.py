@@ -7,7 +7,7 @@ from dramatiq import get_broker
 
 from ..interfaces.i_dropbot_service import IDropbotService
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 broker = get_broker()

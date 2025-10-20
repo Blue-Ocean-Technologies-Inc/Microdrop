@@ -11,7 +11,7 @@ from traits.api import HasTraits, Float, Dict, Str
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
     SVGProcessor
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 logger = get_logger(__name__)
 
 DPI=96

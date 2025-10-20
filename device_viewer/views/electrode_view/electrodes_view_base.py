@@ -4,7 +4,7 @@ import numpy as np
 from traits.observation.observe import observe
 
 # local imports
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 # enthought imports
 from traits.api import Instance, Array, Str

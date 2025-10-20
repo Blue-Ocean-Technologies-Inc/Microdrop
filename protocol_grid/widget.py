@@ -39,7 +39,7 @@ from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 
 logger = get_logger(__name__)
 

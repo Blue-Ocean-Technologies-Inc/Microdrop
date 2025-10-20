@@ -7,9 +7,9 @@ from device_viewer.models.perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 
+from microdrop_utils._logger import get_logger
 from ..preferences import DeviceViewerPreferences
 
-from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 class DeviceViewMainModel(HasTraits):

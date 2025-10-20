@@ -17,7 +17,7 @@ from pathlib import Path
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from microdrop_utils.status_bar_utils import set_status_bar_message
 from microdrop_style.button_styles import get_complete_stylesheet
 

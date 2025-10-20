@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, List, Optional, Set
 from PySide6.QtCore import QObject, Signal, QTimer
 
-from logger.logger_service import get_logger
+from microdrop_utils._logger import get_logger
 from protocol_grid.state.device_state import DeviceState
 
 logger = get_logger(__name__)
