@@ -8,7 +8,7 @@ from .consts import PKG, ACTOR_TOPIC_DICT
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 # Initialize logger
 logger = get_logger(__name__)

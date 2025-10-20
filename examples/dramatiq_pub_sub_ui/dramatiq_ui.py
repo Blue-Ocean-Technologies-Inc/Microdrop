@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMessageBox, QPushBu
 from PySide6.QtCore import Signal
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 

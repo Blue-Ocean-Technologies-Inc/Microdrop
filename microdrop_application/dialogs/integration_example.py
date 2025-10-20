@@ -5,7 +5,7 @@ This example demonstrates how to integrate the custom dialog system with the
 existing Microdrop application and logger.
 """
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from .logger_integration import add_dialog_handler_to_logger, DialogConfig
 from .base_message_dialog import BaseMessageDialog
 from .message_dialog_types import (

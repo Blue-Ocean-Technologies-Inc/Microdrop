@@ -15,7 +15,7 @@ from microdrop_utils.status_bar_utils import set_status_bar_message
 from .consts import PKG
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
                                                       basic_listener_actor_routine)
 

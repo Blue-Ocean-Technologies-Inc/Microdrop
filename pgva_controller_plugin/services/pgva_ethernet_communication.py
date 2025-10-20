@@ -4,7 +4,7 @@ Handles Modbus TCP communication with the PGVA pressure/vacuum generator.
 """
 import time
 from typing import Dict
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from .pgva_status_parser import PGVAStatusParser
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException

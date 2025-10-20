@@ -5,7 +5,7 @@ from traits.api import Instance, Any
 from PySide6.QtCore import Slot
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_controller_base import invoke_class_method
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message

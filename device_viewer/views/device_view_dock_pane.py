@@ -49,7 +49,7 @@ from .route_selection_view.route_selection_view import RouteLayerView
 
 # utils imports
 from microdrop_utils.file_handler import safe_copy_file
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message

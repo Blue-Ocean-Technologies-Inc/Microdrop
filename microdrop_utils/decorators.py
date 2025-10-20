@@ -4,7 +4,7 @@ import threading
 from typing import Any, Callable, TypeVar, cast
 
 from microdrop_utils.timestamped_message import TimestampedMessage
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
