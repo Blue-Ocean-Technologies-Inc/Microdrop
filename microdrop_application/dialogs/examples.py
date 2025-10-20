@@ -150,7 +150,7 @@ def example_global_logger_integration():
 def example_application_integration():
     """Demonstrate integration with the existing Microdrop logger."""
     
-    from microdrop_utils._logger import get_logger
+    from logger.logger_service import get_logger
     
     # Get the existing application logger
     logger = get_logger(__name__)

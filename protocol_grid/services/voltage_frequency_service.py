@@ -1,5 +1,5 @@
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 
 logger = get_logger(__name__)

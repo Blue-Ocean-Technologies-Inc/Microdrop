@@ -5,7 +5,7 @@ from pyface.tasks.dock_pane import DockPane
 # local imports
 from .widget import PGCWidget
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 
 from .consts import PKG, PKG_name
 

@@ -5,7 +5,7 @@ from serial.tools.list_ports import grep
 from dropbot.self_test import generate_report, self_test
 import dropbot as db
 
-from microdrop_utils._logger import get_logger
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 

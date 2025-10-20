@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Str
+from traits.etsconfig.api import ETSConfig
+from traits.api import Bool, Str, Directory
 from traitsui.api import VGroup, View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
@@ -29,6 +32,15 @@ class MicrodropPreferences(PreferencesHelper):
     # Whether to always apply the default application-level layout.
     # See TasksApplication for more information.
     always_use_default_layout = Bool
+
+    EXPERIMENTS_DIR = Directory()
+
+    def _EXPERIMENTS_DIR_default(self) -> Path:
+        default_dir = Path(ETSConfig.user_data) / "Experiments"
+
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+        return default_dir
 
 
 microdrop_tab = PreferencesCategory(
