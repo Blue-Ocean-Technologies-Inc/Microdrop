@@ -184,27 +184,19 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model.routes.layers.items.route.route.items")
     @observe("model.routes.layers.items")
     @observe("model.routes.autoroute_layer.route.route.items")
-    @observe("model.alpha_map.items.[alpha, visible]")
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
-    
+
     @observe("model.electrodes.channels_states_map.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
     @observe("electrode_hovered")
-    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
 
-    @observe("model.alpha_map.items.[alpha, visible]")
-    def electrode_alpha_change(self, event):
-        if self.electrode_view_layer:
-            self.electrode_view_layer.redraw_electrode_lines(self.model)
-
     @observe("model.electrodes.electrodes.items.channel")
-    @observe("model.alpha_map.items.[alpha, visible]")
     def electrode_channel_change(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
@@ -224,7 +216,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
                 self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
             self.preferences.set("camera.transformation", qtransform_serialize(self.model.camera_perspective.transformation))
-    
+
     @observe("model.mode")
     def clear_prespective_rect_on_mode_change(self, event):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
@@ -239,3 +231,25 @@ class ElectrodeInteractionControllerService(HasTraits):
     def electrode_area_scale_edited(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_all_electrode_tooltips()
+
+    @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
+    def _alpha_change(self, event):
+
+        changed_key = event.object.key
+
+        if changed_key == "electrode_outline" and self.electrode_view_layer:
+            self.electrode_view_layer.redraw_electrode_lines(self.model)
+
+        if changed_key == "electrode_fill":
+            self.electrode_state_recolor(None)
+
+        if changed_key == "electrode_text":
+            self.electrode_channel_change(None)
+
+        if changed_key == "routes":
+            self.route_redraw(None)
+
+
+
+
+

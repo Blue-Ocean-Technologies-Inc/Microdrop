@@ -17,6 +17,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+from ..models.alpha import AlphaValue
 ##### local imports ######
 from ..models.electrodes import Electrodes
 from ..preferences import DeviceViewerPreferences
@@ -117,7 +118,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-        self.model = DeviceViewMainModel(undo_manager=self.undo_manager)
+        self.model = DeviceViewMainModel(undo_manager=self.undo_manager, preferences=self.device_viewer_preferences)
 
         if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
             self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
@@ -491,7 +492,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
         self.opencv_pixmap = QGraphicsPixmapItem()
         self.opencv_pixmap.setZValue(-100)  # Set a low z-value to ensure the pixmap is behind other items
-        self.opencv_pixmap.setVisible(False)  # Initially hide the pixmap item
+        self.opencv_pixmap.setVisible(True)  # Initially hide the pixmap item
+        self.video_item.setOpacity(self.model.get_alpha("video"))
+        self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
         scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
         self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
@@ -610,7 +613,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
         self.remove_current_layer()
-        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model)
+        # use model method to figure out default alpha values taking into account visible settings.
+        default_alphas = {key: self.model.get_alpha(key) for key in self.device_viewer_preferences.default_alphas}
+        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
         self.scene.setSceneRect(self.scene.itemsBoundingRect())
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -744,12 +749,19 @@ class DeviceViewerDockPane(TraitsDockPane):
                         self.scene.height() / self.model.camera_perspective.camera_resolution[1])
             self.opencv_pixmap.setTransform(scale * self.model.camera_perspective.transformation)
 
-    @observe("model.alpha_map.items.[alpha, visible]")
+    @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
-        if self.video_item:
-            self.video_item.setOpacity(self.model.get_alpha("video"))
-        if self.opencv_pixmap:
-            self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
+
+        if isinstance(event.object, AlphaValue):
+
+            changed_key = event.object.key
+
+            if changed_key == "video" and self.video_item:
+                self.video_item.setOpacity(self.model.get_alpha("video"))
+
+            if changed_key == "opencv_pixmap" and self.opencv_pixmap:
+                self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
+
 
 def create_line():
     line = QFrame()

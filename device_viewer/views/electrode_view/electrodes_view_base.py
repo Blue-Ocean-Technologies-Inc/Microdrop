@@ -149,7 +149,7 @@ class ElectrodeView(QGraphicsPathItem):
     - The view requires an electrode model to be passed to it.
     """
 
-    def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, parent=None):
+    def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, default_alphas, parent=None):
         super().__init__(parent)
 
         self.state_map = { # Maps electrode states to colors
@@ -160,7 +160,6 @@ class ElectrodeView(QGraphicsPathItem):
 
         self.electrode = electrode
         self.id = id_
-        self.alphas = default_alphas
 
         self.path = QPainterPath()
         self.path.moveTo(path_data[0][0], path_data[0][1])
@@ -171,8 +170,7 @@ class ElectrodeView(QGraphicsPathItem):
 
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
-        self.pen = QPen(self.pen_color, 1)  # line color outline
-        self.setPen(self.pen)
+        self.update_line_alpha(default_alphas.get('electrode_outline',1.0))
 
         # Brush for the fill
         self.update_color(False)
@@ -183,7 +181,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.text_path.setDefaultTextColor(self.text_color)
         self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
                               np.min(path_data[:, 1]), np.max(path_data[:, 1])]
-        self._fit_text_in_path() # Called again by electrode_layer set the proper alphas using the model
+        self._fit_text_in_path(alpha=default_alphas.get('electrode_text', 1.0)) # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
