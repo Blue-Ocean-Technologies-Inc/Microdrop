@@ -1,9 +1,7 @@
-from email.charset import QP
 from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
 from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
-from pyface.qt.QtCore import Qt, QPointF
+from pyface.qt.QtCore import QPointF
 
-from device_viewer.preferences import DeviceViewerPreferences
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
