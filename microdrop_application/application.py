@@ -6,7 +6,7 @@ from pathlib import Path
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 
 from PySide6.QtCore import QEvent
-from traits.etsconfig.etsconfig import ETSConfig
+from traits.etsconfig.api import ETSConfig
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -26,11 +26,10 @@ from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QFont
 
-from microdrop_utils.font_helpers import load_font_family
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from .consts import (scibots_icon_path, sidebar_menu_options, 
-                     hamburger_btn_stylesheet, application_home_directory)
+                     hamburger_btn_stylesheet, EXPERIMENT_DIR)
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -79,20 +78,13 @@ class MicrodropApplication(TasksApplication):
     # Whether to restore the previous application-level layout when the applicaton is started.
     always_use_default_layout = Property(Bool)
 
+    # experiments directory
+    experiments_directory = Property(Directory)
+    current_experiment_directory = Property(Directory)
+
     # branding
     icon = Instance(ImageResource)
     splash_screen = Instance(SplashScreen)
-
-    def _icon_default(self):
-        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon.png'
-        return ImageResource(str(icon_path))
-
-    def _splash_screen_default(self):
-        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo_FHD.png'
-        return SplashScreen(
-            image=ImageResource(str(splash_image_path)),
-            text="Microdrop-Next-Gen v.alpha"
-        )
 
     #### 'Application' interface ####################################
 
@@ -125,6 +117,17 @@ class MicrodropApplication(TasksApplication):
         """
         return MicrodropPreferences(preferences=self.preferences)
 
+    def _icon_default(self):
+        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon.png'
+        return ImageResource(str(icon_path))
+
+    def _splash_screen_default(self):
+        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo_FHD.png'
+        return SplashScreen(
+            image=ImageResource(str(splash_image_path)),
+            text="Microdrop-Next-Gen v.alpha"
+        )
+
     #### Trait property getter/setters ########################################
 
     # the _get and _set tags in the methods are used to define a getter and setter for a trait property.
@@ -132,9 +135,20 @@ class MicrodropApplication(TasksApplication):
     def _get_always_use_default_layout(self):
         return self.preferences_helper.always_use_default_layout
 
+    def _get_experiments_directory(self) -> Path:
+        return Path(self.preferences_helper.EXPERIMENTS_DIR)
+
+    def _get_current_experiment_directory(self) -> Path:
+        return self.experiments_directory / EXPERIMENT_DIR
+
     @observe('application_initialized')
-    def _on_application_started(self, event):
+    def _on_application_initialized(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
+
+    ############################# Initialization ############################################################
+    def traits_init(self):
+        self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Initialized microdrop application. Current experiment directory: {self.current_experiment_directory}")
 
     #### Handler for Layout Restore Errors if any ##########################
     def start(self):
