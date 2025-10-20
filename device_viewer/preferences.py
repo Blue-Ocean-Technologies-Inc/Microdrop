@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE
-from .default_settings import default_alphas
+from .default_settings import default_alphas, default_visibility
 
 
 class DeviceViewerPreferences(PreferencesHelper):
@@ -37,6 +37,7 @@ class DeviceViewerPreferences(PreferencesHelper):
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
 
+    default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
 
     DEFAULT_SVG_FILE = File
