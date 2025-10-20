@@ -3,6 +3,7 @@ from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
 from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
 from pyface.qt.QtCore import Qt, QPointF
 
+from device_viewer.preferences import DeviceViewerPreferences
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
@@ -20,7 +21,7 @@ class ElectrodeLayer():
     - The view is responsible for updating the properties of all the electrode views contained in bulk.
     """
 
-    def __init__(self, electrodes):
+    def __init__(self, electrodes, default_alphas: dict[int, float]):
         # Create the connection and electrode items
         self.connection_items = {}
         self.electrode_views = {}
@@ -37,7 +38,7 @@ class ElectrodeLayer():
         # Create the electrode views for each electrode from the electrodes model and add them to the group
         for electrode_id, electrode in electrodes.electrodes.items():
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
-                                                               modifier * electrode.path)
+                                                               modifier * electrode.path, default_alphas=default_alphas)
             self.electrode_endpoints[electrode_id] = ElectrodeEndpointItem(electrode_id,
                     QPointF(self.svg.electrode_centers[electrode_id][0] * modifier, self.svg.electrode_centers[electrode_id][1] * modifier), 8)
 

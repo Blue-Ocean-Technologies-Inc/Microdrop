@@ -232,7 +232,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_all_electrode_tooltips()
 
-    @observe("model.alpha_map.items.[alpha, visible]")
+    @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
 
         changed_key = event.object.key
