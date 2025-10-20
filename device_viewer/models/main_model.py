@@ -183,6 +183,7 @@ class DeviceViewMainModel(HasTraits):
             if self.filler_capacitance_over_area:
                 self.filler_capacitance_over_area /= event.new
 
+    ### update default alpha values with current values for persistence
     @observe("alpha_map.items.[alpha, visible]")
     def _alpha_values_changed(self, event):
         change_type = event.name

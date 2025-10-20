@@ -17,6 +17,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+from ..models.alpha import AlphaValue
 ##### local imports ######
 from ..models.electrodes import Electrodes
 from ..preferences import DeviceViewerPreferences
@@ -751,13 +752,15 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
 
-        changed_key = event.object.key
+        if isinstance(event.object, AlphaValue):
 
-        if changed_key == "video" and self.video_item:
-            self.video_item.setOpacity(self.model.get_alpha("video"))
+            changed_key = event.object.key
 
-        if changed_key == "opencv_pixmap" and self.opencv_pixmap:
-            self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
+            if changed_key == "video" and self.video_item:
+                self.video_item.setOpacity(self.model.get_alpha("video"))
+
+            if changed_key == "opencv_pixmap" and self.opencv_pixmap:
+                self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
 
 def create_line():
