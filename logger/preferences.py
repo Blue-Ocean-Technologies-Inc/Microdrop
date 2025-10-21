@@ -63,6 +63,7 @@ class LoggerPreferencesPane(PreferencesPane):
                 logger_view,
                 label="Logger Settings",
                 show_border=True,
+                style_sheet=preferences_group_style_sheet,
             ),
         )
 
