@@ -7,10 +7,11 @@ from envisage.api import Plugin
 from envisage.ids import PREFERENCES_PANES
 from traits.api import List, observe
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from .dramatiq_listener import DramatiqLoggerControl
 from .logger_service import LEVELS, file_formatter, console_formatter
 from .preferences import LoggerPreferences
-from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT
+from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT, CHANGE_LOG_LEVEL
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES

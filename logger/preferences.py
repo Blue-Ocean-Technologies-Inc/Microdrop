@@ -6,6 +6,8 @@ from traitsui.api import VGroup, View, Item, FileEditor, EnumEditor, Group, Hand
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
+from logger.consts import CHANGE_LOG_LEVEL
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
 from microdrop_application.preferences import microdrop_tab
 
@@ -67,7 +69,12 @@ class LoggerPreferencesPane(PreferencesPane):
             ),
         )
 
-    @observe("model:level")
-    def log_level_changed(self, event):
-        logger.critical(f"Logging level changed from {event.old} to {event.new}")
-        logging.getLogger().setLevel(LEVELS[event.new])
+    def apply(self, info=None):
+        super().apply(info)
+        ROOT_LOGGER = logging.getLogger()
+
+        # check if pane log level different from model and publish event accoridngly.
+        if LEVELS[self.model.level.upper()] != ROOT_LOGGER.getEffectiveLevel():
+            logger.info(f"Log level change. Publish log level: {self.model.level}")
+            ROOT_LOGGER.setLevel(LEVELS[self.model.level])
+            publish_message(self.model.level, CHANGE_LOG_LEVEL)
