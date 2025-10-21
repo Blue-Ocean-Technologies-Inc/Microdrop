@@ -56,7 +56,7 @@ class DropbotSelfTestsMixinService(HasTraits):
     results_dialog = Instance(ResultsDialogAction)
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self._self_test_cancelled = False
 
     def cancel_self_test(self):

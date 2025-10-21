@@ -3,6 +3,8 @@ from traits.api import Instance, Bool
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
+from ..preferences import DropbotPreferences
+
 
 class IDropbotControllerBase(IDramatiqControllerBase):
     """
@@ -16,6 +18,9 @@ class IDropbotControllerBase(IDramatiqControllerBase):
              "connection is not there, no commands will be processed except searching for a dropbot "
              "connection"
     )
+    preferences = Instance(DropbotPreferences,
+                           desc="The preferences object for the dropbot controller service"
+                           )
 
     def _on_dropbot_proxy_connected(self):
         """
