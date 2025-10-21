@@ -5,9 +5,9 @@ from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routin
 
 from traits.api import Callable
 
-from consts import listener_name
+from .consts import listener_name
 
-from logger_service import get_logger, LEVELS
+from .logger_service import get_logger, LEVELS
 import logging
 logger = get_logger(__name__)
 
