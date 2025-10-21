@@ -73,8 +73,10 @@ class LoggerPreferencesPane(PreferencesPane):
         super().apply(info)
         ROOT_LOGGER = logging.getLogger()
 
-        # check if pane log level different from model and publish event accoridngly.
+        # check if pane log level different from model.
         if LEVELS[self.model.level.upper()] != ROOT_LOGGER.getEffectiveLevel():
             logger.info(f"Log level change. Publish log level: {self.model.level}")
             ROOT_LOGGER.setLevel(LEVELS[self.model.level])
-            publish_message(self.model.level, CHANGE_LOG_LEVEL)
+
+        # publish log level everytime in case backend is new and not synced.
+        publish_message(self.model.level, CHANGE_LOG_LEVEL)
