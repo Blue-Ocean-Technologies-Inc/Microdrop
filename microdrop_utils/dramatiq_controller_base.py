@@ -33,8 +33,7 @@ class DramatiqControllerBase(HasTraits):
     Example:
         >>> class MyController(DramatiqControllerBase):
         ...     # Return a listener actor method if one is not provided
-        ...     def _listener_actor_method_default(self, message: str,
-        ...                                      topic: str) -> None:
+        ...     def _listener_actor_method_default(self):
         ...         def listener_actor_method(self, message: str,
         ...                                 topic: str) -> None:
         ...             print(f"Processing {message} from {topic}")
