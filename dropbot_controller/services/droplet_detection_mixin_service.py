@@ -1,25 +1,21 @@
 import json
 import time
 from contextlib import contextmanager
-from typing import Dict, Generator, List, Optional, Tuple
+from typing import Generator, Optional
 
-import dramatiq
 import numpy as np
 import pandas as pd
 from traits.api import HasTraits, List, Str, Int, Float, provides
 
-from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pandas_helpers import map_series_to_array
-from microdrop_utils.redis_manager import get_redis_hash_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from dropbot_controller.consts import (
     DROPLETS_DETECTED,
     DROPLET_DETECTION_FREQUENCY,
 )
-from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
 logger = get_logger(__name__)
 
