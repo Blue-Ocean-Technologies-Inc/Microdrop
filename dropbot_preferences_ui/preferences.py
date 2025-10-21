@@ -63,7 +63,7 @@ class DropbotPreferencesPane(PreferencesPane):
 
     @observe("model:*")
     def publish_preference_change(self, event):
-        print(event)
+        logger.info(event)
 
         if event.new != event.old:
             msg = json.dumps({event.name: event.new})

@@ -11,6 +11,7 @@ from .services.dropbot_monitor_mixin_service import DropbotMonitorMixinService
 from .services.dropbot_states_setting_mixin_service import DropbotStatesSettingMixinService
 from .services.dropbot_self_tests_mixin_service import DropbotSelfTestsMixinService
 from .services.droplet_detection_mixin_service import DropletDetectionMixinService
+from .services.dropbot_settings_change import DropbotChangeSettingsService
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -36,6 +37,7 @@ class DropbotControllerPlugin(Plugin):
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_set_states_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_self_test_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_droplet_detection_service),
+            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_dropbot_change_settings_service),
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
@@ -56,6 +58,10 @@ class DropbotControllerPlugin(Plugin):
     def _create_droplet_detection_service(self, *args, **kwargs):
         """Returns a droplet detection mixin service for detecting droplets on electrodes."""
         return DropletDetectionMixinService
+
+    def _create_dropbot_change_settings_service(self, *args, **kwargs):
+        """Returns a service to change settings for dropbot system"""
+        return DropbotChangeSettingsService
 
     def start(self):
         """ Initialize the dropbot on plugin start """
