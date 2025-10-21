@@ -1,5 +1,5 @@
 from envisage.api import ServiceOffer
-from envisage.ids import SERVICE_OFFERS
+from envisage.ids import SERVICE_OFFERS, PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from envisage.plugin import Plugin
 from traits.api import List
 
@@ -60,6 +60,8 @@ class DropbotControllerPlugin(Plugin):
     def start(self):
         """ Initialize the dropbot on plugin start """
 
+        from .preferences import DropbotPreferences
+
         # Note that we always offer the service via its name, but look it up via the actual protocol.
         from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
@@ -72,6 +74,7 @@ class DropbotControllerPlugin(Plugin):
             pass
 
         self.dropbot_controller = DropbotController()
+        self.dropbot_controller.preferences = DropbotPreferences()
 
     def stop(self):
         """Cleanup when the plugin is stopped."""
