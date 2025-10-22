@@ -12,7 +12,7 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.decorators import debounce
-from microdrop_utils.timestamped_message import TimestampedMessage
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
 from dropbot_controller.consts import (

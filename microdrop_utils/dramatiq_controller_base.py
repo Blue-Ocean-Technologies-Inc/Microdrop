@@ -13,7 +13,7 @@ from traits.api import Instance, Str, provides, HasTraits, Callable
 from logger.logger_service import get_logger
 
 from .i_dramatiq_controller_base import IDramatiqControllerBase
-from .timestamped_message import TimestampedMessage
+from .datetime_helpers import TimestampedMessage
 
 logger = get_logger(__name__)
 
