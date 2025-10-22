@@ -13,8 +13,6 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-from microdrop_style.text_styles import preferences_group_style_sheet
-
 from dropbot_controller.preferences import DropbotPreferences
 from dropbot_controller.consts import CHANGE_SETTINGS
 

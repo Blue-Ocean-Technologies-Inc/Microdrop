@@ -24,7 +24,6 @@ REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
 DROPBOT_CONNECTED = 'dropbot/signals/connected'
 DROPBOT_DISCONNECTED = 'dropbot/signals/disconnected'
 DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
-SETTINGS_CHANGED = 'dropbot/signals/settings_changed'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
 START_DEVICE_MONITORING = "dropbot/requests/start_device_monitoring"
