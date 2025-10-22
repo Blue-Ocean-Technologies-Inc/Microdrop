@@ -54,7 +54,7 @@ class MicrodropBackendApplication(Application):
         # try to get experiment directory from app globals
         globals = get_microdrop_redis_globals_manager()
 
-        current_exp_dir = globals["experiment_directory"]
+        current_exp_dir = globals.get("experiment_directory", None)
 
         if current_exp_dir is None:
             current_exp_dir = EXPERIMENT_DIR
