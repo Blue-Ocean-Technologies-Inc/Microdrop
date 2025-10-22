@@ -43,7 +43,7 @@ class LoggerPlugin(Plugin):
         preferred_log_level = LEVELS.get(LoggerPreferences().level, "INFO")
 
         # Create handlers
-        file_handler = logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id}.uuid_node_{uuid.getnode()}.pid_{os.getpid()}log", mode='a')
+        file_handler = logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id}.uuid_node_{uuid.getnode()}.pid_{os.getpid()}.log", mode='a')
         file_handler.setFormatter(file_formatter)
 
         console_handler = logging.StreamHandler()
