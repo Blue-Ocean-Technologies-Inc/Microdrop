@@ -1,5 +1,5 @@
 from envisage.api import ServiceOffer
-from envisage.ids import SERVICE_OFFERS, PREFERENCES_CATEGORIES, PREFERENCES_PANES
+from envisage.ids import SERVICE_OFFERS
 from envisage.plugin import Plugin
 from traits.api import List
 
