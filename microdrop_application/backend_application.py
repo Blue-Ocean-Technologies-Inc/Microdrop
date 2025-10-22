@@ -1,7 +1,7 @@
 # sys imports
 from pathlib import Path
 
-from .helpers import sync_redis_globals
+from .helpers import get_microdrop_redis_globals_manager
 # Local imports.
 from .preferences import MicrodropPreferences
 
@@ -52,9 +52,15 @@ class MicrodropBackendApplication(Application):
 
     def _get_current_experiment_directory(self) -> Path:
         # try to get experiment directory from app globals
-        exp_dir = sync_redis_globals(key="experiment_directory", set_value=EXPERIMENT_DIR)
+        globals = get_microdrop_redis_globals_manager()
 
-        return self.experiments_directory / exp_dir
+        current_exp_dir = globals["experiment_directory"]
+
+        if current_exp_dir is None:
+            current_exp_dir = EXPERIMENT_DIR
+            globals["experiment_directory"] = EXPERIMENT_DIR
+
+        return self.experiments_directory / current_exp_dir
 
     ############################# Initialization ############################################################
     def traits_init(self):

@@ -10,7 +10,7 @@ from traits.etsconfig.api import ETSConfig
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .helpers import sync_redis_globals
+from .helpers import get_microdrop_redis_globals_manager
 # Local imports.
 from .preferences import MicrodropPreferences
 
@@ -141,9 +141,15 @@ class MicrodropApplication(TasksApplication):
 
     def _get_current_experiment_directory(self) -> Path:
         # try to get experiment directory from app globals
-        exp_dir = sync_redis_globals(key="experiment_directory", set_value=EXPERIMENT_DIR)
+        globals = get_microdrop_redis_globals_manager()
 
-        return self.experiments_directory / exp_dir
+        current_exp_dir = globals["experiment_directory"]
+
+        if current_exp_dir is None:
+            current_exp_dir = EXPERIMENT_DIR
+            globals["experiment_directory"] = EXPERIMENT_DIR
+
+        return self.experiments_directory / current_exp_dir
 
     @observe('application_initialized')
     def _on_application_initialized(self, event):
