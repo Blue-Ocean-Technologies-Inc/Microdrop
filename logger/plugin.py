@@ -1,20 +1,17 @@
 # Standard library imports.
 import logging
-from pathlib import Path
+import uuid
+import os
 
 # Enthought library imports.
 from envisage.api import Plugin
 from envisage.ids import PREFERENCES_PANES
 from traits.api import List, observe
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .dramatiq_listener import DramatiqLoggerControl
 from .logger_service import LEVELS, file_formatter, console_formatter
 from .preferences import LoggerPreferences
-from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT, CHANGE_LOG_LEVEL
+from .consts import PKG, PKG_name
 
-# microdrop imports
-from message_router.consts import ACTOR_TOPIC_ROUTES
 
 
 class LoggerPlugin(Plugin):
@@ -30,8 +27,6 @@ class LoggerPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
     # views = List(contributes_to=VIEWS)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
-    # This plugin contributes some actors that can be called using certain routing keys.
-    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     ###########################################################################
     # Protected interface.
@@ -48,7 +43,7 @@ class LoggerPlugin(Plugin):
         preferred_log_level = LEVELS.get(LoggerPreferences().level, "INFO")
 
         # Create handlers
-        file_handler = logging.FileHandler(self.application.current_experiment_directory / "microdrop_app.log", mode='a')
+        file_handler = logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id}.uuid_node_{uuid.getnode()}.pid_{os.getpid()}log", mode='a')
         file_handler.setFormatter(file_formatter)
 
         console_handler = logging.StreamHandler()
@@ -60,9 +55,6 @@ class LoggerPlugin(Plugin):
         ROOT_LOGGER.handlers = []  # Clear existing handlers
         ROOT_LOGGER.addHandler(file_handler)
         ROOT_LOGGER.addHandler(console_handler)
-
-        # start dramatiq listener
-        self.dramatiq_listener = DramatiqLoggerControl()
 
     @observe("application:current_experiment_directory")
     def _current_exp_dir_changed(self, event):

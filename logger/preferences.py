@@ -1,14 +1,11 @@
 from apptools.preferences.api import PreferencesHelper
 
-from traits.api import Enum, observe
-from traitsui.api import VGroup, View, Item, FileEditor, EnumEditor, Group, Handler
+from traits.api import Enum
+from traitsui.api import View, Item,EnumEditor, Group
 
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from logger.consts import CHANGE_LOG_LEVEL
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
 from microdrop_application.preferences import microdrop_tab
 
 import logging
@@ -73,11 +70,7 @@ class LoggerPreferencesPane(PreferencesPane):
         super().apply(info)
         ROOT_LOGGER = logging.getLogger()
 
-        # check if pane log level different from model.
+        # check if pane log level different from current log level.
         if LEVELS[self.model.level.upper()] != ROOT_LOGGER.getEffectiveLevel():
             logger.info(f"Log level change. Publish log level: {self.model.level}")
             ROOT_LOGGER.setLevel(LEVELS[self.model.level])
-
-        # publish log level everytime in case backend is new and not synced.
-        logger.debug(f"Log level published: {self.model.level}")
-        publish_message(self.model.level, CHANGE_LOG_LEVEL)

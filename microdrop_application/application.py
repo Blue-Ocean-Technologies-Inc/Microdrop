@@ -48,7 +48,7 @@ class MicrodropApplication(TasksApplication):
     #### 'IApplication' interface #############################################
 
     # The application's globally unique identifier.
-    id = "microdrop.app"
+    id = "microdrop.frontend.app"
 
     # The application's user-visible name.
     name = "Microdrop Next Gen"

@@ -1,20 +1,16 @@
 # sys imports
-
 from pathlib import Path
 
-from dramatiq import get_broker
-from traits.etsconfig.api import ETSConfig
-
-from microdrop_utils.redis_manager import get_redis_hash_proxy
 from .helpers import sync_redis_globals
 # Local imports.
 from .preferences import MicrodropPreferences
 
 # Enthought library imports.
 from envisage.api import Application
+from traits.etsconfig.api import ETSConfig
 from traits.api import Instance, Property, Directory
 
-from .consts import EXPERIMENT_DIR, APP_GLOBALS_REDIS_HASH
+from .consts import EXPERIMENT_DIR
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -32,7 +28,7 @@ class MicrodropBackendApplication(Application):
     #### 'IApplication' interface #############################################
 
     # The application's globally unique identifier.
-    id = "microdrop_backend.app"
+    id = "microdrop.backend.app"
 
     # The application's user-visible name.
     name = "Microdrop Next Gen Backend"
