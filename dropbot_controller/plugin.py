@@ -81,11 +81,11 @@ class DropbotControllerPlugin(Plugin):
             pass
 
         self.dropbot_controller = DropbotController()
-        self.dropbot_controller.preferences = DropbotPreferences()
+        self.dropbot_controller.preferences = DropbotPreferences(preferences=self.application.preferences)
 
-        # push values to redis globals
+        # push all preferences to globals
         app_globals = get_microdrop_redis_globals_manager()
-        app_globals.update(DropbotPreferences.preferences_name_map)
+        app_globals.update(self.dropbot_controller.preferences.preferences_name_map)
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

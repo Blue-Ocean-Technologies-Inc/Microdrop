@@ -4,6 +4,7 @@ from traits.api import provides, HasTraits, Str
 from traits.has_traits import observe
 
 from logger.logger_service import get_logger
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 logger = get_logger(__name__, "DEBUG")
 
@@ -39,3 +40,10 @@ class DropbotChangeSettingsService(HasTraits):
                     return
 
         logger.warning(f"Proxy connection Missing. {event.name.title()} request Denied.")
+
+    @observe('preferences:[capacitance_update_interval, droplet_detection_capacitance]')
+    def _preference_changed(self, event):
+        logger.debug(f"Received preferences change event: {event}")
+
+        app_globals = get_microdrop_redis_globals_manager()
+        app_globals[event.name] = event.new
