@@ -79,4 +79,5 @@ class LoggerPreferencesPane(PreferencesPane):
             ROOT_LOGGER.setLevel(LEVELS[self.model.level])
 
         # publish log level everytime in case backend is new and not synced.
+        logger.debug(f"Log level published: {self.model.level}")
         publish_message(self.model.level, CHANGE_LOG_LEVEL)

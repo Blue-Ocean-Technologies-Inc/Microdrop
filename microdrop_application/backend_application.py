@@ -47,7 +47,7 @@ class MicrodropBackendApplication(Application):
 
     def _preferences_helper_default(self):
         """
-        Retireve the preferences from the preferences file using the DeviceViewerPreferences class.
+        Retrieve the preferences from the preferences file using the DeviceViewerPreferences class.
         """
         return MicrodropPreferences(preferences=self.preferences)
 

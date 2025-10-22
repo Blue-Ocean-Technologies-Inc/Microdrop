@@ -64,7 +64,7 @@ from microdrop_application.application import is_dark_mode
 
 import json
 
-logger = get_logger(__name__, level="INFO")
+logger = get_logger(__name__)
 
 
 class DeviceViewerDockPane(TraitsDockPane):
