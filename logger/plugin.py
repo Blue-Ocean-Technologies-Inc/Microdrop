@@ -43,7 +43,7 @@ class LoggerPlugin(Plugin):
         preferred_log_level = LEVELS.get(LoggerPreferences().level, "INFO")
 
         # Create handlers
-        file_handler = logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id}.uuid_node_{uuid.getnode()}.pid_{os.getpid()}.log", mode='a')
+        file_handler = self.get_file_handler()
         file_handler.setFormatter(file_formatter)
 
         console_handler = logging.StreamHandler()
@@ -78,7 +78,7 @@ class LoggerPlugin(Plugin):
 
             # 3. Add the new FileHandler
         if old_formatter:  # Check if we actually found one
-            new_file_h = logging.FileHandler(self.application.current_experiment_directory / "microdrop_app.log")
+            new_file_h = self.get_file_handler()
 
             # Apply the old settings
             new_file_h.setFormatter(old_formatter)
@@ -88,5 +88,8 @@ class LoggerPlugin(Plugin):
             print(f"Added: {new_file_h.baseFilename}")
         else:
             print("Warning: No FileHandler was found to replace.")
+
+    def get_file_handler(self):
+        return logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id.replace(".app", "")}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
 
 
