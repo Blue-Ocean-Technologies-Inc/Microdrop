@@ -1,7 +1,7 @@
 import json
 from typing import Optional, cast
 
-from traits.api import HasTraits, Instance, Str
+from traits.api import HasTraits, Instance, Str, Property
 
 
 
@@ -150,8 +150,6 @@ class RedisHashDictProxy(HasTraits):
         """
         Updates the Redis hash with the provided dictionary of lists.
         """
-        if not all(isinstance(v, list) for v in data.values()):
-            raise ValueError("All values must be lists.")
         self.redis_client.hmset(self.hash_name, mapping={k: json.dumps(v) for k, v in data.items()})
 
 
@@ -186,7 +184,7 @@ if __name__ == "__main__":
         print("After deletion:", list(redis_dict))  # ['key1']
 
         # Update with a dictionary
-        redis_dict.update({"key3": ["val5", "val6"], "key4": ["val7"]})
+        redis_dict.update({"key3": ["val5", "val6"], "key4": "val7", "key5": 343})
         print("Updated items:", list(redis_dict.items()))  # [('key1', [...]), ('key3', [...]), ...]
 
         # Clear all data
