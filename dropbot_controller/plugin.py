@@ -3,6 +3,7 @@ from envisage.ids import SERVICE_OFFERS
 from envisage.plugin import Plugin
 from traits.api import List
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 # local package imports
 from .dropbot_controller_base import DropbotControllerBase
 from .interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -81,6 +82,10 @@ class DropbotControllerPlugin(Plugin):
 
         self.dropbot_controller = DropbotController()
         self.dropbot_controller.preferences = DropbotPreferences()
+
+        # push values to redis globals
+        app_globals = get_microdrop_redis_globals_manager()
+        app_globals.update(DropbotPreferences.preferences_name_map)
 
     def stop(self):
         """Cleanup when the plugin is stopped."""
