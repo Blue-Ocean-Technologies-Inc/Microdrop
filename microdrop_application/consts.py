@@ -58,4 +58,4 @@ sidebar_stylesheet = """QPushButton {
     color: %s;
 }"""
 
-EXPERIMENT_DIR = f"Exp_{get_current_utc_datetime()}"
+EXPERIMENT_DIR = get_current_utc_datetime()
