@@ -13,7 +13,7 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_controller.preferences import DropbotPreferences, preferences_names
 from dropbot_controller.consts import CHANGE_SETTINGS
 
 
@@ -36,11 +36,11 @@ class DropbotPreferencesPane(PreferencesPane):
     #### 'DeviceViewerPreferencesPane' interface ################################
 
     # Create the single item for the default svg for the main view group.
-    drop_detect_setting = create_item_label_group("droplet_detection_capacitance",
+    drop_detect_setting = create_item_label_group("_droplet_detection_capacitance_view",
                                                             label_text="Drop Detect Capacitance (pF)")
 
-    capacitance_update_setting = create_item_label_group(
-        "capacitance_update_interval", label_text="Capacitance Update Interval (ms)" )
+    capacitance_update_setting = create_item_label_group("_capacitance_update_interval_view",
+                                                         label_text="Capacitance Update Interval (ms)" )
 
 
     settings = VGroup(
@@ -59,10 +59,19 @@ class DropbotPreferencesPane(PreferencesPane):
         resizable=True
     )
 
-    @observe("model:*")
+    @observe("model:[droplet_detection_capacitance, capacitance_update_interval]")
     def publish_preference_change(self, event):
         logger.info(event)
 
         if event.new != event.old:
             msg = json.dumps({event.name: event.new})
             publish_message(msg, CHANGE_SETTINGS)
+    #
+    # ###########################################################################
+    # # 'Handler' interface.
+    # ###########################################################################
+    #
+    # def apply(self, info=None):
+    #     """Handles the Apply button being clicked."""
+    #     trait_names = preferences_names
+    #     self.model.copy_traits(self._model, trait_names)

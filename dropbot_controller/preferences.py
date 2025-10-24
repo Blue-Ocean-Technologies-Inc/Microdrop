@@ -1,6 +1,9 @@
+import time
+
 from apptools.preferences.api import PreferencesHelper
 from traits.api import Float, Int, Dict, Property
 from logger.logger_service import get_logger
+from microdrop_utils.decorators import debounce
 
 logger = get_logger(__name__)
 
@@ -30,13 +33,28 @@ class DropbotPreferences(PreferencesHelper):
 
     preferences_name_map = Property(Dict)
 
+    ################ View Model ################################################
+    _droplet_detection_capacitance_view = Property(Float)
+    _capacitance_update_interval_view = Property(Int)
+
     def _droplet_detection_capacitance_default(self):
         return app_globals.get(preferences_names[0], DROPLET_DETECTION_CAPACITANCE_THRESHOLD)
 
     def _capacitance_update_interval_default(self):
         return app_globals.get(preferences_names[1], 100)
 
+    def _get__droplet_detection_capacitance_view(self):
+        return self._droplet_detection_capacitance_default()
+
+    def _get__capacitance_update_interval_view(self):
+        return self._capacitance_update_interval_default()
+
+    def _set__droplet_detection_capacitance_view(self, value):
+        self.droplet_detection_capacitance = value
+
+    def _set__capacitance_update_interval_view(self, value):
+        self.capacitance_update_interval = value
+
     def _get_preferences_name_map(self):
         # Use a dict comprehension to build the dictionary
         return {pref: getattr(self, pref) for pref in preferences_names}
-
