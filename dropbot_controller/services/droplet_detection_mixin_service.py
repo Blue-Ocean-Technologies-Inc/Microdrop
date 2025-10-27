@@ -20,7 +20,7 @@ from dropbot_controller.consts import (
 logger = get_logger(__name__)
 
 # --- Constants ---
-PF_SCALE_FACTOR = 1e12  # Scale capacitances to picoFarads for logging
+PF_SCALE_FACTOR = 1e12  # Scale capacitances to picoFarads
 
 
 # --- Data Structures ---
@@ -96,7 +96,7 @@ class DropletDetectionMixinService(HasTraits):
         capacitances_array = self._get_capacitances(proxy, channels)
         # normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
 
-        channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold_factor=self.preferences.droplet_detection_capacitance)
+        channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold=self.preferences.droplet_detection_capacitance)
 
         if not channels_with_drops:
             logger.info("No droplets were detected.")
@@ -179,24 +179,26 @@ class DropletDetectionMixinService(HasTraits):
     #     return normalized_caps, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR
 
     @staticmethod
-    def _find_channels_above_threshold(capacitances: np.ndarray, threshold_factor: float) -> list[int]:
+    def _find_channels_above_threshold(capacitances: np.ndarray, threshold: float) -> list[int]:
         """Identify channels where capacitance exceeds a dynamic threshold."""
         if np.all(np.isnan(capacitances)):
             logger.warning("All capacitance values are NaN.")
             return []
 
-        min_capacitance = np.nanmin(capacitances)
-        threshold = min_capacitance * threshold_factor
+        # min_capacitance = np.nanmin(capacitances)
+        # threshold = min_capacitance * threshold_factor
 
-        logger.info(f"droplet detect threshold is: {threshold} = {threshold_factor} * {min_capacitance}")
+        # logger.info(f"droplet detect threshold is: {threshold} = {threshold_factor} * {min_capacitance}")
 
+        # convert pF to F since device caps are in F.
+        threshold /= PF_SCALE_FACTOR
         liquid_channels = np.where(
             (capacitances > threshold) & (~np.isnan(capacitances))
         )[0]
 
         liquid_channels = liquid_channels.tolist()
 
-        logger.info(f"Detected liquid in channels: {liquid_channels}")
+        logger.info(f"Detected liquid in channels: {liquid_channels} with threshold {threshold * PF_SCALE_FACTOR} pF")
         return liquid_channels
 
     @staticmethod
