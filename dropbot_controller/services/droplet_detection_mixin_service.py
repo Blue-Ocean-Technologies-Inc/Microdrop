@@ -185,7 +185,10 @@ class DropletDetectionMixinService(HasTraits):
             logger.warning("All capacitance values are NaN.")
             return []
 
-        threshold = np.nanmin(capacitances) * threshold_factor
+        min_capacitance = np.nanmin(capacitances)
+        threshold = min_capacitance * threshold_factor
+
+        logger.info(f"droplet detect threshold is: {threshold} = {threshold_factor} * {min_capacitance}")
 
         liquid_channels = np.where(
             (capacitances > threshold) & (~np.isnan(capacitances))
