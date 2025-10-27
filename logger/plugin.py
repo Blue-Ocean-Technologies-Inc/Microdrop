@@ -2,6 +2,7 @@
 import logging
 import uuid
 import os
+from pathlib import Path
 
 # Enthought library imports.
 from envisage.api import Plugin
@@ -90,6 +91,8 @@ class LoggerPlugin(Plugin):
             print("Warning: No FileHandler was found to replace.")
 
     def get_file_handler(self):
-        return logging.FileHandler(self.application.current_experiment_directory / f"{self.application.id.replace(".app", "")}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
+        logs_path = Path(self.application.current_experiment_directory / "logs")
+        logs_path.mkdir(parents=True, exist_ok=True)
+        return logging.FileHandler(logs_path / f"{self.application.id.replace(".app", "")}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
 
 
