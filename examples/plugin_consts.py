@@ -1,5 +1,6 @@
 from envisage.application import Application
 from microdrop_application.application import MicrodropApplication
+from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_status.plugin import DropbotStatusPlugin
@@ -48,7 +49,7 @@ FRONTEND_CONTEXT = [
 redis_server_context
 ]
 
-BACKEND_APPLICATION = Application
+BACKEND_APPLICATION = MicrodropBackendApplication
 
 FRONTEND_APPLICATION = MicrodropApplication
 

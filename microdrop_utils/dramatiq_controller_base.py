@@ -13,7 +13,7 @@ from traits.api import Instance, Str, provides, HasTraits, Callable
 from logger.logger_service import get_logger
 
 from .i_dramatiq_controller_base import IDramatiqControllerBase
-from .timestamped_message import TimestampedMessage
+from .datetime_helpers import TimestampedMessage
 
 logger = get_logger(__name__)
 
@@ -33,8 +33,7 @@ class DramatiqControllerBase(HasTraits):
     Example:
         >>> class MyController(DramatiqControllerBase):
         ...     # Return a listener actor method if one is not provided
-        ...     def _listener_actor_method_default(self, message: str,
-        ...                                      topic: str) -> None:
+        ...     def _listener_actor_method_default(self):
         ...         def listener_actor_method(self, message: str,
         ...                                 topic: str) -> None:
         ...             print(f"Processing {message} from {topic}")

@@ -1,14 +1,13 @@
-import os
 import sys
 import shutil
 import subprocess
 import json
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from logger.logger_service import get_logger
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
 logger = get_logger(__name__)
 
@@ -59,8 +58,7 @@ class ExperimentManager:
         return Path("experiment_logs")
     
     def _generate_experiment_id(self):
-        timestamp = datetime.now()
-        return timestamp.strftime("%Y_%m_%d_%H_%M_%S")
+        return get_current_utc_datetime()
     
     def _register_cleanup_on_exit(self):
         """cleanup function to run when application exits."""

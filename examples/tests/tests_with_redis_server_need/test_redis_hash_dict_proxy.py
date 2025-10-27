@@ -104,9 +104,10 @@ def test_update_bulk(redis_dict):
     """
     Test updating the hash with a bulk dictionary.
     """
-    redis_dict.update({"key1": ["val1", "val2"], "key2": ["val3", "val4"]})
+    redis_dict.update({"key1": ["val1", "val2"], "key2": "val3", "key3": 333})
     assert redis_dict["key1"] == ["val1", "val2"]
-    assert redis_dict["key2"] == ["val3", "val4"]
+    assert redis_dict["key2"] == "val3"
+    assert redis_dict["key3"] == 333
 
 
 def test_update_bulk_post_clear(redis_dict):

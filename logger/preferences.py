@@ -1,12 +1,11 @@
 from apptools.preferences.api import PreferencesHelper
 
-from traits.api import Enum, observe
-from traitsui.api import VGroup, View, Item, FileEditor, EnumEditor, Group, Handler
+from traits.api import Enum
+from traitsui.api import View, Item,EnumEditor, Group
 
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
 from microdrop_application.preferences import microdrop_tab
 
 import logging
@@ -63,10 +62,15 @@ class LoggerPreferencesPane(PreferencesPane):
                 logger_view,
                 label="Logger Settings",
                 show_border=True,
+                style_sheet=preferences_group_style_sheet,
             ),
         )
 
-    @observe("model:level")
-    def log_level_changed(self, event):
-        logger.critical(f"Logging level changed from {event.old} to {event.new}")
-        logging.getLogger().setLevel(LEVELS[event.new])
+    def apply(self, info=None):
+        super().apply(info)
+        ROOT_LOGGER = logging.getLogger()
+
+        # check if pane log level different from current log level.
+        if LEVELS[self.model.level.upper()] != ROOT_LOGGER.getEffectiveLevel():
+            logger.info(f"Log level change. Publish log level: {self.model.level}")
+            ROOT_LOGGER.setLevel(LEVELS[self.model.level])

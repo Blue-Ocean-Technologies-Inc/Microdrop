@@ -42,13 +42,14 @@ CHIP_CHECK = "dropbot/requests/chip_check"
 ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'
 SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
 DETECT_DROPLETS = "dropbot/requests/detect_droplets"
+CHANGE_SETTINGS = "dropbot/requests/change_settings"
 
 # Dropbot Error Topics
 DROPBOT_ERROR = 'dropbot/error'
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
-    "dropbot_controller_listener": [
+    f"{PKG}_listener": [
         "dropbot/requests/#",
         DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
@@ -57,6 +58,5 @@ ACTOR_TOPIC_DICT = {
 
 # Constants for droplet detection
 # capacitance threshold to detect droplets. This is the multiplier to the minimum device capacitance
-DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR = 10
-DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION = 10
+DROPLET_DETECTION_CAPACITANCE_THRESHOLD = 10
 DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection

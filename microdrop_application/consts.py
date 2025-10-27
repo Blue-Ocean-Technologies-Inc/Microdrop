@@ -1,10 +1,9 @@
 from pathlib import Path
-import time
-
 from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
                                          ICON_HEADSET_MIC, ICON_INFO,
                                          ICON_TROUBLESHOOT, ICON_EXTENSION,
                                          ICON_DESCRIPTION, ICON_CANCEL)
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -59,4 +58,4 @@ sidebar_stylesheet = """QPushButton {
     color: %s;
 }"""
 
-EXPERIMENT_DIR = f"Exp_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
+EXPERIMENT_DIR = get_current_utc_datetime()

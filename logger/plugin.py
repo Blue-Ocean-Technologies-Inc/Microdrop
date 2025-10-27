@@ -1,15 +1,19 @@
 # Standard library imports.
 import logging
+import uuid
+import os
 from pathlib import Path
 
 # Enthought library imports.
 from envisage.api import Plugin
 from envisage.ids import PREFERENCES_PANES
-from traits.api import List
+from traits.api import List, observe
 
 from .logger_service import LEVELS, file_formatter, console_formatter
 from .preferences import LoggerPreferences
 from .consts import PKG, PKG_name
+
+
 
 class LoggerPlugin(Plugin):
     """Logger plugin."""
@@ -24,6 +28,7 @@ class LoggerPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
     # views = List(contributes_to=VIEWS)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
+
     ###########################################################################
     # Protected interface.
     ###########################################################################
@@ -39,7 +44,7 @@ class LoggerPlugin(Plugin):
         preferred_log_level = LEVELS.get(LoggerPreferences().level, "INFO")
 
         # Create handlers
-        file_handler = logging.FileHandler(self.application.current_experiment_directory / "microdrop_app.log", mode='a')
+        file_handler = self.get_file_handler()
         file_handler.setFormatter(file_formatter)
 
         console_handler = logging.StreamHandler()
@@ -51,3 +56,43 @@ class LoggerPlugin(Plugin):
         ROOT_LOGGER.handlers = []  # Clear existing handlers
         ROOT_LOGGER.addHandler(file_handler)
         ROOT_LOGGER.addHandler(console_handler)
+
+    @observe("application:current_experiment_directory")
+    def _current_exp_dir_changed(self, event):
+        ROOT_LOGGER = logging.getLogger()
+
+        old_formatter = None
+        old_level = None
+
+        for handler in ROOT_LOGGER.handlers[:]:  # Iterate on a copy!
+            if isinstance(handler, logging.FileHandler):
+                # Save its settings
+                old_formatter = handler.formatter
+                old_level = handler.level
+
+                # Close and remove it
+                handler.close()
+                ROOT_LOGGER.removeHandler(handler)
+
+                print(f"Removed: {handler.baseFilename}")
+                break  # Stop after finding the first one
+
+            # 3. Add the new FileHandler
+        if old_formatter:  # Check if we actually found one
+            new_file_h = self.get_file_handler()
+
+            # Apply the old settings
+            new_file_h.setFormatter(old_formatter)
+            new_file_h.setLevel(old_level)  # Ensure logging level is preserved
+
+            ROOT_LOGGER.addHandler(new_file_h)
+            print(f"Added: {new_file_h.baseFilename}")
+        else:
+            print("Warning: No FileHandler was found to replace.")
+
+    def get_file_handler(self):
+        logs_path = Path(self.application.current_experiment_directory / "logs")
+        logs_path.mkdir(parents=True, exist_ok=True)
+        return logging.FileHandler(logs_path / f"{self.application.id.replace(".app", "")}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
+
+

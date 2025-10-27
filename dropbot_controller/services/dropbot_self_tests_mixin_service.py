@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from functools import wraps
-import datetime as dt
 from tqdm import tqdm
 
 from dropbot.hardware_test import (ALL_TESTS, system_info, test_system_metrics,
@@ -14,6 +13,7 @@ from dropbot.self_test import (generate_report, plot_test_voltage_results,
                                plot_test_channels_results)
 from traits.api import provides, HasTraits, Str, Instance
 
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from microdrop_utils.file_handler import open_html_in_browser
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -40,7 +40,7 @@ def get_timestamped_results_path(test_name: str, path: [str, Path]) -> Path:
         path = Path(path)
 
     # Generate unique filename
-    timestamp = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H_%M_%S')
+    timestamp = get_current_utc_datetime()
 
     return path.joinpath(f'{test_name}_results-{timestamp}')
 
@@ -56,7 +56,7 @@ class DropbotSelfTestsMixinService(HasTraits):
     results_dialog = Instance(ResultsDialogAction)
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         self._self_test_cancelled = False
 
     def cancel_self_test(self):

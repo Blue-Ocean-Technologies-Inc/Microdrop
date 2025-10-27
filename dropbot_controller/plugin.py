@@ -3,6 +3,7 @@ from envisage.ids import SERVICE_OFFERS
 from envisage.plugin import Plugin
 from traits.api import List
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 # local package imports
 from .dropbot_controller_base import DropbotControllerBase
 from .interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -11,6 +12,7 @@ from .services.dropbot_monitor_mixin_service import DropbotMonitorMixinService
 from .services.dropbot_states_setting_mixin_service import DropbotStatesSettingMixinService
 from .services.dropbot_self_tests_mixin_service import DropbotSelfTestsMixinService
 from .services.droplet_detection_mixin_service import DropletDetectionMixinService
+from .services.dropbot_settings_change import DropbotChangeSettingsService
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -36,6 +38,7 @@ class DropbotControllerPlugin(Plugin):
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_set_states_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_self_test_service),
             ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_droplet_detection_service),
+            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_dropbot_change_settings_service),
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
@@ -57,8 +60,14 @@ class DropbotControllerPlugin(Plugin):
         """Returns a droplet detection mixin service for detecting droplets on electrodes."""
         return DropletDetectionMixinService
 
+    def _create_dropbot_change_settings_service(self, *args, **kwargs):
+        """Returns a service to change settings for dropbot system"""
+        return DropbotChangeSettingsService
+
     def start(self):
         """ Initialize the dropbot on plugin start """
+
+        from .preferences import DropbotPreferences
 
         # Note that we always offer the service via its name, but look it up via the actual protocol.
         from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -72,6 +81,11 @@ class DropbotControllerPlugin(Plugin):
             pass
 
         self.dropbot_controller = DropbotController()
+        self.dropbot_controller.preferences = DropbotPreferences(preferences=self.application.preferences)
+
+        # push all preferences to globals
+        app_globals = get_microdrop_redis_globals_manager()
+        app_globals.update(self.dropbot_controller.preferences.preferences_name_map)
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

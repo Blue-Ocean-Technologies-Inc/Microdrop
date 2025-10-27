@@ -1,27 +1,21 @@
 import json
 import time
 from contextlib import contextmanager
-from typing import Dict, Generator, List, Optional, Tuple
+from typing import Generator, Optional
 
-import dramatiq
 import numpy as np
 import pandas as pd
 from traits.api import HasTraits, List, Str, Int, Float, provides
 
-from microdrop_application.consts import APP_GLOBALS_REDIS_HASH
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pandas_helpers import map_series_to_array
-from microdrop_utils.redis_manager import get_redis_hash_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from dropbot_controller.consts import (
     DROPLETS_DETECTED,
-    DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR,
     DROPLET_DETECTION_FREQUENCY,
-    DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION,
 )
-from ..models.dropbot_channels_properties_model import DropbotChannelsPropertiesModel
 
 logger = get_logger(__name__)
 
@@ -102,7 +96,7 @@ class DropletDetectionMixinService(HasTraits):
         capacitances_array = self._get_capacitances(proxy, channels)
         # normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
 
-        channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold_factor=DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR)
+        channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold_factor=self.preferences.droplet_detection_capacitance)
 
         if not channels_with_drops:
             logger.info("No droplets were detected.")
@@ -151,38 +145,38 @@ class DropletDetectionMixinService(HasTraits):
         logger.debug(f"Capacitances (pF): {capacitances * PF_SCALE_FACTOR}")
         return map_series_to_array(capacitances)
 
-    @staticmethod
-    def _normalize_capacitances(proxy: 'DramatiqDropbotSerialProxy', capacitances: np.ndarray) -> Tuple[np.ndarray, float]:
-        """Normalize capacitances by electrode area if available."""
-
-        # check if channel areas are set globally
-
-        microdrop_globals = get_redis_hash_proxy(
-            redis_client=dramatiq.get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH
-        )
-        channel_areas_dict = microdrop_globals.get("channel_electrode_areas")
-
-        if not channel_areas_dict:
-            logger.warning("No electrode areas found. Using raw capacitance.")
-            return capacitances, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION
-
-        logger.debug("Normalizing capacitances by electrode area.")
-
-        # preparing channel areas to put through model and get channel-props array: keys need to be ints.
-        channel_areas = {int(k): v for k, v in channel_areas_dict.items()}
-
-        model = DropbotChannelsPropertiesModel(
-            num_available_channels=proxy.number_of_channels,
-            property_dtype=float,
-            channels_properties_dict=channel_areas,
-        )
-
-        # Use np.divide to handle division by zero gracefully if any area is 0
-        normalized_caps = np.divide(
-            capacitances, model.channels_properties_array,
-            out=np.full_like(capacitances, np.nan), where=model.channels_properties_array != 0
-        )
-        return normalized_caps, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR
+    # @staticmethod
+    # def _normalize_capacitances(proxy: 'DramatiqDropbotSerialProxy', capacitances: np.ndarray) -> Tuple[np.ndarray, float]:
+    #     """Normalize capacitances by electrode area if available."""
+    #
+    #     # check if channel areas are set globally
+    #
+    #     microdrop_globals = get_redis_hash_proxy(
+    #         redis_client=dramatiq.get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH
+    #     )
+    #     channel_areas_dict = microdrop_globals.get("channel_electrode_areas")
+    #
+    #     if not channel_areas_dict:
+    #         logger.warning("No electrode areas found. Using raw capacitance.")
+    #         return capacitances, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR_NO_AREA_NORMALIZATION
+    #
+    #     logger.debug("Normalizing capacitances by electrode area.")
+    #
+    #     # preparing channel areas to put through model and get channel-props array: keys need to be ints.
+    #     channel_areas = {int(k): v for k, v in channel_areas_dict.items()}
+    #
+    #     model = DropbotChannelsPropertiesModel(
+    #         num_available_channels=proxy.number_of_channels,
+    #         property_dtype=float,
+    #         channels_properties_dict=channel_areas,
+    #     )
+    #
+    #     # Use np.divide to handle division by zero gracefully if any area is 0
+    #     normalized_caps = np.divide(
+    #         capacitances, model.channels_properties_array,
+    #         out=np.full_like(capacitances, np.nan), where=model.channels_properties_array != 0
+    #     )
+    #     return normalized_caps, DROPLET_DETECTION_CAPACITANCE_THRESHOLD_FACTOR
 
     @staticmethod
     def _find_channels_above_threshold(capacitances: np.ndarray, threshold_factor: float) -> list[int]:
@@ -191,7 +185,10 @@ class DropletDetectionMixinService(HasTraits):
             logger.warning("All capacitance values are NaN.")
             return []
 
-        threshold = np.nanmin(capacitances) * threshold_factor
+        min_capacitance = np.nanmin(capacitances)
+        threshold = min_capacitance * threshold_factor
+
+        logger.info(f"droplet detect threshold is: {threshold} = {threshold_factor} * {min_capacitance}")
 
         liquid_channels = np.where(
             (capacitances > threshold) & (~np.isnan(capacitances))

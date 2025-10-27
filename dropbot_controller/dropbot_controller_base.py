@@ -13,7 +13,7 @@ from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
-                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL)
+                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -23,6 +23,7 @@ from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialP
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from logger.logger_service import get_logger
+from .preferences import DropbotPreferences
 
 logger = get_logger(__name__, level="INFO")
 
@@ -35,6 +36,7 @@ class DropbotControllerBase(HasTraits):
     """
     proxy = Instance(DramatiqDropbotSerialProxy)
     dropbot_connection_active = Bool(False)
+    preferences = Instance(DropbotPreferences)
 
     ##########################################################
     # 'IDramatiqControllerBase' interface.
@@ -105,8 +107,10 @@ class DropbotControllerBase(HasTraits):
                 self.dropbot_connection_active = True
                 return
 
-            # 3. Handle specific dropbot requests that would change dropbot connectivity
-            elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION]:
+            # 3. Handle exceptions:
+            # specific dropbot requests that would change dropbot connectivity
+            # dropbot settings change (user preference)
+            elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
                 requested_method = f"on_{specific_sub_topic}_request"
             
             # Handle all other requests only if dropbot connected
@@ -168,7 +172,7 @@ class DropbotControllerBase(HasTraits):
         # Configure proxy settings
         try:
             self.proxy.update_state(
-                capacitance_update_interval_ms=100,
+                capacitance_update_interval_ms=self.preferences.capacitance_update_interval,
                 hv_output_selected=False,
                 hv_output_enabled=False,
                 event_mask=EVENT_CHANNELS_UPDATED | EVENT_SHORTS_DETECTED | EVENT_ENABLE

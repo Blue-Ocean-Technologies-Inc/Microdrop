@@ -5,7 +5,7 @@ from microdrop_utils.dramatiq_controller_base import DramatiqControllerBase
 from microdrop_utils.redis_manager import RedisHashDictProxy
 
 from logger.logger_service import get_logger
-from microdrop_utils.timestamped_message import TimestampedMessage
+from microdrop_utils.datetime_helpers import TimestampedMessage
 
 logger = get_logger(__name__)
 

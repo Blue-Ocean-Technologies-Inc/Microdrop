@@ -12,7 +12,7 @@ from traits.trait_types import Instance
 from logger.logger_service import get_logger
 from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.timestamped_message import TimestampedMessage
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import RETRY_CONNECTION

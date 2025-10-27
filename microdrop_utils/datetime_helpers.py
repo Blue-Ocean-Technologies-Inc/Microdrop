@@ -1,7 +1,10 @@
-from datetime import datetime
+
 import json
 from typing import Any
+import datetime as dt
 
+def get_current_utc_datetime():
+    return dt.datetime.now(dt.timezone.utc).strftime('%Y_%m_%d-%H_%M_%S')
 
 class TimestampedMessage(str):
     """A string subclass that includes a timestamp attribute."""
@@ -12,9 +15,9 @@ class TimestampedMessage(str):
         # Store the timestamp as an instance attribute in ISO format
         if timestamp is None:
             timestamp_iso = "Timestamp not available"
-            timestamp_dt = datetime.min
+            timestamp_dt = dt.datetime.min
         else:
-            timestamp_dt = datetime.fromtimestamp(timestamp / 1000)
+            timestamp_dt = dt.datetime.fromtimestamp(timestamp / 1000)
             timestamp_iso = timestamp_dt.isoformat()
 
         # Store the timestamp as an instance attribute
@@ -37,7 +40,7 @@ class TimestampedMessage(str):
         return self._timestamp
 
     @property
-    def timestamp_dt(self) -> datetime:
+    def timestamp_dt(self) -> dt.datetime:
         """Get the timestamp of the message as a datetime object."""
         return self._timestamp_dt
 

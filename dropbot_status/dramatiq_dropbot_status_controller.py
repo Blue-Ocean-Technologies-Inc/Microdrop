@@ -1,15 +1,12 @@
 from traits.api import HasTraits, provides, Str
 import dramatiq
 import json
-from traits.api import Instance, Any
-from PySide6.QtCore import Slot
+from traits.api import Instance
 
-from dropbot_controller.consts import START_DEVICE_MONITORING
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_controller_base import invoke_class_method
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.timestamped_message import TimestampedMessage
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from .dramatiq_UI import DramatiqDropBotStatusViewModel
 
 logger = get_logger(__name__)
