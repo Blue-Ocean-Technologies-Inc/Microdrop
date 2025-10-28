@@ -392,10 +392,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     
     @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
-            logger.info("Sending electrode update")
-            self.publish_electrode_update()
-            logger.info("Electrode update sent")
+        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
+        logger.info("Sending electrode update")
+        self.publish_electrode_update()
+        logger.info("Electrode update sent")
 
     @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
     def calibration_change_handler(self, event=None):

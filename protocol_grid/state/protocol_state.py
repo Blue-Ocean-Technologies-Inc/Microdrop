@@ -302,3 +302,21 @@ class ProtocolState:
                 self._filler_capacitance_over_area is not None and
                 self._liquid_capacitance_over_area >= 0 and 
                 self._filler_capacitance_over_area >= 0)
+
+    def get_element_by_path(self, path):
+        path_dims = len(path)
+
+        protocol_element = self.sequence[path[0]]
+
+        if path_dims == 1:
+            return protocol_element
+
+        else:
+            for idx in path[1:]:
+                if isinstance(protocol_element, ProtocolGroup):
+                    protocol_element = protocol_element.elements[idx]
+
+                else:
+                    raise Warning("Protocol group element not found. Multi Dim path not processed.")
+
+            return protocol_element

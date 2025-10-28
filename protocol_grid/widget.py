@@ -1330,7 +1330,14 @@ class PGCWidget(QWidget):
         msg_model = device_state_to_device_viewer_message(
             device_state, step_uid, step_description, step_id, editable
         )
+        logger.info(f"Sending step info: {msg_model.serialize()}")
         publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+
+        step_data = self.state.get_element_by_path(step_path)
+        logger.info(f"selected step data: {step_data}")
+        voltage = step_data.parameters["Voltage"]
+        frequency = step_data.parameters["Frequency"]
+        VoltageFrequencyService.publish_immediate_voltage_frequency(voltage, frequency, preview_mode=self.navigation_bar.is_preview_mode())
         
         # update last published UID
         self._set_last_published_step_uid(step_uid)
@@ -1505,14 +1512,14 @@ class PGCWidget(QWidget):
             path = selected_paths[0]
             item = self.get_item_by_path(path)
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                # step info
                 parent = item.parent() or self.model.invisibleRootItem()
+                # step info
                 row = item.row()
                 id_col = protocol_grid_fields.index("ID")
                 id_item = parent.child(row, id_col)
                 current_step_id = id_item.text() if id_item else ""
                 current_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
-                
+
                 # publish only if this is a different step
                 if current_step_id != self._last_published_step_id:
                     published_step_id = self._publish_step_message(item, path, editable=True)
