@@ -1,6 +1,9 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox
 from PySide6.QtGui import QStandardItem
+
+from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
 
 
@@ -120,35 +123,43 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             
     def setModelData(self, editor, model, index):
         # prevent data setting during protocol execution
+        field = protocol_grid_fields[index.column()]
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
             # during protocol execution, only allow editing in advanced mode for specific fields
             if hasattr(self.parent_widget, 'navigation_bar') and self.parent_widget.navigation_bar.is_advanced_user_mode():
-                field = protocol_grid_fields[index.column()]
                 if field not in ("Voltage", "Frequency"):
                     return
             else:
                 return
-        
-        field = protocol_grid_fields[index.column()]
-        
+
         if field == "Force":
-            return            
+            return
+
         if isinstance(editor, QCheckBox):
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
             model.setData(index, "", Qt.DisplayRole)
-            
+
             item = model.itemFromIndex(index)
             if item is not None:
                 item.emitDataChanged()
+
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)) and field != "Magnet Height":
             value = editor.value()
             if field == "Volume Threshold":
                 model.setData(index, f"{value:.2f}", Qt.EditRole)
+
+            if field == "Voltage":
+                publish_message(str(value), SET_VOLTAGE)
+
+            if field == "Frequency":
+                publish_message(str(value), SET_FREQUENCY)
+
             elif isinstance(editor, QDoubleSpinBox):
                 model.setData(index, f"{value:.1f}", Qt.EditRole)
             else:
                 model.setData(index, str(int(value)), Qt.EditRole)
+
         elif field == "Magnet Height":
             value = editor.value() if hasattr(editor, "value") else editor.text()
             model.setData(index, str(value), Qt.EditRole)
