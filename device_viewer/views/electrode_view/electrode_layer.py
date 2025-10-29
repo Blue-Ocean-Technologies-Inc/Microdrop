@@ -1,10 +1,15 @@
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QGraphicsScene
+from email.charset import QP
+from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
+from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
+from pyface.qt.QtCore import Qt, QPointF
 
-from .electrodes_view_base import ElectrodeView
-from .electrode_view_helpers import generate_connection_line
-from .default_settings import default_colors
+from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
+from .electrode_view_helpers import loop_is_ccw
+from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
+from microdrop_utils._logger import get_logger
+from device_viewer.models.main_model import MainModel
 
+logger = get_logger(__name__)
 
 class ElectrodeLayer():
     """
@@ -17,36 +22,34 @@ class ElectrodeLayer():
 
     def __init__(self, electrodes):
         # Create the connection and electrode items
-        self.connection_items = []
+        self.connection_items = {}
         self.electrode_views = {}
+        self.electrode_endpoints = {}
+        self.electrode_editing_text = None
+        self.reference_rect_item = None
+        self.reference_rect_path_item = None
 
-        svg = electrodes.svg_model
+        self.svg = electrodes.svg_model
 
         # # Scale to approx 360p resolution for display
-        modifier = max(640 / (svg.max_x - svg.min_x), 360 / (svg.max_y - svg.min_y))
+        modifier = max(640 / (self.svg.max_x - self.svg.min_x), 360 / (self.svg.max_y - self.svg.min_y))
 
         # Create the electrode views for each electrode from the electrodes model and add them to the group
         for electrode_id, electrode in electrodes.electrodes.items():
             self.electrode_views[electrode_id] = ElectrodeView(electrode_id, electrodes[electrode_id],
                                                                modifier * electrode.path)
+            self.electrode_endpoints[electrode_id] = ElectrodeEndpointItem(electrode_id,
+                    QPointF(self.svg.electrode_centers[electrode_id][0] * modifier, self.svg.electrode_centers[electrode_id][1] * modifier), 8)
 
         # Create the connections between the electrodes
-        self.connections = {
-            key: ((coord1[0] * modifier, coord1[1] * modifier), (coord2[0] * modifier, coord2[1] * modifier))
-            for key, (coord1, coord2) in svg.connections.items()
+        connections = {
+            key: (QPointF(coord1[0] * modifier, coord1[1] * modifier), QPointF(coord2[0] * modifier, coord2[1] * modifier))
+            for key, (coord1, coord2) in self.svg.connections.items()
+            # key here is form dmf_utils.SvgUtil (see neighbours_to_points), and is a tuple of 2 electrode_ids. if (id1, id2) exists in the dict, then (id2, id1) wont, and viice versa
         }
 
-        for key, (src, dst) in self.connections.items():
-
-            # Set up the color
-            color = QColor(default_colors['connection'])
-            color.setAlphaF(1.0)
-
-            # Generate connection line
-            connection_item = generate_connection_line(key, src, dst, color=color)
-
-            # Store the generated connection item
-            self.connection_items.append(connection_item)
+        for key, (src, dst) in connections.items():
+            self.connection_items[key] = ElectrodeConnectionItem(key, src, dst)
 
     ################# add electrodes/connections from scene ############################################
     def add_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
@@ -57,8 +60,12 @@ class ElectrodeLayer():
         """
         Method to draw the connections between the electrodes in the layer
         """
-        for el in self.connection_items:
-            parent_scene.addItem(el)
+        for key, item in self.connection_items.items():
+            parent_scene.addItem(item)
+
+    def add_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
+        for electrode_id, endpoint_view in self.electrode_endpoints.items():
+            parent_scene.addItem(endpoint_view)
 
     ######################## remove electrodes/connections from scene ###################################
     def remove_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
@@ -69,14 +76,149 @@ class ElectrodeLayer():
         """
         Method to draw the connections between the electrodes in the layer
         """
-        for el in self.connection_items:
-            parent_scene.removeItem(el)
+        for key, item in self.connection_items.items():
+            parent_scene.removeItem(item)
+
+    def remove_endpoints_to_scene(self, parent_scene: 'QGraphicsScene'):
+        for electrode_id, endpoint_view in self.electrode_endpoints.items():
+            parent_scene.removeItem(endpoint_view)
 
     ######################## catch all methods to add / remove all elements from scene ###################
     def add_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.add_electrodes_to_scene(parent_scene)
         self.add_connections_to_scene(parent_scene)
+        self.add_endpoints_to_scene(parent_scene)
+
+        self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
+        self.electrode_editing_text.setPos(QPointF(0, 0))
+
+        self.reference_rect_item = parent_scene.addPolygon(QPolygonF(), QPen(QColor(PERSPECTIVE_RECT_COLOR), 3))
+
+        self.reference_rect_path_item = QGraphicsPathItem()
+        self.reference_rect_path_item.setPen(QPen(QColor(PERSPECTIVE_RECT_COLOR_EDITING), 2))
+        parent_scene.addItem(self.reference_rect_path_item)
 
     def remove_all_items_to_scene(self, parent_scene: 'QGraphicsScene'):
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
+        self.remove_endpoints_to_scene(parent_scene)
+        parent_scene.removeItem(self.electrode_editing_text)
+        parent_scene.removeItem(self.reference_rect_item)
+
+    ######################## Redraw functions ###########################
+    def redraw_connections_to_scene(self, model: MainModel):
+        # Routes are applied in order, so later routes will apply on top
+        # To minimize the number of overlapping Qt calls, we'll apply changes to a dictionary then transfer it to the view at the end
+
+        connection_map = {} # Temporary map to superimpose routes
+        endpoint_map = {} # Temporary map to superimpose endpoints
+
+        layers = model.layers
+
+        if model.selected_layer:
+            layers = layers + [model.selected_layer] # Paint the selected layer again so its always on top
+
+        if model.autoroute_layer:
+            layers = layers + [model.autoroute_layer] # Paint autoroute layer on top
+        
+        for i in range(len(layers)):
+            route_layer = layers[i]
+            color = QColor(route_layer.color)
+            z = i # Make sure each route is it own layer. Prevents weird overlap patterns
+            if route_layer == model.selected_layer:
+                color = QColor(ROUTE_SELECTED)
+            elif route_layer.route.is_loop():
+                if loop_is_ccw(route_layer.route, self.svg.electrode_centers):
+                    color = QColor(ROUTE_CCW_LOOP)
+                else:
+                    color = QColor(ROUTE_CW_LOOP)
+            if route_layer.visible:
+                for endpoint_id in route_layer.route.get_endpoints():
+                    endpoint_map[endpoint_id] = (color, z)
+
+                for (route_from, route_to) in route_layer.route.get_segments(): # Connections 
+                    connection_map[(route_from, route_to)] = (color, z)
+        
+        # Apply map
+        alpha = model.get_alpha("routes")
+
+        for key, connection_item in self.connection_items.items():
+            (color, z) = connection_map.get(key, (None, None))
+            if color:
+                connection_item.set_active(color, alpha)
+                connection_item.setZValue(z) # We want to make sure the whole route is on the same z value
+            else:
+                connection_item.set_inactive()
+        
+        for endpoint_id, endpoint_view in self.electrode_endpoints.items():
+            (color, z) = endpoint_map.get(endpoint_id, (None, None))
+            if color:
+                endpoint_view.set_active(color, alpha)
+                endpoint_view.setZValue(z)
+            else:
+                endpoint_view.set_inactive()
+    
+    def redraw_electrode_lines(self, model: MainModel):
+        """
+        Method to redraw the electrode lines in the layer
+        """
+        alpha = model.get_alpha("electrode_outline")
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.update_line_alpha(alpha)
+
+    def redraw_electrode_colors(self, model: MainModel, electrode_hovered: ElectrodeView):
+        alpha = model.get_alpha("electrode_fill")
+        
+        for electrode_id, electrode_view in self.electrode_views.items():
+            if electrode_view.electrode == model.electrode_editing:
+                color = ELECTRODE_CHANNEL_EDITING
+            elif electrode_view.electrode.channel == None:
+                color = ELECTRODE_NO_CHANNEL
+            else:
+                color = ELECTRODE_ON if model.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
+            
+            if electrode_hovered == electrode_view:
+                color = QColor(color).lighter(120).name()
+
+            electrode_view.update_color(color, alpha)
+
+    def redraw_electrode_labels(self, model: MainModel):
+        alpha = model.get_alpha("electrode_text")
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.update_label(alpha)
+
+    def set_loading_label(self):
+        """
+        Method to set the loading label for the electrode editing text
+        """
+        self.electrode_editing_text.setPlainText("Loading...")
+        QApplication.processEvents()  # Process events to ensure the scene is cleared immediately
+    
+    def redraw_electrode_editing_text(self, model: MainModel):
+        if model.step_id == None:
+            self.electrode_editing_text.setPlainText("Free Mode")
+        else:
+            self.electrode_editing_text.setPlainText(f"{'Editing' if model.editable else 'Displaying'}: {model.step_label} {'(Free Mode)' if model.free_mode else ''}")
+
+    def redraw_reference_rect(self, model: MainModel, partial_rect=None):
+        if len(model.camera_perspective.reference_rect) == 4:
+            # Update the reference rect visualization
+            self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
+            self.reference_rect_path_item.setVisible(False)  # Hide the path item if we're using a polygon
+            self.reference_rect_item.setVisible(True)  # Show the polygon item
+        elif partial_rect is not None and len(partial_rect) > 1:
+            path = QPainterPath()
+            path.moveTo(partial_rect[0])
+            # Draw the path for the reference rect
+            for point in partial_rect[1:]:
+                path.lineTo(point)
+            self.reference_rect_path_item.setPath(path)
+            self.reference_rect_path_item.setVisible(True)
+            self.reference_rect_item.setVisible(False)  # Hide the polygon item if we're using a path
+    
+    def clear_reference_rect(self):
+        """Reset the reference rectangle to its initial state."""
+        self.reference_rect_item.setPolygon(QPolygonF())
+        self.reference_rect_item.setVisible(False)
+        self.reference_rect_path_item.setPath(QPainterPath())
+        self.reference_rect_path_item.setVisible(False)

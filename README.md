@@ -11,9 +11,9 @@
 $$
 \begin{array}{|l|l|l|l|l|l|l|l|}
 \hline \text { Technology } & \text { Category } & \text{Platform Compatibility (Dev)} & \text{External Deps} & \text{Complexity} & \text{licensing} & \text{async} & \checkmark \text{/X } \\
-\hline \text { Redis } & \text { Message Broker } & \text { X } \\
+\hline \text { Redis } & \text { Message Broker } & \checkmark \\
 \hline \text { Celery } & \text { Message Broker } & \text { X } \\
-\hline \text { RabbitMQ } & \text { Message Broker } & \checkmark \\
+\hline \text { RabbitMQ } & \text { Message Broker } & \text { X } \\
 \hline \text { ZMQ } & \text { Messaging Backend } & \text { X } \\
 \hline \text { Pika } & \text { Pure Python Client Library for RabbitMQ } & \text { X } \\
 \hline \text { APScheduler } & \text { Task Execution Scheduler } & \text { X } \\
@@ -45,25 +45,16 @@ Messaging brokers are a tool used to facilitate messaging between different comp
 
 ##### *Our Choices (Messaging Brokers)*
 
-**Celery** was our initial option. The main problem with **Celery** is that they have poor support for windows which is a requirement for our use case. For future development, it is best to pivot to **Redis** *IF* it is decided that **RabbitMQ** is no longer useful. Unlike **Celery**, **Dramatiq** and the other auxiliary packages detailed below support **Redis**.
+**Celery** was our initial option. The main problem with **Celery** is that they have poor support for windows which is a requirement for our use case.
 
-**ZMQ** was another option, but we determined that in terms of messaging and use of the technical tool and further support via other auxiliary tools, it was easier to use a full message broker like **RabbitMQ** over just the **ZMQ** framework.
+**ZMQ** was another option, but we determined that in terms of messaging and use of the technical tool and further support via other auxiliary tools, it was easier to use a full message broker like **Redis** over just the **ZMQ** framework.
 
-**RabbitMQ** was chosen since it had a great amount of support for auxiliary packages like **Pika**, **AIO-Pika**, **FastAPI**, **Dramatiq** **etc...** In addition, **RabbitMQ** achieves all 4 of the above goals. It allows for fully decoupled components, async messaging, routing methods that are defined in queue exchange methods, and reliability is all ensured via acknowledgements and resending of messages based on lack of acknowledgements.
+**RabbitMQ** was initially chosen since it had a great amount of support for auxiliary packages like **Pika**, **AIO-Pika**, **FastAPI**, **Dramatiq** **etc...** In addition, **RabbitMQ** achieves all 4 of the above goals. It allows for fully decoupled components, async messaging, routing methods that are defined in queue exchange methods, and reliability is all ensured via acknowledgements and resending of messages based on lack of acknowledgements. But installing it was complicated, and needed more external installations, like the need for Erlang. 
+
+So we pivoted to using **Redis** which is more lightweight, and offers comparible features. Most importantly, it can be installed just using conda packages. For storing publisher subcriber data, we also use the efficient redis in-memory key–value database. If there is a need to pivot to **RabbitMQ**, this needs a replacement.
 
 However our code is written in a way that it can work with either a **RabbitMQ** or **Redis** backend since we are using a **Dramatiq** broker abstraction.
 This will choose whichever broker is available.
-
-This is to ensure that if **RabbitMQ** is no longer supported or is not useful for our use case, we can pivot to **Redis** with minimal changes to the codebase.
-
-Also note that **RabbitMQ** is a more robust and feature-rich message broker than **Redis**. **Redis** is more of a key-value store that has some messaging capabilities. **RabbitMQ** is a full-fledged message broker that supports many messaging patterns and is more reliable and scalable than **Redis**.
-
-However it needs Erlang OTP to run which is a dependency that needs to be installed.
-
-But **redis** is a simpler and more lightweight solution that is easier to set up and use. It is also easier to scale and is more suited for smaller projects:
-it can simply be conda installed. So this is what we are using right now for development. But again one can use the set broker function to switch to **RabbitMQ** and **Pika** (python bindings for rabbitmq library) if needed.
-
-Or just let **Dramatiq** choose the broker for you automatically.
 
 #### *Frameworks*
 
@@ -91,26 +82,12 @@ Dramatiq is a fast and reliable distributed task processing library for Python. 
 
 ### **Prerequisites**
 
-1. **Python 3.11** 
+1. **Python 3.12** 
 
-If rabbitmq is needed:
-2. **RabbitMQ** download from [here](https://www.rabbitmq.com/download.html)  
-   Windows Installer: [here](https://www.rabbitmq.com/docs/install-windows)
-   Mac Installer: [here](https://www.rabbitmq.com/install-homebrew.html)
-   Linux Installer: [here](https://www.rabbitmq.com/install-debian.html)
-3. Erlang OTP: [here](https://www.erlang.org/downloads)
+We are using redis since it can be installed from the binstar anaconda channel.
 
-If redis is needed:
 simply use the environment.yml from this repos root directory to create a conda environment with the necessary dependencies.
 The command to create the environment is:
 ```conda create -f environment.yml```
 
-And remember to startup the redis or rabbitmq server. In the case of rabbitmq, there is a GUI that can be used to start the server. In the case of redis, the command to start the server is:
-```redis-server``` that needs to be run from a terminal. 
-
-
-## **Important Notes on Documentation**
-
-When @Vigne-hub and I (@MJAquarion2413) originally worked on this project, our goal was to port an old software that utilized GTK2 and Glade with other old packages in python 2 and was not updated for more than half a decade. We found that documentation and availablity of support for these old python packages was one of the most difficult roadblocks to overcome. In this software we decided to use the latest technologies and packages to ensure that the software would be maintainable and easily accessible for future developers. In addition, we will document the methods used and the documentation behind these methods and tools in case the developers make the old documentation unavailable for any reason. This is part of the reason we have made the core application use as little dependencies as possible. 
-
-FOR FUTURE DEVELOPERS: Try to make plugins that have similar documentation to support future developers, especially those that are students, or non-professional developers that need new use cases for their individual experiments.
+And remember to startup the redis server. There is a start_redis_server.py python script for thisnin examples. Or one can just ruin ``redis-server`` on a terminal.

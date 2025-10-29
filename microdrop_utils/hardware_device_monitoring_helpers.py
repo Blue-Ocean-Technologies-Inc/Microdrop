@@ -31,7 +31,7 @@ def check_devices_available(hwids_to_check):
         valid_ports = check_connected_ports_hwid(hwid)
         # just picking first port, if multiple found.
         if len(valid_ports) > 0:
-            port_name = str(valid_ports[0].name)
+            port_name = str(valid_ports[0].device)
             # Indicate success by returning the port name
             logger.info(f'DropBot found on port {port_name}, topic is dropbot/info')
             return port_name

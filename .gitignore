@@ -1,0 +1,21 @@
+# IDE files
+.idea
+.vscode
+
+# Python generated files
+**/__pycache__
+
+# Application generated files
+**/application_logs
+**/dump.rdb
+**/results.txt
+**/*.log
+**/*test*.html
+*.svg
+*.json
+demo*.png
+demo*.dot
+
+# pyinstaller generated files
+**/dist
+**/build

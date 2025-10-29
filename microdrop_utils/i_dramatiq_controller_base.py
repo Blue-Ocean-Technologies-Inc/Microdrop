@@ -8,10 +8,11 @@ class IDramatiqControllerBase(Interface):
     Provides methods for controlling some object via dramatiq signalling.
     """
 
-    listener_name: str = Str(desc="Unique identifier for the Dramatiq actor")
-    listener_actor: Actor = Instance(Actor, desc="Dramatiq actor instance for message handling")
+    listener_name = Str(desc="Unique identifier for the Dramatiq actor")
+    listener_queue = Str(desc="The unique queue actor is listening to")
+    listener_actor = Instance(Actor, desc="Dramatiq actor instance for message handling")
     listener_actor_method = Callable(desc="Method to be wrapped into listener_actor"
-                                           "Should accept message, topic parameters")
+                                          "Should accept message, topic parameters")
 
     def traits_init(self):
         """
@@ -23,8 +24,7 @@ class IDramatiqControllerBase(Interface):
         """
         pass
 
-
-    def _listener_default(self) -> Actor:
+    def _listener_actor_default(self) -> Actor:
         """
         Wraps up listener routine as a dramatiq actor and returns it.
 

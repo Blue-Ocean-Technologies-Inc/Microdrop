@@ -6,12 +6,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Union, TypedDict
 from shapely.geometry import Polygon
-from nptyping import NDArray, Float, Shape
+#from nptyping import NDArray, Float, Shape
 
 
 class ElectrodeDict(TypedDict):
     channel: int
-    path: NDArray[Shape['*, 1, 1'], Float]
+    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
+
 
 
 class SvgUtil:
@@ -34,9 +35,12 @@ class SvgUtil:
         self.x_shift = None
         self.y_shift = None
         self.neighbours: dict[str, list[str]] = {}
-        self.roi: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.roi: list[np.ndarray] = []
         self.electrodes: dict[str, ElectrodeDict] = {}
-        self.connections: list[NDArray[Shape['*, 1, 1'], Float]] = []
+        self.connections = {}
+        self.electrode_centers = {}
+        self.electrode_areas = {}
+        self.pixel_scale = 1.0 # Scale from pixels to mm (should be < 1). To scale the area, we need to square this value.
 
         if self._filename:
             self.get_device_paths(self._filename)
@@ -63,21 +67,35 @@ class SvgUtil:
             elif "Connections" in child.attrib.values():
                 pass
                 # self.connections = self.svg_to_points(child)
+            elif child.tag == "{http://www.w3.org/2000/svg}metadata":
+                scale = child.find("scale")
+                if scale is not None:
+                    self.pixel_scale = float(scale.text)
+                    print(f"Pixel scale set to {self.pixel_scale} from SVG metadata.")
 
-        if len(self.connections) == 0 and len(self.electrodes) > 0:
-            self.neighbours = self.find_neighbours_all()
-            self.neighbours_to_points()
+        if len(self.electrodes) > 0:
+            self.find_electrode_centers()
+            self.electrode_areas = self.find_electrode_areas()
+            if len(self.connections.items()) == 0:
+                self.neighbours = self.find_neighbours_all()
+                self.neighbours_to_points()
 
         if modify:
             tree.write(filename)
 
-    def get_electrode_center(self, electrode: str) -> NDArray[Shape['*, 1, 1'], Float]:
+    def get_electrode_center(self, electrode: str) -> np.ndarray:
         """
         Get the center of an electrode
         """
         return np.mean(self.electrodes[electrode]['path'], axis=0)
 
-    def find_neighbours(self, path: NDArray[Shape['*, 1, 1'], Float], threshold: float = 10) -> list[str]:
+    def find_electrode_centers(self):
+        self.electrode_centers = {}
+
+        for id, _ in self.electrodes.items():
+            self.electrode_centers[id] = self.get_electrode_center(id)
+
+    def find_neighbours(self, path: np.ndarray, threshold: float = 10) -> list[str]:
         """
         Find the neighbours of a path
         """
@@ -92,6 +110,12 @@ class SvgUtil:
         Get the polygons of the electrodes
         """
         return {k: Polygon(v['path'].reshape(-1, 2)) for k, v in self.electrodes.items()}
+    
+    def find_electrode_areas(self) -> dict[str, float]:
+        """
+        Find the areas of the electrodes
+        """
+        return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
 
     def find_neighbours_all(self, threshold: [float, None] = None) -> dict[str, list[str]]:
         """
@@ -131,11 +155,12 @@ class SvgUtil:
         for k, v in self.neighbours.items():
             for n in v:
                 if (n, k) not in self.connections and (k, n) not in self.connections:
-                    coord_k = self.get_electrode_center(k)
-                    coord_n = self.get_electrode_center(n)
+                    coord_k = self.electrode_centers[k]
+                    coord_n = self.electrode_centers[n]
 
                     # Store electrode pair (sorted for uniqueness) and their coordinates
                     self.connections[(k, n)] = (coord_k, coord_n)
+                    self.connections[(n, k)] = (coord_n, coord_k) # Because of the arrow connections are not reverse-equivalent, so we need a connection for either direction
 
     @staticmethod
     def set_fill_black(obj: ET.Element) -> None:
@@ -149,21 +174,7 @@ class SvgUtil:
             except KeyError:
                 pass
 
-    def svg_to_points(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
-        """
-        Converts the svg file to points
-        """
-
-        paths = []
-        for path in obj:
-            points = [(path.attrib["x1"], path.attrib["y1"]),
-                      (path.attrib["x2"], path.attrib["y2"])]
-
-            paths.append(np.array(points).reshape((-1, 1, 2)).astype(float))
-
-        return paths
-
-    def svg_to_paths(self, obj) -> list[NDArray[Shape['*, 1, 1'], Float]]:
+    def svg_to_paths(self, obj) -> list[np.ndarray]:
         """
         Converts the svg file to paths
         """
@@ -232,3 +243,33 @@ class SvgUtil:
         self.min_y = min([e['path'][..., 1].min() for e in electrodes.values()])
 
         return electrodes
+
+def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
+    tree = ET.parse(old_filename)
+    root = tree.getroot()
+
+    electrodes = None
+    for child in root:
+        if "Device" in child.attrib.values():
+            electrodes = child
+        elif child.tag == "{http://www.w3.org/2000/svg}metadata":
+            scale_element = child.find("scale")
+            if scale_element is None:
+                scale_element = ET.SubElement(child, "scale")
+
+            scale_element.text = str(scale)
+
+
+    if electrodes is None:
+        return
+    
+    for electrode in list(electrodes):
+        channel = electrode_ids_channels_map[electrode.attrib["id"]]
+        if channel is not None:
+            electrode.attrib["data-channels"] = str(channel)
+        else:
+            electrode.attrib.pop("data-channels", None)
+
+    ET.indent(root, space="  ")
+
+    tree.write(new_filename)

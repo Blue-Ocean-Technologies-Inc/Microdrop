@@ -1,12 +1,13 @@
 import subprocess
 import time
-import logging
 from contextlib import contextmanager
 import os
 
 from dramatiq import get_broker, Worker
+from dramatiq.middleware import CurrentMessage
 
-logger = logging.getLogger(__name__)
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
 
 def is_redis_running():
@@ -22,44 +23,58 @@ def is_redis_running():
 
 def start_redis_server(retries=5, wait=3):
     """Start the Redis server."""
-    process = subprocess.Popen(["redis-server", f"{os.path.dirname(__file__)}{os.sep}redis.conf"])
-    for _ in range(retries):  # Retry up to 5 times
-        if is_redis_running():
-            print("Redis server is running.")
-            return process
-        else:
-            print("Waiting for Redis server to start...")
-            time.sleep(wait)
-    print("Failed to start Redis server.")
-    process.terminate()
-    return None
+    process = None
+    if not is_redis_running():
+        process = subprocess.Popen(["redis-server", f"{os.path.dirname(__file__)}{os.sep}redis.conf"])
+        for _ in range(retries):  # Retry up to 5 times
+            if is_redis_running():
+                print("Redis server is running.")
+                return process
+            else:
+                print("Waiting for Redis server to start...")
+                time.sleep(wait)
+        print("Failed to start Redis server.")
+        process.terminate()
+
+    else:
+        print("Redis server is already running.")
+    return process
 
 
-def stop_redis_server():
-    import redis
+def stop_redis_server(process):
     """Stop the Redis server."""
-    try:
-        client = redis.StrictRedis(host='localhost', port=6379)
-        client.shutdown()
-        print("Redis server stopped.")
-    except redis.exceptions.ConnectionError as e:
-        print(f"Failed to stop Redis server: {e}")
+    if process is None:
+        print("Redis server is not running, so no need to stop it.")
+        return
+    else:
+        try:
+            process.terminate()
+            print("Redis server stopped.")
+        except Exception as e:
+            print(f"Failed to stop Redis server: {e}")
 
 
 def remove_middleware_from_dramatiq_broker(middleware_name: str, broker: 'dramatiq.broker.Broker'):
     # Remove Prometheus middleware if it exists
-    for el in broker.middleware:
-        if el.__module__ == middleware_name:
-            broker.middleware.remove(el)
+    broker.middleware[:] = [
+        m for m in broker.middleware
+        if m.__module__ != middleware_name
+    ]
 
 
 def start_workers(**kwargs) -> 'dramatiq.worker.Worker':
     """
     A startup routine for apps that make use of dramatiq.
     """
+    
     BROKER = get_broker()
-
-    worker = Worker(broker=BROKER, **kwargs)
+    
+    # Add the CurrentMessage middleware so you we can inspect the timestamp
+    BROKER.add_middleware(CurrentMessage())
+    
+    # Flush any old messages, start the worker, then run your app logic
+    BROKER.flush_all()
+    worker = Worker(broker=BROKER, worker_timeout=100, worker_threads=2, **kwargs)
     worker.start()
 
     return worker
@@ -70,19 +85,19 @@ def redis_server_context():
     """
     Context manager for apps that make use of a redis server
     """
-
+    process = None
     try:
-        start_redis_server()
+        process = start_redis_server()
 
         yield  # This is where the main logic will execute within the context
 
     finally:
         # Shutdown routine
-        stop_redis_server()
+        stop_redis_server(process)
 
 
 @contextmanager
-def dramatiq_workers(**kwargs):
+def dramatiq_workers_context(**kwargs):
     """
     Context manager for apps that make use of dramatiq. They need the workers to exist.
     """
@@ -95,7 +110,6 @@ def dramatiq_workers(**kwargs):
     finally:
         # Shutdown routine
         worker.stop()
-        get_broker().flush_all()
 
 
 # Example usage
@@ -126,6 +140,5 @@ if __name__ == "__main__":
                 exit(0)
 
 
-    with redis_server_context():
-        with dramatiq_workers():
+    with redis_server_context(), dramatiq_workers_context():
             example_app_routine()

@@ -4,9 +4,7 @@ from pathlib import Path
 from pyface.image_resource import ImageResource
 from traits.api import observe
 
-from envisage.ui.tasks.tasks_application import TasksApplication, DEFAULT_STATE_FILENAME
-from pyface.action.schema.schema import SMenuBar, SMenu
-from pyface.tasks.action.task_toggle_group import TaskToggleGroup
+from envisage.ui.tasks.tasks_application import TasksApplication
 
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -26,6 +24,6 @@ class MicrodropCanvasTaskApplication(TasksApplication):
     # branding
     icon = ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
 
-    @observe('started')
+    @observe('application_initialized')
     def _on_application_started(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)

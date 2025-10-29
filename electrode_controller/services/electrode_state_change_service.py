@@ -1,5 +1,5 @@
 # library imports
-from traits.api import provides, HasTraits
+from traits.api import provides, HasTraits, Str, Instance
 
 # interface imports from microdrop plugins
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
@@ -22,19 +22,43 @@ class ElectrodeStateChangeMixinService(HasTraits):
     So we should have access to the dropbot proxy object here, per the IDropbotControllerBase.
     """
 
-    id = "electrode_state_change_mixin_service"
-    name = 'Electrode state change Mixin'
+    id = Str('electrode_state_change_mixin_service')
+    name = Str('Electrode state change Mixin')
 
     ######################################## Methods to Expose #############################################
+
     def on_electrodes_state_change_request(self, message):
-        """
-        Method following the simple example in examples/tests/test_dropbot_methods to actuate electrodes on dropbot
-        given the states and channels pairs in the JSON message as per ElectrodeStateChangeRequestMessageModel.
-        """
-        channel_states_map_model = ElectrodeStateChangeRequestMessageModel(json_message=message,
-                                                                           num_available_channels=self.proxy.number_of_channels)
+        try:
+            if not hasattr(self, 'proxy') or self.proxy is None:
+                logger.error("Proxy not available for electrode state change")
+                return
 
-        # do actuation
-        self.proxy.state_of_channels = channel_states_map_model.channels_states_boolean_mask
+            # Use safe proxy access for electrode state changes
+            with self.proxy_state_manager.safe_proxy_access("electrode_state_change", timeout=3.0):
+                
+                # Create and validate message model
+                channel_states_map_model = ElectrodeStateChangeRequestMessageModel(
+                    json_message=message,
+                    num_available_channels=self.proxy.number_of_channels
+                )
 
-        logger.info(f"{self.proxy.state_of_channels.sum()} number of channels actuated now")
+                # Validate boolean mask size
+                expected_channels = self.proxy.number_of_channels
+                mask_size = len(channel_states_map_model.channels_states_boolean_mask)
+                
+                if mask_size != expected_channels:
+                    logger.error(f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}")
+                    return
+
+                # Set electrode state safely
+                self.proxy.state_of_channels = channel_states_map_model.channels_states_boolean_mask
+                
+                active_channels = self.proxy.state_of_channels.sum()
+                logger.info(f"{active_channels} channels actuated")
+                
+        except TimeoutError:
+            logger.error("Timeout waiting for proxy access for electrode state change")
+        except RuntimeError as e:
+            logger.error(f"Proxy state error during electrode state change: {e}")
+        except Exception as e:
+            logger.error(f"Error processing electrode state change: {e}")

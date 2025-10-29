@@ -1,56 +1,86 @@
+import re
+import traceback
 import warnings
+from typing import Any
+from datetime import datetime
+
 
 import dramatiq
 from dramatiq import Actor
+from dramatiq.middleware import CurrentMessage
 from traits.api import Instance, Str, provides, HasTraits, Callable
 
-from . import logger
-from .i_dramatiq_controller_base import IDramatiqControllerBase
+from microdrop_utils._logger import get_logger
 
+from .i_dramatiq_controller_base import IDramatiqControllerBase
+from .timestamped_message import TimestampedMessage
+
+logger = get_logger(__name__, level="DEBUG")
 
 @provides(IDramatiqControllerBase)
 class DramatiqControllerBase(HasTraits):
     """Base controller class for Dramatiq message handling.
 
-    This class provides a framework for handling asynchronous messages using Dramatiq.
-    It automatically sets up a listener actor that can process messages based on topics
-    and routes them to appropriate handler methods.
+    This class provides a framework for handling asynchronous messages using
+    Dramatiq. It automatically sets up a listener actor that can process
+    messages based on topics and routes them to appropriate handler methods.
 
     Attributes:
         listener_name (str): Name identifier for the Dramatiq actor
-        listener (Actor): Dramatiq actor instance that handles message processing
+        listener_queue (str): The unique queue actor is listening to
+        listener (Actor): Dramatiq actor instance for message processing
 
     Example:
         >>> class MyController(DramatiqControllerBase):
-        ...     listener_name = "my_listener"
-        ...
-        ...     def listener_actor_routine(parent_obj, message: str, topic: str) -> None:
-        ...         print(f"Processing {message} from {topic}")
-
-        >>> dramatiq_controller = DramatiqControllerBase(listener_name=listener_name, listener_actor_routine=method)
+        ...     # Return a listener actor method if one is not provided
+        ...     def _listener_actor_method_default(self, message: str,
+        ...                                      topic: str) -> None:
+        ...         def listener_actor_method(self, message: str,
+        ...                                 topic: str) -> None:
+        ...             print(f"Processing {message} from {topic}")
+        ...         return listener_actor_method
+        >>> dramatiq_controller = MyController()
+        >>> def method():
+        ...     return None
+        >>> dramatiq_controller = DramatiqControllerBase(
+        ...     listener_name=listener_name,
+        ...     listener_actor_method=method
+        ... )
         >>> dramatiq_controller.listener_actor.__class__
         >>> <class 'dramatiq.actor.Actor'>
     """
 
-    listener_name: str = Str(desc="Unique identifier for the Dramatiq actor")
-    listener_actor_method = Callable(desc="Routine to be wrapped into listener_actor"
-                                           "Should accept parent_obj, message, topic parameters")
-    listener_actor: Actor = Instance(Actor, desc="Dramatiq actor instance for message handling")
+    listener_name = Str(desc="Unique identifier for the Dramatiq actor")
+    listener_queue = Str("default", desc="The unique queue actor is listening to")
+    listener_actor_method = Callable(
+        desc="Routine to be wrapped into listener_actor. Should accept "
+             "parent_obj, message, topic parameters"
+    )
+    listener_actor: Actor = Instance(
+        Actor,
+        desc="Dramatiq actor instance for message handling"
+    )
 
     def traits_init(self) -> None:
-        """Initialize the controller by setting up the Dramatiq listener.
-
-        This method is called during object initialization and sets up the
-        Dramatiq actor using the configuration specified in _listener_default.
-        """
-
+        """Initialize the controller by setting up the Dramatiq listener."""
         if not self.listener_name:
-            raise ValueError("listener_name must be set before creating the actor")
+            raise ValueError(
+                "listener_name must be set before creating the actor"
+            )
 
         if not self.listener_actor_method:
-            raise ValueError("listener_actor_method must be set before creating the actor")
+            raise ValueError(
+                "listener_actor_method must be set before creating the actor"
+            )
 
         self.listener_actor = self._listener_actor_default()
+
+    def _listener_name_default(self):
+        """Set the default listener actor name to be class name in snake_case."""
+        class_name = self.__class__.__name__  # class name in camel case
+        # convert to snake case
+        class_name = re.sub(r'([a-z])([A-Z])', r'\1_\2', class_name).lower()
+        return class_name
 
     def _listener_actor_default(self) -> Actor:
         """Create and configure the Dramatiq actor for message handling.
@@ -62,68 +92,101 @@ class DramatiqControllerBase(HasTraits):
             The created actor will use the class's listener_name and
             route messages to the listener_routine method.
         """
-
-        @dramatiq.actor(actor_name=self.listener_name)
-        def create_listener_actor(message: str, topic: str) -> None:
+        @dramatiq.actor(
+            actor_name=self.listener_name,
+            queue_name=self.listener_queue
+        )
+        def create_listener_actor(message: str, topic: str, timestamp: float | None = None) -> None:
             """Handle incoming Dramatiq messages.
 
             Args:
-                parent_obj: Parent class this listener actor should belong to and control.
                 message: Content of the received message
                 topic: Topic/routing key of the message
+                timestamp: Timestamp of the message. If None, the timestamp is extracted from the current message.
             """
-            self.listener_actor_method(message, topic)
+            if timestamp is None: # This is the message *to* the message_router
+                msg_proxy = CurrentMessage.get_current_message()
+                msg_timestamp = (
+                    msg_proxy._message.message_timestamp if msg_proxy is not None
+                    else None
+                )
+                logger.debug(f"Message going to message_router: {message} at {msg_timestamp}")
+            else: # This is the message *from* the message_router (since message_router is the only publish_message that adds a timestamp)
+                msg_timestamp = timestamp
+                logger.debug(f"Message received from message_router: {message} at {msg_timestamp}")
+
+            timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
+                content=message,
+                timestamp=msg_timestamp
+            )
+            self.listener_actor_method(timestamped_message, topic)
 
         return create_listener_actor
 
 
-def generate_class_method_dramatiq_listener_actor(listener_name, class_method) -> Actor:
-    """
-    Method to generate a Dramatiq Actor for message handling for a class based on one of its methods.
+def generate_class_method_dramatiq_listener_actor(
+    listener_name: str,
+    class_method: Callable,
+    listener_queue: str = "default"
+) -> Actor:
+    """Generate a Dramatiq Actor for message handling for a class method.
 
-    Params:
-    listener_name (str): Name identifier for the Dramatiq actor.
-    class_method (Callable): Method that handles message handling that requires to be wrapped up as an Actor
+    Args:
+        listener_name: Name identifier for the Dramatiq actor
+        listener_queue: The unique queue actor is listening to
+        class_method: Method that handles message handling to be wrapped as Actor
+
+    Returns:
+        Actor: Configured Dramatiq actor instance
     """
     # If the given listener name is not registered,
     if listener_name in dramatiq.get_broker().actors:
-        warnings.warn("Dramatiq actor with this name has already been registered.This plugin already has a listener "
-                        "actor. No need to create a new actor.")
-
+        warnings.warn(
+            "Dramatiq actor with this name has already been registered. "
+            "No need to create a new actor."
+        )
     else:
-
-        # Dramatiq controller base class made  with listener actor generated as an attribute
-        dramatiq_controller = DramatiqControllerBase(listener_name=listener_name, listener_actor_method=class_method)
-
+        dramatiq_controller = DramatiqControllerBase(
+            listener_name=listener_name,
+            listener_actor_method=class_method,
+            listener_queue=listener_queue
+        )
         return dramatiq_controller.listener_actor
 
 
-def basic_listener_actor_routine(parent_obj: object, message: any, topic: str,
-                                 handler_name_pattern: str = "_on_{topic}_triggered") -> None:
-    """
-    Dispatches an incoming message to a dynamically determined handler method on the parent object.
+def basic_listener_actor_routine(
+    parent_obj: object,
+    timestamped_message: TimestampedMessage,    
+    topic: str,
+    handler_name_pattern: str = "_on_{topic}_triggered"
+) -> None:
+    """Dispatch incoming message to dynamically determined handler method.
 
-    This function logs the received message and topic, derives a method name using the specified
-    naming pattern (defaulting to "_on_{topic}_triggered"), and then checks if the parent object
-    contains a callable method with that name. If so, it invokes the method with the message.
+    This function logs the received message and topic, derives a method name
+    using the specified naming pattern, and checks if the parent object
+    contains a callable method with that name. If so, it invokes the method
+    with the message.
 
-    Parameters:
-        parent_obj (object): The object expected to have a handler method for the given topic.
-                             It is assumed that parent_obj has a 'name' attribute used for logging.
-        message (any): The message or data payload to be processed by the handler method.
-        topic (str): The topic string from which the handler method name is derived.
-                     The topic is expected to be a string containing segments separated by "/".
-        handler_name_pattern (str, optional): A format string that defines the handler method's name.
-                     It must include a placeholder '{topic}', which will be replaced by the last segment
-                     of the provided topic. Defaults to "_on_{topic}_triggered".
+    Args:
+        parent_obj: Object expected to have a handler method for the topic.
+                   Should have a 'name' attribute used for logging.
+        timestamped_message: TimestampedMessage object containing the message and timestamp.
+        topic: Topic string from which handler method name is derived.
+               Expected to be a string with segments separated by "/".
+        handler_name_pattern: Format string defining handler method's name.
+                            Must include '{topic}' placeholder. Defaults to
+                            "_on_{topic}_triggered".
 
     Example:
-        For a topic "devices/sensor", the computed method name will be "_on_sensor_triggered".
-
-    Returns:
-        None
+        For a topic "devices/sensor", the computed method name will be
+        "_on_sensor_triggered".
     """
-    logger.info(f"{parent_obj.name}: Received message: {message} from topic: {topic}")
+    
+    if topic != 'dropbot/signals/capacitance_updated' and topic != 'ui/protocol_grid/display_state':
+        logger.info(
+            f"{parent_obj.name}: Received message: '{timestamped_message}' "
+            f"from topic: {topic} at {timestamped_message.timestamp}"
+        )
 
     # Split the topic into parts and take the last segment as the key.
     topic_parts = topic.split("/")
@@ -132,17 +195,30 @@ def basic_listener_actor_routine(parent_obj: object, message: any, topic: str,
     # Compute the handler method name using the provided pattern.
     requested_method = handler_name_pattern.format(topic=topic_key)
 
-    # invoke the method, and check if any error_message shows up
-    err_msg = invoke_class_method(parent_obj, requested_method, message)
+    err_msg = invoke_class_method(
+        parent_obj,
+        requested_method,
+        timestamped_message
+    )
 
     if err_msg:
-        logger.error(f"{parent_obj.name}: Received message: {message} from topic: {topic} Failed to execute due to "
-                     f"error: {err_msg}")
+        logger.error(
+            f"{parent_obj.name}: Received message: {timestamped_message} "
+            f"from topic: {topic} Failed to execute due to error: {err_msg}"
+        )
 
 
 def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
-    """
-    Method to invoke a requested method that could be defined within a parent object class with some arguments
+    """Invoke a requested method defined within a parent object class.
+
+    Args:
+        parent_obj: Object containing the method to invoke
+        requested_method: Name of the method to invoke
+        *args: Positional arguments to pass to the method
+        **kwargs: Keyword arguments to pass to the method
+
+    Returns:
+        str: Empty string if successful, error message if failed
     """
     error_msg = ""
 
@@ -156,18 +232,23 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
             try:
                 class_method(*args, **kwargs)
                 return error_msg
-
             except Exception as e:
-                error_msg = f"Error executing '{requested_method}': \nArguments: {args, kwargs}\n Exception: {e}"
+                stack_trace = traceback.format_exc()
+                error_msg = (
+                    f"Error executing '{requested_method}': "
+                    f"\nArguments: {args, kwargs}\n {stack_trace}"
+                )
                 logger.error(error_msg)
                 return error_msg
-        # log a warning if the requested method is an attribute but not a callable
         else:
-            error_msg = f"{parent_obj}: Attribute '{requested_method}' exists but is not callable."
+            error_msg = (
+                f"{parent_obj}: Attribute '{requested_method}' "
+                "exists but is not callable."
+            )
             logger.warning(error_msg)
             return error_msg
-
     else:
         error_msg = f"Method '{requested_method}' not found for {parent_obj}."
         logger.warning(error_msg)
         return error_msg
+

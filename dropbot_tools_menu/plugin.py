@@ -2,14 +2,20 @@
 from functools import partial
 
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import List, observe, Str
+from traits.api import List, observe, Str, Bool
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from device_viewer.consts import PKG as device_viewer_PKG
+from microdrop_application.consts import PKG as microdrop_application_PKG
+
+from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
-from .device_viewer_task_method_additions import _on_self_tests_progress_triggered
+
+from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
+
+from microdrop_utils._logger import get_logger
+logger = get_logger(__name__)
 
 
 class DropbotToolsMenuPlugin(Plugin):
@@ -31,19 +37,24 @@ class DropbotToolsMenuPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     #: The task id to contribute task extension view to
-    task_id_to_contribute_view = Str(default_value=f"{device_viewer_PKG}.task")
+    task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
+    dropbot_connected = Bool(False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._setup_listener_actor()
+    
     #### Trait initializers ###################################################
 
     def _contributed_task_extensions_default(self):
-        from .menus import dropbot_tools_menu_factory
 
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
                 actions=[
                     SchemaAddition(
-                        factory=dropbot_tools_menu_factory,
+                        factory=self.dropbot_tools_menu_factory,
                         path='MenuBar/Tools',
                     )
 
@@ -53,8 +64,38 @@ class DropbotToolsMenuPlugin(Plugin):
 
     @observe("application:application_initialized")
     def on_application_initialized(self, event):
-        # add some listener methods to the application task
-        for task in self.application.active_window.tasks:
-            if task.id == f"{device_viewer_PKG}.task":
-                setattr(task, _on_self_tests_progress_triggered.__name__,
-                        partial(_on_self_tests_progress_triggered, task))
+        # Wait for the window to be created
+        if self.application.active_window is None:
+            # If window is not created yet, observe the window creation
+            self.application.on_trait_change(self._on_window_created, 'active_window')
+            return
+
+    def _on_window_created(self, window):
+        """Called when the application window is created."""
+        if window is not None:
+            # Remove the observer since we don't need it anymore
+            self.application.on_trait_change(self._on_window_created, 'active_window', remove=True)     
+
+    def _listener_actor_routine(self, message, topic):
+        if topic == CHIP_INSERTED:
+            logger.debug(f"Received {topic} signal")
+            self.dropbot_connected = True
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
+        elif topic == DROPBOT_DISCONNECTED:
+            logger.debug(f"Received {topic} signal")
+            self.dropbot_connected = False   
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
+        elif topic == DROPBOT_CONNECTED:
+            logger.debug(f"Received {topic} signal")
+            self.dropbot_connected = True
+            logger.info(f"Dropbot connected: {self.dropbot_connected}")
+    
+    def _setup_listener_actor(self):
+        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=f"{PKG}_listener",
+            class_method=self._listener_actor_routine)    
+    
+    def dropbot_tools_menu_factory(self):
+        from .menus import dropbot_tools_menu_factory
+
+        return dropbot_tools_menu_factory(plugin = self)
