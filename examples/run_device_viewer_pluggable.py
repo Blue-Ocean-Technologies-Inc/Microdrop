@@ -44,6 +44,35 @@ logger = get_logger(__name__)
 def main(plugins=None, contexts=None, application=None, persist=False):
     """Run the application."""
 
+    from device_viewer.application import DeviceViewerApplication
+    from device_viewer.plugin import DeviceViewerPlugin
+    from dropbot_status.plugin import DropbotStatusPlugin
+    from message_router.plugin import MessageRouterPlugin
+    from dropbot_controller.plugin import DropbotControllerPlugin
+    from manual_controls.plugin import ManualControlsPlugin
+    from electrode_controller.plugin import ElectrodeControllerPlugin
+    from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
+    from dropbot_status_plot.plugin import DropbotStatusPlotPlugin
+    from protocol_grid_controller_ui.plugin import ProtocolGridControllerUIPlugin
+
+    plugins = [
+        CorePlugin(),
+        TasksPlugin(),
+        DeviceViewerPlugin(),
+        DropbotStatusPlugin(),
+        ElectrodeControllerPlugin(),
+        MessageRouterPlugin(),
+        DropbotControllerPlugin(),
+        ManualControlsPlugin(),
+        ProtocolGridControllerUIPlugin(),
+        DropbotToolsMenuPlugin(),
+        DropbotStatusPlotPlugin()
+    ]
+
+    app = DeviceViewerApplication(plugins=plugins)
+
+    with dramatiq_workers():
+        app.run()
     app_instance = QApplication.instance() or QApplication(sys.argv)
     app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
 

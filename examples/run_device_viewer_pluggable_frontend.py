@@ -1,3 +1,6 @@
+# Plugin imports.
+from envisage.api import CorePlugin
+from envisage.ui.tasks.api import TasksPlugin
 import sys
 import os
 
@@ -8,6 +11,13 @@ from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS,
                                     FRONTEND_CONTEXT, REQUIRED_CONTEXT,
                                     FRONTEND_APPLICATION)
 
+    from device_viewer.application import DeviceViewerApplication
+    from device_viewer.plugin import DeviceViewerPlugin
+    from dropbot_status.plugin import DropbotStatusPlugin
+    from message_router.plugin import MessageRouterPlugin
+    from manual_controls.plugin import ManualControlsPlugin
+    from protocol_grid_controller_ui.protocol_grid_controller_plugin import ProtocolGridControllerPlugin
+    from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 
 def main():
     """Run only the frontend plugins."""
