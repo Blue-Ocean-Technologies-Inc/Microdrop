@@ -24,6 +24,7 @@ from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_
 from logger.logger_service import get_logger
 from microdrop_utils.font_helpers import load_font_family
 from microdrop_utils.root_dir_utils import get_project_root
+from microdrop_utils.broker_server_helpers import redis_server_context, dramatiq_workers_context
 
 from microdrop_style.font_paths import load_material_symbols_font
 
@@ -75,9 +76,7 @@ def main(plugins=None, contexts=None, application=None, persist=False):
     signal.signal(signal.SIGINT, stop_app)
     signal.signal(signal.SIGTERM, stop_app)
 
-    with contextlib.ExitStack() as stack: # contextlib.ExitStack is a context manager that allows you to stack multiple context managers
-        for context in contexts:
-            stack.enter_context(context())
+    with dramatiq_workers_context():
         app.run()
         if persist:
             while True:
@@ -85,4 +84,5 @@ def main(plugins=None, contexts=None, application=None, persist=False):
 
 
 if __name__ == "__main__":
-    main()
+    with redis_server_context():
+        main()
