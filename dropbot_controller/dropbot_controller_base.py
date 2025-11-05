@@ -13,7 +13,8 @@ from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
-                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS)
+                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
+                     REALTIME_MODE_UPDATED, ELECTRODES_STATE_CHANGE, SET_REALTIME_MODE)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -22,10 +23,13 @@ from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from logger.logger_service import get_logger
 from .preferences import DropbotPreferences
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__, level="INFO")
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
 
 
 @provides(IDropbotControllerBase)
@@ -233,15 +237,27 @@ class DropbotControllerBase(HasTraits):
     def _halted_event_wrapper(signal):
 
         reason = ''
+        message = ''
 
         if signal['error']['name'] == 'output-current-exceeded':
             reason = 'because output current was exceeded'
+
+            message = '''
+                            All channels have been disabled and high voltage has been
+                            turned off until the DropBot is restarted (e.g., unplug all 
+                            cables and plug back in).'''.strip()
+
         elif signal['error']['name'] == 'chip-load-saturated':
             reason = 'because chip load feedback exceeded allowable range'
+            message = '''
+            Requested channels cannot be actuated. Check if you have too many droplets, or damage on actuated electrodes before attempting more actuation.
+                                    '''.strip()
 
         # send out signal to all interested parties that the dropbot has been halted and request the HALT method
-        publish_message(topic=HALTED, message=reason)
-        publish_message(topic=HALT, message="")
+        halted_message = json.dumps({"name": signal['error']['name'], "reason": reason, "message": message})
+        publish_message(topic=HALTED, message=halted_message)
+
+        publish_message(topic=HALT, message=halted_message)
 
         logger.error(f'DropBot halted due to {reason}')
 
@@ -275,6 +291,30 @@ class DropbotControllerBase(HasTraits):
                 shorts_dict = {'Shorts_detected': shorts_list}
                 logger.info(f"Detected shorts: {shorts_dict}")
                 publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
+
+
+    def on_halt_request(self, message):
+        message = json.loads(message)
+        name = message.get('name')
+        # XXX Refresh channels since channels were disabled.
+        self._refresh_channels()
+        # Disable real-time mode.
+        publish_message(topic=SET_REALTIME_MODE, message="False")
+        logger.error("Halted DropBot: Disconnect everything and reconnect")
+
+        # if chip has too much liquid, continue to allow actuation.
+        if name == "chip-load-saturated":
+            self.proxy.disabled_channels_mask *= 0
+
+    def _refresh_channels(self):
+        # XXX Reassign channel states to trigger a `channels-updated`
+        # message since actuated channel states may have changed based
+        # on the channels that were disabled.
+        self.proxy.turn_off_all_channels()
+
+        last_channels_states = app_globals["last_channel_states_requested"]
+
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=last_channels_states)
 
     ########################################################################################################
 

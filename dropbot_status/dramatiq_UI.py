@@ -217,9 +217,16 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         self.no_power = True
         self.view_signals.show_no_power_dialog.emit()
 
-    def _on_halted_triggered(self, message):
-        text = (f"DropBot has been halted, reason was {message}.\n\n"
-                "All channels have been disabled until the DropBot is restarted.")
+    def _on_halted_triggered(self, message_str):
+
+        message_dict = json.loads(message_str)
+
+        reason = message_dict.get('reason')
+        message = message_dict.get('message')
+
+        text = (f"DropBot has halted {reason}.\n\n"
+                f"{message}")
+
         self.view_signals.show_halted_popup.emit(text)
 
 

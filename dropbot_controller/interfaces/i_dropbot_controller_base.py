@@ -50,4 +50,8 @@ class IDropbotControllerBase(IDramatiqControllerBase):
         Detect any shorts on the chip.
         """
 
+    def on_halt_request(self, message):
+        """
+        handle halt requests.
+        """
     ####################################################################################

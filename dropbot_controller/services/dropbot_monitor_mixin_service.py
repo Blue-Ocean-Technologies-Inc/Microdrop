@@ -1,19 +1,12 @@
-import functools
-import json
-import time
-import traceback
-
 import dropbot
-from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE
 from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy, connection_flags
+from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
@@ -24,6 +17,7 @@ logger = get_logger(__name__)
 
 # silence all APScheduler job-exception logs
 get_logger('apscheduler.executors.default').setLevel(level="WARNING")
+
 
 @provides(IDropbotControlMixinService)
 class DropbotMonitorMixinService(HasTraits):
@@ -85,16 +79,6 @@ class DropbotMonitorMixinService(HasTraits):
             return
         logger.info("Attempting to retry connecting with a dropbot")
         self.monitor_scheduler.resume()
-
-    def on_halt_request(self, message):
-        self.proxy.turn_off_all_channels()
-        self.proxy.update_state(hv_output_selected=False,
-                                hv_output_enabled=False,
-                                voltage=0)
-        # hv output change means realtime mode has been updated
-        publish_message(topic=REALTIME_MODE_UPDATED, message="False")
-        logger.info(f"HALTED: realtime mode OFF")
-        logger.error("Halted DropBot: Disconnect everything and reconnect")
     
     ############################################################
     # Connect / Disconnect signal handlers
