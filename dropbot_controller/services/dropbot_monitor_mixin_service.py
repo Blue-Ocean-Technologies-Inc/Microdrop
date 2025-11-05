@@ -3,6 +3,7 @@ from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUSED
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
@@ -34,17 +35,39 @@ class DropbotMonitorMixinService(HasTraits):
     _no_power = Bool(False) 
 
     ######################################## Methods to Expose #############################################
+
     def on_start_device_monitoring_request(self, hwids_to_check):
         """
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
         """
-
         # if dropbot already connected, exit after publishing connection and chip details
         if self.dropbot_connection_active:
             publish_message('dropbot_connected', DROPBOT_CONNECTED)
             self.on_chip_check_request("") # from base class
-            return
+            return None
+
+        ## handle cases where monitor scheduler object already exists
+        if hasattr(self, "monitor_scheduler"):
+            if isinstance(self.monitor_scheduler, BackgroundScheduler):
+
+                if self.monitor_scheduler.state == STATE_RUNNING:
+                    logger.warning(f"Dropbot connections are already being monitored.")
+
+                elif self.monitor_scheduler.state == STATE_STOPPED:
+                    self.monitor_scheduler.start()
+                    logger.info(f"Dropbot connection monitoring started now.")
+
+                elif self.monitor_scheduler.state == STATE_PAUSED:
+                    self.monitor_scheduler.resume()
+                    logger.info(f"Dropbot connection monitoring was paused, now it is resumed.")
+
+                else:
+                    logger.error(f"Invalid dropbot monitor scheduler state: it is {self.monitor_scheduler.state}")
+
+                return None
+
+        ## monitor was never created, so we can make one now:
 
         if not hwids_to_check:
             hwids_to_check = [DROPBOT_DB3_120_HWID]
