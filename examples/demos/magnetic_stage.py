@@ -18,15 +18,17 @@ time.sleep(settling_time_s)
 print(proxy.config)
 
 down_height = proxy.config.zstage_down_position
+
+print(down_height == 0.5)
+
 up_height = proxy.config.zstage_up_position
+print(up_height)
 
 zstage = proxy.zstage
 
-## ensure zstage is homed
+## ensure zstage is homed at 0.0
 zstage.home()
-print(zstage.position == down_height)
-print(zstage.is_down == True)
-print(zstage.is_up == False)
+print(zstage.position == 0.0)
 time.sleep(0.5)
 
 ## bring stage up
@@ -42,12 +44,8 @@ print(zstage.is_down == True)
 print(zstage.is_up == False)
 
 time.sleep(0.5)
+
 # home again
 zstage.home()
 
 proxy.terminate()
-
-
-
-
-
