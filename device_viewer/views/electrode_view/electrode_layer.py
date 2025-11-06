@@ -169,8 +169,7 @@ class ElectrodeLayer():
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_line_alpha(alpha)
 
-    def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView):
-        alpha = model.get_alpha("electrode_fill")
+    def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView, hovered_electrode_lightness):
         
         for electrode_id, electrode_view in self.electrode_views.items():
             if electrode_view.electrode == model.electrodes.electrode_editing:
@@ -179,9 +178,14 @@ class ElectrodeLayer():
                 color = ELECTRODE_NO_CHANNEL
             else:
                 color = ELECTRODE_ON if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
-            
+
+            if color == ELECTRODE_ON:
+                alpha = model.get_alpha("actuated_electrodes")
+            else:
+                alpha = model.get_alpha("electrode_fill")
+
             if electrode_hovered == electrode_view:
-                color = QColor(color).lighter(120).name()
+                color = QColor(color).lighter(hovered_electrode_lightness).name()
 
             electrode_view.update_color(color, alpha)
 

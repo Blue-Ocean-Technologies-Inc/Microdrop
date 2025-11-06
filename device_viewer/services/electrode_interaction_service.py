@@ -194,7 +194,11 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("electrode_hovered")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
-            self.electrode_view_layer.redraw_electrode_colors(self.model, self.electrode_hovered)
+            self.electrode_view_layer.redraw_electrode_colors(
+                self.model,
+                self.electrode_hovered,
+                hovered_electrode_lightness=self.model.preferences.HOVERED_ELECTRODE_LIGHTNESS
+            )
 
     @observe("model.electrodes.electrodes.items.channel")
     def electrode_channel_change(self, event):
@@ -240,7 +244,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if changed_key == "electrode_outline" and self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_lines(self.model)
 
-        if changed_key == "electrode_fill":
+        if changed_key in ["electrode_fill", "actuated_electrodes"]:
             self.electrode_state_recolor(None)
 
         if changed_key == "electrode_text":

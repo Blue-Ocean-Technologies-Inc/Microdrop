@@ -48,7 +48,7 @@ if __name__ == '__main__':
 
         @observe("alpha_map.items.[alpha, visible]")
         def update_alpha_map(self, event):
-            print(f"{event.object.key}, {event.name}, {event.new}")
+            print(event)
 
     alpha_model = AlphaModel()
     alpha_model.alpha_map = [AlphaValue(key=key, alpha=default_alphas[key]) for key in default_alphas.keys()]

@@ -21,5 +21,12 @@ ROUTE_CCW_LOOP = "orange"
 ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], PRIMARY_SHADE[600])
 AUTOROUTE_COLOR = "pink"
 
-default_alphas = {'routes': 1.0, 'electrode_fill': 0.75, 'electrode_text': 0.75, 'electrode_outline': 1, 'video': 1.0}
+default_alphas = {
+    'routes': 1.0,
+    'electrode_fill': 0.75,
+    'actuated_electrodes': 1.0,
+    'electrode_text': 0.75,
+    'electrode_outline': 1,
+    'video': 1.0}
+
 default_visibility = {key: True for key in default_alphas}

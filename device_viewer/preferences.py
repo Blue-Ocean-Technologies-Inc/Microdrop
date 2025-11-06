@@ -2,7 +2,7 @@ from pathlib import Path
 import filecmp
 
 from apptools.preferences.api import PreferencesHelper
-from traits.api import File, Range, Directory, Dict
+from traits.api import File, Range, Directory, Dict, Int
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import VGroup, View, Item, FileEditor
 from envisage.ui.tasks.api import PreferencesCategory
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 
-from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE
+from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE, HOVERED_ELECTRODE_LIGHTNESS
 from .default_settings import default_alphas, default_visibility
 
 
@@ -36,6 +36,8 @@ class DeviceViewerPreferences(PreferencesHelper):
     DEVICE_VIEWER_SIDEBAR_WIDTH = Range(value=DEVICE_VIEWER_SIDEBAR_WIDTH, low=0, high=10000)
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
+
+    HOVERED_ELECTRODE_LIGHTNESS = Range(value=HOVERED_ELECTRODE_LIGHTNESS, low=0, high=500)
 
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
@@ -129,8 +131,14 @@ class DeviceViewerPreferencesPane(PreferencesPane):
             ),
         )
 
+    # add setting for hovered electrode lightness
+    hovered_lightness_setting = create_item_label_group(
+        'HOVERED_ELECTRODE_LIGHTNESS',
+        label_text='Hovered Electrode Lightness',
+    )
+
     main_view_settings = VGroup(
-        default_svg_setting_group,
+        default_svg_setting_group, hovered_lightness_setting,
         label="Main View",
         show_border=True,
         style_sheet=preferences_group_style_sheet,
