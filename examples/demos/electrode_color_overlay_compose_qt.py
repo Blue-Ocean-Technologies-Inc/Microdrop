@@ -164,7 +164,6 @@ class ClickablePathItem(QGraphicsPathItem):
                 break
 
         # 3. Linearly interpolate between min and max
-        # This was the missing piece.
         lightness_percentage = min_lightness_percent + (max_lightness_percent - min_lightness_percent) * lightness_scale
 
         # QColor.lighter() expects an integer
