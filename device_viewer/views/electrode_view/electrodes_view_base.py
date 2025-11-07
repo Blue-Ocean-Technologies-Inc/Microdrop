@@ -201,29 +201,7 @@ class ElectrodeView(QGraphicsPathItem):
         """
         Creates a scaled-down and centered version of the original path.
         """
-        bbox = original_path.boundingRect()
-
-        # Calculate new size
-        scaled_width = bbox.width() * scale_factor
-        scaled_height = bbox.height() * scale_factor
-
-        # Calculate translation to center the scaled path
-        translate_x = bbox.x() + (bbox.width() - scaled_width) / 2
-        translate_y = bbox.y() + (bbox.height() - scaled_height) / 2
-
-        # Create a transform
-        transform = QTransform()
-        transform.translate(translate_x, translate_y)  # Move to the new top-left
-        transform.scale(scale_factor, scale_factor)  # Scale relative to (0,0)
-
-        # Apply the inverse translation to scale around the center (before scaling)
-        transform.translate(-bbox.x(), -bbox.y())
-
-        # It's actually easier to scale around center by doing this:
-        # 1. Translate so bbox center is at (0,0)
-        # 2. Scale
-        # 3. Translate back
-        center = bbox.center()
+        center = original_path.boundingRect().center()
         transform = QTransform()
         transform.translate(center.x(), center.y())
         transform.scale(scale_factor, scale_factor)
