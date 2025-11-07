@@ -35,7 +35,7 @@ SECONDARY_SHADE = {
 }
 
 from microdrop_style.colors import SECONDARY_SHADE
-ELECTRODE_ON =  SECONDARY_SHADE[300]
+ELECTRODE_ON =  SECONDARY_SHADE[600]
 ELECTRODE_OFF = SECONDARY_SHADE[900]
 
 # --- Define Base Colors ---
@@ -55,10 +55,13 @@ class ClickablePathItem(QGraphicsPathItem):
     def __init__(self, path_data, color_off, color_on, pen_color, id_=None, parent=None):
         super().__init__(parent)
 
+        self.hover_factor_base = 0.5
+        self.hover_factor_actuation = 0.5
         self.id = id_
-        self.state = False  # Corresponds to True/False in your state_map
+        self.state = False
+        self._is_hovered = False
 
-        # Store the colors
+        # Store the base colors
         self.color_off = QColor(color_off)
         self.color_on = QColor(color_on)
 
@@ -77,33 +80,14 @@ class ClickablePathItem(QGraphicsPathItem):
         # Set the pen for the outline
         self.setPen(QPen(pen_color, 1))
 
+        # Tell the item to accept hover events
+        self.setAcceptHoverEvents(True)
+
     def _create_inner_path(self, original_path, scale_factor):
         """
         Creates a scaled-down and centered version of the original path.
         """
-        bbox = original_path.boundingRect()
-
-        # Calculate new size
-        scaled_width = bbox.width() * scale_factor
-        scaled_height = bbox.height() * scale_factor
-
-        # Calculate translation to center the scaled path
-        translate_x = bbox.x() + (bbox.width() - scaled_width) / 2
-        translate_y = bbox.y() + (bbox.height() - scaled_height) / 2
-
-        # Create a transform
-        transform = QTransform()
-        transform.translate(translate_x, translate_y)  # Move to the new top-left
-        transform.scale(scale_factor, scale_factor)  # Scale relative to (0,0)
-
-        # Apply the inverse translation to scale around the center (before scaling)
-        transform.translate(-bbox.x(), -bbox.y())
-
-        # It's actually easier to scale around center by doing this:
-        # 1. Translate so bbox center is at (0,0)
-        # 2. Scale
-        # 3. Translate back
-        center = bbox.center()
+        center = original_path.boundingRect().center()
         transform = QTransform()
         transform.translate(center.x(), center.y())
         transform.scale(scale_factor, scale_factor)
@@ -137,7 +121,53 @@ class ClickablePathItem(QGraphicsPathItem):
         self.setPen(pen)
         self.update()
 
+    def set_hover_factor_base(self, factor):
+        """Sets the lightness factor for hovering."""
+        self.hover_factor_base = factor
+
+    def set_hover_factor_actuation(self, factor):
+        """Sets the lightness factor for hovering."""
+        self.hover_factor_actuation = factor
+
+
     # --- Overridden Qt Methods ---
+
+    def _get_lighter_percent(self, color, lightness_scale):
+        """
+        Calculates the integer percentage for QColor.lighter()
+        based on a 0.0-1.0 scale.
+
+        color: QColor
+        lightness_scale: float (0.0 to 1.0)
+            0.0 means same lightness as color (returns 100).
+            1.0 means fully white (returns 100 / lightnessF).
+        """
+
+        # 1. Define the start of our scale (100% = no change)
+        min_lightness_percent = 100.0
+
+        current_lightness = color.lightness()
+
+        # 2. Define the end of our scale (the factor to get to white)
+        if current_lightness == 0:
+            # Handle pure black:
+            h, s, l, a = color.getHsl()
+            color.setHsl(h, s, 1, a)
+
+        # The factor needed to reach 1.0 lightness (white)
+        # e.g., if lightnessF is 0.5 (gray), we need a factor of
+        # 1.0 / 0.5 = 2.0, which is 200%.
+        max_lightness_percent = int(255*100 / current_lightness)
+        for n in range(max_lightness_percent, max_lightness_percent + 10000):
+            if color.lighter(n).lightness() == 255:
+                max_lightness_percent = n
+                break
+
+        # 3. Linearly interpolate between min and max
+        lightness_percentage = min_lightness_percent + (max_lightness_percent - min_lightness_percent) * lightness_scale
+
+        # QColor.lighter() expects an integer
+        return int(lightness_percentage)
 
     def paint(self, painter, option, widget):
         """
@@ -147,19 +177,23 @@ class ClickablePathItem(QGraphicsPathItem):
         # Use SourceOver composition to allow alpha blending
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        # 1. Always paint the 'off' color as the base, using the full path
-        painter.fillPath(self.path(), self.color_off)
+        # 1. Determine the *actual* colors to use based on hover state
+        if self._is_hovered:
+            current_off_color = self.color_off.lighter(self._get_lighter_percent(self.color_off, self.hover_factor_base))
+            current_on_color = self.color_on.lighter(self._get_lighter_percent(self.color_on, self.hover_factor_actuation))
+        else:
+            current_off_color = self.color_off
+            current_on_color = self.color_on
 
-        # 2. If the state is 'on' (True), paint the 'on' color
+        # 2. Always paint the 'off' color as the base, using the calculated color
+        painter.fillPath(self.path(), current_off_color)
+
+        # 3. If the state is 'on' (True), paint the 'on' color
         #    using the _inner_path over the 'off' color.
         if self.state:
-            # THIS was the bug. This line was redundant and incorrect.
-            # painter.fillPath(self.item_path, self.color_off)
+            painter.fillPath(self._inner_path, current_on_color)
 
-            # This is the only line that should be here:
-            painter.fillPath(self._inner_path, self.color_on)
-
-        # 3. Draw the outline (using the full path)
+        # 4. Draw the outline (using the full path)
         painter.strokePath(self.path(), self.pen())
 
     def mousePressEvent(self, event):
@@ -169,6 +203,18 @@ class ClickablePathItem(QGraphicsPathItem):
 
         # Pass the event on
         super().mousePressEvent(event)
+
+    def hoverEnterEvent(self, event):
+        """Handles mouse hovering events by setting a flag."""
+        self._is_hovered = True
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        """Handles mouse hovering events by clearing a flag."""
+        self._is_hovered = False
+        self.update()
+        super().hoverLeaveEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -261,6 +307,29 @@ class MainWindow(QMainWindow):
         on_alpha_layout.addWidget(self.on_alpha_slider)
         controls_layout.addLayout(on_alpha_layout)
 
+        # lightness on hover slider:
+        hover_layout = QHBoxLayout()
+        hover_label = QLabel("Base Hover Lightness (%):")
+        hover_slider = QSlider(Qt.Orientation.Horizontal)
+        hover_slider.setRange(0, 100)  # 100% (no change) to 250%
+        hover_slider.setValue(50)
+        hover_slider.valueChanged.connect(self.update_base_hover_lightness)
+        hover_layout.addWidget(hover_label)
+        hover_layout.addWidget(hover_slider)
+        controls_layout.addLayout(hover_layout)
+
+        # lightness on hover slider:
+        hover_layout = QHBoxLayout()
+        hover_label = QLabel("Actuation Hover Lightness (%):")
+        hover_slider = QSlider(Qt.Orientation.Horizontal)
+        hover_slider.setRange(0, 100)  # 100% (no change) to 250%
+        hover_slider.setValue(50)
+        hover_slider.valueChanged.connect(self.update_actuation_hover_lightness)
+        hover_layout.addWidget(hover_label)
+        hover_layout.addWidget(hover_slider)
+        controls_layout.addLayout(hover_layout)
+
+
         main_layout.addWidget(controls_widget)  # Add controls to main layout
 
         # Set the central widget
@@ -282,7 +351,21 @@ class MainWindow(QMainWindow):
         Slot to update the alpha of the 'on' color for all items.
         """
         for item in self.items:
-            item.set_on_color(self.color_clicked, value)  # This calls item.update()
+            item.set_on_color(self.color_clicked, value)  # This calls item.update()\
+
+    def update_base_hover_lightness(self, value):
+        """
+        Slot to update the hover lightness factor for all items.
+        """
+        for item in self.items:
+            item.set_hover_factor_base(value / 100)
+
+    def update_actuation_hover_lightness(self, value):
+        """
+        Slot to update the hover lightness factor for all items.
+        """
+        for item in self.items:
+            item.set_hover_factor_actuation(value / 100)
 
 
 def main():

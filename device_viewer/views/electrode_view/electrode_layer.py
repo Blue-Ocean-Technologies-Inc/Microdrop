@@ -2,6 +2,7 @@ from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
 from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
 from pyface.qt.QtCore import QPointF
 
+from microdrop_utils.qt_helpers import get_qcolor_lighter_percent_from_factor
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \
@@ -171,7 +172,7 @@ class ElectrodeLayer():
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_line_alpha(alpha)
 
-    def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView, hovered_electrode_lightness):
+    def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView):
         
         for electrode_id, electrode_view in self.electrode_views.items():
             # initialize color stack
@@ -199,9 +200,11 @@ class ElectrodeLayer():
 
             # check if fills need editing if they are hovered:
             if electrode_hovered == electrode_view:
-                base_color = base_color.lighter(hovered_electrode_lightness)
+                lighter_percent = get_qcolor_lighter_percent_from_factor(base_color, model.preferences.HOVERED_ELECTRODE_LIGHTNESS / 100)
+                base_color = base_color.lighter(lighter_percent)
                 if on_color:
-                    on_color = on_color.lighter(hovered_electrode_lightness)
+                    lighter_percent = get_qcolor_lighter_percent_from_factor(on_color, model.preferences.HOVERED_ACTUATED_ELECTRODE_LIGHTNESS / 100)
+                    on_color = on_color.lighter(lighter_percent)
 
             color_stack.append(base_color)
             if on_color:

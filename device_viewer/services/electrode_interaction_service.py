@@ -198,7 +198,6 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_electrode_colors(
                 self.model,
                 self.electrode_hovered,
-                hovered_electrode_lightness=self.model.preferences.HOVERED_ELECTRODE_LIGHTNESS
             )
 
     @observe("model.electrodes.electrodes.items.channel")
