@@ -35,7 +35,7 @@ SECONDARY_SHADE = {
 }
 
 from microdrop_style.colors import SECONDARY_SHADE
-ELECTRODE_ON =  SECONDARY_SHADE[300]
+ELECTRODE_ON =  SECONDARY_SHADE[600]
 ELECTRODE_OFF = SECONDARY_SHADE[900]
 
 # --- Define Base Colors ---
@@ -153,9 +153,6 @@ class ClickablePathItem(QGraphicsPathItem):
         # 2. If the state is 'on' (True), paint the 'on' color
         #    using the _inner_path over the 'off' color.
         if self.state:
-            # THIS was the bug. This line was redundant and incorrect.
-            # painter.fillPath(self.item_path, self.color_off)
-
             # This is the only line that should be here:
             painter.fillPath(self._inner_path, self.color_on)
 
