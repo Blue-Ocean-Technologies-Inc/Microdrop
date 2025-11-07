@@ -32,7 +32,7 @@ alpha_keys = [routes_key, electrode_fill_key, actuated_electrodes_key,
               electrode_text_key, electrode_outline_key, video_key]
 
 default_alphas = dict(
-    zip(alpha_keys, [1]*len(alpha_keys))
+    zip(alpha_keys, [100]*len(alpha_keys))
 )
 
 default_visibility = {key: True for key in default_alphas}
