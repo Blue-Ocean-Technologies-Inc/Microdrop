@@ -16,7 +16,8 @@ from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphic
                              QGraphicsItem)
 
 from microdrop_utils.decorators import debounce
-from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
+from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, \
+    CONNECTION_LINE_ON_DEFAULT, default_alphas, electrode_text_key, electrode_outline_key
 from device_viewer.models.electrodes import Electrode
 
 logger = get_logger(__name__, level='INFO')
@@ -176,7 +177,7 @@ class ElectrodeView(QGraphicsPathItem):
 
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
-        self.update_line_alpha(default_alphas.get('electrode_outline',1.0))
+        self.update_line_alpha(default_alphas.get(electrode_outline_key,1.0))
 
         # Text item
         self.text_path = QGraphicsTextItem(parent=self)
@@ -184,7 +185,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.text_path.setDefaultTextColor(self.text_color)
         self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
                               np.min(path_data[:, 1]), np.max(path_data[:, 1])]
-        self._fit_text_in_path(alpha=default_alphas.get('electrode_text', 1.0)) # Called again by electrode_layer set the proper alphas using the model
+        self._fit_text_in_path(alpha=default_alphas.get(electrode_text_key, 1.0)) # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)

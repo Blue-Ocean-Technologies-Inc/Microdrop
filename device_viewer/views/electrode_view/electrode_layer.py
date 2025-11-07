@@ -4,7 +4,9 @@ from pyface.qt.QtCore import QPointF
 
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
-from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING
+from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \
+    ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING, electrode_outline_key, \
+    electrode_fill_key, actuated_electrodes_key, electrode_text_key
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 
@@ -165,7 +167,7 @@ class ElectrodeLayer():
         """
         Method to redraw the electrode lines in the layer
         """
-        alpha = model.get_alpha("electrode_outline")
+        alpha = model.get_alpha(electrode_outline_key)
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_line_alpha(alpha)
 
@@ -187,13 +189,13 @@ class ElectrodeLayer():
 
             # construct the base QColor
             base_color = QColor(base_color)
-            base_color.setAlphaF(model.get_alpha("electrode_fill"))
+            base_color.setAlphaF(model.get_alpha(electrode_fill_key))
 
             # check if electrode is on to see if additional color_layer needed:
             on_color = None
             if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False):
                 on_color = QColor(ELECTRODE_ON)
-                on_color.setAlphaF(model.get_alpha("actuated_electrodes"))
+                on_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
 
             # check if fills need editing if they are hovered:
             if electrode_hovered == electrode_view:
@@ -208,7 +210,7 @@ class ElectrodeLayer():
             electrode_view.update_color(color_stack)
 
     def redraw_electrode_labels(self, model: DeviceViewMainModel):
-        alpha = model.get_alpha("electrode_text")
+        alpha = model.get_alpha(electrode_text_key)
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label(alpha)
 

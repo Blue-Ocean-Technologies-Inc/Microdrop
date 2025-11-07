@@ -6,6 +6,7 @@ from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
+from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
 
 from ..preferences import DeviceViewerPreferences
 
@@ -142,12 +143,12 @@ class DeviceViewMainModel(HasTraits):
             self.electrodes.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
             self.camera_perspective.reset_rects() # Reset the rectangles when entering camera-place mode
-            self.set_visible("electrode_fill", False)  # Set the fill alpha low for visibility
-            self.set_visible("electrode_text", False)  # Set the text alpha low for visibility
-            self.set_visible("electrode_outline", True)  # Keep the outline visible for editing
+            self.set_visible(electrode_fill_key, False)  # Set the fill alpha low for visibility
+            self.set_visible(electrode_text_key, False)  # Set the text alpha low for visibility
+            self.set_visible(electrode_outline_key, True)  # Keep the outline visible for editing
         if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
-            self.set_visible("electrode_fill", True)  # Restore fill visibility
-            self.set_visible("electrode_text", True)  # Restore text
+            self.set_visible(electrode_fill_key, True)  # Restore fill visibility
+            self.set_visible(electrode_text_key, True)  # Restore text
 
     @observe("routes.layers.items.route.route.items")
     @observe("electrodes.channels_electrode_ids_map.items")

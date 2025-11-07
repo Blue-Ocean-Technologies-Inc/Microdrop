@@ -17,6 +17,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+from ..default_settings import video_key
 from ..models.alpha import AlphaValue
 ##### local imports ######
 from ..models.electrodes import Electrodes
@@ -756,8 +757,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             changed_key = event.object.key
 
-            if changed_key == "video" and self.video_item:
-                self.video_item.setOpacity(self.model.get_alpha("video"))
+            if changed_key == video_key and self.video_item:
+                self.video_item.setOpacity(self.model.get_alpha(video_key))
 
             if changed_key == "opencv_pixmap" and self.opencv_pixmap:
                 self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
