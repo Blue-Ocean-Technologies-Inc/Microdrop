@@ -29,6 +29,9 @@ class LoggerPreferences(PreferencesHelper):
     # The log levels
     level = Enum("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
+    def _level_default(self):
+        return "INFO"
+
 
 class LoggerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""

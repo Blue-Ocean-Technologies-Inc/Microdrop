@@ -1,6 +1,9 @@
 # library imports
 import math
+from typing import List
+
 import numpy as np
+from PySide6.QtGui import QTransform
 from traits.observation.observe import observe
 
 # local imports
@@ -13,7 +16,8 @@ from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphic
                              QGraphicsItem)
 
 from microdrop_utils.decorators import debounce
-from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, CONNECTION_LINE_ON_DEFAULT, default_alphas
+from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, \
+    CONNECTION_LINE_ON_DEFAULT, default_alphas, electrode_text_key, electrode_outline_key
 from device_viewer.models.electrodes import Electrode
 
 logger = get_logger(__name__, level='INFO')
@@ -152,6 +156,7 @@ class ElectrodeView(QGraphicsPathItem):
     def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, default_alphas, parent=None):
         super().__init__(parent)
 
+        self.color_stack = None # only supports two right now: base, and actuation layer color
         self.state_map = { # Maps electrode states to colors
             None: ELECTRODE_OFF,
             False: ELECTRODE_OFF,
@@ -168,12 +173,11 @@ class ElectrodeView(QGraphicsPathItem):
         self.path.closeSubpath()
         self.setPath(self.path)
 
+        self._inner_path = self._create_inner_path(self.path, scale_factor=0.8)
+
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
-        self.update_line_alpha(default_alphas.get('electrode_outline',1.0))
-
-        # Brush for the fill
-        self.update_color(False)
+        self.update_line_alpha(default_alphas.get(electrode_outline_key,1.0))
 
         # Text item
         self.text_path = QGraphicsTextItem(parent=self)
@@ -181,7 +185,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.text_path.setDefaultTextColor(self.text_color)
         self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
                               np.min(path_data[:, 1]), np.max(path_data[:, 1])]
-        self._fit_text_in_path(alpha=default_alphas.get('electrode_text', 1.0)) # Called again by electrode_layer set the proper alphas using the model
+        self._fit_text_in_path(alpha=default_alphas.get(electrode_text_key, 1.0)) # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -193,6 +197,40 @@ class ElectrodeView(QGraphicsPathItem):
     #################################################################################
     # electrode view protected methods
     ##################################################################################
+
+    def _create_inner_path(self, original_path, scale_factor):
+        """
+        Creates a scaled-down and centered version of the original path.
+        """
+        bbox = original_path.boundingRect()
+
+        # Calculate new size
+        scaled_width = bbox.width() * scale_factor
+        scaled_height = bbox.height() * scale_factor
+
+        # Calculate translation to center the scaled path
+        translate_x = bbox.x() + (bbox.width() - scaled_width) / 2
+        translate_y = bbox.y() + (bbox.height() - scaled_height) / 2
+
+        # Create a transform
+        transform = QTransform()
+        transform.translate(translate_x, translate_y)  # Move to the new top-left
+        transform.scale(scale_factor, scale_factor)  # Scale relative to (0,0)
+
+        # Apply the inverse translation to scale around the center (before scaling)
+        transform.translate(-bbox.x(), -bbox.y())
+
+        # It's actually easier to scale around center by doing this:
+        # 1. Translate so bbox center is at (0,0)
+        # 2. Scale
+        # 3. Translate back
+        center = bbox.center()
+        transform = QTransform()
+        transform.translate(center.x(), center.y())
+        transform.scale(scale_factor, scale_factor)
+        transform.translate(-center.x(), -center.y())
+
+        return transform.map(original_path)
 
     @property
     def _tooltip_text(self):
@@ -243,14 +281,25 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def update_color(self, color_str: str, alpha: float = 1.0):
+    def update_color(self, colors: List[QColor]):
         """
         Method to update the color of the electrode based on the state
         """
-        color = QColor(color_str)
-        color.setAlphaF(alpha)
-        self.setBrush(QBrush(color))
+        # set the color stack: supports only two elements right now.
+        self.color_stack = colors
         self.update()
+
+    def paint(self, painter, option, widget):
+
+        # if only one element, then only base color given
+        painter.fillPath(self.path, self.color_stack[0])
+
+        # second element should be the actuation color.
+        if len(self.color_stack) > 1:
+            painter.fillPath(self._inner_path, self.color_stack[1])
+
+        # take care of the outline color
+        painter.strokePath(self.path, self.pen())
 
     def update_label(self, alpha: float = 1.0):
         self._fit_text_in_path(alpha)
