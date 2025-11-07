@@ -21,12 +21,18 @@ ROUTE_CCW_LOOP = "orange"
 ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], PRIMARY_SHADE[600])
 AUTOROUTE_COLOR = "pink"
 
-default_alphas = {
-    'routes': 1.0,
-    'electrode_fill': 0.75,
-    'actuated_electrodes': 1.0,
-    'electrode_text': 0.75,
-    'electrode_outline': 1,
-    'video': 1.0}
+routes_key = "Route"
+electrode_fill_key = "Electrode fill"
+actuated_electrodes_key = "Actuated electrodes"
+electrode_text_key = "Electrode text"
+electrode_outline_key = "Electrode outline"
+video_key = "Video"
+
+alpha_keys = [routes_key, electrode_fill_key, actuated_electrodes_key,
+              electrode_text_key, electrode_outline_key, video_key]
+
+default_alphas = dict(
+    zip(alpha_keys, [1]*len(alpha_keys))
+)
 
 default_visibility = {key: True for key in default_alphas}

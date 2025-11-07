@@ -9,7 +9,8 @@ from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
-from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS
+from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
+    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
 from device_viewer.utils.camera import qtransform_serialize, qtransform_deserialize
 from microdrop_application.consts import application_home_directory
 
@@ -241,16 +242,16 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         changed_key = event.object.key
 
-        if changed_key == "electrode_outline" and self.electrode_view_layer:
+        if changed_key == electrode_outline_key and self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_lines(self.model)
 
-        if changed_key in ["electrode_fill", "actuated_electrodes"]:
+        if changed_key in [electrode_fill_key, actuated_electrodes_key]:
             self.electrode_state_recolor(None)
 
-        if changed_key == "electrode_text":
+        if changed_key == electrode_text_key:
             self.electrode_channel_change(None)
 
-        if changed_key == "routes":
+        if changed_key == routes_key:
             self.route_redraw(None)
 
 
