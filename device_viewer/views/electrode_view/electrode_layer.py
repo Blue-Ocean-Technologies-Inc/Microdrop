@@ -172,22 +172,40 @@ class ElectrodeLayer():
     def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView, hovered_electrode_lightness):
         
         for electrode_id, electrode_view in self.electrode_views.items():
+            # initialize color stack
+            color_stack = []
+
+            # determine base_color:
             if electrode_view.electrode == model.electrodes.electrode_editing:
-                color = ELECTRODE_CHANNEL_EDITING
+                base_color = ELECTRODE_CHANNEL_EDITING
+
             elif electrode_view.electrode.channel == None:
-                color = ELECTRODE_NO_CHANNEL
-            else:
-                color = ELECTRODE_ON if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False) else ELECTRODE_OFF
+                base_color = ELECTRODE_NO_CHANNEL
 
-            if color == ELECTRODE_ON:
-                alpha = model.get_alpha("actuated_electrodes")
             else:
-                alpha = model.get_alpha("electrode_fill")
+                base_color = ELECTRODE_OFF
 
+            # construct the base QColor
+            base_color = QColor(base_color)
+            base_color.setAlphaF(model.get_alpha("electrode_fill"))
+
+            # check if electrode is on to see if additional color_layer needed:
+            on_color = None
+            if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False):
+                on_color = QColor(ELECTRODE_ON)
+                on_color.setAlphaF(model.get_alpha("actuated_electrodes"))
+
+            # check if fills need editing if they are hovered:
             if electrode_hovered == electrode_view:
-                color = QColor(color).lighter(hovered_electrode_lightness).name()
+                base_color = base_color.lighter(hovered_electrode_lightness)
+                if on_color:
+                    on_color = on_color.lighter(hovered_electrode_lightness)
 
-            electrode_view.update_color(color, alpha)
+            color_stack.append(base_color)
+            if on_color:
+                color_stack.append(on_color)
+
+            electrode_view.update_color(color_stack)
 
     def redraw_electrode_labels(self, model: DeviceViewMainModel):
         alpha = model.get_alpha("electrode_text")
