@@ -131,12 +131,12 @@ class DropBotDeviceConnectionMonitor(HasTraits):
 
 
 @dramatiq.actor
-def print_dropbot_message(message=str, topic=str):
+def print_dropbot_message(message=str, topic=str, timestamp=None):
     print(f"PRINT_DROPBOT_MESSAGE_SERVICE: Received message: {message}! from topic: {topic}")
 
 
 @dramatiq.actor
-def make_serial_proxy(port_name:Str, topic: Str):
+def make_serial_proxy(port_name:Str, topic: Str, timestamp=None):
     import dropbot
     try:
         proxy = dropbot.SerialProxy(port=port_name)
