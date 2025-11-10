@@ -9,7 +9,7 @@ from envisage.api import Plugin
 from envisage.ids import PREFERENCES_PANES
 from traits.api import List, observe
 
-from .logger_service import LEVELS, file_formatter, console_formatter
+from .logger_service import init_logger, LEVELS
 from .preferences import LoggerPreferences
 from .consts import PKG, PKG_name
 
@@ -41,21 +41,7 @@ class LoggerPlugin(Plugin):
     #
     def start(self):
         """Starts the plugin."""
-        preferred_log_level = LEVELS.get(LoggerPreferences().level, "INFO")
-
-        # Create handlers
-        file_handler = self.get_file_handler()
-        file_handler.setFormatter(file_formatter)
-
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(console_formatter)
-
-        # Set root logger initial config
-        ROOT_LOGGER = logging.getLogger()
-        ROOT_LOGGER.setLevel(preferred_log_level)
-        ROOT_LOGGER.handlers = []  # Clear existing handlers
-        ROOT_LOGGER.addHandler(file_handler)
-        ROOT_LOGGER.addHandler(console_handler)
+        init_logger(preferred_log_level=LEVELS.get(LoggerPreferences().level, logging.INFO))
 
     @observe("application:current_experiment_directory")
     def _current_exp_dir_changed(self, event):
