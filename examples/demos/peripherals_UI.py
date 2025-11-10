@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMainWindow,
     QGroupBox,
-    QDoubleSpinBox
+    QDoubleSpinBox,
 )
 from PySide6.QtCore import QObject, Signal, Slot
 from traits.api import HasTraits, Instance, Str, Float, observe
@@ -139,6 +139,11 @@ class PositionerViewModel(HasTraits):
         self._update_status_display()
         self._update_position_display()
         self.view_signals.position_value_changed.emit(self.model.position)
+        # Emit initial color
+        if self.model.status == "Disconnected":
+            self.view_signals.status_color_changed.emit("red")
+        else:
+            self.view_signals.status_color_changed.emit("green")
 
 
 # ----------------------------------------------------------------------------
@@ -158,17 +163,17 @@ class PositionerView(QWidget):
         self.view_signals = view_model.view_signals
 
         # --- Create Widgets ---
+        # Read-only labels
         self.status_label = QLabel("Status: ...")
-
-        # Read-only label for displaying the current position
         self.current_position_label = QLabel("Position: ...")
-        self.current_position_label.setMinimumWidth(120)  # Give it some space
-        self.current_position_label.setContentsMargins(5, 2, 5, 2)  # Add padding
 
+        # Color box for status
+        self.status_color_box = QLabel()
         # control buttons
         self.up_button = QPushButton("Up")
         self.down_button = QPushButton("Down")
         self.home_button = QPushButton("Home")
+        self.disconnect_button = QPushButton("Connect/Disconnect")  # Add disconnect button
 
         # Position control spinbox
         self.set_position_label = QLabel("Set Position:")
@@ -181,17 +186,22 @@ class PositionerView(QWidget):
         main_layout = QVBoxLayout(self)
 
         ################### Status display group ######################
-        status_group = QGroupBox("Status")
-        status_layout = QVBoxLayout()
+        self.status_group = QGroupBox("Status")  # Store as self.status_group
 
-        # Position layout (Display Label, Set Label, Spinbox)
-        position_layout = QHBoxLayout()
-        position_layout.addWidget(self.current_position_label)  # Add the new display label
-        position_layout.addSpacing(10)  # Add some space
+        status_layout = QHBoxLayout()
 
-        status_layout.addWidget(self.status_label)
-        status_layout.addLayout(position_layout)
-        status_group.setLayout(status_layout)
+        status_layout.addWidget(self.status_color_box)
+
+        # We will now use a single QHBoxLayout for all status info
+        status_text_layout = QVBoxLayout()
+
+        # Add the read only labels
+        status_text_layout.addWidget(self.status_label)
+        status_text_layout.addWidget(self.current_position_label)
+
+        status_layout.addLayout(status_text_layout)
+
+        self.status_group.setLayout(status_layout)
 
         ###################### Control group ##########################
         control_group = QGroupBox("Controls")
@@ -203,6 +213,7 @@ class PositionerView(QWidget):
         controls_buttons_layout.addWidget(self.up_button)
         controls_buttons_layout.addWidget(self.down_button)
         controls_buttons_layout.addWidget(self.home_button)
+        # controls_buttons_layout.addWidget(self.disconnect_button)  # Add button to layout
 
         # display position label and spin box horizontally aligned
         position_controls_layout.addWidget(self.set_position_label)
@@ -214,7 +225,7 @@ class PositionerView(QWidget):
 
         #############################################################
 
-        main_layout.addWidget(status_group)
+        main_layout.addWidget(self.status_group)
         main_layout.addWidget(control_group)
 
         # --- Data Binding ---
@@ -223,6 +234,7 @@ class PositionerView(QWidget):
         self.up_button.clicked.connect(self.view_model.move_up)
         self.down_button.clicked.connect(self.view_model.move_down)
         self.home_button.clicked.connect(self.view_model.go_home)
+        self.disconnect_button.clicked.connect(self.view_model.disconnect_device)  # Connect button
         self.position_spinbox.valueChanged.connect(self.view_model.set_position)
 
         # Connect signals (ViewModel) -> slots (View widgets)
@@ -234,6 +246,9 @@ class PositionerView(QWidget):
         # Connect the float value signal to our custom slot to update the spinbox
         self.view_signals.position_value_changed.connect(self.on_position_value_changed)
 
+        # Connect the color signal to our new slot
+        self.view_signals.status_color_changed.connect(self.on_status_color_changed)
+
     @Slot(float)
     def on_position_value_changed(self, value: float):
         """Slot to update the spinbox value from the ViewModel."""
@@ -242,6 +257,32 @@ class PositionerView(QWidget):
         self.position_spinbox.blockSignals(True)
         self.position_spinbox.setValue(value)
         self.position_spinbox.blockSignals(False)
+
+    @Slot(str)
+    def on_status_color_changed(self, color: str):
+        """Updates the border color of the status group box."""
+        # This CSS sets a border and ensures the groupbox title is visible
+        self.status_group.setStyleSheet(f"""
+            QGroupBox {{
+                border: 2px solid {color};
+                border-radius: 5px;
+                margin-top: 6px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 7px;
+                padding: 0px 5px 0px 5px;
+            }}
+        """)
+
+        # Set the background color of the new status box
+        self.status_color_box.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: {color};
+                        border: 1px solid #555;
+                        border-radius: 5px;
+                    }}
+                """)
 
 
 # ----------------------------------------------------------------------------
