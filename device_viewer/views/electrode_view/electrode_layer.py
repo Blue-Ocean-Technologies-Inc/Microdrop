@@ -7,7 +7,8 @@ from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, Electr
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \
     ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING, electrode_outline_key, \
-    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
+    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, hovered_actuation_key, \
+    hovered_electrode_key
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 
@@ -200,10 +201,10 @@ class ElectrodeLayer():
 
             # check if fills need editing if they are hovered:
             if electrode_hovered == electrode_view:
-                lighter_percent = get_qcolor_lighter_percent_from_factor(base_color, model.preferences.HOVERED_ELECTRODE_LIGHTNESS / 100)
+                lighter_percent = get_qcolor_lighter_percent_from_factor(base_color, model.get_alpha(hovered_electrode_key))
                 base_color = base_color.lighter(lighter_percent)
                 if on_color:
-                    lighter_percent = get_qcolor_lighter_percent_from_factor(on_color, model.preferences.HOVERED_ACTUATED_ELECTRODE_LIGHTNESS / 100)
+                    lighter_percent = get_qcolor_lighter_percent_from_factor(on_color, model.get_alpha(hovered_actuation_key))
                     on_color = on_color.lighter(lighter_percent)
 
             color_stack.append(base_color)
