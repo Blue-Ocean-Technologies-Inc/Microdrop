@@ -25,22 +25,24 @@ class DramatiqPeripheralSerialProxy(SerialProxy):
 
         # define the dramatiq pub sub wrappers
         def connected_wrapper(f, *args, **kwargs):
-            f(*args, **kwargs)
-
             # are we already in the state you're about to report?
             if _connection_state['connected']:
                 return  # already connected, skip
             _connection_state['connected'] = True
             publish_message(f'connected', CONNECTED)
 
-        def disconnected_wrapper(f, *args, **kwargs):
             f(*args, **kwargs)
+
+        def disconnected_wrapper(f, *args, **kwargs):
 
             # are we already in the state you're about to report?
             if not _connection_state['connected']:
                 return  # already disconnected, skip
+
             _connection_state['connected'] = False
             publish_message(f'disconnected', DISCONNECTED)
+
+            f(*args, **kwargs)
 
         monitor.disconnected_event.set = ft.partial(disconnected_wrapper,monitor.disconnected_event.set)
         monitor.disconnected_event.set = ft.partial(connected_wrapper, monitor.connected_event.set)
