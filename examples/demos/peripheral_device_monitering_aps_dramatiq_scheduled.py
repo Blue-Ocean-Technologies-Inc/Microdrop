@@ -71,6 +71,7 @@ def print_message(message=str, topic=str, *args, **kwargs):
 
 ### Manager proxy connection #########
 def disconnected_wrapper(f, *args, **kwargs):
+    logger.info(f"PRINT_MESSAGE_SERVICE: Disconnected from {f}")
     f(*args, **kwargs)
     publish_message(f'device disconnected', 'peripheral/disconnected')
 
@@ -88,7 +89,7 @@ def serial_proxy_manager(port_name:Str, topic: Str, *args, **kwargs):
 
     try:
         proxy = mr_box_peripheral_board.SerialProxy(port=port_name)
-        proxy.monitor.disconnected_event.set = ft.partial(disconnected_wrapper, proxy.monitor.disconnected_event)
+        proxy.monitor.disconnected_event.set = ft.partial(disconnected_wrapper, proxy.monitor.disconnected_event.set)
         time.sleep(2)
         print(proxy.ram_free())
 
