@@ -27,12 +27,19 @@ actuated_electrodes_key = "Actuated electrodes"
 electrode_text_key = "Electrode text"
 electrode_outline_key = "Electrode outline"
 video_key = "Video"
+hovered_electrode_key = "Hovered Electrode"
+hovered_actuation_key = "Hovered Actuation"
+
+hovered_electrode_lightness = 20
+hovered_actuated_lightness = 30
 
 alpha_keys = [routes_key, electrode_fill_key, actuated_electrodes_key,
-              electrode_text_key, electrode_outline_key, video_key]
+              electrode_text_key, electrode_outline_key, video_key, hovered_electrode_key, hovered_actuation_key]
+
+values = [100] * len(alpha_keys[:-2]) + [20, 30]
 
 default_alphas = dict(
-    zip(alpha_keys, [1]*len(alpha_keys))
+    zip(alpha_keys, values)
 )
 
 default_visibility = {key: True for key in default_alphas}

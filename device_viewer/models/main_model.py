@@ -113,7 +113,7 @@ class DeviceViewMainModel(HasTraits):
         """Get the alpha value for a given key."""
         for alpha_value in self.alpha_map:
             if alpha_value.key == key:
-                return alpha_value.alpha if alpha_value.visible else 0.0
+                return alpha_value.alpha / 100 if alpha_value.visible else 0.0
         return 1.0 # Default alpha if not found
 
     def set_alpha(self, key: str, alpha: float):
