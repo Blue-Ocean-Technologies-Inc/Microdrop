@@ -48,8 +48,10 @@ def main(plugins=None, contexts=None, application=None, persist=False):
     app_instance = QApplication.instance() or QApplication(sys.argv)
     app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
 
+    from peripheral_controller.plugin import PeripheralControllerPlugin
+
     if plugins is None:
-        plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS
+        plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS + [PeripheralControllerPlugin]
     if contexts is None:
         contexts = FRONTEND_CONTEXT + BACKEND_CONTEXT + REQUIRED_CONTEXT
     if application is None:

@@ -5,6 +5,7 @@ from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_status.plugin import DropbotStatusPlugin
 from manual_controls.plugin import ManualControlsPlugin
+from peripheral_controller.plugin import PeripheralControllerPlugin
 from protocol_grid.plugin import ProtocolGridControllerUIPlugin
 from BlankMicrodropCanvas.application import MicrodropCanvasTaskApplication
 from dropbot_controller.plugin import DropbotControllerPlugin
@@ -29,6 +30,7 @@ FRONTEND_PLUGINS = [
 BACKEND_PLUGINS = [
     DropbotControllerPlugin,
     ElectrodeControllerPlugin,
+    PeripheralControllerPlugin
 ]
 
 REQUIRED_PLUGINS = [

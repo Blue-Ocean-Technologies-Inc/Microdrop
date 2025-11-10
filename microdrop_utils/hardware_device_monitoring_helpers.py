@@ -33,11 +33,11 @@ def check_devices_available(hwids_to_check):
         if len(valid_ports) > 0:
             port_name = str(valid_ports[0].device)
             # Indicate success by returning the port name
-            logger.info(f'DropBot found on port {port_name}, topic is dropbot/info')
+            logger.info(f'Device for hwids {hwids_to_check} found on port {port_name}')
             return port_name
 
         else:
-            raise Exception('DropBot not found')
+            raise Exception(f'No device for hwids {hwids_to_check} found')
 
 
 if __name__ == "__main__":
