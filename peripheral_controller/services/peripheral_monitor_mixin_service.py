@@ -118,9 +118,8 @@ class PeripheralMonitorMixinService(HasTraits):
                 self.proxy.monitor = None
                 logger.info(f"Sending Signal to Resumed {self._device_name} monitor")
 
-        else:
-            logger.info("DropBot disconnected. Resuming search for dropbot connection.")
-            self.on_retry_connection_request(message="")
+        logger.info(f" {self._device_name} disconnected. Resuming search for dropbot connection.")
+        self.on_retry_connection_request(message="")
 
     def on_connected_signal(self, message):
         # set connection active in case it was not changed.
