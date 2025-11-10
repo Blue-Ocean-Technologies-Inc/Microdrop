@@ -70,8 +70,9 @@ class RangeColumn(ObjectColumn):
 
     def get_editor(self, object):
         """Gets the editor for the column of a specified object."""
-        if self.editor is not None:
-            return self.editor
+
+        # get the editor returned by super class to obtain some trait values for modified editor.
+        _editor = super().get_editor(object)
 
         ### the current edited row object key is set here
         self.editing_object_key = object.key
@@ -81,14 +82,14 @@ class RangeColumn(ObjectColumn):
         ### to do this we need to apss the reference of this "parent_column" object to the range editor
 
         ### This is a major hack!
-        ### TODO: Figure out bettter way to do this.
+        ### TODO: Figure out better way to do this.
 
         class _RangeEditor(RangeEditor):
             parent_column = Instance(RangeColumn)
             def __del__(self):
                 self.parent_column.editing_object_key = ""
 
-        editor = _RangeEditor(low=0, high=100, mode="spinner", parent_column=self)
+        editor = _RangeEditor(low=_editor.low, high=_editor.high, mode=_editor.mode, parent_column=self)
 
         return editor
 
