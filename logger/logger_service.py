@@ -78,3 +78,28 @@ def get_logger(name, level=MIN_APP_LOGLEVEL, dev_mode=DEV_MODE):
         logger.setLevel(LEVELS[level])
 
     return logger
+
+def init_logger(preferred_log_level=LEVELS["INFO"],
+                file_handler=None,
+                console_handler=None, console_handler_formatter=None):
+
+    # setup console handler
+    if not console_handler:
+        console_handler = logging.StreamHandler()
+
+    if not console_handler_formatter:
+        console_handler_formatter = console_formatter
+
+    console_handler.setFormatter(console_handler_formatter)
+
+    # setup root logger:
+    ROOT_LOGGER = logging.getLogger()
+    ROOT_LOGGER.setLevel(preferred_log_level)
+    ROOT_LOGGER.handlers = []  # Clear existing handlers
+
+    # if file handler provided, add to root logger.
+    if file_handler:
+        file_handler.setFormatter(file_formatter)
+        ROOT_LOGGER.addHandler(file_handler)
+
+    ROOT_LOGGER.addHandler(console_handler)
