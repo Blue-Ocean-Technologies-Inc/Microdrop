@@ -94,6 +94,7 @@ class PeripheralControllerBase(HasTraits):
                     self.connection_active = True
                 else:
                     self.connection_active = False
+                requested_method = f"on_{specific_sub_topic}_signal"
 
             # 3. Handle exceptions:
             # specific  requests that would change connectivity
