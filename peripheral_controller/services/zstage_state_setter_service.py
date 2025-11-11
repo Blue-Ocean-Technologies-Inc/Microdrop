@@ -79,6 +79,7 @@ class ZStageStatesSetterMixinService(HasTraits):
         """
         Home z stage
         """
+        self.proxy.zstage.home()
 
     @thread_lock_with_error_handling
     @zstage_motor_context
