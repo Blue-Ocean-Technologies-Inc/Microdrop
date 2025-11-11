@@ -3,34 +3,34 @@ import os
 import sys
 from pathlib import Path
 
-from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
-
-from PySide6.QtCore import QEvent
-from traits.etsconfig.api import ETSConfig
-
+# Local imports.
+from .helpers import get_microdrop_redis_globals_manager
+from .preferences import MicrodropPreferences
 from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .helpers import get_microdrop_redis_globals_manager
-# Local imports.
-from .preferences import MicrodropPreferences
+from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
+from dropbot_tools_menu.menus import dropbot_tools_menu_factory
+from .consts import (scibots_icon_path, sidebar_menu_options,
+                     hamburger_btn_stylesheet, EXPERIMENT_DIR)
 
 # Enthought library imports.
-from envisage.ui.tasks.api import TasksApplication
-from pyface.tasks.api import TaskWindowLayout
+from traits.etsconfig.api import ETSConfig
 from traits.api import Bool, Instance, List, Property, observe, Directory
+
+from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
+from envisage.ui.tasks.api import TasksApplication
+
+from pyface.tasks.api import TaskWindowLayout
+from pyface.action.api import StatusBarManager
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
-from PySide6.QtWidgets import (QStatusBar, QToolBar, QLabel,
-                               QPushButton, QSizePolicy, QVBoxLayout,
+from PySide6.QtWidgets import (QToolBar, QLabel,
+                               QPushButton, QVBoxLayout,
                                QHBoxLayout, QWidget, QFrame)
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QPixmap, QFont
 
-from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-from dropbot_tools_menu.menus import dropbot_tools_menu_factory
-from .consts import (scibots_icon_path, sidebar_menu_options, 
-                     hamburger_btn_stylesheet, EXPERIMENT_DIR)
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -155,6 +155,29 @@ class MicrodropApplication(TasksApplication):
     def _on_application_initialized(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
+        if is_dark_mode():
+            stylesheet = """
+            QStatusBar {
+                color: #00FF85;              
+                font-weight: bold;  
+                font-size: 12x;       
+            }
+            QStatusBar::item {
+                border: none;
+            }
+        """
+        else:
+            stylesheet = """
+                        QStatusBar {
+                            font-size: 12x;
+                            font-weight: bold;
+                            color: #28A745;
+                        }
+                     """
+
+        self.active_window.status_bar_manager = StatusBarManager(messages=["\t"*10, "Free Mode"], size_grip=True)
+        self.active_window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
+
     ############################# Initialization ############################################################
     def traits_init(self):
         self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
@@ -175,30 +198,27 @@ class MicrodropApplication(TasksApplication):
             
             return super().start()
 
-    # status bar at the bottom of the window 
-    @observe('windows:items')
-    def _on_windows_updated(self, event):
-        for window in event.added:
-            if hasattr(window, "control") and window.control is not None:
-                if not hasattr(window.control, "_statusbar"):
-                    status_bar = QStatusBar(window.control)
-                    status_bar.setFixedHeight(30)
-                    status_bar.showMessage("Ready", 10000)
-
-                    window.control.setStatusBar(status_bar)
-                    window.control._statusbar = status_bar
-                    
-                if not hasattr(window.control, "_left_toolbar"):
-                    left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
-
-                    # Add to the left of the main window
-                    window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
-
-                    # Optionally, prevent closing the toolbar
-                    left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
-
-                    # Store a reference so it's not re-added
-                    window.control._left_toolbar = left_toolbar
+    # # status bar at the bottom of the window
+    # @observe('windows:items')
+    # def _on_windows_updated(self, event):
+    #     for window in event.added:
+    #         if hasattr(window, "control") and window.control is not None:
+    #             if not hasattr(window.control, "_statusbar"):
+    #                 window.status_bar_manager
+    #
+    #                 window.control.setStatusBar(status_bar)
+    #
+    #             # if not hasattr(window.control, "_left_toolbar"):
+    #             #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
+    #             #
+    #             #     # Add to the left of the main window
+    #             #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
+    #             #
+    #             #     # Optionally, prevent closing the toolbar
+    #             #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
+    #             #
+    #             #     # Store a reference so it's not re-added
+    #             #     window.control._left_toolbar = left_toolbar
 
 
 class MicrodropSidebar(QToolBar):
