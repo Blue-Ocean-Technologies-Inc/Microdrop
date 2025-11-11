@@ -6,7 +6,7 @@ from traits.has_traits import HasTraits, observe
 from traits.trait_types import Instance
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from peripherals_ui.z_stage.model import ZStageModel
+from peripherals_ui.model import PeripheralModel
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -46,7 +46,7 @@ class ZStageViewModelSignals(QObject):
 
 class ZStageViewModel(HasTraits):
     """Manages the logic for the Positioner View."""
-    model = Instance(ZStageModel)
+    model = Instance(PeripheralModel)
     view_signals = Instance(ZStageViewModelSignals, ())  # Auto-creates an instance
 
     # --- Commands (for the View's buttons to call) ---

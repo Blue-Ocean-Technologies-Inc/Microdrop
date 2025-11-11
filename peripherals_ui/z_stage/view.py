@@ -154,7 +154,7 @@ class ZStageView(QWidget):
 # 5. Main Application / Test Harness
 # ----------------------------------------------------------------------------
 if __name__ == "__main__":
-    from peripherals_ui.z_stage.model import ZStageModel
+    from peripherals_ui.model import PeripheralModel
 
     from logger.logger_service import init_logger, get_logger
     logger = get_logger(__name__)
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # 1. Create the Model
-    the_model = ZStageModel()
+    the_model = PeripheralModel(device_name="ZStage")
 
     # 2. Create the ViewModel
     the_view_model = ZStageViewModel(model=the_model)
