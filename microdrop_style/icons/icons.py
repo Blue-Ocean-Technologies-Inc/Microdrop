@@ -28,3 +28,5 @@ ICON_NEXT_PHASE      = "\ue5cc"  # next_phase
 ICON_STOP            = "\ue047"  # stop
 ICON_NEXT            = "\ue01f"  # next
 ICON_LAST            = "\ue044"  # last
+
+ICON_MENU            = "\ue5d2"
