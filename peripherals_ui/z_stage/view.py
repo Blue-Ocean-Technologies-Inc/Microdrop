@@ -114,6 +114,8 @@ class ZStageView(QWidget):
         # Connect the color signal to our new slot
         self.view_signals.status_color_changed.connect(self.on_status_color_changed)
 
+        self.view_signals.controls_enabled_changed.connect(self.set_controls_enabled)
+
     @Slot(float)
     def on_position_value_changed(self, value: float):
         """Slot to update the spinbox value from the ViewModel."""
@@ -148,6 +150,18 @@ class ZStageView(QWidget):
                         border-radius: 5px;
                     }}
                 """)
+
+    @Slot(bool)
+    def set_controls_enabled(self, enabled: bool):
+        """
+        Enables or disables the motion controls (buttons and spinbox).
+        The Connect/Disconnect button is excluded as it needs to be always active.
+        """
+        self.up_button.setEnabled(enabled)
+        self.down_button.setEnabled(enabled)
+        self.home_button.setEnabled(enabled)
+        self.position_spinbox.setEnabled(enabled)
+        self.set_position_label.setEnabled(enabled)
 
 
 # ----------------------------------------------------------------------------

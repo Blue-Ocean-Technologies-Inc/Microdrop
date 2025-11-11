@@ -42,6 +42,7 @@ class ZStageViewModelSignals(QObject):
     position_text_changed = Signal(str)
     position_value_changed = Signal(float)  # Signal for the raw float value
     status_color_changed = Signal(str)  # Signal for the group box color
+    controls_enabled_changed = Signal(bool)
 
 
 class ZStageViewModel(HasTraits):
@@ -101,6 +102,7 @@ class ZStageViewModel(HasTraits):
         """Fires when model.status changes."""
         self._update_status_text()
         self._update_status_color()
+        self.view_signals.controls_enabled_changed.emit(event.new)
 
     @observe("model:position")
     def _on_position_changed(self, event):
@@ -117,5 +119,6 @@ class ZStageViewModel(HasTraits):
         self._update_status_color()
         self._update_position_display()
         self.view_signals.position_value_changed.emit(self.model.position)
+        self.view_signals.controls_enabled_changed.emit(self.model.status)
 
 
