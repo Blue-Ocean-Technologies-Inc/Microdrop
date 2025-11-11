@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from microdrop_style.icons.icons import ICON_MENU
 # Local imports.
 from .helpers import get_microdrop_redis_globals_manager
 from .preferences import MicrodropPreferences
@@ -28,7 +29,7 @@ from pyface.splash_screen import SplashScreen
 from PySide6.QtWidgets import (QToolBar, QLabel,
                                QPushButton, QVBoxLayout,
                                QHBoxLayout, QWidget, QFrame)
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, QSize
 from PySide6.QtGui import QPixmap, QFont
 
 
@@ -155,28 +156,6 @@ class MicrodropApplication(TasksApplication):
     def _on_application_initialized(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
-        if is_dark_mode():
-            stylesheet = """
-            QStatusBar {
-                color: #00FF85;              
-                font-weight: bold;  
-                font-size: 12x;       
-            }
-            QStatusBar::item {
-                border: none;
-            }
-        """
-        else:
-            stylesheet = """
-                        QStatusBar {
-                            font-size: 12x;
-                            font-weight: bold;
-                            color: #28A745;
-                        }
-                     """
-
-        self.active_window.status_bar_manager = StatusBarManager(messages=["\t"*10, "Free Mode"], size_grip=True)
-        self.active_window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
 
     ############################# Initialization ############################################################
     def traits_init(self):
@@ -198,27 +177,52 @@ class MicrodropApplication(TasksApplication):
             
             return super().start()
 
-    # # status bar at the bottom of the window
-    # @observe('windows:items')
-    # def _on_windows_updated(self, event):
-    #     for window in event.added:
-    #         if hasattr(window, "control") and window.control is not None:
-    #             if not hasattr(window.control, "_statusbar"):
-    #                 window.status_bar_manager
-    #
-    #                 window.control.setStatusBar(status_bar)
-    #
-    #             # if not hasattr(window.control, "_left_toolbar"):
-    #             #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
-    #             #
-    #             #     # Add to the left of the main window
-    #             #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
-    #             #
-    #             #     # Optionally, prevent closing the toolbar
-    #             #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
-    #             #
-    #             #     # Store a reference so it's not re-added
-    #             #     window.control._left_toolbar = left_toolbar
+    # add tool bar to the window
+    @observe('windows:items')
+    def _on_windows_updated(self, event):
+
+        if self.active_window:
+            window = self.active_window
+
+            if is_dark_mode():
+                stylesheet = """
+                QStatusBar {
+                    color: #dadedf;              
+                    font-weight: bold;  
+                    font-size: 14x; 
+                    font-family: Arial;
+                    background: #222222;
+                    border-top: 2px solid #333333 ;
+                    border-bottom: 2px solid #333333;
+                }
+            """
+            else:
+                stylesheet = """
+                            QStatusBar {
+                                color: #222222;
+                                font-weight: bold;
+                                font-size: 14x;
+                                font-family: Arial;
+                                background: #f2f3f4;
+                                border-top: 2px solid #dadedf;
+                                border-bottom: 2px solid #dadedf;
+                            }
+                         """
+
+            window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
+            window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
+
+            if not hasattr(window.control, "_left_toolbar"):
+                left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
+
+                # Add to the left of the main window
+                window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
+
+                # Optionally, prevent closing the toolbar
+                left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
+
+                # Store a reference so it's not re-added
+                window.control._left_toolbar = left_toolbar
 
 
 class MicrodropSidebar(QToolBar):
@@ -248,9 +252,9 @@ class MicrodropSidebar(QToolBar):
         self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
 
         # Hamburger button
-        self.hamburger_btn = QPushButton()
-       # self.hamburger_btn.setFixedSize(QSize(40, 40))
-        self.hamburger_btn.setText("☰")
+        self.hamburger_btn = QPushButton(ICON_MENU)
+        self.hamburger_btn.setFont(QFont("Material Symbols Outlined"))
+        self.hamburger_btn.setFixedSize(QSize(40, 40))
         self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
         self.hamburger_btn.setCursor(Qt.PointingHandCursor)
         self.hamburger_btn.clicked.connect(self.toggle_menu)

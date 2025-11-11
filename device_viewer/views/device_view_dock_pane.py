@@ -772,10 +772,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         _status_bar_manager = self.task.window.status_bar_manager
 
         if self.model.step_label is None:
-            _status_bar_manager.messages = ["\t"*10, "Free Mode"]
+            _status_bar_manager.message = "\t"*10 + "Free Mode"
 
         elif self.model.step_label:
-            _status_bar_manager.messages = ["\t"*10, f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"]
+            _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
 
 
 def create_line():
