@@ -1,4 +1,5 @@
 # Site package imports
+import time
 from pathlib import Path
 import dramatiq
 
@@ -628,9 +629,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.info(f"Selected SVG file: {svg_file}")
 
         self.model.reset()
-        self.current_electrode_layer.set_loading_label()  # Set loading label while the SVG is being processed
+        self.task.window.status_bar_manager.messages.append('Loading ...') # Set loading label while the SVG is being processed
+
         self.model.electrodes.set_electrodes_from_svg_file(svg_file) # FIXME: Slow! Calculating centers via np.mean
         logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+        self.task.window.status_bar_manager.messages.pop()
 
         self.set_interaction_service(self.model)
         logger.info(f"Electrodes model set to {self.model}")
@@ -762,6 +765,17 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             if changed_key == "opencv_pixmap" and self.opencv_pixmap:
                 self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
+
+    @observe("model.step_label")
+    @observe("model.free_mode")
+    def step_label_change(self, event):
+        _status_bar_manager = self.task.window.status_bar_manager
+
+        if self.model.step_label is None:
+            _status_bar_manager.messages = ["\t"*10, "Free Mode"]
+
+        elif self.model.step_label:
+            _status_bar_manager.messages = ["\t"*10, f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"]
 
 
 def create_line():
