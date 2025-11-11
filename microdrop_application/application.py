@@ -183,45 +183,45 @@ class MicrodropApplication(TasksApplication):
         if self.active_window:
             window = self.active_window
 
-        if is_dark_mode():
-            stylesheet = """
-            QStatusBar {
-                color: #dadedf;              
-                font-weight: bold;  
-                font-size: 14x; 
-                font-family: Arial;
-                background: #222222;
-                border-top: 2px solid #333333 ;
-                border-bottom: 2px solid #333333;
-            }
-        """
-        else:
-            stylesheet = """
-                        QStatusBar {
-                            color: #222222;
-                            font-weight: bold;
-                            font-size: 14x;
-                            font-family: Arial;
-                            background: #f2f3f4;
-                            border-top: 2px solid #dadedf;
-                            border-bottom: 2px solid #dadedf;
-                        }
-                     """
+            if is_dark_mode():
+                stylesheet = """
+                QStatusBar {
+                    color: #dadedf;              
+                    font-weight: bold;  
+                    font-size: 14x; 
+                    font-family: Arial;
+                    background: #222222;
+                    border-top: 2px solid #333333 ;
+                    border-bottom: 2px solid #333333;
+                }
+            """
+            else:
+                stylesheet = """
+                            QStatusBar {
+                                color: #222222;
+                                font-weight: bold;
+                                font-size: 14x;
+                                font-family: Arial;
+                                background: #f2f3f4;
+                                border-top: 2px solid #dadedf;
+                                border-bottom: 2px solid #dadedf;
+                            }
+                         """
 
-        window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
-        window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
+            window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
+            window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
 
-        # if not hasattr(window.control, "_left_toolbar"):
-        #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
-        #
-        #     # Add to the left of the main window
-        #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
-        #
-        #     # Optionally, prevent closing the toolbar
-        #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
-        #
-        #     # Store a reference so it's not re-added
-        #     window.control._left_toolbar = left_toolbar
+            # if not hasattr(window.control, "_left_toolbar"):
+            #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
+            #
+            #     # Add to the left of the main window
+            #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
+            #
+            #     # Optionally, prevent closing the toolbar
+            #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
+            #
+            #     # Store a reference so it's not re-added
+            #     window.control._left_toolbar = left_toolbar
 
 
 class MicrodropSidebar(QToolBar):
