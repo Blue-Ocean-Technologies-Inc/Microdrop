@@ -28,7 +28,7 @@ class ElectrodeLayer():
         self.connection_items = {}
         self.electrode_views = {}
         self.electrode_endpoints = {}
-        self.electrode_editing_text = None
+        # self.electrode_editing_text = None
         self.reference_rect_item = None
         self.reference_rect_path_item = None
 
@@ -92,8 +92,8 @@ class ElectrodeLayer():
         self.add_connections_to_scene(parent_scene)
         self.add_endpoints_to_scene(parent_scene)
 
-        self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
-        self.electrode_editing_text.setPos(QPointF(0, 0))
+        # self.electrode_editing_text = parent_scene.addText("Free Mode", QFont("Arial", 10))
+        # self.electrode_editing_text.setPos(QPointF(0, 0))
 
         self.reference_rect_item = parent_scene.addPolygon(QPolygonF(), QPen(QColor(PERSPECTIVE_RECT_COLOR), 3))
 
@@ -105,7 +105,7 @@ class ElectrodeLayer():
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
         self.remove_endpoints_to_scene(parent_scene)
-        parent_scene.removeItem(self.electrode_editing_text)
+        # parent_scene.removeItem(self.electrode_editing_text)
         parent_scene.removeItem(self.reference_rect_item)
 
     def toggle_electrode_tooltips(self, checked):
@@ -222,14 +222,14 @@ class ElectrodeLayer():
         """
         Method to set the loading label for the electrode editing text
         """
-        self.electrode_editing_text.setPlainText("Loading...")
+        # self.electrode_editing_text.setPlainText("Loading...")
         QApplication.processEvents()  # Process events to ensure the scene is cleared immediately
     
-    def redraw_electrode_editing_text(self, model: DeviceViewMainModel):
-        if model.step_id == None:
-            self.electrode_editing_text.setPlainText("Free Mode")
-        else:
-            self.electrode_editing_text.setPlainText(f"{'Editing' if model.editable else 'Displaying'}: {model.step_label} {'(Free Mode)' if model.free_mode else ''}")
+    # def redraw_electrode_editing_text(self, model: DeviceViewMainModel):
+    #     if model.step_id == None:
+    #         self.electrode_editing_text.setPlainText("Free Mode")
+    #     else:
+    #         self.electrode_editing_text.setPlainText(f"{'Editing' if model.editable else 'Displaying'}: {model.step_label} {'(Free Mode)' if model.free_mode else ''}")
 
     def redraw_reference_rect(self, model: DeviceViewMainModel, partial_rect=None):
         if len(model.camera_perspective.reference_rect) == 4:

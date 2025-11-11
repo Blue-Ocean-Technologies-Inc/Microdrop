@@ -205,11 +205,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
 
-    @observe("model.step_label")
-    @observe("model.free_mode")
-    def step_label_change(self, event):
-        if self.electrode_view_layer:
-            self.electrode_view_layer.redraw_electrode_editing_text(self.model)
+    # @observe("model.step_label")
+    # @observe("model.free_mode")
+    # def step_label_change(self, event):
+    #     if self.electrode_view_layer:
+    #         self.electrode_view_layer.redraw_electrode_editing_text(self.model)
 
     @observe("model.camera_perspective.transformation")
     @observe("rect_buffer.items")
