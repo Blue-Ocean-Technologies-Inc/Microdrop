@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 class DramatiqPeripheralSerialProxy(SerialProxy):
 
-    def connect(self, port=None, baudrate=BOARD_BAUDRATE, settling_time_s=2):
+    def connect(self, port=None, baudrate=BOARD_BAUDRATE, settling_time_s=1):
         # If the monitor is already running, terminate it
         if self.monitor is not None:
             self.terminate()
@@ -21,29 +21,19 @@ class DramatiqPeripheralSerialProxy(SerialProxy):
 
         monitor = bnr.ser_async.BaseNodeSerialMonitor(port=port, baudrate=baudrate)
 
-        _connection_state = {'connected': False}
-
         # define the dramatiq pub sub wrappers
         def connected_wrapper(f, *args, **kwargs):
+            publish_message(f'connected', CONNECTED)
             f(*args, **kwargs)
 
-            # are we already in the state you're about to report?
-            if _connection_state['connected']:
-                return  # already connected, skip
-            _connection_state['connected'] = True
-            publish_message(f'connected', CONNECTED)
 
         def disconnected_wrapper(f, *args, **kwargs):
+            publish_message(f'disconnected', DISCONNECTED)
             f(*args, **kwargs)
 
-            # are we already in the state you're about to report?
-            if not _connection_state['connected']:
-                return  # already disconnected, skip
-            _connection_state['connected'] = False
-            publish_message(f'disconnected', DISCONNECTED)
 
         monitor.disconnected_event.set = ft.partial(disconnected_wrapper,monitor.disconnected_event.set)
-        monitor.disconnected_event.set = ft.partial(connected_wrapper, monitor.connected_event.set)
+        monitor.connected_event.set = ft.partial(connected_wrapper, monitor.connected_event.set)
 
         monitor.start()
         monitor.connected_event.wait()
