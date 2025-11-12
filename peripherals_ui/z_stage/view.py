@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Slot
 
+from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from peripherals_ui.z_stage.view_model import ZStageViewModel
 
 
@@ -38,7 +39,6 @@ class ZStageView(QWidget):
         self.up_button = QPushButton("Up")
         self.down_button = QPushButton("Down")
         self.home_button = QPushButton("Home")
-        self.disconnect_button = QPushButton("Connect/Disconnect")  # Add disconnect button
 
         # Position control spinbox
         self.set_position_label = QLabel("Set Position:")
@@ -51,26 +51,24 @@ class ZStageView(QWidget):
         main_layout = QVBoxLayout(self)
 
         ################### Status display group ######################
-        self.status_group = QGroupBox("Status")  # Store as self.status_group
+        # Create a container widget for all the contents of the group
+        status_contents_container = QWidget()
 
-        status_layout = QHBoxLayout()
+        status_layout = QHBoxLayout(status_contents_container)  # Set layout on container
 
-        status_layout.addWidget(self.status_color_box)
+        status_layout.addWidget(self.status_label)
+        status_layout.addWidget(self.current_position_label)
+        status_layout.addStretch()  # Add stretch to keep them to the left
 
-        # We will now use a single QHBoxLayout for all status info
-        status_text_layout = QVBoxLayout()
-
-        # Add the read only labels
-        status_text_layout.addWidget(self.status_label)
-        status_text_layout.addWidget(self.current_position_label)
-
-        status_layout.addLayout(status_text_layout)
-
-        self.status_group.setLayout(status_layout)
+        status_group = CollapsibleVStackBox("Status", [status_contents_container])
 
         ###################### Control group ##########################
-        control_group = QGroupBox("Controls")
-        controls_layout = QVBoxLayout()
+
+        # Create a container widget for all the contents of the group
+        self.control_contents_container = QWidget()
+
+        # Set the layout on the container widget
+        controls_layout = QVBoxLayout(self.control_contents_container)
         controls_buttons_layout = QHBoxLayout()
         position_controls_layout = QHBoxLayout()
 
@@ -78,7 +76,6 @@ class ZStageView(QWidget):
         controls_buttons_layout.addWidget(self.up_button)
         controls_buttons_layout.addWidget(self.down_button)
         controls_buttons_layout.addWidget(self.home_button)
-        controls_buttons_layout.addWidget(self.disconnect_button)  # Add button to layout
 
         # display position label and spin box horizontally aligned
         position_controls_layout.addWidget(self.set_position_label)
@@ -86,12 +83,14 @@ class ZStageView(QWidget):
 
         controls_layout.addLayout(controls_buttons_layout)
         controls_layout.addLayout(position_controls_layout)
-        control_group.setLayout(controls_layout)
+
+        control_group = CollapsibleVStackBox("Controls", [self.control_contents_container])
 
         #############################################################
 
-        main_layout.addWidget(self.status_group)
+        main_layout.addWidget(status_group)
         main_layout.addWidget(control_group)
+        main_layout.addStretch()
 
         # --- Data Binding ---
 
@@ -99,7 +98,6 @@ class ZStageView(QWidget):
         self.up_button.clicked.connect(self.view_model.move_up)
         self.down_button.clicked.connect(self.view_model.move_down)
         self.home_button.clicked.connect(self.view_model.go_home)
-        self.disconnect_button.clicked.connect(self.view_model.disconnect_device)  # Connect button
         self.position_spinbox.valueChanged.connect(self.view_model.set_position)
 
         # Connect signals (ViewModel) -> slots (View widgets)
@@ -110,9 +108,6 @@ class ZStageView(QWidget):
 
         # Connect the float value signal to our custom slot to update the spinbox
         self.view_signals.position_value_changed.connect(self.on_position_value_changed)
-
-        # Connect the color signal to our new slot
-        self.view_signals.status_color_changed.connect(self.on_status_color_changed)
 
         self.view_signals.controls_enabled_changed.connect(self.set_controls_enabled)
 
@@ -125,32 +120,6 @@ class ZStageView(QWidget):
         self.position_spinbox.setValue(value)
         self.position_spinbox.blockSignals(False)
 
-    @Slot(str)
-    def on_status_color_changed(self, color: str):
-        """Updates the border color of the status group box."""
-        # This CSS sets a border and ensures the groupbox title is visible
-        self.status_group.setStyleSheet(f"""
-            QGroupBox {{
-                border: 2px solid {color};
-                border-radius: 5px;
-                margin-top: 6px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 7px;
-                padding: 0px 5px 0px 5px;
-            }}
-        """)
-
-        # Set the background color of the new status box
-        self.status_color_box.setStyleSheet(f"""
-                    QLabel {{
-                        background-color: {color};
-                        border: 1px solid #555;
-                        border-radius: 5px;
-                    }}
-                """)
-
     @Slot(bool)
     def set_controls_enabled(self, enabled: bool):
         """
@@ -162,7 +131,6 @@ class ZStageView(QWidget):
         self.home_button.setEnabled(enabled)
         self.position_spinbox.setEnabled(enabled)
         self.set_position_label.setEnabled(enabled)
-
 
 # ----------------------------------------------------------------------------
 # 5. Main Application / Test Harness
