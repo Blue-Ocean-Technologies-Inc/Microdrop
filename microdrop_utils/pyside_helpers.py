@@ -6,6 +6,8 @@ with consistent styling and behavior across the application.
 """
 
 from typing import Union, List, Optional
+
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QToolButton, QLabel, QPushButton, QApplication
 from PySide6.QtCore import Qt
 
@@ -39,7 +41,8 @@ class CollapsibleVStackBox(QWidget):
         box = CollapsibleBox("Controls", control_widgets=widgets)
     """
 
-    def __init__(self, title: str, control_widgets: Union[QWidget, List[QWidget], None], parent: Optional[QWidget] = None) -> None:
+    def __init__(self, title: str, control_widgets: Union[QWidget, List[QWidget], None],
+                 parent: Optional[QWidget] = None) -> None:
         """
         Initialize the collapsible box with the given title and widgets.
         
@@ -80,7 +83,10 @@ class CollapsibleVStackBox(QWidget):
         for widget in self.content_widgets:
             if widget:
                 widget.setVisible(True)  # Start Revealed
-                self.content_layout.addWidget(widget)
+                try:
+                    self.content_layout.addWidget(widget)
+                except Exception as e:
+                    print(e)
 
         # Connect the button's click to the toggle function
         self.toggle_button.toggled.connect(self._on_toggled)
@@ -173,3 +179,41 @@ if __name__ == "__main__":
 
     # Run the test when this file is executed directly
     create_test_window()
+
+
+def get_qcolor_lighter_percent_from_factor(color: 'QColor', lightness_scale: float):
+    """
+    Calculates the integer percentage for QColor.lighter()
+    based on a 0.0-1.0 scale.
+
+    color: QColor
+    lightness_scale: float (0.0 to 1.0)
+        0.0 means same lightness as color (returns 100).
+        1.0 means fully white (returns 100 / lightnessF).
+    """
+
+    # 1. Define the start of our scale (100% = no change)
+    min_lightness_percent = 100.0
+
+    current_lightness = color.lightness()
+
+    # 2. Define the end of our scale (the factor to get to white)
+    if current_lightness == 0:
+        # Handle pure black:
+        h, s, l, a = color.getHsl()
+        color.setHsl(h, s, 1, a)
+
+    # The factor needed to reach 1.0 lightness (white)
+    # e.g., if lightnessF is 0.5 (gray), we need a factor of
+    # 1.0 / 0.5 = 2.0, which is 200%.
+    max_lightness_percent = int(255 * 100 / current_lightness)
+    for n in range(max_lightness_percent, max_lightness_percent + 10000):
+        if color.lighter(n).lightness() == 255:
+            max_lightness_percent = n
+            break
+
+    # 3. Linearly interpolate between min and max
+    lightness_percentage = min_lightness_percent + (max_lightness_percent - min_lightness_percent) * lightness_scale
+
+    # QColor.lighter() expects an integer
+    return int(lightness_percentage)
