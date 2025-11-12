@@ -76,7 +76,7 @@ def publish_position_update(func):
         finally:
             new_pos = self.proxy.zstage.position
             if new_pos != ols_pos:
-                publish_message(new_pos, ZSTAGE_POSITION_UPDATED)
+                publish_message(f"{new_pos}", ZSTAGE_POSITION_UPDATED)
 
             logger.info(f"Method {func.__name__} finished. Positions -> new: {self.proxy.zstage.position}, old: {ols_pos}")
 
