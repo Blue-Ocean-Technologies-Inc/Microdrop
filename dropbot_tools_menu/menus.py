@@ -1,31 +1,20 @@
 from dropbot.hardware_test import ALL_TESTS
-from pyface.tasks.action.api import SMenu, TaskWindowAction
+from pyface.tasks.action.api import SMenu
 from traits.api import Property, Directory
 
 from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
 
 logger = get_logger(__name__)
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.status_bar_utils import set_status_bar_message
 
 from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING
-from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from traits.api import Str, Int, Any, Bool
-
-from .consts import PKG
+from traits.api import Int, Any
 
 from .self_test_dialogs import ShowSelfTestIntroDialogAction, DropbotDisconnectedDialogAction
-
-
-class DramatiqMessagePublishAction(TaskWindowAction):
-    topic = Str(desc="topic this action connects to")
-    message = Any(desc="message to publish")
-
-    def perform(self, event=None):
-        publish_message(topic=self.topic, message=self.message)
 
 
 class RunTests(DramatiqMessagePublishAction):
