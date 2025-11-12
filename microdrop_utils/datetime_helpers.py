@@ -24,15 +24,21 @@ class TimestampedMessage(str):
         instance._timestamp_dt = timestamp_dt
         instance._timestamp = timestamp_iso
         instance._timestamp_ms = timestamp
+        instance._content = content if content not in ["", "None"] else None
+
         return instance
-   
+
     def serialize(self) -> str:
         return json.dumps({'message': self, 'timestamp': self._timestamp_ms})
-  
+
     @staticmethod
     def deserialize(serialized_message: str) -> 'TimestampedMessage':
         data = json.loads(serialized_message)
         return TimestampedMessage(data['message'], data['timestamp'])
+  
+    @property
+    def content(self):
+        return self._content
 
     @property
     def timestamp(self) -> str:
