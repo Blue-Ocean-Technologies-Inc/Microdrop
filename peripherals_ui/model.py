@@ -7,3 +7,4 @@ class PeripheralModel(HasTraits):
     device_name = Str("ZStage")
     status = Bool(False)
     position = Float(0.0)  # Position in mm
+    realtime_mode = Bool(False)
