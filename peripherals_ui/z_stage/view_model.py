@@ -95,14 +95,28 @@ class ZStageViewModel(HasTraits):
         display_text = f"Position: {self.model.position:.2f} mm"
         self.view_signals.position_text_changed.emit(display_text)
 
+    @log_function_call_and_exceptions
+    def _update_controls_enabled(self):
+        if self.model.realtime_mode and self.model.status:
+            enabled = True
+        else:
+            enabled = False
+
+        self.view_signals.controls_enabled_changed.emit(enabled)
+
     # --- Observers (React to Model changes) ---
 
     @observe("model:status")
     def _on_status_changed(self, event):
         """Fires when model.status changes."""
+        logger.info(f"{self.model.device_name} Status change: {event}")
         self._update_status_text()
-        self._update_status_color()
-        self.view_signals.controls_enabled_changed.emit(event.new)
+        self._update_controls_enabled()
+
+    @observe("model:realtime_mode")
+    def _on_realtime_mode_changed(self, event):
+        """Fires when model.realtime_mode changes."""
+        self._update_controls_enabled()
 
     @observe("model:position")
     def _on_position_changed(self, event):
