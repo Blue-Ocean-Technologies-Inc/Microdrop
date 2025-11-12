@@ -79,7 +79,8 @@ class ZStageViewModel(HasTraits):
     @log_function_call_and_exceptions
     def _update_status_text(self):
         """Formats and emits the current status text."""
-        display_text = f"Status: {self.model.status}"
+        status = "Active" if self.model.status else "Inactive"
+        display_text = f"Status: {status}"
         self.view_signals.status_text_changed.emit(display_text)
 
     @log_function_call_and_exceptions
