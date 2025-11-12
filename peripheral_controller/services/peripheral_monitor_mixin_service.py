@@ -1,3 +1,5 @@
+import json
+
 import dropbot
 from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
@@ -5,6 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUSED
 
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
@@ -35,12 +38,20 @@ class PeripheralMonitorMixinService(HasTraits):
 
     ######################################## Methods to Expose #############################################
 
-    def on_start_device_monitoring_request(self, hwids_to_check):
+    def on_start_device_monitoring_request(self, timestamped_message: 'TimestampedMessage'):
         """
-        Method to start looking for dropbots connected using their hwids.
-        If dropbot already connected, publishes dropbot connected signal.
+        Method to start looking for devices connected using their hwids.
+        If device already connected, publishes device connected signal.
+
+        message should be a json serialized list of hwids to check.
         """
-        # if dropbot already connected, exit after publishing connection and chip details
+
+        if timestamped_message.content:
+            hwids_to_check = json.loads(timestamped_message.content)
+        else:
+            hwids_to_check = [MR_BOX_HWID]
+
+        # if device already connected, exit after publishing connection and chip details
         if self.connection_active:
             publish_message(f'{self._device_name}_connected', CONNECTED)
             return None
@@ -66,10 +77,6 @@ class PeripheralMonitorMixinService(HasTraits):
                 return None
 
         ## monitor was never created, so we can make one now:
-
-        if not hwids_to_check:
-            hwids_to_check = [MR_BOX_HWID]
-
         def check_devices_with_error_handling():
             """
             Wrapper to handle errors from check_devices_available.
@@ -90,15 +97,15 @@ class PeripheralMonitorMixinService(HasTraits):
         scheduler.add_listener(self._on_port_found, EVENT_JOB_EXECUTED)
         self.monitor_scheduler = scheduler
 
-        logger.info("DropBot monitor created and started")
+        logger.info(f"{self._device_name} monitor created and started")
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
     def on_retry_connection_request(self, message):
         if self.connection_active:
-            logger.info(f"Retry connection request rejected: Dropbot already connected")
+            logger.info(f"Retry connection request rejected: {self._device_name} already connected")
             return
-        logger.info("Attempting to retry connecting with a dropbot")
+        logger.info(f"Attempting to retry connecting with a {self._device_name}")
         self.monitor_scheduler.resume()
 
     ############################################################
@@ -118,7 +125,7 @@ class PeripheralMonitorMixinService(HasTraits):
                 self.proxy.monitor = None
                 logger.info(f"Sending Signal to Resumed {self._device_name} monitor")
 
-        logger.info(f" {self._device_name} disconnected. Resuming search for dropbot connection.")
+        logger.info(f" {self._device_name} disconnected. Resuming search for {self._device_name} connection.")
         self.on_retry_connection_request(message="")
 
     def on_connected_signal(self, message):
@@ -129,7 +136,7 @@ class PeripheralMonitorMixinService(HasTraits):
     ################################# Protected methods ######################################
     def _on_port_found(self, event):
         """
-        Method defining what to do when dropbot has been found on a port.
+        Method defining what to do when device has been found on a port.
         """
         # if check_devices returned nothing => still disconnected
         if not event.retval:
@@ -145,14 +152,13 @@ class PeripheralMonitorMixinService(HasTraits):
 
     def _connect_to_device(self, port_name):
         """
-        Once a port is found, attempt to connect to the DropBot on that port.
+        Once a port is found, attempt to connect to the Device on that port.
 
         IF already connected, do nothing.
-        IF not connected, attempt to connect to the DropBot on the port.
+        IF not connected, attempt to connect to the Device on the port.
 
         FAIL IF:
-        - No DropBot available for connection - USB not connected
-        - No power to DropBot - power supply not connected
+        - No Device available for connection - USB not connected
         """
         if self.proxy is None or getattr(self, 'proxy.monitor', None) is None:
 
@@ -161,7 +167,7 @@ class PeripheralMonitorMixinService(HasTraits):
             ############################### Attempt to make a proxy object #############################
 
             try:
-                logger.debug(f"Attempting to create DropBot serial proxy on port {port_name}")
+                logger.debug(f"Attempting to create {self._device_name} serial proxy on port {port_name}")
                 self.proxy = DramatiqPeripheralSerialProxy(port=port_name)
                 logger.info(f"{self._device_name} connected on port {port_name}")
 
@@ -171,7 +177,7 @@ class PeripheralMonitorMixinService(HasTraits):
 
             except Exception as e:
                 # This is for any other unexpected error during the connection process.
-                logger.error(f"An unexpected error occurred with DropBot: {e}", exc_info=True)
+                logger.error(f"An unexpected error occurred with {self._device_name}: {e}", exc_info=True)
 
             ###########################################################################################
 
@@ -181,6 +187,6 @@ class PeripheralMonitorMixinService(HasTraits):
                 if not self.connection_active:
                     self.on_disconnected_signal("")
 
-        # if the dropbot is already connected
+        # if the device is already connected
         else:
             logger.info(f"{self._device_name.title()} already connected on port {port_name}")
