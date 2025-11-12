@@ -41,7 +41,6 @@ class ZStageViewModelSignals(QObject):
     status_text_changed = Signal(str)
     position_text_changed = Signal(str)
     position_value_changed = Signal(float)  # Signal for the raw float value
-    status_color_changed = Signal(str)  # Signal for the group box color
     controls_enabled_changed = Signal(bool)
 
 
@@ -84,12 +83,6 @@ class ZStageViewModel(HasTraits):
         self.view_signals.status_text_changed.emit(display_text)
 
     @log_function_call_and_exceptions
-    def _update_status_color(self):
-        """Formats and emits the current status color."""
-        color = "green" if self.model.status else "red"
-        self.view_signals.status_color_changed.emit(color)
-
-    @log_function_call_and_exceptions
     def _update_position_display(self):
         """Formats and emits the current position as a string."""
         display_text = f"Position: {self.model.position:.2f} mm"
@@ -130,7 +123,6 @@ class ZStageViewModel(HasTraits):
     def force_initial_update(self):
         """Pushes the current model state to the view's signals."""
         self._update_status_text()
-        self._update_status_color()
         self._update_position_display()
         self.view_signals.position_value_changed.emit(self.model.position)
         self.view_signals.controls_enabled_changed.emit(self.model.status)
