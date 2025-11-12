@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Slot
 
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
+from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
 from peripherals_ui.z_stage.view_model import ZStageViewModel
 
 
@@ -43,7 +44,8 @@ class ZStageView(QWidget):
         # Position control spinbox
         self.set_position_label = QLabel("Set Position:")
         self.position_spinbox = QDoubleSpinBox()
-        self.position_spinbox.setRange(0, 500)
+        self.position_spinbox.setSingleStep(0.5)
+        self.position_spinbox.setRange(MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM)
         self.position_spinbox.setDecimals(2)
         self.position_spinbox.setSuffix(" mm")
 
@@ -157,6 +159,9 @@ if __name__ == "__main__":
 
     # 4. Force initial state sync *after* bindings are set up
     the_view_model.force_initial_update()
+
+    the_model.status = True
+    the_model.realtime_mode = True
 
     # 5. Show the UI
     window = QMainWindow()

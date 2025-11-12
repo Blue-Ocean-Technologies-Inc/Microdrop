@@ -1,4 +1,5 @@
 # enthought imports
+from envisage.ids import PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str
 from envisage.api import Plugin, TASK_EXTENSIONS
@@ -34,6 +35,12 @@ class PeripheralUiPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    ###########################################################################
+    # Protected interface.
+    ###########################################################################
 
     #### Trait initializers ###################################################
 
@@ -53,6 +60,16 @@ class PeripheralUiPlugin(Plugin):
             )
         ]
 
+    def _preferences_panes_default(self):
+        from .preferences import PeripheralPreferencesPane
+
+        return [PeripheralPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import peripherals_tab
+        return [peripherals_tab]
+
+    ###### Factory methods ########
     def _tools_menu_factory(self):
         from .menus import tools_menu_factory
 

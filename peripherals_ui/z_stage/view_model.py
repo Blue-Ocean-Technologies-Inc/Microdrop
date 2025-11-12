@@ -5,6 +5,7 @@ from PySide6.QtCore import QObject, Signal
 from traits.has_traits import HasTraits, observe
 from traits.trait_types import Instance
 
+from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripherals_ui.model import PeripheralModel
 
@@ -66,6 +67,7 @@ class ZStageViewModel(HasTraits):
         publish_message("", GO_HOME)
 
     @log_function_call_and_exceptions
+    @debounce(0.3)
     def set_position(self, value: float):
         """Command to set the positioner to a specific value."""
         publish_message(str(value), SET_POSITION)
