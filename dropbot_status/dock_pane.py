@@ -73,7 +73,7 @@ class DropbotStatusDockPane(DockPane):
         dropbot_status.setToolTip(dropbot_status_icon_tooltip_html)
 
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status, stretch=0.2)
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status)
 
         def set_status_color(color):
             dropbot_status.setStyleSheet(f"color: {color}")
