@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QLabel
 
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import ICON_DROP_EC
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name
 from .displayed_UI import disconnected_color, connected_no_device_color, connected_color
 
@@ -71,7 +72,8 @@ class DropbotStatusDockPane(DockPane):
 
         dropbot_status.setToolTip(dropbot_status_icon_tooltip_html)
 
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status)
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status, stretch=0.2)
 
         def set_status_color(color):
             dropbot_status.setStyleSheet(f"color: {color}")
