@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import ICON_MENU
 # Local imports.
 from .helpers import get_microdrop_redis_globals_manager
