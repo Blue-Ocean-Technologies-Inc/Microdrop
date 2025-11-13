@@ -1,6 +1,5 @@
-import sys
 import copy
-import json
+
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, 
                                QPushButton, QDialog)
@@ -8,15 +7,16 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
 from microdrop_application.application import is_dark_mode
+from microdrop_utils.decorators import debounce
 from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
-from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE, 
+from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE,
                                   CALIBRATION_DATA,
-                                  GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults, 
+                                  GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, step_defaults,
                                   group_defaults, protocol_grid_fields, protocol_grid_column_widths,
-                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
+                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET, copy_fields_for_new_step)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
                                              InformationPanel, ExperimentCompleteDialog,
@@ -1096,13 +1096,18 @@ class PGCWidget(QWidget):
         scroll_pos = self.save_scroll_positions()
         self.state.snapshot_for_undo()
 
+        last_step = self.state.get_last_step()
+
+        logger.info(f"Copying last step: {last_step.to_dict()}")
+
         new_step = ProtocolStep(
-            parameters = dict(step_defaults),
-            name = "Step"
+            parameters=dict(step_defaults),
+            name="Step"
         )
 
-        if isinstance(self.state.sequence[-1], ProtocolStep):
-            new_step.device_state.from_dict(copy.deepcopy(self.state.sequence[-1].device_state.to_dict()))
+        new_step.device_state.from_dict(copy.deepcopy(last_step.device_state.to_dict()))
+        params_to_copy = {k: copy.deepcopy(v) for k, v in last_step.parameters.items() if k in copy_fields_for_new_step}
+        new_step.parameters.update(params_to_copy)
 
         self.state.assign_uid_to_step(new_step)
         self.state.sequence.append(new_step)
@@ -2347,42 +2352,10 @@ class PGCWidget(QWidget):
         self._mark_protocol_modified()
         
     def add_step_into(self):
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-        
-        selected_paths = self.get_selected_paths()
-        if not selected_paths:
-            return
-            
-        target_path = selected_paths[0]
-        target_item = self.get_item_by_path(target_path)
-        if not target_item:
-            return
-            
-        self.state.snapshot_for_undo()
-        
-        new_step = ProtocolStep(
-            parameters=dict(step_defaults),
-            name="Step"
-        )
-        self.state.assign_uid_to_step(new_step)
-        
-        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-            target_elements = self._find_elements_by_path(target_path)
-            target_elements.append(new_step)
-        else:
-            parent_path = target_path[:-1]
-            target_elements = self._find_elements_by_path(parent_path)
-            row = target_path[-1] + 1
-            target_elements.insert(row, new_step)
-            
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
-        
+        self._navigating = True
+        self._protected_add_step_to_current_group()
+        self._navigating = False
+
     def add_group(self):
         scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
