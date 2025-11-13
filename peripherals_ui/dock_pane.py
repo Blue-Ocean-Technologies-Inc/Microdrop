@@ -1,16 +1,19 @@
 # enthought imports
-from PySide6.QtGui import QFont
 from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
-from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QSizePolicy
 
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QApplication
+
+from microdrop_application.application import is_dark_mode
+from microdrop_style.colors import GREY, WHITE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_STAIRS
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name,DEVICE_NAME
 
-from dropbot_status.displayed_UI import disconnected_color, connected_no_device_color, connected_color
+from dropbot_status.displayed_UI import disconnected_color, connected_color
 
 
 class PeripheralStatusDockPane(DockPane):
@@ -71,32 +74,48 @@ class PeripheralStatusDockPane(DockPane):
 
         _model = self.dramatiq_controller.ui.model
 
-        device_Status = QLabel(ICON_STAIRS)
+        device_status = QLabel(ICON_STAIRS)
 
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
-        device_Status.setFont(_font)
-        device_Status.setStyleSheet(f"color: {disconnected_color}")
-
-        device_Status.setToolTip(z_stage_status_icon_tooltip_html)
-
+        device_status.setFont(_font)
+        device_status.setStyleSheet(f"color: {disconnected_color};")
 
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_Status)
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_status)
 
         def set_status_color(event):
             color = connected_color if event.new else disconnected_color
-            device_Status.setStyleSheet(f"color: {color}")
+            device_status.setStyleSheet(f"color: {color}")
 
         _model.observe(set_status_color, "status")
 
+        QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
 
-z_stage_status_icon_tooltip_html = f"""
-    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1.4;">
-      <strong style="font-size: 1.1em;">Z-Stage Status:</strong>
-      <ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
+        self.status_bar_icon = device_status
+
+        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+
+    ### update tooltip based on dark / light mode
+    def _on_application_palette_changed(self):
+        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+
+
+def get_status_icon_tooltip_themed():
+    if is_dark_mode():
+        title_color = WHITE
+    else:
+        title_color = GREY['dark']
+
+    z_stage_status_icon_tooltip_html = f"""
+    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
+      <strong style="font-size: 1.1em; color: {title_color}">Z-Stage Status:</strong>
+      <ul style="margin-top: 1px; margin-bottom: 0; padding-left: 20px;">
         <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
         <li><strong style="color: {connected_color};">Connected</strong></li>
       </ul>
     </div>
     """
+    return z_stage_status_icon_tooltip_html
+
+

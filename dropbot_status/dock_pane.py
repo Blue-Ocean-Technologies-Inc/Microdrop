@@ -3,8 +3,10 @@ from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QApplication
 
+from microdrop_application.application import is_dark_mode
+from microdrop_style.colors import WHITE, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_DROP_EC
@@ -71,8 +73,6 @@ class DropbotStatusDockPane(DockPane):
         dropbot_status.setFont(_font)
         dropbot_status.setStyleSheet(f"color: {disconnected_color}")
 
-        dropbot_status.setToolTip(dropbot_status_icon_tooltip_html)
-
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status)
 
@@ -81,15 +81,33 @@ class DropbotStatusDockPane(DockPane):
 
         self.control.widget()._view_model_signals.icon_color_changed.connect(set_status_color)
 
+        QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
 
-dropbot_status_icon_tooltip_html = f"""
-<div style="font-family: sans-serif; font-size: 10pt; line-height: 1.4;">
-  <strong style="font-size: 1.1em;">Dropbot Status:</strong>
-  <ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
-    <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
-    <li><strong style="color: {connected_no_device_color};">Connected (No Chip)</strong></li>
-    <li><strong style="color: {connected_color};">Connected (Chip Detected)</strong></li>
-  </ul>
-</div>
-"""
+        self.status_bar_icon = dropbot_status
+
+        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+
+    ### update tooltip based on dark / light mode
+    def _on_application_palette_changed(self):
+        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+
+
+def get_status_icon_tooltip_themed():
+    if is_dark_mode():
+        title_color = WHITE
+    else:
+        title_color = GREY['dark']
+
+    dropbot_status_icon_tooltip_html = f"""
+    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
+      <strong style="font-size: 1.1em; color: {title_color}">Dropbot Status:</strong>
+      <ul style="margin-top: 1px; margin-bottom: 1px; padding-left: 20px;">
+        <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
+        <li><strong style="color: {connected_no_device_color};">Connected (No Chip)</strong></li>
+        <li><strong style="color: {connected_color};">Connected (Chip Detected)</strong></li>
+      </ul>
+    </div>
+    """
+
+    return dropbot_status_icon_tooltip_html
 
