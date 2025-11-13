@@ -1,6 +1,4 @@
 # enthought imports
-from functools import partial
-
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, observe, Str, Bool
 from envisage.api import Plugin, TASK_EXTENSIONS

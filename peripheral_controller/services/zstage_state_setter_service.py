@@ -3,11 +3,14 @@ from functools import wraps
 from traits.api import provides, HasTraits, Instance
 
 from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_peripheral_control_mixin_service import IPeripheralControlMixinService
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+from ..consts import ZSTAGE_POSITION_UPDATED
 
 # silence all APScheduler job-exception logs
 get_logger('apscheduler.executors.default').setLevel(level="WARNING")
@@ -39,22 +42,43 @@ def thread_lock_with_error_handling(func):
 
 def zstage_motor_context(func):
     """
-    Decorator to log a method call and wrap it in the instance's
-    proxy transaction lock.
+    enable zstage motor and then turn off.
     """
 
     @wraps(func)
     def wrapped(self, *args, **kwargs):
-        logger.info("Enable Motor")
+        logger.info("Enabled Motor")
         self.proxy.zstage.motor_enabled = True
 
         try:
             result = func(self, *args, **kwargs)
 
         finally:
-            logger.info(f"Method {func.__name__} finished. New position: {self.proxy.zstage.position}")
-            logger.info("Disable Motor")
+            logger.info("Disabled Motor")
             self.proxy.zstage.motor_enabled = False
+
+        return result
+
+    return wrapped
+
+def publish_position_update(func):
+    """
+    After position change, publish_update
+    """
+
+    @wraps(func)
+    def wrapped(self, *args, **kwargs):
+        ols_pos = self.proxy.zstage.position
+
+        try:
+            result = func(self, *args, **kwargs)
+
+        finally:
+            new_pos = self.proxy.zstage.position
+            if new_pos != ols_pos:
+                publish_message(f"{new_pos}", ZSTAGE_POSITION_UPDATED)
+
+            logger.info(f"Method {func.__name__} finished. Positions -> new: {self.proxy.zstage.position}, old: {ols_pos}")
 
         return result
 
@@ -75,6 +99,7 @@ class ZStageStatesSetterMixinService(HasTraits):
 
     @thread_lock_with_error_handling
     @zstage_motor_context
+    @publish_position_update
     def on_go_home_request(self, message):
         """
         Home z stage
@@ -83,6 +108,7 @@ class ZStageStatesSetterMixinService(HasTraits):
 
     @thread_lock_with_error_handling
     @zstage_motor_context
+    @publish_position_update
     def on_move_up_request(self, message):
         """
         Move up z stage
@@ -91,6 +117,7 @@ class ZStageStatesSetterMixinService(HasTraits):
 
     @thread_lock_with_error_handling
     @zstage_motor_context
+    @publish_position_update
     def on_move_down_request(self, message):
         """
         Move down z stage
@@ -99,6 +126,7 @@ class ZStageStatesSetterMixinService(HasTraits):
 
     @thread_lock_with_error_handling
     @zstage_motor_context
+    @publish_position_update
     def on_set_position_request(self, message):
         """
         Move z stage to position.

@@ -2,7 +2,7 @@ from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
 from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
 from pyface.qt.QtCore import QPointF
 
-from microdrop_utils.qt_helpers import get_qcolor_lighter_percent_from_factor
+from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_factor
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \

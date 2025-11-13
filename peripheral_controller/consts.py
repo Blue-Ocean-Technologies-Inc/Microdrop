@@ -10,6 +10,7 @@ DEVICE_NAME = "ZStage"
 # Topics published by this plugin
 CONNECTED = f'{DEVICE_NAME}/signals/connected'
 DISCONNECTED = f'{DEVICE_NAME}/signals/disconnected'
+ZSTAGE_POSITION_UPDATED = f'{DEVICE_NAME}/signals/position_updated'
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
@@ -17,6 +18,7 @@ GO_HOME = f"{DEVICE_NAME}/requests/go_home"
 MOVE_UP = f"{DEVICE_NAME}/requests/move_up"
 MOVE_DOWN = f"{DEVICE_NAME}/requests/move_down"
 SET_POSITION = f"{DEVICE_NAME}/requests/set_position"
+RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
 
 # Error Topics
 ERROR = f'{DEVICE_NAME}/error'
@@ -28,3 +30,6 @@ ACTOR_TOPIC_DICT = {
         CONNECTED,
         DISCONNECTED,
     ]}
+
+DEFAULT_DOWN_HEIGHT_MM, DEFAULT_UP_HEIGHT_MM,  = 0.5, 23.0
+MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM = 0.5, 28.0

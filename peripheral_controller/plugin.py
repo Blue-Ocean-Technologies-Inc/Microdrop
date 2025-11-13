@@ -62,4 +62,4 @@ class PeripheralControllerPlugin(Plugin):
         """Cleanup when the plugin is stopped."""
         if hasattr(self, 'device_controller'):
             self.device_controller.cleanup()
-            logger.info("DropbotController plugin stopped")
+            logger.info(f"{self.device_controller._device_name.title()} Controller plugin stopped")
