@@ -195,6 +195,7 @@ class MicrodropApplication(TasksApplication):
                     border-top: 2px solid #333333 ;
                     border-bottom: 2px solid #333333;
                 }
+                QStatusBar::item {border: None;}
             """
             else:
                 stylesheet = """
@@ -207,10 +208,12 @@ class MicrodropApplication(TasksApplication):
                                 border-top: 2px solid #dadedf;
                                 border-bottom: 2px solid #dadedf;
                             }
+                            QStatusBar::item {border: None;}
                          """
 
             window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
             window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
+            window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 
             # if not hasattr(window.control, "_left_toolbar"):
             #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
