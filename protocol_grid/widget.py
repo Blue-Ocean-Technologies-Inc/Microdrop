@@ -1092,12 +1092,15 @@ class PGCWidget(QWidget):
             self.tree.selectionModel().select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
             self.tree.scrollTo(index)
 
-    def _add_step_at_root_and_select(self):
-        scroll_pos = self.save_scroll_positions()
-        self.state.snapshot_for_undo()
+    def _copy_last_step(self) -> ProtocolStep:
+        """
+        Copy the last step found on the protocol grid.
 
+        New step has objects with all new references (using deepcopy).
+
+        Only params specified in copy_fields_for_new_step list are copied over to new step.
+        """
         last_step = self.state.get_last_step()
-
         logger.info(f"Copying last step: {last_step.to_dict()}")
 
         new_step = ProtocolStep(
@@ -1108,6 +1111,14 @@ class PGCWidget(QWidget):
         new_step.device_state.from_dict(copy.deepcopy(last_step.device_state.to_dict()))
         params_to_copy = {k: copy.deepcopy(v) for k, v in last_step.parameters.items() if k in copy_fields_for_new_step}
         new_step.parameters.update(params_to_copy)
+
+        return new_step
+
+    def _add_step_at_root_and_select(self):
+        scroll_pos = self.save_scroll_positions()
+        self.state.snapshot_for_undo()
+
+        new_step = self._copy_last_step()
 
         self.state.assign_uid_to_step(new_step)
         self.state.sequence.append(new_step)
@@ -1140,10 +1151,8 @@ class PGCWidget(QWidget):
             scroll_pos = self.save_scroll_positions()
             self.state.snapshot_for_undo()    
 
-            new_step = ProtocolStep(
-                parameters=dict(step_defaults),
-                name="Step"
-            )  
+            new_step = self._copy_last_step()
+
             self.state.assign_uid_to_step(new_step)  
 
             if len(current_path) == 1:
@@ -1317,6 +1326,7 @@ class PGCWidget(QWidget):
         # clear last published UID
         self._set_last_published_step_uid(None)
 
+    @debounce(0.1)
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return None
