@@ -16,8 +16,7 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import RETRY_CONNECTION
-from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
-from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude, ureg
+from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .model import DropBotStatusModel
@@ -26,9 +25,6 @@ logger = get_logger(__name__)
 
 from microdrop_utils.ureg_helpers import ureg
 
-disconnected_color = GREY["lighter"]  #ERROR_COLOR
-connected_no_device_color = WARNING_COLOR
-connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
 
 

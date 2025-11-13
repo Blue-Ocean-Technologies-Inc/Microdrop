@@ -12,6 +12,11 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QToolButton, QLabel, QPushBu
 from PySide6.QtCore import Qt
 
 
+def horizontal_spacer_widget(width=10) -> QWidget:
+    widget = QWidget()
+    widget.setFixedWidth(width)
+    return widget
+
 class CollapsibleVStackBox(QWidget):
     """
     A minimalist, non-animated collapsible box that instantly

@@ -1,14 +1,9 @@
 from PySide6.QtGui import Qt, QPixmap
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout
-
-from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-disconnected_color = ERROR_COLOR
-connected_no_device_color = WARNING_COLOR
-connected_color = SUCCESS_COLOR
 BORDER_RADIUS = 4
 
 class DropBotIconWidget(QLabel):
