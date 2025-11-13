@@ -1100,6 +1100,10 @@ class PGCWidget(QWidget):
             parameters = dict(step_defaults),
             name = "Step"
         )
+
+        if isinstance(self.state.sequence[-1], ProtocolStep):
+            new_step.device_state.from_dict(copy.deepcopy(self.state.sequence[-1].device_state.to_dict()))
+
         self.state.assign_uid_to_step(new_step)
         self.state.sequence.append(new_step)
         self.reassign_ids()

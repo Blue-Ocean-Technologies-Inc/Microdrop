@@ -43,7 +43,6 @@ class ProtocolStep:
         obj.device_state.from_dict(data.get("device_state", {}))
         return obj
 
-
 class ProtocolGroup:
     def __init__(self, parameters=None, name="Group", elements=None):
         self.name = name
