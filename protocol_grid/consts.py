@@ -105,6 +105,26 @@ group_defaults = {
     "Run Time": "",
 }
 
+copy_fields_for_new_step = [
+    "Repetitions",
+    "Duration",
+    "Voltage",
+    "Force",
+    "Frequency",
+    "Message",
+    "Repeat Duration",
+    "Trail Length",
+    "Trail Overlay",
+    "Video",
+    "Capture",
+    "Record",
+    "Volume Threshold",
+    "Magnet",
+    "Magnet Height",
+    "Max. Path Length",
+    "Run Time"
+]
+
 # Button styling constants (now imported from button_styles)
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4

@@ -43,7 +43,6 @@ class ProtocolStep:
         obj.device_state.from_dict(data.get("device_state", {}))
         return obj
 
-
 class ProtocolGroup:
     def __init__(self, parameters=None, name="Group", elements=None):
         self.name = name
@@ -320,3 +319,16 @@ class ProtocolState:
                     raise Warning("Protocol group element not found. Multi Dim path not processed.")
 
             return protocol_element
+
+    def get_last_step(self, sequence=None):
+        if sequence is None:
+            sequence = self.sequence
+        for element in reversed(sequence):
+            if isinstance(element, ProtocolStep):
+                return element
+            elif isinstance(element, ProtocolGroup):
+                last_step = self.get_last_step(element.elements)
+                if last_step:
+                    return last_step
+
+            return None
