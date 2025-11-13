@@ -21,7 +21,7 @@ from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog
                                              NavigationBar, StatusBar, make_separator,
                                              InformationPanel, ExperimentCompleteDialog,
                                              DropbotDisconnectedBeforeRunDialogAction)
-from protocol_grid.services.device_viewer_listener_controller import DeviceViewerListenerController
+
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
