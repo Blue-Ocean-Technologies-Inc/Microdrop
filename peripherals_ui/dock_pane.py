@@ -5,6 +5,7 @@ from pyface.tasks.dock_pane import DockPane
 from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QSizePolicy
 
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_STAIRS
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name,DEVICE_NAME
@@ -73,7 +74,7 @@ class PeripheralStatusDockPane(DockPane):
         device_Status = QLabel(ICON_STAIRS)
 
         _font = QFont(ICON_FONT_FAMILY)
-        _font.setPointSize(18)
+        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         device_Status.setFont(_font)
         device_Status.setStyleSheet(f"color: {disconnected_color}")
 
@@ -83,8 +84,8 @@ class PeripheralStatusDockPane(DockPane):
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_Status)
 
-        def set_status_color(status:bool):
-            color = connected_color if status else disconnected_color
+        def set_status_color(event):
+            color = connected_color if event.new else disconnected_color
             device_Status.setStyleSheet(f"color: {color}")
 
         _model.observe(set_status_color, "status")

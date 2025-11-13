@@ -6,6 +6,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel
 
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_DROP_EC
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name
@@ -66,7 +67,7 @@ class DropbotStatusDockPane(DockPane):
         dropbot_status = QLabel(ICON_DROP_EC)
 
         _font = QFont(ICON_FONT_FAMILY)
-        _font.setPointSize(18)
+        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         dropbot_status.setFont(_font)
         dropbot_status.setStyleSheet(f"color: {disconnected_color}")
 
