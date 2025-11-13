@@ -1,7 +1,14 @@
 # enthought imports
+from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QLabel
+
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icons.icons import ICON_DROP_EC
 from .consts import PKG, PKG_name
+from .displayed_UI import disconnected_color, connected_no_device_color, connected_color
 
 
 class DropbotStatusDockPane(DockPane):
@@ -48,3 +55,38 @@ class DropbotStatusDockPane(DockPane):
         status_view = DropBotStatusView(view_model=view_model)
 
         return status_view
+
+    @observe("task:window:status_bar_manager")
+    def _setup_app_statusbar_with_dropbot_status_icon(self, event):
+        from .displayed_UI import disconnected_color
+
+        _model = self.dramatiq_controller.ui.model
+
+        dropbot_status = QLabel(ICON_DROP_EC)
+
+        _font = QFont(ICON_FONT_FAMILY)
+        _font.setPointSize(18)
+        dropbot_status.setFont(_font)
+        dropbot_status.setStyleSheet(f"color: {disconnected_color}")
+
+        dropbot_status.setToolTip(dropbot_status_icon_tooltip_html)
+
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status)
+
+        def set_status_color(color):
+            dropbot_status.setStyleSheet(f"color: {color}")
+
+        self.control.widget()._view_model_signals.icon_color_changed.connect(set_status_color)
+
+
+dropbot_status_icon_tooltip_html = f"""
+<div style="font-family: sans-serif; font-size: 10pt; line-height: 1.4;">
+  <strong style="font-size: 1.1em;">Dropbot Status:</strong>
+  <ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
+    <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
+    <li><strong style="color: {connected_no_device_color};">Connected (No Chip)</strong></li>
+    <li><strong style="color: {connected_color};">Connected (Chip Detected)</strong></li>
+  </ul>
+</div>
+"""
+
