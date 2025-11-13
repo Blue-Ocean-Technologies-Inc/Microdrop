@@ -315,8 +315,8 @@ class PGCWidget(QWidget):
                 
                 if device_state.id_to_channel != current_id_to_channel:
                     self._apply_id_to_channel_mapping_to_all_steps(device_state.id_to_channel, device_state.route_colors)
-                else:
-                    target_item.setData(device_state, Qt.UserRole + 100)
+
+                current_device_state.from_dict(device_state.to_dict()) # apply new device states to selected step
                 
                 self.model_to_state()
                 
