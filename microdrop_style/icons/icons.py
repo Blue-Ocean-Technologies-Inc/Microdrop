@@ -32,3 +32,5 @@ ICON_LAST            = "\ue044"  # last
 ICON_MENU            = "\ue5d2"
 
 ICON_DROP_EC         = "\uf875" # droplet with bolt
+
+ICON_STAIRS          = "\uf46c" # stairs

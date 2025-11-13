@@ -1,8 +1,15 @@
 # enthought imports
-from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout
+from PySide6.QtGui import QFont
+from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
+from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QSizePolicy
 
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icons.icons import ICON_STAIRS
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name,DEVICE_NAME
+
+from dropbot_status.displayed_UI import disconnected_color, connected_no_device_color, connected_color
 
 
 class PeripheralStatusDockPane(DockPane):
@@ -57,3 +64,38 @@ class PeripheralStatusDockPane(DockPane):
 
         # Return the scroll area directly
         return scroll_area
+
+    @observe("task:window:status_bar_manager")
+    def _setup_app_statusbar_with_device_status_icon(self, event):
+
+        _model = self.dramatiq_controller.ui.model
+
+        device_Status = QLabel(ICON_STAIRS)
+
+        _font = QFont(ICON_FONT_FAMILY)
+        _font.setPointSize(18)
+        device_Status.setFont(_font)
+        device_Status.setStyleSheet(f"color: {disconnected_color}")
+
+        device_Status.setToolTip(z_stage_status_icon_tooltip_html)
+
+
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_Status)
+
+        def set_status_color(status:bool):
+            color = connected_color if status else disconnected_color
+            device_Status.setStyleSheet(f"color: {color}")
+
+        _model.observe(set_status_color, "status")
+
+
+z_stage_status_icon_tooltip_html = f"""
+    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1.4;">
+      <strong style="font-size: 1.1em;">Z-Stage Status:</strong>
+      <ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
+        <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
+        <li><strong style="color: {connected_color};">Connected</strong></li>
+      </ul>
+    </div>
+    """
