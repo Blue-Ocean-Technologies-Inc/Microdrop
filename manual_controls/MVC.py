@@ -166,10 +166,34 @@ ManualControlView = View(
 @provides(IDramatiqControllerBase)
 class ManualControlControl(Controller):
 
-    dramatiq_listener_actor = Instance(dramatiq.Actor)
+    ###################################################################################
+    # IDramatiqControllerBase Interface
+    ###################################################################################
 
+    dramatiq_listener_actor = Instance(dramatiq.Actor)
     name = listener_name
 
+    def traits_init(self):
+        logger.info("Starting ManualControls listener")
+        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=listener_name,
+            class_method=self.listener_actor_routine)
+
+    def listener_actor_routine(self, message, topic):
+        return basic_listener_actor_routine(self, message, topic)
+
+    @timestamped_value('realtime_mode_message')
+    def _on_realtime_mode_updated_triggered(self, message):
+        logger.debug(f"Realtime mode updated to {message}")
+        self.model.realtime_mode = message == "True"
+
+    @timestamped_value('disconnected_message')
+    def _on_disconnected_triggered(self, message):
+        logger.debug("Disconnected from dropbot")
+        self.model.realtime_mode = False
+    ###################################################################################
+
+    ### Helper traits #######
     realtime_mode_message = Instance(TimestampedMessage)
     disconnected_message = Instance(TimestampedMessage)
 
@@ -179,6 +203,11 @@ class ManualControlControl(Controller):
     def _disconnected_message_default(self):
         return TimestampedMessage("", 0)
 
+    ###################################################################################
+    # Controller interface
+    ###################################################################################
+
+    @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, object, traitname, value):
         publish_message(topic=SET_VOLTAGE, message=str(value))
         logger.debug(f"Requesting Voltage change to {value} V")
@@ -203,25 +232,6 @@ class ManualControlControl(Controller):
         
         # info.realtime_mode.update_editor()  # You can use info to acces the editor from the ui but it's not needed when debouncing because it will call update_editor anyway
         return super().setattr(info, object, traitname, value)
-  
-    def traits_init(self):
-        logger.info("Starting ManualControls listener")
-        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=listener_name,
-            class_method=self.listener_actor_routine)
-   
-    def listener_actor_routine(self, message, topic):
-        return basic_listener_actor_routine(self, message, topic)
-   
-    @timestamped_value('realtime_mode_message')
-    def _on_realtime_mode_updated_triggered(self, message):
-        logger.debug(f"Realtime mode updated to {message}")
-        self.model.realtime_mode = message == "True"
-
-    @timestamped_value('disconnected_message')
-    def _on_disconnected_triggered(self, message):
-        logger.debug("Disconnected from dropbot")
-        self.model.realtime_mode = False
 
 
 if __name__ == "__main__":
