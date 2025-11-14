@@ -1,5 +1,7 @@
+import functools
+
 import dramatiq
-from traits.api import HasTraits, Range, Bool, provides, Instance
+from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict
 from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
@@ -142,13 +144,13 @@ ManualControlView = View(
                 name='voltage',
                 label='Voltage (V)',
                 resizable=True,
-                enabled_when='realtime_mode',
+                # enabled_when='realtime_mode', # we will just not publish changes instead of disabling.
             ),
             Item(
                 name='frequency',
                 label='Frequency (Hz)',
                 resizable=True,
-                enabled_when='realtime_mode',
+                # enabled_when='realtime_mode',  # we will just not publish changes instead of disabling.
             ),
             Item(
                 name='realtime_mode',
@@ -156,11 +158,12 @@ ManualControlView = View(
                 style='custom',
                 resizable=True,
                 editor=ToggleEditorFactory(),
+                enabled_when='connected',
             ),
         ), 
         show_border=True, 
         padding=10,
-        enabled_when='connected',
+        # enabled_when='connected', # will only do this for realtime mode
     ),
     title=PKG_name,
     resizable=True,
@@ -169,6 +172,8 @@ ManualControlView = View(
 
 @provides(IDramatiqControllerBase)
 class ManualControlControl(Controller):
+    # Use a dict to store the *latest* task for each topic
+    message_dict = Dict()
 
     ###################################################################################
     # IDramatiqControllerBase Interface
@@ -195,6 +200,7 @@ class ManualControlControl(Controller):
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
         self.model.realtime_mode = False
+        self.model.connected = False
 
     @timestamped_value('disconnected_message')
     def _on_connected_triggered(self, message):
@@ -202,7 +208,7 @@ class ManualControlControl(Controller):
         self.model.connected = True
     ###################################################################################
 
-    ### Helper traits #######
+    ### Helper traits / funcs #######
     realtime_mode_message = Instance(TimestampedMessage)
     disconnected_message = Instance(TimestampedMessage)
 
@@ -212,35 +218,89 @@ class ManualControlControl(Controller):
     def _disconnected_message_default(self):
         return TimestampedMessage("", 0)
 
+    def _publish_message_if_realtime(self, topic: str, message: str) -> bool:
+        if self.model.realtime_mode:
+            publish_message(topic=topic, message=message)
+            return True
+
+        else:
+            # Create the task "snapshot"
+            task = functools.partial(publish_message, topic=topic, message=message)
+            logger.debug(f"QUEUEING Topic='{topic}, message={message}' when realtime mode on")
+            # Store the task, overwriting any previous task for this topic
+            self.message_dict[topic] = task
+
+        return False
+
+    def publish_queued_messages(self):
+        """
+        Processes the most recent message for each topic.
+        """
+        logger.info("\n--- Dropbot Manual Control: Publishing Queued Messages (Last Value Only) ---")
+
+        if not self.message_dict:
+            logger.info("--- Dropbot Manual Control Queue empty ---")
+            return
+
+            # Get all the "latest" tasks that are waiting
+            tasks_to_run = list(self.message_dict.values())
+            # Clear the dict for the next batch
+            self.message_dict.clear()
+
+        # 5. Run the tasks *outside* the lock.
+        # This is crucial for performance, as publish_message might be slow
+        # and we don't want to block new messages from being queued.
+        for task in self.message_dict.values():
+            try:
+                task()  # This executes: publish_message(topic=..., message=...)
+            except Exception as e:
+                # Handle potential errors during publish
+                logger.warning(f"Error publishing queued message: {e}")
+
     ###################################################################################
     # Controller interface
     ###################################################################################
 
+    ####### We need these voltage and frequency setattr only for debouncing. ##########
     @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, object, traitname, value):
-        publish_message(topic=SET_VOLTAGE, message=str(value))
-        logger.debug(f"Requesting Voltage change to {value} V")
         return super().setattr(info, object, traitname, value)
 
     @debounce(wait_seconds=0.3)
     def frequency_setattr(self, info, object, traitname, value):
-        publish_message(topic=SET_FREQUENCY, message=str(value))
-        logger.debug(f"Requesting Frequency change to {value} Hz")
         return super().setattr(info, object, traitname, value)
 
     # This callback will not call update_editor() when it is not debounced!
     # This is likely because update_editor is only called by 'external' trait changes, and the new thread spawned by the decorator appears as such
     @debounce(wait_seconds=1)
     def realtime_mode_setattr(self, info, object, traitname, value):
-        publish_message(
-            topic=SET_REALTIME_MODE,
-            message=str(value)
-        )
         logger.debug(f"Set realtime mode to {value}")
         info.realtime_mode.control.setChecked(value)
-        
-        # info.realtime_mode.update_editor()  # You can use info to acces the editor from the ui but it's not needed when debouncing because it will call update_editor anyway
         return super().setattr(info, object, traitname, value)
+
+    ###################################################################################
+    # Trait notification handlers
+    ###################################################################################
+
+    @observe("model:realtime_mode")
+    def _realtime_mode_changed(self, event):
+        publish_message(
+            topic=SET_REALTIME_MODE,
+            message=str(event.new)
+        )
+
+        if event.new:
+            self.publish_queued_messages()
+
+    @observe("model:voltage")
+    def _voltage_changed(self, event):
+        if self._publish_message_if_realtime(topic=SET_VOLTAGE, message=str(event.new)):
+            logger.debug(f"Requesting Voltage change to {event.new} V")
+
+    @observe("model:frequency")
+    def _frequency_changed(self, event):
+        if self._publish_message_if_realtime(topic=SET_FREQUENCY, message=str(event.new)):
+            logger.debug(f"Requesting Frequency change to {event.new} Hz")
 
 
 if __name__ == "__main__":
