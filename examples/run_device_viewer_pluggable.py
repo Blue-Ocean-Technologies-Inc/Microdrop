@@ -1,15 +1,15 @@
 import contextlib
 import os
-import platform
 import sys
 import signal
 import time
 from functools import partial
 
+# import platform
 # Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
-if "pi" in platform.uname().node.lower():
-        os.environ["QT_SCALE_FACTOR"] = "0.7"
-        print(f"running with environment variables: {os.environ['QT_SCALE_FACTOR']}")
+# if "pi" in platform.uname().node.lower():
+#         os.environ["QT_SCALE_FACTOR"] = "0.7"
+#         print(f"running with environment variables: {os.environ['QT_SCALE_FACTOR']}")
 
 from envisage.ui.tasks.tasks_application import TasksApplication
 from PySide6.QtWidgets import QApplication
