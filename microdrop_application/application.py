@@ -156,6 +156,7 @@ class MicrodropApplication(TasksApplication):
     @observe('application_initialized')
     def _on_application_initialized(self, event):
         logger.critical("Application Initialized")
+        self._add_status_bar_to_active_window()
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
 
@@ -179,9 +180,8 @@ class MicrodropApplication(TasksApplication):
             
             return super().start()
 
-    @observe('window_opened')
-    def _window_opened_fired(self, event):
-        logger.critical(f"Windows updated event: {event}")
+    def _add_status_bar_to_active_window(self):
+        logger.critical(f"Adding status bar to active window.")
         window = self.active_window
         if is_dark_mode():
             stylesheet = """
