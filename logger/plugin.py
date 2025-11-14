@@ -79,6 +79,6 @@ class LoggerPlugin(Plugin):
     def get_file_handler(self):
         logs_path = Path(self.application.current_experiment_directory / "logs")
         logs_path.mkdir(parents=True, exist_ok=True)
-        return logging.FileHandler(logs_path / f"{self.application.id.replace(".app", "")}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
+        return logging.FileHandler(logs_path / f"{self.application.id.replace('.app', '')}.{uuid.getnode()}-{os.getpid()}.log", mode = 'a')
 
 
