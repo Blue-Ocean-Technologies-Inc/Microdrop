@@ -14,7 +14,7 @@ from traits.api import Str
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
                                   fixed_fields, ROW_TYPE_ROLE, STEP_TYPE,
                                   LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
-from microdrop_application.application import is_dark_mode
+from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,

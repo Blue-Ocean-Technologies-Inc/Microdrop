@@ -6,24 +6,25 @@ import dramatiq
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
 from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
 from pyface.api import GUI
+from pyface.action.api import StatusBarManager
 from traits.api import Instance, provides
 
+
+# Local imports.
+from microdrop_style.helpers import is_dark_mode
+from microdrop_style.status_bar_style import get_status_bar_stylesheet
+from .consts import PKG
+
+from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
+                                                      basic_listener_actor_routine)
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.status_bar_utils import set_status_bar_message
-# Local imports.
-from .consts import PKG
-
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
-                                                      basic_listener_actor_routine)
 
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
-
-listener_name = f"{PKG}_listener"
 
 
 @provides(IDramatiqControllerBase)
@@ -58,7 +59,7 @@ class MicrodropTask(Task):
 
         logger.info("Starting Microdrop listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=listener_name,
+            listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
     #### 'Task' interface #####################################################
@@ -90,7 +91,16 @@ class MicrodropTask(Task):
 
     def activated(self):
         """Called when the task is activated."""
-        pass
+        logger.info("Microdrop task activated")
+        if self.window.status_bar_manager is None:
+            logger.info("Microdrop task: No status bar manager created: Adding now...")
+            self._add_status_bar_to_window()
+
+    def _add_status_bar_to_window(self):
+        logger.info(f"Adding status bar to Microdrop Task window.")
+        self.window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
+        self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet())
+        self.window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 
 
     ###########################################################################

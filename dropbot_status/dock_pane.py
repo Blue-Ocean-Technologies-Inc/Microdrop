@@ -5,7 +5,7 @@ from pyface.tasks.dock_pane import DockPane
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QApplication
 
-from microdrop_application.application import is_dark_mode
+from microdrop_style.helpers import is_dark_mode
 from microdrop_style.colors import WHITE, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE

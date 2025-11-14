@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 
-from microdrop_application.application import is_dark_mode
+from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
 from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
                                                calculate_group_aggregation_from_children)

@@ -61,8 +61,7 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_application.application import is_dark_mode
-
+from microdrop_style.helpers import is_dark_mode
 
 import json
 

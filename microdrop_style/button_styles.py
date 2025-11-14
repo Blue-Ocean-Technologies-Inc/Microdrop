@@ -255,6 +255,8 @@ QPushButton:pressed {{
 }}
 """
 
+
+
 # Function to get button style based on theme
 def get_button_style(theme="light", button_type="default"):
     """
