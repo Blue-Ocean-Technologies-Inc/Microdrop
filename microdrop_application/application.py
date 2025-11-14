@@ -211,6 +211,7 @@ class MicrodropApplication(TasksApplication):
                             QStatusBar::item {border: None;}
                          """
 
+            logger.critical("Initializing Status Bar")
             window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
             window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
             window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
