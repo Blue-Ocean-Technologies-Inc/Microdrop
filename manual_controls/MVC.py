@@ -132,6 +132,7 @@ class ManualControlModel(HasTraits):
         desc="the frequency to set on the dropbot device"
     )
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
+    connected = Bool(False, desc="Connected to dropbot?")
 
 
 ManualControlView = View(
@@ -141,11 +142,13 @@ ManualControlView = View(
                 name='voltage',
                 label='Voltage (V)',
                 resizable=True,
+                enabled_when='realtime_mode',
             ),
             Item(
                 name='frequency',
                 label='Frequency (Hz)',
                 resizable=True,
+                enabled_when='realtime_mode',
             ),
             Item(
                 name='realtime_mode',
@@ -157,6 +160,7 @@ ManualControlView = View(
         ), 
         show_border=True, 
         padding=10,
+        enabled_when='connected',
     ),
     title=PKG_name,
     resizable=True,
@@ -191,6 +195,11 @@ class ManualControlControl(Controller):
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
         self.model.realtime_mode = False
+
+    @timestamped_value('disconnected_message')
+    def _on_connected_triggered(self, message):
+        logger.debug("Connected from dropbot")
+        self.model.connected = True
     ###################################################################################
 
     ### Helper traits #######
