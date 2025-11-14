@@ -22,6 +22,12 @@ FRONTEND_PLUGINS = [
     PeripheralUiPlugin
 ]
 
+import platform
+# Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
+if "pi" in platform.uname().node.lower():
+        os.environ["QT_SCALE_FACTOR"] = "0.7"
+        print(f"running with environment variables: {os.environ['QT_SCALE_FACTOR']}")
+
 def main():
     """Run only the frontend plugins."""
     plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + [LoggerPlugin, DropbotPreferencesPlugin]
