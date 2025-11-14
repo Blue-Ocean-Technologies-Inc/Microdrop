@@ -1,8 +1,12 @@
+import contextlib
 import os
 import platform
 import sys
 import signal
 import time
+from functools import partial
+
+from IPython.core.magic import on_off
 
 # Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
 if "pi" in platform.uname().node.lower():
@@ -16,24 +20,26 @@ from PySide6.QtGui import QFont
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from logger.logger_service import get_logger
-from microdrop_utils.font_helpers import load_font_family
 from microdrop_utils.root_dir_utils import get_project_root
-from microdrop_utils.broker_server_helpers import redis_server_context, dramatiq_workers_context
-
-from microdrop_style.font_paths import load_material_symbols_font
-
 root = get_project_root()
 
 os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "") # Add root to PATH for PyInstaller. Should do nothing normal operation
 
 # Font paths
-INTER_FONT_PATH = root / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
-LABEL_FONT_FAMILY = load_font_family(INTER_FONT_PATH) or "Inter"
-
-# Load the Material Symbols font using the clean API
-ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
+LABEL_FONT_FAMILY = "Inter"
+ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 logger = get_logger(__name__)
+
+
+def stop_app(app, signum, frame):
+    print("Shutting down...")
+    if isinstance(app,
+                  TasksApplication):  # It's a UI application, so we call exit so that the application can save its state via TasksApplication.exit()
+        app.exit()
+    else:  # It's a backend application, so we call Application.stop() since exit() doesn't exist
+        app.stop()
+    sys.exit(0)
 
 
 def main(plugins, contexts, application, persist):
@@ -47,27 +53,33 @@ def main(plugins, contexts, application, persist):
     # Instantiate plugins
     plugin_instances = [plugin() for plugin in plugins]
 
-    # Instantiate application
-    app = application(plugins=plugin_instances)
+    #### Startup application with context
 
-    def stop_app(signum, frame):
-        print("Shutting down...")
-        if isinstance(app, TasksApplication): # It's a UI application, so we call exit so that the application can save its state via TasksApplication.exit()
-            app.exit()
-        else: # It's a backend application, so we call Application.stop() since exit() doesn't exist
-            app.stop()
-        sys.exit(0)
+    with contextlib.ExitStack() as stack:  # contextlib.ExitStack is a context manager that allows you to stack multiple context managers
+        for context in contexts:
+            stack.enter_context(context())
 
-    # Register signal handlers
-    signal.signal(signal.SIGINT, stop_app)
-    signal.signal(signal.SIGTERM, stop_app)
+        # Instantiate application
+        app = application(plugins=plugin_instances)
 
-    with dramatiq_workers_context():
+        # Register signal handlers
+        stop_app_func = partial(stop_app, app)
+        signal.signal(signal.SIGINT, stop_app_func)
+        signal.signal(signal.SIGTERM, stop_app_func)
+
         app.run()
+
         if persist:
             while True:
                 time.sleep(0.001)
 
 
 if __name__ == "__main__":
-    main()
+    from plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, REQUIRED_CONTEXT, SERVER_CONTEXT, DEFAULT_APPLICATION
+
+    main(
+        plugins=REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS,
+        contexts=SERVER_CONTEXT + REQUIRED_CONTEXT,
+        application=DEFAULT_APPLICATION,
+        persist=False # UI so no
+         )

@@ -47,7 +47,7 @@ REQUIRED_CONTEXT = [
     dramatiq_workers_context
 ]
 
-BACKEND_CONTEXT = [
+SERVER_CONTEXT = [
     redis_server_context
 ]
 
