@@ -1,11 +1,8 @@
-from logging import root
 import os
 import platform
 import sys
-import contextlib
 import signal
 import time
-from pathlib import Path
 
 # Set environment variables for Qt scaling for low DPI displays i.e, Raspberry Pi 4
 if "pi" in platform.uname().node.lower():
@@ -18,9 +15,6 @@ from PySide6.QtGui import QFont
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from examples.plugin_consts import (REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, 
-                                    FRONTEND_CONTEXT, BACKEND_CONTEXT, REQUIRED_CONTEXT, 
-                                    DEFAULT_APPLICATION)
 from logger.logger_service import get_logger
 from microdrop_utils.font_helpers import load_font_family
 from microdrop_utils.root_dir_utils import get_project_root
@@ -42,21 +36,11 @@ ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
 logger = get_logger(__name__)
 
 
-def main(plugins=None, contexts=None, application=None, persist=False):
+def main(plugins, contexts, application, persist):
     """Run the application."""
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
     app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
-
-    from peripheral_controller.plugin import PeripheralControllerPlugin
-
-    if plugins is None:
-        plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS + [PeripheralControllerPlugin]
-    if contexts is None:
-        contexts = FRONTEND_CONTEXT + BACKEND_CONTEXT + REQUIRED_CONTEXT
-    if application is None:
-        application = DEFAULT_APPLICATION
-
 
     logger.debug(f"Instantiating application {application} with plugins {plugins}")
 
@@ -86,5 +70,4 @@ def main(plugins=None, contexts=None, application=None, persist=False):
 
 
 if __name__ == "__main__":
-    with redis_server_context():
-        main()
+    main()

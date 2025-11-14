@@ -8,9 +8,6 @@ from logger.plugin import LoggerPlugin
 from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
 from examples.plugin_consts import *
 
-
-
-
 def main():
     """Run only the backend plugins."""
     plugins = REQUIRED_PLUGINS + BACKEND_PLUGINS + [LoggerPlugin]
