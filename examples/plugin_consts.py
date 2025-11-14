@@ -1,4 +1,5 @@
-from envisage.application import Application
+from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
+from logger.plugin import LoggerPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
@@ -7,7 +8,6 @@ from dropbot_status.plugin import DropbotStatusPlugin
 from manual_controls.plugin import ManualControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from protocol_grid.plugin import ProtocolGridControllerUIPlugin
-from BlankMicrodropCanvas.application import MicrodropCanvasTaskApplication
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
@@ -26,7 +26,8 @@ FRONTEND_PLUGINS = [
     ManualControlsPlugin,
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
-    PeripheralUiPlugin
+    PeripheralUiPlugin,
+    DropbotPreferencesPlugin
 ]
 
 BACKEND_PLUGINS = [
@@ -38,6 +39,7 @@ BACKEND_PLUGINS = [
 REQUIRED_PLUGINS = [
     CorePlugin,
     MessageRouterPlugin,
+    LoggerPlugin
 ]
 
 
@@ -45,12 +47,8 @@ REQUIRED_CONTEXT = [
     dramatiq_workers_context
 ]
 
-BACKEND_CONTEXT = [
+SERVER_CONTEXT = [
     redis_server_context
-]
-
-FRONTEND_CONTEXT = [
-redis_server_context
 ]
 
 BACKEND_APPLICATION = MicrodropBackendApplication
