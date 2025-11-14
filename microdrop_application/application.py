@@ -156,6 +156,7 @@ class MicrodropApplication(TasksApplication):
     @observe('application_initialized')
     def _on_application_initialized(self, event):
         publish_message(message="", topic=START_DEVICE_MONITORING)
+        self._on_windows_updated(None)
 
 
     ############################# Initialization ############################################################
