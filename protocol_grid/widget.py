@@ -1,10 +1,14 @@
 import copy
+import json
+from pathlib import Path
 
+from pyface.api import confirm, NO, YES
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow, 
                                QPushButton, QDialog)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
+from traits.has_traits import HasTraits
 
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
@@ -48,7 +52,7 @@ class PGCWidget(QWidget):
     
     protocolChanged = Signal()
     
-    def __init__(self, parent=None, state=None):
+    def __init__(self, application, parent=None, state=None):
         super().__init__(parent)
 
         self._protocol_grid_plugin = None
@@ -63,8 +67,8 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error) 
         self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
 
-        self.experiment_manager = ExperimentManager()
-        self.experiment_manager.initialize()  
+        self.application = application
+        self.experiment_manager = ExperimentManager(self.application.current_experiment_directory)
 
         self.protocol_data_logger = ProtocolDataLogger(self)
         self.protocol_runner.set_data_logger(self.protocol_data_logger)
@@ -104,7 +108,7 @@ class PGCWidget(QWidget):
 
         self.information_panel = InformationPanel(self)
         self.information_panel.open_button.clicked.connect(self.open_experiment_directory)        
-        self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_id())
+        self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
         self.information_panel.update_protocol_name(self.protocol_state_tracker.get_protocol_display_name())
         
         self.navigation_bar = NavigationBar(self)
@@ -521,12 +525,21 @@ class PGCWidget(QWidget):
                 logger.info(f"Protocol data saved to: {data_file_path}")
                 csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
             
-            # initialize new experiment
-            new_experiment_id = self.experiment_manager.initialize_new_experiment()
-            if new_experiment_id:
-                # update information panel with new experiment ID
-                self.information_panel.update_experiment_id(new_experiment_id)
-                logger.info(f"Started new experiment: {new_experiment_id}")
+            # initialize new experiment if user wants
+            if confirm(self, "Create a new experiment?",
+                       title="Create New Experiment?",
+                       cancel=False,
+                       # no_label="No",
+                       # yes_label="Yes",
+                       # detail="This is some details over here",
+                       ) == YES:
+
+                new_experiment_dir = self.experiment_manager.initialize_new_experiment()
+                self.application.current_experiment_directory = new_experiment_dir
+                if new_experiment_dir:
+                    # update information panel with new experiment ID
+                    self.information_panel.update_experiment_id(new_experiment_dir.stem)
+                    logger.info(f"Started new experiment: {new_experiment_dir.stem}")
             
         except Exception as e:
             logger.error(f"Error handling regular mode completion: {e}")
@@ -2804,11 +2817,16 @@ class PGCWidget(QWidget):
                     logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    import sys
+    app = QApplication.instance() or QApplication(sys.argv)
     window = QMainWindow()
     window.setWindowTitle("Protocol Grid Widget")
-    window.setGeometry(50, 50, 1400, 500)    
-    widget = PGCWidget()
+    window.setGeometry(50, 50, 1400, 500)
+
+    class App(HasTraits):
+        current_experiment_directory = Path(__file__).resolve().parent
+
+    widget = PGCWidget(App())
     window.setCentralWidget(widget)    
     window.show()    
     sys.exit(app.exec())

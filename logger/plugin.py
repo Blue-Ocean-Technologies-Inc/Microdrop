@@ -41,10 +41,12 @@ class LoggerPlugin(Plugin):
     #
     def start(self):
         """Starts the plugin."""
-        init_logger(preferred_log_level=LEVELS.get(LoggerPreferences().level, logging.INFO))
+        init_logger(preferred_log_level=LEVELS.get(LoggerPreferences().level, logging.INFO),
+                    file_handler=self.get_file_handler())
 
-    @observe("application:current_experiment_directory")
+    @observe("application:experiment_changed")
     def _current_exp_dir_changed(self, event):
+        print("Changing Log File")
         ROOT_LOGGER = logging.getLogger()
 
         old_formatter = None
@@ -60,7 +62,7 @@ class LoggerPlugin(Plugin):
                 handler.close()
                 ROOT_LOGGER.removeHandler(handler)
 
-                print(f"Removed: {handler.baseFilename}")
+                print(f"Log File detached: {handler.baseFilename}")
                 break  # Stop after finding the first one
 
             # 3. Add the new FileHandler
@@ -72,7 +74,7 @@ class LoggerPlugin(Plugin):
             new_file_h.setLevel(old_level)  # Ensure logging level is preserved
 
             ROOT_LOGGER.addHandler(new_file_h)
-            print(f"Added: {new_file_h.baseFilename}")
+            print(f"Log File Attached: {new_file_h.baseFilename}")
         else:
             print("Warning: No FileHandler was found to replace.")
 

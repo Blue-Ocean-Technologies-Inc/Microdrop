@@ -1,4 +1,6 @@
 # enthought imports
+from pathlib import Path
+
 from traits.api import Str
 from pyface.tasks.dock_pane import DockPane
 
@@ -22,11 +24,11 @@ class PGCDockPane(DockPane):
     name = Str(PKG_name)
 
     def create_contents(self, parent):
-        widget = PGCWidget()
-
+        widget = None
         try: 
             if hasattr(self, 'task') and self.task and hasattr(self.task, 'window'):
                 app = self.task.window.application
+                widget = PGCWidget(application=app)
                 if app and hasattr(app, 'plugin_manager'):
                     for plugin in app.plugin_manager._plugins:
                         if hasattr(plugin, 'id') and plugin.id == "protocol_grid.plugin":
@@ -44,7 +46,11 @@ class PGCDockPane(DockPane):
                     logger.info("no plugin manager found in application")
             else:
                 logger.info("no task/window available for plugin access")
-        except Exception as e:
-            logger.info(f"coulc not set plugin reference via dock pane: {e}")
 
-        return widget
+        except Exception as e:
+            logger.info(f"could not set plugin reference via dock pane: {e}")
+
+        if widget:
+            return widget
+        else:
+            raise

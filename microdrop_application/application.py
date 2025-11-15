@@ -15,7 +15,7 @@ from .consts import (scibots_icon_path, sidebar_menu_options,
 
 # Enthought library imports.
 from traits.etsconfig.api import ETSConfig
-from traits.api import Bool, Instance, List, Property, observe, Directory
+from traits.api import Bool, Instance, List, Property, observe, Directory, Event
 
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 from envisage.ui.tasks.api import TasksApplication
@@ -81,6 +81,7 @@ class MicrodropApplication(TasksApplication):
     # experiments directory
     experiments_directory = Property(Directory)
     current_experiment_directory = Property(Directory)
+    experiment_changed = Event()
 
     # branding
     icon = Instance(ImageResource)
@@ -149,6 +150,17 @@ class MicrodropApplication(TasksApplication):
             globals["experiment_directory"] = EXPERIMENT_DIR
 
         return self.experiments_directory / current_exp_dir
+
+    def _set_current_experiment_directory(self, directory: Path):
+        if not isinstance(directory, Path):
+            directory = Path(directory)
+
+        globals = get_microdrop_redis_globals_manager()
+        globals["experiment_directory"] = directory.stem
+
+        self._get_current_experiment_directory().mkdir(parents=True, exist_ok=True)
+
+        self.experiment_changed = True
 
     @observe('application_initialized')
     def _on_application_initialized(self, event):
