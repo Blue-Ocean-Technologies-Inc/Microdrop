@@ -1,10 +1,6 @@
 # sys imports
-import os
-import sys
 from pathlib import Path
 
-from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.icons.icons import ICON_MENU
 # Local imports.
 from .helpers import get_microdrop_redis_globals_manager
 from .preferences import MicrodropPreferences
@@ -12,6 +8,8 @@ from dropbot_controller.consts import START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
+from microdrop_style.helpers import is_dark_mode
+from microdrop_style.icons.icons import ICON_MENU
 from .consts import (scibots_icon_path, sidebar_menu_options,
                      hamburger_btn_stylesheet, EXPERIMENT_DIR)
 
@@ -23,7 +21,6 @@ from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 from envisage.ui.tasks.api import TasksApplication
 
 from pyface.tasks.api import TaskWindowLayout
-from pyface.action.api import StatusBarManager
 from pyface.image_resource import ImageResource
 from pyface.splash_screen import SplashScreen
 
@@ -155,6 +152,7 @@ class MicrodropApplication(TasksApplication):
 
     @observe('application_initialized')
     def _on_application_initialized(self, event):
+        logger.critical("Application Initialized")
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
 
@@ -178,54 +176,17 @@ class MicrodropApplication(TasksApplication):
             
             return super().start()
 
-    @observe('windows:items')
-    def _on_windows_updated(self, event):
-
-        if self.active_window:
-            window = self.active_window
-
-            if is_dark_mode():
-                stylesheet = """
-                QStatusBar {
-                    color: #dadedf;              
-                    font-weight: bold;  
-                    font-size: 14x; 
-                    font-family: Arial;
-                    background: #222222;
-                    border-top: 2px solid #333333 ;
-                    border-bottom: 2px solid #333333;
-                }
-                QStatusBar::item {border: None;}
-            """
-            else:
-                stylesheet = """
-                            QStatusBar {
-                                color: #222222;
-                                font-weight: bold;
-                                font-size: 14x;
-                                font-family: Arial;
-                                background: #f2f3f4;
-                                border-top: 2px solid #dadedf;
-                                border-bottom: 2px solid #dadedf;
-                            }
-                            QStatusBar::item {border: None;}
-                         """
-
-            window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
-            window.status_bar_manager.status_bar.setStyleSheet(stylesheet)
-            window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
-
-            # if not hasattr(window.control, "_left_toolbar"):
-            #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
-            #
-            #     # Add to the left of the main window
-            #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
-            #
-            #     # Optionally, prevent closing the toolbar
-            #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
-            #
-            #     # Store a reference so it's not re-added
-            #     window.control._left_toolbar = left_toolbar
+        # if not hasattr(window.control, "_left_toolbar"):
+        #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
+        #
+        #     # Add to the left of the main window
+        #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
+        #
+        #     # Optionally, prevent closing the toolbar
+        #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
+        #
+        #     # Store a reference so it's not re-added
+        #     window.control._left_toolbar = left_toolbar
 
 
 class MicrodropSidebar(QToolBar):
@@ -364,45 +325,3 @@ class SidebarMenuButton(QFrame):
 
     from PySide6.QtCore import Signal
     clicked = Signal()
-    
-    
-def is_dark_mode():
-    if sys.platform == "darwin":
-        import subprocess
-        try:
-            mode = subprocess.check_output(
-                "defaults read -g AppleInterfaceStyle",
-                shell=True
-            ).strip()
-            return mode == b"Dark"
-        except Exception:
-            return False
-    elif sys.platform.startswith("win"):
-        try:
-            import winreg
-            reg = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
-            key = winreg.OpenKey(
-                reg,
-                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            )
-            apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return apps_use_light_theme == 0
-        except Exception:
-            return False
-    else:
-        gtk_theme = os.environ.get("GTK_THEME", "").lower()
-        if "dark" in gtk_theme:
-            return True
-        qt_theme = os.environ.get("QT_QPA_PLATFORMTHEME", "").lower()
-        if "dark" in qt_theme:
-            return True
-        # KDE check
-        kde_globals = os.path.expanduser("~/.config/kdeglobals")
-        if os.path.isfile(kde_globals):
-            try:
-                with open(kde_globals, "r") as f:
-                    if "ColorScheme=Dark" in f.read():
-                        return True
-            except Exception:
-                pass
-        return False

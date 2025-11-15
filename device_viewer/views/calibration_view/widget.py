@@ -41,8 +41,8 @@ class CalibrationView(QWidget):
         """Apply theme-aware styling to the widget."""
         try:
             # Import here to avoid circular imports
-            from microdrop_application.application import is_dark_mode
-            
+            from microdrop_style.helpers import is_dark_mode
+
             theme = "dark" if is_dark_mode() else "light"
             # Set button styling with correct theme
             button_style = get_complete_stylesheet(theme, "default")
