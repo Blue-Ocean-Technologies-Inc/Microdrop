@@ -1,6 +1,9 @@
 import os
+import warnings
+
 import paramiko
 from typing import Tuple
+from pathlib import Path
 
 
 def generate_ssh_keypair(key_name: str, ssh_dir: str) -> Tuple[str, str, str]:
@@ -23,27 +26,44 @@ def generate_ssh_keypair(key_name: str, ssh_dir: str) -> Tuple[str, str, str]:
     if not key_name:
         raise ValueError("Key name cannot be empty.")
 
-    os.makedirs(ssh_dir, exist_ok=True)
+    ssh_dir = Path(ssh_dir)
+    ssh_dir.mkdir(parents=True, exist_ok=True)
 
-    priv_key_path = os.path.join(ssh_dir, key_name)
-    pub_key_path = f"{priv_key_path}.pub"
+    priv_key_path = ssh_dir / key_name
+    pub_key_path = priv_key_path.with_suffix(".pub")
+    pub_key_data = ""
 
-    if os.path.exists(priv_key_path) or os.path.exists(pub_key_path):
-        raise FileExistsError(f"Files already exist at {priv_key_path}")
+    if pub_key_path.exists():
+        if priv_key_path.exists():
+            warnings.warn(f"Key file already exists. Returning existing information.")
 
-    # Generate the key
-    key = paramiko.RSAKey.generate(4096)
+            try:
+                with open(pub_key_path, 'r') as f:
+                    pub_key_data = f.read().strip()
 
-    # Save private key
-    key.write_private_key_file(priv_key_path)
-    os.chmod(priv_key_path, 0o600)  # Set secure permissions
+            except Exception as e:
+                raise OSError(f"Failed to read public key {pub_key_path}: {e}")
+        else:
+            raise FileExistsError(f"Public key: {pub_key_path} exists nut no private key: {priv_key_path}.")
 
-    # Save public key
-    pub_key_data = f"{key.get_name()} {key.get_base64()}"
-    with open(pub_key_path, "w") as f:
-        f.write(pub_key_data)
+    else:
+        # Generate the key
+        key = paramiko.RSAKey.generate(4096)
 
-    return (pub_key_data, priv_key_path, pub_key_path)
+        # Save private key
+        key.write_private_key_file(priv_key_path)
+        os.chmod(priv_key_path, 0o600)  # Set secure permissions
+
+        # Save public key
+        pub_key_data = f"{key.get_name()} {key.get_base64()}"
+        try:
+            with open(pub_key_path, "w") as f:
+                f.write(pub_key_data)
+
+        except Exception as e:
+            raise OSError(f"Failed to write public key {pub_key_path}: {e}")
+
+    return pub_key_data, str(priv_key_path), str(pub_key_path)
 
 
 def get_password_authenticated_client(host: str, port: int, username: str, password: str) -> paramiko.SSHClient:
