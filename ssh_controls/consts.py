@@ -19,7 +19,9 @@ ACTOR_TOPIC_DICT = {
 }
 
 # published topics
-SSH_KEYPAIR_GENERATED = "ssh_service/success/ssh_keypair_generated"
-SSH_KEY_UPLOADED = "ssh_service/success/ssh_keypair_uploaded"
-SSH_SERVICE_WARNING = "ssh_service/warnings"
-SSH_SERVICE_ERROR = "ssh_service/errors"
+SSH_KEYGEN_SUCCESS = "ssh_service/success/ssh_keygen_success"
+SSH_KEYGEN_WARNING = "ssh_service/warning/ssh_keygen_warning"
+SSH_KEYGEN_ERROR = "ssh_service/error/ssh_keygen_error"
+
+SSH_KEY_UPLOAD_SUCCESS = "ssh_service/success/ssh_keypair_uploaded"
+SSH_KEY_UPLOAD_ERROR = "ssh_service/error/ssh_keypair_upload_error"

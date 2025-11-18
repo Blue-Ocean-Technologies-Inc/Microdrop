@@ -15,7 +15,8 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 
-from .consts import listener_name, SSH_KEYPAIR_GENERATED, SSH_SERVICE_WARNING, SSH_SERVICE_ERROR, SSH_KEY_UPLOADED
+from .consts import listener_name, SSH_KEYGEN_SUCCESS, \
+    SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR, SSH_KEY_UPLOAD_ERROR, SSH_KEY_UPLOAD_SUCCESS
 
 logger = get_logger(__name__)
 
@@ -44,6 +45,9 @@ class SSHService(HasTraits):
         message_data = json.loads(message.data)
         key_name = message_data.get("key_name")
         ssh_dir = message_data.get("ssh_dir")
+
+        err_title = None
+        err_msg = None
         
         try:
             with warnings.catch_warnings(record=True) as captured_warnings:
@@ -54,24 +58,35 @@ class SSHService(HasTraits):
                 output["priv_key_path"] = priv_key_path
                 output["pub_key_path"] = pub_key_path
 
-                publish_message(json.dumps(output), SSH_KEYPAIR_GENERATED)
+                publish_message(json.dumps(output), SSH_KEYGEN_SUCCESS)
 
                 if captured_warnings:
-                    publish_message(str(captured_warnings[0].message), SSH_SERVICE_WARNING)
-                    print(captured_warnings[0].message)
+                    message = {
+                        "title": "User Warning",
+                        "text": str(captured_warnings[0].message),
+                    }
+                    publish_message(json.dumps(message), SSH_KEYGEN_WARNING)
 
         except FileNotFoundError as e:
-            publish_message(f"Public key exists, but private key is missing.\n Error: {e}", SSH_SERVICE_ERROR)
+            err_title = "FileNotFoundError: Public key exists, but private key is missing"
+            err_msg = str(e)
 
         except OSError as e:
-            publish_message(f"Failed to read/write public key.\nError: {e}", SSH_SERVICE_ERROR)
+            err_title = "OSError: Failed to read/write public key"
+            err_msg = str(e)
 
         except ValueError as e:  # Catch invalid key names, etc.
-            publish_message(f"Bad Key name. Error: {e}", SSH_SERVICE_ERROR)
+            err_title = "Bad Key name"
+            err_msg = str(e)
 
         except Exception as e:
-            publish_message(f"Failed to generate public key.\nError: {e}", SSH_SERVICE_ERROR)
+            err_title = "Exception: Failed to generate public key"
+            err_msg = str(e)
 
+        finally:
+            if err_msg:
+                message = {"title": err_title, "text": err_msg}
+                publish_message(json.dumps(message), SSH_KEYGEN_ERROR)
 
     def _on_key_upload_request(self, config):
         """
@@ -85,7 +100,7 @@ class SSHService(HasTraits):
             return
 
         if not all([config["host"], config["port"], config["username"], config["password"]]):
-            publish_message("All connection fields are required.", SSH_SERVICE_ERROR)
+            publish_message("All connection fields are required.", SSH_KEY_UPLOAD_ERROR)
             return
 
         ssh_client = None
@@ -104,15 +119,15 @@ class SSHService(HasTraits):
             if exit_status == 0:
                 publish_message(
                     f"Public key authorized on {config['host']}.\nYou can now try connecting with your private key.",
-                    SSH_KEY_UPLOADED)
+                    SSH_KEY_UPLOAD_SUCCESS)
             else:
-                publish_message("The server failed to add the key. Check permissions or see server logs.", SSH_SERVICE_ERROR)
+                publish_message("The server failed to add the key. Check permissions or see server logs.", SSH_KEY_UPLOAD_ERROR)
 
         except AuthenticationException:
-            publish_message("Authentication Failed. Please check your username and password.", SSH_SERVICE_ERROR)
+            publish_message("Authentication Failed. Please check your username and password.", SSH_KEY_UPLOAD_ERROR)
 
         except Exception as e:
-            publish_message(f"An unexpected error occurred: {e}",SSH_SERVICE_ERROR)
+            publish_message(f"An unexpected error occurred: {e}", SSH_KEY_UPLOAD_ERROR)
 
         finally:
             if ssh_client:
