@@ -23,5 +23,5 @@ SSH_KEYGEN_SUCCESS = "ssh_service/success/ssh_keygen_success"
 SSH_KEYGEN_WARNING = "ssh_service/warning/ssh_keygen_warning"
 SSH_KEYGEN_ERROR = "ssh_service/error/ssh_keygen_error"
 
-SSH_KEY_UPLOAD_SUCCESS = "ssh_service/success/ssh_keypair_uploaded"
-SSH_KEY_UPLOAD_ERROR = "ssh_service/error/ssh_keypair_upload_error"
+SSH_KEY_UPLOAD_SUCCESS = "ssh_service/success/ssh_key_upload_success"
+SSH_KEY_UPLOAD_ERROR = "ssh_service/error/ssh_key_upload_error"
