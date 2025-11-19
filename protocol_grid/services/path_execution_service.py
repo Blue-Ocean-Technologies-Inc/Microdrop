@@ -502,14 +502,3 @@ class PathExecutionService:
             message_obj[str(channel)] = False
         
         return json.dumps(message_obj)
-    
-    @staticmethod
-    def publish_step_hardware_state(step, device_state, active_electrodes, preview_mode=False):
-        """Publish both voltage/frequency and electrode state for a step."""
-        VoltageFrequencyService.publish_step_voltage_frequency(step, preview_mode)
-        
-        if not preview_mode:
-            hardware_message = PathExecutionService.create_hardware_electrode_message(
-                device_state, active_electrodes
-            )
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
