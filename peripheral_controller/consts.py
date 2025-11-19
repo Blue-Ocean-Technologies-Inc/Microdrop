@@ -19,6 +19,7 @@ MOVE_UP = f"{DEVICE_NAME}/requests/move_up"
 MOVE_DOWN = f"{DEVICE_NAME}/requests/move_down"
 SET_POSITION = f"{DEVICE_NAME}/requests/set_position"
 RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
+UPDATE_CONFIG = f"{DEVICE_NAME}/requests/update_config"
 
 # Error Topics
 ERROR = f'{DEVICE_NAME}/error'
