@@ -12,7 +12,7 @@ class SSHControlView(QWidget):
         conn_group = QGroupBox("1. Connection Details (for key upload)")
         conn_layout = QFormLayout()
 
-        # UPDATED: Initialize QLineEdits with model's default values
+        # Initialize QLineEdits
         self.host_entry = QLineEdit()
         self.port_entry = QLineEdit()
         self.user_entry = QLineEdit()
