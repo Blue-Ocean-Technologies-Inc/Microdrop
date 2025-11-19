@@ -147,9 +147,10 @@ class ZStageStatesSetterMixinService(HasTraits):
             # 2. Pass to Proxy
             # Use .model_dump() to convert the model instance back to a dictionary
             # so you can unpack it with **
-            logger.critical(f"Attempting to set Z-stage config: {validated_config.model_dump()}")
+            config = validated_config.model_dump(exclude_none=True)
+            logger.critical(f"Attempting to set Z-stage config: {config}")
 
-            self.proxy.update_config(**validated_config.model_dump())
+            self.proxy.update_config(**config)
 
             logger.critical(f"Success: Z-stage config changed to: {self.proxy.config}")
 
