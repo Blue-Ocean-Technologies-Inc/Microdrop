@@ -151,3 +151,37 @@ def test_create_dump_validate_cycle():
     assert loaded_model.zstage_up_position == original_model.zstage_up_position
     # Pydantic models support direct equality checks
     assert loaded_model == original_model
+
+
+def test_only_down_position_provided():
+    """
+    Scenario: Only 'zstage_down_position' is provided.
+    Expected: Model is created successfully. 'up' is None. Validator logic is skipped.
+    """
+    json_str = '''
+        {
+            "zstage_down_position": 10.0
+        }
+        '''
+    model = ZStageConfigData.model_validate_json(json_str)
+
+    assert model.zstage_down_position == 10.0
+    assert model.zstage_up_position is None
+    assert model.model_dump(exclude_none=True) == {"zstage_down_position": 10.0}
+
+
+def test_only_up_position_provided():
+    """
+    Scenario: Only 'zstage_up_position' is provided.
+    Expected: Model is created successfully. 'down' is None. Validator logic is skipped.
+    """
+    json_str = '''
+            {
+                "zstage_up_position": 20.0
+            }
+            '''
+    model = ZStageConfigData.model_validate_json(json_str)
+
+    assert model.zstage_up_position == 20.0
+    assert model.zstage_down_position is None
+    assert model.model_dump(exclude_none=True) == {"zstage_up_position": 20.0}
