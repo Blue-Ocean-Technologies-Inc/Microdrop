@@ -15,54 +15,14 @@ logger = get_logger(__name__)
 class ExperimentManager:
     """manage experiment lifecycle, directory creation, and cleanup."""
     
-    def __init__(self):
-        self._experiment_id = None
-        self._experiment_directory = None
-        self._base_experiments_dir = None
+    def __init__(self, experiment_directory: Path):
         self._initialized = False
-        
-    def initialize(self):
-        """initialize self and create experiment directory."""
-        if self._initialized:
-            return
-            
-        try:
-            # create base directory: experiment_logs
-            self._base_experiments_dir = self._get_base_experiments_directory()
-            self._base_experiments_dir.mkdir(parents=True, exist_ok=True)
-            
-            # generate unique experiment ID
-            self._experiment_id = self._generate_experiment_id()
-            
-            # create directory
-            #TODO: change this to a more appropriate location (System Documents) after dev
-            self._experiment_directory = self._base_experiments_dir / self._experiment_id
-            self._experiment_directory.mkdir(parents=True, exist_ok=True)
-            
-            self._register_cleanup_on_exit() # on app exit
-            
-            self._initialized = True
-            logger.info(f"Experiment initialized: {self._experiment_id}")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize experiment: {e}")
-            # fallback to current directory
-            self._experiment_directory = Path.cwd()
-            self._experiment_id = "fallback"
-            self._initialized = True
-    
-    def _get_base_experiments_directory(self):
-        """
-        Get base experiments directory.
-        """
-        return Path("experiment_logs")
-    
-    def _generate_experiment_id(self):
-        return get_current_utc_datetime()
+        self._experiment_directory = experiment_directory
+        self._register_cleanup_on_exit() # on app exit
+        logger.info(f"Experiment initialized: Directory={self._experiment_directory}")
     
     def _register_cleanup_on_exit(self):
         """cleanup function to run when application exits."""
-        app_instance = QApplication.instance() or QApplication(sys.argv)
         app = QApplication.instance()
         if app:
             app.aboutToQuit.connect(self._cleanup_on_exit)
@@ -75,9 +35,9 @@ class ExperimentManager:
         try:
             if self._is_directory_empty(self._experiment_directory):
                 shutil.rmtree(self._experiment_directory)
-                logger.info(f"Cleaned up empty experiment directory: {self._experiment_id}")
+                logger.info(f"Cleaned up empty experiment directory: {self._experiment_directory}")
             else:
-                logger.info(f"Experiment directory not empty, keeping: {self._experiment_id}")
+                logger.info(f"Experiment directory not empty, keeping: {self._experiment_directory}")
         except Exception as e:
             logger.error(f"Failed to cleanup experiment directory: {e}")
     
@@ -87,15 +47,11 @@ class ExperimentManager:
             return len(list(directory.iterdir())) == 0
         except Exception:
             return False
-    
+
     def get_experiment_id(self):
-        if not self._initialized:
-            self.initialize()
         return self._experiment_id or "unknown"
-    
+
     def get_experiment_directory(self):
-        if not self._initialized:
-            self.initialize()
         return self._experiment_directory or Path.cwd()
     
     def open_experiment_directory(self):
@@ -161,21 +117,23 @@ class ExperimentManager:
             
         except Exception as e:
             logger.error(f"Failed to auto-save protocol: {e}")
-            return None 
-    
+            return None
+
     def initialize_new_experiment(self):
         """initialize a new experiment with new ID and directory."""
         try:
             # generate new experiment ID
-            self._experiment_id = self._generate_experiment_id()
-            
+            new_experiment_dir = get_current_utc_datetime()
+
             # create new experiment directory
-            self._experiment_directory = self._base_experiments_dir / self._experiment_id
-            self._experiment_directory.mkdir(parents=True, exist_ok=True)
-            
-            logger.info(f"Initialized new experiment: {self._experiment_id}")
-            return self._experiment_id
-            
+            _experiment_directory = self._experiment_directory.parent / new_experiment_dir
+            _experiment_directory.mkdir(parents=True, exist_ok=True)
+
+            logger.info(f"Initialized new experiment: {_experiment_directory}")
+            self._experiment_directory = _experiment_directory
+
+            return self._experiment_directory
+
         except Exception as e:
             logger.error(f"Failed to initialize new experiment: {e}")
             return None

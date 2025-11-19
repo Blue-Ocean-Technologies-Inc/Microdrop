@@ -8,7 +8,7 @@ from .preferences import MicrodropPreferences
 # Enthought library imports.
 from envisage.api import Application
 from traits.etsconfig.api import ETSConfig
-from traits.api import Instance, Property, Directory
+from traits.api import Instance, Property, Directory, Event
 
 from .consts import EXPERIMENT_DIR
 
@@ -36,6 +36,7 @@ class MicrodropBackendApplication(Application):
     # experiments directory
     experiments_directory = Property(Directory)
     current_experiment_directory = Property(Directory)
+    experiment_changed = Event()
 
     #### 'Application' interface ####################################
 
@@ -61,6 +62,17 @@ class MicrodropBackendApplication(Application):
             globals["experiment_directory"] = EXPERIMENT_DIR
 
         return self.experiments_directory / current_exp_dir
+
+    def _set_current_experiment_directory(self, directory: Path):
+        if not isinstance(directory, Path):
+            directory = Path(directory)
+
+        globals = get_microdrop_redis_globals_manager()
+        globals["experiment_directory"] = directory.stem
+
+        self._get_current_experiment_directory().mkdir(parents=True, exist_ok=True)
+
+        self.experiment_changed = True
 
     ############################# Initialization ############################################################
     def traits_init(self):
