@@ -12,7 +12,7 @@ from examples.plugin_consts import *
 def main():
     """Run only the backend plugins."""
 
-    plugins = REQUIRED_PLUGINS + [SSHControlsPlugin]
+    plugins = REQUIRED_PLUGINS + BACKEND_PLUGINS + [SSHControlsPlugin]
 
     run_device_viewer_pluggable(plugins=plugins, contexts=REQUIRED_CONTEXT, application=BACKEND_APPLICATION, persist=True)
 
