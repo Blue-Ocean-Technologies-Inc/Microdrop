@@ -98,10 +98,10 @@ class SSHControlView(QWidget):
         else:
             QMessageBox.warning(self, title, text)
 
-    def initialize_field_values(self, host="", port="", username="", key_name="", password=""):
+    def initialize_field_values(self, host="", port=0, username="", key_name="", password=""):
         """Initialize the fields values."""
         self.host_entry.setText(host)
-        self.port_entry.setText(port)
+        self.port_entry.setText(str(port))
         self.user_entry.setText(username)
         self.pass_entry.setText(password)
         self.key_name_entry.setText(key_name)
