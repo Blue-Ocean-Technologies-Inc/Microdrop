@@ -42,7 +42,7 @@ class SSHService(HasTraits):
 
 
     def _on_generate_keypair_request(self, message):
-        message_data = json.loads(message.data)
+        message_data = json.loads(message)
         key_name = message_data.get("key_name")
         ssh_dir = message_data.get("ssh_dir")
 
