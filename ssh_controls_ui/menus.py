@@ -1,11 +1,7 @@
-import sys
-
-from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QMainWindow, QApplication
+from PySide6.QtWidgets import QMainWindow
 from dotenv import load_dotenv
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup
-from pyface.window import Window
 
 from .dramatiq_listener import SSHControlUIListener
 from .view_model import SSHControlViewModel, SSHControlViewModelSignals
