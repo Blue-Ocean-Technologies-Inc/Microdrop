@@ -1,7 +1,5 @@
 from PySide6.QtCore import Slot
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel, \
-    QMainWindow
+from PySide6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
 
 
 class SSHControlView(QWidget):
