@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
-from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.services.hardware_setter_services import VoltageFrequencyService
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAMERA_ACTIVE,
@@ -1005,6 +1005,9 @@ class ProtocolRunnerController(QObject):
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
+
+
+
             
             logger.info(f"Executing step {self._current_index + 1} with device state: {device_state}")
             

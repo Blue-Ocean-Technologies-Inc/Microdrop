@@ -29,7 +29,7 @@ from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
-from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.services.hardware_setter_services import VoltageFrequencyService
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
 from device_viewer.models.messages import DeviceViewerMessageModel

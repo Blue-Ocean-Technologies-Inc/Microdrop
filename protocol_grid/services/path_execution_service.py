@@ -5,9 +5,6 @@ from typing import List, Dict, Any
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import DeviceState
 from protocol_grid.state.protocol_state import ProtocolStep
-from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
