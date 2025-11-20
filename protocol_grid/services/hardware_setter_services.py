@@ -1,8 +1,10 @@
+import time
+
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
-from peripheral_controller.consts import MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM
-from peripheral_controller.datamodels import ZStageConfigData
+from peripheral_controller.consts import MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM, SET_POSITION, MOVE_UP, MOVE_DOWN, \
+    GO_HOME
 
 logger = get_logger(__name__)
 
@@ -88,7 +90,27 @@ class MagnetService:
             logger.info(f"Failed to validate magnet height: {err}. Returning 0")
             return 0
 
-    # @staticmethod
+    @staticmethod
+    def publish_magnet_height(magnet_str):
+        """publish magnet height for a step execution."""
+        logger.info(f"Trying to Publish magnet height for step {magnet_str}")
+        # validate height
+        magnet_height = MagnetService.validate_magnet_height(magnet_str)
+
+        if magnet_height != 0:
+            publish_message(str(magnet_height), SET_POSITION)
+            logger.info(f"Published magnet height: {magnet_height}V")
+
+        else:
+            publish_message("", MOVE_UP)
+            logger.info(f"No magnet height given. Using the configured Up height.")
+
+    def publish_magnet_home(self):
+        """publish magnet home for a step execution."""
+        publish_message("", MOVE_DOWN)
+        publish_message("", GO_HOME)
+
+
 
 
 
