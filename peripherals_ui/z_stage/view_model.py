@@ -93,12 +93,13 @@ class ZStageViewModel(HasTraits):
 
     @log_function_call_and_exceptions
     def _update_controls_enabled(self):
-        if self.model.realtime_mode and self.model.status:
-            enabled = True
-        else:
-            enabled = False
+        # if self.model.realtime_mode and self.model.status:
+        #     enabled = True
+        # else:
+        #     enabled = False
 
-        self.view_signals.controls_enabled_changed.emit(enabled)
+        self.view_signals.controls_enabled_changed.emit(self.model.status)
+
 
     # --- Observers (React to Model changes) ---
 
@@ -109,10 +110,10 @@ class ZStageViewModel(HasTraits):
         self._update_status_text()
         self._update_controls_enabled()
 
-    @observe("model:realtime_mode")
-    def _on_realtime_mode_changed(self, event):
-        """Fires when model.realtime_mode changes."""
-        self._update_controls_enabled()
+    # @observe("model:realtime_mode")
+    # def _on_realtime_mode_changed(self, event):
+    #     """Fires when model.realtime_mode changes."""
+    #     self._update_controls_enabled()
 
     @observe("model:position")
     def _on_position_changed(self, event):
