@@ -64,7 +64,8 @@ class VoltageFrequencyService:
             logger.info(f"Failed to publish frequency: {e}")
 
 
-    def publish_step_voltage_frequency(self, step, preview_mode=False):
+    @classmethod
+    def publish_step_voltage_frequency(cls, step, preview_mode=False):
         """publish voltage and frequency for a step execution."""
 
         logger.info(f"Trying to Publish voltage and frequency for step {step}")
@@ -72,7 +73,7 @@ class VoltageFrequencyService:
         voltage_str = step.parameters.get("Voltage", "100.0")
         frequency_str = step.parameters.get("Frequency", "10000")
 
-        self.publish_immediate_voltage_frequency(voltage_str, frequency_str, preview_mode)
+        cls.publish_immediate_voltage_frequency(voltage_str, frequency_str, preview_mode)
 
 
 class MagnetService:
@@ -91,8 +92,12 @@ class MagnetService:
             return 0
 
     @staticmethod
-    def publish_magnet_height(magnet_str):
+    def publish_magnet_height(magnet_str, preview_mode=False):
         """publish magnet height for a step execution."""
+        if preview_mode:
+            logger.info("Skipping magnet position publishing in preview mode")
+            return
+
         logger.info(f"Trying to Publish magnet height for step {magnet_str}")
         # validate height
         magnet_height = MagnetService.validate_magnet_height(magnet_str)
@@ -105,7 +110,8 @@ class MagnetService:
             publish_message("", MOVE_UP)
             logger.info(f"No magnet height given. Using the configured Up height.")
 
-    def publish_magnet_home(self):
+    @staticmethod
+    def publish_magnet_home():
         """publish magnet home for a step execution."""
         publish_message("", MOVE_DOWN)
         publish_message("", GO_HOME)
