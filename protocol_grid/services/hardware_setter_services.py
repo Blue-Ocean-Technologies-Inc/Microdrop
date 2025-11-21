@@ -80,40 +80,42 @@ class MagnetService:
     @staticmethod
     def validate_magnet_height(magnet_str):
         """validate and return magnet height value within acceptable range."""
+        if magnet_str == "Default":
+            return "Default"
         try:
             magnet_height = float(magnet_str)
             if MIN_ZSTAGE_HEIGHT_MM < magnet_height < MAX_ZSTAGE_HEIGHT_MM:
                 return magnet_height
             else:
                 return 0
+
         except Exception as e:
             err = e
             logger.info(f"Failed to validate magnet height: {err}. Returning 0")
             return 0
 
     @staticmethod
-    def publish_magnet_height(magnet_str, preview_mode=False):
+    def publish_magnet_height(magnet_str):
         """publish magnet height for a step execution."""
-        if preview_mode:
-            logger.info("Skipping magnet position publishing in preview mode")
-            return
-
-        logger.info(f"Trying to Publish magnet height for step {magnet_str}")
+        logger.critical(f"Trying to Publish magnet height for step {magnet_str}")
         # validate height
         magnet_height = MagnetService.validate_magnet_height(magnet_str)
+        logger.critical(f"Magnet height is {magnet_height}")
 
-        if magnet_height != 0:
-            publish_message(str(magnet_height), SET_POSITION)
-            logger.info(f"Published magnet height: {magnet_height}V")
+        if magnet_height == 'Default':
+            publish_message("", MOVE_UP)
+            logger.critical(f"No magnet height given. Using the configured Default Up height.")
 
         else:
-            publish_message("", MOVE_UP)
-            logger.info(f"No magnet height given. Using the configured Up height.")
+            logger.critical(f"Published magnet height: {magnet_height}")
+            publish_message(str(magnet_height), SET_POSITION)
+
 
     @staticmethod
     def publish_magnet_home():
         """publish magnet home for a step execution."""
         publish_message("", MOVE_DOWN)
+        time.sleep(0.3) # settling time before next command.
         publish_message("", GO_HOME)
 
 
