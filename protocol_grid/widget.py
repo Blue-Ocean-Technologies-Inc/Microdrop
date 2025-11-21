@@ -58,16 +58,16 @@ class PGCWidget(QWidget):
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
+        self.application = application
 
-        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run)
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=application.preferences)
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
-        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)    
-        self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error) 
+        self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)
+        self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)
         self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
 
-        self.application = application
         self.experiment_manager = ExperimentManager(self.application.current_experiment_directory)
 
         self.protocol_data_logger = ProtocolDataLogger(self)
@@ -215,6 +215,8 @@ class PGCWidget(QWidget):
                     )
                     # connect protocol runner to droplet detection responses
                     self.protocol_runner.connect_droplet_detection_listener(message_listener)
+
+                    self.protocol_runner.connect_zstage_position_listener(message_listener)
 
                     # connect to calibration_data messages
                     message_listener.signal_emitter.calibration_data_received.connect(
@@ -1444,7 +1446,7 @@ class PGCWidget(QWidget):
                 
         elif field == "Magnet":
             magnet_col = protocol_grid_fields.index("Magnet")
-            magnet_height_col = protocol_grid_fields.index("Magnet Height")
+            magnet_height_col = protocol_grid_fields.index("Magnet Height (mm)")
             magnet_item = parent.child(row, magnet_col)
             magnet_height_item = parent.child(row, magnet_height_col)
             
@@ -1753,7 +1755,7 @@ class PGCWidget(QWidget):
                             parameters[field] = "1" if checked else "0"
                         else:
                             parameters[field] = "0"
-                    elif field == "Magnet Height":
+                    elif field == "Magnet Height (mm)":
                         stored_value = item.data(Qt.UserRole + 2)
                         if stored_value is not None and stored_value != "":
                             parameters[field] = str(stored_value)

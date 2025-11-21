@@ -14,6 +14,9 @@ from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAM
                                   DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
+
+from peripheral_controller.preferences import PeripheralPreferences
+
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -33,8 +36,14 @@ class ProtocolRunnerController(QObject):
     using Dramatiq actors for logic
     emits signals for UI updates.
     """
-    def __init__(self, protocol_state, flatten_func, parent=None):
+    def __init__(self, protocol_state, flatten_func, parent=None, preferences=None):
         super().__init__(parent)
+        self.current_magnet_height = 0.0
+        # Magnet Wait State
+        self._waiting_for_magnet = False
+        self.preferences = preferences
+        self.zstage_preferences = PeripheralPreferences(preferences=self.preferences)
+
         self.protocol_state = protocol_state
         self.flatten_func = flatten_func
         self.signals = ProtocolRunnerSignals()
