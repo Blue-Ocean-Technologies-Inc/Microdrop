@@ -864,11 +864,11 @@ class PGCWidget(QWidget):
 
         if not self._check_dropbot_connection_and_show_dialog():
             return
-        
+
         selected_paths = self.get_selected_paths()
         if not selected_paths:
             return
-        
+
         # find first selected step if multiple steps are selected
         target_step_path = None
         for path in selected_paths:
@@ -876,67 +876,63 @@ class PGCWidget(QWidget):
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                 target_step_path = path
                 break
-        
+
         if not target_step_path:
             return
-        
+
         self._protocol_running = True
         self.sync_to_state()
-        
+
         target_step_item = self.get_item_by_path(target_step_path)
         if not target_step_item:
             return
-        
-        parent = target_step_item.parent() or self.model.invisibleRootItem()
-        row = target_step_item.row()
-        
+
         parameters = {}
+        step_params = self.state.get_element_by_path(target_step_path).parameters
+
+
         for col, field in enumerate(protocol_grid_fields):
-            item = parent.child(row, col)
-            if item:
-                if field == "Magnet":
-                    parameters[field] = "1" if self._is_checkbox_checked(item) else "0"
-                else:
-                    parameters[field] = item.text()
-        
-        # temporary step object
-        from protocol_grid.state.protocol_state import ProtocolStep
+            parameters[field] = step_params.get(field)
+
+
         temp_step = ProtocolStep(parameters=parameters, name=parameters.get("Description", "Step"))
-        
+
         device_state = target_step_item.data(Qt.UserRole + 100)
         if device_state:
             temp_step.device_state = device_state
         else:
             temp_step.device_state = DeviceState()
-        
+
         run_order = [{
             "step": temp_step,
             "path": target_step_path,
             "rep_idx": 1,
             "rep_total": 1
         }]
-        
+
         droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
-        
+
         self.protocol_runner.set_preview_mode(preview_mode)
-        
+
         self.protocol_runner.set_repeat_protocol_n(1)
         self.protocol_runner.set_run_order(run_order)
-        
+
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
 
         # set droplet check mode for single step execution
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
-        
+
+        logger.critical(f"Running Step (path={target_step_path})\nParams={parameters}\nDevice_state={device_state.to_dict()}")
+
         self.protocol_runner.start()
-        
+
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
 
         self._update_navigation_buttons_state()
-        
+
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
