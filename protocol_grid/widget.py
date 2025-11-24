@@ -75,10 +75,7 @@ class PGCWidget(QWidget):
 
         self.protocol_runner.experiment_manager = self.experiment_manager
 
-        self.protocol_state_tracker = ProtocolStateTracker()        
-        
-        self._column_visibility = {}
-        self._column_widths = {}
+        self.protocol_state_tracker = ProtocolStateTracker()
         
         self.tree = QTreeView()
         self.model = QStandardItemModel()
@@ -155,7 +152,7 @@ class PGCWidget(QWidget):
         self.setup_shortcuts()
         self.setup_header_context_menu()        
         self.ensure_minimum_protocol()
-        self.load_from_state()
+        self.load_from_state(init=True)
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
 
@@ -166,6 +163,8 @@ class PGCWidget(QWidget):
         app = QApplication.instance()
         if app:
             app.paletteChanged.connect(self._on_application_palette_changed)
+
+        self.application.observe(self.save_column_settings, "application_exiting")
 
     # ---------- DropBot connection ----------
     def _is_dropbot_connected(self):
@@ -1563,17 +1562,26 @@ class PGCWidget(QWidget):
         
         self._last_selected_step_id = current_step_id
         
-    def save_column_settings(self):
+    def save_column_settings(self, *args, **kwargs):
+        _column_visibility = json.loads(self.application.preferences.get("protocol_grid.column_visibility", "{}"))
+        _column_widths = json.loads(self.application.preferences.get("protocol_grid.column_widths", "{}"))
+
         for i, field in enumerate(protocol_grid_fields):
-            self._column_visibility[field] = not self.tree.isColumnHidden(i)
-            self._column_widths[field] = self.tree.header().sectionSize(i)
-            
+            _column_visibility[field] = not self.tree.isColumnHidden(i)
+            _column_widths[field] = self.tree.header().sectionSize(i)
+
+        self.application.preferences.set("protocol_grid.column_visibility", json.dumps(_column_visibility))
+        self.application.preferences.set("protocol_grid.column_widths", json.dumps(_column_widths))
+
     def restore_column_settings(self):
+        visibility = json.loads(self.application.preferences.get("protocol_grid.column_visibility", "{}"))
+        widths = json.loads(self.application.preferences.get("protocol_grid.column_widths", "{}"))
         for i, field in enumerate(protocol_grid_fields):
-            if field in self._column_visibility:
-                self.tree.setColumnHidden(i, not self._column_visibility[field])
-            if field in self._column_widths and self._column_widths[field] > 0:
-                self.tree.setColumnWidth(i, self._column_widths[field])
+            if field in visibility:
+                self.tree.setColumnHidden(i, not visibility[field])
+
+            if field in widths and widths[field] > 0:
+                self.tree.setColumnWidth(i, widths[field])
         
     def ensure_minimum_protocol(self):
         if not self.state.sequence:
@@ -1830,10 +1838,13 @@ class PGCWidget(QWidget):
         QTimer.singleShot(0, lambda: self.tree.verticalScrollBar().setValue(vert))
         QTimer.singleShot(0, lambda: self.tree.horizontalScrollBar().setValue(horiz))
 
-    def load_from_state(self):
+    def load_from_state(self, init=False):
         scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
-        self.save_column_settings()        
+
+        if not init:
+            self.save_column_settings()
+
         self._programmatic_change = True
         self._loading_from_file = True
         try:
@@ -1848,11 +1859,11 @@ class PGCWidget(QWidget):
         finally:
             self._programmatic_change = False
             self._loading_from_file = False
-            
+
         self.restore_column_settings()
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
-            
+
     def state_to_model(self):
         self.model.clear()        
         self.model.setHorizontalHeaderLabels(protocol_grid_fields)
