@@ -33,5 +33,5 @@ class SSHControlsPlugin(Plugin):
 
         from .service import SSHService
 
-        logger.info("Starting SSH Controls Listener")
+        logger.debug("Starting SSH Controls Listener")
         self.ssh_controller = SSHService()

@@ -7,13 +7,16 @@ from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.path_execution_service import PathExecutionService
-from protocol_grid.services.voltage_frequency_service import VoltageFrequencyService
+from protocol_grid.services.hardware_setter_services import VoltageFrequencyService, MagnetService
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAMERA_ACTIVE,
                                   DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
+
+from peripheral_controller.preferences import PeripheralPreferences
+
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -33,8 +36,14 @@ class ProtocolRunnerController(QObject):
     using Dramatiq actors for logic
     emits signals for UI updates.
     """
-    def __init__(self, protocol_state, flatten_func, parent=None):
+    def __init__(self, protocol_state, flatten_func, parent=None, preferences=None):
         super().__init__(parent)
+        self.current_magnet_height = 0.0
+        # Magnet Wait State
+        self._waiting_for_magnet = False
+        self.preferences = preferences
+        self.zstage_preferences = PeripheralPreferences(preferences=self.preferences)
+
         self.protocol_state = protocol_state
         self.flatten_func = flatten_func
         self.signals = ProtocolRunnerSignals()
@@ -298,6 +307,14 @@ class ProtocolRunnerController(QObject):
             )
             logger.info("Connected to droplet detection signals")
 
+    def connect_zstage_position_listener(self, message_listener):
+        """Connect to zstage height change response signals."""
+        if message_listener and hasattr(message_listener, 'signal_emitter'):
+            message_listener.signal_emitter.zstage_position_updated.connect(
+                self._on_zstage_position_updated_response
+            )
+            logger.info("Connected to zstage position change signals")
+
     def set_droplet_check_enabled(self, enabled):
         self._droplet_check_enabled = enabled
 
@@ -421,6 +438,24 @@ class ProtocolRunnerController(QObject):
         except Exception as e:
             logger.error(f"Error processing droplet detection response: {e}")
             self._handle_droplet_detection_failure(self._expected_electrodes_for_check, [])
+
+    def _on_zstage_position_updated_response(self, response):
+        self.current_magnet_height = float(response)
+
+        if not self._waiting_for_magnet:
+            return
+
+        logger.info("Magnet target position reached. Resuming step execution.")
+        self._waiting_for_magnet = False
+
+        # Check if we were paused by the user while waiting for the magnet
+        if self._is_paused:
+            logger.info("Protocol was paused by user while waiting for magnet. "
+                        "Execution will not auto-resume until user hits Resume.")
+            return
+
+        # Resume the flow
+        self._start_step_timers_and_logic()
 
     def _handle_droplet_detection_failure(self, expected_channels, detected_channels):
         """show dialog and pause."""
@@ -853,6 +888,9 @@ class ProtocolRunnerController(QObject):
         self._qt_debounce_pause_resume(self._internal_resume)
 
     def stop(self):
+        
+        self._waiting_for_magnet = False
+        
         publish_message(topic=SET_REALTIME_MODE, message=str(False))
 
         if hasattr(self, '_current_message_dialog'):
@@ -1005,6 +1043,9 @@ class ProtocolRunnerController(QObject):
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
+
+
+
             
             logger.info(f"Executing step {self._current_index + 1} with device state: {device_state}")
             
@@ -1029,27 +1070,115 @@ class ProtocolRunnerController(QObject):
             self._was_in_phase = False
             self._paused_phase_index = 0
 
+
+            if self._preview_mode:
+                logger.info("In preview mode. No hardware requests will be published.")
+
             VoltageFrequencyService.publish_step_voltage_frequency(step, self._preview_mode)
-            step_timeout = PathExecutionService.calculate_step_execution_time(step, device_state)
-            
-            self._timer.timeout.disconnect()
-            self._timer.timeout.connect(self._on_step_timeout)
-            self._timer.start(int(step_timeout * 1000))
-            
-            logger.info(f"Started step timer for {step_timeout:.2f} seconds with {len(self._current_execution_plan)} phases")
-            
-            # check for Message first BEFORE any phase execution
-            message = step.parameters.get("Message", "")
-            if message and message.strip():
-                # publish individual electrodes first, then message pop-up
-                self._show_individual_electrodes_and_message(step, device_state)
-            else:
-                self._execute_next_phase()
-            
+
+            # We assume MagnetService returns True if the magnet is moving/needs time
+            # If your MagnetService is void, you will need to check step params manually here.
+
+            if "Magnet" in step.parameters and not self._preview_mode:
+
+                step_height = MagnetService.validate_magnet_height(step.parameters.get("Magnet Height (mm)"))
+                if bool(int(step.parameters.get("Magnet", False))):
+                    logger.critical("Magnet requested to be on:")
+                    if step_height == "Default":
+                        logger.info("Request to use default up position height for magnet")
+                        self.expected_magnet_height = self.zstage_preferences.up_height_mm
+                    else:
+                        self.expected_magnet_height = step_height
+
+                    logger.critical(f"Step height: {self.expected_magnet_height}")
+
+                else:
+                    logger.critical("Magnet requested to be off")
+                    self.expected_magnet_height = 0.0
+
+                if abs(self.current_magnet_height - self.expected_magnet_height) > 0.1:
+                    logger.critical(f"Requesting magnet to height {self.expected_magnet_height}")
+
+                    # use ho home if request is for magnet off.
+                    if self.expected_magnet_height == 0.0:
+                        MagnetService.publish_magnet_home()
+                    else:
+                        MagnetService.publish_magnet_height(step_height)
+
+                    self._waiting_for_magnet = True
+
+                else:
+                    # magnet already at expected level. proceed now.
+                    logger.critical("Magnet is already at expected height.")
+                    self._waiting_for_magnet = False
+                    self._start_step_timers_and_logic()
+                    return
+
+                logger.info("Magnet is moving. Pausing execution flow until target reached.")
+                # We STOP here. The method exits.
+                # We rely on on_magnet_target_reached() to resume.
+                return
+
+            # 3. If magnet is not moving (or we are in preview), proceed immediately
+            self._start_step_timers_and_logic()
+
         except Exception as e:
             logger.error(f"Error executing step: {e}")
             self.signals.protocol_error.emit(str(e))
             self.stop()
+
+    def _start_step_timers_and_logic(self):
+        """
+        Starts the logic/timers for the step.
+        This is separated so it can be called immediately OR after magnet delay.
+        """
+        if self._current_index >= len(self._run_order):
+            return
+
+        step_info = self._run_order[self._current_index]
+        step = step_info["step"]
+
+        device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
+
+        logger.info(f"Executing step logic with device state: {device_state}")
+
+        self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
+        self._current_phase_index = 0
+        self._total_step_phases_completed = 0
+        self._step_repetition_info = PathExecutionService.calculate_step_repetition_info(step, device_state)
+
+        current_time = time.time()
+
+        # if first step, synchronize total timer and step timer
+        if self._start_time is None:
+            self._start_time = current_time
+
+        self._step_start_time = current_time
+        self._step_phase_start_time = current_time
+        self._step_elapsed_time = 0.0
+        self._phase_start_time = None
+        self._phase_elapsed_time = 0.0
+        self._remaining_step_time = 0.0
+        self._remaining_phase_time = 0.0
+        self._was_in_phase = False
+        self._paused_phase_index = 0
+
+        step_timeout = PathExecutionService.calculate_step_execution_time(step, device_state)
+
+        self._timer.timeout.disconnect()
+        self._timer.timeout.connect(self._on_step_timeout)
+        self._timer.start(int(step_timeout * 1000))
+
+        logger.info(f"Started step timer for {step_timeout:.2f} seconds")
+
+        # Check for Message parameter
+        message = step.parameters.get("Message", "")
+        if message and message.strip():
+            self._show_individual_electrodes_and_message(step, device_state)
+        else:
+            self._execute_next_phase()
 
     def _execute_next_phase(self):
         if self._is_paused or not self._is_running:

@@ -126,7 +126,6 @@ class ZStageView(QWidget):
     def set_controls_enabled(self, enabled: bool):
         """
         Enables or disables the motion controls (buttons and spinbox).
-        The Connect/Disconnect button is excluded as it needs to be always active.
         """
         self.up_button.setEnabled(enabled)
         self.down_button.setEnabled(enabled)

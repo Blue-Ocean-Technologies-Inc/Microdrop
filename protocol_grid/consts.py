@@ -11,6 +11,7 @@ from microdrop_style.colors import (
 from microdrop_style.button_styles import (
     get_button_style, get_button_dimensions, BUTTON_SPACING
 )
+from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 
@@ -38,6 +39,7 @@ ACTOR_TOPIC_DICT = {
         DROPLETS_DETECTED,
         CALIBRATION_DATA,
         CAPACITANCE_UPDATED,
+        ZSTAGE_POSITION_UPDATED
         # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
@@ -52,7 +54,7 @@ protocol_grid_fields = [
     "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay",
     "Video", "Capture", "Record",
-    "Volume Threshold", "Magnet", "Magnet Height",
+    "Volume Threshold", "Magnet", "Magnet Height (mm)",
     "Max. Path Length", "Run Time"
 ]
 protocol_grid_column_widths = [
@@ -65,12 +67,12 @@ field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
                 "Repeat Duration", "Repetitions", 
                 "Trail Length", "Video", "Capture", "Record", "Volume Threshold", 
-                "Magnet", "Magnet Height", "Trail Overlay"
+                "Magnet", "Magnet Height (mm)", "Trail Overlay"
             ] and f not in fixed_fields]),
             ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length", 
                                 "Trail Overlay", "Video", "Capture", "Record"]),
             ("Dropbot:", ["Volume Threshold"]),
-            ("Magnet:", ["Magnet", "Magnet Height"]),
+            ("Magnet:", ["Magnet", "Magnet Height (mm)"]),
         ]
 step_defaults = {
     "Description": "Step",
@@ -89,7 +91,7 @@ step_defaults = {
     "Record": "1",
     "Volume Threshold": "0.00",
     "Magnet": "0",
-    "Magnet Height": "0",    
+    "Magnet Height (mm)": "Default",
     "Max. Path Length": "0",
     "Run Time": "0.0",
     "UID": ""
@@ -120,7 +122,7 @@ copy_fields_for_new_step = [
     "Record",
     "Volume Threshold",
     "Magnet",
-    "Magnet Height",
+    "Magnet Height (mm)",
     "Max. Path Length",
     "Run Time"
 ]

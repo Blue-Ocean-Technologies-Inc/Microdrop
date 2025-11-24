@@ -4,6 +4,7 @@ from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
 from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
 
 
@@ -46,17 +47,29 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         if field in ("Video", "Capture", "Record", "Magnet"):
             editor = QCheckBox(parent)
             return editor
-        elif field in ("Magnet Height"):
-            editor = QSpinBox(parent)
-            editor.setMinimum(0)
-            editor.setMaximum(10)
+        elif field in ("Magnet Height (mm)"):
+            editor = QDoubleSpinBox(parent)
+            editor.setFrame(False)  # Often looks better in tables
+
+            # 1. Define the "Magic Number" for Default
+            # We go slightly below the actual minimum to store the "Default" state
+            self.special_value = MIN_ZSTAGE_HEIGHT_MM - 0.5
+
+            # 2. Set Range including the special value
+            editor.setRange(self.special_value, MAX_ZSTAGE_HEIGHT_MM)
+
+            # 3. Map the minimum value to the text "Default"
+            editor.setSpecialValueText("Default")
+
+            editor.setDecimals(2)
+            editor.setSingleStep(0.1)
             return editor
         elif field in ("Repetitions", "Trail Length"):
             editor = QSpinBox(parent)
             editor.setMinimum(1)
             editor.setMaximum(10000)
             return editor
-        elif field in ("Frequency"):
+        elif field == "Frequency":
             editor = QSpinBox(parent)
             editor.setMinimum(100)
             editor.setMaximum(20000)
@@ -67,21 +80,21 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setMinimum(0)
             editor.setMaximum(1000)
             return editor
-        elif field in ("Duration"):
+        elif field == "Duration":
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(10000.0)
             editor.setDecimals(1)
             editor.setSingleStep(0.1)
             return editor
-        elif field in ("Voltage"):
+        elif field == "Voltage":
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(30.0)
             editor.setMaximum(150.0)
             editor.setDecimals(1)
             editor.setSingleStep(0.5)
             return editor        
-        elif field in ("Volume Threshold"):
+        elif field == "Volume Threshold":
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.00)
             editor.setMaximum(1.00)
@@ -96,22 +109,40 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             return editor
         else:
             return QLineEdit(parent)
-            
+
     def setEditorData(self, editor, index):
         field = protocol_grid_fields[index.column()]
-        
+
         if field == "Force":
-            return            
+            return
+
+            # --- 1. Checkboxes ---
         if field in ("Video", "Capture", "Record", "Magnet"):
             check_state = index.model().data(index, Qt.CheckStateRole)
             if check_state is not None:
                 checked = check_state == Qt.Checked or check_state == 2
             else:
-                # fallback to text based checking
                 text_value = index.model().data(index, Qt.DisplayRole) or ""
                 checked = str(text_value).strip().lower() in ("1", "true", "yes", "on")
             editor.setChecked(checked)
-        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
+            return
+
+        # --- 2. Magnet Height (Special Handling for "Default") ---
+        if field == "Magnet Height (mm)" and isinstance(editor, QDoubleSpinBox):
+            raw_data = index.model().data(index, Qt.EditRole)
+
+            # If data is "Default", set editor to its minimum (Magic Number)
+            if raw_data == "Default":
+                editor.setValue(editor.minimum())
+            else:
+                try:
+                    editor.setValue(float(raw_data))
+                except (ValueError, TypeError):
+                    editor.setValue(editor.minimum())
+            return
+
+        # --- 3. Standard SpinBoxes ---
+        if isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             try:
                 value = float(index.model().data(index, Qt.DisplayRole) or 0)
                 editor.setValue(value)
@@ -120,54 +151,67 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         else:
             text = index.model().data(index, Qt.DisplayRole) or ""
             editor.setText(str(text))
-            
+
     def setModelData(self, editor, model, index):
-        # prevent data setting during protocol execution
         field = protocol_grid_fields[index.column()]
+
+        # --- 1. Guard Clauses (Execution Mode) ---
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
-            # during protocol execution, only allow editing in advanced mode for specific fields
-            if hasattr(self.parent_widget, 'navigation_bar') and self.parent_widget.navigation_bar.is_advanced_user_mode():
-                if field not in ("Voltage", "Frequency"):
-                    return
-            else:
+            is_advanced = hasattr(self.parent_widget, 'navigation_bar') and \
+                          self.parent_widget.navigation_bar.is_advanced_user_mode()
+
+            if not is_advanced or field not in ("Voltage", "Frequency"):
                 return
 
         if field == "Force":
             return
 
+        # --- 2. Checkboxes ---
         if isinstance(editor, QCheckBox):
             checked = editor.isChecked()
             model.setData(index, Qt.Checked if checked else Qt.Unchecked, Qt.CheckStateRole)
-            model.setData(index, "", Qt.DisplayRole)
+            model.setData(index, "", Qt.DisplayRole)  # Clear text so only checkbox shows
 
             item = model.itemFromIndex(index)
-            if item is not None:
-                item.emitDataChanged()
+            if item: item.emitDataChanged()
 
-        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)) and field != "Magnet Height":
+        # --- 3. SpinBoxes (Logic separated from Side Effects) ---
+        elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             value = editor.value()
-            if field == "Volume Threshold":
-                model.setData(index, f"{value:.2f}", Qt.EditRole)
 
+            # A. Side Effects (Publishing)
             if field == "Voltage":
                 publish_message(str(value), SET_VOLTAGE)
-
-            if field == "Frequency":
+            elif field == "Frequency":
                 publish_message(str(value), SET_FREQUENCY)
+
+            # B. Saving Data
+            if field == "Magnet Height (mm)":
+                # Check if we are at the "Magic Number" for Default
+                if value == editor.minimum():
+                    model.setData(index, "Default", Qt.EditRole)
+                    model.setData(index, "Default", Qt.UserRole + 2)
+                else:
+                    # Save as standard string/float
+                    model.setData(index, f"{value:.2f}", Qt.EditRole)
+                    model.setData(index, f"{value:.2f}", Qt.UserRole + 2)
+
+            elif field == "Volume Threshold":
+                model.setData(index, f"{value:.2f}", Qt.EditRole)
 
             elif isinstance(editor, QDoubleSpinBox):
                 model.setData(index, f"{value:.1f}", Qt.EditRole)
+
             else:
+                # Integers
                 model.setData(index, str(int(value)), Qt.EditRole)
 
-        elif field == "Magnet Height":
-            value = editor.value() if hasattr(editor, "value") else editor.text()
-            model.setData(index, str(value), Qt.EditRole)
-            model.setData(index, str(value), Qt.UserRole + 2)
+        # --- 4. Text/Others ---
         else:
             text = editor.text()
             model.setData(index, text, Qt.EditRole)
 
+        # Sync parent state
         widget = self.parent()
         if hasattr(widget, "sync_to_state"):
             widget.sync_to_state()
@@ -211,7 +255,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             item.setText("")
             if field == "Magnet":
                 magnet_checked = checked
-        elif row_type == STEP_TYPE and field == "Magnet Height":
+        elif row_type == STEP_TYPE and field == "Magnet Height (mm)":
             item.setData(str(value), Qt.UserRole + 2)
             if not magnet_checked:
                 item.setEditable(False)

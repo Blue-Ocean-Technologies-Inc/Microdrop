@@ -8,6 +8,7 @@ from logger.logger_service import get_logger
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
+from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
                                   CALIBRATION_DATA)
 
@@ -20,6 +21,7 @@ class MessageListenerSignalEmitter(QObject):
     droplets_detected = Signal(str)  # droplet detection response
     calibration_data_received = Signal(str, str)  # message, topic
     capacitance_updated = Signal(str) # capacitance updated signal -> CAPACITANCE_UPDATED message
+    zstage_position_updated = Signal(float)
 
 
 class MessageListener(HasTraits):
@@ -61,6 +63,10 @@ class MessageListener(HasTraits):
             elif topic == CAPACITANCE_UPDATED:
                 logger.debug("Received capacitance updated message")
                 self.signal_emitter.capacitance_updated.emit(message)
+
+            elif topic == ZSTAGE_POSITION_UPDATED:
+                logger.debug("Received z-stage position updated message")
+                self.signal_emitter.zstage_position_updated.emit(float(message))
                 
             else:
                 logger.info(f"Unhandled message topic: {topic}")

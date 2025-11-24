@@ -11,7 +11,7 @@ from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, REQUIRED_
 def main():
     """Run only the frontend plugins."""
 
-    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + [SSHUIPlugin]
+    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS
 
     run_device_viewer_pluggable(plugins=plugins, contexts=REQUIRED_CONTEXT,
                                 application=FRONTEND_APPLICATION, persist=False)

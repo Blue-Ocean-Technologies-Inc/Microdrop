@@ -1,93 +1,187 @@
-import re
-
-import numpy as np
 import pytest
-from traits.api import TraitError
-from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
+from pydantic import ValidationError
+
+from peripheral_controller.datamodels import ZStageConfigData
 
 
-def test_message_model_success():
-    """Test that JSON model controller accepts valid JSON string, validates it, and sets it to model. """
-    json_data = '{"1": true, "2": false, "3": true}'
-    parsed_data = {1: True, 2: False, 3: True}
+# --- JSON Parsing Tests ---
 
-    # Instantiate the model and validate
-    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data).model
-    assert model.channels_properties_dict == parsed_data
+def test_valid_json_input():
+    """Test that valid JSON with floats parses correctly."""
+    # down (10.5) < up (20.1) -> Valid
+    json_str = '{"zstage_down_position": 10.5, "zstage_up_position": 20.1}'
 
-def test_message_model_failure_non_boolean_value():
-    """Test that MessageModel raises TraitError for JSON with non-boolean values."""
-    json_data = '{"1": true, "2": "false"}'  # Value "false" is a string, not a boolean
+    model = ZStageConfigData.model_validate_json(json_str)
 
-    with pytest.raises(TraitError,
-                       match=re.escape("JSON Message input should be a dictionary with string representation of "
-                                       "integer (numeric string) keys and Boolean values.")):
-        DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data)
+    assert model.zstage_down_position == 10.5
+    assert model.zstage_up_position == 20.1
+    assert isinstance(model.zstage_down_position, float)
 
 
-def test_get_boolean_channels_states_mask():
-    """Test that MessageModel returns the correct mask for the channels and states based on the input json string and
-    max available channels specified
+def test_valid_json_coercion():
     """
-    json_data = '{"0": true, "1": false, "9": true}'
-    max_channels = 10
-
-    # Instantiate the model and validate
-    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
-    assert np.all(
-        model.channels_properties_array ==
-        np.array([True, False, False, False, False, False, False, False, False, True])
-    )
-
-def test_get_boolean_channels_states_mask_no_max_channel():
-    """Test that MessageModel returns the correct mask for the channels and states based on the input json string and
-    max available channels specified
+    Test that Pydantic converts strings/ints to floats automatically.
     """
-    json_data = '{"0": true, "1": false, "9": true}'
-    max_channels = 10
+    # Updated values to satisfy up > down rule
+    # down="10" -> 10.0, up="50.5" -> 50.5
+    json_str = '{"zstage_down_position": "10", "zstage_up_position": "50.5"}'
 
-    with pytest.raises(ValueError,
-                       match=re.escape("Set num available channels.")):
+    model = ZStageConfigData.model_validate_json(json_str)
 
-        # Instantiate the model and validate
-        model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data).model
-        mask = model.channels_properties_array
-
+    assert model.zstage_down_position == 10.0
+    assert model.zstage_up_position == 50.5
 
 
-def test_get_boolean_channels_states_mask_zero_on():
-    """Test that MessageModel returns the correct mask for the channels and states based on the input json string and
-    max available channels specified
+def test_extra_fields_forbidden():
+    """Test that extra fields cause a validation error."""
+    json_str = '''
+    {
+        "zstage_down_position": 10.0, 
+        "zstage_up_position": 20.0, 
+        "zstage_speed": 5.0
+    }
+    '''
+
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_str)
+
+    assert "Extra inputs are not permitted" in str(excinfo.value)
+
+
+def test_missing_field():
+    """Test that missing fields raise a validation error."""
+    json_str = '{"zstage_down_position": 10.0}'
+
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_str)
+
+    assert "Field required" in str(excinfo.value)
+
+
+def test_invalid_data_type():
+    """Test that non-numeric strings raise a validation error."""
+    json_str = '{"zstage_down_position": "Not a number", "zstage_up_position": 20.0}'
+
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_str)
+
+    assert "Input should be a valid number" in str(excinfo.value)
+
+
+def test_negative_values_forbidden():
+    """Test that negative numbers raise a validation error."""
+
+    # Test 0.0 boundary (Valid as long as up > down)
+    json_valid = '{"zstage_down_position": 0.0, "zstage_up_position": 0.1}'
+    model = ZStageConfigData.model_validate_json(json_valid)
+    assert model.zstage_down_position == 0.0
+
+    # Test Negative Value (Should fail)
+    json_invalid = '{"zstage_down_position": -0.1, "zstage_up_position": 10.0}'
+
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_invalid)
+
+    assert "Input should be greater than or equal to 0" in str(excinfo.value)
+
+
+def test_up_position_must_be_larger():
+    """Test the new logic: Up must be strictly larger than Down."""
+
+    # Case 1: Up < Down (Should Fail)
+    json_invalid_order = '{"zstage_down_position": 20.0, "zstage_up_position": 10.0}'
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_invalid_order)
+    assert "zstage_up_position must be strictly larger than zstage_down_position" in str(excinfo.value)
+
+    # Case 2: Up == Down (Should Fail, assuming strict inequality)
+    json_equal = '{"zstage_down_position": 10.0, "zstage_up_position": 10.0}'
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData.model_validate_json(json_equal)
+    assert "zstage_up_position must be strictly larger than zstage_down_position" in str(excinfo.value)
+
+
+# --- Python Constructor (Creation) Tests ---
+
+def test_create_via_constructor_valid():
+    """Test direct instantiation via Python class constructor."""
+    config = ZStageConfigData(zstage_down_position=5.0, zstage_up_position=15.0)
+    assert config.zstage_down_position == 5.0
+    assert config.zstage_up_position == 15.0
+
+
+def test_create_via_constructor_extra_forbidden():
+    """Test that passing extra arguments to constructor raises ValidationError."""
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData(
+            zstage_down_position=5.0,
+            zstage_up_position=15.0,
+            invalid_param=123
+        )
+    assert "Extra inputs are not permitted" in str(excinfo.value)
+
+
+def test_create_via_constructor_logic_validation():
+    """Test logical constraints (up > down) via constructor."""
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData(zstage_down_position=20.0, zstage_up_position=10.0)
+    assert "zstage_up_position must be strictly larger than zstage_down_position" in str(excinfo.value)
+
+
+def test_create_via_constructor_negative_validation():
+    """Test negative value constraints via constructor."""
+    with pytest.raises(ValidationError) as excinfo:
+        ZStageConfigData(zstage_down_position=-5.0, zstage_up_position=10.0)
+    assert "Input should be greater than or equal to 0" in str(excinfo.value)
+
+
+def test_create_dump_validate_cycle():
+    """Test the full cycle: Create -> Dump to JSON -> Validate from JSON."""
+    # 1. Create the model using Python constructor
+    original_model = ZStageConfigData(zstage_down_position=5.5, zstage_up_position=15.5)
+
+    # 2. Dump to JSON string
+    json_output = original_model.model_dump_json()
+
+    # 3. Validate (Load back) from that JSON string
+    loaded_model = ZStageConfigData.model_validate_json(json_output)
+
+    # 4. Assertions to ensure data integrity
+    assert loaded_model.zstage_down_position == original_model.zstage_down_position
+    assert loaded_model.zstage_up_position == original_model.zstage_up_position
+    # Pydantic models support direct equality checks
+    assert loaded_model == original_model
+
+
+def test_only_down_position_provided():
     """
-    json_data = '{"0": false, "1": false, "9": false}'
-    max_channels = 10
+    Scenario: Only 'zstage_down_position' is provided.
+    Expected: Model is created successfully. 'up' is None. Validator logic is skipped.
+    """
+    json_str = '''
+        {
+            "zstage_down_position": 10.0
+        }
+        '''
+    model = ZStageConfigData.model_validate_json(json_str)
 
-    # Instantiate the model and validate
-    model = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data, num_available_channels=max_channels, property_dtype=bool).model
-    assert np.all(
-        model.channels_properties_array ==
-        np.array([False, False, False, False, False, False, False, False, False, False])
-    )
+    assert model.zstage_down_position == 10.0
+    assert model.zstage_up_position is None
+    assert model.model_dump(exclude_none=True) == {"zstage_down_position": 10.0}
 
-def test_model_from_changed_json():
-    json_data_1 = '{"1": true, "2": false, "3": true}'
-    json_data_2 = '{"1": false, "2": false, "3": false}'
 
-    max_channels = 10
+def test_only_up_position_provided():
+    """
+    Scenario: Only 'zstage_up_position' is provided.
+    Expected: Model is created successfully. 'down' is None. Validator logic is skipped.
+    """
+    json_str = '''
+            {
+                "zstage_up_position": 20.0
+            }
+            '''
+    model = ZStageConfigData.model_validate_json(json_str)
 
-    json_model_factory = DropbotChannelsPropertiesModelFromJSON(channels_properties_json=json_data_1,
-                                                   num_available_channels=max_channels, property_dtype=bool)
-
-    model = json_model_factory.model
-
-    assert np.all(
-        model.channels_properties_array ==
-        np.array([False, True, False, True, False, False, False, False, False, False])
-    )
-
-    json_model_factory.channels_properties_json = json_data_2
-
-    assert np.all(
-        model.channels_properties_array ==
-        np.array([False, False, False, False, False, False, False, False, False, False])
-    )
+    assert model.zstage_up_position == 20.0
+    assert model.zstage_down_position is None
+    assert model.model_dump(exclude_none=True) == {"zstage_up_position": 20.0}
