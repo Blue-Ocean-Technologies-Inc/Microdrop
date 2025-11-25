@@ -724,11 +724,3 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             elif self.model.step_label:
                 _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
-
-
-def create_line():
-    line = QFrame()
-    line.setStyleSheet("padding: 0px; margin: 0px;")
-    line.setFrameShape(QFrame.HLine)
-    line.setFrameShadow(QFrame.Sunken)
-    return line
