@@ -1,15 +1,14 @@
 # Site package imports
-import time
 from pathlib import Path
 import dramatiq
 
-from traits.api import Instance, observe, Str, Float
+from traits.api import Instance, observe, Str, Float, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 
 from pyface.api import FileDialog, OK, confirm, YES, NO
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QLabel, QFrame, QPushButton
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton
 from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
@@ -18,9 +17,9 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+##### local imports ######
 from ..default_settings import video_key
 from ..models.alpha import AlphaValue
-##### local imports ######
 from ..models.electrodes import Electrodes
 from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
@@ -51,7 +50,7 @@ from .route_selection_view.route_selection_view import RouteLayerView
 
 # utils imports
 from microdrop_utils.file_handler import safe_copy_file
-from logger.logger_service import get_logger
+from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -65,9 +64,10 @@ from microdrop_style.helpers import is_dark_mode
 
 import json
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-
+@provides(IDramatiqControllerBase)
 class DeviceViewerDockPane(TraitsDockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
@@ -100,6 +100,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     opencv_pixmap = None  # Pixmap item for OpenCV images
     debounce_timer = None  # Timer to debounce state messages
 
+    ###################################################################################
+    #------------- IDramatiqControllerBase Interface -------------------- #
+    ###################################################################################
+    listener_name = listener_name
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     # --------- Dramatiq Init ------------------------------
@@ -110,35 +114,53 @@ class DeviceViewerDockPane(TraitsDockPane):
     def traits_init(self):
         logger.info("Starting DeviceViewer listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=listener_name,
+            listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
+        ###############################################################################################################
+        #--------------Setup device view model ---------------------------------- #
+        ##############################################################################################################
+
+        ########### Load preferences: for app level, and device viewer level: ######################
         self.app_preferences = self.task.window.application.preferences_helper.preferences
         self.device_viewer_preferences = DeviceViewerPreferences(preferences=self.app_preferences)
+
+        ################ Load undo manager ###################################################
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
+        ################ Create Model ######################################################
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager, preferences=self.device_viewer_preferences)
+
+        ################################################################################################################
+        # ------------------Load preferences to model --------------------------------------------#
+        ################################################################################################################
+
+        ############## Load preferred / default svg ####################################
 
         if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
             self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
 
         self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
 
-
-        # Load preferences to model
+        ############## load preferred / default camera options #########################
         transform = self.app_preferences.get("camera.transformation")
         if transform: # If preference exists
             self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
-        self.scene = ElectrodeScene(self)
+        ################################################################################################
+        # ----------- Setup device view widget ----------------- #
+        ################################################################################################
 
+        self.scene = ElectrodeScene(self)
         self.device_view = AutoFitGraphicsView(self.scene)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
-        
-        # Connect to application palette changes for theme updates
+
+        ###########################################################################################
+        # ---------- Connect to application level changes ------------------ #
+        ###########################################################################################
         QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
     
     def _on_application_palette_changed(self):
@@ -149,17 +171,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         except Exception as e:
             logger.debug(f"Error handling palette change: {e}")
     
-    def _apply_initial_theme_styling(self):
-        """Apply initial theme styling when the UI is first built"""
-        try:
-            theme = "dark" if is_dark_mode() else "light"
-            logger.info(f"Applying initial theme styling: {theme} mode")
-            self._update_theme_styling(theme)
-        except Exception as e:
-            logger.debug(f"Error applying initial theme: {e}")
-            # Fallback to light theme
-            self._update_theme_styling("light")
-
     def _update_theme_styling(self, theme):
         """Update theme styling for all child components"""
         if hasattr(self, "device_view"):
@@ -172,75 +183,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         if hasattr(self, 'calibration_view'):
             self.calibration_view.update_theme_styling(theme)
 
-        # Update section label styling based on theme
-    #     section_style = self._get_section_label_style(theme)
-    #     button_style = self._get_camera_button_style(theme)
-    #
-    #     for i in range(self.left_stack.count()):
-    #         widget = self.left_stack.widget(i)
-    #         if isinstance(widget, QLabel) and widget.text() in ["Camera Controls", "Capacitance Calibration", "Paths"]:
-    #             widget.setStyleSheet(section_style)
-    #
-    #     # Update camera control buttons if they exist
-    #     if hasattr(self, 'camera_controls_container'):
-    #         for child in self.camera_controls_container.findChildren(QPushButton):
-    #             child.setStyleSheet(button_style)
-    #
-    # def _get_section_label_style(self, theme):
-    #     """Get section label styling based on theme"""
-    #     if theme == "dark":
-    #         return """
-    #             QLabel {
-    #                 color: #CCCCCC;
-    #                 font-size: 12px;
-    #                 font-weight: bold;
-    #                 padding: 4px 0px 2px 0px;
-    #                 margin-bottom: 4px;
-    #             }
-    #         """
-    #     else:  # light theme
-    #         return """
-    #             QLabel {
-    #                 color: #333333;
-    #                 font-size: 12px;
-    #                 font-weight: bold;
-    #                 padding: 4px 0px 2px 0px;
-    #                 margin-bottom: 4px;
-    #             }
-    #         """
-    #
-    # def _get_camera_button_style(self, theme):
-    #     """Get camera control button styling based on theme"""
-    #     if theme == "dark":
-    #         return """
-    #             QPushButton {
-    #                 background-color: #444444;
-    #                 border: 1px solid #666666;
-    #                 border-radius: 4px;
-    #                 font-family: "Material Symbols Outlined";
-    #                 font-size: 16px;
-    #                 color: #FFFFFF;
-    #             }
-    #             QPushButton:hover {
-    #                 background-color: #555555;
-    #             }
-    #         """
-    #     else:  # light theme
-    #         return """
-    #             QPushButton {
-    #                 background-color: #E0E0E0;
-    #                 border: 1px solid #CCCCCC;
-    #                 border-radius: 4px;
-    #                 font-family: "Material Symbols Outlined";
-    #                 font-size: 16px;
-    #                 color: #333333;
-    #             }
-    #             QPushButton:hover {
-    #                 background-color: #D0D0D0;
-    #             }
-    #         """
-
+    ################################################################################################
     # ------- Dramatiq handlers ---------------------------
+    ################################################################################################
+
     def _on_chip_inserted(self, message):
         if message == "True" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
@@ -327,7 +273,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             # Apply electrode on/off states
             self.model.electrodes.channels_states_map.update(detected_channels)
 
+    ################################################################################################
     # ------- Device View class methods -------------------------
+    ################################################################################################
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
 
@@ -348,7 +296,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
 
-
     def remove_current_layer(self):
         """
         Utility methods to remove current scene's electrode layer.
@@ -365,46 +312,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         elif isinstance(event, DictChangeEvent):
             command = DictChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
-
-    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
-    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
-    def model_change_handler_with_timeout(self, event=None):
-        if not self._undoing:
-            self.add_traits_event_to_undo_stack(event)
-            if not self.model.editable:
-                self.undo() # Revert changes if not editable
-                return
-
-    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.routes.layers.items.route.route.items") # When a route is modified
-    @observe("model.routes.layers.items") # When an electrode changes state
-    @observe("model.electrodes.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
-    @observe("model.electrodes.electrode_editing") # When an electrode is being edited
-    def model_change_handler_with_message(self, event=None):
-        """
-        Handle changes to the model and send a message to the device viewer state change topic.
-        """
-        self.model_change_handler_with_timeout(event)
-        if not self._disable_state_messages and self.debounce_timer:
-            self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
-            self.debounce_timer.start(200) # Start timeout for sending message
-    
-    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
-    def electrode_click_handler(self, event=None):
-        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
-        logger.info("Sending electrode update")
-        self.publish_electrode_update()
-        logger.info("Electrode update sent")
-
-    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
-    def calibration_change_handler(self, event=None):
-        """
-        Handle changes to the calibration values and publish a message.
-        """
-        self.publish_calibration_message()
-        logger.info("Calibration message published")
 
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
@@ -481,6 +388,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
+
+    def _apply_initial_theme_styling(self):
+        """Apply initial theme styling when the UI is first built"""
+        try:
+            theme = "dark" if is_dark_mode() else "light"
+            logger.info(f"Applying initial theme styling: {theme} mode")
+            self._update_theme_styling(theme)
+        except Exception as e:
+            logger.debug(f"Error applying initial theme: {e}")
+            # Fallback to light theme
+            self._update_theme_styling("light")
 
     def create_contents(self, parent):
         """Called when the task is activated."""
@@ -622,6 +540,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.undo_manager.active_stack.clear()
 
+
+    ###################################################################################################################
+    ###### SVG file loading / saving handling ########
+    ###################################################################################################################
+
     def _on_load_svg_success(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
         svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE # since OK, the default should have changed now.
@@ -734,6 +657,51 @@ class DeviceViewerDockPane(TraitsDockPane):
             channels_to_svg(self.model.electrodes.svg_model.filename, new_filename,
                             self.model.electrodes.electrode_ids_channels_map, self.model.electrode_scale)
 
+
+    #################################################################################################################
+    ###### Trait Observers -- Model and Model Traits ########
+    #################################################################################################################
+
+    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
+    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
+    def model_change_handler_with_timeout(self, event=None):
+        if not self._undoing:
+            self.add_traits_event_to_undo_stack(event)
+            if not self.model.editable:
+                self.undo()  # Revert changes if not editable
+                return
+
+    @observe("model")  # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.routes.layers.items.route.route.items")  # When a route is modified
+    @observe("model.routes.layers.items")  # When an electrode changes state
+    @observe("model.electrodes.electrodes.items.channel")  # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
+    def model_change_handler_with_message(self, event=None):
+        """
+        Handle changes to the model and send a message to the device viewer state change topic.
+        """
+        self.model_change_handler_with_timeout(event)
+        if not self._disable_state_messages and self.debounce_timer:
+            self.message_buffer = gui_models_to_message_model(self.model).serialize()
+            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
+            self.debounce_timer.start(200)  # Start timeout for sending message
+
+    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    def electrode_click_handler(self, event=None):
+        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
+        logger.info("Sending electrode update")
+        self.publish_electrode_update()
+        logger.info("Electrode update sent")
+
+    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
+    def calibration_change_handler(self, event=None):
+        """
+        Handle changes to the calibration values and publish a message.
+        """
+        self.publish_calibration_message()
+        logger.info("Calibration message published")
+
     @observe("model.camera_perspective.transformation")
     @observe("model.camera_perspective.camera_resolution")
     def camera_perspective_change_handler(self, event):
@@ -777,11 +745,3 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             elif self.model.step_label:
                 _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
-
-
-def create_line():
-    line = QFrame()
-    line.setStyleSheet("padding: 0px; margin: 0px;")
-    line.setFrameShape(QFrame.HLine)
-    line.setFrameShadow(QFrame.Sunken)
-    return line
