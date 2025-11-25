@@ -216,12 +216,10 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.preferences.set("camera.transformation", qtransform_serialize(self.model.camera_perspective.transformation))
 
     @observe("model.mode")
-    def clear_prespective_rect_on_mode_change(self, event):
+    def _on_mode_change(self, event):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
             self.electrode_view_layer.clear_reference_rect()
 
-    @observe("model.mode")
-    def clear_buffer_on_mode_change(self, event):
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer = []
 
