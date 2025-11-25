@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 import dramatiq
 
-from traits.api import Instance, observe, Str, Float
+from traits.api import Instance, observe, Str, Float, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 
 from pyface.api import FileDialog, OK, confirm, YES, NO
@@ -51,7 +51,7 @@ from .route_selection_view.route_selection_view import RouteLayerView
 
 # utils imports
 from microdrop_utils.file_handler import safe_copy_file
-from logger.logger_service import get_logger
+from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -65,9 +65,10 @@ from microdrop_style.helpers import is_dark_mode
 
 import json
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-
+@provides(IDramatiqControllerBase)
 class DeviceViewerDockPane(TraitsDockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
@@ -100,6 +101,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     opencv_pixmap = None  # Pixmap item for OpenCV images
     debounce_timer = None  # Timer to debounce state messages
 
+    ###################################################################################
+    # IDramatiqControllerBase Interface
+    ###################################################################################
+    listener_name = listener_name
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     # --------- Dramatiq Init ------------------------------
@@ -110,7 +115,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def traits_init(self):
         logger.info("Starting DeviceViewer listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=listener_name,
+            listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
         self.app_preferences = self.task.window.application.preferences_helper.preferences
