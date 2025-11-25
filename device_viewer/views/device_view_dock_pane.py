@@ -429,7 +429,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                         QPointF(scene_rect.width() * 3/ 4, scene_rect.height() / 4),
                         QPointF(scene_rect.width() * 3/ 4, scene_rect.height() * 3/ 4),
                         QPointF(scene_rect.width() / 4, scene_rect.height() * 3/ 4)]
-        self.model.camera_perspective.default_reference_rect = bounding_box
+        self.model.camera_perspective.default_rect = bounding_box
 
         ########## Add video to scene and set as output. ###################
         self.scene.addItem(self.video_item)
