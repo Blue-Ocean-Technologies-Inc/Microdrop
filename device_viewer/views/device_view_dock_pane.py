@@ -519,6 +519,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.undo_manager.active_stack.clear()
 
+
+    ###################################################################################################################
+    ###### SVG file loading / saving handling ########
+    ###################################################################################################################
+
     def _on_load_svg_success(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
         svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE # since OK, the default should have changed now.
