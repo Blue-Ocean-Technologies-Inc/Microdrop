@@ -303,46 +303,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             command = DictChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
 
-    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
-    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
-    def model_change_handler_with_timeout(self, event=None):
-        if not self._undoing:
-            self.add_traits_event_to_undo_stack(event)
-            if not self.model.editable:
-                self.undo() # Revert changes if not editable
-                return
-
-    @observe("model") # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
-    @observe("model.routes.layers.items.route.route.items") # When a route is modified
-    @observe("model.routes.layers.items") # When an electrode changes state
-    @observe("model.electrodes.electrodes.items.channel") # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
-    @observe("model.electrodes.electrode_editing") # When an electrode is being edited
-    def model_change_handler_with_message(self, event=None):
-        """
-        Handle changes to the model and send a message to the device viewer state change topic.
-        """
-        self.model_change_handler_with_timeout(event)
-        if not self._disable_state_messages and self.debounce_timer:
-            self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
-            self.debounce_timer.start(200) # Start timeout for sending message
-    
-    @observe("model.electrodes.channels_states_map.items") # When an electrode changes state
-    def electrode_click_handler(self, event=None):
-        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
-        logger.info("Sending electrode update")
-        self.publish_electrode_update()
-        logger.info("Electrode update sent")
-
-    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
-    def calibration_change_handler(self, event=None):
-        """
-        Handle changes to the calibration values and publish a message.
-        """
-        self.publish_calibration_message()
-        logger.info("Calibration message published")
-
     def undo(self):
         self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
         self.model.undo_manager.undo()
@@ -670,6 +630,51 @@ class DeviceViewerDockPane(TraitsDockPane):
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             channels_to_svg(self.model.electrodes.svg_model.filename, new_filename,
                             self.model.electrodes.electrode_ids_channels_map, self.model.electrode_scale)
+
+
+    #################################################################################################################
+    ###### Trait Observers -- Model and Model Traits ########
+    #################################################################################################################
+
+    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
+    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
+    def model_change_handler_with_timeout(self, event=None):
+        if not self._undoing:
+            self.add_traits_event_to_undo_stack(event)
+            if not self.model.editable:
+                self.undo()  # Revert changes if not editable
+                return
+
+    @observe("model")  # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe("model.routes.layers.items.route.route.items")  # When a route is modified
+    @observe("model.routes.layers.items")  # When an electrode changes state
+    @observe("model.electrodes.electrodes.items.channel")  # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
+    def model_change_handler_with_message(self, event=None):
+        """
+        Handle changes to the model and send a message to the device viewer state change topic.
+        """
+        self.model_change_handler_with_timeout(event)
+        if not self._disable_state_messages and self.debounce_timer:
+            self.message_buffer = gui_models_to_message_model(self.model).serialize()
+            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
+            self.debounce_timer.start(200)  # Start timeout for sending message
+
+    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    def electrode_click_handler(self, event=None):
+        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
+        logger.info("Sending electrode update")
+        self.publish_electrode_update()
+        logger.info("Electrode update sent")
+
+    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
+    def calibration_change_handler(self, event=None):
+        """
+        Handle changes to the calibration values and publish a message.
+        """
+        self.publish_calibration_message()
+        logger.info("Calibration message published")
 
     @observe("model.camera_perspective.transformation")
     @observe("model.camera_perspective.camera_resolution")
