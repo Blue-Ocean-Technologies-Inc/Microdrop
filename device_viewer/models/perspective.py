@@ -28,7 +28,7 @@ class PerspectiveModel(HasTraits):
                 closest_index = i
         return closest_point, closest_index
 
-    @observe("reference_rect.items, transformed_reference_rect.items")
+    @observe("transformed_reference_rect.items")
     def update_transformation(self, event=None):
         """Update the transformation matrix based on the reference rectangle such that the new point replaces the old one."""
         if len(self.reference_rect) == 4 and len(self.transformed_reference_rect) == 4:
