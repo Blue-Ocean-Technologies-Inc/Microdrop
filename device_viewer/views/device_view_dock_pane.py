@@ -1,5 +1,4 @@
 # Site package imports
-import time
 from pathlib import Path
 import dramatiq
 
