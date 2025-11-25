@@ -61,7 +61,6 @@ class PerspectiveModel(HasTraits):
         Rotates the transformed reference rectangle by 'angle_degrees'.
         This effectively spins the video feed while keeping it pinned to the same location.
         """
-        print("rotate_output", angle_degrees)
         if len(self.transformed_reference_rect) != 4:
             transformed_reference_rect = self.default_rect
         else:
@@ -72,7 +71,6 @@ class PerspectiveModel(HasTraits):
         cx = sum(p.x() for p in transformed_reference_rect) / 4.0
         cy = sum(p.y() for p in transformed_reference_rect) / 4.0
 
-        print(cx, cy)
         # 2. Create a temporary Transform for the rotation math
         rotator = QTransform()
         rotator.translate(cx, cy)  # Move origin to center
