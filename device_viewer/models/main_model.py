@@ -146,9 +146,9 @@ class DeviceViewMainModel(HasTraits):
             self.set_visible(electrode_fill_key, False)  # Set the fill alpha low for visibility
             self.set_visible(electrode_text_key, False)  # Set the text alpha low for visibility
             self.set_visible(electrode_outline_key, True)  # Keep the outline visible for editing
-        if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
-            self.set_visible(electrode_fill_key, True)  # Restore fill visibility
-            self.set_visible(electrode_text_key, True)  # Restore text
+        # if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
+        #     self.set_visible(electrode_fill_key, True)  # Restore fill visibility
+        #     self.set_visible(electrode_text_key, True)  # Restore text
 
     @observe("routes.layers.items.route.route.items")
     @observe("electrodes.channels_electrode_ids_map.items")
