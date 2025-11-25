@@ -58,6 +58,14 @@ class ElectrodeScene(QGraphicsScene):
             if key == Qt.Key_Backspace:
                 self.interaction_service.handle_backspace()
 
+        if (event.modifiers() & Qt.ControlModifier) and event.key() == Qt.Key_Right:
+            # Rotate the MODEL +90 degrees
+            self.dockpane.model.camera_perspective.rotate_output(90)
+
+        elif (event.modifiers() & Qt.ControlModifier) and event.key() == Qt.Key_Left:
+            # Rotate the MODEL -90 degrees
+            self.dockpane.model.camera_perspective.rotate_output(-90)
+
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
