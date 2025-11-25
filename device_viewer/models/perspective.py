@@ -6,6 +6,8 @@ import math
 class PerspectiveModel(HasTraits):
     reference_rect = List(QPointF, []) # List of reference points for the rect, relative to untransformed feed
     transformed_reference_rect = List(QPointF, []) # List of reference points for the rect, relative to transformed feed, aka the scene
+    default_reference_rect = List(QPointF, [])  # fallback rectangle to use by default if transformed reference rect / reference rect not defined.
+
     camera_resolution = Instance(tuple, allow_none=True) # Resolution of the camera feed as (width, height)
 
     # Don't manually set this, it is updated automatically when the reference rect changes!
