@@ -8,7 +8,7 @@ from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictCha
 from pyface.api import FileDialog, OK, confirm, YES, NO
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QLabel, QFrame, QPushButton
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton
 from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
@@ -17,9 +17,9 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+##### local imports ######
 from ..default_settings import video_key
 from ..models.alpha import AlphaValue
-##### local imports ######
 from ..models.electrodes import Electrodes
 from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
@@ -101,7 +101,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     debounce_timer = None  # Timer to debounce state messages
 
     ###################################################################################
-    # IDramatiqControllerBase Interface
+    #------------- IDramatiqControllerBase Interface -------------------- #
     ###################################################################################
     listener_name = listener_name
     dramatiq_listener_actor = Instance(dramatiq.Actor)
@@ -117,32 +117,50 @@ class DeviceViewerDockPane(TraitsDockPane):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine)
 
+        ###############################################################################################################
+        #--------------Setup device view model ---------------------------------- #
+        ##############################################################################################################
+
+        ########### Load preferences: for app level, and device viewer level: ######################
         self.app_preferences = self.task.window.application.preferences_helper.preferences
         self.device_viewer_preferences = DeviceViewerPreferences(preferences=self.app_preferences)
+
+        ################ Load undo manager ###################################################
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
+        ################ Create Model ######################################################
         self.model = DeviceViewMainModel(undo_manager=self.undo_manager, preferences=self.device_viewer_preferences)
+
+        ################################################################################################################
+        # ------------------Load preferences to model --------------------------------------------#
+        ################################################################################################################
+
+        ############## Load preferred / default svg ####################################
 
         if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
             self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
 
         self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
 
-
-        # Load preferences to model
+        ############## load preferred / default camera options #########################
         transform = self.app_preferences.get("camera.transformation")
         if transform: # If preference exists
             self.model.camera_perspective.transformation = qtransform_deserialize(transform)
 
-        self.scene = ElectrodeScene(self)
+        ################################################################################################
+        # ----------- Setup device view widget ----------------- #
+        ################################################################################################
 
+        self.scene = ElectrodeScene(self)
         self.device_view = AutoFitGraphicsView(self.scene)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
-        
-        # Connect to application palette changes for theme updates
+
+        ###########################################################################################
+        # ---------- Connect to application level changes ------------------ #
+        ###########################################################################################
         QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
     
     def _on_application_palette_changed(self):
@@ -153,17 +171,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         except Exception as e:
             logger.debug(f"Error handling palette change: {e}")
     
-    def _apply_initial_theme_styling(self):
-        """Apply initial theme styling when the UI is first built"""
-        try:
-            theme = "dark" if is_dark_mode() else "light"
-            logger.info(f"Applying initial theme styling: {theme} mode")
-            self._update_theme_styling(theme)
-        except Exception as e:
-            logger.debug(f"Error applying initial theme: {e}")
-            # Fallback to light theme
-            self._update_theme_styling("light")
-
     def _update_theme_styling(self, theme):
         """Update theme styling for all child components"""
         if hasattr(self, "device_view"):
@@ -176,7 +183,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         if hasattr(self, 'calibration_view'):
             self.calibration_view.update_theme_styling(theme)
 
+    ################################################################################################
     # ------- Dramatiq handlers ---------------------------
+    ################################################################################################
+
     def _on_chip_inserted(self, message):
         if message == "True" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
@@ -263,7 +273,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             # Apply electrode on/off states
             self.model.electrodes.channels_states_map.update(detected_channels)
 
+    ################################################################################################
     # ------- Device View class methods -------------------------
+    ################################################################################################
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
 
@@ -283,7 +295,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scene.interaction_service.electrode_state_recolor(None)
 
         logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
-
 
     def remove_current_layer(self):
         """
@@ -377,6 +388,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
+
+    def _apply_initial_theme_styling(self):
+        """Apply initial theme styling when the UI is first built"""
+        try:
+            theme = "dark" if is_dark_mode() else "light"
+            logger.info(f"Applying initial theme styling: {theme} mode")
+            self._update_theme_styling(theme)
+        except Exception as e:
+            logger.debug(f"Error applying initial theme: {e}")
+            # Fallback to light theme
+            self._update_theme_styling("light")
 
     def create_contents(self, parent):
         """Called when the task is activated."""
