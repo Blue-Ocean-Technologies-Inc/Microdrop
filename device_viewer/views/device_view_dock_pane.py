@@ -145,9 +145,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
 
         ############## load preferred / default camera options #########################
-        transform = self.app_preferences.get("camera.transformation")
-        if transform: # If preference exists
-            self.model.camera_perspective.transformation = qtransform_deserialize(transform)
+        self.model.load_camera_perspective_from_preferences()
 
         ################################################################################################
         # ----------- Setup device view widget ----------------- #
