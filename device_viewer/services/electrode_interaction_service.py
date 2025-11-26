@@ -6,13 +6,11 @@ from envisage.api import IApplication
 from device_viewer.models.electrodes import Electrode
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.models.route import Route, RouteLayer, RouteLayerManager
+from device_viewer.models.route import Route, RouteLayer
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
 from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
-from device_viewer.utils.camera import qtransform_serialize, qtransform_deserialize
-from microdrop_application.consts import application_home_directory
 
 logger = get_logger(__name__)
 
@@ -40,9 +38,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_buffer = List([])
 
     application = Instance(IApplication)
-
-    def traits_init(self):
-        self.preferences = self.application.preferences_helper.preferences
 
     # -------------------- Helpers ------------------------
 
@@ -213,7 +208,6 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.electrode_view_layer.redraw_reference_rect(self.model)
             elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
                 self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
-            self.preferences.set("camera.transformation", qtransform_serialize(self.model.camera_perspective.transformation))
 
     @observe("model.mode")
     def _on_mode_change(self, event):
