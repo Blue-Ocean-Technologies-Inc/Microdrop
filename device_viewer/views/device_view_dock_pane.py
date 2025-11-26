@@ -405,7 +405,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Device Viewer Task activated. Setting default view with {self.device_viewer_preferences.DEFAULT_SVG_FILE}...")
         self.set_interaction_service(self.model)
 
+        ###################################################################
         # Initialize camera primitives
+        ###################################################################
         self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
         self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
@@ -415,13 +417,26 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.video_item.setOpacity(self.model.get_alpha("video"))
         self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
-        scene_rect = self.device_view.viewport().rect()  # Get the viewport rectangle of the device view
-        self.video_item.setSize(QSizeF(scene_rect.width(), scene_rect.height()))  # Set the size of the video item
-        self.capture_session.setVideoOutput(self.video_item)
-        self.scene.addItem(self.video_item)
-        self.scene.addItem(self.opencv_pixmap)  # Add the pixmap item to the scene
+        ################### Determine Size for video #####################
 
-        # Create debounce timer
+        ##### Size #####
+        scene_rect = self.scene.itemsBoundingRect()
+        video_size = QSizeF(scene_rect.width(), scene_rect.height())
+        self.video_item.setSize(video_size)
+
+        ### define default perspective rectangle for video framing ############
+        bounding_box = [QPointF(scene_rect.width() / 4, scene_rect.height() / 4),
+                        QPointF(scene_rect.width() * 3/ 4, scene_rect.height() / 4),
+                        QPointF(scene_rect.width() * 3/ 4, scene_rect.height() * 3/ 4),
+                        QPointF(scene_rect.width() / 4, scene_rect.height() * 3/ 4)]
+        self.model.camera_perspective.default_rect = bounding_box
+
+        ########## Add video to scene and set as output. ###################
+        self.scene.addItem(self.video_item)
+        self.scene.addItem(self.opencv_pixmap)
+        self.capture_session.setVideoOutput(self.video_item)
+
+        ###################### Create debounce timer #############################################
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.publish_model_message)
