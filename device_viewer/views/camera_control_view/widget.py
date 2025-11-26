@@ -70,6 +70,7 @@ class CameraControlWidget(QWidget):
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)
         self.camera_select_layout.addWidget(self.camera_combo)
+        self._align_mode = False
 
         self.resolution_select_layout = QHBoxLayout()
         self.resolution_select_layout.addWidget(self.resolution_label)
@@ -136,7 +137,7 @@ class CameraControlWidget(QWidget):
 
         # Connect toggle buttons with proper toggle logic
         self.camera_toggle_button.clicked.connect(self.toggle_camera)
-        self.button_align.clicked.connect(lambda: self.set_mode("camera-place"))
+        self.button_align.clicked.connect(self.toggle_align_camera_mode)
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
         self.record_toggle_button.clicked.connect(self.toggle_recording)
@@ -192,6 +193,14 @@ class CameraControlWidget(QWidget):
         else:
             self.video_record_start()
 
+    def toggle_align_camera_mode(self):
+        self._align_mode = not self._align_mode
+
+        if self._align_mode:
+            self.set_mode("camera-place")
+        else:
+            self.set_mode("draw")
+
     def _apply_theme_styling(self):
         """Apply theme-aware styling to the widget."""
         try:
@@ -243,7 +252,7 @@ class CameraControlWidget(QWidget):
 
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
-        self.button_align.setChecked(self.model.mode == "camera-place")
+        self.button_align.setChecked(self._align_mode)
 
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
@@ -408,7 +417,7 @@ class CameraControlWidget(QWidget):
             if self.using_opencv:
                 scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
                            self.scene.height() / self.model.camera_perspective.camera_resolution[1])
-            painter.setTransform(scale * self.model.camera_perspective.transformation)
+            painter.setTransform(self.model.camera_perspective.transformation)
             if self.using_opencv:
                 # If using OpenCV, draw the pixmap item
                 self.pixmap_item.paint(painter, options, None)
