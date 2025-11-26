@@ -1,6 +1,9 @@
 import json
+from typing import List, Tuple
+
 import numpy as np
 import cv2
+from PySide6.QtCore import QPointF
 from PySide6.QtGui import QImage, QTransform
 
 def qimage_to_cv_image(qimage: QImage) -> np.ndarray: # https://stackoverflow.com/questions/18406149/pyqt-pyside-how-do-i-convert-qimage-into-opencvs-mat-format
@@ -30,3 +33,9 @@ def qtransform_deserialize(data: str) -> QTransform:
     return QTransform(params[0], params[1], params[2],
                       params[3], params[4], params[5],
                       params[6], params[7], params[8])
+
+def qpointf_list_serialize(list_qpointf: List[QPointF]) -> List[Tuple[float, float]]:
+    return json.dumps([el.toTuple() for el in list_qpointf])
+
+def qpointf_list_deserialize(data: str) -> List[QPointF]:
+    return [QPointF(*coord_tuple) for coord_tuple in json.loads(data)]
