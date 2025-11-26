@@ -11,6 +11,9 @@ from ..default_settings import electrode_fill_key, electrode_text_key, electrode
 from ..preferences import DeviceViewerPreferences
 
 from logger.logger_service import get_logger
+from ..utils.camera import qtransform_serialize, qpointf_list_serialize, qpointf_list_deserialize, \
+    qtransform_deserialize
+
 logger = get_logger(__name__)
 
 class DeviceViewMainModel(HasTraits):
@@ -58,8 +61,17 @@ class DeviceViewMainModel(HasTraits):
     # ------------------ Camera Model --------------------
     camera_perspective = Instance(PerspectiveModel, PerspectiveModel())
 
-    # ------------------ Initialization --------------------
+    def load_camera_perspective_from_preferences(self):
+        _reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.reference_rect", "[]"))
+        _transformed_reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.transformed_reference_rect", "[]"))
 
+        if _reference_rect:
+            self.camera_perspective.reference_rect = _reference_rect
+
+        if _transformed_reference_rect:
+            self.camera_perspective.transformed_reference_rect = _transformed_reference_rect
+
+    # ------------------ Initialization --------------------
     def traits_init(self):
         """Initialize the model with default traits."""
 
@@ -194,3 +206,8 @@ class DeviceViewMainModel(HasTraits):
 
         elif change_type == "visible":
             self.preferences.default_visibility[event.object.key] = event.new
+
+    @observe("camera_perspective:transformation")
+    def _camera_perspective_changed(self, event=None):
+        self.preferences.preferences.set("camera.reference_rect", qpointf_list_serialize(self.camera_perspective.reference_rect))
+        self.preferences.preferences.set("camera.transformed_reference_rect", qpointf_list_serialize(self.camera_perspective.transformed_reference_rect))
