@@ -130,8 +130,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     def _rotate_device_view(self, angle_step):
         # rotate entire view:
         self.device_view.rotate(angle_step)
-        # undo rotation ont ext for maintaining readability
+        # undo rotation on text for maintaining readability
         self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
+
+        self.device_view.fit_to_scene_rect()
 
     ########################################################################################################
 

@@ -21,5 +21,8 @@ class AutoFitGraphicsView(QGraphicsView):
 
     def resizeEvent(self, event):
         logger.debug(f"Resizing view size: {self.scene().sceneRect()}")
-        self.fitInView(self.scene().sceneRect().adjusted(20, 20, 20, 20), Qt.AspectRatioMode.KeepAspectRatio)
+        self.fit_to_scene_rect()
         super().resizeEvent(event)
+
+    def fit_to_scene_rect(self):
+        self.fitInView(self.scene().sceneRect().adjusted(20, 20, 20, 20), Qt.AspectRatioMode.KeepAspectRatio)
