@@ -424,11 +424,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.video_item.setSize(video_size)
 
         ### define default perspective rectangle for video framing ############
-        bounding_box = [QPointF(scene_rect.width() / 4, scene_rect.height() / 4),
-                        QPointF(scene_rect.width() * 3/ 4, scene_rect.height() / 4),
-                        QPointF(scene_rect.width() * 3/ 4, scene_rect.height() * 3/ 4),
-                        QPointF(scene_rect.width() / 4, scene_rect.height() * 3/ 4)]
-        self.model.camera_perspective.default_rect = bounding_box
+        x,y = scene_rect.center().toTuple()
+        w,h = scene_rect.size().toTuple()
+        w,h  = w/4, h/4
+        self.model.camera_perspective.default_rect = [QPointF(x-w, y-h), QPointF(x+w, y-h),
+                                                      QPointF(x+w, y+h), QPointF(x-w, y+h)]#bounding_box
+        if len(self.model.camera_perspective.reference_rect) != 4:
+            # force update so rotation is shown
+            self.model.camera_perspective.update_transformation()
 
         ########## Add video to scene and set as output. ###################
         self.scene.addItem(self.video_item)

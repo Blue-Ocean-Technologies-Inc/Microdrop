@@ -1,7 +1,7 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
-from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
+from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
 import cv2
@@ -315,7 +315,11 @@ class CameraControlWidget(QWidget):
             if 0 <= index < len(self.qt_available_cameras):
                 if self.qt_available_cameras[index]: # Camera is not None
                     self.camera = QCamera(self.qt_available_cameras[index])
-                    self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                    filtered_formats = [format for format in self.qt_available_cameras[index].videoFormats()
+                                        if format.pixelFormat() == QVideoFrameFormat.PixelFormat.Format_Jpeg]
+                    filtered_formats.sort(key=lambda f: f.resolution().width() * f.resolution().height())
+                    self.camera_formats = {f"{f.resolution().width()}x{f.resolution().height()}": f
+                                           for f in filtered_formats}
                     self.capture_session.setCamera(self.camera)
                     if self.preferences.get("camera.camera_state", "off") == "on":
                         self.camera.start()
@@ -336,12 +340,10 @@ class CameraControlWidget(QWidget):
             if self.camera:
                 self.resolution_combo.clear()
 
-                resolutions = [format.resolution() for format in self.camera_formats]
-
                 preferences_resolution = self.preferences.get("camera.resolution", None)
 
-                for res in resolutions:
-                    self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+                for res in self.camera_formats:
+                    self.resolution_combo.addItem(res)
 
                 if preferences_resolution:
                     index = self.resolution_combo.findText(preferences_resolution)
@@ -388,10 +390,19 @@ class CameraControlWidget(QWidget):
 
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
-                self.preferences.set("camera.resolution", self.resolution_combo.itemText(index))
-                format = self.camera_formats[index]
+                resolution = self.resolution_combo.itemText(index)
+                self.preferences.set("camera.resolution", resolution)
+                format = self.camera_formats[resolution]
+
+                camera_on = self.camera.isActive()
+                if camera_on:
+                    self.camera.stop()
+                    QApplication.processEvents()
+
                 self.camera.setCameraFormat(format)
                 self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
+                if camera_on:
+                    self.camera.start()
         else:
             if self.cap:
                 resolution = self.resolution_combo.itemText(index)
@@ -405,25 +416,40 @@ class CameraControlWidget(QWidget):
         return str(int(time.time()))
 
     def get_transformed_frame(self):
-        """Apply a transformation to the video frame."""
+        """
+        Returns the full high-res transformed image, automatically resizing
+        the canvas and shifting the origin so nothing is clipped.
+        """
 
-        image = QImage(self.scene.width(), self.scene.height(), QImage.Format_ARGB32)
-        image.fill(0xFF000000)  # Fill with black background
+        # 1. Get the source item and its original size
+        target_item = self.pixmap_item if self.using_opencv else self.video_item
 
-        if self.model.camera_perspective:
-            painter = QPainter(image)
-            options = QStyleOptionGraphicsItem()
-            scale = QTransform()
-            if self.using_opencv:
-                scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
-                           self.scene.height() / self.model.camera_perspective.camera_resolution[1])
-            painter.setTransform(self.model.camera_perspective.transformation)
-            if self.using_opencv:
-                # If using OpenCV, draw the pixmap item
-                self.pixmap_item.paint(painter, options, None)
-            else:
-                self.video_item.paint(painter, options, None)
-            painter.end()
+        # 3. where the image ends up after transformation
+        # This gives us a rectangle that might have negative coordinates (e.g. x=-50)
+        mapped_rect = self.video_item.sceneBoundingRect()
+
+        # 4. Create the QImage based on this NEW size (so nothing is cut off)
+        # If you strictly need the original camera_resolution, see Option 2 below
+        width = int(mapped_rect.width())
+        height = int(mapped_rect.height())
+        image = QImage(width, height, QImage.Format_ARGB32)
+        image.fill(0x00000000)  # Transparent background (or use 0xFF000000 for black)
+
+        painter = QPainter(image)
+        options = QStyleOptionGraphicsItem()
+
+        # Fix the clipping by shifting the Painter
+        # If the image starts at -50, we translate +50 to bring it to 0
+        painter.translate(-mapped_rect.x(), -mapped_rect.y())
+
+        # 6. Apply the transformation
+        # We use combine=True so we don't overwrite our translation
+        painter.setTransform(self.video_item.transform(), combine=True)
+
+        # 7. Paint the raw high-res item
+        target_item.paint(painter, options, None)
+
+        painter.end()
         return image
     
     # ------------------------ Callbacks -------------------------------
