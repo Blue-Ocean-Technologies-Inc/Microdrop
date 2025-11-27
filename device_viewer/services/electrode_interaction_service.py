@@ -119,6 +119,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_ctrl_key_right(self):
         self.model.camera_perspective.rotate_output(90)
 
+    def handle_rotate_camera(self):
+        self.model.camera_perspective.rotate_output(90)
+
     def handle_alt_key_left(self):
         angle_step = -90
         self._rotate_device_view(angle_step)
@@ -126,6 +129,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_alt_key_right(self):
         angle_step = 90
         self._rotate_device_view(angle_step)
+
+    def handle_rotate_device(self):
+        self._rotate_device_view(90)
 
     def _rotate_device_view(self, angle_step):
         # rotate entire view:
