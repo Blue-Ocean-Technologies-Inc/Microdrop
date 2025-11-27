@@ -256,6 +256,10 @@ class ElectrodeView(QGraphicsPathItem):
         posy = top + (bottom - top - text_size.height()) / 2
         self.text_path.setPos(posx, posy)
 
+    def rotate_electrode_text(self, angle=0):
+        self.text_path.setTransformOriginPoint(self.text_path.boundingRect().center())
+        self.text_path.setRotation(self.text_path.rotation() + angle)
+
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################

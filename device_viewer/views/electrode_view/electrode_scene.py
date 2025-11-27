@@ -58,13 +58,19 @@ class ElectrodeScene(QGraphicsScene):
             if key == Qt.Key_Backspace:
                 self.interaction_service.handle_backspace()
 
-        if (event.modifiers() & Qt.ControlModifier) and event.key() == Qt.Key_Right:
-            # Rotate the MODEL +90 degrees
-            self.dockpane.model.camera_perspective.rotate_output(90)
+        if (event.modifiers() & Qt.ControlModifier):
+            if event.key() == Qt.Key_Right:
+                self.interaction_service.handle_ctrl_key_right()
 
-        elif (event.modifiers() & Qt.ControlModifier) and event.key() == Qt.Key_Left:
-            # Rotate the MODEL -90 degrees
-            self.dockpane.model.camera_perspective.rotate_output(-90)
+            elif event.key() == Qt.Key_Left:
+                self.interaction_service.handle_ctrl_key_left()
+
+        if (event.modifiers() & Qt.AltModifier):
+            if event.key() == Qt.Key_Right:
+                self.interaction_service.handle_alt_key_right()
+
+            elif event.key() == Qt.Key_Left:
+                self.interaction_service.handle_alt_key_left()
 
         super().keyPressEvent(event)
 
