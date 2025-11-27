@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, \
+    QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
@@ -315,7 +316,11 @@ class CameraControlWidget(QWidget):
             if 0 <= index < len(self.qt_available_cameras):
                 if self.qt_available_cameras[index]: # Camera is not None
                     self.camera = QCamera(self.qt_available_cameras[index])
-                    self.camera_formats = list(filter(lambda fmt: fmt.pixelFormat() != QVideoFrameFormat.PixelFormat.Format_YUYV, self.qt_available_cameras[index].videoFormats())) # Selectng these formats gets a segfault for some reason
+                    filtered_formats = [format for format in self.qt_available_cameras[index].videoFormats()
+                                        if format.pixelFormat() == QVideoFrameFormat.PixelFormat.Format_Jpeg]
+                    filtered_formats.sort(key=lambda f: f.resolution().width() * f.resolution().height())
+                    self.camera_formats = {f"{f.resolution().width()}x{f.resolution().height()}": f
+                                           for f in filtered_formats}
                     self.capture_session.setCamera(self.camera)
                     if self.preferences.get("camera.camera_state", "off") == "on":
                         self.camera.start()
@@ -336,12 +341,10 @@ class CameraControlWidget(QWidget):
             if self.camera:
                 self.resolution_combo.clear()
 
-                resolutions = [format.resolution() for format in self.camera_formats]
-
                 preferences_resolution = self.preferences.get("camera.resolution", None)
 
-                for res in resolutions:
-                    self.resolution_combo.addItem(f"{res.width()}x{res.height()}")
+                for res in self.camera_formats:
+                    self.resolution_combo.addItem(res)
 
                 if preferences_resolution:
                     index = self.resolution_combo.findText(preferences_resolution)
@@ -388,10 +391,19 @@ class CameraControlWidget(QWidget):
 
         if not self.using_opencv:
             if self.camera and 0 <= index < len(self.camera_formats):
-                self.preferences.set("camera.resolution", self.resolution_combo.itemText(index))
-                format = self.camera_formats[index]
+                resolution = self.resolution_combo.itemText(index)
+                self.preferences.set("camera.resolution", resolution)
+                format = self.camera_formats[resolution]
+
+                camera_on = self.camera.isActive()
+                if camera_on:
+                    self.camera.stop()
+                    QApplication.processEvents()
+
                 self.camera.setCameraFormat(format)
                 self.model.camera_perspective.camera_resolution = (format.resolution().width(), format.resolution().height())
+                if camera_on:
+                    self.camera.start()
         else:
             if self.cap:
                 resolution = self.resolution_combo.itemText(index)
