@@ -6,6 +6,7 @@ from .electrode_view_helpers import find_path_item
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from logger.logger_service import get_logger
 from .scale_edit_view import ScaleEditViewController
+from ...services.electrode_interaction_service import ElectrodeInteractionControllerService
 
 logger = get_logger(__name__, level='DEBUG')
 
@@ -24,7 +25,7 @@ class ElectrodeScene(QGraphicsScene):
         self.electrode_view_right_clicked = None
         self.is_drag = False
         self.last_electrode_id_visited = None
-        self._interaction_service = None
+        self._interaction_service: 'ElectrodeInteractionControllerService' = None
 
     @property
     def interaction_service(self):
@@ -32,7 +33,7 @@ class ElectrodeScene(QGraphicsScene):
         return self._interaction_service
 
     @interaction_service.setter
-    def interaction_service(self, interaction_service):
+    def interaction_service(self, interaction_service: ElectrodeInteractionControllerService):
         self._interaction_service = interaction_service
 
     def get_item_under_mouse(self, coordinates: QPointF, object_type):
