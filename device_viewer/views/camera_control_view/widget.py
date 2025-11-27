@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
-from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
@@ -12,11 +12,8 @@ import ctypes
 import ctypes.util
 import signal
 import subprocess
-import json
 from pathlib import Path
 
-from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
-from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
 from logger.logger_service import get_logger
