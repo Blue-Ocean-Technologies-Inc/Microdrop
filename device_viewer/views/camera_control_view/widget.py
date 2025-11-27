@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
 from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
-from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
@@ -12,7 +12,6 @@ import ctypes
 import ctypes.util
 import signal
 import subprocess
-import json
 from pathlib import Path
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
@@ -80,10 +79,10 @@ class CameraControlWidget(QWidget):
         self.button_align = QPushButton("view_in_ar")
         self.button_align.setToolTip("Align Camera Perspective")
 
-        self.button_reset = QPushButton("frame_reload")
+        self.button_reset = QPushButton("reset_focus")
         self.button_reset.setToolTip("Reset Camera Perspective")
 
-        self.camera_refresh_button = QPushButton("flip_camera_ios")
+        self.camera_refresh_button = QPushButton("update")
         self.camera_refresh_button.setToolTip("Refresh Camera List")
 
         # Single toggle button for recording
@@ -95,8 +94,17 @@ class CameraControlWidget(QWidget):
         self.capture_image_button = QPushButton("camera")
         self.capture_image_button.setToolTip("Capture Image")
 
+        ####### Rotate camera option #################
+        self.rotate_camera_button = QPushButton("flip_camera_ios")
+        self.rotate_camera_button.setToolTip("Rotate Camera")
+        self.rotate_camera_button.clicked.connect(self.scene.interaction_service.handle_rotate_camera)
 
-        # Single toggle button for camera on/off
+        ######### Rotate device option ################
+        self.rotate_device_button = QPushButton("rotate_90_degrees_cw")
+        self.rotate_device_button.setToolTip("Rotate Device")
+        self.rotate_device_button.clicked.connect(self.scene.interaction_service.handle_rotate_device)
+
+        ###### Single toggle button for camera on/off #####
         self.camera_toggle_button = QPushButton("videocam_off")
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setCheckable(True)
@@ -111,13 +119,15 @@ class CameraControlWidget(QWidget):
 
         top_layout.addWidget(self.camera_toggle_button)
         top_layout.addWidget(self.camera_refresh_button)
-        
+        top_layout.addWidget(self.rotate_camera_button)
+
         # bottom buttons
         bottom_layout = QHBoxLayout()
         for btn in [self.record_toggle_button, self.button_align]:
             btn.setCheckable(True)
             bottom_layout.addWidget(btn)
         bottom_layout.addWidget(self.button_reset)
+        bottom_layout.addWidget(self.rotate_device_button)
         
         # bottom_layout.addStretch()  # Add stretch to push buttons to the left and expand the layout
         
