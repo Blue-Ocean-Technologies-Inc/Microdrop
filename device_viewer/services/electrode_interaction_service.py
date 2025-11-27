@@ -1,3 +1,4 @@
+from PySide6.QtWidgets import QGraphicsView
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
@@ -21,14 +22,21 @@ class ElectrodeInteractionControllerService(HasTraits):
     The following should be passed as kwargs to the constructor:
     - model: The main model instance.
     - electrode_view_layer: The current electrode layer view.
+    - device_view: the current QGraphics device view
     - application: The main Envisage application instance.
     """
 
-    #: Model
+    #: Device view Model
     model = Instance(DeviceViewMainModel)
 
     #: The current electrode layer view
     electrode_view_layer = Instance(ElectrodeLayer)
+
+    #: The current device view
+    device_view = Instance(QGraphicsView)
+
+    #: The current parent envisage application
+    application = Instance(IApplication)
 
     autoroute_paths = Dict({})
 
@@ -37,7 +45,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
 
-    application = Instance(IApplication)
 
     # -------------------- Helpers ------------------------
 
@@ -87,6 +94,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_electrode_channel_editing(self, electrode: Electrode):
         self.model.electrodes.electrode_editing = electrode
 
+    #######################################################################################################
+    # Key handlers
+    #######################################################################################################
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
             new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
@@ -102,6 +112,30 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.model.electrodes.electrode_editing.channel = new_channel
 
             self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
+
+    def handle_ctrl_key_left(self):
+        self.model.camera_perspective.rotate_output(-90)
+
+    def handle_ctrl_key_right(self):
+        self.model.camera_perspective.rotate_output(90)
+
+    def handle_alt_key_left(self):
+        angle_step = -90
+        self._rotate_device_view(angle_step)
+
+    def handle_alt_key_right(self):
+        angle_step = 90
+        self._rotate_device_view(angle_step)
+
+    def _rotate_device_view(self, angle_step):
+        # rotate entire view:
+        self.device_view.rotate(angle_step)
+        # undo rotation on text for maintaining readability
+        self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
+
+        self.device_view.fit_to_scene_rect()
+
+    ########################################################################################################
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""

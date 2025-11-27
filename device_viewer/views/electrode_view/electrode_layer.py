@@ -244,3 +244,7 @@ class ElectrodeLayer():
         logger.debug(f"redraw_all_electrode_tooltips")
         for changed_electrode_id in self.electrode_views:
             self.redraw_electrode_tooltip(changed_electrode_id)
+
+    def rotate_electrode_views_texts(self, angle=0):
+        for electrode_view in self.electrode_views.values():
+            electrode_view.rotate_electrode_text(angle)

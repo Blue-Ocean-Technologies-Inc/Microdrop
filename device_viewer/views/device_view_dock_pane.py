@@ -281,10 +281,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.set_view_from_model(new_model.electrodes)
         logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
 
-        # Initialize the electrode mouse interaction service with the new model and layer
+        # Initialize the electrode mouse / key interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
             model=new_model,
             electrode_view_layer=self.current_electrode_layer,
+            device_view=self.device_view,
             application=self.task.window.application
         )
 
