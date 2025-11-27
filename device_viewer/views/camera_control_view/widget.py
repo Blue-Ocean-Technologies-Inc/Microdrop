@@ -1,8 +1,7 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, \
-    QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
-from PySide6.QtCore import Slot, QTimer, QStandardPaths, QObject, QThread, Signal
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
+from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat, QCameraDevice
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from apptools.preferences.api import Preferences
 import cv2
@@ -417,25 +416,40 @@ class CameraControlWidget(QWidget):
         return str(int(time.time()))
 
     def get_transformed_frame(self):
-        """Apply a transformation to the video frame."""
+        """
+        Returns the full high-res transformed image, automatically resizing
+        the canvas and shifting the origin so nothing is clipped.
+        """
 
-        image = QImage(self.scene.width(), self.scene.height(), QImage.Format_ARGB32)
-        image.fill(0xFF000000)  # Fill with black background
+        # 1. Get the source item and its original size
+        target_item = self.pixmap_item if self.using_opencv else self.video_item
 
-        if self.model.camera_perspective:
-            painter = QPainter(image)
-            options = QStyleOptionGraphicsItem()
-            scale = QTransform()
-            if self.using_opencv:
-                scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
-                           self.scene.height() / self.model.camera_perspective.camera_resolution[1])
-            painter.setTransform(self.model.camera_perspective.transformation)
-            if self.using_opencv:
-                # If using OpenCV, draw the pixmap item
-                self.pixmap_item.paint(painter, options, None)
-            else:
-                self.video_item.paint(painter, options, None)
-            painter.end()
+        # 3. where the image ends up after transformation
+        # This gives us a rectangle that might have negative coordinates (e.g. x=-50)
+        mapped_rect = self.video_item.sceneBoundingRect()
+
+        # 4. Create the QImage based on this NEW size (so nothing is cut off)
+        # If you strictly need the original camera_resolution, see Option 2 below
+        width = int(mapped_rect.width())
+        height = int(mapped_rect.height())
+        image = QImage(width, height, QImage.Format_ARGB32)
+        image.fill(0x00000000)  # Transparent background (or use 0xFF000000 for black)
+
+        painter = QPainter(image)
+        options = QStyleOptionGraphicsItem()
+
+        # Fix the clipping by shifting the Painter
+        # If the image starts at -50, we translate +50 to bring it to 0
+        painter.translate(-mapped_rect.x(), -mapped_rect.y())
+
+        # 6. Apply the transformation
+        # We use combine=True so we don't overwrite our translation
+        painter.setTransform(self.video_item.transform(), combine=True)
+
+        # 7. Paint the raw high-res item
+        target_item.paint(painter, options, None)
+
+        painter.end()
         return image
     
     # ------------------------ Callbacks -------------------------------
