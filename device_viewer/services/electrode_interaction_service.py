@@ -201,7 +201,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_autoroute_end(self):
         self.autoroute_paths = {}
-        self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
+        # only proceed if there is at least one segment
+        if self.model.routes.autoroute_layer.route.get_segments():
+            self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
         self.model.routes.autoroute_layer = None
         self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
         # self.model.mode = 'edit'
