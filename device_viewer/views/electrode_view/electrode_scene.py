@@ -91,7 +91,8 @@ class ElectrodeScene(QGraphicsScene):
 
             elif mode == "auto":
                 if electrode_view:
-                    self.interaction_service.handle_autoroute_start(electrode_view.id)
+                    is_alt_pressed = event.modifiers() & Qt.KeyboardModifier.AltModifier
+                    self.interaction_service.handle_autoroute_start(electrode_view.id, avoid_collisions=not is_alt_pressed)
                 else: # No electrode clicked, exit autoroute mode
                     self.interaction_service.set_mode("edit")
 

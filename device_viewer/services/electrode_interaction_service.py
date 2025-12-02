@@ -5,6 +5,7 @@ from pyface.qt.QtCore import QPointF
 from envisage.api import IApplication
 
 from device_viewer.models.electrodes import Electrode
+from device_viewer.utils.electrode_route_helpers import find_shortest_paths
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
@@ -190,9 +191,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         elif electrode_id == endpoints[1]: # Ending endpoint erased
             self.handle_route_erase(*segments[-1]) # Delete last segment
 
-    def handle_autoroute_start(self, from_id): # Run when the user enables autorouting an clicks on an electrode
+    def handle_autoroute_start(self, from_id, avoid_collisions=True): # Run when the user enables autorouting an clicks on an electrode
         routes = [layer.route for layer in self.model.routes.layers]
-        self.autoroute_paths = Route.find_shortest_paths(from_id, routes, self.model.electrodes.svg_model.neighbours) # Run the BFS and cache the result dict
+        self.autoroute_paths = find_shortest_paths(from_id, self.model.electrodes.svg_model.neighbours, routes, avoid_collisions=avoid_collisions) # Run the BFS and cache the result dict
         self.model.routes.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
 
     def handle_autoroute(self, to_id):
@@ -203,7 +204,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
         self.model.routes.autoroute_layer = None
         self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
-        self.model.mode = 'edit'
+        # self.model.mode = 'edit'
 
     def handle_toggle_electrode_tooltip(self, checked):
         '''Handle toggle electrode tooltip.'''
