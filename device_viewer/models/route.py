@@ -10,9 +10,6 @@ class Route(HasTraits):
     def _route_default(self):
         return []
 
-    def __init__(self, route: list = []):
-        self.route = route
-
     def get_channel_from_id(self, id, channel_map):
         for key, value in channel_map.items():
             if id in value:
