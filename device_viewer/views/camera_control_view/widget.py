@@ -327,6 +327,8 @@ class CameraControlWidget(QWidget):
                     self.camera = QCamera(self.qt_available_cameras[index])
                     filtered_formats = [format for format in self.qt_available_cameras[index].videoFormats()
                                         if format.pixelFormat() == QVideoFrameFormat.PixelFormat.Format_Jpeg]
+                    if len(filtered_formats) == 0:
+                        filtered_formats = [format for format in self.qt_available_cameras[index].videoFormats()]
                     filtered_formats.sort(key=lambda f: f.resolution().width() * f.resolution().height())
                     self.camera_formats = {f"{f.resolution().width()}x{f.resolution().height()}": f
                                            for f in filtered_formats}
