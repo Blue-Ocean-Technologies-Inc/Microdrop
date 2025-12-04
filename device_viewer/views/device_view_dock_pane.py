@@ -27,7 +27,6 @@ from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
 from ..consts import listener_name
 from ..utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
-from ..utils.dmf_utils_helpers import channels_to_svg
 
 # models and services
 from ..models.main_model import DeviceViewMainModel
@@ -36,7 +35,6 @@ from ..consts import PKG, PKG_name
 from ..services.electrode_interaction_service import ElectrodeInteractionControllerService
 
 # For sidebar
-from ..utils.camera import qtransform_deserialize
 from .alpha_view.alpha_table import alpha_table_view
 from .calibration_view.widget import CalibrationView
 from .camera_control_view.widget import CameraControlWidget
@@ -671,9 +669,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
-            channels_to_svg(self.model.electrodes.svg_model.filename, new_filename,
-                            self.model.electrodes.electrode_ids_channels_map, self.model.electrode_scale)
-
+            self.model.electrodes.svg_save_as(new_filename)
 
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
