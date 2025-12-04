@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 class AutoFitGraphicsView(QGraphicsView):
     """
-    A QGraphicsView that automatically fits the scene rect when the view is resized
+    A QGraphicsView with a method to fit to scene size.
     """
     display_state_signal = Signal(str)
 
@@ -19,10 +19,6 @@ class AutoFitGraphicsView(QGraphicsView):
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.TextAntialiasing, True)
 
-    def resizeEvent(self, event):
-        logger.debug(f"Resizing view size: {self.scene().sceneRect()}")
-        self.fit_to_scene_rect()
-        super().resizeEvent(event)
-
     def fit_to_scene_rect(self):
-        self.fitInView(self.scene().sceneRect().adjusted(20, 20, 20, 20), Qt.AspectRatioMode.KeepAspectRatio)
+        if self.scene():
+            self.fitInView(self.scene().sceneRect().adjusted(20, 20, 20, 20), Qt.AspectRatioMode.KeepAspectRatio)

@@ -179,6 +179,14 @@ class ElectrodeScene(QGraphicsScene):
         
         super().mouseReleaseEvent(event)
 
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            angle = event.delta()
+            self.interaction_service.handle_mouse_wheel_event(angle)
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
     def detect_droplet(self):
         """Placeholder for a context menu action."""
         self.dockpane.publish_detect_droplet()

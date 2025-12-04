@@ -51,13 +51,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def remove_last_digit(self, number: int | None) -> int | None:
         if number == None: return None
-        
+
         string = str(number)[:-1]
         if string == "":
             return None
         else:
             return int(string)
-    
+
     def add_digit(self, number: int | None, digit: str) -> int:
         if number == None:
             return int(digit)
@@ -67,7 +67,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     # -------------------- Handlers -----------------------
 
     def handle_reference_point_placement(self, point: QPointF):
-        """Handle the placement of a reference point for perspective correction."""        
+        """Handle the placement of a reference point for perspective correction."""
         # Add the new point to the reference rect
         self.rect_buffer.append(point)
         if len(self.rect_buffer) == 4:  # We have a rectangle now
@@ -142,6 +142,22 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         self.device_view.fit_to_scene_rect()
 
+    def handle_mouse_wheel_event(self, angle, sx=1.15, sy=1.15):
+
+        if angle > 0:
+            self._zoom_in(sx, sy)
+        else:
+            self._zoom_out(sx, sy)
+
+    def _zoom_in(self, sx, sy):
+        logger.debug("Zoom In")
+        self.device_view.scale(sx, sy)
+
+    def _zoom_out(self, sx, sy):
+        logger.debug("Zoom Out")
+        self.device_view.scale(1 / sx, 1 / sy)
+
+
     ########################################################################################################
 
     def handle_electrode_click(self, electrode_id: Str):
@@ -172,11 +188,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         '''Handle a route segment being erased'''
         current_route = self.model.routes.get_selected_route()
         if current_route == None: return
-        
+
         if current_route.can_remove(from_id, to_id):
             new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
             self.model.routes.replace_layer(self.model.routes.selected_layer, new_routes)
-    
+
     def handle_endpoint_erase(self, electrode_id):
         '''Handle the erase being triggered by hovering an endpoint'''
         current_route = self.model.get_selected_route()
@@ -214,7 +230,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def get_mode(self):
         return self.model.mode
-    
+
     def set_mode(self, mode):
         self.model.mode = mode
 
