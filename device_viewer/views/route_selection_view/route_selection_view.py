@@ -33,7 +33,6 @@ class RouteLayerHandler(Handler):
 
 layer_table_editor = TableEditor(
     columns=[
-        ColorColumn(name='color', label="", editable=False, width=16),
         ObjectColumn(name='name', label="", resize_mode="stretch", editable=False),
         VisibleColumn(name='visible', label="", editable=False, horizontal_alignment='center', width=16)
     ],
@@ -43,7 +42,7 @@ layer_table_editor = TableEditor(
     sortable=False,
     reorderable=True,
     show_column_labels=False,
-    show_row_labels=False,
+    show_row_labels=True,
 )
 
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
