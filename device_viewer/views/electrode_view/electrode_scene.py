@@ -52,19 +52,25 @@ class ElectrodeScene(QGraphicsScene):
         char = event.text()
         key = event.key()
 
-        if char.isprintable(): # If an actual char was inputted
-            if char.isdigit(): # It's a digit
-                self.interaction_service.handle_digit_input(char)
-        else:
-            if key == Qt.Key_Backspace:
+        if char.isprintable() and char.isdigit(): # If an actual char digit was inputted
+            self.interaction_service.handle_digit_input(char)
+
+        elif key == Qt.Key_Backspace:
                 self.interaction_service.handle_backspace()
 
         if (event.modifiers() & Qt.ControlModifier):
             if event.key() == Qt.Key_Right:
                 self.interaction_service.handle_ctrl_key_right()
 
-            elif event.key() == Qt.Key_Left:
+            if event.key() == Qt.Key_Left:
                 self.interaction_service.handle_ctrl_key_left()
+
+            # Check for Plus (Key_Plus is Numpad, Key_Equal is standard keyboard '+')
+            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+                self.interaction_service.handle_ctrl_plus()
+
+            if event.key() == Qt.Key.Key_Minus:
+                self.interaction_service.handle_ctrl_minus()
 
         if (event.modifiers() & Qt.AltModifier):
             if event.key() == Qt.Key_Right:

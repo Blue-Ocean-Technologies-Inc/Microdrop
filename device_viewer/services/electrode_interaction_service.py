@@ -159,6 +159,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         logger.debug("Zoom Out")
         self.device_view.scale(1 / sx, 1 / sy)
 
+    def handle_ctrl_plus(self):
+        self._zoom_in(x_zoom_scale, y_zoom_scale)
+
+    def handle_ctrl_minus(self):
+        self._zoom_out(x_zoom_scale, y_zoom_scale)
+
 
     ########################################################################################################
 
