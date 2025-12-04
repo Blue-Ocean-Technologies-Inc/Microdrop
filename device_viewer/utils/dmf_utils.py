@@ -28,6 +28,7 @@ class SvgUtil(HasTraits):
 
     def __init__(self, filename: Union[str, Path] = None, **traits):
         super().__init__(**traits)
+        self.auto_found_connections = False  # whether connections were retrieved from file or auto generated.
         self._filename = filename
         self.max_x = None
         self.max_y = None
@@ -89,6 +90,7 @@ class SvgUtil(HasTraits):
 
             if len(self.neighbours.items()) == 0:
                 self.neighbours = self.find_neighbours_all()
+                self.auto_found_connections = True
 
             self.neighbours_to_points()
 
