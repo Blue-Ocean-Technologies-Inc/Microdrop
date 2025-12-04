@@ -200,3 +200,20 @@ class SvgUtil(HasTraits):
                 element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
+
+    def get_connection_lines(self):
+        """
+        Returns paths for connection lines in the form (start_x, start_y, end_x, end_y).
+
+        Can be used to get the connection lines between electrodes even if they were auto generated using the
+        find_neighbours_all method.
+        """
+        paths = []
+        for key, value in self.neighbours.items():
+            start_x, start_y = self.electrode_centers[key]
+            for elec in value:
+                end_x, end_y = self.electrode_centers[elec]
+                if (end_x, end_y, start_x, start_y) not in paths:
+                    paths.append((start_x, start_y, end_x, end_y))
+
+        return paths
