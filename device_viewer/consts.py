@@ -30,5 +30,9 @@ DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
+## zoom scaling values:
+x_zoom_scale = 1.15
+y_zoom_scale = 1.15
+
 # main view config
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"

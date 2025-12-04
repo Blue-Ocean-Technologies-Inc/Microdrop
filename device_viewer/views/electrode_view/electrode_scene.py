@@ -182,7 +182,7 @@ class ElectrodeScene(QGraphicsScene):
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle = event.delta()
-            self.interaction_service.handle_mouse_wheel_event(angle)
+            self.interaction_service.handle_ctrl_mouse_wheel_event(angle)
             event.accept()
         else:
             super().wheelEvent(event)

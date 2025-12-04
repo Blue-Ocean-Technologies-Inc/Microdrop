@@ -16,6 +16,8 @@ from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, 
 
 logger = get_logger(__name__)
 
+from ..consts import x_zoom_scale, y_zoom_scale
+
 class ElectrodeInteractionControllerService(HasTraits):
     """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
     Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class.
@@ -142,12 +144,12 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         self.device_view.fit_to_scene_rect()
 
-    def handle_mouse_wheel_event(self, angle, sx=1.15, sy=1.15):
+    def handle_ctrl_mouse_wheel_event(self, angle):
 
         if angle > 0:
-            self._zoom_in(sx, sy)
+            self._zoom_in(x_zoom_scale, y_zoom_scale)
         else:
-            self._zoom_out(sx, sy)
+            self._zoom_out(x_zoom_scale, y_zoom_scale)
 
     def _zoom_in(self, sx, sy):
         logger.debug("Zoom In")
