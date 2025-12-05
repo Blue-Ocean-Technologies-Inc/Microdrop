@@ -11,6 +11,7 @@ from typing import List, Dict, Set, TypedDict, Optional, Any, Union
 from svg.path import parse_path
 
 from logger.logger_service import get_logger
+from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line
 
 logger = get_logger(__name__, "INFO")
 
@@ -96,30 +97,42 @@ class PolygonNeighborFinder:
             # Buffer each polygon by a small amount relative to its area
             current_polygons = [poly.buffer(poly.area / buffer_factor) for poly in current_polygons]
 
+        ###### Check if we can proceed with looser conditions #######
+        logger.warning(f"Could not find a solution where each line intersects exactly 2 polygons "
+            f"after {max_attempts} attempts.")
+
+        if np.all(counts >= 2):
+            logger.warning("Proceeding with solution taking first and last polygin intersected by line")
+            return self._build_neighbor_map(query_result)
+
+        ##### Looser conditions failed, raise error: should have a fallback method in place to handle this
         raise AlgorithmError(
-            f"Could not find a solution where each line intersects exactly 2 polygons "
-            f"after {max_attempts} attempts."
+            f"Could not find a solution where each line intersects at least 2 polygons "
         )
 
     def _build_neighbor_map(self, query_result: np.ndarray) -> Dict[str, List[str]]:
         """Helper method to construct the final neighbor dictionary from query results."""
         # Use a defaultdict or a set for easier adding
         neighbours_map: Dict[str, Set[str]] = {name: set() for name in self.polygon_names}
-        neighbours_connecting_line_coords_map: Dict[tuple[str,str], tuple[tuple,tuple]] = {}
 
         # Group polygon indices by their corresponding line index
         for line_idx in range(len(self.lines)):
             # Get the indices of polygons that intersected with this line
             intersecting_poly_indices = query_result[1, query_result[0] == line_idx]
 
-            # Since we've already checked for success, we know there are exactly two.
-            poly1_idx, poly2_idx = intersecting_poly_indices
+            # if more than 2 polygons found intersecting, only take polygons at line start and end points
+            # do this by sorting polygon indices by distance of corresponding polygon to line start
+            # then we take the first and last elements of the sorted list
+            if len(intersecting_poly_indices) > 2:
+                intersecting_poly_indices = sort_polygon_indices_along_line(line=self.lines[line_idx],
+                                                                            polygons=self.polygons,
+                                                                            indices=list(intersecting_poly_indices))
+
+            # Just take first and last ones -- endpoint polygons.
+            poly1_idx, poly2_idx = intersecting_poly_indices[0], intersecting_poly_indices[-1]
 
             name1 = self.polygon_names[poly1_idx]
             name2 = self.polygon_names[poly2_idx]
-
-            neighbours_connecting_line_coords_map[(name1, name2)] = (self.lines[0].coords[0], self.lines[0].coords[1])
-            neighbours_connecting_line_coords_map[(name1, name2)] = (self.lines[0].coords[0], self.lines[0].coords[1])
 
             # Register the neighbor relationship symmetrically
             neighbours_map[name1].add(name2)
