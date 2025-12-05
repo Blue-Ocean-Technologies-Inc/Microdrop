@@ -13,7 +13,8 @@ from functools import partial
 
 from envisage.ui.tasks.tasks_application import TasksApplication
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont
+
+from microdrop_style.helpers import style_app
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -22,10 +23,6 @@ from microdrop_utils.root_dir_utils import get_project_root
 root = get_project_root()
 
 os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "") # Add root to PATH for PyInstaller. Should do nothing normal operation
-
-# Font paths
-LABEL_FONT_FAMILY = "Inter"
-ICON_FONT_FAMILY = "Material Symbols Outlined"
 
 logger = get_logger(__name__)
 
@@ -44,7 +41,8 @@ def main(plugins, contexts, application, persist):
     """Run the application."""
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
-    app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
+
+    style_app(app_instance)
 
     logger.debug(f"Instantiating application {application} with plugins {plugins}")
 
