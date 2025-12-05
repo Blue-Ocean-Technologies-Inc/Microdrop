@@ -1,16 +1,8 @@
-from PySide6.QtWidgets import (QWidget, QHBoxLayout, QPushButton, QVBoxLayout, 
-                                QLabel, QGridLayout)
-from PySide6.QtCore import Qt
-from pathlib import Path
+from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout, QLabel, QGridLayout
 
-from microdrop_style.icons.icons import (ICON_AUTOMATION, ICON_DRAW, ICON_EDIT, 
-                                         ICON_RESET_WRENCH)
+from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT,ICON_RESET_WRENCH
+
 from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_style.font_paths import load_material_symbols_font
-
-# Load the Material Symbols font using the clean API
-ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
-
 
 def if_editable(func):
     """Decorator to check if the model is editable before executing the function."""

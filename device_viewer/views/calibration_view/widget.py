@@ -1,11 +1,7 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QLabel, QSizePolicy
-from pathlib import Path
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSizePolicy
 
 from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_style.font_paths import load_material_symbols_font
 
-# Load the Material Symbols font using the clean API
-ICON_FONT_FAMILY = load_material_symbols_font() or "Material Symbols Outlined"
 
 
 class CalibrationView(QWidget):

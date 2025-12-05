@@ -1,6 +1,11 @@
 import os
 import sys
 
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication
+
+from microdrop_style.font_paths import load_material_symbols_font, load_inter_font
+
 
 def is_dark_mode():
     if sys.platform == "darwin":
@@ -42,3 +47,11 @@ def is_dark_mode():
             except Exception:
                 pass
         return False
+
+def style_app(app_instance: 'QApplication'):
+    # Load the Material Symbols font
+    load_material_symbols_font()
+    # load inter font and set with some size
+    LABEL_FONT_FAMILY = load_inter_font()
+
+    app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
