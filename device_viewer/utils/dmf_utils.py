@@ -9,7 +9,7 @@ from shapely.geometry import Polygon
 from traits.api import HasTraits, Float, Dict, Str
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
-    SVGProcessor
+    SVGProcessor, AlgorithmError
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -73,13 +73,17 @@ class SvgUtil(HasTraits):
             elif "Connections" in child.attrib.values():
                 connection_lines = svg_processor.extract_connections(child)
                 if connection_lines is not None:
-                    self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
+                    try:
+                        self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
+                    except AlgorithmError as e:
+                        logger.error(e)
+                        # publish this to have a popup inform user about this
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
                 if scale is not None:
                     self.area_scale = float(scale.text)
-                    print(f"Pixel scale set to {self.area_scale} from SVG metadata.")
+                    logger.info(f"Pixel scale set to {self.area_scale} from SVG metadata.")
 
         if len(self.electrodes) > 0:
             self.find_electrode_centers()

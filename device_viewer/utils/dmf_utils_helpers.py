@@ -19,6 +19,11 @@ DPI=96
 INCH_TO_MM = 25.4
 DOTS_TO_MM = INCH_TO_MM / DPI
 
+class AlgorithmError(Exception):
+    """Raised when the algorithm fails to find a valid solution."""
+    pass
+
+
 class PolygonNeighborFinder:
     """
     Finds neighboring polygons based on intersections with a given set of lines.
@@ -91,7 +96,7 @@ class PolygonNeighborFinder:
             # Buffer each polygon by a small amount relative to its area
             current_polygons = [poly.buffer(poly.area / buffer_factor) for poly in current_polygons]
 
-        raise ValueError(
+        raise AlgorithmError(
             f"Could not find a solution where each line intersects exactly 2 polygons "
             f"after {max_attempts} attempts."
         )
