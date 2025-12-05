@@ -2,8 +2,6 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QKeyEvent, QAction
 from PySide6.QtWidgets import QGraphicsScene, QMenu, QGraphicsSceneContextMenuEvent
 
-from .electrode_view_helpers import find_path_item
-from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from logger.logger_service import get_logger
 from .scale_edit_view import ScaleEditViewController
 from ...services.electrode_interaction_service import ElectrodeInteractionControllerService
@@ -20,11 +18,7 @@ class ElectrodeScene(QGraphicsScene):
         super().__init__(parent)
         self.electrode_tooltip_visible = True
         self.dockpane = dockpane
-        self.left_mouse_pressed = False
-        self.right_mouse_pressed = False
         self.electrode_view_right_clicked = None
-        self.is_drag = False
-        self.last_electrode_id_visited = None
         self._interaction_service: 'ElectrodeInteractionControllerService' = None
 
     @property
@@ -47,150 +41,34 @@ class ElectrodeScene(QGraphicsScene):
             if isinstance(item, object_type):
                 return item
         return None
-    
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        char = event.text()
-        key = event.key()
 
-        if char.isprintable() and char.isdigit(): # If an actual char digit was inputted
-            self.interaction_service.handle_digit_input(char)
-
-        elif key == Qt.Key_Backspace:
-                self.interaction_service.handle_backspace()
-
-        if (event.modifiers() & Qt.ControlModifier):
-            if event.key() == Qt.Key_Right:
-                self.interaction_service.handle_ctrl_key_right()
-
-            if event.key() == Qt.Key_Left:
-                self.interaction_service.handle_ctrl_key_left()
-
-            # Check for Plus (Key_Plus is Numpad, Key_Equal is standard keyboard '+')
-            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
-                self.interaction_service.handle_ctrl_plus()
-
-            if event.key() == Qt.Key.Key_Minus:
-                self.interaction_service.handle_ctrl_minus()
-
-        if (event.modifiers() & Qt.AltModifier):
-            if event.key() == Qt.Key_Right:
-                self.interaction_service.handle_alt_key_right()
-
-            elif event.key() == Qt.Key_Left:
-                self.interaction_service.handle_alt_key_left()
+        self.interaction_service.handle_key_press_event(event)
 
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
 
-        button = event.button()
-        mode = self.interaction_service.get_mode()
-
-        if button == Qt.LeftButton:
-            self.left_mouse_pressed = True
-            electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-
-            if mode in ("edit", "draw", "edit-draw"):
-                if electrode_view:
-                    self.last_electrode_id_visited = electrode_view.id
-
-            elif mode == "auto":
-                if electrode_view:
-                    is_alt_pressed = event.modifiers() & Qt.KeyboardModifier.AltModifier
-                    self.interaction_service.handle_autoroute_start(electrode_view.id, avoid_collisions=not is_alt_pressed)
-                else: # No electrode clicked, exit autoroute mode
-                    self.interaction_service.set_mode("edit")
-
-            elif mode == "channel-edit":
-                if electrode_view:
-                    self.interaction_service.handle_electrode_channel_editing(electrode_view.electrode)
-
-            elif mode == "camera-place":
-                self.interaction_service.handle_reference_point_placement(event.scenePos())
-
-            elif mode == "camera-edit":
-                self.interaction_service.handle_perspective_edit_start(event.scenePos())
-
-        elif button == Qt.RightButton:
-            self.right_mouse_pressed = True
-            self.electrode_view_right_clicked = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-
+        self.interaction_service.handle_mouse_press_event(event)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         """Handle the dragging motion."""
 
-        mode = self.interaction_service.get_mode()
-        electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-        self.interaction_service.handle_electrode_hover(electrode_view)
-
-        if self.left_mouse_pressed:
-            # Only proceed if we have a valid electrode view.
-            if mode in ("edit", "draw", "edit-draw"):
-                if electrode_view:
-                    if self.last_electrode_id_visited == None: # No electrode clicked yet (for example, first click was not on electrode)
-                        self.last_electrode_id_visited = electrode_view.id
-                    else:
-                        found_connection_item = find_path_item(self, (self.last_electrode_id_visited, electrode_view.id))
-                        if found_connection_item is not None: # Are the electrodes neigbors? (This excludes self)
-                            self.interaction_service.handle_route_draw(self.last_electrode_id_visited, electrode_view.id)
-                            self.last_electrode_id_visited = electrode_view.id # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
-                            self.is_drag = True # Since more than one electrode is left clicked, its a drag, not a single electrode click
-                        
-            elif mode == "auto":
-                if electrode_view:
-                    self.interaction_service.handle_autoroute(electrode_view.id) # We store last_electrode_id_visited as the source node
-            
-            elif mode == "camera-edit":
-                self.interaction_service.handle_perspective_edit(event.scenePos())
-
-        if self.right_mouse_pressed:
-            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
-                connection_item = self.get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
-                endpoint_item = self.get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
-                if connection_item:
-                    (from_id, to_id) = connection_item.key
-                    self.interaction_service.handle_route_erase(from_id, to_id)
-                elif endpoint_item:
-                    self.interaction_service.handle_endpoint_erase(endpoint_item.electrode_id)
-
+        self.interaction_service.handle_mouse_move_event(event)
         # Call the base class mouseMoveEvent to ensure normal processing continues.
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         """Finalize the drag operation."""
-        button = event.button()
 
-        if button == Qt.LeftButton:
-            self.left_mouse_pressed = False
-            mode = self.interaction_service.get_mode()  
-            if mode == "auto":
-                self.interaction_service.handle_autoroute_end()
-            elif mode in ("edit", "draw", "edit-draw"):
-                electrode_view = self.get_item_under_mouse(event.scenePos(), ElectrodeView)
-                # If it's a click (not a drag) since only one electrode selected:
-                if not self.is_drag and electrode_view:
-                    self.interaction_service.handle_electrode_click(electrode_view.id)
-                
-                # Reset left-click related vars
-                self.is_drag = False
-
-                if mode == "edit-draw": # Go back to draw
-                    self.interaction_service.set_mode("draw")
-            elif mode == "camera-edit":
-                self.interaction_service.handle_perspective_edit_end()
-        elif button == Qt.RightButton:
-            self.right_mouse_pressed = False
-        
+        self.interaction_service.handle_mouse_release_event(event)
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            angle = event.delta()
-            self.interaction_service.handle_ctrl_mouse_wheel_event(angle)
-            event.accept()
-        else:
+        if not self.interaction_service.handle_wheel_event(event):
             super().wheelEvent(event)
 
     def detect_droplet(self):

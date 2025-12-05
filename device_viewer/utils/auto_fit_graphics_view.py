@@ -3,6 +3,7 @@ from pyface.qt.QtCore import Qt, Signal
 from pyface.qt.QtGui import QPainter
 
 from device_viewer.consts import AUTO_FIT_MARGIN_SCALE
+from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -37,3 +38,16 @@ class AutoFitGraphicsView(QGraphicsView):
 
         # scale down to leave margin
         self.scale(self.auto_fit_margin_scale, self.auto_fit_margin_scale)
+
+    def keyPressEvent(self, event):
+
+        # forward all the key press events to the interaction service event if interaction disabled:
+        scene = self.scene()
+
+        if isinstance(scene, ElectrodeScene):
+            if hasattr(scene, 'interaction_service'):
+                scene.interaction_service.handle_key_press_event(event)
+                return
+
+
+        super().keyPressEvent(event)
