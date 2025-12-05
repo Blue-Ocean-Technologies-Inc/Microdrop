@@ -13,10 +13,9 @@ from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
 from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
+from ..preferences import DeviceViewerPreferences
 
 logger = get_logger(__name__)
-
-from ..consts import x_zoom_scale, y_zoom_scale
 
 class ElectrodeInteractionControllerService(HasTraits):
     """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
@@ -26,6 +25,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     - model: The main model instance.
     - electrode_view_layer: The current electrode layer view.
     - device_view: the current QGraphics device view
+    - device_viewer_preferences: preferences for the current device viewer
     - application: The main Envisage application instance.
     """
 
@@ -37,6 +37,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     #: The current device view
     device_view = Instance(QGraphicsView)
+
+    #: The preferences for the current device view
+    device_viewer_preferences = Instance(DeviceViewerPreferences)
 
     #: The current parent envisage application
     application = Instance(IApplication)
@@ -152,26 +155,34 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_ctrl_mouse_wheel_event(self, angle):
 
         if angle > 0:
-            self._zoom_in(x_zoom_scale, y_zoom_scale)
+            self._zoom_in()
         else:
-            self._zoom_out(x_zoom_scale, y_zoom_scale)
+            self._zoom_out()
 
-    def _zoom_in(self, sx, sy):
+    def _zoom_in(self, scale=None):
         logger.debug("Zoom In")
         # disable auto fit if user wants to zoom in
         if self.device_view.auto_fit:
             self.device_view.auto_fit = False
-        self.device_view.scale(sx, sy)
 
-    def _zoom_out(self, sx, sy):
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(scale, scale)
+
+    def _zoom_out(self, scale=None):
         logger.debug("Zoom Out")
-        self.device_view.scale(1 / sx, 1 / sy)
+
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(1 / scale, 1 / scale)
 
     def handle_ctrl_plus(self):
-        self._zoom_in(x_zoom_scale, y_zoom_scale)
+        self._zoom_in()
 
     def handle_ctrl_minus(self):
-        self._zoom_out(x_zoom_scale, y_zoom_scale)
+        self._zoom_out()
 
 
     ########################################################################################################

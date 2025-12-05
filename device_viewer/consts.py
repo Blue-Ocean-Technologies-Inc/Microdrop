@@ -30,9 +30,8 @@ DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
-## zoom scaling values:
-x_zoom_scale = 1.15
-y_zoom_scale = 1.15
+## device vew zoom sensitivity
+ZOOM_SENSITIVITY = 5
 
 ## device view margin when auto fit
 AUTO_FIT_MARGIN_SCALE = 0.95

@@ -18,7 +18,8 @@ logger = get_logger(__name__)
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 
-from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE, AUTO_FIT_MARGIN_SCALE
+from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE, \
+    AUTO_FIT_MARGIN_SCALE, ZOOM_SENSITIVITY
 from .default_settings import default_alphas, default_visibility
 
 
@@ -38,16 +39,16 @@ class DeviceViewerPreferences(PreferencesHelper):
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
 
-    # HOVERED_ELECTRODE_LIGHTNESS = Range(value=HOVERED_ELECTRODE_LIGHTNESS, low=0, high=100)
-    # HOVERED_ACTUATED_ELECTRODE_LIGHTNESS = Range(value=HOVERED_ACTUATED_ELECTRODE_LIGHTNESS, low=0, high=100)
-
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
 
-    ### main view prefs
+    ### main view prefs ###
     AUTO_FIT_MARGIN_SCALE = Range(value=AUTO_FIT_MARGIN_SCALE, low=1, high=100, mode="spinner")
+    ZOOM_SENSITIVITY = Range(value=ZOOM_SENSITIVITY, low=1, high=100, mode='spinner')
 
+    # getters for processed values from int set in spinner
     _auto_fit_margin_scale = Property(observe='AUTO_FIT_MARGIN_SCALE')
+    _zoom_scale = Property(observe='ZOOM_SENSITIVITY')
 
     DEFAULT_SVG_FILE = File
 
@@ -97,6 +98,9 @@ class DeviceViewerPreferences(PreferencesHelper):
     def _get__auto_fit_margin_scale(self) -> float:
         return self.AUTO_FIT_MARGIN_SCALE / 100
 
+    def _get__zoom_scale(self) -> float:
+        return 1 + (self.ZOOM_SENSITIVITY / 100)
+
 
 device_viewer_tab = PreferencesCategory(
     id="microdrop.device_viewer.preferences",
@@ -131,6 +135,7 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    ########## Main view grid ###########################
     # Create items for the default svg for the main view group.
     default_svg_setting_item = create_item_label_pair(
             'DEFAULT_SVG_FILE',
@@ -143,17 +148,21 @@ class DeviceViewerPreferencesPane(PreferencesPane):
 
     default_auto_fit_margin_scale_item = create_item_label_group(
             'AUTO_FIT_MARGIN_SCALE',
-        label_text='Auto Fit Margin Scale',
     )
 
+    default_zoom_sensitivity = create_item_label_group(
+        'ZOOM_SENSITIVITY',
+    )
 
     main_view_settings = Group(
-        [default_svg_setting_item, default_auto_fit_margin_scale_item],
+        [default_svg_setting_item, default_auto_fit_margin_scale_item, default_zoom_sensitivity],
         label="Main View",
         show_labels = False,
         show_border=True,
         style_sheet=preferences_group_style_sheet,
     ),
+
+    ########################################################################################
 
     view = View(
 

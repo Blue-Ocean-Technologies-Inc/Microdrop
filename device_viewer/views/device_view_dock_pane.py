@@ -285,6 +285,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             model=new_model,
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
+            device_viewer_preferences=self.device_viewer_preferences,
             application=self.task.window.application
         )
 
