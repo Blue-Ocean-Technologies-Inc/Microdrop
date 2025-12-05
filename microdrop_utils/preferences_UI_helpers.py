@@ -44,7 +44,7 @@ def create_item_label_pair(
             item_kwargs[key] = value
 
     if label_text is None:
-        label_text = item_name.replace('_', ' ').capitalize()
+        label_text = item_name.replace('_', ' ').title()
 
     item = Item(item_name, show_label=False, **item_kwargs)
     label = Label(label_text, **label_kwargs)
