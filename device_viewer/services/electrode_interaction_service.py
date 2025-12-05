@@ -137,6 +137,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._rotate_device_view(90)
 
     def _rotate_device_view(self, angle_step):
+
+        # enable auto fit for rotations:
+        if not self.device_view.auto_fit:
+            self.device_view.auto_fit = True
+
         # rotate entire view:
         self.device_view.rotate(angle_step)
         # undo rotation on text for maintaining readability
@@ -153,6 +158,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _zoom_in(self, sx, sy):
         logger.debug("Zoom In")
+        # disable auto fit if user wants to zoom in
+        if self.device_view.auto_fit:
+            self.device_view.auto_fit = False
         self.device_view.scale(sx, sy)
 
     def _zoom_out(self, sx, sy):
