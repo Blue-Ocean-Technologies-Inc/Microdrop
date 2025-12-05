@@ -34,5 +34,8 @@ LAYERS_VIEW_MIN_HEIGHT = 250
 x_zoom_scale = 1.15
 y_zoom_scale = 1.15
 
+## device view margin when auto fit
+AUTO_FIT_MARGIN_SCALE = 0.95
+
 # main view config
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"

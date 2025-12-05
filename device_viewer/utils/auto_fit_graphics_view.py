@@ -2,6 +2,7 @@ from pyface.qt.QtWidgets import QGraphicsView
 from pyface.qt.QtCore import Qt, Signal
 from pyface.qt.QtGui import QPainter
 
+from device_viewer.consts import AUTO_FIT_MARGIN_SCALE
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -14,6 +15,11 @@ class AutoFitGraphicsView(QGraphicsView):
     display_state_signal = Signal(str)
 
     def __init__(self, *args, **kwargs):
+
+        # check initial auto fit value
+        self.auto_fit = kwargs.pop('auto_fit', True)
+        self.auto_fit_margin_scale = kwargs.pop('auto_fit_margin_scale', AUTO_FIT_MARGIN_SCALE)
+
         super().__init__(*args, **kwargs)
         
         self.setRenderHint(QPainter.Antialiasing, True)
@@ -21,4 +27,7 @@ class AutoFitGraphicsView(QGraphicsView):
 
     def fit_to_scene_rect(self):
         if self.scene():
-            self.fitInView(self.scene().sceneRect().adjusted(20, 20, 20, 20), Qt.AspectRatioMode.KeepAspectRatio)
+            self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+        # scale down to leave margin
+        self.scale(self.auto_fit_margin_scale, self.auto_fit_margin_scale)
