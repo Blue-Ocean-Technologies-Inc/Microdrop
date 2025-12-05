@@ -361,7 +361,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         elif button == Qt.RightButton:
             self._right_mouse_pressed = True
-            self._electrode_view_right_clicked =  self.get_electrode_view_for_scene_pos(event.scene_pos())
+            self._electrode_view_right_clicked =  self.get_electrode_view_for_scene_pos(event.scenePos())
 
     def handle_mouse_move_event(self, event):
         """Handle the dragging motion."""
