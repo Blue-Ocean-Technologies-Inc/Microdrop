@@ -68,7 +68,7 @@ class ElectrodeScene(QGraphicsScene):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
-        if not self.interaction_service.handle_wheel_event(event):
+        if not self.interaction_service.handle_scene_wheel_event(event):
             super().wheelEvent(event)
 
     def detect_droplet(self):

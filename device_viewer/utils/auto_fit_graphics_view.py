@@ -44,10 +44,23 @@ class AutoFitGraphicsView(QGraphicsView):
         # forward all the key press events to the interaction service event if interaction disabled:
         scene = self.scene()
 
-        if isinstance(scene, ElectrodeScene):
-            if hasattr(scene, 'interaction_service'):
-                scene.interaction_service.handle_key_press_event(event)
-                return
+        if not self.isInteractive():
+            if isinstance(scene, ElectrodeScene):
+                if hasattr(scene, 'interaction_service'):
+                    scene.interaction_service.handle_key_press_event(event)
+                    return
 
 
         super().keyPressEvent(event)
+
+    def wheelEvent(self, event):
+        # forward all the key press events to the interaction service event if interaction disabled:
+        scene = self.scene()
+
+        if not self.isInteractive():
+            if isinstance(scene, ElectrodeScene):
+                if hasattr(scene, 'interaction_service'):
+                    scene.interaction_service.handle_wheel_event(event)
+                    return
+
+        super().wheelEvent(event)

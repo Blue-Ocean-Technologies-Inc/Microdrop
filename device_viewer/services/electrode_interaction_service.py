@@ -1,5 +1,5 @@
-from PySide6.QtGui import QKeyEvent, Qt
-from PySide6.QtWidgets import QGraphicsView
+from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent
+from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
@@ -428,9 +428,18 @@ class ElectrodeInteractionControllerService(HasTraits):
         elif button == Qt.RightButton:
             self._right_mouse_pressed = False
 
-    def handle_wheel_event(self, event):
+    def handle_scene_wheel_event(self, event: 'QGraphicsSceneWheelEvent'):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle = event.delta()
+            self.handle_ctrl_mouse_wheel_event(angle)
+            event.accept()
+            return True
+        else:
+            return False
+
+    def handle_wheel_event(self, event: 'QWheelEvent'):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            angle = event.angleDelta().y()
             self.handle_ctrl_mouse_wheel_event(angle)
             event.accept()
             return True
