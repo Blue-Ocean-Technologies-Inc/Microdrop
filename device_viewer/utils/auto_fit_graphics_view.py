@@ -25,6 +25,12 @@ class AutoFitGraphicsView(QGraphicsView):
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.TextAntialiasing, True)
 
+    def resizeEvent(self, event):
+        if self.auto_fit:
+            self.fit_to_scene_rect()
+
+        super().resizeEvent(event)
+
     def fit_to_scene_rect(self):
         if self.scene():
             self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)

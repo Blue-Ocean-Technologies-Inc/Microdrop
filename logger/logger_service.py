@@ -3,7 +3,7 @@ import logging
 MIN_APP_LOGLEVEL = 'WARNING'
 ROOT_LOGLEVEL = 'WARNING'
 
-DEV_MODE = False
+DEV_MODE = True
 
 # ANSI color codes
 COLORS = {
