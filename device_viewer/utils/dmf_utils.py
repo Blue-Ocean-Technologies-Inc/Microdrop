@@ -62,6 +62,12 @@ class SvgUtil(HasTraits):
 
         svg_processor = SVGProcessor(filename=filename)
 
+        ################################################
+        ## Load Data from svg file
+        ################################################
+
+        connection_lines = None
+
         for child in svg_processor.root:
             if "Device" in child.attrib.values():
                 self.set_fill_black(child)
@@ -72,18 +78,26 @@ class SvgUtil(HasTraits):
 
             elif "Connections" in child.attrib.values():
                 connection_lines = svg_processor.extract_connections(child)
-                if connection_lines is not None:
-                    try:
-                        self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
-                    except AlgorithmError as e:
-                        logger.error(e)
-                        # publish this to have a popup inform user about this
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":
                 scale = child.find("scale")
                 if scale is not None:
                     self.area_scale = float(scale.text)
                     logger.info(f"Pixel scale set to {self.area_scale} from SVG metadata.")
+
+        #############################################
+        ## Process svg data
+        #############################################
+        if not self.polygons:
+            logger.error("No polygons found in SVG file. Failed load attempt.")
+            raise ValueError("No polygons found in SVG file. Failed load attempt.")
+
+        if connection_lines is not None:
+            try:
+                self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
+            except AlgorithmError as e:
+                logger.error(e)
+                # publish this to have a popup inform user about this
 
         if len(self.electrodes) > 0:
             self.find_electrode_centers()
