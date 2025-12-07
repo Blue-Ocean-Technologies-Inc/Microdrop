@@ -69,14 +69,14 @@ class SvgUtil(HasTraits):
         connection_lines = None
 
         for child in svg_processor.root:
-            if "Device" in child.attrib.values():
+            if "device" in [val.lower() for val in child.attrib.values()]:
                 self.set_fill_black(child)
                 self.electrodes = svg_processor.svg_to_electrodes(child)
                 self.min_x, self.min_y, self.max_x, self.max_y = svg_processor.get_bounding_box()
 
                 self.polygons = self.get_electrode_polygons()
 
-            elif "Connections" in child.attrib.values():
+            elif "connections" in [val for val in child.attrib.values()]:
                 connection_lines = svg_processor.extract_connections(child)
 
             elif child.tag == "{http://www.w3.org/2000/svg}metadata":

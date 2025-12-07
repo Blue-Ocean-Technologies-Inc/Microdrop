@@ -1,18 +1,22 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox, QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem, QSizePolicy, QApplication
-from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
-from PySide6.QtGui import QImage, QPainter, QPixmap
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
-from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
-from apptools.preferences.api import Preferences
-import cv2
-import time
+# -*- coding: utf-8 -*-
 import os
 import sys
+import cv2
+import time
 import ctypes
-import ctypes.util
 import signal
 import subprocess
+import ctypes.util
+
 from pathlib import Path
+from apptools.preferences.api import Preferences
+from PySide6.QtCore import Slot, QTimer, QStandardPaths, Signal
+from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtWidgets import (QWidget, QHBoxLayout, QPushButton, QVBoxLayout, QComboBox,
+                               QLabel, QGraphicsScene, QGraphicsPixmapItem, QStyleOptionGraphicsItem,
+                               QSizePolicy, QApplication)
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QVideoFrameFormat
+from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
@@ -30,7 +34,8 @@ class CameraControlWidget(QWidget):
     screen_capture_signal = Signal(object)
     screen_recording_signal = Signal(object)
 
-    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem, pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
+    def __init__(self, model, capture_session: QMediaCaptureSession, video_item: QGraphicsVideoItem,
+                 pixmap_item: QGraphicsPixmapItem, scene: QGraphicsScene, preferences: Preferences):
         super().__init__()
         self.preferences = preferences
         self.model = model
