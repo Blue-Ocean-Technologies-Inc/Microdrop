@@ -34,9 +34,10 @@ class DeviceViewMainModel(HasTraits):
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
     # Camera-Edit: User can edit the perspecive correction of the camera feed
+    # Pan: User can pan svg device (useful when zoomed in)
     # To change the mode, set the mode property and clean up any references/inconsistencies
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
-
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
+    last_mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
 
     # Editor related properties
     mode_name = Property(Str, observe="mode")
@@ -134,10 +135,26 @@ class DeviceViewMainModel(HasTraits):
                 alpha_value.visible = visible
                 return
 
+    def goto_last_mode(self):
+        self.mode = self.last_mode
+
+    def flip_mode_activation(self, mode):
+        """
+        Method to enter mode if it is different from the current mode.
+        Exits mode to last mode if mode is current mode.
+        """
+        current_mode = self.mode
+        if current_mode == mode:
+            self.goto_last_mode()
+        else:
+            self.mode = mode
+
     # ------------------ Observers ------------------------------------
 
     @observe('mode')
     def mode_change(self, event):
+        self.last_mode = event.old # for use in goto_last_mode method
+
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
             self.message = ""
             self.routes.layer_to_merge = None
