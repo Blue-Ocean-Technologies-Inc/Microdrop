@@ -102,12 +102,19 @@ class CameraControlWidget(QWidget):
         ####### Rotate camera option #################
         self.rotate_camera_button = QPushButton("flip_camera_ios")
         self.rotate_camera_button.setToolTip("Rotate Camera")
-        self.rotate_camera_button.clicked.connect(self.scene.interaction_service.handle_rotate_camera)
+
+        def _rotate_camera():
+            self.scene.interaction_service.handle_rotate_camera()
+        self.rotate_camera_button.clicked.connect(_rotate_camera)
 
         ######### Rotate device option ################
         self.rotate_device_button = QPushButton("rotate_90_degrees_cw")
         self.rotate_device_button.setToolTip("Rotate Device")
-        self.rotate_device_button.clicked.connect(self.scene.interaction_service.handle_rotate_device)
+
+        def _rotate_device():
+            self.scene.interaction_service.handle_rotate_device()
+
+        self.rotate_device_button.clicked.connect(_rotate_device)
 
         ###### Single toggle button for camera on/off #####
         self.camera_toggle_button = QPushButton("videocam_off")
