@@ -2,15 +2,15 @@ from pathlib import Path
 import filecmp
 
 from apptools.preferences.api import PreferencesHelper
-from traits.api import File, Range, Directory, Dict, Int
+from traits.api import File, Range, Directory, Dict, Property
 from traits.etsconfig.api import ETSConfig
-from traitsui.api import VGroup, View, Item, FileEditor
+from traitsui.api import VGroup, View, Item, FileEditor, Group
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 
-from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
+from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group, create_item_label_pair
 from microdrop_utils.file_handler import safe_copy_file
 from logger.logger_service import get_logger
 
@@ -18,7 +18,8 @@ logger = get_logger(__name__)
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 
-from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE # HOVERED_ELECTRODE_LIGHTNESS, HOVERED_ACTUATED_ELECTRODE_LIGHTNESS
+from .consts import DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, MASTER_SVG_FILE, \
+    AUTO_FIT_MARGIN_SCALE, ZOOM_SENSITIVITY
 from .default_settings import default_alphas, default_visibility
 
 
@@ -33,15 +34,21 @@ class DeviceViewerPreferences(PreferencesHelper):
     preferences_path = "microdrop.device_viewer"
 
     #### Preferences ##########################################################
+    ### Side bar prefs ###
     DEVICE_VIEWER_SIDEBAR_WIDTH = Range(value=DEVICE_VIEWER_SIDEBAR_WIDTH, low=0, high=10000)
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
 
-    # HOVERED_ELECTRODE_LIGHTNESS = Range(value=HOVERED_ELECTRODE_LIGHTNESS, low=0, high=100)
-    # HOVERED_ACTUATED_ELECTRODE_LIGHTNESS = Range(value=HOVERED_ACTUATED_ELECTRODE_LIGHTNESS, low=0, high=100)
-
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
+
+    ### main view prefs ###
+    AUTO_FIT_MARGIN_SCALE = Range(value=AUTO_FIT_MARGIN_SCALE, low=1, high=100, mode="spinner")
+    ZOOM_SENSITIVITY = Range(value=ZOOM_SENSITIVITY, low=1, high=100, mode='spinner')
+
+    # getters for processed values from int set in spinner
+    _auto_fit_margin_scale = Property(observe='AUTO_FIT_MARGIN_SCALE')
+    _zoom_scale = Property(observe='ZOOM_SENSITIVITY')
 
     DEFAULT_SVG_FILE = File
 
@@ -88,6 +95,12 @@ class DeviceViewerPreferences(PreferencesHelper):
 
         return str(default_user_file)
 
+    def _get__auto_fit_margin_scale(self) -> float:
+        return self.AUTO_FIT_MARGIN_SCALE / 100
+
+    def _get__zoom_scale(self) -> float:
+        return 1 + (self.ZOOM_SENSITIVITY / 100)
+
 
 device_viewer_tab = PreferencesCategory(
     id="microdrop.device_viewer.preferences",
@@ -122,8 +135,9 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
-    # Create the single item for the default svg for the main view group.
-    default_svg_setting_group = create_item_label_group(
+    ########## Main view grid ###########################
+    # Create items for the default svg for the main view group.
+    default_svg_setting_item = create_item_label_pair(
             'DEFAULT_SVG_FILE',
             label_text='Default Device Layout',
             item_editor=FileEditor(
@@ -132,22 +146,23 @@ class DeviceViewerPreferencesPane(PreferencesPane):
             ),
         )
 
-    # # add setting for hovered electrode lightness
-    # hovered_lightness_setting = create_item_label_group(
-    #     'HOVERED_ELECTRODE_LIGHTNESS',
-    #     label_text='Hovered Electrode Lightness',
-    # )
-    #
-    # hovered_actuation_lightness_setting = create_item_label_group(
-    #     'HOVERED_ACTUATED_ELECTRODE_LIGHTNESS',
-    #     label_text='Hovered Actuation Lightness')
+    default_auto_fit_margin_scale_item = create_item_label_group(
+            'AUTO_FIT_MARGIN_SCALE',
+    )
 
-    main_view_settings = VGroup(
-        default_svg_setting_group, # hovered_lightness_setting, hovered_actuation_lightness_setting,
+    default_zoom_sensitivity = create_item_label_group(
+        'ZOOM_SENSITIVITY',
+    )
+
+    main_view_settings = Group(
+        [default_svg_setting_item, default_auto_fit_margin_scale_item, default_zoom_sensitivity],
         label="Main View",
+        show_labels = False,
         show_border=True,
         style_sheet=preferences_group_style_sheet,
     ),
+
+    ########################################################################################
 
     view = View(
 

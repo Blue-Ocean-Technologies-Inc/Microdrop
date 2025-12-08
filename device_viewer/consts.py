@@ -30,5 +30,11 @@ DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
+## device vew zoom sensitivity
+ZOOM_SENSITIVITY = 5
+
+## device view margin when auto fit
+AUTO_FIT_MARGIN_SCALE = 95
+
 # main view config
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"

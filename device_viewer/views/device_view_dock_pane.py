@@ -83,6 +83,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Views
     scene = Instance(QGraphicsScene) 
     device_view = Instance(AutoFitGraphicsView)
+    device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
     layer_ui = None
     mode_picker_view = None
@@ -150,7 +151,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################################################################################################
 
         self.scene = ElectrodeScene(self)
-        self.device_view = AutoFitGraphicsView(self.scene)
+        self.device_view = AutoFitGraphicsView(self.scene, auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
 
@@ -284,6 +285,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             model=new_model,
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
+            device_viewer_preferences=self.device_viewer_preferences,
             application=self.task.window.application
         )
 
@@ -758,3 +760,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             elif self.model.step_label:
                 _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
+
+    @observe("device_viewer_preferences:_auto_fit_margin_scale ")
+    def _auto_fit_margin_scale_change(self, event):
+        self.device_view.auto_fit_margin_scale = event.new

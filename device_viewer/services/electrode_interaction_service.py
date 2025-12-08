@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QGraphicsView
+from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent
+from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
@@ -10,9 +11,12 @@ from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView
+from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, \
+    ElectrodeEndpointItem
 from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
+from ..preferences import DeviceViewerPreferences
+from ..views.electrode_view.electrode_view_helpers import find_path_item
 
 logger = get_logger(__name__)
 
@@ -24,6 +28,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     - model: The main model instance.
     - electrode_view_layer: The current electrode layer view.
     - device_view: the current QGraphics device view
+    - device_viewer_preferences: preferences for the current device viewer
     - application: The main Envisage application instance.
     """
 
@@ -36,6 +41,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     #: The current device view
     device_view = Instance(QGraphicsView)
 
+    #: The preferences for the current device view
+    device_viewer_preferences = Instance(DeviceViewerPreferences)
+
     #: The current parent envisage application
     application = Instance(IApplication)
 
@@ -46,18 +54,27 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
 
+    _toggle_pan = False
+
 
     # -------------------- Helpers ------------------------
 
+    def traits_init(self, *args, **kwargs):
+        self._last_electrode_id_visited = None
+        self._left_mouse_pressed = False
+        self._electrode_view_right_clicked = None
+        self._right_mouse_pressed = False
+        self._is_drag = False
+
     def remove_last_digit(self, number: int | None) -> int | None:
         if number == None: return None
-        
+
         string = str(number)[:-1]
         if string == "":
             return None
         else:
             return int(string)
-    
+
     def add_digit(self, number: int | None, digit: str) -> int:
         if number == None:
             return int(digit)
@@ -67,7 +84,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     # -------------------- Handlers -----------------------
 
     def handle_reference_point_placement(self, point: QPointF):
-        """Handle the placement of a reference point for perspective correction."""        
+        """Handle the placement of a reference point for perspective correction."""
         # Add the new point to the reference rect
         self.rect_buffer.append(point)
         if len(self.rect_buffer) == 4:  # We have a rectangle now
@@ -98,6 +115,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     #######################################################################################################
     # Key handlers
     #######################################################################################################
+
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
             new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
@@ -135,12 +153,64 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._rotate_device_view(90)
 
     def _rotate_device_view(self, angle_step):
+
+        # enable auto fit for rotations:
+        if not self.device_view.auto_fit:
+            self.device_view.auto_fit = True
+
         # rotate entire view:
         self.device_view.rotate(angle_step)
         # undo rotation on text for maintaining readability
         self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
 
         self.device_view.fit_to_scene_rect()
+
+    def handle_ctrl_mouse_wheel_event(self, angle):
+
+        if angle > 0:
+            self._zoom_in()
+        else:
+            self._zoom_out()
+
+    def _zoom_in(self, scale=None):
+        logger.debug("Zoom In")
+        # disable auto fit if user wants to zoom in
+        if self.device_view.auto_fit:
+            self.device_view.auto_fit = False
+
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(scale, scale)
+
+    def _zoom_out(self, scale=None):
+        logger.debug("Zoom Out")
+
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(1 / scale, 1 / scale)
+
+    def handle_ctrl_plus(self):
+        self._zoom_in()
+
+    def handle_ctrl_minus(self):
+        self._zoom_out()
+
+    def handle_space(self):
+        self._toggle_pan =  not self._toggle_pan
+
+        # Disable interaction with items (clicking/hovering) while panning
+        self.device_view.setInteractive(not self._toggle_pan)
+
+        def _apply_drag_mode(enabled: bool):
+            if enabled:
+                self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+            else:
+                self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
+
+        _apply_drag_mode(self._toggle_pan)
+
 
     ########################################################################################################
 
@@ -172,11 +242,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         '''Handle a route segment being erased'''
         current_route = self.model.routes.get_selected_route()
         if current_route == None: return
-        
+
         if current_route.can_remove(from_id, to_id):
             new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
             self.model.routes.replace_layer(self.model.routes.selected_layer, new_routes)
-    
+
     def handle_endpoint_erase(self, electrode_id):
         '''Handle the erase being triggered by hovering an endpoint'''
         current_route = self.model.get_selected_route()
@@ -214,9 +284,169 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def get_mode(self):
         return self.model.mode
-    
+
     def set_mode(self, mode):
         self.model.mode = mode
+
+    def get_electrode_view_for_scene_pos(self, scene_pos):
+        return self.device_view.scene().get_item_under_mouse(scene_pos, ElectrodeView)
+
+    ########## super user interaction event handlers ####################
+
+    def handle_key_press_event(self, event: QKeyEvent):
+        char = event.text()
+        key = event.key()
+
+        if char.isprintable() and char.isdigit():  # If an actual char digit was inputted
+            self.handle_digit_input(char)
+
+        elif key == Qt.Key_Backspace:
+            self.handle_backspace()
+
+        if (event.modifiers() & Qt.ControlModifier):
+            if event.key() == Qt.Key_Right:
+                self.handle_ctrl_key_right()
+
+            if event.key() == Qt.Key_Left:
+                self.handle_ctrl_key_left()
+
+            # Check for Plus (Key_Plus is Numpad, Key_Equal is standard keyboard '+')
+            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+                self.handle_ctrl_plus()
+
+            if event.key() == Qt.Key.Key_Minus:
+                self.handle_ctrl_minus()
+
+        if (event.modifiers() & Qt.AltModifier):
+            if event.key() == Qt.Key_Right:
+                self.handle_alt_key_right()
+
+            elif event.key() == Qt.Key_Left:
+                self.handle_alt_key_left()
+
+        if event.key() == Qt.Key.Key_Space:
+            self.handle_space()
+
+    def handle_mouse_press_event(self, event):
+        """Handle the start of a mouse click event."""
+
+        button = event.button()
+        mode = self.get_mode()
+
+        if button == Qt.LeftButton:
+            self._left_mouse_pressed = True
+            electrode_view =  self.get_electrode_view_for_scene_pos(event.scenePos())
+
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    self._last_electrode_id_visited = electrode_view.id
+
+            elif mode == "auto":
+                if electrode_view:
+                    is_alt_pressed = event.modifiers() & Qt.KeyboardModifier.AltModifier
+                    self.handle_autoroute_start(electrode_view.id,
+                                                                    avoid_collisions=not is_alt_pressed)
+                else:  # No electrode clicked, exit autoroute mode
+                    self.set_mode("edit")
+
+            elif mode == "channel-edit":
+                if electrode_view:
+                    self.handle_electrode_channel_editing(electrode_view.electrode)
+
+            elif mode == "camera-place":
+                self.handle_reference_point_placement(event.scenePos())
+
+            elif mode == "camera-edit":
+                self.handle_perspective_edit_start(event.scenePos())
+
+        elif button == Qt.RightButton:
+            self._right_mouse_pressed = True
+            self._electrode_view_right_clicked =  self.get_electrode_view_for_scene_pos(event.scenePos())
+
+    def handle_mouse_move_event(self, event):
+        """Handle the dragging motion."""
+
+        mode = self.get_mode()
+        electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+        self.handle_electrode_hover(electrode_view)
+
+        if self._left_mouse_pressed:
+            # Only proceed if we have a valid electrode view.
+            if mode in ("edit", "draw", "edit-draw"):
+                if electrode_view:
+                    if self._last_electrode_id_visited == None:  # No electrode clicked yet (for example, first click was not on electrode)
+                        self._last_electrode_id_visited = electrode_view.id
+                    else:
+                        found_connection_item = find_path_item(self.device_view.scene(),
+                                                               (self._last_electrode_id_visited, electrode_view.id))
+                        if found_connection_item is not None:  # Are the electrodes neigbors? (This excludes self)
+                            self.handle_route_draw(self._last_electrode_id_visited,
+                                                   electrode_view.id)
+                            self._last_electrode_id_visited = electrode_view.id  # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
+                            self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
+
+            elif mode == "auto":
+                if electrode_view:
+                    self.handle_autoroute(
+                        electrode_view.id)  # We store last_electrode_id_visited as the source node
+
+            elif mode == "camera-edit":
+                self.handle_perspective_edit(event.scenePos())
+
+        if self._right_mouse_pressed:
+            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
+                connection_item = self.device_view.scene().get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
+                endpoint_item = self.device_view.scene().get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+                if connection_item:
+                    (from_id, to_id) = connection_item.key
+                    self.handle_route_erase(from_id, to_id)
+                elif endpoint_item:
+                    self.handle_endpoint_erase(endpoint_item.electrode_id)
+
+    def handle_mouse_release_event(self, event):
+        """Finalize the drag operation."""
+        button = event.button()
+
+        if button == Qt.LeftButton:
+            self._left_mouse_pressed = False
+            mode = self.get_mode()
+            if mode == "auto":
+                self.handle_autoroute_end()
+            elif mode in ("edit", "draw", "edit-draw"):
+                electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+                # If it's a click (not a drag) since only one electrode selected:
+                if not self._is_drag and electrode_view:
+                    self.handle_electrode_click(electrode_view.id)
+
+                # Reset left-click related vars
+                self._is_drag = False
+
+                if mode == "edit-draw":  # Go back to draw
+                    self.set_mode("draw")
+            elif mode == "camera-edit":
+                self.handle_perspective_edit_end()
+        elif button == Qt.RightButton:
+            self._right_mouse_pressed = False
+
+    def handle_scene_wheel_event(self, event: 'QGraphicsSceneWheelEvent'):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            angle = event.delta()
+            self.handle_ctrl_mouse_wheel_event(angle)
+            event.accept()
+            return True
+        else:
+            return False
+
+    def handle_wheel_event(self, event: 'QWheelEvent'):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            angle = event.angleDelta().y()
+            self.handle_ctrl_mouse_wheel_event(angle)
+            event.accept()
+            return True
+        else:
+            return False
+
+    ############## Traits observers ##############################
 
     @observe("model.routes.layers.items.visible")
     @observe("model.routes.selected_layer")
