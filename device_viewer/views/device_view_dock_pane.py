@@ -544,14 +544,21 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
         self.remove_current_layer()
+
         # use model method to figure out default alpha values taking into account visible settings.
         default_alphas = {key: self.model.get_alpha(key) for key in self.device_viewer_preferences.default_alphas}
+
+        # create new electrode layer and add to scene
         self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
-        self.scene.setSceneRect(self.scene.itemsBoundingRect())
-        self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self.undo_manager.active_stack.clear()
 
+        # reset device view transformations and set fit new scene items to view
+        self.device_view.resetTransform()
+        self.scene.setSceneRect(self.scene.itemsBoundingRect())
+        self.device_view.fit_to_scene_rect()
+
+        # new device: reset undo manager.
+        self.undo_manager.active_stack.clear()
 
     ###################################################################################################################
     ###### SVG file loading / saving handling ########
