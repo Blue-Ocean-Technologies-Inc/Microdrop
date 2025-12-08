@@ -17,6 +17,7 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession
 
 from PySide6.QtWidgets import QScrollArea
 
+from .viewport_settings_view.widget import ZoomViewModel, ZoomControlWidget
 ##### local imports ######
 from ..default_settings import video_key
 from ..models.alpha import AlphaValue
@@ -538,6 +539,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.calibration_view = CalibrationView(self.model)
         self.calibration_view.setParent(main_container)
 
+        vm = ZoomViewModel(model=self.model)
+        self.viewport_controls_widget =  ZoomControlWidget(vm)
+
+        scroll_layout.addWidget(
+            CollapsibleVStackBox("Viewport Controls",
+                                 control_widgets=self.viewport_controls_widget)
+        )
         scroll_layout.addWidget(
             CollapsibleVStackBox("Camera Controls", control_widgets=[self.camera_control_widget, self.alpha_view_ui.control])
         )
