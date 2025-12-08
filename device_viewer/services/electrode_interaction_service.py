@@ -54,9 +54,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
 
-    _toggle_pan = False
-
-
     # -------------------- Helpers ------------------------
 
     def traits_init(self, *args, **kwargs):
@@ -197,20 +194,21 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_ctrl_minus(self):
         self._zoom_out()
 
-    def handle_space(self):
-        self._toggle_pan =  not self._toggle_pan
+    def _apply_pan_mode(self):
+        enabled = self.model.mode == "pan"
 
         # Disable interaction with items (clicking/hovering) while panning
-        self.device_view.setInteractive(not self._toggle_pan)
+        self.device_view.setInteractive(not enabled)
 
-        def _apply_drag_mode(enabled: bool):
-            if enabled:
-                self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-            else:
-                self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        if enabled:
+            self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        else:
+            self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
 
-        _apply_drag_mode(self._toggle_pan)
+    def handle_space(self):
+        self.model.flip_mode_activation(mode='pan')
 
+        # Observer routine will call apply pan mode #
 
     ########################################################################################################
 
@@ -482,13 +480,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
                 self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
 
-    @observe("model.mode")
+    @observe("model:mode")
     def _on_mode_change(self, event):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
             self.electrode_view_layer.clear_reference_rect()
 
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer = []
+
+        if event.new == 'pan' or event.old == 'pan':
+            self._apply_pan_mode()
 
     @observe('model.electrode_scale', post_init=True)
     def electrode_area_scale_edited(self, event):
