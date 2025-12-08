@@ -141,8 +141,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
             self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
 
-        self.model.electrodes.set_electrodes_from_svg_file(self.device_viewer_preferences.DEFAULT_SVG_FILE)
-
         ############## load preferred / default camera options #########################
         self.model.load_camera_perspective_from_preferences()
 
@@ -275,9 +273,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
-
-        # Trigger an update to redraw and re-initialize the svg widget once a new svg file is selected.
-        self.set_view_from_model(new_model.electrodes)
         logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
 
         # Initialize the electrode mouse / key interaction service with the new model and layer
@@ -401,8 +396,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         """Called when the task is activated."""
-        logger.debug(f"Device Viewer Task activated. Setting default view with {self.device_viewer_preferences.DEFAULT_SVG_FILE}...")
-        self.set_interaction_service(self.model)
+        self._initialize_svg_view()
 
         ###################################################################
         # Initialize camera primitives
@@ -565,16 +559,29 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def _on_load_svg_success(self):
         """Open a file dialog to select an SVG file and set it in the central pane."""
-        svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE # since OK, the default should have changed now.
-        logger.info(f"Selected SVG file: {svg_file}")
-
-        self.model.reset()
         self.task.window.status_bar_manager.messages.append('Loading ...') # Set loading label while the SVG is being processed
 
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file) # FIXME: Slow! Calculating centers via np.mean
-        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+        self.model.reset()
+
+        # since OK, the default svg-file should have changed now. Initialize svg view uses this by default
+        logger.info(f"Selected SVG file: {self.device_viewer_preferences.DEFAULT_SVG_FILE}")
+
+        self._initialize_svg_view()
+
         self.task.window.status_bar_manager.messages.pop()
 
+    def _initialize_svg_view(self, svg_file=None):
+        if svg_file is None:
+            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
+
+        # create model using svg data
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
+        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+
+        # Trigger an update to redraw and re-initialize view using model.
+        self.set_view_from_model(self.model.electrodes)
+
+        # Initialize service to handle user interactions.
         self.set_interaction_service(self.model)
         logger.info(f"Electrodes model set to {self.model}")
 
@@ -727,7 +734,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         if not self.model.camera_perspective.camera_resolution:
             return
-        
+
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
         if self.opencv_pixmap:
