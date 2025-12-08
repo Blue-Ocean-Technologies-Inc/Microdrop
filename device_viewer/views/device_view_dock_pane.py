@@ -271,32 +271,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
     # ------- Device View class methods -------------------------
     ################################################################################################
-    def set_interaction_service(self, new_model):
-        """Handle when the electrodes model changes."""
-        logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
-
-        # Initialize the electrode mouse / key interaction service with the new model and layer
-        interaction_service = ElectrodeInteractionControllerService(
-            model=new_model,
-            electrode_view_layer=self.current_electrode_layer,
-            device_view=self.device_view,
-            device_viewer_preferences=self.device_viewer_preferences,
-            application=self.task.window.application
-        )
-
-        # Update the scene with the interaction service
-        self.scene.interaction_service = interaction_service
-        self.scene.interaction_service.electrode_state_recolor(None)
-
-        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
-
-    def remove_current_layer(self):
-        """
-        Utility methods to remove current scene's electrode layer.
-        """
-        if self.current_electrode_layer:
-            self.current_electrode_layer.remove_all_items_to_scene(self.scene)
-
     def add_traits_event_to_undo_stack(self, event):
         command = None
         if isinstance(event, TraitChangeEvent):
@@ -383,6 +357,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
 
+    # --------------UI view content creation / configuration helpers ---------------------------------
+
     def _apply_initial_theme_styling(self):
         """Apply initial theme styling when the UI is first built"""
         try:
@@ -393,6 +369,93 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.debug(f"Error applying initial theme: {e}")
             # Fallback to light theme
             self._update_theme_styling("light")
+
+    def set_interaction_service(self, new_model):
+        """Handle when the electrodes model changes."""
+        logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
+
+        # Initialize the electrode mouse / key interaction service with the new model and layer
+        interaction_service = ElectrodeInteractionControllerService(
+            model=new_model,
+            electrode_view_layer=self.current_electrode_layer,
+            device_view=self.device_view,
+            device_viewer_preferences=self.device_viewer_preferences,
+            application=self.task.window.application
+        )
+
+        # Update the scene with the interaction service
+        self.scene.interaction_service = interaction_service
+        self.scene.interaction_service.electrode_state_recolor(None)
+
+        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
+
+    def remove_current_layer(self):
+        """
+        Utility methods to remove current scene's electrode layer.
+        """
+        if self.current_electrode_layer:
+            self.current_electrode_layer.remove_all_items_to_scene(self.scene)
+
+    def configure_camera_to_scene_size(self):
+        ##### Size #####
+        scene_rect = self.scene.sceneRect()
+        video_size = QSizeF(scene_rect.width(), scene_rect.height())
+        self.video_item.setSize(video_size)
+
+        ### define default perspective rectangle for video framing ############
+        x, y = scene_rect.center().toTuple()
+        w, h = scene_rect.size().toTuple()
+        w, h = w / 4, h / 4
+        self.model.camera_perspective.default_rect = [QPointF(x - w, y - h), QPointF(x + w, y - h),
+                                                      QPointF(x + w, y + h), QPointF(x - w, y + h)]  # bounding_box
+        if len(self.model.camera_perspective.reference_rect) != 4:
+            # force update so rotation is shown
+            self.model.camera_perspective.update_transformation()
+
+    def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
+        self.remove_current_layer()
+
+        # use model method to figure out default alpha values taking into account visible settings.
+        default_alphas = {key: self.model.get_alpha(key) for key in self.device_viewer_preferences.default_alphas}
+
+        # create new electrode layer and add to scene
+        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
+        self.current_electrode_layer.add_all_items_to_scene(self.scene)
+
+        # Fit the View
+        self.device_view.resetTransform()
+
+        layer_bounding_rect = self.current_electrode_layer.get_electrodes_views_bounding_rect()
+
+        if layer_bounding_rect and not layer_bounding_rect.isEmpty():
+            # Update the scene's boundary to match the new focus area
+            self.scene.setSceneRect(layer_bounding_rect)
+
+            self.device_view.fit_to_scene_rect()
+
+        # recenter the camera to the new device scale
+        if self.video_item:
+            self.configure_camera_to_scene_size()
+
+        # new device: reset undo manager.
+        self.undo_manager.active_stack.clear()
+
+    def _initialize_svg_view(self, svg_file=None):
+        if svg_file is None:
+            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
+
+        # create model using svg data
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
+        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+
+        # Trigger an update to redraw and re-initialize view using model.
+        self.set_view_from_model(self.model.electrodes)
+
+        # Initialize service to handle user interactions.
+        self.set_interaction_service(self.model)
+        logger.info(f"Electrodes model set to {self.model}")
+
+    #--------------------- UI initialization -----------------------
 
     def create_contents(self, parent):
         """Called when the task is activated."""
@@ -412,20 +475,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         ################### Determine Size for video #####################
 
-        ##### Size #####
-        scene_rect = self.scene.itemsBoundingRect()
-        video_size = QSizeF(scene_rect.width(), scene_rect.height())
-        self.video_item.setSize(video_size)
-
-        ### define default perspective rectangle for video framing ############
-        x,y = scene_rect.center().toTuple()
-        w,h = scene_rect.size().toTuple()
-        w,h  = w/4, h/4
-        self.model.camera_perspective.default_rect = [QPointF(x-w, y-h), QPointF(x+w, y-h),
-                                                      QPointF(x+w, y+h), QPointF(x-w, y+h)]#bounding_box
-        if len(self.model.camera_perspective.reference_rect) != 4:
-            # force update so rotation is shown
-            self.model.camera_perspective.update_transformation()
+        self.configure_camera_to_scene_size()
 
         ########## Add video to scene and set as output. ###################
         self.scene.addItem(self.video_item)
@@ -536,22 +586,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         main_container.setLayout(main_layout)
 
-
         # Apply initial theme styling
         self._apply_initial_theme_styling()
 
         return main_container
-
-    def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
-        self.remove_current_layer()
-        # use model method to figure out default alpha values taking into account visible settings.
-        default_alphas = {key: self.model.get_alpha(key) for key in self.device_viewer_preferences.default_alphas}
-        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
-        self.current_electrode_layer.add_all_items_to_scene(self.scene)
-        self.scene.setSceneRect(self.scene.itemsBoundingRect())
-        self.device_view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self.undo_manager.active_stack.clear()
-
 
     ###################################################################################################################
     ###### SVG file loading / saving handling ########
@@ -569,21 +607,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._initialize_svg_view()
 
         self.task.window.status_bar_manager.messages.pop()
-
-    def _initialize_svg_view(self, svg_file=None):
-        if svg_file is None:
-            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
-
-        # create model using svg data
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
-        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
-
-        # Trigger an update to redraw and re-initialize view using model.
-        self.set_view_from_model(self.model.electrodes)
-
-        # Initialize service to handle user interactions.
-        self.set_interaction_service(self.model)
-        logger.info(f"Electrodes model set to {self.model}")
 
     def load_svg_dialog(self):
 

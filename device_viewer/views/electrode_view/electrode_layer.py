@@ -1,3 +1,4 @@
+from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
 from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
 from pyface.qt.QtCore import QPointF
@@ -248,3 +249,24 @@ class ElectrodeLayer():
     def rotate_electrode_views_texts(self, angle=0):
         for electrode_view in self.electrode_views.values():
             electrode_view.rotate_electrode_text(angle)
+
+    def get_electrodes_views_bounding_rect(self) -> 'QRectF':
+        """
+        Calculates the united bounding rectangle of all electrode views
+        in the current layer. Returns an empty QRectF if no views exist.
+        """
+        views = self.electrode_views.values()
+
+        if not views:
+            return QRectF()  # Return empty rect if no items
+
+        # Initialize with the first item's rect
+        # (This avoids the repeated 'if target_rect is None' check inside the loop)
+        iterator = iter(views)
+        target_rect = next(iterator).sceneBoundingRect()
+
+        # Unite with the rest
+        for view in iterator:
+            target_rect = target_rect.united(view.sceneBoundingRect())
+
+        return target_rect
