@@ -552,10 +552,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
 
-        # reset device view transformations and set fit new scene items to view
+        # Fit the View
         self.device_view.resetTransform()
-        self.scene.setSceneRect(self.scene.itemsBoundingRect())
-        self.device_view.fit_to_scene_rect()
+
+        layer_bounding_rect = self.current_electrode_layer.get_electrodes_views_bounding_rect()
+
+        if layer_bounding_rect and not layer_bounding_rect.isEmpty():
+            # Update the scene's boundary to match the new focus area
+            self.scene.setSceneRect(layer_bounding_rect)
+
+            self.device_view.fit_to_scene_rect()
+        else:
+            # Fallback if layer is empty (prevents errors)
+            self.device_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
         # new device: reset undo manager.
         self.undo_manager.active_stack.clear()
