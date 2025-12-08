@@ -38,7 +38,7 @@ from ..services.electrode_interaction_service import ElectrodeInteractionControl
 from .alpha_view.alpha_table import alpha_table_view
 from .calibration_view.widget import CalibrationView
 from .camera_control_view.widget import CameraControlWidget
-from .mode_picker.widget import ModePicker
+from .mode_picker.widget import ModePicker, ModePickerViewModel
 
 # Device Viewer electrode and route views
 from .electrode_view.electrode_scene import ElectrodeScene
@@ -482,7 +482,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
-        self.mode_picker_view = ModePicker(self.model, self)
+        _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
+        self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
         self.mode_picker_view.setParent(main_container)
 
         # camera_control_widget code
