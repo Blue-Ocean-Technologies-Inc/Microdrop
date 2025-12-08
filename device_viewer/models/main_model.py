@@ -94,17 +94,7 @@ class DeviceViewMainModel(HasTraits):
             self.electrodes.svg_model.area_scale = value
 
     def _get_mode_name(self):
-        return {
-            "draw": "Draw",
-            "edit-draw": "Draw",
-            "edit": "Edit",
-            "auto": "Autoroute",
-            "merge": "Merge",
-            "channel-edit": "Channel Edit",
-            "display": "Display",
-            "camera-edit": "Camera Edit",
-            "camera-place": "Camera Place"
-        }.get(self.mode, "Error")
+        return self.mode.title().replace('-', ' ')
 
     def _get_editable(self):
         return self.mode != "display"
