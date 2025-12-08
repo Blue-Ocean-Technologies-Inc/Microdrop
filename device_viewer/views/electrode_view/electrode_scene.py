@@ -102,7 +102,7 @@ class ElectrodeScene(QGraphicsScene):
     def adjust_electrode_area_scale(self):
         """Placeholder for adjusting electrode area."""
         
-        scale_edit_view_controller = ScaleEditViewController(model=self.electrode_view_right_clicked.electrode,
+        scale_edit_view_controller = ScaleEditViewController(model=self.interaction_service._electrode_view_right_clicked.electrode,
                                                              electrode_interaction_service=self.interaction_service)
         scale_edit_view_controller.configure_traits()
 
@@ -123,7 +123,7 @@ class ElectrodeScene(QGraphicsScene):
         context_menu.addAction("Reset Electrodes", self.interaction_service.model.electrodes.reset_electrode_states)
         context_menu.addAction("Find Liquid", self.detect_droplet)
 
-        if self.electrode_view_right_clicked is not None:
+        if self.interaction_service._electrode_view_right_clicked is not None:
             context_menu.addAction("Adjust Electrode Area Scale", self.adjust_electrode_area_scale)
         context_menu.addSeparator()
 
