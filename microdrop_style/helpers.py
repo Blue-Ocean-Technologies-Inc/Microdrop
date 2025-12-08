@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication
 
 from microdrop_style.font_paths import load_material_symbols_font, load_inter_font
@@ -55,3 +55,4 @@ def style_app(app_instance: 'QApplication'):
     LABEL_FONT_FAMILY = load_inter_font()
 
     app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
+    QIcon.setThemeName("Material Symbols Outlined")
