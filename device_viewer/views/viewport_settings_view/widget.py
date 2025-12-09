@@ -100,10 +100,13 @@ class ZoomControlWidget(QWidget):
             from microdrop_style.helpers import is_dark_mode
 
             theme = "dark" if is_dark_mode() else "light"
-            # Use complete stylesheet with tooltips for icon buttons
-            icon_button_style = get_complete_stylesheet(theme, "default")
-            self.setStyleSheet(icon_button_style)
         except Exception as e:
             # Fallback to light theme if there's an error
-            icon_button_style = get_complete_stylesheet("light", "default")
-            self.setStyleSheet(icon_button_style)
+            theme = 'light'
+
+        self.update_theme_styling(theme)
+
+    def update_theme_styling(self, theme="light"):
+        """Update styling when theme changes."""
+        icon_button_style = get_complete_stylesheet(theme, "default")
+        self.setStyleSheet(icon_button_style)

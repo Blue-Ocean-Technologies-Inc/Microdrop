@@ -172,12 +172,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         if hasattr(self, "device_view"):
             self.device_view.setStyleSheet(get_complete_stylesheet(theme))
 
-        if hasattr(self, 'mode_picker_view'):
-            self.mode_picker_view.update_theme_styling(theme)
-        if hasattr(self, 'camera_control_widget'):
-            self.camera_control_widget.update_theme_styling(theme)
-        if hasattr(self, 'calibration_view'):
-            self.calibration_view.update_theme_styling(theme)
+        for widget_name in [
+            'mode_picker_view',
+            'camera_control_view',
+            'calibration_view',
+            'viewport_controls_view',
+        ]:
+            if hasattr(self, widget_name):
+                getattr(self, widget_name).update_theme_styling(theme)
 
     ################################################################################################
     # ------- Dramatiq handlers ---------------------------
