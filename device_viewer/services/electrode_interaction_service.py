@@ -165,9 +165,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_ctrl_mouse_wheel_event(self, angle):
 
         if angle > 0:
-            self._zoom_in()
+            self.model.zoom_in_event = True
         else:
-            self._zoom_out()
+            self.model.zoom_out_event = True
 
     def _zoom_in(self, scale=None):
         logger.debug("Zoom In")
@@ -189,10 +189,10 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.device_view.scale(1 / scale, 1 / scale)
 
     def handle_ctrl_plus(self):
-        self._zoom_in()
+        self.model.zoom_in_event = True # Observer routine will call zoom in
 
     def handle_ctrl_minus(self):
-        self._zoom_out()
+        self.model.zoom_out_event = True # Observer routine will call zoom out
 
     def _apply_pan_mode(self):
         enabled = self.model.mode == "pan"
@@ -512,6 +512,18 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if changed_key == routes_key:
             self.route_redraw(None)
+
+    @observe("model:zoom_in_event", post_init=True)
+    def _zoom_in_event_triggered(self, event):
+        self._zoom_in()
+
+    @observe("model:zoom_out_event", post_init=True)
+    def _zoom_out_event_triggered(self, event):
+        self._zoom_out()
+
+    @observe("model:reset_view_event", post_init=True)
+    def _reset_view_event_triggered(self, event):
+        self._zoom_in()
 
 
 
