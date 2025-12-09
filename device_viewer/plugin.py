@@ -65,7 +65,8 @@ class DeviceViewerPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
-                        path='MenuBar/File'
+                        path='MenuBar/File',
+                        before='Exit',
                     ),
                 ]
             )
