@@ -1,4 +1,4 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Dict
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Dict, Event
 from pyface.undo.api import UndoManager
 import uuid
 
@@ -11,8 +11,7 @@ from ..default_settings import electrode_fill_key, electrode_text_key, electrode
 from ..preferences import DeviceViewerPreferences
 
 from logger.logger_service import get_logger
-from ..utils.camera import qtransform_serialize, qpointf_list_serialize, qpointf_list_deserialize, \
-    qtransform_deserialize
+from ..utils.camera import qpointf_list_serialize, qpointf_list_deserialize
 
 logger = get_logger(__name__)
 
@@ -34,9 +33,10 @@ class DeviceViewMainModel(HasTraits):
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
     # Camera-Edit: User can edit the perspecive correction of the camera feed
+    # Pan: User can pan svg device (useful when zoomed in)
     # To change the mode, set the mode property and clean up any references/inconsistencies
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit")
-
+    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
+    last_mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
 
     # Editor related properties
     mode_name = Property(Str, observe="mode")
@@ -54,6 +54,11 @@ class DeviceViewMainModel(HasTraits):
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
 
     uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
+
+    # -------------------- events ----------------------------------
+    zoom_in_event = Event(desc="Increase device view scale -- zoom into device view")
+    zoom_out_event = Event(desc="Decrease device view scale -- zoom out of device view")
+    reset_view_event = Event(desc="Reset device view scaling -- reset zoom")
 
     # ------------------ Alpha Color Model --------------------
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
@@ -78,9 +83,11 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         # Initialize the alpha map with default values
-        self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
-                                     visible=self.preferences.default_visibility[key])
-                          for key in self.preferences.default_alphas.keys()]
+
+        if self.preferences:
+            self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
+                                         visible=self.preferences.default_visibility[key])
+                              for key in self.preferences.default_alphas.keys()]
 
     # ------------------------- Properties ------------------------
 
@@ -134,10 +141,26 @@ class DeviceViewMainModel(HasTraits):
                 alpha_value.visible = visible
                 return
 
+    def goto_last_mode(self):
+        self.mode = self.last_mode
+
+    def flip_mode_activation(self, mode):
+        """
+        Method to enter mode if it is different from the current mode.
+        Exits mode to last mode if mode is current mode.
+        """
+        current_mode = self.mode
+        if current_mode == mode:
+            self.goto_last_mode()
+        else:
+            self.mode = mode
+
     # ------------------ Observers ------------------------------------
 
     @observe('mode')
     def mode_change(self, event):
+        self.last_mode = event.old # for use in goto_last_mode method
+
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
             self.message = ""
             self.routes.layer_to_merge = None
