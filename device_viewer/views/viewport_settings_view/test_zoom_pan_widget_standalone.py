@@ -100,7 +100,7 @@ if __name__ == "__main__":
             # Bind Signals
             self.vm_signals.zoom_changed.connect(self.apply_zoom)
             self.vm_signals.reset_requested.connect(self.apply_fit)
-            self.vm_signals.drag_mode_changed.connect(self.apply_drag_mode)
+            self.vm_signals.pan_mode_changed.connect(self.apply_drag_mode)
 
             # Set Initial State
             self.apply_drag_mode(self.vm.drag_enabled)

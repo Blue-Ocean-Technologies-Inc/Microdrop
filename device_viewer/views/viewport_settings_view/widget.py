@@ -11,7 +11,8 @@ from traits.api import HasTraits, Instance, Bool, observe, Event
 
 class ZoomViewModelSignals(QObject):
     # Signals to notify the View of changes
-    drag_mode_changed = Signal(bool)  # Emits when drag/pan is toggled
+    pan_mode_changed = Signal(bool)  # Emits when drag/pan is toggled
+
 
 class ZoomViewModel(HasTraits):
     model = Instance(DeviceViewMainModel)
@@ -43,7 +44,7 @@ class ZoomViewModel(HasTraits):
         inform view of current mode. Is it pan mode or not
         """
         self.drag_enabled = event.new == 'pan'
-        self.signals.drag_mode_changed.emit(self.drag_enabled)
+        self.signals.pan_mode_changed.emit(self.drag_enabled)
 
 
 class ZoomControlWidget(QWidget):
@@ -79,7 +80,7 @@ class ZoomControlWidget(QWidget):
 
         ##### View Model Bindings ######
         # Ensure button UI stays in sync if VM changes externally
-        self.vm.signals.drag_mode_changed.connect(btn_pan.setChecked)
+        self.vm.signals.pan_mode_changed.connect(btn_pan.setChecked)
         btn_out.clicked.connect(self.vm.zoom_out)
         btn_in.clicked.connect(self.vm.zoom_in)
         btn_pan.clicked.connect(self.vm.toggle_drag_mode)
