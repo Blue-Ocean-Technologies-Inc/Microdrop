@@ -203,6 +203,9 @@ class Electrodes(HasTraits):
     def svg_save_as(self, new_file):
         self.svg_model.save_to_file(new_file, self.electrode_ids_channels_map)
 
+    def svg_save(self):
+        self.svg_save_as(self.svg_model.filename)
+
     #### Observer methods ######
     @observe('svg_model:area_scale', post_init=True)
     def svg_model_area_scaled_changed(self, event):

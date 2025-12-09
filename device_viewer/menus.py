@@ -23,7 +23,7 @@ def save_svg_dialogue_menu_factory():
         id=PKG + ".save_svg_dialogue",
         dock_pane_id=PKG + ".dock_pane",
         name=f"Save",
-        method="save_svg_dialog",
+        method="save_svg",
     )
 
 def save_as_svg_dialogue_menu_factory():
