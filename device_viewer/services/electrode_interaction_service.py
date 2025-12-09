@@ -523,8 +523,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     @observe("model:reset_view_event", post_init=True)
     def _reset_view_event_triggered(self, event):
-        self._zoom_in()
-
+        self.device_view.fit_to_scene_rect()
 
 
 
