@@ -83,9 +83,11 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         # Initialize the alpha map with default values
-        self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
-                                     visible=self.preferences.default_visibility[key])
-                          for key in self.preferences.default_alphas.keys()]
+
+        if self.preferences:
+            self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
+                                         visible=self.preferences.default_visibility[key])
+                              for key in self.preferences.default_alphas.keys()]
 
     # ------------------------- Properties ------------------------
 
