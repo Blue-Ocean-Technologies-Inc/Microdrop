@@ -2,7 +2,6 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget,  QHBoxLayout, QPushButton
 
 from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 # Assumes microdrop_style is available in the python environment
 from microdrop_style.button_styles import get_complete_stylesheet
 
