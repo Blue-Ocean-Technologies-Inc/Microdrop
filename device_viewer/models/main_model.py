@@ -159,7 +159,9 @@ class DeviceViewMainModel(HasTraits):
 
     @observe('mode')
     def mode_change(self, event):
-        self.last_mode = event.old # for use in goto_last_mode method
+        # do not store camera-place as the last mode. It is a transient mode
+        if not event.old == 'camera-place':
+            self.last_mode = event.old # for use in goto_last_mode method
 
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
             self.message = ""
