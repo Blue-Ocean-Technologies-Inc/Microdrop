@@ -1,6 +1,6 @@
-from pyface.tasks.action.api import SGroup, DockPaneAction
+from pyface.tasks.action.api import DockPaneAction, SMenu
 
-from .consts import PKG, PKG_name
+from .consts import PKG
 
 def load_svg_dialog_menu_factory():
     """
@@ -25,3 +25,8 @@ def save_svg_dialogue_menu_factory():
         name=f"Save Device",
         method="save_svg_dialog",
     )
+
+
+def tools_menu_factory():
+    return SMenu(load_svg_dialog_menu_factory(), save_svg_dialogue_menu_factory(),
+                 id="device_svg_tools", name="Device")
