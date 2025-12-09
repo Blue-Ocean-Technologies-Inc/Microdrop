@@ -42,7 +42,7 @@ class SvgUtil(HasTraits):
         self.electrodes: dict[str, ElectrodeDict] = {}
         self.polygons = {}
         self.connections = {}
-        self.electrode_centers = {}
+        self.electrode_centers: dict[str, tuple[float, float]] = {}
         self.electrode_areas = {}
         self.area_scale = 1.0
 
@@ -100,7 +100,7 @@ class SvgUtil(HasTraits):
                 # publish this to have a popup inform user about this
 
         if len(self.electrodes) > 0:
-            self.find_electrode_centers()
+            self.electrode_centers = self.find_electrode_centroids()
             self.electrode_areas = self.find_electrode_areas()
             self.electrode_areas_scaled = {key: value * self.area_scale for key, value in self.electrode_areas.items()}
 
@@ -110,19 +110,6 @@ class SvgUtil(HasTraits):
                 self.auto_found_connections = True
 
             self.neighbours_to_points()
-
-    def get_electrode_center(self, electrode: str) -> np.ndarray:
-        """
-        Get the center of an electrode
-        """
-        # exclude last element in path that indicates path is closed.
-        return np.mean(self.electrodes[electrode]['path'][:-1], axis=0)
-
-    def find_electrode_centers(self):
-        self.electrode_centers = {}
-
-        for id, _ in self.electrodes.items():
-            self.electrode_centers[id] = self.get_electrode_center(id)
 
     def find_neighbours(self, path: np.ndarray, threshold: float = 10) -> list[str]:
         """
@@ -145,6 +132,9 @@ class SvgUtil(HasTraits):
         Find the areas of the electrodes
         """
         return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
+
+    def find_electrode_centroids(self) -> dict[str, tuple[float, float]]:
+        return {electrode_id: polygon.centroid.coords[0] for electrode_id, polygon in self.get_electrode_polygons().items()}
 
     def find_neighbours_all(self, buffer_distance: float = None) -> dict[str, list[str]]:
 
