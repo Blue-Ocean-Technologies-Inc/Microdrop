@@ -31,7 +31,7 @@ class ZoomViewModel(HasTraits):
     def reset_view(self):
         self.model.reset_view_event = True
 
-    def toggle_drag_mode(self, *args, **kwargs):
+    def toggle_pan_mode(self, *args, **kwargs):
         """
         Enable view to toggle pan mode on/off
         """
@@ -82,7 +82,7 @@ class ZoomControlWidget(QWidget):
         self.vm.signals.pan_mode_changed.connect(btn_pan.setChecked)
         btn_out.clicked.connect(self.vm.zoom_out)
         btn_in.clicked.connect(self.vm.zoom_in)
-        btn_pan.clicked.connect(self.vm.toggle_drag_mode)
+        btn_pan.clicked.connect(self.vm.toggle_pan_mode)
         btn_reset.clicked.connect(self.vm.reset_view)
 
     def _apply_theme_styling(self):
