@@ -1,23 +1,16 @@
-import sys
-import unittest
-from PySide6.QtCore import QObject, Signal, Qt, QEvent, QTimer, QRectF
-from PySide6.QtWidgets import (QApplication, QGraphicsView, QGraphicsScene,
-                               QWidget, QVBoxLayout, QHBoxLayout, QToolButton,
-                               QMainWindow, QGraphicsRectItem, QPushButton)
-from PySide6.QtGui import QPainter, QColor, QBrush, QTransform, QPen, QFont, QIcon
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QWidget,  QHBoxLayout, QPushButton
 
 from device_viewer.models.main_model import DeviceViewMainModel
+from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
 # Assumes microdrop_style is available in the python environment
 from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_style.font_paths import load_material_symbols_font
 
-from traits.api import HasTraits, Instance, Str, Bool, observe
+from traits.api import HasTraits, Instance, Bool, observe, Event
 
 
 class ZoomViewModelSignals(QObject):
     # Signals to notify the View of changes
-    zoom_changed = Signal(int)  # Emits new absolute scale factor
-    reset_requested = Signal()  # Emits when fit-to-view is needed
     drag_mode_changed = Signal(bool)  # Emits when drag/pan is toggled
 
 class ZoomViewModel(HasTraits):
@@ -30,14 +23,13 @@ class ZoomViewModel(HasTraits):
         self.drag_enabled = False
 
     def zoom_in(self):
-        print("zoom in")
+        self.model.zoom_in_event = True
 
     def zoom_out(self):
-        print("zoom_out")
+        self.model.zoom_out_event = True
 
     def reset_view(self):
-        """Reset logic. We reset our internal counter and tell View to fit."""
-        print("reset view")
+        self.model.reset_view_event = True
 
     def toggle_drag_mode(self, *args, **kwargs):
         """
