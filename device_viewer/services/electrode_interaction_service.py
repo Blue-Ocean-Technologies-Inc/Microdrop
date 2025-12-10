@@ -67,7 +67,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     electrode_hovered = Instance(ElectrodeView)
 
     rect_editing_index = -1  # Index of the point being edited in the reference rect
-    rect_buffer = List([])
+    rect_buffer = List(Instance(QPointF), [])
 
     #######################################################################################################
     # Helpers
@@ -524,14 +524,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
 
-    @observe("model.camera_perspective.transformation")
-    @observe("rect_buffer.items")
-    def update_perspective_rect(self, event):
-        if self.electrode_view_layer:
-            if self.model.mode == "camera-edit" and len(self.model.camera_perspective.reference_rect) == 4:
-                self.electrode_view_layer.redraw_reference_rect(self.model)
-            elif self.model.mode == "camera-place" and len(self.rect_buffer) > 1:
-                self.electrode_view_layer.redraw_reference_rect(self.model, partial_rect=self.rect_buffer)
+    @observe("model:camera_perspective:transformed_reference_rect:items")
+    @observe("rect_buffer:items")
+    def _reference_rect_change(self, event):
+        if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
+                self.electrode_view_layer.redraw_reference_rect(rect=event.object)
 
     @observe("model:mode")
     def _on_mode_change(self, event):
@@ -539,7 +536,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.clear_reference_rect()
 
         if event.new == "camera-edit":
-            self.electrode_view_layer.redraw_reference_rect(self.model)
+            self.electrode_view_layer.redraw_reference_rect(self.model.camera_perspective.transformed_reference_rect)
 
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer = []
