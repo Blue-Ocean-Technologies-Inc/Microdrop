@@ -161,8 +161,11 @@ class DeviceViewMainModel(HasTraits):
 
     @observe('mode')
     def mode_change(self, event):
-        # do not store camera-place as the last mode. It is a transient mode
-        if not event.old == 'camera-place':
+        logger.debug(f"Mode change. New mode is: {event.new}")
+        # Do not store last mode when moving between the two camera alignment modes.
+        # They are one "super" mode.
+        if not (event.old == 'camera-edit' and event.new == 'camera-place') and not (event.new == 'camera-edit' and event.old == 'camera-place'):
+            logger.debug(f"Setting last mode to {event.old}")
             self.last_mode = event.old # for use in goto_last_mode method
 
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
