@@ -232,21 +232,27 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.handle_route_erase(*segments[-1]) # Delete last segment
 
     def handle_autoroute_start(self, from_id, avoid_collisions=True): # Run when the user enables autorouting an clicks on an electrode
+        logger.debug("Start Autoroute")
         routes = [layer.route for layer in self.model.routes.layers]
         self.autoroute_paths = find_shortest_paths(from_id, self.model.electrodes.svg_model.neighbours, routes, avoid_collisions=avoid_collisions) # Run the BFS and cache the result dict
         self.model.routes.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
 
     def handle_autoroute(self, to_id):
+        logger.debug(f"Autoroute: Adding route to {to_id}")
         self.model.routes.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy() # Display cached result from BFS
 
     def handle_autoroute_end(self):
-        self.autoroute_paths = {}
-        # only proceed if there is at least one segment
-        if self.model.routes.autoroute_layer.route.get_segments():
-            self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
-        self.model.routes.autoroute_layer = None
-        self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
-        # self.model.mode = 'edit'
+        # only proceed if there is at least one segment and autoroute layer exists
+        if self.model.routes.autoroute_layer:
+            logger.debug("End Autoroute")
+            self.autoroute_paths = {}
+            if self.model.routes.autoroute_layer.route.get_segments():
+                self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
+            self.model.routes.autoroute_layer = None
+            self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
+            # self.model.mode = 'edit'
+        else:
+            logger.warning("Autoroute needs to start by clicking and dragging from an electrode polygon.")
 
     #######################################################################################################
     # Key handlers
@@ -356,8 +362,6 @@ class ElectrodeInteractionControllerService(HasTraits):
                     is_alt_pressed = event.modifiers() & Qt.KeyboardModifier.AltModifier
                     self.handle_autoroute_start(electrode_view.id,
                                                                     avoid_collisions=not is_alt_pressed)
-                else:  # No electrode clicked, exit autoroute mode
-                    self.model.model = "edit"
 
             elif mode == "channel-edit":
                 if electrode_view:
@@ -381,24 +385,21 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.handle_electrode_hover(electrode_view)
 
         if self._left_mouse_pressed:
-            # Only proceed if we have a valid electrode view.
-            if mode in ("edit", "draw", "edit-draw"):
-                if electrode_view:
-                    if self._last_electrode_id_visited == None:  # No electrode clicked yet (for example, first click was not on electrode)
-                        self._last_electrode_id_visited = electrode_view.id
-                    else:
-                        found_connection_item = find_path_item(self.device_view.scene(),
-                                                               (self._last_electrode_id_visited, electrode_view.id))
-                        if found_connection_item is not None:  # Are the electrodes neigbors? (This excludes self)
-                            self.handle_route_draw(self._last_electrode_id_visited,
-                                                   electrode_view.id)
-                            self._last_electrode_id_visited = electrode_view.id  # TODO: Move this outside of if clause, last_electrode_id_visited should always be the last hovered
-                            self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
+            # Only proceed if we are in the appropriate mode with a valid electrode view.
+            # If last electrode view is none then no electrode was clicked yet (for example, first click was not on electrode)
+            if mode in ("edit", "draw", "edit-draw") and electrode_view and self._last_electrode_id_visited:
 
-            elif mode == "auto":
-                if electrode_view:
-                    self.handle_autoroute(
-                        electrode_view.id)  # We store last_electrode_id_visited as the source node
+                    found_connection_item = find_path_item(self.device_view.scene(),
+                                                           (self._last_electrode_id_visited, electrode_view.id))
+
+                    if found_connection_item:  # Are the electrodes neighbours? (This excludes self)
+                        self.handle_route_draw(self._last_electrode_id_visited, electrode_view.id)
+                        self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
+
+            elif mode == "auto" and electrode_view:
+                # only proceed if a new electrode id was visited
+                if electrode_view.id != self._last_electrode_id_visited:
+                    self.handle_autoroute(electrode_view.id)  # We store last_electrode_id_visited as the source node
 
             elif mode == "camera-edit":
                 self.handle_perspective_edit(event.scenePos())
@@ -413,6 +414,10 @@ class ElectrodeInteractionControllerService(HasTraits):
                 elif endpoint_item:
                     self.handle_endpoint_erase(endpoint_item.electrode_id)
 
+        # End of routine: now the current electrode view becomes the "last electrode visited"
+        if electrode_view:
+            self._last_electrode_id_visited = electrode_view.id
+
     def handle_mouse_release_event(self, event):
         """Finalize the drag operation."""
         button = event.button()
@@ -422,6 +427,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             mode = self.model.mode
             if mode == "auto":
                 self.handle_autoroute_end()
+
             elif mode in ("edit", "draw", "edit-draw"):
                 electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
                 # If it's a click (not a drag) since only one electrode selected:
