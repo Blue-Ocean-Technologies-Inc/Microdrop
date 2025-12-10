@@ -377,7 +377,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
-            application=self.task.window.application
         )
 
         # Update the scene with the interaction service

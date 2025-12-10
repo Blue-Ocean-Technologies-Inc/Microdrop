@@ -5,8 +5,6 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent, QGraphics
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
-from envisage.api import IApplication
-
 from device_viewer.models.electrodes import Electrode
 from device_viewer.utils.electrode_route_helpers import find_shortest_paths
 from dropbot_controller.consts import DETECT_DROPLETS
@@ -35,7 +33,6 @@ def remove_last_digit(number: int | None) -> int | None:
     else:
         return int(string)
 
-
 def add_digit(number: int | None, digit: str) -> int:
     if number == None:
         return int(digit)
@@ -51,7 +48,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     - electrode_view_layer: The current electrode layer view.
     - device_view: the current QGraphics device view
     - device_viewer_preferences: preferences for the current device viewer
-    - application: The main Envisage application instance.
     """
 
     #: Device view Model
@@ -65,9 +61,6 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     #: The preferences for the current device view
     device_viewer_preferences = Instance(DeviceViewerPreferences)
-
-    #: The current parent envisage application
-    application = Instance(IApplication)
 
     autoroute_paths = Dict({})
 
