@@ -146,11 +146,6 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle the placement of a reference point for perspective correction."""
         # Add the new point to the reference rect
         self.rect_buffer.append(point)
-        if len(self.rect_buffer) == 4:  # We have a rectangle now
-            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
-            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.rect_buffer]
-            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
-            self.model.mode = "camera-edit"  # Switch to camera-edit mode
 
     def handle_perspective_edit_start(self, point: QPointF):
         """Handle the start of perspective editing."""
@@ -559,6 +554,16 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
                 self.electrode_view_layer.redraw_reference_rect(rect=event.object)
 
+    @observe("rect_buffer:items")
+    def _rect_buffer_change(self, event):
+        logger.debug(f"rect_buffer change: adding point {event.added}. Buffer of length {len(self.rect_buffer)} now.")
+        if len(self.rect_buffer) == 4:  # We have a rectangle now
+            logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
+            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
+            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in event.object]
+            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
+            self.model.mode = "camera-edit"  # Switch to camera-edit mode
+
     @observe("model:mode")
     def _on_mode_change(self, event):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
@@ -568,7 +573,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_reference_rect(self.model.camera_perspective.transformed_reference_rect)
 
         if event.old != "camera-place" and event.new == "camera-place":
-            self.rect_buffer = []
+            self.rect_buffer.clear()
 
         if event.new == 'pan' or event.old == 'pan':
             self._apply_pan_mode()
