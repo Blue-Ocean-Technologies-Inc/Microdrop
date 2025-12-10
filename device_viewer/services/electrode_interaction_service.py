@@ -485,6 +485,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
             self.electrode_view_layer.clear_reference_rect()
 
+        if event.new == "camera-edit":
+            self.electrode_view_layer.redraw_reference_rect(self.model)
+
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer = []
 
