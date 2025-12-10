@@ -89,9 +89,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     layer_ui = None
     mode_picker_view = None
 
-    # Readings
-    last_capacitance = Float()  # Last capacitance reading (in pF)
-
     # Variables
     _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
@@ -149,7 +146,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # ----------- Setup device view widget ----------------- #
         ################################################################################################
 
-        self.scene = ElectrodeScene(self)
+        self.scene = ElectrodeScene()
         self.device_view = AutoFitGraphicsView(self.scene, auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
@@ -211,7 +208,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         capacitance_str = json.loads(message).get('capacitance', None)
         if capacitance_str is not None:
             capacitance = float(capacitance_str.split("pF")[0])
-            self.last_capacitance = capacitance
+            self.model.last_capacitance = capacitance
 
     def _on_screen_capture_triggered(self, message):
         """
@@ -345,9 +342,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             message_obj[channel] = self.model.electrodes.channels_states_map.get(channel, False)
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
-    def publish_detect_droplet(self):
-        publish_message(topic=DETECT_DROPLETS, message=json.dumps(list(self.model.electrodes.channels_electrode_ids_map.keys())))
-
     def publish_calibration_message(self):
         """
         Publish a message with the current calibration values.
@@ -383,7 +377,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
-            application=self.task.window.application
         )
 
         # Update the scene with the interaction service

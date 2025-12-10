@@ -44,6 +44,7 @@ class DeviceViewMainModel(HasTraits):
     message = Str("") # Message to display in the table view
 
     # calibration related properties
+    last_capacitance = Float()  # Last capacitance reading (in pF)
     liquid_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the liquid in pF/mm^2
     filler_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the filler in pF/mm^2
     electrode_scale = Property(Float, observe='electrodes.svg_model.area_scale')
@@ -156,6 +157,30 @@ class DeviceViewMainModel(HasTraits):
         else:
             logger.debug(f"Current mode ({self.mode}) is not given mode ({mode}), setting given mode")
             self.mode = mode
+
+    def measure_filler_capacitance(self):
+        """measuring filler capacitance."""
+        if not self.electrodes.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure filler capacitance.")
+            return
+
+        if self.last_capacitance is None:
+            logger.warning("No capacitance value available to set for filler capacitance.")
+            return
+
+        self.filler_capacitance_over_area = self.last_capacitance / self.electrodes.get_activated_electrode_area_mm2()
+
+    def measure_liquid_capacitance(self):
+        """P measuring liquid capacitance."""
+        if not self.electrodes.any_electrode_on():
+            logger.warning("No electrodes are on, cannot measure liquid capacitance.")
+            return
+
+        if self.last_capacitance is None:
+            logger.warning("No capacitance value available to set for liquid capacitance.")
+            return
+
+        self.liquid_capacitance_over_area = self.last_capacitance / self.electrodes.get_activated_electrode_area_mm2()
 
     # ------------------ Observers ------------------------------------
 
