@@ -1,6 +1,6 @@
 from PySide6.QtCore import QRectF
-from PySide6.QtGui import QColor, QFont, QPolygonF, QPen, QPainterPath
-from PySide6.QtWidgets import QGraphicsScene, QApplication, QGraphicsPathItem
+from PySide6.QtGui import QColor, QPolygonF, QPen, QPainterPath
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsPathItem
 from pyface.qt.QtCore import QPointF
 
 from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_factor
@@ -214,21 +214,29 @@ class ElectrodeLayer():
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.update_label(alpha)
 
-    def redraw_reference_rect(self, model: DeviceViewMainModel, partial_rect=None):
-        if len(model.camera_perspective.reference_rect) == 4:
+    def redraw_reference_rect(self, rect: list[QPointF]):
+        if len(rect) == 4:
+
             # Update the reference rect visualization
-            self.reference_rect_item.setPolygon(QPolygonF(model.camera_perspective.transformed_reference_rect))
+            self.reference_rect_item.setPolygon(QPolygonF(rect))
             self.reference_rect_path_item.setVisible(False)  # Hide the path item if we're using a polygon
             self.reference_rect_item.setVisible(True)  # Show the polygon item
-        elif partial_rect is not None and len(partial_rect) > 1:
+
+        elif len(rect) > 1:
             path = QPainterPath()
-            path.moveTo(partial_rect[0])
+            path.moveTo(rect[0])
             # Draw the path for the reference rect
-            for point in partial_rect[1:]:
+            for point in rect[1:]:
                 path.lineTo(point)
             self.reference_rect_path_item.setPath(path)
             self.reference_rect_path_item.setVisible(True)
             self.reference_rect_item.setVisible(False)  # Hide the polygon item if we're using a path
+
+        elif len(rect) == 1:
+            path = QPainterPath()
+            path.addEllipse(rect[0], 4, 4)
+            self.reference_rect_path_item.setPath(path)
+            self.reference_rect_path_item.setVisible(True)
 
     def clear_reference_rect(self):
         """Reset the reference rectangle to its initial state."""
