@@ -707,12 +707,15 @@ class DeviceViewerDockPane(TraitsDockPane):
                 return None
 
 
-    def save_svg_dialog(self):
+    def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             self.model.electrodes.svg_save_as(new_filename)
+
+    def save_svg(self):
+        self.model.electrodes.svg_save()
 
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
