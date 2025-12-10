@@ -142,6 +142,7 @@ class DeviceViewMainModel(HasTraits):
                 return
 
     def goto_last_mode(self):
+        logger.debug(f"Going to last mode: {self.last_mode}")
         self.mode = self.last_mode
 
     def flip_mode_activation(self, mode):
@@ -149,17 +150,23 @@ class DeviceViewMainModel(HasTraits):
         Method to enter mode if it is different from the current mode.
         Exits mode to last mode if mode is current mode.
         """
-        current_mode = self.mode
-        if current_mode == mode:
+        if self.mode == mode:
+            logger.debug(f"Current mode is given mode ({mode}), reverting to last mode ({self.last_mode}).")
             self.goto_last_mode()
         else:
+            logger.debug(f"Current mode ({self.mode}) is not given mode ({mode}), setting given mode")
             self.mode = mode
 
     # ------------------ Observers ------------------------------------
 
     @observe('mode')
     def mode_change(self, event):
-        self.last_mode = event.old # for use in goto_last_mode method
+        logger.debug(f"Mode change. New mode is: {event.new}")
+        # Do not store last mode when moving between the two camera alignment modes.
+        # They are one "super" mode.
+        if not (event.old == 'camera-edit' and event.new == 'camera-place') and not (event.new == 'camera-edit' and event.old == 'camera-place'):
+            logger.debug(f"Setting last mode to {event.old}")
+            self.last_mode = event.old # for use in goto_last_mode method
 
         if event.old == 'merge' and event.new != 'merge': # We left merge mode
             self.message = ""

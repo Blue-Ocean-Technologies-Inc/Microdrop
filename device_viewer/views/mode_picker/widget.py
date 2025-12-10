@@ -73,7 +73,7 @@ class ModePickerViewModel(HasTraits):
     # -- Actions --
     @if_editable
     def set_mode(self, mode):
-        self.model.mode = mode
+        self.model.flip_mode_activation(mode)
 
     @if_editable
     def undo(self):
