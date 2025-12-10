@@ -1,5 +1,7 @@
-from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent
-from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent
+import json
+
+from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent, QAction
+from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent, QGraphicsSceneContextMenuEvent, QMenu
 from traits.api import HasTraits, Instance, Dict, List, Str, observe
 from pyface.qt.QtCore import QPointF
 
@@ -7,6 +9,7 @@ from envisage.api import IApplication
 
 from device_viewer.models.electrodes import Electrode
 from device_viewer.utils.electrode_route_helpers import find_shortest_paths
+from dropbot_controller.consts import DETECT_DROPLETS
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
@@ -15,10 +18,29 @@ from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeVie
     ElectrodeEndpointItem
 from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
+from ..views.electrode_view.scale_edit_view import ScaleEditViewController
 
 logger = get_logger(__name__)
+
+###### Channel edit helper methods #################
+def remove_last_digit(number: int | None) -> int | None:
+    if number == None: return None
+
+    string = str(number)[:-1]
+    if string == "":
+        return None
+    else:
+        return int(string)
+
+
+def add_digit(number: int | None, digit: str) -> int:
+    if number == None:
+        return int(digit)
+    else:
+        return int(str(number) + digit)
 
 class ElectrodeInteractionControllerService(HasTraits):
     """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
@@ -54,31 +76,72 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List([])
 
-    # -------------------- Helpers ------------------------
+    #######################################################################################################
+    # Helpers
+    #######################################################################################################
 
     def traits_init(self, *args, **kwargs):
         self._last_electrode_id_visited = None
         self._left_mouse_pressed = False
         self._electrode_view_right_clicked = None
+        self.electrode_tooltip_visible = False
         self._right_mouse_pressed = False
         self._is_drag = False
 
-    def remove_last_digit(self, number: int | None) -> int | None:
-        if number == None: return None
+    def _zoom_in(self, scale=None):
+        logger.debug("Zoom In")
+        # disable auto fit if user wants to zoom in
+        if self.device_view.auto_fit:
+            self.device_view.auto_fit = False
 
-        string = str(number)[:-1]
-        if string == "":
-            return None
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(scale, scale)
+
+    def _zoom_out(self, scale=None):
+        logger.debug("Zoom Out")
+
+        if scale is None:
+            scale = self.device_viewer_preferences._zoom_scale
+
+        self.device_view.scale(1 / scale, 1 / scale)
+
+    def _rotate_device_view(self, angle_step):
+
+        # enable auto fit for rotations:
+        if not self.device_view.auto_fit:
+            self.device_view.auto_fit = True
+
+        # rotate entire view:
+        self.device_view.rotate(angle_step)
+        # undo rotation on text for maintaining readability
+        self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
+
+        self.device_view.fit_to_scene_rect()
+
+    def _apply_pan_mode(self):
+        enabled = self.model.mode == "pan"
+
+        # Disable interaction with items (clicking/hovering) while panning
+        self.device_view.setInteractive(not enabled)
+
+        if enabled:
+            self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         else:
-            return int(string)
+            self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
 
-    def add_digit(self, number: int | None, digit: str) -> int:
-        if number == None:
-            return int(digit)
-        else:
-            return int(str(number) + digit)
+    def get_electrode_view_for_scene_pos(self, scene_pos):
+        return self.device_view.scene().get_item_under_mouse(scene_pos, ElectrodeView)
 
-    # -------------------- Handlers -----------------------
+    def detect_droplet(self):
+        """Placeholder for a context menu action."""
+        publish_message(topic=DETECT_DROPLETS,
+                        message=json.dumps(list(self.model.electrodes.channels_electrode_ids_map.keys())))
+
+    #######################################################################################################
+    # Perspective Handlers
+    #######################################################################################################
 
     def handle_reference_point_placement(self, point: QPointF):
         """Handle the placement of a reference point for perspective correction."""
@@ -103,114 +166,21 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Finalize the perspective editing."""
         self.rect_editing_index = -1
 
+    def handle_rotate_device(self):
+        self._rotate_device_view(90)
+
+    def handle_rotate_camera(self):
+        self.model.camera_perspective.rotate_output(90)
+
+    #######################################################################################################
+    # Electrode Handlers
+    #######################################################################################################
+
     def handle_electrode_hover(self, electrode_view: ElectrodeView):
         self.electrode_hovered = electrode_view
 
     def handle_electrode_channel_editing(self, electrode: Electrode):
         self.model.electrodes.electrode_editing = electrode
-
-    #######################################################################################################
-    # Key handlers
-    #######################################################################################################
-
-    def handle_digit_input(self, digit: str):
-        if self.model.mode == "channel-edit":
-            new_channel = self.add_digit(self.model.electrodes.electrode_editing.channel, digit)
-            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
-                self.model.electrodes.electrode_editing.channel = new_channel
-
-            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
-
-    def handle_backspace(self):
-        if self.model.mode == "channel-edit":
-            new_channel = self.remove_last_digit(self.model.electrodes.electrode_editing.channel)
-            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
-                self.model.electrodes.electrode_editing.channel = new_channel
-
-            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
-
-    def handle_ctrl_key_left(self):
-        self.model.camera_perspective.rotate_output(-90)
-
-    def handle_ctrl_key_right(self):
-        self.model.camera_perspective.rotate_output(90)
-
-    def handle_rotate_camera(self):
-        self.model.camera_perspective.rotate_output(90)
-
-    def handle_alt_key_left(self):
-        angle_step = -90
-        self._rotate_device_view(angle_step)
-
-    def handle_alt_key_right(self):
-        angle_step = 90
-        self._rotate_device_view(angle_step)
-
-    def handle_rotate_device(self):
-        self._rotate_device_view(90)
-
-    def _rotate_device_view(self, angle_step):
-
-        # enable auto fit for rotations:
-        if not self.device_view.auto_fit:
-            self.device_view.auto_fit = True
-
-        # rotate entire view:
-        self.device_view.rotate(angle_step)
-        # undo rotation on text for maintaining readability
-        self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
-
-        self.device_view.fit_to_scene_rect()
-
-    def handle_ctrl_mouse_wheel_event(self, angle):
-
-        if angle > 0:
-            self.model.zoom_in_event = True
-        else:
-            self.model.zoom_out_event = True
-
-    def _zoom_in(self, scale=None):
-        logger.debug("Zoom In")
-        # disable auto fit if user wants to zoom in
-        if self.device_view.auto_fit:
-            self.device_view.auto_fit = False
-
-        if scale is None:
-            scale = self.device_viewer_preferences._zoom_scale
-
-        self.device_view.scale(scale, scale)
-
-    def _zoom_out(self, scale=None):
-        logger.debug("Zoom Out")
-
-        if scale is None:
-            scale = self.device_viewer_preferences._zoom_scale
-
-        self.device_view.scale(1 / scale, 1 / scale)
-
-    def handle_ctrl_plus(self):
-        self.model.zoom_in_event = True # Observer routine will call zoom in
-
-    def handle_ctrl_minus(self):
-        self.model.zoom_out_event = True # Observer routine will call zoom out
-
-    def _apply_pan_mode(self):
-        enabled = self.model.mode == "pan"
-
-        # Disable interaction with items (clicking/hovering) while panning
-        self.device_view.setInteractive(not enabled)
-
-        if enabled:
-            self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        else:
-            self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
-
-    def handle_space(self):
-        self.model.flip_mode_activation(mode='pan')
-
-        # Observer routine will call apply pan mode #
-
-    ########################################################################################################
 
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
@@ -221,6 +191,19 @@ class ElectrodeInteractionControllerService(HasTraits):
             if clicked_electrode_channel != None: # The channel can be unassigned!
                 self.model.electrodes.channels_states_map[clicked_electrode_channel] = \
                     not self.model.electrodes.channels_states_map.get(clicked_electrode_channel, False)
+
+    def handle_toggle_electrode_tooltip(self, checked):
+        '''Handle toggle electrode tooltip.'''
+        self.electrode_view_layer.toggle_electrode_tooltips(checked)
+
+    def handle_toggle_electrode_tooltips(self, checked):
+        """Handle toggle electrode tooltip."""
+        self.electrode_tooltip_visible = checked
+        self.handle_toggle_electrode_tooltip(checked)
+
+    #######################################################################################################
+    # Route Handlers
+    #######################################################################################################
 
     def handle_route_draw(self, from_id, to_id):
         '''Handle a route segment being drawn or first electrode being added'''
@@ -276,20 +259,60 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
         # self.model.mode = 'edit'
 
-    def handle_toggle_electrode_tooltip(self, checked):
-        '''Handle toggle electrode tooltip.'''
-        self.electrode_view_layer.toggle_electrode_tooltips(checked)
+    #######################################################################################################
+    # Key handlers
+    #######################################################################################################
 
-    def get_mode(self):
-        return self.model.mode
+    def handle_digit_input(self, digit: str):
+        if self.model.mode == "channel-edit":
+            new_channel = add_digit(self.model.electrodes.electrode_editing.channel, digit)
+            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+                self.model.electrodes.electrode_editing.channel = new_channel
 
-    def set_mode(self, mode):
-        self.model.mode = mode
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
 
-    def get_electrode_view_for_scene_pos(self, scene_pos):
-        return self.device_view.scene().get_item_under_mouse(scene_pos, ElectrodeView)
+    def handle_backspace(self):
+        if self.model.mode == "channel-edit":
+            new_channel = remove_last_digit(self.model.electrodes.electrode_editing.channel)
+            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+                self.model.electrodes.electrode_editing.channel = new_channel
 
-    ########## super user interaction event handlers ####################
+            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
+
+    def handle_ctrl_key_left(self):
+        self.model.camera_perspective.rotate_output(-90)
+
+    def handle_ctrl_key_right(self):
+        self.model.camera_perspective.rotate_output(90)
+
+    def handle_alt_key_left(self):
+        angle_step = -90
+        self._rotate_device_view(angle_step)
+
+    def handle_alt_key_right(self):
+        angle_step = 90
+        self._rotate_device_view(angle_step)
+
+    def handle_ctrl_mouse_wheel_event(self, angle):
+
+        if angle > 0:
+            self.model.zoom_in_event = True
+        else:
+            self.model.zoom_out_event = True
+
+    def handle_ctrl_plus(self):
+        self.model.zoom_in_event = True # Observer routine will call zoom in
+
+    def handle_ctrl_minus(self):
+        self.model.zoom_out_event = True # Observer routine will call zoom out
+
+    def handle_space(self):
+        self.model.flip_mode_activation(mode='pan')
+        # Observer routine will call apply pan mode #
+
+    ##########################################################################################
+    # Electrode Scene global input delegations
+    ##########################################################################################
 
     def handle_key_press_event(self, event: QKeyEvent):
         char = event.text()
@@ -329,7 +352,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle the start of a mouse click event."""
 
         button = event.button()
-        mode = self.get_mode()
+        mode = self.model.mode
 
         if button == Qt.LeftButton:
             self._left_mouse_pressed = True
@@ -345,7 +368,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                     self.handle_autoroute_start(electrode_view.id,
                                                                     avoid_collisions=not is_alt_pressed)
                 else:  # No electrode clicked, exit autoroute mode
-                    self.set_mode("edit")
+                    self.model.model = "edit"
 
             elif mode == "channel-edit":
                 if electrode_view:
@@ -364,7 +387,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_mouse_move_event(self, event):
         """Handle the dragging motion."""
 
-        mode = self.get_mode()
+        mode = self.model.mode
         electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
         self.handle_electrode_hover(electrode_view)
 
@@ -407,7 +430,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if button == Qt.LeftButton:
             self._left_mouse_pressed = False
-            mode = self.get_mode()
+            mode = self.model.mode
             if mode == "auto":
                 self.handle_autoroute_end()
             elif mode in ("edit", "draw", "edit-draw"):
@@ -420,7 +443,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self._is_drag = False
 
                 if mode == "edit-draw":  # Go back to draw
-                    self.set_mode("draw")
+                    self.model.mode = "draw"
             elif mode == "camera-edit":
                 self.handle_perspective_edit_end()
         elif button == Qt.RightButton:
@@ -444,7 +467,40 @@ class ElectrodeInteractionControllerService(HasTraits):
         else:
             return False
 
-    ############## Traits observers ##############################
+    def handle_context_menu_event(self, event: QGraphicsSceneContextMenuEvent):
+
+        if not (event.modifiers() & Qt.ControlModifier): # If control is pressed, we do not show the context menu
+
+            context_menu = QMenu()
+            context_menu.addAction("Measure Liquid Capacitance", self.model.measure_liquid_capacitance)
+            context_menu.addAction("Measure Filler Capacitance", self.model.measure_filler_capacitance)
+            context_menu.addSeparator()
+            context_menu.addAction("Reset Electrodes", self.model.electrodes.reset_electrode_states)
+            context_menu.addAction("Find Liquid", self.detect_droplet)
+
+            if self._electrode_view_right_clicked is not None:
+
+                scale_edit_view_controller = ScaleEditViewController(
+                    model=self._electrode_view_right_clicked.electrode,
+                    device_view_model=self.model)
+
+                context_menu.addAction("Adjust Electrode Area Scale", scale_edit_view_controller.configure_traits)
+
+            context_menu.addSeparator()
+
+            # tooltip enabled by default
+            tooltip_toggle_action = QAction("Enable Electrode Tooltip", checkable=True,
+                                            checked=self.electrode_tooltip_visible)
+
+            tooltip_toggle_action.triggered.connect(self.handle_toggle_electrode_tooltips)
+
+            context_menu.addAction(tooltip_toggle_action)
+
+            context_menu.exec(event.screenPos())
+
+    ################################################################################################################
+    #------------------ Traits observers --------------------------------------------
+    ################################################################################################################
 
     @observe("model.routes.layers.items.visible")
     @observe("model.routes.selected_layer")

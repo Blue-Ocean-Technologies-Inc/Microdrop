@@ -1,7 +1,7 @@
 from traits.api import Float, Property, Instance
-from traits.trait_types import self
 from traitsui.api import View, Item, HGroup, VGroup, Label, Action, Controller
-from device_viewer.services.electrode_interaction_service import ElectrodeInteractionControllerService
+
+from device_viewer.models.main_model import DeviceViewMainModel
 
 SetScaleButton = Action(name="Set Scale", action="set_electrode_area_scale")
 
@@ -32,7 +32,7 @@ scale_edit_view = View(
 class ScaleEditViewController(Controller):
     # --- User input ---
     real_electrode_area = Float(1.0)  # User sets this value
-    electrode_interaction_service = Instance(ElectrodeInteractionControllerService)
+    device_view_model = Instance(DeviceViewMainModel)
 
     # --- Calculated Property ---
     scaling_factor = Property(Float, observe=['real_electrode_area', 'model.area_scaled'])
@@ -47,5 +47,5 @@ class ScaleEditViewController(Controller):
     view = scale_edit_view
 
     def set_electrode_area_scale(self, info):
-        self.electrode_interaction_service.model.electrode_scale = self.scaling_factor
+        self.device_view_model.electrode_scale = self.scaling_factor
         info.ui.dispose()
