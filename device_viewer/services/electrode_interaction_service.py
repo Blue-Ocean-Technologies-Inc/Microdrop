@@ -77,7 +77,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._last_electrode_id_visited = None
         self._left_mouse_pressed = False
         self._electrode_view_right_clicked = None
-        self.electrode_tooltip_visible = False
+        self._electrode_tooltip_visible = False
         self._right_mouse_pressed = False
         self._is_drag = False
 
@@ -185,14 +185,10 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.model.electrodes.channels_states_map[clicked_electrode_channel] = \
                     not self.model.electrodes.channels_states_map.get(clicked_electrode_channel, False)
 
-    def handle_toggle_electrode_tooltip(self, checked):
-        '''Handle toggle electrode tooltip.'''
-        self.electrode_view_layer.toggle_electrode_tooltips(checked)
-
     def handle_toggle_electrode_tooltips(self, checked):
         """Handle toggle electrode tooltip."""
-        self.electrode_tooltip_visible = checked
-        self.handle_toggle_electrode_tooltip(checked)
+        self._electrode_tooltip_visible = checked
+        self.electrode_view_layer.toggle_electrode_tooltips(checked)
 
     #######################################################################################################
     # Route Handlers
@@ -465,25 +461,33 @@ class ElectrodeInteractionControllerService(HasTraits):
         if not (event.modifiers() & Qt.ControlModifier): # If control is pressed, we do not show the context menu
 
             context_menu = QMenu()
-            context_menu.addAction("Measure Liquid Capacitance", self.model.measure_liquid_capacitance)
-            context_menu.addAction("Measure Filler Capacitance", self.model.measure_filler_capacitance)
-            context_menu.addSeparator()
-            context_menu.addAction("Reset Electrodes", self.model.electrodes.reset_electrode_states)
-            context_menu.addAction("Find Liquid", self.detect_droplet)
 
-            if self._electrode_view_right_clicked is not None:
+            if self.model.mode.split("-")[0] == "camera":
+                def _f():
+                    self.model.mode = "camera-place"
+                context_menu.addAction("Reset Reference Rectangle", _f)
+                context_menu.addSeparator()
 
-                scale_edit_view_controller = ScaleEditViewController(
-                    model=self._electrode_view_right_clicked.electrode,
-                    device_view_model=self.model)
+            else:
+                context_menu.addAction("Measure Liquid Capacitance", self.model.measure_liquid_capacitance)
+                context_menu.addAction("Measure Filler Capacitance", self.model.measure_filler_capacitance)
+                context_menu.addSeparator()
+                context_menu.addAction("Reset Electrodes", self.model.electrodes.reset_electrode_states)
+                context_menu.addAction("Find Liquid", self.detect_droplet)
+                context_menu.addSeparator()
 
-                context_menu.addAction("Adjust Electrode Area Scale", scale_edit_view_controller.configure_traits)
+                if self._electrode_view_right_clicked is not None:
 
-            context_menu.addSeparator()
+                    scale_edit_view_controller = ScaleEditViewController(
+                        model=self._electrode_view_right_clicked.electrode,
+                        device_view_model=self.model)
+
+                    context_menu.addAction("Adjust Electrode Area Scale", scale_edit_view_controller.configure_traits)
+                    context_menu.addSeparator()
 
             # tooltip enabled by default
             tooltip_toggle_action = QAction("Enable Electrode Tooltip", checkable=True,
-                                            checked=self.electrode_tooltip_visible)
+                                            checked=self._electrode_tooltip_visible)
 
             tooltip_toggle_action.triggered.connect(self.handle_toggle_electrode_tooltips)
 
