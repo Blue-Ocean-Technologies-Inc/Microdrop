@@ -2,7 +2,7 @@ import json
 
 from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent, QAction
 from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent, QGraphicsSceneContextMenuEvent, QMenu
-from traits.api import HasTraits, Instance, Dict, List, Str, observe
+from traits.api import HasTraits, Instance, Dict, List, Str, observe, Bool
 from pyface.qt.QtCore import QPointF
 
 from device_viewer.models.electrodes import Electrode
@@ -69,17 +69,23 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List(Instance(QPointF), [])
 
+    #: state data fields
+    _last_electrode_id_visited = Str(allow_none=True, desc="The last electrode clicked / dragged on by user's id.")
+
+    _left_mouse_pressed = Bool(False)
+    _right_mouse_pressed = Bool(False)
+
+    _electrode_view_right_clicked = Instance(ElectrodeView, allow_none=True)
+
+    _edit_reference_rect = Bool(False, desc='Is the reference rect editable without affecting perpective.')
+
+    _electrode_tooltip_visible = Bool(False)
+
+    _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
+
     #######################################################################################################
     # Helpers
     #######################################################################################################
-
-    def traits_init(self, *args, **kwargs):
-        self._last_electrode_id_visited = None
-        self._left_mouse_pressed = False
-        self._electrode_view_right_clicked = None
-        self._electrode_tooltip_visible = False
-        self._right_mouse_pressed = False
-        self._is_drag = False
 
     def _zoom_in(self, scale=None):
         logger.debug("Zoom In")
@@ -164,6 +170,14 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_rotate_camera(self):
         self.model.camera_perspective.rotate_output(90)
+
+    def handle_toggle_edit_reference_rect(self):
+        if self._edit_reference_rect:
+            logger.info(f"Toggling reference rect edit mode off. Changed will affect camera perspective")
+        else:
+            logger.info(f"Toggling reference rect edit mode on. Changed will not affect camera perspective")
+
+        self._edit_reference_rect = not self._edit_reference_rect
 
     #######################################################################################################
     # Electrode Handlers
@@ -469,9 +483,18 @@ class ElectrodeInteractionControllerService(HasTraits):
             context_menu = QMenu()
 
             if self.model.mode.split("-")[0] == "camera":
-                def _f():
+                def set_camera_place_mode():
                     self.model.mode = "camera-place"
-                context_menu.addAction("Reset Reference Rectangle", _f)
+
+
+                reference_rect_edit_action = QAction("Edit Reference Rect", checkable=True,
+                                              checked=self._edit_reference_rect,
+                                              toolTip="Edit Reference Rectangle without changing perspective")
+
+                reference_rect_edit_action.triggered.connect(self.handle_toggle_edit_reference_rect)
+
+                context_menu.addAction("Reset Reference Rectangle", set_camera_place_mode)
+                context_menu.addAction(reference_rect_edit_action)
                 context_menu.addSeparator()
 
             else:
