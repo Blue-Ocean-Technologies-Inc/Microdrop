@@ -216,12 +216,21 @@ class CameraControlWidget(QWidget):
             self.video_record_start()
 
     def toggle_align_camera_mode(self):
-        self._align_mode = not self._align_mode
 
-        if self._align_mode:
-            self.set_mode("camera-place")
+        if self.model.mode == "camera-edit" or (self.model.mode != "camera-edit" and self.can_enter_edit_mode()):
+            logger.debug(f"Toggle align camera mode: camera-edit. Current mode: {self.model.mode}")
+            self.model.flip_mode_activation("camera-edit")
         else:
-            self.set_mode("draw")
+            logger.debug(f"Toggle align camera mode: camera-place. Current mode: {self.model.mode}")
+            self.model.flip_mode_activation("camera-place")
+
+    def can_enter_edit_mode(self) -> bool:
+        """
+        Return True if camera edit mode is possible.
+
+        Camera edit only possible when camera placement has worked and a perspective transformation can be done
+        """
+        return self.model.camera_perspective.perspective_transformation_possible()
 
     def _apply_theme_styling(self):
         """Apply theme-aware styling to the widget."""
@@ -274,7 +283,25 @@ class CameraControlWidget(QWidget):
 
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
-        self.button_align.setChecked(self._align_mode)
+        if self.model.mode == "camera-place":
+            self.button_align.setStyleSheet(self.button_reset.styleSheet())
+            self.button_align.setChecked(True)
+
+
+        elif self.model.mode == "camera-edit":
+            self.button_align.setChecked(True)
+            self.button_align.setStyleSheet("background-color: green;")
+
+        else:
+            self.button_align.setChecked(False)
+            self.button_align.setStyleSheet(self.button_reset.styleSheet())
+
+    def reset(self):
+        """Reset the camera control widget to its initial state."""
+        self.model.camera_perspective.reset()
+        if self.model.mode == "camera-edit":
+            # Reset to camera-place mode after reset
+            self.model.mode = "camera-place"
 
     def populate_camera_list(self):
         """Populate the camera combo box with available cameras."""
@@ -677,17 +704,6 @@ class CameraControlWidget(QWidget):
         if self.video_writer:
             self.video_writer.write(qimage_to_cv_image(frame))
             self.frame_count += 1
-
-    def set_mode(self, mode):
-        self.model.mode = mode
-        self.sync_buttons_and_label()
-
-    def reset(self):
-        """Reset the camera control widget to its initial state."""
-        self.model.camera_perspective.reset()
-        if self.model.mode == "camera-edit":
-            # Reset to camera-place mode after reset
-            self.model.mode = "camera-place"
 
     def ensure_camera_on(self):
         """Ensure camera is on, return True if it was already on, False if we had to turn it on."""
