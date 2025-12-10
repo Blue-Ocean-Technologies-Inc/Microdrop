@@ -112,3 +112,9 @@ class PerspectiveModel(HasTraits):
         # 4. Update the trait
         #    This automatically triggers 'update_transformation' via the @observe decorator
         self.transformed_reference_rect = new_points
+
+    def perspective_transformation_possible(self) -> bool:
+        """
+        Return True if perspective transformation is possible, False otherwise.
+        """
+        return len(self.transformed_reference_rect) == 4 and (len(self.reference_rect) == 4 or len(self.default_rect) == 4)
