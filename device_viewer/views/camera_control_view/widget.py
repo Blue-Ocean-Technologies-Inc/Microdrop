@@ -74,7 +74,6 @@ class CameraControlWidget(QWidget):
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)
         self.camera_select_layout.addWidget(self.camera_combo)
-        self._align_mode = False
 
         self.resolution_select_layout = QHBoxLayout()
         self.resolution_select_layout.addWidget(self.resolution_label)
