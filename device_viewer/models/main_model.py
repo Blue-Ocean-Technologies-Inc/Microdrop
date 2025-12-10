@@ -142,6 +142,7 @@ class DeviceViewMainModel(HasTraits):
                 return
 
     def goto_last_mode(self):
+        logger.debug(f"Going to last mode: {self.last_mode}")
         self.mode = self.last_mode
 
     def flip_mode_activation(self, mode):
@@ -149,10 +150,11 @@ class DeviceViewMainModel(HasTraits):
         Method to enter mode if it is different from the current mode.
         Exits mode to last mode if mode is current mode.
         """
-        current_mode = self.mode
-        if current_mode == mode:
+        if self.mode == mode:
+            logger.debug(f"Current mode is given mode ({mode}), reverting to last mode ({self.last_mode}).")
             self.goto_last_mode()
         else:
+            logger.debug(f"Current mode ({self.mode}) is not given mode ({mode}), setting given mode")
             self.mode = mode
 
     # ------------------ Observers ------------------------------------
