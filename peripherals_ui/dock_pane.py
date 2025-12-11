@@ -2,14 +2,17 @@
 from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QApplication
+from pyface.qt.QtGui import QFont, Qt
+from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QApplication
 
-from microdrop_style.helpers import is_dark_mode
+from microdrop_style.button_styles import get_tooltip_style
+from microdrop_style.general_style import get_general_style
+from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES
 from microdrop_style.colors import GREY, WHITE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_STAIRS
+from microdrop_style.label_style import get_label_style
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name,DEVICE_NAME
 
@@ -65,6 +68,26 @@ class PeripheralStatusDockPane(DockPane):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(scroll_content)
+
+        # ---------------------------------- Theme aware styling ----------------------------------#
+        def _apply_theme_style(theme: 'Qt.ColorScheme'):
+            """Handle application level theme updates"""
+            theme = QT_THEME_NAMES[theme]
+
+            general = get_general_style(theme)
+            labels = get_label_style(theme)
+            tooltips = get_tooltip_style(theme)
+
+            # Order matters slightly: General generic rules first, specific widgets last.
+            stylesheet = f"{general}\n{labels}\n{tooltips}"
+
+            self.control.setStyleSheet(stylesheet)
+
+        # Apply initial theme styling
+        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
+
+        # Call theme application method whenever global theme changes occur as well
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
 
         # Return the scroll area directly
         return scroll_area
