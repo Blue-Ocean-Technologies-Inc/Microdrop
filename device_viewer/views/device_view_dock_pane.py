@@ -56,8 +56,7 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 # ext consts
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
-from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES, update_qwidget_theme_styling
+from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES, get_complete_stylesheet
 
 import json
 
@@ -148,26 +147,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view = AutoFitGraphicsView(self.scene, auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale)
         self.device_view.setObjectName('device_view')
         self.device_view.setViewport(QOpenGLWidget())
-
-        ###########################################################################################
-        # ---------- Connect to application level changes ------------------ #
-        ###########################################################################################
-        QApplication.styleHints().colorSchemeChanged.connect(self._apply_theme_style)
-    
-    def _apply_theme_style(self, new_theme):
-        """Handle application level theme updates"""
-        for widget_name in [
-            "device_view",
-            'mode_picker_view',
-            'camera_control_widget',
-            'calibration_view',
-            'viewport_controls_widget',
-        ]:
-
-            update_qwidget_theme_styling(
-                widget=getattr(self, widget_name),
-                theme=QT_THEME_NAMES[new_theme]
-            )
 
     ################################################################################################
     # ------- Dramatiq handlers ---------------------------
@@ -434,6 +413,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         """Called when the task is activated."""
+        logger.debug("creating device viewer dock pane contents")
         self._initialize_svg_view()
 
         ###################################################################
@@ -548,15 +528,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             #    (chevron_right to hide, chevron_left to reveal)
             reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
 
-        # Import and apply centralized button styles with proper tooltip styling
-        try:
-            theme = "dark" if is_dark_mode() else "light"
-            narrow_style = get_complete_stylesheet(theme, "narrow")
-            reveal_button.setStyleSheet(narrow_style)
-        except ImportError:
-            # Fallback to custom styling if centralized styles aren't available
-            reveal_button.setStyleSheet("font-family: Material Symbols Outlined; font-size: 30px; margin-left: 3px; margin-right: 3px; padding-left: 3px;")
-
         reveal_button.setToolTip("Reveal Hidden Controls")
         reveal_button.clicked.connect(reveal_button_handler)
         reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
@@ -568,10 +539,27 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         main_container.setLayout(main_layout)
 
+        # ---------------------------------- Theme aware styling ----------------------------------#
+        def _apply_theme_style(theme: 'Qt.ColorScheme'):
+            """Handle application level theme updates"""
+
+            logger.debug(f"Applying theme: {theme}")
+
+            self.control.setStyleSheet(
+                get_complete_stylesheet(
+                    theme=QT_THEME_NAMES[theme]
+                )
+            )
+
+            # reveal requires the narrow button type specified
+            reveal_button.setStyleSheet(
+                get_complete_stylesheet(theme=theme, button_type="narrow"))
+
         # Apply initial theme styling
-        self._apply_theme_style(
-            new_theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
-        )
+        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
+
+        # Call theme application method whenever global theme changes occur as well
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
 
         return main_container
 
