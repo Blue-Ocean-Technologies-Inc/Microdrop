@@ -569,11 +569,17 @@ class ElectrodeInteractionControllerService(HasTraits):
     def _rect_buffer_change(self, event):
         logger.debug(f"rect_buffer change: adding point {event.added}. Buffer of length {len(self.rect_buffer)} now.")
         if len(self.rect_buffer) == 4:  # We have a rectangle now
-            logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
+
             inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
             self.model.camera_perspective.reference_rect = [inverse.map(point) for point in event.object]
             self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
-            self.model.mode = "camera-edit"  # Switch to camera-edit mode
+
+            # User may have already completed the reference rectangle and in edit mode.
+            # sometimes user is just editing a completed rect_buffer when edit_reference_rect is enabled
+            # Only need to do this and give log message when its the first time the reference rect is completed.
+            if self.model.mode != "camera-edit":
+                logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
+                self.model.mode = "camera-edit"  # Switch to camera-edit mode if not already there
 
     @observe("model:mode")
     def _on_mode_change(self, event):
