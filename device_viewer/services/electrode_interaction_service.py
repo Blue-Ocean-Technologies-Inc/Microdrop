@@ -154,7 +154,18 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_perspective_edit(self, point: QPointF):
         """Handle the editing of a reference point during perspective correction."""
-        self.model.camera_perspective.transformed_reference_rect[self.rect_editing_index] = point
+
+        # check if we are editing just the reference rect buffer or the actual rect tied to transforming perspective
+        if self._edit_reference_rect:
+            logger.debug("Only reference rect buffer changed")
+            if not self.rect_buffer:
+                self.rect_buffer = self.model.camera_perspective.transformed_reference_rect.copy()
+            rect_to_edit = self.rect_buffer
+        else:
+            logger.debug("Reference rect tied to perspective transform changed")
+            rect_to_edit = self.model.camera_perspective.transformed_reference_rect
+
+        rect_to_edit[self.rect_editing_index] = point
 
     def handle_perspective_edit_end(self):
         """Finalize the perspective editing."""
