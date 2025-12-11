@@ -93,8 +93,6 @@ QPushButton:checked {{
     border-color: {SECONDARY_SHADE[900]};
     color: {WHITE};
 }}
-
-{TOOLTIP_STYLE}
 """
 
 # Light mode button styles
@@ -111,8 +109,6 @@ QPushButton:disabled {{
     background-color: {GREY['light']};
     border-color: {GREY['lighter']};
 }}
-
-{LIGHT_MODE_TOOLTIP_STYLE}
 """
 
 # Dark mode button styles
@@ -129,8 +125,6 @@ QPushButton:disabled {{
     background-color: {BLACK};
     border-color: {GREY['dark']};
 }}
-
-{DARK_MODE_TOOLTIP_STYLE}
 """
 
 # Navigation button specific styles
