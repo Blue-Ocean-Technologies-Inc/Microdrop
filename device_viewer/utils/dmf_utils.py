@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Union
 from shapely.geometry import Polygon
 
-from traits.api import HasTraits, Float, Dict, Str
+from traits.api import HasTraits, Float, Dict, Str, Bool
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
     SVGProcessor, AlgorithmError
@@ -25,10 +25,10 @@ class SvgUtil(HasTraits):
 
     area_scale = Float
     electrode_areas_scaled = Dict(Str, Float)
+    auto_found_connections = Bool(False, desc='whether connections were retrieved from file or auto generated')
 
     def __init__(self, filename: Union[str, Path] = None, **traits):
         super().__init__(**traits)
-        self.auto_found_connections = False  # whether connections were retrieved from file or auto generated.
         self._filename = filename
         self.max_x = None
         self.max_y = None

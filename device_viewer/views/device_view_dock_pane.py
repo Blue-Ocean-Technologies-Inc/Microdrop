@@ -63,6 +63,8 @@ import json
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
+_dock_pane_name = f"{PKG_name} Dock Pane"
+
 @provides(IDramatiqControllerBase)
 class DeviceViewerDockPane(TraitsDockPane):
     """
@@ -76,10 +78,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     model = Instance(DeviceViewMainModel)
 
     id = PKG + ".dock_pane"
-    name = PKG_name + " Dock Pane"
+    name = _dock_pane_name
 
     # Views
-    scene = Instance(QGraphicsScene) 
+    scene = Instance(QGraphicsScene)
     device_view = Instance(AutoFitGraphicsView)
     device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
@@ -192,7 +194,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                     capture_data = json.loads(message)
                 except (json.JSONDecodeError, TypeError):
                     logger.debug("Screen capture message is not JSON, using default capture")
-            
+
             self.camera_control_widget.screen_capture_signal.emit(capture_data)
 
     def _on_screen_recording_triggered(self, message):
@@ -398,6 +400,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         if svg_file is None:
             svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
 
+
         # create model using svg data
         self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
         logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
@@ -409,6 +412,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.set_interaction_service(self.model)
         logger.info(f"Electrodes model set to {self.model}")
 
+        name = _dock_pane_name + "\t\t-\t\t" + Path(svg_file).stem
+
+        if self.model.electrodes.svg_model.auto_found_connections:
+            name += " (modified)"
+
+        self.name = name
     #--------------------- UI initialization -----------------------
 
     def create_contents(self, parent):
@@ -674,6 +683,14 @@ class DeviceViewerDockPane(TraitsDockPane):
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
     #################################################################################################################
+
+    @observe('model:electrodes:svg_model:area_scale', post_init=True)
+    @observe('model:electrodes:electrode_ids_channels_map:items', post_init=True)
+    def _svg_data_changed(self, event):
+        print(event)
+        if "modified" not in self.name:
+            logger.info("Svg data changed")
+            self.name += " (modified)"
 
     @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
     @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values

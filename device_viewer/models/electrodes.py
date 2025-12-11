@@ -28,7 +28,6 @@ class Electrode(HasTraits):
     #: Electrode area in mm^2
     area_scaled = Float(allow_none=True)
 
-
 class Electrodes(HasTraits):
 
     """
