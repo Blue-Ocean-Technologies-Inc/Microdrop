@@ -135,10 +135,10 @@ class ModePicker(QWidget):
         self.button_channel_edit.setCheckable(True)
 
         # Action Buttons
-        self.button_reset_routes = QPushButton(ICON_RESET_WRENCH)
+        self.button_reset_routes = QPushButton("remove_road")
         self.button_reset_routes.setToolTip("Reset Routes")
 
-        self.button_reset_electrodes = QPushButton("reset_settings")
+        self.button_reset_electrodes = QPushButton("layers_clear")
         self.button_reset_electrodes.setToolTip("Reset Electrode States")
 
         self.button_undo = QPushButton("Undo")
@@ -159,8 +159,8 @@ class ModePicker(QWidget):
         btn_layout.addWidget(self.button_channel_edit, 0, 3)
 
         # Row 2: Actions
-        btn_layout.addWidget(self.button_reset_routes, 1, 0)
-        btn_layout.addWidget(self.button_reset_electrodes, 1, 1)
+        btn_layout.addWidget(self.button_reset_electrodes, 1, 0)
+        btn_layout.addWidget(self.button_reset_routes, 1, 1)
         btn_layout.addWidget(self.button_undo, 1, 2)
         btn_layout.addWidget(self.button_redo, 1, 3)
 

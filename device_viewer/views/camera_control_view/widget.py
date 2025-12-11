@@ -86,7 +86,7 @@ class CameraControlWidget(QWidget):
         self.button_reset = QPushButton("reset_focus")
         self.button_reset.setToolTip("Reset Camera Perspective")
 
-        self.camera_refresh_button = QPushButton("update")
+        self.camera_refresh_button = QPushButton("flip_camera_ios")
         self.camera_refresh_button.setToolTip("Refresh Camera List")
 
         # Single toggle button for recording
@@ -99,7 +99,7 @@ class CameraControlWidget(QWidget):
         self.capture_image_button.setToolTip("Capture Image")
 
         ####### Rotate camera option #################
-        self.rotate_camera_button = QPushButton("flip_camera_ios")
+        self.rotate_camera_button = QPushButton("cameraswitch")
         self.rotate_camera_button.setToolTip("Rotate Camera")
 
         def _rotate_camera():
