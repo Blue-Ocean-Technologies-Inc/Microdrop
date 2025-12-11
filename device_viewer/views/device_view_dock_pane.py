@@ -538,18 +538,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         def _apply_theme_style(theme: 'Qt.ColorScheme'):
             """Handle application level theme updates"""
 
-            logger.debug(f"Applying theme: {theme}")
+            theme_name = QT_THEME_NAMES[theme]
 
-            self.control.setStyleSheet(
-                get_complete_stylesheet(
-                    theme=QT_THEME_NAMES[theme]
-                )
-            )
+            logger.debug(f"Applying {theme_name} mode")
+
+            scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
 
             # reveal requires the narrow button type specified
-            reveal_button.setStyleSheet(
-                get_complete_stylesheet(theme=QT_THEME_NAMES[theme], button_type="narrow")
-            )
+            reveal_button.setStyleSheet(get_complete_stylesheet(theme_name, button_type="narrow"))
 
         # Apply initial theme styling
         _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
