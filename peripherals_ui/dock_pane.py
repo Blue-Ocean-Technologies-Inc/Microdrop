@@ -90,16 +90,14 @@ class PeripheralStatusDockPane(DockPane):
 
         _model.observe(set_status_color, "status")
 
-        QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
-
         self.status_bar_icon = device_status
 
-        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+        ### update tooltip based on dark / light mode
+        def _apply_theme_style():
+            self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
 
-    ### update tooltip based on dark / light mode
-    def _on_application_palette_changed(self):
-        self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
-
+        _apply_theme_style()  # initial setting
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)  # track theme changes
 
 def get_status_icon_tooltip_themed():
     if is_dark_mode():
