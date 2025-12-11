@@ -1,6 +1,6 @@
 from functools import partial
 
-from traits.api import HasTraits, Instance, Any, observe, Property
+from traits.api import HasTraits, Instance, observe, Property
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QLabel,
                                QGridLayout)
@@ -9,9 +9,7 @@ from pyface.tasks.dock_pane import DockPane
 
 from device_viewer.models.main_model import DeviceViewMainModel
 # Imports from your context
-from microdrop_style.icons.icons import (ICON_AUTOMATION, ICON_DRAW,
-                                         ICON_EDIT, ICON_RESET_WRENCH)
-from microdrop_style.button_styles import get_complete_stylesheet
+from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT
 
 try:
     from microdrop_style.helpers import is_dark_mode
@@ -108,7 +106,6 @@ class ModePicker(QWidget):
         # Setup UI components
         self._init_ui_elements()
         self._layout_ui()
-        self._apply_theme_styling()
 
         # Initial State Sync
         self.sync_ui()
@@ -198,13 +195,3 @@ class ModePicker(QWidget):
         self.button_channel_edit.setChecked(current_mode == "channel-edit")
 
         self.mode_label.setText(f"Mode: {self.vm.mode_name}")
-
-    def _apply_theme_styling(self):
-        theme = "dark" if is_dark_mode() else "light"
-        try:
-            self.setStyleSheet(get_complete_stylesheet(theme, "default"))
-        except Exception:
-            self.setStyleSheet(get_complete_stylesheet("light", "default"))
-
-    def update_theme_styling(self, theme="light"):
-        self.setStyleSheet(get_complete_stylesheet(theme, "default"))

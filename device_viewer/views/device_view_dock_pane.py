@@ -2,20 +2,18 @@
 from pathlib import Path
 import dramatiq
 
-from traits.api import Instance, observe, Str, Float, provides
+from traits.api import Instance, observe, Str, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 
 from pyface.api import FileDialog, OK, confirm, YES, NO
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton
-from pyface.qt.QtCore import Qt, QTimer, QPointF, QSizeF
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton, QScrollArea
+from pyface.qt.QtCore import QTimer, QPointF, QSizeF, Qt
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtMultimedia import QMediaCaptureSession
-
-from PySide6.QtWidgets import QScrollArea
 
 from .viewport_settings_view.widget import ZoomViewModel, ZoomControlWidget
 ##### local imports ######
@@ -56,10 +54,10 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.datetime_helpers import TimestampedMessage
 
 # ext consts
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE, DETECT_DROPLETS
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 from microdrop_style.button_styles import get_complete_stylesheet
-from microdrop_style.helpers import is_dark_mode
+from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES, update_qwidget_theme_styling
 
 import json
 
@@ -154,29 +152,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         ###########################################################################################
         # ---------- Connect to application level changes ------------------ #
         ###########################################################################################
-        QApplication.instance().paletteChanged.connect(self._on_application_palette_changed)
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_theme_style)
     
-    def _on_application_palette_changed(self):
-        """Handle application palette changes for theme updates"""
-        try:
-            theme = "dark" if is_dark_mode() else "light"
-            self._update_theme_styling(theme)
-        except Exception as e:
-            logger.debug(f"Error handling palette change: {e}")
-    
-    def _update_theme_styling(self, theme):
-        """Update theme styling for all child components"""
-        if hasattr(self, "device_view"):
-            self.device_view.setStyleSheet(get_complete_stylesheet(theme))
-
+    def _apply_theme_style(self, new_theme):
+        """Handle application level theme updates"""
         for widget_name in [
+            "device_view",
             'mode_picker_view',
             'camera_control_widget',
             'calibration_view',
             'viewport_controls_widget',
         ]:
-            if hasattr(self, widget_name):
-                getattr(self, widget_name).update_theme_styling(theme)
+
+            update_qwidget_theme_styling(
+                widget=getattr(self, widget_name),
+                theme=QT_THEME_NAMES[new_theme]
+            )
 
     ################################################################################################
     # ------- Dramatiq handlers ---------------------------
@@ -355,18 +346,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.info(f"Published calibration message: {message}")
 
     # --------------UI view content creation / configuration helpers ---------------------------------
-
-    def _apply_initial_theme_styling(self):
-        """Apply initial theme styling when the UI is first built"""
-        try:
-            theme = "dark" if is_dark_mode() else "light"
-            logger.info(f"Applying initial theme styling: {theme} mode")
-            self._update_theme_styling(theme)
-        except Exception as e:
-            logger.debug(f"Error applying initial theme: {e}")
-            # Fallback to light theme
-            self._update_theme_styling("light")
-
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
         logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
@@ -590,7 +569,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         main_container.setLayout(main_layout)
 
         # Apply initial theme styling
-        self._apply_initial_theme_styling()
+        self._apply_theme_style(
+            new_theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
+        )
 
         return main_container
 

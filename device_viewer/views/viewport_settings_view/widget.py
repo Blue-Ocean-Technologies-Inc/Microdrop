@@ -2,10 +2,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget,  QHBoxLayout, QPushButton
 
 from device_viewer.models.main_model import DeviceViewMainModel
-# Assumes microdrop_style is available in the python environment
-from microdrop_style.button_styles import get_complete_stylesheet
-
-from traits.api import HasTraits, Instance, Bool, observe, Event
+from traits.api import HasTraits, Instance, Bool, observe
 
 
 class ZoomViewModelSignals(QObject):
@@ -74,9 +71,6 @@ class ZoomControlWidget(QWidget):
         layout.addWidget(btn_pan)  # Added Pan button
         layout.addStretch()
 
-        # Apply theme-aware styling
-        self._apply_theme_styling()
-
         ##### View Model Bindings ######
         # Ensure button UI stays in sync if VM changes externally
         self.vm.signals.pan_mode_changed.connect(btn_pan.setChecked)
@@ -84,21 +78,3 @@ class ZoomControlWidget(QWidget):
         btn_in.clicked.connect(self.vm.zoom_in)
         btn_pan.clicked.connect(self.vm.toggle_pan_mode)
         btn_reset.clicked.connect(self.vm.reset_view)
-
-    def _apply_theme_styling(self):
-        """Apply theme-aware styling to the widget."""
-        try:
-            # Import here to avoid circular imports
-            from microdrop_style.helpers import is_dark_mode
-
-            theme = "dark" if is_dark_mode() else "light"
-        except Exception as e:
-            # Fallback to light theme if there's an error
-            theme = 'light'
-
-        self.update_theme_styling(theme)
-
-    def update_theme_styling(self, theme="light"):
-        """Update styling when theme changes."""
-        icon_button_style = get_complete_stylesheet(theme, "default")
-        self.setStyleSheet(icon_button_style)

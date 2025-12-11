@@ -22,7 +22,6 @@ from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from device_viewer.utils.camera import qimage_to_cv_image, cv_image_to_qimage
 from logger.logger_service import get_logger
 from microdrop_utils.status_bar_utils import set_status_bar_message
-from microdrop_style.button_styles import get_complete_stylesheet
 
 logger = get_logger(__name__)
 
@@ -62,9 +61,6 @@ class CameraControlWidget(QWidget):
         self.cap = None  # OpenCV VideoCapture object
         self.frame_input = None
         self.frame_input_timer = QTimer()  # Timer to handle frame input
-
-        # Apply theme-aware styling
-        self._apply_theme_styling()
 
         # Camera Combo Box
         self.camera_combo = QComboBox()
@@ -230,26 +226,6 @@ class CameraControlWidget(QWidget):
         Camera edit only possible when camera placement has worked and a perspective transformation can be done
         """
         return self.model.camera_perspective.perspective_transformation_possible()
-
-    def _apply_theme_styling(self):
-        """Apply theme-aware styling to the widget."""
-        try:
-            # Import here to avoid circular imports
-            from microdrop_style.helpers import is_dark_mode
-
-            theme = "dark" if is_dark_mode() else "light"
-            # Use complete stylesheet with tooltips for icon buttons
-            icon_button_style = get_complete_stylesheet(theme, "default")
-            self.setStyleSheet(icon_button_style)
-        except Exception as e:
-            # Fallback to light theme if there's an error
-            icon_button_style = get_complete_stylesheet("light", "default")
-            self.setStyleSheet(icon_button_style)
-
-    def update_theme_styling(self, theme="light"):
-        """Update styling when theme changes."""
-        icon_button_style = get_complete_stylesheet(theme, "default")
-        self.setStyleSheet(icon_button_style)
 
     # --------------------- Callbacks ---------------------------------------
     @Slot(bool)
