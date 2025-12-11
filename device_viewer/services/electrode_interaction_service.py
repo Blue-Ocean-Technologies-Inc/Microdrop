@@ -2,7 +2,7 @@ import json
 
 from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent, QAction
 from PySide6.QtWidgets import QGraphicsView, QGraphicsSceneWheelEvent, QGraphicsSceneContextMenuEvent, QMenu
-from traits.api import HasTraits, Instance, Dict, List, Str, observe
+from traits.api import HasTraits, Instance, Dict, List, Str, observe, Bool
 from pyface.qt.QtCore import QPointF
 
 from device_viewer.models.electrodes import Electrode
@@ -69,17 +69,23 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_editing_index = -1  # Index of the point being edited in the reference rect
     rect_buffer = List(Instance(QPointF), [])
 
+    #: state data fields
+    _last_electrode_id_visited = Str(allow_none=True, desc="The last electrode clicked / dragged on by user's id.")
+
+    _left_mouse_pressed = Bool(False)
+    _right_mouse_pressed = Bool(False)
+
+    _electrode_view_right_clicked = Instance(ElectrodeView, allow_none=True)
+
+    _edit_reference_rect = Bool(False, desc='Is the reference rect editable without affecting perpective.')
+
+    _electrode_tooltip_visible = Bool(False)
+
+    _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
+
     #######################################################################################################
     # Helpers
     #######################################################################################################
-
-    def traits_init(self, *args, **kwargs):
-        self._last_electrode_id_visited = None
-        self._left_mouse_pressed = False
-        self._electrode_view_right_clicked = None
-        self._electrode_tooltip_visible = False
-        self._right_mouse_pressed = False
-        self._is_drag = False
 
     def _zoom_in(self, scale=None):
         logger.debug("Zoom In")
@@ -140,11 +146,6 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle the placement of a reference point for perspective correction."""
         # Add the new point to the reference rect
         self.rect_buffer.append(point)
-        if len(self.rect_buffer) == 4:  # We have a rectangle now
-            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
-            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in self.rect_buffer]
-            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
-            self.model.mode = "camera-edit"  # Switch to camera-edit mode
 
     def handle_perspective_edit_start(self, point: QPointF):
         """Handle the start of perspective editing."""
@@ -153,7 +154,18 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_perspective_edit(self, point: QPointF):
         """Handle the editing of a reference point during perspective correction."""
-        self.model.camera_perspective.transformed_reference_rect[self.rect_editing_index] = point
+
+        # check if we are editing just the reference rect buffer or the actual rect tied to transforming perspective
+        if self._edit_reference_rect:
+            logger.debug("Only reference rect buffer changed")
+            if not self.rect_buffer:
+                self.rect_buffer = self.model.camera_perspective.transformed_reference_rect.copy()
+            rect_to_edit = self.rect_buffer
+        else:
+            logger.debug("Reference rect tied to perspective transform changed")
+            rect_to_edit = self.model.camera_perspective.transformed_reference_rect
+
+        rect_to_edit[self.rect_editing_index] = point
 
     def handle_perspective_edit_end(self):
         """Finalize the perspective editing."""
@@ -164,6 +176,14 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_rotate_camera(self):
         self.model.camera_perspective.rotate_output(90)
+
+    def handle_toggle_edit_reference_rect(self):
+        if self._edit_reference_rect:
+            logger.info(f"Toggling reference rect edit mode off. Changed will affect camera perspective")
+        else:
+            logger.info(f"Toggling reference rect edit mode on. Changed will not affect camera perspective")
+
+        self._edit_reference_rect = not self._edit_reference_rect
 
     #######################################################################################################
     # Electrode Handlers
@@ -469,9 +489,18 @@ class ElectrodeInteractionControllerService(HasTraits):
             context_menu = QMenu()
 
             if self.model.mode.split("-")[0] == "camera":
-                def _f():
+                def set_camera_place_mode():
                     self.model.mode = "camera-place"
-                context_menu.addAction("Reset Reference Rectangle", _f)
+
+
+                reference_rect_edit_action = QAction("Edit Reference Rect", checkable=True,
+                                              checked=self._edit_reference_rect,
+                                              toolTip="Edit Reference Rectangle without changing camera perspective")
+
+                reference_rect_edit_action.triggered.connect(self.handle_toggle_edit_reference_rect)
+
+                context_menu.addAction("Reset Reference Rectangle", set_camera_place_mode)
+                context_menu.addAction(reference_rect_edit_action)
                 context_menu.addSeparator()
 
             else:
@@ -536,6 +565,22 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
                 self.electrode_view_layer.redraw_reference_rect(rect=event.object)
 
+    @observe("rect_buffer:items")
+    def _rect_buffer_change(self, event):
+        logger.debug(f"rect_buffer change: adding point {event.added}. Buffer of length {len(self.rect_buffer)} now.")
+        if len(self.rect_buffer) == 4:  # We have a rectangle now
+
+            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
+            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in event.object]
+            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
+
+            # User may have already completed the reference rectangle and in edit mode.
+            # sometimes user is just editing a completed rect_buffer when edit_reference_rect is enabled
+            # Only need to do this and give log message when its the first time the reference rect is completed.
+            if self.model.mode != "camera-edit":
+                logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
+                self.model.mode = "camera-edit"  # Switch to camera-edit mode if not already there
+
     @observe("model:mode")
     def _on_mode_change(self, event):
         if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
@@ -545,7 +590,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_reference_rect(self.model.camera_perspective.transformed_reference_rect)
 
         if event.old != "camera-place" and event.new == "camera-place":
-            self.rect_buffer = []
+            self.rect_buffer.clear()
 
         if event.new == 'pan' or event.old == 'pan':
             self._apply_pan_mode()
