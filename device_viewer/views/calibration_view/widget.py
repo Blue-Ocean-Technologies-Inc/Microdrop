@@ -42,7 +42,7 @@ class CalibrationView(QWidget):
             theme = "dark" if is_dark_mode() else "light"
             # Set button styling with correct theme
             button_style = get_complete_stylesheet(theme, "default")
-            self.capacitance_reset_button.setStyleSheet(button_style)
+            self.setStyleSheet(button_style)
         except Exception as e:
             # Fallback to light theme if there's an error
             button_style = get_complete_stylesheet("light", "default")
@@ -51,7 +51,7 @@ class CalibrationView(QWidget):
     def update_theme_styling(self, theme="light"):
         """Update styling when theme changes."""
         button_style = get_complete_stylesheet(theme, "default")
-        self.capacitance_reset_button.setStyleSheet(button_style)
+        self.setStyleSheet(button_style)
 
     def update_capacitance_labels(self, event=None):
         self.liquid_capacitance_label.setText(f"C_l: {self.model.liquid_capacitance_over_area:.4f} pF/mm^2" if self.model.liquid_capacitance_over_area is not None else 'C_l: -')

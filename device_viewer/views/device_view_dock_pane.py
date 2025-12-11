@@ -171,9 +171,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         for widget_name in [
             'mode_picker_view',
-            'camera_control_view',
+            'camera_control_widget',
             'calibration_view',
-            'viewport_controls_view',
+            'viewport_controls_widget',
         ]:
             if hasattr(self, widget_name):
                 getattr(self, widget_name).update_theme_styling(theme)
