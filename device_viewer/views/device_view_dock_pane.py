@@ -471,27 +471,22 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.alpha_view_ui.control.setMinimumHeight(self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT)
         self.alpha_view_ui.control.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
-        self.alpha_view_ui.control.setParent(main_container)
 
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.routes.edit_traits(view=layer_view)
 
         self.layer_ui.control.setMinimumHeight(self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT)
-        self.layer_ui.control.setParent(main_container)
 
         # mode_picker_view code
         _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
         self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
-        self.mode_picker_view.setParent(main_container)
 
         # camera_control_widget code
         self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.app_preferences)
-        self.camera_control_widget.setParent(main_container)
 
         # calibration_view code
         self.calibration_view = CalibrationView(self.model)
-        self.calibration_view.setParent(main_container)
 
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget =  ZoomControlWidget(vm)
