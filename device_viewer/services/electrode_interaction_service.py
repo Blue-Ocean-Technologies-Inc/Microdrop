@@ -495,7 +495,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
                 reference_rect_edit_action = QAction("Edit Reference Rect", checkable=True,
                                               checked=self._edit_reference_rect,
-                                              toolTip="Edit Reference Rectangle without changing perspective")
+                                              toolTip="Edit Reference Rectangle without changing camera perspective")
 
                 reference_rect_edit_action.triggered.connect(self.handle_toggle_edit_reference_rect)
 
