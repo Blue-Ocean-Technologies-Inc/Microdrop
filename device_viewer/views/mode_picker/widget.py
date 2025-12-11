@@ -85,11 +85,11 @@ class ModePickerViewModel(HasTraits):
 
     @if_editable
     def reset_electrodes(self):
-        self.model.electrodes.reset_electrode_states()
+        self.model.electrodes.clear_electrode_states()
 
     @if_editable
     def reset_routes(self):
-        self.model.routes.reset_route_manager()
+        self.model.routes.clear_routes()
 
     @observe('model:mode')
     def _on_underlying_mode_changed(self, event):
@@ -136,10 +136,10 @@ class ModePicker(QWidget):
 
         # Action Buttons
         self.button_reset_routes = QPushButton("remove_road")
-        self.button_reset_routes.setToolTip("Reset Routes")
+        self.button_reset_routes.setToolTip("Clear Routes")
 
         self.button_reset_electrodes = QPushButton("layers_clear")
-        self.button_reset_electrodes.setToolTip("Reset Electrode States")
+        self.button_reset_electrodes.setToolTip("Clear Electrode States")
 
         self.button_undo = QPushButton("Undo")
         self.button_undo.setToolTip("Undo")

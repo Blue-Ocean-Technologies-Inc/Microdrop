@@ -116,8 +116,8 @@ class DeviceViewMainModel(HasTraits):
     # ------------------------ Methods ---------------------------------
 
     def reset(self):
-        self.electrodes.reset_electrode_states()
-        self.routes.reset_route_manager()
+        self.electrodes.clear_electrode_states()
+        self.routes.clear_routes()
 
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""

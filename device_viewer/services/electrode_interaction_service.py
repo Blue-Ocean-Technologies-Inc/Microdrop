@@ -507,7 +507,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addAction("Measure Liquid Capacitance", self.model.measure_liquid_capacitance)
                 context_menu.addAction("Measure Filler Capacitance", self.model.measure_filler_capacitance)
                 context_menu.addSeparator()
-                context_menu.addAction("Reset Electrodes", self.model.electrodes.reset_electrode_states)
+                context_menu.addAction("Clear Electrodes", self.model.electrodes.clear_electrode_states)
+                context_menu.addAction("Clear Routes", self.model.routes.clear_routes)
+                context_menu.addSeparator()
                 context_menu.addAction("Find Liquid", self.detect_droplet)
                 context_menu.addSeparator()
 

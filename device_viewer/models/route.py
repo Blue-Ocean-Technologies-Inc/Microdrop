@@ -241,7 +241,7 @@ class RouteLayerManager(HasTraits):
         else:
             return False
 
-    def reset_route_manager(self):
+    def clear_routes(self):
         self.layers.clear()
         self.selected_layer = None
         self.layer_to_merge = None
