@@ -134,12 +134,12 @@ BUTTON_BORDER_RADIUS = 4
 # Get button styles based on theme
 def get_light_mode_stylesheet():
     """Get light mode stylesheet with button styles."""
-    from microdrop_style.button_styles import get_complete_stylesheet
+    from microdrop_style.helpers import get_complete_stylesheet
     return get_complete_stylesheet("light", "default")
 
 def get_dark_mode_stylesheet():
     """Get dark mode stylesheet with button styles."""
-    from microdrop_style.button_styles import get_complete_stylesheet
+    from microdrop_style.helpers import get_complete_stylesheet
     return get_complete_stylesheet("dark", "default")
 
 # Legacy constants for backward compatibility

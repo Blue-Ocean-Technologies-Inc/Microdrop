@@ -304,22 +304,6 @@ def get_tooltip_style(theme="light"):
     else:
         return LIGHT_MODE_TOOLTIP_STYLE
 
-
-def get_complete_stylesheet(theme="light", button_type="default"):
-    """
-    Get complete stylesheet including buttons and tooltips.
-    
-    Args:
-        theme (str): 'light' or 'dark'
-        button_type (str): Button type for styling
-    
-    Returns:
-        str: Complete CSS stylesheet
-    """
-    button_style = get_button_style(theme, button_type)
-    tooltip_style = get_tooltip_style(theme)
-    return f"{button_style}\n{tooltip_style}"
-
 # Function to get button dimensions
 def get_button_dimensions(button_type="default"):
     """

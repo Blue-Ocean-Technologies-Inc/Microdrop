@@ -9,8 +9,10 @@ import sys
 
 # Import the centralized tooltip styles
 from microdrop_style.button_styles import (
-    get_tooltip_style, get_complete_stylesheet
+    get_tooltip_style
 )
+from microdrop_style.helpers import get_complete_stylesheet
+
 
 class TooltipStylesExample(QWidget):
     def __init__(self):
