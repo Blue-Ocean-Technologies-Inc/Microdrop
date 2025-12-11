@@ -1,9 +1,11 @@
 # system imports.
 import json
 import dramatiq
-from PySide6.QtWidgets import QApplication
+
 
 # Enthought library imports.
+from pyface.qt.QtWidgets import QApplication
+from pyface.qt.QtCore import Qt
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
 from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
 from pyface.api import GUI
@@ -12,7 +14,7 @@ from traits.api import Instance, provides
 
 
 # Local imports.
-from microdrop_style.helpers import is_dark_mode
+from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES
 from microdrop_style.status_bar_style import get_status_bar_stylesheet
 from .consts import PKG
 
@@ -102,12 +104,12 @@ class MicrodropTask(Task):
         self.window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
 
         # ---------------------------------- Theme aware styling ----------------------------------#
-        def _apply_theme_style():
+        def _apply_theme_style(theme: 'Qt.ColorScheme'):
             """Handle application level theme updates"""
-            self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet())
+            self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet(QT_THEME_NAMES[theme]))
 
         # Apply initial theme styling
-        _apply_theme_style()
+        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
         # Call theme application method whenever global theme changes occur as well
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
 

@@ -26,5 +26,8 @@ LIGHT_MODE_STYLESHEET = """
             QStatusBar::item {border: None;}
          """
 
-def get_status_bar_stylesheet():
-    return DARK_MODE_STYLESHEET if is_dark_mode() else LIGHT_MODE_STYLESHEET
+def get_status_bar_stylesheet(theme):
+    if theme == 'dark':
+        return DARK_MODE_STYLESHEET
+    else:
+        return LIGHT_MODE_STYLESHEET
