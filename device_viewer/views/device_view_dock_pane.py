@@ -548,7 +548,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             # reveal requires the narrow button type specified
             reveal_button.setStyleSheet(
-                get_complete_stylesheet(theme=theme, button_type="narrow"))
+                get_complete_stylesheet(theme=QT_THEME_NAMES[theme], button_type="narrow"))
 
         # Apply initial theme styling
         _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
