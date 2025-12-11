@@ -4,13 +4,11 @@ This demonstrates consistent tooltip appearance across all components.
 """
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton
-from PySide6.QtCore import Qt
 import sys
 
 # Import the centralized tooltip styles
-from microdrop_style.button_styles import (
-    get_tooltip_style
-)
+from microdrop_style.button_styles import get_tooltip_style
+
 from microdrop_style.helpers import get_complete_stylesheet
 
 

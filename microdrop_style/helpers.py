@@ -1,6 +1,6 @@
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QFont, QIcon
-from pyface.qt.QtWidgets import QApplication, QWidget
+from pyface.qt.QtWidgets import QApplication
 
 from .button_styles import get_button_style, get_tooltip_style
 from .font_paths import load_material_symbols_font, load_inter_font
