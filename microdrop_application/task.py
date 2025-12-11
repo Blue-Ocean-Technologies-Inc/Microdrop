@@ -1,6 +1,7 @@
 # system imports.
 import json
 import dramatiq
+from PySide6.QtWidgets import QApplication
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
@@ -99,7 +100,19 @@ class MicrodropTask(Task):
     def _add_status_bar_to_window(self):
         logger.info(f"Adding status bar to Microdrop Task window.")
         self.window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
-        self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet())
+
+        # ---------------------------------- Theme aware styling ----------------------------------#
+        def _apply_theme_style():
+            """Handle application level theme updates"""
+            self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet())
+
+        # Apply initial theme styling
+        _apply_theme_style()
+        # Call theme application method whenever global theme changes occur as well
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
+
+        # -----------------------------------------------------------------------------------------#
+
         self.window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 
 
