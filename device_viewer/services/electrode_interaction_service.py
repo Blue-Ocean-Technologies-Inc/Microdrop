@@ -75,8 +75,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     _left_mouse_pressed = Bool(False)
     _right_mouse_pressed = Bool(False)
 
-    _electrode_view_right_clicked = Instance(ElectrodeView, allow_none=True)
-
     _edit_reference_rect = Bool(False, desc='Is the reference rect editable without affecting perpective.')
 
     _electrode_tooltip_visible = Bool(False)
@@ -369,9 +367,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         button = event.button()
         mode = self.model.mode
 
+        electrode_view =  self.get_electrode_view_for_scene_pos(event.scenePos())
         if button == Qt.LeftButton:
             self._left_mouse_pressed = True
-            electrode_view =  self.get_electrode_view_for_scene_pos(event.scenePos())
 
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
@@ -395,7 +393,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         elif button == Qt.RightButton:
             self._right_mouse_pressed = True
-            self._electrode_view_right_clicked =  self.get_electrode_view_for_scene_pos(event.scenePos())
+            self.model.electrodes.electrode_right_clicked = electrode_view.electrode
 
     def handle_mouse_move_event(self, event):
         """Handle the dragging motion."""
@@ -513,11 +511,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addAction("Find Liquid", self.detect_droplet)
                 context_menu.addSeparator()
 
-                if self._electrode_view_right_clicked is not None:
+                if self.model.electrodes.electrode_right_clicked is not None:
 
-                    scale_edit_view_controller = ScaleEditViewController(
-                        model=self._electrode_view_right_clicked.electrode,
-                        device_view_model=self.model)
+                    scale_edit_view_controller = ScaleEditViewController(model=self.model)
 
                     context_menu.addAction("Adjust Electrode Area Scale", scale_edit_view_controller.configure_traits)
                     context_menu.addSeparator()

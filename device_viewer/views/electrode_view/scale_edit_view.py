@@ -1,7 +1,5 @@
-from traits.api import Float, Property, Instance
+from traits.api import Float, Property
 from traitsui.api import View, Item, HGroup, VGroup, Label, Action, Controller
-
-from device_viewer.models.main_model import DeviceViewMainModel
 
 SetScaleButton = Action(name="Set Scale", action="set_electrode_area_scale")
 
@@ -10,9 +8,10 @@ scale_edit_view = View(
             # --- Left Side: Electrode Info (Read-only) ---
             VGroup(
                 Label("Electrode Information"),
-                Item('id', style='readonly', label="ID"),
-                Item('channel', style='readonly', label="Channel"),
-                Item('area_scaled', style='readonly', label="Current Area (mm²)", format_str="%.4f"),
+                Item('object.electrodes.electrode_right_clicked.id', style='readonly', label="ID"),
+                Item('object.electrodes.electrode_right_clicked.channel', style='readonly', label="Channel"),
+                Item('object.electrodes.electrode_right_clicked.area', style='readonly', label="Original Area (mm²)", format_str="%.4f"),
+                Item('object.electrodes.electrode_right_clicked.area_scaled', style='readonly', label="Scaled Area (mm²)", format_str="%.4f"),
                 show_border=True,
             ),
             # --- Right Side: Scaling Controls ---
@@ -32,20 +31,19 @@ scale_edit_view = View(
 class ScaleEditViewController(Controller):
     # --- User input ---
     real_electrode_area = Float(1.0)  # User sets this value
-    device_view_model = Instance(DeviceViewMainModel)
 
     # --- Calculated Property ---
-    scaling_factor = Property(Float, observe=['real_electrode_area', 'model.area_scaled'])
+    scaling_factor = Property(Float, observe="real_electrode_area")
 
     def _get_scaling_factor(self):
         """Calculates the scaling factor to be displayed."""
-        if self.model.area_scaled > 0:
-            return self.real_electrode_area / self.model.area_scaled
+        if self.model.electrodes.electrode_right_clicked.area > 0:
+            return self.real_electrode_area / self.model.electrodes.electrode_right_clicked.area
         return 0.0
 
     # --- TraitsUI View Definition ---
     view = scale_edit_view
 
     def set_electrode_area_scale(self, info):
-        self.device_view_model.electrode_scale = self.scaling_factor
+        self.model.electrode_scale = self.scaling_factor
         info.ui.dispose()
