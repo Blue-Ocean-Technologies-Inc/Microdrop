@@ -1,7 +1,5 @@
-from traits.api import Float, Property, Instance
+from traits.api import Float, Property
 from traitsui.api import View, Item, HGroup, VGroup, Label, Action, Controller
-
-from device_viewer.models.main_model import DeviceViewMainModel
 
 SetScaleButton = Action(name="Set Scale", action="set_electrode_area_scale")
 
@@ -12,7 +10,8 @@ scale_edit_view = View(
                 Label("Electrode Information"),
                 Item('object.electrodes.electrode_right_clicked.id', style='readonly', label="ID"),
                 Item('object.electrodes.electrode_right_clicked.channel', style='readonly', label="Channel"),
-                Item('object.electrodes.electrode_right_clicked.area_scaled', style='readonly', label="Current Area (mm²)", format_str="%.4f"),
+                Item('object.electrodes.electrode_right_clicked.area', style='readonly', label="Original Area (mm²)", format_str="%.4f"),
+                Item('object.electrodes.electrode_right_clicked.area_scaled', style='readonly', label="Scaled Area (mm²)", format_str="%.4f"),
                 show_border=True,
             ),
             # --- Right Side: Scaling Controls ---
@@ -38,8 +37,8 @@ class ScaleEditViewController(Controller):
 
     def _get_scaling_factor(self):
         """Calculates the scaling factor to be displayed."""
-        if self.model.electrodes.svg_model.electrode_areas[self.model.electrodes.electrode_right_clicked.id] > 0:
-            return self.real_electrode_area / self.model.electrodes.svg_model.electrode_areas[self.model.electrodes.electrode_right_clicked.id]
+        if self.model.electrodes.electrode_right_clicked.area > 0:
+            return self.real_electrode_area / self.model.electrodes.electrode_right_clicked.area
         return 0.0
 
     # --- TraitsUI View Definition ---

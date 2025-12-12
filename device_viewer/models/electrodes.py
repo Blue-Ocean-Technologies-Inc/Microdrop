@@ -26,6 +26,9 @@ class Electrode(HasTraits):
     path = Array(dtype=Float, shape=(None, 2))
 
     #: Electrode area in mm^2
+    area = Float(allow_none=True)
+
+    #: Scaled Electrode area in mm^2
     area_scaled = Float(allow_none=True)
 
 class Electrodes(HasTraits):
@@ -179,12 +182,23 @@ class Electrodes(HasTraits):
 
     #### Observer methods ######
     @observe('svg_model.electrode_areas_scaled')
-    def update_electrode_areas(self, event):
+    def update_scaled_electrode_areas(self, event):
         logger.info("Scaled electrode areas map changed. Updating electrode model with new area")
         self._is_bulk_updating_electrode_areas = True
         try:
             for electrode_id, electrode in self.electrodes.items():
                 electrode.area_scaled = self.svg_model.electrode_areas_scaled[electrode_id]
+
+        finally:
+            self._is_bulk_updating_electrode_areas = False
+
+    @observe('svg_model.electrode_areas')
+    def update_electrode_areas(self, event):
+        logger.info("Scaled electrode areas map changed. Updating electrode model with new area")
+        self._is_bulk_updating_electrode_areas = True
+        try:
+            for electrode_id, electrode in self.electrodes.items():
+                electrode.area = self.svg_model.electrode_areas[electrode_id]
 
         finally:
             self._is_bulk_updating_electrode_areas = False
