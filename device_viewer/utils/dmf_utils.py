@@ -4,7 +4,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from shapely.geometry import Polygon
 
-from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Int, Array
+from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeData, \
     SVGProcessor, AlgorithmError
@@ -25,7 +25,7 @@ class SvgUtil(HasTraits):
     area_scale = Float(1.0)
     electrode_areas_scaled = Dict(Str, Float, desc='Area of electrodes scaled by area scale in mm2')
 
-    electrodes = Dict(Str, Instance(ElectrodeData), desc="keys are electrode id, velues are electrode data "
+    electrodes = Dict(Str, Instance(ElectrodeData), desc="keys are electrode id, values are electrode data "
                                                          "providing path and channel data of the electrodes")
 
     auto_found_connections = Bool(False, desc='whether connections were retrieved from file or auto generated')
@@ -104,16 +104,6 @@ class SvgUtil(HasTraits):
 
             self.neighbours_to_points()
 
-    def find_neighbours(self, path: np.ndarray, threshold: float = 10) -> list[str]:
-        """
-        Find the neighbours of a path
-        """
-        neighbours = []
-        for k, v in self.electrodes.items():
-            if np.linalg.norm(path[0, 0] - v.path[0, 0]) < threshold:
-                neighbours.append(k)
-        return neighbours
-
     def get_electrode_polygons(self) -> dict[str, Polygon]:
         """
         Get the polygons of the electrodes
@@ -124,10 +114,10 @@ class SvgUtil(HasTraits):
         """
         Find the areas of the electrodes
         """
-        return {electrode_id: polygon.area for electrode_id, polygon in self.get_electrode_polygons().items()}
+        return {electrode_id: polygon.area for electrode_id, polygon in self.polygons.items()}
 
     def find_electrode_centroids(self) -> dict[str, tuple[float, float]]:
-        return {electrode_id: polygon.centroid.coords[0] for electrode_id, polygon in self.get_electrode_polygons().items()}
+        return {electrode_id: polygon.centroid.coords[0] for electrode_id, polygon in self.polygons.items()}
 
     def find_neighbours_all(self, buffer_distance: float = None) -> dict[str, list[str]]:
 
