@@ -1,17 +1,8 @@
-from fontTools.t1Lib import eexec_IV
 from traits.api import Instance, observe
 from traitsui.api import View, Item, ObjectColumn, Group, Action, Handler, Menu, TableEditor
 
 from device_viewer.default_settings import default_alphas, default_visibility
 from microdrop_utils.traitsui_qt_helpers import VisibleColumn, RangeColumn
-
-class ExTableEditor(TableEditor):
-    def __init__(self, **traits):
-        super().__init__(**traits)
-
-    @observe('selected_row')
-    def check_selected(self, event):
-        print(event)
 
 alpha_table_editor = TableEditor(
 

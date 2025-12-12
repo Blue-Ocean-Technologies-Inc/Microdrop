@@ -694,7 +694,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe('model:electrodes:svg_model:area_scale', post_init=True)
     @observe('model:electrodes:electrode_ids_channels_map:items', post_init=True)
     def _svg_data_changed(self, event):
-        print(event)
+        logger.debug(f"Svg data changed event: {event}")
         if "modified" not in self.name:
             logger.info("Svg data changed")
             self.name += device_modified_tag
