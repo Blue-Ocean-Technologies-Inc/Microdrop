@@ -56,12 +56,12 @@ class DeviceViewMainModel(HasTraits):
 
     uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
 
-    # -------------------- events ----------------------------------
+    # -------------------------------------- events ----------------------------------
     zoom_in_event = Event(desc="Increase device view scale -- zoom into device view")
     zoom_out_event = Event(desc="Decrease device view scale -- zoom out of device view")
     reset_view_event = Event(desc="Reset device view scaling -- reset zoom")
 
-    # ------------------ Alpha Color Model --------------------
+    # --------------------------------- Alpha Color Model --------------------------------
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
 
     # ------------------ Camera Model --------------------

@@ -35,9 +35,10 @@ class Electrodes(HasTraits):
     """
 
     #: Dictionary of electrodes with keys being an electrode id and values being the electrode object
-    electrodes = Dict(Str, Electrode, desc="Dictionary of electrodes with keys being an electrode id and values "
+    electrodes = Dict(Str, Instance(Electrode), desc="Dictionary of electrodes with keys being an electrode id and values "
                                             "being the electrode object")
     electrode_editing = Instance(Electrode)
+    electrode_right_clicked = Instance(Electrode)
 
     svg_model = Instance(SvgUtil, allow_none=True, desc="Model for the SVG file if given")
 
