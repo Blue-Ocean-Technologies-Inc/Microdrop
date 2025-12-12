@@ -676,9 +676,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             self.model.electrodes.svg_save_as(new_filename)
+            self.name = self.name.replace(" (modified)", "")
 
     def save_svg(self):
         self.model.electrodes.svg_save()
+        self.name = self.name.replace(" (modified)", "")
 
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
