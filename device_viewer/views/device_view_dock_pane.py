@@ -25,7 +25,8 @@ from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
-from ..consts import listener_name, device_modified_tag
+from ..consts import listener_name, device_modified_tag, camera_place_status_message_text, \
+    camera_edit_status_message_text
 from ..utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 
 # models and services
@@ -782,6 +783,24 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             elif self.model.step_label:
                 _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
+
+    @observe("model:mode")
+    def _mode_changed(self, event):
+
+        _status_bar_manager = self.task.window.status_bar_manager
+        if _status_bar_manager:
+
+            if event.new == "camera-place":
+                _status_bar_manager.message += camera_place_status_message_text
+
+            if event.new == "camera-edit":
+                _status_bar_manager.message += camera_edit_status_message_text
+
+            if event.old == "camera-place":
+                _status_bar_manager.message = _status_bar_manager.message.replace(camera_place_status_message_text, "")
+
+            if event.old == "camera-edit":
+                _status_bar_manager.message = _status_bar_manager.message.replace(camera_edit_status_message_text, "")
 
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
