@@ -24,7 +24,7 @@ from ..preferences import DeviceViewerPreferences
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.message_utils import gui_models_to_message_model
 from ..models.messages import DeviceViewerMessageModel
-from ..consts import listener_name
+from ..consts import listener_name, device_modified_tag
 from ..utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
 
 # models and services
@@ -676,11 +676,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         if dialog.open() == OK:
             new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
             self.model.electrodes.svg_save_as(new_filename)
-            self.name = self.name.replace(" (modified)", "")
+            self.name = self.name.replace(device_modified_tag, "")
 
     def save_svg(self):
         self.model.electrodes.svg_save()
-        self.name = self.name.replace(" (modified)", "")
+        self.name = self.name.replace(device_modified_tag, "")
 
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
@@ -692,7 +692,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         print(event)
         if "modified" not in self.name:
             logger.info("Svg data changed")
-            self.name += " (modified)"
+            self.name += device_modified_tag
 
     @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
     @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values

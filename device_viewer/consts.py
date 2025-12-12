@@ -12,6 +12,8 @@ PKG_name = PKG.title().replace("_", " ")
 
 listener_name = f"{PKG}_listener"
 
+device_modified_tag = " (modified)"
+
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
