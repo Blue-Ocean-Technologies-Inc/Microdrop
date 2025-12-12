@@ -52,7 +52,7 @@ class Electrodes(HasTraits):
     #: Map of electrode_areas
     electrode_ids_areas_scaled_map = Property(Dict(Str, Float), observe='svg_model.electrode_areas_scaled')
     #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
-    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['electrode_ids_areas_scaled_map', 'channels_electrode_ids_map'])
+    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['svg_model.electrode_areas_scaled', 'channels_electrode_ids_map'])
 
     #: Flag indicating electrode areas are being updated in bulk (true on init).
     # If False: change made on single electrode only.
@@ -139,11 +139,11 @@ class Electrodes(HasTraits):
         """
         channel_electrode_areas_map = {}
 
-        if self.channels_electrode_ids_map and self.electrode_ids_areas_scaled_map:
+        if self.channels_electrode_ids_map and self.svg_model.electrode_areas_scaled:
             # We can iterate over the electrode ids for each channel
             for channel, electrode_ids in self.channels_electrode_ids_map.items():
                 # Aggregate the electrode_ids using their area values
-                total_area_scaled = sum([self.electrode_ids_areas_scaled_map[electrode_id] for electrode_id in electrode_ids])
+                total_area_scaled = sum([self.svg_model.electrode_areas_scaled[electrode_id] for electrode_id in electrode_ids])
 
                 # Set channel id scaled area
                 channel_electrode_areas_map[channel] = total_area_scaled
