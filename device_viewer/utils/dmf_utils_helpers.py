@@ -6,7 +6,8 @@ import pandas as pd
 from shapely.geometry import Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
-from typing import List, Dict, Set, TypedDict, Optional, Any, Union
+from typing import List, Dict, Set, Union
+from traits.api import HasTraits, Int, Array
 
 from svg.path import parse_path
 
@@ -207,9 +208,9 @@ def create_adjacency_dict(neighbours) -> dict:
     return dict(adj_dict)
 
 
-class ElectrodeDict(TypedDict):
-    channel: int
-    path: np.ndarray # NDArray[Shape['*, 1, 1'], Float]
+class ElectrodeData(HasTraits):
+    channel = Int
+    path = Array
 
 class SVGProcessor:
     """
@@ -266,12 +267,12 @@ class SVGProcessor:
         transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
         return transform
 
-    def svg_to_electrodes(self, group_element: ET.Element) -> Dict[str, ElectrodeDict]:
+    def svg_to_electrodes(self, group_element: ET.Element) -> Dict[str, ElectrodeData]:
         """
         Converts path elements within an SVG group into an electrode dictionary,
         applying transforms, scaling, and calculating the bounding box.
         """
-        electrodes: Dict[str, ElectrodeDict] = {}
+        electrodes: Dict[str, ElectrodeData] = {}
         all_electrode_paths = []
 
         # Parse the 'transform' attribute of the parent group
@@ -289,10 +290,10 @@ class SVGProcessor:
                 transformed_path = (path_points + transform) * DOTS_TO_MM
 
                 channel_str = element.attrib.get('data-channels')
-                electrodes[element_id] = {
-                    'channel': int(channel_str) if channel_str is not None else None,
-                    'path': transformed_path
-                }
+                electrodes[element_id] = ElectrodeData(
+                    channel = int(channel_str) if channel_str is not None else None,
+                    path = transformed_path
+                )
                 all_electrode_paths.append(transformed_path)
             else:
                 logger.debug(f"Skipping {element} due lack of elements.")

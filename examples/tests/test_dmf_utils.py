@@ -41,7 +41,7 @@ def SVGProcessor():
 
 def test_svg_util(clean_svg, SvgUtil):
 
-    SvgUtil(clean_svg)
+    SvgUtil(filename=clean_svg)
 
 
 def test_filename(clean_svg, SvgUtil):
@@ -73,5 +73,5 @@ def test_extract_connections(clean_svg, SVGProcessor):
             assert len(connection_lines) == 125
 
 def test_get_connection_lines(clean_svg, SvgUtil):
-    svg = SvgUtil(clean_svg)
+    svg = SvgUtil(filename=clean_svg)
     assert (len(svg.get_connection_lines())) == 125

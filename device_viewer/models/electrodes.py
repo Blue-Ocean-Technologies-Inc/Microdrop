@@ -156,7 +156,7 @@ class Electrodes(HasTraits):
         self.electrodes.clear()
         new_electrodes = {}
         for k, v in new_model.electrodes.items():
-            new_electrodes[k] = Electrode(channel=v['channel'], path=v['path'], id=k)
+            new_electrodes[k] = Electrode(channel=v.channel, path=v.path, id=k)
 
         # self.electrode_scale = new_model.pixel_scale
         self.electrodes.update(new_electrodes) # Single update to model = single draw
@@ -171,7 +171,7 @@ class Electrodes(HasTraits):
         :return: Dictionary of electrodes
         """
 
-        self.svg_model = SvgUtil(svg_file)
+        self.svg_model = SvgUtil(filename=svg_file)
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
 
     def clear_electrode_states(self):

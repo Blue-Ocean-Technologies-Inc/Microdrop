@@ -2,65 +2,60 @@
 import re
 import numpy as np
 import xml.etree.ElementTree as ET
-from pathlib import Path
-from typing import Union
 from shapely.geometry import Polygon
 
-from traits.api import HasTraits, Float, Dict, Str, Bool
+from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Int, Array
 
-from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeDict, \
+from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeData, \
     SVGProcessor, AlgorithmError
 
 from logger.logger_service import get_logger
-logger = get_logger(__name__)
+logger = get_logger(__name__, "DEBUG")
 
 DPI=96
 INCH_TO_MM = 25.4
 DOTS_TO_MM = INCH_TO_MM / DPI
 
+float_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
 
 class SvgUtil(HasTraits):
-    float_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
-    style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
+    filename = File(desc='Filename of SVG file with electrodes data')
 
-    area_scale = Float
-    electrode_areas_scaled = Dict(Str, Float)
+    area_scale = Float(1.0)
+    electrode_areas_scaled = Dict(Str, Float, desc='Area of electrodes scaled by area scale in mm2')
+
+    electrodes = Dict(Str, Instance(ElectrodeData), desc="keys are electrode id, velues are electrode data "
+                                                         "providing path and channel data of the electrodes")
+
     auto_found_connections = Bool(False, desc='whether connections were retrieved from file or auto generated')
+    neighbours = Dict(Str, List(Str), desc='Map of electrode id to electrode ids of neighbouring electrodes')
+    connections = Dict(desc="Each item is a connections between two electrodes given bu its centroid coordinates")
 
-    def __init__(self, filename: Union[str, Path] = None, **traits):
-        super().__init__(**traits)
-        self._filename = filename
-        self.max_x = None
-        self.max_y = None
-        self.min_x = None
-        self.min_y = None
-        self.multi_x = None
-        self.multi_y = None
-        self.x_shift = None
-        self.y_shift = None
-        self.neighbours: dict[str, list[str]] = {}
-        self.electrodes: dict[str, ElectrodeDict] = {}
-        self.polygons = {}
-        self.connections = {}
-        self.electrode_centers: dict[str, tuple[float, float]] = {}
-        self.electrode_areas = {}
-        self.area_scale = 1.0
+    polygons = Dict(Str, Instance(Polygon), desc="Polygon for each electrode keyed by its id")
+    electrode_centers = Dict(Str, Tuple(Float, Float), desc="Electrode centroid coords")
+    electrode_areas = Dict(Str, Float, desc="Electrode areas")
 
-        if self._filename:
-            self.get_device_paths(self._filename)
+    max_x = Float(desc='Max x coordinate of electrodes')
+    max_y = Float(desc='Max y coordinate of electrodes')
+    min_x = Float(desc='Min x coordinate of electrodes')
+    min_y = Float(desc='Min y coordinate of electrodes')
 
-    @property
-    def filename(self) -> Union[str, Path]:
-        return self._filename
+    svg_processor = Instance(SVGProcessor)
 
-    @filename.setter
-    def filename(self, filename: Union[str, Path]):
-        self._filename = filename
-        self.get_device_paths(self._filename)
+    @observe('filename')
+    def _filename_change(self, event):
+        logger.debug("File changed")
+        self.get_device_paths(event.new)
+
+    @observe('electrodes')
+    def _electrodes_changed(self, event):
+        self.min_x, self.min_y, self.max_x, self.max_y = self.svg_processor.get_bounding_box()
+        logger.debug(f"Bounding box: {self.min_x, self.min_y, self.max_x, self.max_y}")
 
     def get_device_paths(self, filename):
 
-        svg_processor = SVGProcessor(filename=filename)
+        self.svg_processor = svg_processor = SVGProcessor(filename=filename)
 
         ################################################
         ## Load Data from svg file
@@ -72,8 +67,6 @@ class SvgUtil(HasTraits):
             if "device" in [val.casefold() for val in child.attrib.values()]:
                 self.set_fill_black(child)
                 self.electrodes = svg_processor.svg_to_electrodes(child)
-                self.min_x, self.min_y, self.max_x, self.max_y = svg_processor.get_bounding_box()
-
                 self.polygons = self.get_electrode_polygons()
 
             elif "connections" in [val.casefold() for val in child.attrib.values()]:
@@ -117,7 +110,7 @@ class SvgUtil(HasTraits):
         """
         neighbours = []
         for k, v in self.electrodes.items():
-            if np.linalg.norm(path[0, 0] - v['path'][0, 0]) < threshold:
+            if np.linalg.norm(path[0, 0] - v.path[0, 0]) < threshold:
                 neighbours.append(k)
         return neighbours
 
@@ -125,8 +118,8 @@ class SvgUtil(HasTraits):
         """
         Get the polygons of the electrodes
         """
-        return {k: Polygon(v['path'].reshape(-1, 2)) for k, v in self.electrodes.items()}
-    
+        return {k: Polygon(v.path.reshape(-1, 2)) for k, v in self.electrodes.items()}
+
     def find_electrode_areas(self) -> dict[str, float]:
         """
         Find the areas of the electrodes
@@ -204,7 +197,7 @@ class SvgUtil(HasTraits):
         """
         for element in obj:
             try:
-                element.attrib['style'] = re.sub(SvgUtil.style_pattern, r"fill:#000000", element.attrib['style'])
+                element.attrib['style'] = re.sub(style_pattern, r"fill:#000000", element.attrib['style'])
             except KeyError:
                 pass
 
