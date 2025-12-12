@@ -40,3 +40,7 @@ AUTO_FIT_MARGIN_SCALE = 95
 
 # main view config
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"
+
+# statusbar messages
+camera_place_status_message_text = "\t"*10 + "Select 4 points on image"
+camera_edit_status_message_text = "\t"*10 + "Drag vertices to align with device outline "
