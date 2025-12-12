@@ -12,12 +12,14 @@ from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_
 from logger.logger_service import get_logger
 logger = get_logger(__name__, "DEBUG")
 
-DPI=96
-INCH_TO_MM = 25.4
-DOTS_TO_MM = INCH_TO_MM / DPI
+# ------------------------- InkScape Consts ---------------------------------
 
 float_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 style_pattern = re.compile(r"fill:#[0-9a-fA-F]{6}")
+
+# Define Namespaces
+NS_SVG = "http://www.w3.org/2000/svg"
+NS_INKSCAPE = "http://www.inkscape.org/namespaces/inkscape"
 
 class SvgUtil(HasTraits):
     filename = File(desc='Filename of SVG file with electrodes data')
@@ -261,10 +263,6 @@ class SvgUtil(HasTraits):
             logger.info("Writing auto found connections to save file")
             connection_lines = self.get_connection_lines()
 
-            # Define Namespaces
-            NS_SVG = "http://www.w3.org/2000/svg"
-            NS_INKSCAPE = "http://www.inkscape.org/namespaces/inkscape"
-
             # Create the Group < ns0: g >
             # Note: Attributes with namespaces also need the {namespace}key format
             layer_attribs = {
@@ -283,10 +281,10 @@ class SvgUtil(HasTraits):
                 line_attribs = {
                     "id": f"line{index}",
                     "style": style,
-                    "x1": str(x1 / DOTS_TO_MM),
-                    "x2": str(x2 / DOTS_TO_MM),
-                    "y1": str(y1 / DOTS_TO_MM),
-                    "y2": str(y2 / DOTS_TO_MM)
+                    "x1": str(self.svg_processor.unit_normalization_func(x1)),
+                    "x2": str(self.svg_processor.unit_normalization_func(x2)),
+                    "y1": str(self.svg_processor.unit_normalization_func(y1)),
+                    "y2": str(self.svg_processor.unit_normalization_func(y2))
                 }
                 ET.SubElement(layer, f"{{{NS_SVG}}}line", line_attribs)
 

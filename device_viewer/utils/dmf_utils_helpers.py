@@ -16,10 +16,36 @@ from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line
 
 logger = get_logger(__name__, "INFO")
 
-
 DPI=96
 INCH_TO_MM = 25.4
-DOTS_TO_MM = INCH_TO_MM / DPI
+
+def pixels_to_mm(pixels):
+    return pixels * INCH_TO_MM / DPI
+
+def points_to_mm(points):
+    pixels = points * DPI / 72
+    return pixels_to_mm(pixels)
+
+def picas_to_mm(picas):
+    points = picas * 12
+    return points_to_mm(points)
+
+inkscape_units = [
+    "mm",
+    "cm",
+    "pt",
+    "pc",
+    "px"
+]
+
+_mm_converter_func = {
+    'mm': lambda v: v,
+    'cm': lambda v: 10 * v,
+    "pt": points_to_mm,
+    "pc": picas_to_mm,
+    "px": pixels_to_mm,
+}
+
 
 class AlgorithmError(Exception):
     """Raised when the algorithm fails to find a valid solution."""
@@ -224,6 +250,16 @@ class SVGProcessor:
         # Bounding box attributes are initialized
         self.min_x = self.min_y = self.max_x = self.max_y = None
 
+        ### Set unit normalization func to get all values in mm everytime.
+        _svg_file_units = 'px' # default value is pixels if nothing given or invalid values given in svg file
+        svg_width, svg_height = self.root.get("width"), self.root.get("height")
+
+        for unit in inkscape_units:
+            if unit in svg_width and unit in svg_height:
+                _svg_file_units = unit
+
+        self.unit_normalization_func = _mm_converter_func[_svg_file_units]
+
     @staticmethod
     def _parse_path_string(d_string: str) -> np.ndarray:
         """
@@ -287,7 +323,7 @@ class SVGProcessor:
                 path_points = self._parse_path_string(d_string)
 
                 # Apply all transformations: translation and then scaling
-                transformed_path = (path_points + transform) * DOTS_TO_MM
+                transformed_path = self.unit_normalization_func(path_points + transform)
 
                 channel_str = element.attrib.get('data-channels')
                 electrodes[element_id] = ElectrodeData(
@@ -370,7 +406,7 @@ class SVGProcessor:
         # convert list to np array to easily apply tranformations
         lines = np.array(lines)
         lines = (lines.reshape(-1, 2) + transform).reshape(-1,4) # apply translation to start and end points
-        return lines * DOTS_TO_MM
+        return self.unit_normalization_func(lines)
 
 
 
