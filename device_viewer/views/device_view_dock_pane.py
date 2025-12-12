@@ -15,6 +15,7 @@ from pyface.undo.api import UndoManager, CommandStack
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtMultimedia import QMediaCaptureSession
 
+from microdrop_style.button_styles import get_tooltip_style
 from .viewport_settings_view.widget import ZoomViewModel, ZoomControlWidget
 ##### local imports ######
 from ..default_settings import video_key
@@ -552,6 +553,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.debug(f"Applying {theme_name} mode")
 
             scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
+
+            # device view uses opengl so a complete stylesheet with widget style specs cannot be added:
+            # but other elements like tooltips do need updating
+            self.device_view.setStyleSheet(get_tooltip_style(theme_name))
 
             # reveal requires the narrow button type specified
             reveal_button.setStyleSheet(get_complete_stylesheet(theme_name, button_type="narrow"))
