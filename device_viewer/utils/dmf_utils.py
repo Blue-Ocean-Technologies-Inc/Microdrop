@@ -4,7 +4,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from shapely.geometry import Polygon
 
-from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple
+from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Property, cached_property
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeData, \
     SVGProcessor, AlgorithmError
@@ -23,7 +23,7 @@ class SvgUtil(HasTraits):
     filename = File(desc='Filename of SVG file with electrodes data')
 
     area_scale = Float(1.0)
-    electrode_areas_scaled = Dict(Str, Float, desc='Area of electrodes scaled by area scale in mm2')
+    electrode_areas_scaled = Property(Dict(Str, Float), observe='[area_scale, electrode_areas.items]', desc='Area of electrodes scaled by area scale in mm2')
 
     electrodes = Dict(Str, Instance(ElectrodeData), desc="keys are electrode id, values are electrode data "
                                                          "providing path and channel data of the electrodes")
@@ -44,7 +44,7 @@ class SvgUtil(HasTraits):
     svg_processor = Instance(SVGProcessor)
 
     @observe('filename')
-    def _filename_change(self, event):
+    def _filename_changed(self, event):
         logger.debug("File changed")
         self.get_device_paths(event.new)
 
@@ -52,6 +52,15 @@ class SvgUtil(HasTraits):
     def _electrodes_changed(self, event):
         self.min_x, self.min_y, self.max_x, self.max_y = self.svg_processor.get_bounding_box()
         logger.debug(f"Bounding box: {self.min_x, self.min_y, self.max_x, self.max_y}")
+
+    @cached_property
+    def _get_electrode_areas_scaled(self):
+        if self.area_scale and self.electrode_areas:
+            return {key: value * self.area_scale for key, value in self.electrode_areas.items()}
+        elif self.electrode_areas:
+            return self.electrode_areas
+        else:
+            return {}
 
     def get_device_paths(self, filename):
 
@@ -95,7 +104,6 @@ class SvgUtil(HasTraits):
         if len(self.electrodes) > 0:
             self.electrode_centers = self.find_electrode_centroids()
             self.electrode_areas = self.find_electrode_areas()
-            self.electrode_areas_scaled = {key: value * self.area_scale for key, value in self.electrode_areas.items()}
 
             if len(self.neighbours.items()) == 0:
                 logger.warning(f"{self.filename} does not have extractable connection elements. Will auto find the connections")
