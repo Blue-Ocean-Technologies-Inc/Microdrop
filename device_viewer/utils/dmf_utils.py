@@ -89,30 +89,31 @@ class SvgUtil(HasTraits):
                     self.area_scale = float(scale.text)
                     logger.info(f"Pixel scale set to {self.area_scale} from SVG metadata.")
 
-        #############################################
+        #########################################################################################
         ## Process svg data
-        #############################################
+        #########################################################################################
         if not self.polygons:
             logger.error("No polygons found in SVG file. Failed load attempt.")
             raise ValueError("No polygons found in SVG file. Failed load attempt.")
-
-        if connection_lines is not None:
-            try:
-                self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
-            except AlgorithmError as e:
-                logger.error(e)
-                # publish this to have a popup inform user about this
 
         if len(self.electrodes) > 0:
             self.electrode_centers = self.find_electrode_centroids()
             self.electrode_areas = self.find_electrode_areas()
 
+            if connection_lines is not None:
+                try:
+                    self.neighbours = self.find_neighbours_all_from_connections(connection_lines)
+                except AlgorithmError as e:
+                    logger.error(e)
+                    # publish this to have a popup inform user about this
+
             if len(self.neighbours.items()) == 0:
                 logger.warning(f"{self.filename} does not have extractable connection elements. Will auto find the connections")
-                self.neighbours = self.find_neighbours_all()
-                self.auto_found_connections = True
+                self.generate_connections_from_neighbouring_electrodes()
 
-            self.neighbours_to_points()
+    def generate_connections_from_neighbouring_electrodes(self):
+        self.neighbours = self.find_neighbours_all()
+        self.auto_found_connections = True
 
     def get_electrode_polygons(self) -> dict[str, Polygon]:
         """
@@ -175,7 +176,8 @@ class SvgUtil(HasTraits):
 
         return tree_query.get_polygon_neighbours()
 
-    def neighbours_to_points(self):
+    @observe('neighbours')
+    def neighbours_to_points(self, event):
         # Dictionary to store electrode connections
         self.connections = {}
 
@@ -218,8 +220,7 @@ class SvgUtil(HasTraits):
 
         return paths
 
-    def save_to_file(self, file,
-                     electrode_ids_channels_map: dict[str, int]):
+    def save_to_file(self, file, electrode_ids_channels_map: dict[str, int]):
         """
         Method to save current svg data to a new svg file.
 
@@ -287,6 +288,9 @@ class SvgUtil(HasTraits):
                     "y2": str(self.svg_processor.unit_normalization_func(y2))
                 }
                 ET.SubElement(layer, f"{{{NS_SVG}}}line", line_attribs)
+
+            # reset auto found connections flag in case user wants to do it again
+            self.auto_found_connections = False
 
 
         ET.indent(root, space="  ")

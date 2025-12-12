@@ -571,7 +571,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         return main_container
 
     ###################################################################################################################
-    ###### SVG file loading / saving handling ########
+    ###### SVG file loading / saving / other handling ########
     ###################################################################################################################
 
     def _on_load_svg_success(self):
@@ -688,11 +688,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.electrodes.svg_save()
         self.name = self.name.replace(device_modified_tag, "")
 
+    def generate_svg_connections(self):
+        self.model.electrodes.svg_model.generate_connections_from_neighbouring_electrodes()
+
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
     #################################################################################################################
 
     @observe('model:electrodes:svg_model:area_scale', post_init=True)
+    @observe('model:electrodes:svg_model:auto_found_connections')
     @observe('model:electrodes:electrode_ids_channels_map:items', post_init=True)
     def _svg_data_changed(self, event):
         logger.debug(f"Svg data changed event: {event}")
