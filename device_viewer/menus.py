@@ -1,3 +1,5 @@
+from idlelib import tooltip
+
 from pyface.tasks.action.api import DockPaneAction, SMenu
 
 from .consts import PKG
@@ -38,7 +40,21 @@ def save_as_svg_dialogue_menu_factory():
         method="save_as_svg_dialog",
     )
 
+def generate_svg_connections_menu_factory():
+    """
+    Create a menu item that makes the viewer save current electrode/channel assignment to svg file
+    """
+
+    return DockPaneAction(
+        id=PKG + ".generate_svg_connections",
+        dock_pane_id=PKG + ".dock_pane",
+        name=f"Generate Connections",
+        method="generate_svg_connections",
+    )
 
 def tools_menu_factory():
-    return SMenu(load_svg_dialog_menu_factory(), save_svg_dialogue_menu_factory(), save_as_svg_dialogue_menu_factory(),
+    return SMenu(load_svg_dialog_menu_factory(),
+                 save_svg_dialogue_menu_factory(),
+                 save_as_svg_dialogue_menu_factory(),
+                 generate_svg_connections_menu_factory(),
                  id="device_svg_tools", name="Device")
