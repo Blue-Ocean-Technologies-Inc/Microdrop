@@ -277,15 +277,18 @@ class SvgUtil(HasTraits):
             style = "stroke:#000000;stroke-width:0.128792"
 
             # Iterate through data and create <ns0:line> sub-elements
+            # Store the coords in the original units user provided.
+            # Undo the normalization to mm using the appropriate inverse scaling function
             for index, (x1, y1, x2, y2) in enumerate(connection_lines):
+                x1, y1, x2, y2 = (str(self.svg_processor.unit_normalization_func_inverse(coord)) for coord in (x1, y1, x2, y2))
                 # save in DPI units in the file to match other svg files.
                 line_attribs = {
                     "id": f"line{index}",
                     "style": style,
-                    "x1": str(self.svg_processor.unit_normalization_func(x1)),
-                    "x2": str(self.svg_processor.unit_normalization_func(x2)),
-                    "y1": str(self.svg_processor.unit_normalization_func(y1)),
-                    "y2": str(self.svg_processor.unit_normalization_func(y2))
+                    "x1": x1,
+                    "x2": x2,
+                    "y1": y1,
+                    "y2": y2
                 }
                 ET.SubElement(layer, f"{{{NS_SVG}}}line", line_attribs)
 
