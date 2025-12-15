@@ -30,6 +30,17 @@ def picas_to_mm(picas):
     points = picas * 12
     return points_to_mm(points)
 
+def mm_to_pixels(mm):
+    return mm * DPI / INCH_TO_MM
+
+def mm_to_points(mm):
+    pixels = mm_to_pixels(mm)
+    return pixels * 72 / DPI
+
+def mm_to_picas(mm):
+    points = mm_to_points(mm)
+    return points / 12
+
 inkscape_units = [
     "mm",
     "cm",
@@ -44,6 +55,14 @@ _mm_converter_func = {
     "pt": points_to_mm,
     "pc": picas_to_mm,
     "px": pixels_to_mm,
+}
+
+_mm_converter_func_inverse = {
+    'mm': lambda v: v,
+    'cm': lambda v: v / 10,
+    "pt": mm_to_points,
+    "pc": mm_to_picas,
+    "px": mm_to_pixels,
 }
 
 
@@ -259,6 +278,7 @@ class SVGProcessor:
                 _svg_file_units = unit
 
         self.unit_normalization_func = _mm_converter_func[_svg_file_units]
+        self.unit_normalization_func_inverse = _mm_converter_func_inverse[_svg_file_units]
 
     @staticmethod
     def _parse_path_string(d_string: str) -> np.ndarray:
