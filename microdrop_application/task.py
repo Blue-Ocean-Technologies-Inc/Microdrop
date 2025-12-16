@@ -4,20 +4,15 @@ import dramatiq
 
 
 # Enthought library imports.
-from pyface.qt.QtWidgets import QApplication
-from pyface.qt.QtCore import Qt
-from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup, TaskAction
+from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
 from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
 from pyface.api import GUI
-from pyface.action.api import StatusBarManager
 from traits.api import Instance, provides
 
-
 # Local imports.
-from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES
-from microdrop_style.status_bar_style import get_status_bar_stylesheet
 from .consts import PKG
 
+from microdrop_utils.pyface_helpers import StatusBarManager
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
                                                       basic_listener_actor_routine)
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
@@ -101,19 +96,7 @@ class MicrodropTask(Task):
 
     def _add_status_bar_to_window(self):
         logger.info(f"Adding status bar to Microdrop Task window.")
-        self.window.status_bar_manager = StatusBarManager(messages=["\t" * 10 + "Free Mode"], size_grip=True)
-
-        # ---------------------------------- Theme aware styling ----------------------------------#
-        def _apply_theme_style(theme: 'Qt.ColorScheme'):
-            """Handle application level theme updates"""
-            self.window.status_bar_manager.status_bar.setStyleSheet(get_status_bar_stylesheet(QT_THEME_NAMES[theme]))
-
-        # Apply initial theme styling
-        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
-        # Call theme application method whenever global theme changes occur as well
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
-
-        # -----------------------------------------------------------------------------------------#
+        self.window.status_bar_manager = StatusBarManager(messages=["Free Mode"], size_grip=True)
 
         self.window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 

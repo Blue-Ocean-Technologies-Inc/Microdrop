@@ -1,11 +1,12 @@
 # Site package imports
+import traceback
 from pathlib import Path
 import dramatiq
 
 from traits.api import Instance, observe, Str, provides
 from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
 
-from pyface.api import FileDialog, OK, confirm, YES, NO
+from pyface.api import FileDialog, OK, confirm, YES, NO, error, error
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton, QScrollArea
@@ -54,6 +55,7 @@ from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.datetime_helpers import TimestampedMessage
+from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 
 # ext consts
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
@@ -398,15 +400,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # new device: reset undo manager.
         self.undo_manager.active_stack.clear()
 
-    def _initialize_svg_view(self, svg_file=None):
-        if svg_file is None:
-            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
-
-
-        # create model using svg data
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
-        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
-
+    def _initialize_svg_view(self, svg_file):
         # Trigger an update to redraw and re-initialize view using model.
         self.set_view_from_model(self.model.electrodes)
 
@@ -420,12 +414,42 @@ class DeviceViewerDockPane(TraitsDockPane):
             name += " (modified)"
 
         self.name = name
+
+    def _set_svg_model(self, svg_file):
+
+        self.model.reset()
+
+        # create model using svg data
+        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
+        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+
+    def _set_device_view_from_svg(self, svg_file=None):
+        if svg_file is None:
+            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
+
+        logger.info(f"Selected SVG file: {svg_file}")
+        # create model using svg data
+        try:
+            self._set_svg_model(svg_file=svg_file)
+            self._initialize_svg_view(svg_file=svg_file)
+            # if model and view can be set, change default svg file
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
+
+        except Exception as e:
+            logger.error(f"Could not create electrodes from SVG file: {svg_file}. Error: {e}", exc_info=True)
+            error(self.control, f"Could not create electrodes from SVG file: {svg_file}",
+                  informative=f"Reason: {e}",
+                  detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                  title="Error: Cannot Load Device SVG"
+                  )
+            return
+
     #--------------------- UI initialization -----------------------
 
     def create_contents(self, parent):
         """Called when the task is activated."""
         logger.debug("creating device viewer dock pane contents")
-        self._initialize_svg_view()
+        self._set_device_view_from_svg()
 
         ###################################################################
         # Initialize camera primitives
@@ -574,19 +598,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     ###### SVG file loading / saving / other handling ########
     ###################################################################################################################
 
-    def _on_load_svg_success(self):
-        """Open a file dialog to select an SVG file and set it in the central pane."""
-        self.task.window.status_bar_manager.messages.append('Loading ...') # Set loading label while the SVG is being processed
-
-        self.model.reset()
-
-        # since OK, the default svg-file should have changed now. Initialize svg view uses this by default
-        logger.info(f"Selected SVG file: {self.device_viewer_preferences.DEFAULT_SVG_FILE}")
-
-        self._initialize_svg_view()
-
-        self.task.window.status_bar_manager.messages.pop()
-
+    @app_statusbar_message_from_dock_pane("...Loading Svg")
     def load_svg_dialog(self):
 
         # --- 1. Open a dialog for the user to select a source file ---
@@ -607,8 +619,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug("Checking for chosen file in repo...")
         if src_file.parent == repo_dir:
             logger.debug(f"File '{src_file.name}' is already in the repo. Selecting it.")
-            self.device_viewer_preferences.DEFAULT_SVG_FILE = src_file
-            self._on_load_svg_success()
+            self._set_device_view_from_svg(src_file)
             return OK
 
         logger.info("\n--- Loading external svg file into device repo ---")
@@ -618,11 +629,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         if not dst_file.exists():
             # --- 4a. No conflict: The file doesn't exist, copy it directly.
 
-            self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+            self._set_device_view_from_svg(safe_copy_file(src_file, dst_file))
 
             logger.info(f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before.")
 
-            self._on_load_svg_success()
             return OK
 
         else:
@@ -642,9 +652,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             if confirm_overwrite == YES:
                 # --- Overwrite the existing file ---
                 logger.debug(f"User chose to overwrite '{dst_file.name}'.")
-                self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
 
-                self._on_load_svg_success()
+                self._set_device_view_from_svg(safe_copy_file(src_file, dst_file))
+
                 return OK
 
             elif confirm_overwrite == NO:
@@ -660,9 +670,8 @@ class DeviceViewerDockPane(TraitsDockPane):
                 if dialog.open() == OK:
                     dst_file = dialog.path
 
-                    self.device_viewer_preferences.DEFAULT_SVG_FILE = safe_copy_file(src_file, dst_file)
+                    self._set_device_view_from_svg(safe_copy_file(src_file, dst_file))
 
-                    self._on_load_svg_success()
                     return OK
 
                 else:
@@ -675,7 +684,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 logger.debug("Load operation cancelled by user.")
                 return None
 
-
+    @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
@@ -684,10 +693,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.electrodes.svg_save_as(new_filename)
             self.name = self.name.replace(device_modified_tag, "")
 
+    @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_svg(self):
         self.model.electrodes.svg_save()
         self.name = self.name.replace(device_modified_tag, "")
 
+    @app_statusbar_message_from_dock_pane("...Generating Connections")
     def generate_svg_connections(self):
         self.model.electrodes.svg_model.generate_connections_from_neighbouring_electrodes()
 
@@ -783,10 +794,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         if _status_bar_manager:
 
             if self.model.step_label is None:
-                _status_bar_manager.message = "\t"*10 + "Free Mode"
+                _status_bar_manager.message = "Free Mode"
 
             elif self.model.step_label:
-                _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
+                _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
 
     @observe("model:mode")
     def _mode_changed(self, event):
@@ -795,16 +806,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         if _status_bar_manager:
 
             if event.new == "camera-place":
-                _status_bar_manager.message += camera_place_status_message_text
+                _status_bar_manager.messages += [camera_place_status_message_text]
 
             if event.new == "camera-edit":
-                _status_bar_manager.message += camera_edit_status_message_text
+                _status_bar_manager.messages += [camera_edit_status_message_text]
 
             if event.old == "camera-place":
-                _status_bar_manager.message = _status_bar_manager.message.replace(camera_place_status_message_text, "")
+                _status_bar_manager.remove(camera_place_status_message_text)
 
             if event.old == "camera-edit":
-                _status_bar_manager.message = _status_bar_manager.message.replace(camera_edit_status_message_text, "")
+                _status_bar_manager.remove(camera_edit_status_message_text)
 
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
