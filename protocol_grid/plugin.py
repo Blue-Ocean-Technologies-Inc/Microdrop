@@ -60,6 +60,7 @@ class ProtocolGridControllerUIPlugin(Plugin):
 
     def _contributed_task_extensions_default(self):
         from .dock_pane import PGCDockPane
+        from .menus import tools_menu_factory
 
         return [
             TaskExtension(
@@ -71,7 +72,14 @@ class ProtocolGridControllerUIPlugin(Plugin):
                         path='MenuBar/Edit',
                         after='Preferences',
                         id='advanced_mode_menu'
-                    )
+                    ),
+
+                    SchemaAddition(
+                        factory=tools_menu_factory,
+                        path='MenuBar/File',
+                        before='Exit',
+                    ),
+
                 ]
             )
         ]

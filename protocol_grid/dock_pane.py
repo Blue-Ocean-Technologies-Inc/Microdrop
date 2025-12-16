@@ -54,3 +54,9 @@ class PGCDockPane(DockPane):
             return widget
         else:
             raise
+
+    def load_protocol_dialog(self):
+        self.control.widget().import_from_json()
+
+    def save_as_protocol_dialog(self):
+        self.control.widget().export_to_json()
