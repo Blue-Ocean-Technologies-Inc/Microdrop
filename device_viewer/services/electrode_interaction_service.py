@@ -77,7 +77,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     _edit_reference_rect = Bool(False, desc='Is the reference rect editable without affecting perpective.')
 
-    _electrode_tooltip_visible = Bool(False)
+    _electrode_tooltip_visible = Bool(True)
 
     _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
 
