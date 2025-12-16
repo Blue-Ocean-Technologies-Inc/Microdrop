@@ -1487,13 +1487,13 @@ class PGCWidget(QWidget):
         self.btn_add_group_into.setToolTip("Add Group Into")
 
         self.btn_import = QPushButton("file_save")
-        self.btn_import.setToolTip("Import")
+        self.btn_import.setToolTip("Import Protocol File Dialog")
 
         self.btn_export = QPushButton("file_export")
-        self.btn_export.setToolTip("Export")
+        self.btn_export.setToolTip("Save Protocol As File Dialog")
 
         self.btn_import_into = QPushButton("input")
-        self.btn_import_into.setToolTip("Import Into")
+        self.btn_import_into.setToolTip("Import Protocol Into Selected Group")
         
         self.btn_add_step.clicked.connect(self.add_step)
         self.btn_add_step_into.clicked.connect(self.add_step_into)
