@@ -5,8 +5,8 @@ from pyface.qt.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, QScrollArea,
                                QCheckBox, QDialogButtonBox, QApplication, QTextBrowser)
+from pyface.qt.QtGui import QAction, QCursor, QContextMenuEvent
 
-from pyface.qt.QtGui import QAction, QCursor
 from pyface.action.api import Action
 
 from traits.api import Str
@@ -45,6 +45,8 @@ class ExperimentLabel(QLabel):
 
         self._experiment_id = None
 
+        self._tooltip_visible = True
+
         # apply initial styling and update whenever app color scheme changes
         self.apply_styling()
         QApplication.styleHints().colorSchemeChanged.connect(self.apply_styling)
@@ -56,6 +58,28 @@ class ExperimentLabel(QLabel):
             event.accept()
         else:
             super().mousePressEvent(event)
+
+    def handle_tooltip_toggle(self, checked):
+        """Handler method when user requests tooltip toggle"""
+        self._tooltip_visible = checked
+        if checked:
+            self.setToolTip("Active Experiment (Click to open folder)")
+        else:
+            self.setToolTip("")
+
+    def contextMenuEvent(self, event: QContextMenuEvent):
+        context_menu = QMenu(self)
+
+        # Create Action
+        tooltip_toggle_action = QAction("Enable Tooltip", checkable=True, checked=self._tooltip_visible)
+
+        # Connect signal (checkable actions emit the bool state)
+        tooltip_toggle_action.triggered.connect(self.handle_tooltip_toggle)
+
+        context_menu.addAction(tooltip_toggle_action)
+
+        # Use globalPos() for correct menu placement
+        context_menu.exec(event.globalPos())
 
     def update_experiment_id(self, experiment_id=None):
         # if for style updates, id is None. Use the stored experiment id
@@ -83,7 +107,7 @@ class ExperimentLabel(QLabel):
             f"""
             QLabel {{ 
                 color: {text_color};
-                padding: 10px;
+                padding: 2px;
                 border-radius: 4px; /* Softens corners on hover */
             }}
 
