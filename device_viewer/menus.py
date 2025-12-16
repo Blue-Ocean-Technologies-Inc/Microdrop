@@ -1,7 +1,5 @@
-from idlelib import tooltip
-
-from pyface.tasks.action.api import DockPaneAction, SMenu
-
+from pyface.tasks.action.api import DockPaneAction, SMenu, SGroup
+from pyface.action.api import Separator
 from .consts import PKG
 
 def load_svg_dialog_menu_factory():
@@ -53,8 +51,18 @@ def generate_svg_connections_menu_factory():
     )
 
 def tools_menu_factory():
-    return SMenu(load_svg_dialog_menu_factory(),
-                 save_svg_dialogue_menu_factory(),
-                 save_as_svg_dialogue_menu_factory(),
-                 generate_svg_connections_menu_factory(),
-                 id="device_svg_tools", name="Device")
+    return SMenu(
+
+        SGroup(
+        load_svg_dialog_menu_factory(),
+            save_svg_dialogue_menu_factory(),
+            save_as_svg_dialogue_menu_factory()
+        ),
+
+    Separator(),
+
+    generate_svg_connections_menu_factory(),
+
+    id="device_svg_tools", name="Device"
+
+    )
