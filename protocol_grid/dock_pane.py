@@ -20,15 +20,15 @@ class PGCDockPane(DockPane):
     """
     #### 'ITaskPane' interface ################################################
 
-    id = Str(PKG + ".dock_pane")
+    id = f"{PKG}.dock_pane"
     name = Str(PKG_name)
 
     def create_contents(self, parent):
         widget = None
         try: 
             if hasattr(self, 'task') and self.task and hasattr(self.task, 'window'):
+                widget = PGCWidget(dock_pane=self)
                 app = self.task.window.application
-                widget = PGCWidget(application=app)
                 if app and hasattr(app, 'plugin_manager'):
                     for plugin in app.plugin_manager._plugins:
                         if hasattr(plugin, 'id') and plugin.id == "protocol_grid.plugin":

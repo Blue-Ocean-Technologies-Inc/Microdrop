@@ -52,15 +52,15 @@ class PGCWidget(QWidget):
     
     protocolChanged = Signal()
     
-    def __init__(self, application, parent=None, state=None):
+    def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
 
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
-        self.application = application
+        self.application = dock_pane.task.window.application
 
-        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=application.preferences)
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=self.application.preferences)
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
