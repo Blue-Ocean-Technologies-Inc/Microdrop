@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
+from pyface.qt.QtCore import Qt, Signal
+from pyface.qt.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, QScrollArea,
-                               QCheckBox, QDialogButtonBox, QApplication)
-from PySide6.QtGui import QAction, QCursor
+                               QCheckBox, QDialogButtonBox, QApplication, QTextBrowser)
 
+from pyface.qt.QtGui import QAction, QCursor
 from pyface.action.api import Action
-from pyface.qt.QtWidgets import QTextBrowser
+
 from traits.api import Str
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
@@ -194,26 +194,24 @@ class NavigationBar(QWidget):
         # 2. Add Stretch (pushes left slot to left, checkboxes to right)
         checkbox_layout.addStretch()
 
+        # Add Checkboxes
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip(
-            "When checked, droplet detection will be performed at the end of each step"
-        )
-        
+        self.droplet_check_checkbox.setToolTip( "Droplet Detection on step end")
+
+        self.preview_mode_checkbox = QCheckBox("Preview Mode")
+        msg = "Send no hardware messages on protocol run and do not trigger errors."
+        self.preview_mode_checkbox.setToolTip(f"<div style='width: 150px;'>{msg}</div>")
+
         self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
         self.advanced_user_mode_checkbox.setToolTip(
             "When checked, navigation buttons remain enabled during protocol execution for advanced users"
         )
         self.advanced_user_mode_checkbox.setVisible(False)
         
-        self.preview_mode_checkbox = QCheckBox("Preview Mode")
-        self.preview_mode_checkbox.setToolTip(
-            "When checked, no hardware messages will be sent during protocol execution"
-        )
-        
         checkbox_layout.addWidget(self.preview_mode_checkbox)
         checkbox_layout.addWidget(self.droplet_check_checkbox)
         # checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
-            
+
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
         
