@@ -503,9 +503,7 @@ class PGCWidget(QWidget):
             protocol_name = self.protocol_state_tracker.get_protocol_name()
             is_modified = self.protocol_state_tracker.is_modified()
             
-            saved_path = self.experiment_manager.auto_save_protocol(
-                protocol_data, protocol_name, is_modified
-            )
+            saved_path = self.experiment_manager.auto_save_protocol(protocol_data, protocol_name, is_modified)
             
             if saved_path:
                 # update protocol state tracker to reflect the auto-saved protocol
