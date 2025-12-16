@@ -45,10 +45,9 @@ class SvgUtil(HasTraits):
 
     svg_processor = Instance(SVGProcessor)
 
-    @observe('filename')
-    def _filename_changed(self, event):
+    def traits_init(self):
         logger.debug("File changed")
-        self.get_device_paths(event.new)
+        self.get_device_paths(self.filename)
 
     @observe('electrodes')
     def _electrodes_changed(self, event):
