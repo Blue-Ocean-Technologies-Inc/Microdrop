@@ -48,9 +48,6 @@ class ExperimentManager:
         except Exception:
             return False
 
-    def get_experiment_id(self):
-        return self._experiment_id or "unknown"
-
     def get_experiment_directory(self):
         return self._experiment_directory or Path.cwd()
     
@@ -78,18 +75,19 @@ class ExperimentManager:
         except Exception as e:
             logger.error(f"Error checking if save is in experiment directory: {e}")
             return False
-    
+
     def auto_save_protocol(self, protocol_data, protocol_name=None, is_modified=False):
         """auto-save protocol to experiment directory with standard filename."""
         try:
-
+            directory = self.get_experiment_directory()
             # create filename
             if protocol_name and protocol_name != "untitled" and not is_modified:
                 # use current protocol name if not modified
                 filename = f"{protocol_name}.json"
             else:
                 # use experiment ID if untitled or modified
-                filename = f"protocol_{self._experiment_id}.json"
+                filename = f"protocol_{directory.stem}.json"
+
             file_path = self.get_experiment_directory() / filename
             
             # save protocol

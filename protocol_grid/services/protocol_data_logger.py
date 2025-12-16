@@ -2,12 +2,11 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject
 
 from logger.logger_service import get_logger
-from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 logger = get_logger(__name__)
 
@@ -287,7 +286,7 @@ class ProtocolDataLogger(QObject):
                 output_path = json_path.parent / (json_path.stem + ".csv")
             
             df.to_csv(output_path, index=False)
-            logger.info(f"Saved CSV file: {output_path}")
+            logger.critical(f"Saved CSV file: {output_path}")
             return str(output_path)
             
         except Exception as e:

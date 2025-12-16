@@ -23,7 +23,7 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DIS
                                   LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET, copy_fields_for_new_step)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
-                                             InformationPanel, ExperimentCompleteDialog,
+                                             ExperimentLabel, ExperimentCompleteDialog,
                                              DropbotDisconnectedBeforeRunDialogAction)
 
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
@@ -37,8 +37,6 @@ from protocol_grid.state.device_state import (DeviceState, device_state_from_dev
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
 
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
@@ -52,15 +50,15 @@ class PGCWidget(QWidget):
     
     protocolChanged = Signal()
     
-    def __init__(self, application, parent=None, state=None):
+    def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
 
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
-        self.application = application
+        self.application = dock_pane.task.window.application
 
-        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=application.preferences)
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=self.application.preferences)
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(self.on_protocol_finished)
@@ -75,7 +73,7 @@ class PGCWidget(QWidget):
 
         self.protocol_runner.experiment_manager = self.experiment_manager
 
-        self.protocol_state_tracker = ProtocolStateTracker()
+        self.protocol_state_tracker = ProtocolStateTracker(dock_pane=dock_pane)
         
         self.tree = QTreeView()
         self.model = QStandardItemModel()
@@ -103,27 +101,27 @@ class PGCWidget(QWidget):
         
         self.create_buttons()
 
-        self.information_panel = InformationPanel(self)
-        self.information_panel.open_button.clicked.connect(self.open_experiment_directory)        
+        self.information_panel = ExperimentLabel(self)
+        self.information_panel.clicked.connect(self.open_experiment_directory)
         self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
-        self.information_panel.update_protocol_name(self.protocol_state_tracker.get_protocol_display_name())
-        
+
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.stop_protocol)
         self.navigation_bar.btn_first.clicked.connect(self.navigate_to_first_step)
         self.navigation_bar.btn_prev.clicked.connect(self.navigate_to_previous_step)
         self.navigation_bar.btn_next.clicked.connect(self.navigate_to_next_step)
-        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step) 
+        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step)
         self.navigation_bar.btn_prev_phase.clicked.connect(self.navigate_previous_phase)
         self.navigation_bar.btn_resume.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_next_phase.clicked.connect(self.navigate_next_phase)
 
+        self.navigation_bar.add_widget_to_left_slot(self.information_panel)
+
+
         self.status_bar = StatusBar(self)
 
         layout = QVBoxLayout()
-
-        layout.addWidget(CollapsibleVStackBox("Info", control_widgets=self.information_panel))
 
         layout.addWidget(self.navigation_bar)
         layout.addWidget(make_separator())
@@ -388,15 +386,11 @@ class PGCWidget(QWidget):
         """open experiment directory in file explorer."""
         self.experiment_manager.open_experiment_directory()
 
-    def _update_protocol_display(self):
-        display_name = self.protocol_state_tracker.get_protocol_display_name()
-        self.information_panel.update_protocol_name(display_name)
 
     def _mark_protocol_modified(self):
         """mark the protocol as modified and update display."""
         if not self.protocol_state_tracker.is_modified():
             self.protocol_state_tracker.mark_modified(True)
-            self._update_protocol_display()
     # -----------------------------------------------
 
     # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
@@ -510,20 +504,15 @@ class PGCWidget(QWidget):
             protocol_name = self.protocol_state_tracker.get_protocol_name()
             is_modified = self.protocol_state_tracker.is_modified()
             
-            saved_path = self.experiment_manager.auto_save_protocol(
-                protocol_data, protocol_name, is_modified
-            )
+            saved_path = self.experiment_manager.auto_save_protocol(protocol_data, protocol_name, is_modified)
             
             if saved_path:
                 # update protocol state tracker to reflect the auto-saved protocol
-                self.protocol_state_tracker.set_saved_protocol(saved_path)
-                self._update_protocol_display()
-                logger.info(f"Protocol auto-saved to: {saved_path}")
+                logger.critical(f"Protocol saved as: {saved_path}")
 
             # save data file    
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
-                logger.info(f"Protocol data saved to: {data_file_path}")
                 csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
             
             # initialize new experiment if user wants
@@ -551,7 +540,6 @@ class PGCWidget(QWidget):
             # save data file
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
-                logger.info(f"Protocol data saved to: {data_file_path}")
                 csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
 
             dialog = ExperimentCompleteDialog(self)
@@ -1487,14 +1475,17 @@ class PGCWidget(QWidget):
         self.btn_add_group_into.setToolTip("Add Group Into")
 
         self.btn_import = QPushButton("file_save")
-        self.btn_import.setToolTip("Import")
+        self.btn_import.setToolTip("Import Protocol File Dialog")
 
         self.btn_export = QPushButton("file_export")
-        self.btn_export.setToolTip("Export")
+        self.btn_export.setToolTip("Save Protocol As File Dialog")
 
         self.btn_import_into = QPushButton("input")
-        self.btn_import_into.setToolTip("Import Into")
-        
+        self.btn_import_into.setToolTip("Import Protocol Into Selected Group")
+
+        # self.btn_open = QPushButton("folder_open")
+        # self.btn_open.setToolTip("Open current experiment directory")
+
         self.btn_add_step.clicked.connect(self.add_step)
         self.btn_add_step_into.clicked.connect(self.add_step_into)
         self.btn_add_group.clicked.connect(self.add_group)
@@ -1502,7 +1493,8 @@ class PGCWidget(QWidget):
         self.btn_import.clicked.connect(self.import_from_json)
         self.btn_import_into.clicked.connect(self.import_into_json)
         self.btn_export.clicked.connect(self.export_to_json)
-        
+        # self.btn_open.clicked.connect(self.open_experiment_directory)
+
         self.button_layout.addWidget(self.btn_add_step)
         self.button_layout.addWidget(self.btn_add_step_into)
         self.button_layout.addWidget(self.btn_add_group)
@@ -1510,6 +1502,7 @@ class PGCWidget(QWidget):
         self.button_layout.addWidget(self.btn_import)
         self.button_layout.addWidget(self.btn_import_into)
         self.button_layout.addWidget(self.btn_export)
+        # self.button_layout.addWidget(self.btn_open)
         self.button_layout.addStretch()
         
     def setup_header_context_menu(self):
@@ -2617,13 +2610,13 @@ class PGCWidget(QWidget):
                 
                 # update protocol state tracker
                 self.protocol_state_tracker.set_saved_protocol(file_name)
-                self._update_protocol_display()
                 
             except Exception as e:
                 logger.info(self, "Export Error", f"Failed to export: {str(e)}")
                 
     def import_from_json(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
+        default_dir = str(self.experiment_manager.get_experiment_directory())
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", default_dir, "JSON Files (*.json)")
         if file_name:
             try:
                 with open(file_name, "r") as f:
@@ -2637,7 +2630,6 @@ class PGCWidget(QWidget):
                     
                     # update protocol state tracker
                     self.protocol_state_tracker.set_loaded_protocol(file_name)
-                    self._update_protocol_display()
                     
                 finally:
                     self._loading_from_file = False

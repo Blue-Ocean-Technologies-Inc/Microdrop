@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
+from pyface.qt.QtCore import Qt, Signal
+from pyface.qt.QtWidgets import (QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                                QPushButton, QSizePolicy, QLabel, QLineEdit,
                                QFrame, QToolButton, QWidget, QScrollArea,
-                               QCheckBox, QDialogButtonBox, QApplication)
-from PySide6.QtGui import QAction, QCursor
+                               QCheckBox, QDialogButtonBox, QApplication, QTextBrowser)
+from pyface.qt.QtGui import QAction, QCursor, QContextMenuEvent
 
 from pyface.action.api import Action
-from pyface.qt.QtWidgets import QTextBrowser
+
 from traits.api import Str
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
@@ -33,69 +33,93 @@ BUTTON_BORDER_RADIUS = 8
 BUTTON_PADDING = 8
 
 
-class InformationPanel(QWidget):
-    """shows device, protocol, experiment info, and button to open experiment directory."""    
+class ExperimentLabel(QLabel):
+    """shows experiment info - clickable label"""
+    clicked = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setup_ui()
+        self.setText("<b>Experiment: </b>")
+        self.setToolTip("Active Experiment (Click to open folder)")
+        self.setCursor(Qt.PointingHandCursor)
+
+        self._experiment_id = None
+
+        self._tooltip_visible = True
+
+        # apply initial styling and update whenever app color scheme changes
         self.apply_styling()
-    
-    def setup_ui(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(3)
-        
-        text_layout = QVBoxLayout()
-        text_layout.setContentsMargins(5, 5, 5, 5)
-        text_layout.setSpacing(3)
-        
-        # self.device_label = QLabel("Device: ")
-        # self.device_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        self.protocol_label = QLabel("Protocol: untitled [not modified]")
-        self.protocol_label.setAlignment(Qt.AlignLeft)
-        
-        self.experiment_label = QLabel("Experiment: ")
-        self.experiment_label.setAlignment(Qt.AlignLeft)
-        
-        # layout.addWidget(self.device_label)
-        text_layout.addWidget(self.protocol_label)
-        text_layout.addWidget(self.experiment_label)
-        
-        self.open_button = QPushButton("folder_open")
-        self.open_button.setToolTip("Open current experiment directory")
-        
-        layout.addLayout(text_layout)
-        layout.addWidget(self.open_button, alignment=Qt.AlignLeft)
-        layout.addStretch()
-                
-        self.setLayout(layout)
-    
-    def apply_styling(self):
-        if is_dark_mode():
-            text_color = WHITE
-            button_style = DARK_MODE_STYLESHEET
+        QApplication.styleHints().colorSchemeChanged.connect(self.apply_styling)
+
+    def mousePressEvent(self, event):
+        """Emit signal on left click"""
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+            event.accept()
         else:
-            text_color = BLACK
-            button_style = LIGHT_MODE_STYLESHEET
-        
-        label_style = f"QLabel {{ color: {text_color}; }}"
-        
-        # for label in [self.device_label, self.protocol_label, self.experiment_label]:
-        for label in [self.protocol_label, self.experiment_label]:
-            label.setStyleSheet(label_style)
-        
-        self.open_button.setStyleSheet(button_style)
-    
-    # def update_device_name(self, device_name):
-    #     self.device_label.setText(f"Device: {device_name}")
-    
-    def update_protocol_name(self, protocol_display_name):
-        self.protocol_label.setText(f"Protocol: {protocol_display_name}")
-    
-    def update_experiment_id(self, experiment_id):
-        self.experiment_label.setText(f"Experiment: {experiment_id}")
-    
+            super().mousePressEvent(event)
+
+    def handle_tooltip_toggle(self, checked):
+        """Handler method when user requests tooltip toggle"""
+        self._tooltip_visible = checked
+        if checked:
+            self.setToolTip("Active Experiment (Click to open folder)")
+        else:
+            self.setToolTip("")
+
+    def contextMenuEvent(self, event: QContextMenuEvent):
+        context_menu = QMenu(self)
+
+        # Create Action
+        tooltip_toggle_action = QAction("Enable Tooltip", checkable=True, checked=self._tooltip_visible)
+
+        # Connect signal (checkable actions emit the bool state)
+        tooltip_toggle_action.triggered.connect(self.handle_tooltip_toggle)
+
+        context_menu.addAction(tooltip_toggle_action)
+
+        # Use globalPos() for correct menu placement
+        context_menu.exec(event.globalPos())
+
+    def update_experiment_id(self, experiment_id=None):
+        # if for style updates, id is None. Use the stored experiment id
+        if experiment_id is None:
+            experiment_id = self._experiment_id
+
+        # Dark Mode Link: Soft Sky Blue (Good contrast on dark backgrounds)
+        # Light Mode Link: Deep Primary Blue (Standard web-link style)
+        link_color = "#82B1FF" if is_dark_mode() else "#0066CC"
+        self.setText(
+            f"<b>Experiment: </b> "
+            f"<span style='text-decoration: underline; color: {link_color};'>{experiment_id}</span>"
+        )
+
+        self._experiment_id = experiment_id
+
+    def apply_styling(self):
+        # Define base colors (Soft White vs Soft Black/Charcoal)
+        text_color = "#F0F0F0" if is_dark_mode() else "#333333"
+
+        # Define hover background colors (Slightly lighter/darker than bg)
+        hover_bg = "#3a3a3a" if is_dark_mode() else "#e0e0e0"
+
+        self.setStyleSheet(
+            f"""
+            QLabel {{ 
+                color: {text_color};
+                padding: 2px;
+                border-radius: 4px; /* Softens corners on hover */
+            }}
+
+            /* Visual feedback when hovering over the clickable area */
+            QLabel:hover {{
+                background-color: {hover_bg};
+            }}
+            """
+        )
+
+        self.update_experiment_id()
+
     def update_theme_styling(self):
         self.apply_styling()
 
@@ -181,30 +205,37 @@ class NavigationBar(QWidget):
         checkbox_layout = QHBoxLayout()
         checkbox_layout.setContentsMargins(0, 0, 0, 0)
         checkbox_layout.setSpacing(10)
-        
-        # right-align checkboxes
+
+        # Create a LEFT SLOT container
+        self.left_slot_container = QWidget()
+        self.left_slot_layout = QHBoxLayout(self.left_slot_container)
+        self.left_slot_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_slot_layout.setSpacing(5)
+
+        # Add the left slot to the layout FIRST
+        checkbox_layout.addWidget(self.left_slot_container)
+
+        # 2. Add Stretch (pushes left slot to left, checkboxes to right)
         checkbox_layout.addStretch()
 
+        # Add Checkboxes
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip(
-            "When checked, droplet detection will be performed at the end of each step"
-        )
-        
+        self.droplet_check_checkbox.setToolTip( "Droplet Detection on step end")
+
+        self.preview_mode_checkbox = QCheckBox("Preview Mode")
+        msg = "Send no hardware messages on protocol run and do not trigger errors."
+        self.preview_mode_checkbox.setToolTip(f"<div style='width: 150px;'>{msg}</div>")
+
         self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
         self.advanced_user_mode_checkbox.setToolTip(
             "When checked, navigation buttons remain enabled during protocol execution for advanced users"
         )
         self.advanced_user_mode_checkbox.setVisible(False)
         
-        self.preview_mode_checkbox = QCheckBox("Preview Mode")
-        self.preview_mode_checkbox.setToolTip(
-            "When checked, no hardware messages will be sent during protocol execution"
-        )
-        
         checkbox_layout.addWidget(self.preview_mode_checkbox)
         checkbox_layout.addWidget(self.droplet_check_checkbox)
         # checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
-            
+
         main_layout.addLayout(self.button_layout)
         main_layout.addLayout(checkbox_layout)
         
@@ -293,6 +324,10 @@ class NavigationBar(QWidget):
     
     def is_phase_navigation_active(self):
         return self._phase_navigation_active
+
+    def add_widget_to_left_slot(self, widget):
+        """Helper to add widgets to the bottom-left area."""
+        self.left_slot_layout.addWidget(widget)
 
 
 class StatusBar(QScrollArea):
@@ -497,8 +532,8 @@ class EditContextMenu(QMenu):
         
         import_export_actions = [
             ("Import Into", self.widget.import_into_json),
-            ("Export to JSON", self.widget.export_to_json),
-            ("Import from JSON", self.widget.import_from_json),
+            ("Save As", self.widget.export_to_json),
+            ("Load", self.widget.import_from_json),
         ]
         for name, slot in import_export_actions:
             action = QAction(name, self)
