@@ -37,46 +37,21 @@ class InformationPanel(QWidget):
     """shows device, protocol, experiment info, and button to open experiment directory."""    
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setup_ui()
-        self.apply_styling()
-    
-    def setup_ui(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(3)
-        
-        text_layout = QVBoxLayout()
-        text_layout.setContentsMargins(5, 5, 5, 5)
-        text_layout.setSpacing(3)
-        
         self.experiment_label = QLabel("Experiment: ")
-        self.experiment_label.setAlignment(Qt.AlignLeft)
+        self.apply_styling()
 
-        text_layout.addWidget(self.experiment_label)
-        
-        self.open_button = QPushButton("folder_open")
-        self.open_button.setToolTip("Open current experiment directory")
-        
-        layout.addLayout(text_layout)
-        layout.addWidget(self.open_button, alignment=Qt.AlignLeft)
-        layout.addStretch()
-                
+        layout = QVBoxLayout()
+        layout.addWidget(self.experiment_label)
+
         self.setLayout(layout)
-    
+
     def apply_styling(self):
-        if is_dark_mode():
-            text_color = WHITE
-            button_style = DARK_MODE_STYLESHEET
-        else:
-            text_color = BLACK
-            button_style = LIGHT_MODE_STYLESHEET
-        
-        label_style = f"QLabel {{ color: {text_color}; }}"
-        
-        # for label in [self.device_label, self.protocol_label, self.experiment_label]:
-        self.experiment_label.setStyleSheet(label_style)
-        
-        self.open_button.setStyleSheet(button_style)
+
+        self.experiment_label.setStyleSheet(
+
+            f"QLabel {{ color: {WHITE if is_dark_mode() else BLACK}; }}"
+
+        )
     
     def update_experiment_id(self, experiment_id):
         self.experiment_label.setText(f"Experiment: {experiment_id}")

@@ -102,7 +102,6 @@ class PGCWidget(QWidget):
         self.create_buttons()
 
         self.information_panel = InformationPanel(self)
-        self.information_panel.open_button.clicked.connect(self.open_experiment_directory)        
         self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
 
         self.navigation_bar = NavigationBar(self)
@@ -1481,7 +1480,10 @@ class PGCWidget(QWidget):
 
         self.btn_import_into = QPushButton("input")
         self.btn_import_into.setToolTip("Import Protocol Into Selected Group")
-        
+
+        self.btn_open = QPushButton("folder_open")
+        self.btn_open.setToolTip("Open current experiment directory")
+
         self.btn_add_step.clicked.connect(self.add_step)
         self.btn_add_step_into.clicked.connect(self.add_step_into)
         self.btn_add_group.clicked.connect(self.add_group)
@@ -1489,7 +1491,8 @@ class PGCWidget(QWidget):
         self.btn_import.clicked.connect(self.import_from_json)
         self.btn_import_into.clicked.connect(self.import_into_json)
         self.btn_export.clicked.connect(self.export_to_json)
-        
+        self.btn_open.clicked.connect(self.open_experiment_directory)
+
         self.button_layout.addWidget(self.btn_add_step)
         self.button_layout.addWidget(self.btn_add_step_into)
         self.button_layout.addWidget(self.btn_add_group)
@@ -1497,6 +1500,7 @@ class PGCWidget(QWidget):
         self.button_layout.addWidget(self.btn_import)
         self.button_layout.addWidget(self.btn_import_into)
         self.button_layout.addWidget(self.btn_export)
+        self.button_layout.addWidget(self.btn_open)
         self.button_layout.addStretch()
         
     def setup_header_context_menu(self):
