@@ -2612,7 +2612,8 @@ class PGCWidget(QWidget):
                 logger.info(self, "Export Error", f"Failed to export: {str(e)}")
                 
     def import_from_json(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", "", "JSON Files (*.json)")
+        default_dir = str(self.experiment_manager.get_experiment_directory())
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Protocol from JSON", default_dir, "JSON Files (*.json)")
         if file_name:
             try:
                 with open(file_name, "r") as f:
