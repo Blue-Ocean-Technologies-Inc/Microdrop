@@ -33,29 +33,69 @@ BUTTON_BORDER_RADIUS = 8
 BUTTON_PADDING = 8
 
 
-class InformationPanel(QWidget):
-    """shows device, protocol, experiment info, and button to open experiment directory."""    
+class ExperimentLabel(QLabel):
+    """shows experiment info - clickable label"""
+    clicked = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.experiment_label = QLabel("Experiment: ")
+        self.setText("<b>Experiment: </b>")
+        self.setToolTip("Active Experiment (Click to open folder)")
+        self.setCursor(Qt.PointingHandCursor)
+
+        self._experiment_id = None
+
+        # apply initial styling and update whenever app color scheme changes
         self.apply_styling()
+        QApplication.styleHints().colorSchemeChanged.connect(self.apply_styling)
 
-        layout = QVBoxLayout()
-        layout.addWidget(self.experiment_label)
+    def mousePressEvent(self, event):
+        """Emit signal on left click"""
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
-        self.setLayout(layout)
+    def update_experiment_id(self, experiment_id=None):
+        # if for style updates, id is None. Use the stored experiment id
+        if experiment_id is None:
+            experiment_id = self._experiment_id
+
+        # Dark Mode Link: Soft Sky Blue (Good contrast on dark backgrounds)
+        # Light Mode Link: Deep Primary Blue (Standard web-link style)
+        link_color = "#82B1FF" if is_dark_mode() else "#0066CC"
+        self.setText(
+            f"<b>Experiment: </b> "
+            f"<span style='text-decoration: underline; color: {link_color};'>{experiment_id}</span>"
+        )
+
+        self._experiment_id = experiment_id
 
     def apply_styling(self):
+        # Define base colors (Soft White vs Soft Black/Charcoal)
+        text_color = "#F0F0F0" if is_dark_mode() else "#333333"
 
-        self.experiment_label.setStyleSheet(
+        # Define hover background colors (Slightly lighter/darker than bg)
+        hover_bg = "#3a3a3a" if is_dark_mode() else "#e0e0e0"
 
-            f"QLabel {{ color: {WHITE if is_dark_mode() else BLACK}; }}"
+        self.setStyleSheet(
+            f"""
+            QLabel {{ 
+                color: {text_color};
+                padding: 10px;
+                border-radius: 4px; /* Softens corners on hover */
+            }}
 
+            /* Visual feedback when hovering over the clickable area */
+            QLabel:hover {{
+                background-color: {hover_bg};
+            }}
+            """
         )
-    
-    def update_experiment_id(self, experiment_id):
-        self.experiment_label.setText(f"Experiment: {experiment_id}")
-    
+
+        self.update_experiment_id()
+
     def update_theme_styling(self):
         self.apply_styling()
 
@@ -141,8 +181,17 @@ class NavigationBar(QWidget):
         checkbox_layout = QHBoxLayout()
         checkbox_layout.setContentsMargins(0, 0, 0, 0)
         checkbox_layout.setSpacing(10)
-        
-        # right-align checkboxes
+
+        # Create a LEFT SLOT container
+        self.left_slot_container = QWidget()
+        self.left_slot_layout = QHBoxLayout(self.left_slot_container)
+        self.left_slot_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_slot_layout.setSpacing(5)
+
+        # Add the left slot to the layout FIRST
+        checkbox_layout.addWidget(self.left_slot_container)
+
+        # 2. Add Stretch (pushes left slot to left, checkboxes to right)
         checkbox_layout.addStretch()
 
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
@@ -253,6 +302,10 @@ class NavigationBar(QWidget):
     
     def is_phase_navigation_active(self):
         return self._phase_navigation_active
+
+    def add_widget_to_left_slot(self, widget):
+        """Helper to add widgets to the bottom-left area."""
+        self.left_slot_layout.addWidget(widget)
 
 
 class StatusBar(QScrollArea):

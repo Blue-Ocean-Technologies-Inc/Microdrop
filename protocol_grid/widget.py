@@ -23,7 +23,7 @@ from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DIS
                                   LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET, copy_fields_for_new_step)
 from protocol_grid.extra_ui_elements import (EditContextMenu, ColumnToggleDialog,
                                              NavigationBar, StatusBar, make_separator,
-                                             InformationPanel, ExperimentCompleteDialog,
+                                             ExperimentLabel, ExperimentCompleteDialog,
                                              DropbotDisconnectedBeforeRunDialogAction)
 
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
@@ -101,7 +101,8 @@ class PGCWidget(QWidget):
         
         self.create_buttons()
 
-        self.information_panel = InformationPanel(self)
+        self.information_panel = ExperimentLabel(self)
+        self.information_panel.clicked.connect(self.open_experiment_directory)
         self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
 
         self.navigation_bar = NavigationBar(self)
@@ -110,16 +111,17 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_first.clicked.connect(self.navigate_to_first_step)
         self.navigation_bar.btn_prev.clicked.connect(self.navigate_to_previous_step)
         self.navigation_bar.btn_next.clicked.connect(self.navigate_to_next_step)
-        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step) 
+        self.navigation_bar.btn_last.clicked.connect(self.navigate_to_last_step)
         self.navigation_bar.btn_prev_phase.clicked.connect(self.navigate_previous_phase)
         self.navigation_bar.btn_resume.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_next_phase.clicked.connect(self.navigate_next_phase)
 
+        self.navigation_bar.add_widget_to_left_slot(self.information_panel)
+
+
         self.status_bar = StatusBar(self)
 
         layout = QVBoxLayout()
-
-        layout.addWidget(CollapsibleVStackBox("Info", control_widgets=self.information_panel))
 
         layout.addWidget(self.navigation_bar)
         layout.addWidget(make_separator())
