@@ -61,7 +61,7 @@ class ProtocolStateTracker(HasTraits):
             self._loaded_protocol_path = str(path)
             self._protocol_name = path.stem
             self._is_modified = False
-            logger.info(f"Protocol saved as: {self._protocol_name}")
+            logger.critical(f"Protocol saved as: {self._protocol_name}")
     
     def mark_modified(self, modified=True):
         """mark protocol as modified or unmodified."""

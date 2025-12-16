@@ -286,7 +286,7 @@ class ProtocolDataLogger(QObject):
                 output_path = json_path.parent / (json_path.stem + ".csv")
             
             df.to_csv(output_path, index=False)
-            logger.info(f"Saved CSV file: {output_path}")
+            logger.critical(f"Saved CSV file: {output_path}")
             return str(output_path)
             
         except Exception as e:
