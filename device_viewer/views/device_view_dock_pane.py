@@ -9,7 +9,7 @@ from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictCha
 from pyface.api import FileDialog, OK, confirm, YES, NO, error, error
 from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
 from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton, QScrollArea
+from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton, QScrollArea, QFrame
 from pyface.qt.QtCore import QTimer, QPointF, QSizeF, Qt
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import UndoManager, CommandStack
@@ -591,6 +591,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Call theme application method whenever global theme changes occur as well
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
+
+        # style device view: remove frame in device view
+        self.device_view.setFrameStyle(QFrame.NoFrame)
 
         return main_container
 
