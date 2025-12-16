@@ -48,9 +48,6 @@ class ExperimentManager:
         except Exception:
             return False
 
-    def get_experiment_id(self):
-        return self._experiment_id or "unknown"
-
     def get_experiment_directory(self):
         return self._experiment_directory or Path.cwd()
     
