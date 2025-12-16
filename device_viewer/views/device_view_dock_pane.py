@@ -54,6 +54,7 @@ from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.datetime_helpers import TimestampedMessage
+from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 
 # ext consts
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
@@ -675,7 +676,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 logger.debug("Load operation cancelled by user.")
                 return None
 
-
+    @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
         dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
@@ -684,10 +685,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.electrodes.svg_save_as(new_filename)
             self.name = self.name.replace(device_modified_tag, "")
 
+    @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_svg(self):
         self.model.electrodes.svg_save()
         self.name = self.name.replace(device_modified_tag, "")
 
+    @app_statusbar_message_from_dock_pane("...Generating Connections")
     def generate_svg_connections(self):
         self.model.electrodes.svg_model.generate_connections_from_neighbouring_electrodes()
 
@@ -783,10 +786,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         if _status_bar_manager:
 
             if self.model.step_label is None:
-                _status_bar_manager.message = "\t"*10 + "Free Mode"
+                _status_bar_manager.message = "Free Mode"
 
             elif self.model.step_label:
-                _status_bar_manager.message = "\t"*10 + f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
+                _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
 
     @observe("model:mode")
     def _mode_changed(self, event):
@@ -795,16 +798,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         if _status_bar_manager:
 
             if event.new == "camera-place":
-                _status_bar_manager.message += camera_place_status_message_text
+                _status_bar_manager.messages += [camera_place_status_message_text]
 
             if event.new == "camera-edit":
-                _status_bar_manager.message += camera_edit_status_message_text
+                _status_bar_manager.messages += [camera_edit_status_message_text]
 
             if event.old == "camera-place":
-                _status_bar_manager.message = _status_bar_manager.message.replace(camera_place_status_message_text, "")
+                _status_bar_manager.remove(camera_place_status_message_text)
 
             if event.old == "camera-edit":
-                _status_bar_manager.message = _status_bar_manager.message.replace(camera_edit_status_message_text, "")
+                _status_bar_manager.remove(camera_edit_status_message_text)
 
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
