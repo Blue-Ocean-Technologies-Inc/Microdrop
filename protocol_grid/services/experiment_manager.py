@@ -79,26 +79,10 @@ class ExperimentManager:
             logger.error(f"Error checking if save is in experiment directory: {e}")
             return False
     
-    def cleanup_experiment_jsons(self):
-        """delete all JSON files in the current experiment directory."""
-        try:
-            experiment_dir = self.get_experiment_directory()
-            
-            # find and delete all .json files
-            json_files = list(experiment_dir.glob("*.json"))
-            for json_file in json_files:
-                json_file.unlink()
-                logger.info(f"Deleted existing JSON file: {json_file.name}")
-                
-        except Exception as e:
-            logger.error(f"Failed to cleanup experiment JSONs: {e}")
-    
     def auto_save_protocol(self, protocol_data, protocol_name=None, is_modified=False):
         """auto-save protocol to experiment directory with standard filename."""
         try:
-            # cleanup existing JSONs first
-            self.cleanup_experiment_jsons()
-            
+
             # create filename
             if protocol_name and protocol_name != "untitled" and not is_modified:
                 # use current protocol name if not modified

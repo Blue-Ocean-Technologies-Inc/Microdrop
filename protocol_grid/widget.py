@@ -2611,12 +2611,6 @@ class PGCWidget(QWidget):
         file_name, _ = QFileDialog.getSaveFileName(self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)")
         if file_name:
             try:
-                # check if saving to experiment directory
-                if self.experiment_manager.is_save_in_experiment_directory(file_name):
-                    # cleanup existing JSONs first
-                    self.experiment_manager.cleanup_experiment_jsons()
-                    logger.info("Overwriting existing JSONs in experiment directory")
-                
                 flat_data = self.state.to_flat_export()
                 with open(file_name, "w") as f:
                     json.dump(flat_data, f, indent=2)
