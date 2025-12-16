@@ -514,7 +514,6 @@ class PGCWidget(QWidget):
             # save data file    
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
-                logger.info(f"Protocol data saved to: {data_file_path}")
                 csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
             
             # initialize new experiment if user wants
