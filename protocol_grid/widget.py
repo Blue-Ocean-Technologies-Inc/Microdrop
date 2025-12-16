@@ -104,8 +104,7 @@ class PGCWidget(QWidget):
         self.information_panel = InformationPanel(self)
         self.information_panel.open_button.clicked.connect(self.open_experiment_directory)        
         self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
-        self.information_panel.update_protocol_name(self.protocol_state_tracker.get_protocol_display_name())
-        
+
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.stop_protocol)
@@ -386,15 +385,11 @@ class PGCWidget(QWidget):
         """open experiment directory in file explorer."""
         self.experiment_manager.open_experiment_directory()
 
-    def _update_protocol_display(self):
-        display_name = self.protocol_state_tracker.get_protocol_display_name()
-        self.information_panel.update_protocol_name(display_name)
 
     def _mark_protocol_modified(self):
         """mark the protocol as modified and update display."""
         if not self.protocol_state_tracker.is_modified():
             self.protocol_state_tracker.mark_modified(True)
-            self._update_protocol_display()
     # -----------------------------------------------
 
     # ---------- Protocol Navigation Bar / Status Bar / Runner Methods ----------
@@ -515,7 +510,6 @@ class PGCWidget(QWidget):
             if saved_path:
                 # update protocol state tracker to reflect the auto-saved protocol
                 self.protocol_state_tracker.set_saved_protocol(saved_path)
-                self._update_protocol_display()
                 logger.info(f"Protocol auto-saved to: {saved_path}")
 
             # save data file    
@@ -549,7 +543,6 @@ class PGCWidget(QWidget):
             # save data file
             data_file_path = self.protocol_data_logger.save_data_file()
             if data_file_path:
-                logger.info(f"Protocol data saved to: {data_file_path}")
                 csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(data_file_path)
 
             dialog = ExperimentCompleteDialog(self)
@@ -2615,7 +2608,6 @@ class PGCWidget(QWidget):
                 
                 # update protocol state tracker
                 self.protocol_state_tracker.set_saved_protocol(file_name)
-                self._update_protocol_display()
                 
             except Exception as e:
                 logger.info(self, "Export Error", f"Failed to export: {str(e)}")
@@ -2635,7 +2627,6 @@ class PGCWidget(QWidget):
                     
                     # update protocol state tracker
                     self.protocol_state_tracker.set_loaded_protocol(file_name)
-                    self._update_protocol_display()
                     
                 finally:
                     self._loading_from_file = False

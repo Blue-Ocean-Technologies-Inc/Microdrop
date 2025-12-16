@@ -49,17 +49,9 @@ class InformationPanel(QWidget):
         text_layout.setContentsMargins(5, 5, 5, 5)
         text_layout.setSpacing(3)
         
-        # self.device_label = QLabel("Device: ")
-        # self.device_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        self.protocol_label = QLabel("Protocol: untitled [not modified]")
-        self.protocol_label.setAlignment(Qt.AlignLeft)
-        
         self.experiment_label = QLabel("Experiment: ")
         self.experiment_label.setAlignment(Qt.AlignLeft)
-        
-        # layout.addWidget(self.device_label)
-        text_layout.addWidget(self.protocol_label)
+
         text_layout.addWidget(self.experiment_label)
         
         self.open_button = QPushButton("folder_open")
@@ -82,16 +74,9 @@ class InformationPanel(QWidget):
         label_style = f"QLabel {{ color: {text_color}; }}"
         
         # for label in [self.device_label, self.protocol_label, self.experiment_label]:
-        for label in [self.protocol_label, self.experiment_label]:
-            label.setStyleSheet(label_style)
+        self.experiment_label.setStyleSheet(label_style)
         
         self.open_button.setStyleSheet(button_style)
-    
-    # def update_device_name(self, device_name):
-    #     self.device_label.setText(f"Device: {device_name}")
-    
-    def update_protocol_name(self, protocol_display_name):
-        self.protocol_label.setText(f"Protocol: {protocol_display_name}")
     
     def update_experiment_id(self, experiment_id):
         self.experiment_label.setText(f"Experiment: {experiment_id}")
