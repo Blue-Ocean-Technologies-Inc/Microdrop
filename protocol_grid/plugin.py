@@ -3,14 +3,10 @@ from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str, Bool, Event
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
 
 from protocol_grid.services.message_listener import MessageListener
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
-from dropbot_controller.consts import DROPBOT_DISCONNECTED, CHIP_INSERTED, DROPBOT_CONNECTED
 from protocol_grid.services.advanced_mode_menu import advanced_mode_menu_factory
 
 
@@ -134,12 +130,12 @@ class ProtocolGridControllerUIPlugin(Plugin):
                 if widget and hasattr(widget, 'navigation_bar'):
                     # temporarily disconnect signal to prevent infinite loop
                     checkbox = widget.navigation_bar.advanced_user_mode_checkbox
-                    
+
                     # block signals while updating to prevent recursion
                     checkbox.blockSignals(True)
                     checkbox.setChecked(state)
                     checkbox.blockSignals(False)
-                    
+
                     logger.debug(f"Synced advanced mode to widget: {state}")
         except Exception as e:
             logger.error(f"Error syncing advanced mode to widget: {e}")
@@ -149,10 +145,10 @@ class ProtocolGridControllerUIPlugin(Plugin):
         """Set a weak reference to the widget for state synchronization."""
         import weakref
         self._widget_ref = weakref.ref(widget)
-        
+
         # initialize advanced mode state from widget if checkbox exists
         if hasattr(widget, 'navigation_bar') and hasattr(widget.navigation_bar, 'advanced_user_mode_checkbox'):
             initial_state = widget.navigation_bar.advanced_user_mode_checkbox.isChecked()
-            if initial_state != self._advanced_mode:
-                self._advanced_mode = initial_state
-                logger.info(f"Initialized advanced mode state from widget: {initial_state}")
+        if initial_state != self._advanced_mode:
+            self._advanced_mode = initial_state
+            logger.info(f"Initialized advanced mode state from widget: {initial_state}")
