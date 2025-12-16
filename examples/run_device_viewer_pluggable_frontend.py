@@ -1,8 +1,6 @@
 import sys
 import os
 
-from ssh_controls_ui.plugin import SSHUIPlugin
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
