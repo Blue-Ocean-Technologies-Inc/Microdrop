@@ -37,8 +37,6 @@ from protocol_grid.state.device_state import (DeviceState, device_state_from_dev
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
-from microdrop_style.colors import(PRIMARY_SHADE, SECONDARY_SHADE, WHITE,
-                                   WHITE, BLACK, GREY)
 
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
