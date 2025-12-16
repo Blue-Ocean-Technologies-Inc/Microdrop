@@ -1,19 +1,46 @@
+from traits.api import HasTraits, Str, observe, Instance, Bool
+from pyface.tasks.dock_pane import DockPane
+
 from pathlib import Path
 
 from logger.logger_service import get_logger
+from protocol_grid.consts import PKG_name
 
 logger = get_logger(__name__)
 
 
-class ProtocolStateTracker:
+class ProtocolStateTracker(HasTraits):
     """tracks current protocol file state and modifications."""
-    
-    def __init__(self):
+
+    _protocol_name = Str("untitled")
+    _is_modified = Bool(False)
+    dock_pane = Instance(DockPane)
+
+    def traits_init(self):
         self._loaded_protocol_path = None
-        self._protocol_name = "untitled"
-        self._is_modified = False
         self._original_state_hash = None
-    
+        self.modified_tag = "\t[modified]"
+
+        _modified_tag = self.modified_tag if self._is_modified else ""
+        self.dock_pane.name = PKG_name + "\t\t-\t\t" + self._protocol_name + _modified_tag
+
+    @observe("_protocol_name")
+    def __protocol_name_changed(self, event):
+        logger.debug(f"Protocol name change event: {event}")
+        self.dock_pane.name = PKG_name + "\t\t-\t\t" + event.new
+
+    @observe("_is_modified")
+    def _is_modified_changed(self, event):
+        logger.debug(f"Protocol modification change event: {event}")
+
+        base_name = PKG_name + "\t\t-\t\t" + self._protocol_name
+
+        if self._is_modified:
+            self.dock_pane.name = base_name + self.modified_tag
+
+        else:
+            self.dock_pane.name = base_name
+
     def set_loaded_protocol(self, file_path):
         """to set InformationPanel label as the currently loaded protocol file."""
         if file_path:

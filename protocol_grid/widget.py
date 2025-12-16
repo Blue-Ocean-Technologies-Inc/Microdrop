@@ -75,7 +75,7 @@ class PGCWidget(QWidget):
 
         self.protocol_runner.experiment_manager = self.experiment_manager
 
-        self.protocol_state_tracker = ProtocolStateTracker()
+        self.protocol_state_tracker = ProtocolStateTracker(dock_pane=dock_pane)
         
         self.tree = QTreeView()
         self.model = QStandardItemModel()
