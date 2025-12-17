@@ -19,21 +19,21 @@ class ProtocolStateTracker(HasTraits):
     def traits_init(self):
         self._loaded_protocol_path = None
         self._original_state_hash = None
-        self.modified_tag = "\t[modified]"
+        self.modified_tag = " [modified]"
 
         _modified_tag = self.modified_tag if self._is_modified else ""
-        self.dock_pane.name = PKG_name + "\t-\t" + self._protocol_name + _modified_tag
+        self.dock_pane.name = PKG_name + " - " + self._protocol_name + _modified_tag
 
     @observe("_protocol_name")
     def __protocol_name_changed(self, event):
         logger.debug(f"Protocol name change event: {event}")
-        self.dock_pane.name = PKG_name + "\t\t-\t\t" + event.new
+        self.dock_pane.name = PKG_name + " - " + event.new
 
     @observe("_is_modified")
     def _is_modified_changed(self, event):
         logger.debug(f"Protocol modification change event: {event}")
 
-        base_name = PKG_name + "\t-\t" + self._protocol_name
+        base_name = PKG_name + " - " + self._protocol_name
 
         if self._is_modified:
             self.dock_pane.name = base_name + self.modified_tag
