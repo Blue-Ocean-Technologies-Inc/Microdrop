@@ -524,15 +524,18 @@ class PGCWidget(QWidget):
                        # detail="This is some details over here",
                        ) == YES:
 
-                new_experiment_dir = self.experiment_manager.initialize_new_experiment()
-                self.application.current_experiment_directory = new_experiment_dir
-                if new_experiment_dir:
-                    # update information panel with new experiment ID
-                    self.experiment_label.update_experiment_id(new_experiment_dir.stem)
-                    logger.info(f"Started new experiment: {new_experiment_dir.stem}")
+                self.setup_new_experiment()
             
         except Exception as e:
             logger.error(f"Error handling regular mode completion: {e}")
+
+    def setup_new_experiment(self):
+        new_experiment_dir = self.experiment_manager.initialize_new_experiment()
+        self.application.current_experiment_directory = new_experiment_dir
+        if new_experiment_dir:
+            # update information panel with new experiment ID
+            self.experiment_label.update_experiment_id(new_experiment_dir.stem)
+            logger.info(f"Started new experiment: {new_experiment_dir.stem}")
 
     def _handle_advanced_mode_completion(self):
         """handle protocol completion in advanced mode: show dialog."""       
