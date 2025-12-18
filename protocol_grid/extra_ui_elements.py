@@ -240,8 +240,9 @@ class NavigationBar(QWidget):
         
         self.setLayout(main_layout)
         
-        # apply initial styling
+        # apply initial styling and change on future changes
         self._apply_styling()
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
     
     def _apply_styling(self):
         if is_dark_mode():
@@ -423,8 +424,10 @@ class StatusBar(QScrollArea):
         # 5. Adjust the height to account for the scrollbar itself.
         self.setFixedHeight(40)
         
-        # Apply initial styling
+        # Apply initial styling and update on future changes
         self._apply_styling()
+
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
     
     def _apply_styling(self):
         """Apply theme-specific styling to all labels and input fields."""
