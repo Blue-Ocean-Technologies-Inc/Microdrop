@@ -13,7 +13,8 @@ from traits.has_traits import HasTraits
 from microdrop_style.button_styles import get_button_style
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
-from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
+from microdrop_utils.pyside_helpers import DebouncedToolButton
+from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                calculate_group_aggregation_from_children)
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
@@ -38,8 +39,6 @@ from protocol_grid.state.device_state import (DeviceState, device_state_from_dev
                                               device_state_to_device_viewer_message)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
-
-from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 from logger.logger_service import get_logger
@@ -108,7 +107,7 @@ class PGCWidget(QWidget):
         self.experiment_label.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
 
         # new experiment tool
-        self.btn_new_exp = QToolButton(self)
+        self.btn_new_exp = DebouncedToolButton(timeout=1000)
         self.btn_new_exp.setText("note_add")
         self.btn_new_exp.setToolTip("New Experiment")
         self.btn_new_exp.clicked.connect(self.setup_new_experiment)

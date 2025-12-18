@@ -222,3 +222,18 @@ def get_qcolor_lighter_percent_from_factor(color: 'QColor', lightness_scale: flo
 
     # QColor.lighter() expects an integer
     return int(lightness_percentage)
+
+
+class DebouncedToolButton(QToolButton):
+    def __init__(self, timeout=1000, parent=None):
+        super().__init__(parent)
+        self.timeout = timeout
+
+        self.clicked.connect(self._handle_click)
+
+    def _handle_click(self):
+        # 1. Disable immediately
+        self.setEnabled(False)
+
+        # 2. Re-enable after timeout
+        QTimer.singleShot(self.timeout, lambda: self.setEnabled(True))
