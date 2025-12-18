@@ -1,5 +1,5 @@
 # enthought imports
-
+from PySide6.QtWidgets import QApplication
 from traits.api import Str
 from pyface.tasks.dock_pane import DockPane
 
@@ -48,6 +48,7 @@ class PGCDockPane(DockPane):
         # secondary notes widget that pgc widget could open
         self.note_launcher = NoteLauncher()
         self.note_launcher.start_daemon()
+        QApplication.instance().aboutToQuit.connect(self.note_launcher.shutdown)
 
         return widget
 
@@ -67,7 +68,3 @@ class PGCDockPane(DockPane):
         experiment_name = base_dir.stem
 
         self.note_launcher.request_new_note(base_dir, experiment_name)
-
-    def destroy(self, *args, **kwargs):
-        self.note_launcher.shutdown()
-        super().destroy(*args, **kwargs)

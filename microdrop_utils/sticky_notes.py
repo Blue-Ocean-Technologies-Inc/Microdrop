@@ -1,4 +1,5 @@
 import logging
+import signal
 import sys
 import os
 import re
@@ -410,6 +411,7 @@ def run_sticky_manager(command_queue, log_queue):
     timer.start(500)  # Check every 500ms (Changed from 1000 for better responsiveness)
 
     logger.info("Sticky Note Daemon Started. Waiting for commands...")
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     sys.exit(app.exec())
 
 
