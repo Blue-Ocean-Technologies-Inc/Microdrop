@@ -105,19 +105,11 @@ class StickyView(QWidget):
 
         # --- ACTIONS, SHORTCUTS & TOOLTIPS ---
 
-        # 1. Close
-        self.act_close = QAction("close", self)
-        self.act_close.setShortcut(QKeySequence.Close)  # Standard Close (Ctrl+W)
-        self.act_close.setToolTip("Close Note (Ctrl+W)")
-        self.addAction(self.act_close)
-
-        # 2. Save
         self.act_save = QAction("save", self)
         self.act_save.setShortcut(QKeySequence.Save)  # Standard Save (Ctrl+S)
         self.act_save.setToolTip("Save Note (Ctrl+S)")
         self.addAction(self.act_save)
 
-        # 3. Formatting
         self.act_bold = QAction("format_bold", self)
         self.act_bold.setCheckable(True)
         self.act_bold.setShortcut(QKeySequence.Bold)  # Standard Bold (Ctrl+B)
@@ -159,7 +151,6 @@ class StickyView(QWidget):
         self.top_bar.addWidget(self.file_save_label)
         self.top_bar.addWidget(_spacer())
         self.top_bar.addAction(self.act_color)
-        self.top_bar.addAction(self.act_close)
 
         # 2. Editor Area
         self.editor = QTextEdit()
