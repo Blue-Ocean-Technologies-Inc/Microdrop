@@ -6,7 +6,7 @@ from pyface.api import confirm, NO, YES
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
                                QFileDialog, QMessageBox, QApplication, QMainWindow,
                                QPushButton, QDialog, QToolButton)
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
