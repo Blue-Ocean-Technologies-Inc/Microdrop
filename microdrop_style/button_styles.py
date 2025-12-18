@@ -249,7 +249,34 @@ QPushButton:pressed {{
 }}
 """
 
+# Define hover background colors (Slightly lighter/darker than usual bg)
+DARK_MODE_TOOLBUTTON_STYLE = f"""
+                        QToolButton {{
+                            font-family: {ICON_FONT_FAMILY};
+                            font-size: 18px;
+                            width: 18px;
+                            height: 24px;
+                            border: none; /* Hides the border */
+                        }}
 
+                        QToolButton:hover {{
+                            background-color: "#3a3a3a";
+                        }}
+                    """
+
+LIGHT_MODE_TOOLBUTTON_STYLE = f"""
+                        QToolButton {{
+                            font-family: {ICON_FONT_FAMILY};
+                            font-size: 18px;
+                            width: 18px;
+                            height: 24px;
+                            border: none; /* Hides the border */
+                        }}
+
+                        QToolButton:hover {{
+                            background-color: "#e0e0e0";
+                        }}
+                    """
 
 # Function to get button style based on theme
 def get_button_style(theme="light", button_type="default"):
@@ -264,10 +291,6 @@ def get_button_style(theme="light", button_type="default"):
     Returns:
         str: CSS stylesheet for the button
     """
-    if theme == "dark":
-        base_style = DARK_MODE_BUTTON_STYLE
-    else:
-        base_style = LIGHT_MODE_BUTTON_STYLE
     
     if button_type == "navigation":
         return NAVIGATION_BUTTON_STYLE
@@ -285,7 +308,19 @@ def get_button_style(theme="light", button_type="default"):
         return DANGER_BUTTON_STYLE
     elif button_type == "success":
         return SUCCESS_BUTTON_STYLE
+
+    elif button_type == "tool":
+        if theme == "dark":
+            return DARK_MODE_TOOLBUTTON_STYLE
+        else:
+            return LIGHT_MODE_TOOLBUTTON_STYLE
+
     else:
+        if theme == "dark":
+            base_style = DARK_MODE_BUTTON_STYLE
+        else:
+            base_style = LIGHT_MODE_BUTTON_STYLE
+
         return base_style
 
 
