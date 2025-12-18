@@ -13,33 +13,29 @@ class ProtocolStateTracker(HasTraits):
     """tracks current protocol file state and modifications."""
 
     _protocol_name = Str("untitled")
-    _is_modified = Bool(False)
+    _is_modified = Bool(True)
     dock_pane = Instance(DockPane)
+
+    def update_display_name(self):
+        _modified_tag = self.modified_tag if self._is_modified else ""
+        self.dock_pane.name = PKG_name + "\t-\t" + self._protocol_name + _modified_tag
 
     def traits_init(self):
         self._loaded_protocol_path = None
         self._original_state_hash = None
         self.modified_tag = " [modified]"
 
-        _modified_tag = self.modified_tag if self._is_modified else ""
-        self.dock_pane.name = PKG_name + " - " + self._protocol_name + _modified_tag
+        self.update_display_name()
 
     @observe("_protocol_name")
     def __protocol_name_changed(self, event):
         logger.debug(f"Protocol name change event: {event}")
-        self.dock_pane.name = PKG_name + " - " + event.new
+        self.update_display_name()
 
     @observe("_is_modified")
     def _is_modified_changed(self, event):
         logger.debug(f"Protocol modification change event: {event}")
-
-        base_name = PKG_name + " - " + self._protocol_name
-
-        if self._is_modified:
-            self.dock_pane.name = base_name + self.modified_tag
-
-        else:
-            self.dock_pane.name = base_name
+        self.update_display_name()
 
     def set_loaded_protocol(self, file_path):
         """to set InformationPanel label as the currently loaded protocol file."""
