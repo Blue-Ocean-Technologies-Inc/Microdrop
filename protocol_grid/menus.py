@@ -17,7 +17,7 @@ def load_dialog_menu_factory():
 
 def save_dialogue_menu_factory():
     """
-    Create a menu item that makes the viewer save current electrode/channel assignment to svg file
+    Create a menu item to save current protocol in place
     """
 
     return DockPaneAction(
@@ -30,7 +30,7 @@ def save_dialogue_menu_factory():
 
 def save_as_dialogue_menu_factory():
     """
-    Create a menu item that makes the viewer save current electrode/channel assignment to svg file
+    Create a menu item to save current protocol as another file.
     """
 
     return DockPaneAction(
@@ -38,6 +38,18 @@ def save_as_dialogue_menu_factory():
         dock_pane_id=PKG + ".dock_pane",
         name="Save as",
         method="save_as_protocol_dialog",
+    )
+
+def new_experiment_factory():
+    """
+    Increment experiment ID with new timestamp, and create new exp directory.
+    """
+
+    return DockPaneAction(
+        id=PKG + ".create_new_experiment",
+        dock_pane_id=PKG + ".dock_pane",
+        name="New Experiment",
+        method="setup_new_experiment",
     )
 
 

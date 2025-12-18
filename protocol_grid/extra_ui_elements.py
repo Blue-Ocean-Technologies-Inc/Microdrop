@@ -98,7 +98,7 @@ class ExperimentLabel(QLabel):
 
     def apply_styling(self):
         # Define base colors (Soft White vs Soft Black/Charcoal)
-        text_color = "#F0F0F0" if is_dark_mode() else "#333333"
+        text_color = "#f0f0f0" if is_dark_mode() else "#333333"
 
         # Define hover background colors (Slightly lighter/darker than bg)
         hover_bg = "#3a3a3a" if is_dark_mode() else "#e0e0e0"
@@ -107,8 +107,7 @@ class ExperimentLabel(QLabel):
             f"""
             QLabel {{ 
                 color: {text_color};
-                padding: 2px;
-                border-radius: 4px; /* Softens corners on hover */
+                border: none; /* Hides the border */
             }}
 
             /* Visual feedback when hovering over the clickable area */
@@ -241,8 +240,9 @@ class NavigationBar(QWidget):
         
         self.setLayout(main_layout)
         
-        # apply initial styling
+        # apply initial styling and change on future changes
         self._apply_styling()
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
     
     def _apply_styling(self):
         if is_dark_mode():
@@ -250,6 +250,7 @@ class NavigationBar(QWidget):
             checkbox_style = f"""
                 QCheckBox {{
                     color: {WHITE};
+                    background-color: #1e1e1e;
                 }}
             """
         else:
@@ -423,8 +424,10 @@ class StatusBar(QScrollArea):
         # 5. Adjust the height to account for the scrollbar itself.
         self.setFixedHeight(40)
         
-        # Apply initial styling
+        # Apply initial styling and update on future changes
         self._apply_styling()
+
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
     
     def _apply_styling(self):
         """Apply theme-specific styling to all labels and input fields."""
@@ -465,10 +468,6 @@ class StatusBar(QScrollArea):
         
         # Apply styling to input field
         self.edit_repeat_protocol.setStyleSheet(input_style)
-    
-    def update_theme_styling(self):
-        """Update theme styling when theme changes."""
-        self._apply_styling()
 
 
 class EditContextMenu(QMenu):
