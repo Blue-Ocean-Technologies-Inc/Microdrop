@@ -4,8 +4,8 @@ from pathlib import Path
 
 from pyface.api import confirm, NO, YES
 from PySide6.QtWidgets import (QTreeView, QVBoxLayout, QWidget, QHBoxLayout,
-                               QFileDialog, QMessageBox, QApplication, QMainWindow, 
-                               QPushButton, QDialog)
+                               QFileDialog, QMessageBox, QApplication, QMainWindow,
+                               QPushButton, QDialog, QToolButton)
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
@@ -101,9 +101,24 @@ class PGCWidget(QWidget):
         
         self.create_buttons()
 
+        # experiment label
         self.experiment_label = ExperimentLabel(self)
         self.experiment_label.clicked.connect(self.open_experiment_directory)
         self.experiment_label.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
+
+        # new experiment tool
+        self.btn_new_exp = QToolButton(self)
+        self.btn_new_exp.setText("note_add")
+        self.btn_new_exp.setToolTip("New Experiment")
+        self.btn_new_exp.clicked.connect(self.setup_new_experiment)
+        self.btn_new_exp.setCursor(Qt.PointingHandCursor)
+
+        # new experiment tool
+        self.btn_new_note = QToolButton(self)
+        self.btn_new_note.setText("sticky_note")
+        self.btn_new_note.setToolTip("New Note")
+        # self.btn_new_note.clicked.connect(self.setup_new_experiment)
+        self.btn_new_note.setCursor(Qt.PointingHandCursor)
 
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
@@ -116,8 +131,9 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_resume.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_next_phase.clicked.connect(self.navigate_next_phase)
 
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_exp)
         self.navigation_bar.add_widget_to_left_slot(self.experiment_label)
-
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
 
         self.status_bar = StatusBar(self)
 
