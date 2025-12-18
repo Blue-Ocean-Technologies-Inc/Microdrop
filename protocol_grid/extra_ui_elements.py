@@ -468,10 +468,6 @@ class StatusBar(QScrollArea):
         
         # Apply styling to input field
         self.edit_repeat_protocol.setStyleSheet(input_style)
-    
-    def update_theme_styling(self):
-        """Update theme styling when theme changes."""
-        self._apply_styling()
 
 
 class EditContextMenu(QMenu):
