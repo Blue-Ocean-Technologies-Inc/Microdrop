@@ -9,7 +9,7 @@ from typing import Union, List, Optional
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QToolButton, QLabel, QPushButton, QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
