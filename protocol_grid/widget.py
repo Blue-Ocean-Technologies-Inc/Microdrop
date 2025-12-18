@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QEvent
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
+from microdrop_style.button_styles import get_button_style
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
 from protocol_grid.protocol_grid_helpers import (PGCItem, make_row, ProtocolGridDelegate, 
@@ -172,13 +173,41 @@ class PGCWidget(QWidget):
 
         # calibration data tracking
         self._last_free_mode_active_electrodes = []
-        
-        # Connect to application palette changes to ensure theme updates are detected
-        app = QApplication.instance()
-        if app:
-            app.paletteChanged.connect(self._on_application_palette_changed)
+
+        # apply style and update when global theme change
+        self._on_application_palette_changed()
+        QApplication.styleHints().colorSchemeChanged.connect(self._on_application_palette_changed)
 
         self.application.observe(self.save_column_settings, "application_exiting")
+
+    def _on_application_palette_changed(self):
+        """Handle application palette changes (system theme switches)."""
+
+        # Update main widget styling
+        style_sheet = (DARK_MODE_STYLESHEET
+                           if is_dark_mode() else LIGHT_MODE_STYLESHEET)
+
+        self.setStyleSheet(style_sheet)
+
+        toolbtn_style = get_button_style(theme="dark" if is_dark_mode() else "light", button_type="tool")
+        self.btn_new_exp.setStyleSheet(toolbtn_style)
+        self.btn_new_note.setStyleSheet(toolbtn_style)
+
+        # Clear highlights
+        self.clear_highlight()
+
+        # Update any open dialogs
+        self._update_theme_styling_for_dialogs()
+
+    def _update_theme_styling_for_dialogs(self):
+        """Update theme styling for any open dialogs."""
+        # Find and update any open dialogs
+        for dialog in self.findChildren(QDialog):
+            if hasattr(dialog, 'update_theme_styling'):
+                try:
+                    dialog.update_theme_styling()
+                except Exception as e:
+                    logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
     # ---------- DropBot connection ----------
     def _is_dropbot_connected(self):
@@ -1476,8 +1505,6 @@ class PGCWidget(QWidget):
             self.model.itemChanged.emit(magnet_height_item)
 
     def create_buttons(self):
-        self.setStyleSheet(DARK_MODE_STYLESHEET 
-                           if is_dark_mode() else LIGHT_MODE_STYLESHEET)
 
         self.button_layout = QHBoxLayout()
         
@@ -2728,107 +2755,6 @@ class PGCWidget(QWidget):
             elif isinstance(element, ProtocolGroup):
                 self._assign_new_uids_to_all_elements(element.elements)
 
-    def _reset_palette_change_flag(self):
-        self._processing_palette_change = False
-
-    def _refresh_model_after_theme_change(self):
-        if self._protocol_running:
-            return            
-        
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-        
-        self._programmatic_change = True
-        self._restoring_selection = True
-        try:
-            self._clean_group_parameters_recursive(self.state.sequence)            
-            # reload model from clean state
-            # self.load_from_state() 
-            self.save_column_settings()
-            self.state.assign_uids_to_all_steps()
-            self.state_to_model()
-            self.setup_headers()
-            self.tree.expandAll()
-            self.update_all_group_aggregations()
-            self.update_step_dev_fields()
-            self.restore_column_settings()           
-        finally:
-            self._programmatic_change = False
-            
-        try:
-            self.restore_scroll_positions(scroll_pos)
-            self.restore_selection(saved_selection)
-        finally:
-            self._restoring_selection = False
-        
-    def event(self, event):
-        if event.type() == QEvent.PaletteChange:
-            if not getattr(self, '_processing_palette_change', False):
-                self._processing_palette_change = True
-                try:
-                    logger.critical("palette change")
-                    self.setStyleSheet(DARK_MODE_STYLESHEET 
-                                       if is_dark_mode() else LIGHT_MODE_STYLESHEET)                
-                    self.clear_highlight()
-                    if hasattr(self, 'navigation_bar'):
-                        self.navigation_bar.update_theme_styling()
-                    if hasattr(self, 'information_panel'):
-                        self.experiment_label.update_theme_styling()
-
-                    # Only trigger model refresh if not during selection restoration or protocol running
-                    if (not getattr(self, '_restoring_selection', False) and 
-                        not self._protocol_running and 
-                        not getattr(self, '_programmatic_change', False)):
-                        QTimer.singleShot(50, self._refresh_model_after_theme_change)
-                        
-                finally:
-                    QTimer.singleShot(100, self._reset_palette_change_flag)
-                self._processing_palette_change = False
-        
-        return super().event(event)
-
-    def _on_application_palette_changed(self):
-        """Handle application palette changes (system theme switches)."""
-        if not getattr(self, '_processing_palette_change', False):
-            self._processing_palette_change = True
-            try:                
-                # Update main widget styling
-                self.setStyleSheet(DARK_MODE_STYLESHEET 
-                                   if is_dark_mode() else LIGHT_MODE_STYLESHEET)
-                
-                # Clear highlights
-                self.clear_highlight()
-                
-                # Update all UI components
-                if hasattr(self, 'navigation_bar'):
-                    self.navigation_bar.update_theme_styling()
-                if hasattr(self, 'information_panel'):
-                    self.experiment_label.update_theme_styling()
-                if hasattr(self, 'status_bar'):
-                    self.status_bar.update_theme_styling()
-                
-                # Update any open dialogs
-                self._update_theme_styling_for_dialogs()
-                
-                # Refresh model if needed
-                if (not getattr(self, '_restoring_selection', False) and 
-                    not self._protocol_running and 
-                    not getattr(self, '_programmatic_change', False)):
-                    QTimer.singleShot(50, self._refresh_model_after_theme_change)
-                    
-            finally:
-                QTimer.singleShot(100, self._reset_palette_change_flag)
-            self._processing_palette_change = False
-    
-    def _update_theme_styling_for_dialogs(self):
-        """Update theme styling for any open dialogs."""
-        # Find and update any open dialogs
-        for dialog in self.findChildren(QDialog):
-            if hasattr(dialog, 'update_theme_styling'):
-                try:
-                    dialog.update_theme_styling()
-                except Exception as e:
-                    logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
 if __name__ == "__main__":
     import sys
