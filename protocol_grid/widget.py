@@ -57,6 +57,7 @@ class PGCWidget(QWidget):
 
         self.state = state or ProtocolState()
         self.application = dock_pane.task.window.application
+        self.dock_pane = dock_pane
 
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, preferences=self.application.preferences)
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
@@ -114,10 +115,11 @@ class PGCWidget(QWidget):
         self.btn_new_exp.setCursor(Qt.PointingHandCursor)
 
         # new experiment tool
-        self.btn_new_note = QToolButton(self)
+        self.btn_new_note = QToolButton()
         self.btn_new_note.setText("sticky_note")
         self.btn_new_note.setToolTip("New Note")
-        # self.btn_new_note.clicked.connect(self.setup_new_experiment)
+
+        self.btn_new_note.clicked.connect(self.dock_pane.create_new_note)
         self.btn_new_note.setCursor(Qt.PointingHandCursor)
 
         self.navigation_bar = NavigationBar(self)
