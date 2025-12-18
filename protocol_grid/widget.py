@@ -193,6 +193,8 @@ class PGCWidget(QWidget):
         self.btn_new_exp.setStyleSheet(toolbtn_style)
         self.btn_new_note.setStyleSheet(toolbtn_style)
 
+        self.navigation_bar.left_slot_container.setStyleSheet('background-color: #1e1e1e;' if is_dark_mode() else '')
+
         # Clear highlights
         self.clear_highlight()
 

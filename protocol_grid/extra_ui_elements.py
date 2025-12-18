@@ -108,7 +108,6 @@ class ExperimentLabel(QLabel):
             QLabel {{ 
                 color: {text_color};
                 border: none; /* Hides the border */
-                {"background-color: #1e1e1e;" if is_dark_mode() else ""} /* blending dark mode */
             }}
 
             /* Visual feedback when hovering over the clickable area */
