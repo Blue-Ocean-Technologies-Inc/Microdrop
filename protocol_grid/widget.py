@@ -101,9 +101,9 @@ class PGCWidget(QWidget):
         
         self.create_buttons()
 
-        self.information_panel = ExperimentLabel(self)
-        self.information_panel.clicked.connect(self.open_experiment_directory)
-        self.information_panel.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
+        self.experiment_label = ExperimentLabel(self)
+        self.experiment_label.clicked.connect(self.open_experiment_directory)
+        self.experiment_label.update_experiment_id(self.experiment_manager.get_experiment_directory().stem)
 
         self.navigation_bar = NavigationBar(self)
         self.navigation_bar.btn_play.clicked.connect(self.toggle_play_pause)
@@ -116,7 +116,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_resume.clicked.connect(self.toggle_play_pause)
         self.navigation_bar.btn_next_phase.clicked.connect(self.navigate_next_phase)
 
-        self.navigation_bar.add_widget_to_left_slot(self.information_panel)
+        self.navigation_bar.add_widget_to_left_slot(self.experiment_label)
 
 
         self.status_bar = StatusBar(self)
@@ -528,7 +528,7 @@ class PGCWidget(QWidget):
                 self.application.current_experiment_directory = new_experiment_dir
                 if new_experiment_dir:
                     # update information panel with new experiment ID
-                    self.information_panel.update_experiment_id(new_experiment_dir.stem)
+                    self.experiment_label.update_experiment_id(new_experiment_dir.stem)
                     logger.info(f"Started new experiment: {new_experiment_dir.stem}")
             
         except Exception as e:
@@ -2754,7 +2754,7 @@ class PGCWidget(QWidget):
                     if hasattr(self, 'navigation_bar'):
                         self.navigation_bar.update_theme_styling()
                     if hasattr(self, 'information_panel'):
-                        self.information_panel.update_theme_styling()
+                        self.experiment_label.update_theme_styling()
 
                     # Only trigger model refresh if not during selection restoration or protocol running
                     if (not getattr(self, '_restoring_selection', False) and 
@@ -2784,7 +2784,7 @@ class PGCWidget(QWidget):
                 if hasattr(self, 'navigation_bar'):
                     self.navigation_bar.update_theme_styling()
                 if hasattr(self, 'information_panel'):
-                    self.information_panel.update_theme_styling()
+                    self.experiment_label.update_theme_styling()
                 if hasattr(self, 'status_bar'):
                     self.status_bar.update_theme_styling()
                 
