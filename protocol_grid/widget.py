@@ -16,6 +16,7 @@ from microdrop_utils.decorators import debounce
 from microdrop_utils.pyside_helpers import DebouncedToolButton
 from protocol_grid.protocol_grid_helpers import (make_row, ProtocolGridDelegate,
                                                calculate_group_aggregation_from_children)
+from protocol_grid.quick_action_bar import QuickProtocolActions, QuickProtocolActionsController
 from protocol_grid.state.protocol_state import ProtocolState, ProtocolStep, ProtocolGroup
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE,
@@ -99,8 +100,6 @@ class PGCWidget(QWidget):
         self._play_pause_debounce_timer.timeout.connect(self._execute_debounced_play_pause)
         self._pending_play_pause_action = None
         self._debounce_delay_ms = 250
-        
-        self.create_buttons()
 
         # experiment label
         self.experiment_label = ExperimentLabel(self)
@@ -114,7 +113,7 @@ class PGCWidget(QWidget):
         self.btn_new_exp.clicked.connect(self.setup_new_experiment)
         self.btn_new_exp.setCursor(Qt.PointingHandCursor)
 
-        # new experiment tool
+        # new note tool
         self.btn_new_note = QToolButton()
         self.btn_new_note.setText("sticky_note")
         self.btn_new_note.setToolTip("New Note")
@@ -149,7 +148,9 @@ class PGCWidget(QWidget):
 
         layout.addWidget(self.tree)
 
-        layout.addLayout(self.button_layout)
+        quick_actions = QuickProtocolActions()
+        layout.addLayout(quick_actions)
+        self.quick_action_controller = QuickProtocolActionsController(quick_actions, self)
 
         self.setLayout(layout)
         
@@ -163,6 +164,7 @@ class PGCWidget(QWidget):
         
         self.model.itemChanged.connect(self.on_item_changed)
         self.tree.selectionModel().selectionChanged.connect(self.on_selection_changed)
+        self.tree.selectionModel().selectionChanged.connect(self.quick_action_controller.on_selection_changed)
         
         self.setup_context_menu()
         self.setup_shortcuts()
@@ -1015,14 +1017,8 @@ class PGCWidget(QWidget):
             self.tree.setEnabled(True)
             self.tree.setContextMenuPolicy(Qt.NoContextMenu)
             self.tree.setSelectionMode(QTreeView.NoSelection)
-        
-        self.btn_add_step.setEnabled(enabled)
-        self.btn_add_step_into.setEnabled(enabled)
-        self.btn_add_group.setEnabled(enabled)
-        self.btn_add_group_into.setEnabled(enabled)
-        self.btn_import.setEnabled(enabled)
-        self.btn_import_into.setEnabled(enabled)
-        self.btn_export.setEnabled(enabled)
+
+        self.quick_action_controller._update_ui_enabled_state(enabled)
 
     def _update_navigation_buttons_state(self):
         # Enable navigation buttons if:
@@ -1506,53 +1502,6 @@ class PGCWidget(QWidget):
                 self.model.dataChanged.emit(magnet_height_item.index(), magnet_height_item.index(), [Qt.EditRole])
 
             self.model.itemChanged.emit(magnet_height_item)
-
-    def create_buttons(self):
-
-        self.button_layout = QHBoxLayout()
-        
-        self.btn_add_step = QPushButton("add_2")
-        self.btn_add_step.setToolTip("Add Step")
-
-        self.btn_add_step_into = QPushButton("subdirectory_arrow_left")
-        self.btn_add_step_into.setToolTip("Add Step Into")
-
-        self.btn_add_group = QPushButton("ad_group")
-        self.btn_add_group.setToolTip("Add Group")
-
-        self.btn_add_group_into = QPushButton("move_group")
-        self.btn_add_group_into.setToolTip("Add Group Into")
-
-        self.btn_import = QPushButton("file_save")
-        self.btn_import.setToolTip("Import Protocol File Dialog")
-
-        self.btn_export = QPushButton("file_export")
-        self.btn_export.setToolTip("Save Protocol As File Dialog")
-
-        self.btn_import_into = QPushButton("input")
-        self.btn_import_into.setToolTip("Import Protocol Into Selected Group")
-
-        # self.btn_open = QPushButton("folder_open")
-        # self.btn_open.setToolTip("Open current experiment directory")
-
-        self.btn_add_step.clicked.connect(self.add_step)
-        self.btn_add_step_into.clicked.connect(self.add_step_into)
-        self.btn_add_group.clicked.connect(self.add_group)
-        self.btn_add_group_into.clicked.connect(self.add_group_into)
-        self.btn_import.clicked.connect(self.import_from_json)
-        self.btn_import_into.clicked.connect(self.import_into_json)
-        self.btn_export.clicked.connect(self.export_to_json)
-        # self.btn_open.clicked.connect(self.open_experiment_directory)
-
-        self.button_layout.addWidget(self.btn_add_step)
-        self.button_layout.addWidget(self.btn_add_step_into)
-        self.button_layout.addWidget(self.btn_add_group)
-        self.button_layout.addWidget(self.btn_add_group_into)
-        self.button_layout.addWidget(self.btn_import)
-        self.button_layout.addWidget(self.btn_import_into)
-        self.button_layout.addWidget(self.btn_export)
-        # self.button_layout.addWidget(self.btn_open)
-        self.button_layout.addStretch()
         
     def setup_header_context_menu(self):
         header = self.tree.header()
@@ -1571,10 +1520,6 @@ class PGCWidget(QWidget):
         selected_paths = self.get_selected_paths()
 
         has_selection = len(selected_paths) > 0
-        if not self._protocol_running:
-            self.btn_add_step_into.setEnabled(has_selection)
-            self.btn_add_group_into.setEnabled(has_selection)
-            self.btn_import_into.setEnabled(has_selection)
 
         current_step_id = None
         current_step_uid = None
@@ -2391,106 +2336,38 @@ class PGCWidget(QWidget):
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         self._mark_protocol_modified()
-        
-    def add_step(self):
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-        
-        selected_paths = self.get_selected_paths()
-        if not selected_paths:
-            target_elements = self.state.sequence
-            row = len(target_elements)
-        else:
-            target_path = selected_paths[0]
-            target_item = self.get_item_by_path(target_path)
-            if not target_item:
-                return
-            parent_path = target_path[:-1]
-            target_elements = self._find_elements_by_path(parent_path)
-            row = target_path[-1] + 1
-                
-        self.state.snapshot_for_undo()
-        
-        new_step = ProtocolStep(
-            parameters=dict(step_defaults),
-            name="Step"
-        )
-        self.state.assign_uid_to_step(new_step)
-        target_elements.insert(row, new_step)
-        
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
-        
-    def add_step_into(self):
-        self._navigating = True
-        self._protected_add_step_to_current_group()
-        self._navigating = False
 
     def add_group(self):
         scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
-        
+
         selected_paths = self.get_selected_paths()
         if not selected_paths:
+            print("No selection")
             target_elements = self.state.sequence
             row = len(target_elements)
+
         else:
             target_path = selected_paths[0]
-            target_item = self.get_item_by_path(target_path)
-            if not target_item:
-                return
-            parent_path = target_path[:-1]
-            target_elements = self._find_elements_by_path(parent_path)
-            row = target_path[-1] + 1
-                
+            print(target_path)
+            if len(target_path) == 1:
+                target_elements = self.state.sequence
+                row = target_path + [0]
+            else:
+                parent_path = target_path[:-1]
+                target_elements = self._find_elements_by_path(parent_path)
+                row = target_path[-1] + 1
+
         self.state.snapshot_for_undo()
-        
+
         new_group = ProtocolGroup(
             parameters=dict(group_defaults),
             name="Group"
         )
+
+        print(row)
         target_elements.insert(row, new_group)
-        
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
-        
-    def add_group_into(self):
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-        
-        selected_paths = self.get_selected_paths()
-        if not selected_paths:
-            return
-            
-        target_path = selected_paths[0]
-        target_item = self.get_item_by_path(target_path)
-        if not target_item:
-            return
-            
-        self.state.snapshot_for_undo()
-        
-        new_group = ProtocolGroup(
-            parameters=dict(group_defaults),
-            name="Group"
-        )
-        
-        if target_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-            target_elements = self._find_elements_by_path(target_path)
-            target_elements.append(new_group)
-        else:
-            parent_path = target_path[:-1]
-            target_elements = self._find_elements_by_path(parent_path)
-            row = target_path[-1] + 1
-            target_elements.insert(row, new_group)
-            
+
         self.reassign_ids()
         self.load_from_state()
         # self.sync_to_state()
@@ -2501,8 +2378,9 @@ class PGCWidget(QWidget):
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
         if not selected_paths:
-            return
-            
+            target_elements = self.state.sequence
+            row = 0
+            target_elements.pop()
         self.state.snapshot_for_undo()
         
         selected_paths.sort(reverse=True)
