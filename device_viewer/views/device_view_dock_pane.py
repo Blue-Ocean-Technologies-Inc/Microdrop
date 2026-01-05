@@ -38,7 +38,7 @@ from ..services.electrode_interaction_service import ElectrodeInteractionControl
 
 # For sidebar
 from .alpha_view.alpha_table import alpha_table_view
-from .calibration_view.widget import CalibrationView
+from .calibration_view.widget import CalibrationWidget, CalibrationController
 from .camera_control_view.widget import CameraControlWidget
 from .mode_picker.widget import ModePicker, ModePickerViewModel
 
@@ -521,7 +521,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.app_preferences)
 
         # calibration_view code
-        self.calibration_view = CalibrationView(self.model)
+        self.calibration_view = CalibrationWidget()
+        self.calibration_controller = CalibrationController(model=self.model.calibration, view=self.calibration_view)
 
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget =  ZoomControlWidget(vm)

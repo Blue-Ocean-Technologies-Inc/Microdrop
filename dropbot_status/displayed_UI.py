@@ -82,10 +82,11 @@ class DropBotStatusViewModel(HasTraits):
                 except AssertionError:
                     if event.new == "-":
                         logger.info(f"{event.name.title()} is not measured by device. Value is {event.new}")
+                        formatted_value = event.new
                     else:
                         logger.warning(f"{event.name.title()} changed to value that cannot be parsed. Format needed: '[quantity] [units]'")
 
-                    return
+                        return
 
                 # 2. Get the correct signal from the instance using its name
                 signal_to_emit = getattr(self.view_signals, signal_name)

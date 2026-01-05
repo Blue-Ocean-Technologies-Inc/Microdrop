@@ -21,4 +21,6 @@ def get_ureg_magnitude(text):
 
 
 def trim_to_n_digits(text, n_digits):
-    return f'{ureg.Quantity(text):.{n_digits}g~H}'
+    quantity = round(ureg.Quantity(text), n_digits)
+
+    return f'{quantity:.{n_digits}g~H}'

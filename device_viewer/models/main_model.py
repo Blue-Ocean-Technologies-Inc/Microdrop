@@ -1,9 +1,10 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Dict, Event
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event
 from pyface.undo.api import UndoManager
 import uuid
 
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
+from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
@@ -15,12 +16,14 @@ from ..utils.camera import qpointf_list_serialize, qpointf_list_deserialize
 
 logger = get_logger(__name__)
 
+
 class DeviceViewMainModel(HasTraits):
 
     # Compose device view model using components
     routes = Instance(RouteLayerManager)
     electrodes = Instance(Electrodes)
     preferences = Instance(DeviceViewerPreferences)
+    calibration = Instance(CalibrationModel)
     # ---------------- Device View Traits -----------------------
 
     undo_manager = Instance(UndoManager)  # Undo manager
@@ -43,10 +46,10 @@ class DeviceViewMainModel(HasTraits):
     editable = Property(Bool, observe="mode")
     message = Str("") # Message to display in the table view
 
-    # calibration related properties
-    last_capacitance = Float()  # Last capacitance reading (in pF)
-    liquid_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the liquid in pF/mm^2
-    filler_capacitance_over_area = Instance(float, allow_none=True)  # The capacitance of the filler in pF/mm^2
+    last_capacitance = Property(Float, depends_on="calibration.last_capacitance")
+    liquid_capacitance_over_area = Property(Float, depends_on="calibration.liquid_capacitance_over_area")
+    filler_capacitance_over_area = Property(Float, depends_on="calibration.filler_capacitance_over_area")
+
     electrode_scale = Property(Float, observe='electrodes.svg_model.area_scale')
 
     # message model properties
@@ -83,6 +86,7 @@ class DeviceViewMainModel(HasTraits):
 
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
+        self.calibration = CalibrationModel(electrodes=self.electrodes)
         # Initialize the alpha map with default values
 
         if self.preferences:
@@ -112,6 +116,24 @@ class DeviceViewMainModel(HasTraits):
             self.mode = "display"
         elif self.mode == "display":
             self.mode = "edit"  # Default to edit mode if editable is set to True
+
+    def _get_last_capacitance(self):
+        return self.calibration.last_capacitance
+
+    def _get_liquid_capacitance_over_area(self):
+        return self.calibration.liquid_capacitance_over_area
+
+    def _get_filler_capacitance_over_area(self):
+        return self.calibration.filler_capacitance_over_area
+
+    def _set_last_capacitance(self, value):
+        self.calibration.last_capacitance = value
+
+    def _set_liquid_capacitance_over_area(self, value):
+        self.calibration.liquid_capacitance_over_area = value
+
+    def _set_filler_capacitance_over_area(self, value):
+        self.calibration.filler_capacitance_over_area = value
 
     # ------------------------ Methods ---------------------------------
 
@@ -160,27 +182,11 @@ class DeviceViewMainModel(HasTraits):
 
     def measure_filler_capacitance(self):
         """measuring filler capacitance."""
-        if not self.electrodes.any_electrode_on():
-            logger.warning("No electrodes are on, cannot measure filler capacitance.")
-            return
-
-        if self.last_capacitance is None:
-            logger.warning("No capacitance value available to set for filler capacitance.")
-            return
-
-        self.filler_capacitance_over_area = self.last_capacitance / self.electrodes.get_activated_electrode_area_mm2()
+        self.calibration.measure_filler_capacitance()
 
     def measure_liquid_capacitance(self):
         """P measuring liquid capacitance."""
-        if not self.electrodes.any_electrode_on():
-            logger.warning("No electrodes are on, cannot measure liquid capacitance.")
-            return
-
-        if self.last_capacitance is None:
-            logger.warning("No capacitance value available to set for liquid capacitance.")
-            return
-
-        self.liquid_capacitance_over_area = self.last_capacitance / self.electrodes.get_activated_electrode_area_mm2()
+        self.calibration.measure_liquid_capacitance()
 
     # ------------------ Observers ------------------------------------
 

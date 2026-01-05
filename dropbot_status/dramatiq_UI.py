@@ -163,17 +163,30 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
     def _on_calibration_data_triggered(self, body_str):
         data = json.loads(body_str)
-        filler_cap = data.get('filler_capacitance_over_area', 0.0)
-        liquid_cap = data.get('liquid_capacitance_over_area', 0.0)
 
-        if filler_cap and liquid_cap:
+        filler_cap = data.get('filler_capacitance_over_area')
+        liquid_cap = data.get('liquid_capacitance_over_area')
+
+        if filler_cap is not None and liquid_cap is not None:
             self.pressure_value = liquid_cap - filler_cap
-            force = ForceCalculationService.calculate_force_for_step(
-                get_ureg_magnitude(self.model.voltage),
-                self.pressure_value
-            )
             self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
-            self.model.force = f"{force:.4f} mN/m"
+
+            if self.model.voltage != "-":
+                force = ForceCalculationService.calculate_force_for_step(
+                    get_ureg_magnitude(self.model.voltage),
+                    self.pressure_value
+                )
+
+                self.model.force = f"{force:.4f} mN/m"
+
+            else:
+                logger.error("Voltage is not set! Cannot find Force. Recalibrate once voltage is set.")
+                self.model.force = "-"
+
+        else:
+            self.model.pressure = f"-"
+            self.model.force = "-"
+
 
     ####### Dropbot Icon Image Control Methods ###########
 
