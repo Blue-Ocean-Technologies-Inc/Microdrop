@@ -172,7 +172,6 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
 
             if self.model.voltage != "-":
-                print(self.model.voltage)
                 force = ForceCalculationService.calculate_force_for_step(
                     get_ureg_magnitude(self.model.voltage),
                     self.pressure_value
