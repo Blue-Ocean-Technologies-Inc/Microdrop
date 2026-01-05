@@ -253,9 +253,7 @@ QPushButton:pressed {{
 DARK_MODE_TOOLBUTTON_STYLE = f"""
                         QToolButton {{
                             font-family: {ICON_FONT_FAMILY};
-                            font-size: 18px;
-                            width: 18px;
-                            height: 24px;
+                            font-size: 18px; width: 18px; height: 24px;
                             border: none; /* Hides the border */
                         }}
 
@@ -267,9 +265,7 @@ DARK_MODE_TOOLBUTTON_STYLE = f"""
 LIGHT_MODE_TOOLBUTTON_STYLE = f"""
                         QToolButton {{
                             font-family: {ICON_FONT_FAMILY};
-                            font-size: 18px;
-                            width: 18px;
-                            height: 24px;
+                            font-size: 18px; width: 18px; height: 24px;
                             border: none; /* Hides the border */
                         }}
 
