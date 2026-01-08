@@ -1,6 +1,5 @@
 
 from traits.api import HasTraits, Instance, observe
-from win32cryptcon import szOID_OIWSEC_dsaCommSHA
 
 from device_viewer.models.calibration import CalibrationModel
 
