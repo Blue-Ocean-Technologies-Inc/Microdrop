@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 from pyface.image_resource import ImageResource
 from traits.api import observe
@@ -24,6 +23,9 @@ class MicrodropCanvasTaskApplication(TasksApplication):
     # branding
     icon = ImageResource(f'{os.path.dirname(__file__)}{os.sep}microdrop.ico')
 
+    start_device_monitoring_on_init = False
+
     @observe('application_initialized')
     def _on_application_started(self, event):
-        publish_message(message="", topic=START_DEVICE_MONITORING)
+        if self.start_device_monitoring_on_init:
+            publish_message(message="", topic=START_DEVICE_MONITORING)
