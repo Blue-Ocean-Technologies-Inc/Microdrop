@@ -1,6 +1,8 @@
 """Columns that are permanently shown by default"""
 
-from pluggable_protocol_tree.views.base_column_views import StringViewOnlyColumnView
+from ...models.column import BaseColumnModel
+from .base_column_views import StringViewOnlyColumnView
+from pluggable_protocol_tree.views.column.column import Column
 
 
 class IDView(StringViewOnlyColumnView):
@@ -22,3 +24,7 @@ class IDView(StringViewOnlyColumnView):
 
     def create_editor(self, parent, context):
         return None
+
+
+def get_id_column():
+    return Column(model=BaseColumnModel(col_name="ID", col_id="id"), view=IDView())

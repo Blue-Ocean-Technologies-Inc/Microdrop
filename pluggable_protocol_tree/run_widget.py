@@ -1,7 +1,7 @@
 from pluggable_protocol_tree.models.column import BaseColumnModel
-from pluggable_protocol_tree.views.base_column_views import StringEditColumnView
-from pluggable_protocol_tree.views.column import Column
-from pluggable_protocol_tree.views.default_column_views import IDView
+from pluggable_protocol_tree.views.column.base_column_views import StringEditColumnView
+from pluggable_protocol_tree.views.column.column import Column
+from pluggable_protocol_tree.views.column.default_column_views import get_id_column
 from pluggable_protocol_tree.views.tree_widget import ProtocolEditorWidget
 
 if __name__ == "__main__":
@@ -10,7 +10,7 @@ if __name__ == "__main__":
 
     # 2. Setup Columns
     test_columns = [
-        Column(model=BaseColumnModel(col_name="ID", col_id="id"), view=IDView()),
+        get_id_column(),
         Column(
             model=BaseColumnModel(col_name="Name", col_id="name"),
             view=StringEditColumnView(),

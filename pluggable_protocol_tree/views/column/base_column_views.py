@@ -1,5 +1,5 @@
-from ..models.steps import GroupStep
-from ..interfaces.i_column import (
+from ...models.steps import GroupStep
+from ...interfaces.i_column import (
     IColumnView,
     IColumnModel,
     IDoubleSpinBoxColumnModel,

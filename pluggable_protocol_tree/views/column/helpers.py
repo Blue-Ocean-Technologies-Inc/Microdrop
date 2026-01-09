@@ -1,11 +1,3 @@
-from traits.api import provides, HasTraits, Instance
-
-from ..interfaces.i_column import IColumn, IColumnModel, IColumnView, IColumnHandler
-from ..models.column import (
-    BaseColumnModel,
-    BaseDoubleSpinBoxColumnModel,
-    BaseIntSpinBoxColumnModel,
-)
 from .base_column_views import (
     DoubleSpinBoxColumnView,
     IntSpinBoxColumnView,
@@ -14,26 +6,13 @@ from .base_column_views import (
     StringEditColumnView,
 )
 
+from .column import Column
 
-@provides(IColumnHandler)
-class BaseColumnHandler(HasTraits):
-    def on_interact(self, step, model, value):
-        return model.set_value(step, value)
-
-
-@provides(IColumn)
-class Column(HasTraits):
-    model = Instance(IColumnModel)
-    view = Instance(IColumnView)
-    handler = Instance(IColumnHandler, BaseColumnHandler())
-
-    def traits_init(self):
-        """Connect model view and the handler here"""
-
-        self.view.model = self.model
-
-        self.handler.model = self.model
-        self.handler.view = self.view
+from ...models.column import (
+    BaseDoubleSpinBoxColumnModel,
+    BaseIntSpinBoxColumnModel,
+    BaseColumnModel,
+)
 
 
 def get_double_spinner_column(id, name, low, high, decimals):
@@ -58,6 +37,7 @@ def get_checkbox_column(id, name):
         view=CheckboxView(),
         handler=CheckboxHandler(),
     )
+
 
 def get_string_editor_column(id, name):
     return Column(

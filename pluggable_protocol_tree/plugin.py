@@ -5,14 +5,13 @@ from envisage.ui.tasks.task_extension import TaskExtension
 from traits.trait_types import List, Str, Any
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from pluggable_protocol_tree.interfaces.i_column import IColumn
-from pluggable_protocol_tree.models.column import BaseColumnModel
-from pluggable_protocol_tree.models.steps import ActionStep
+from .interfaces.i_column import IColumn
+from .models.steps import ActionStep
 
 from .consts import PKG, PKG_name, PROTOCOL_COLUMNS
-from .dock_pane import ProtocolPane
-from .views.column import Column, get_string_editor_column
-from .views.default_column_views import IDView
+from .views.column.default_column_views import get_id_column
+from .views.column.helpers import get_string_editor_column
+from .views.dock_pane import ProtocolPane
 
 
 class PluggableProtocolTreePlugin(Plugin):
@@ -47,7 +46,7 @@ class PluggableProtocolTreePlugin(Plugin):
         # id and name columns first then contributed columns
         columns = [
             # 1. HIERARCHICAL ID COLUMN (Read-Only, Leftmost)
-            Column(model=BaseColumnModel(col_name="ID", col_id="id"), view=IDView()),
+            get_id_column(),
             # 2. Standard Columns
             get_string_editor_column(name="Name", id="name"),
         ] + self.columns
