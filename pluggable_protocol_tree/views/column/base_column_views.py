@@ -1,4 +1,4 @@
-from ...models.steps import GroupStep
+from ...models.row import GroupRow
 from ...interfaces.i_column import (
     IColumnView,
     IColumnModel,
@@ -37,13 +37,13 @@ class BaseColumnView(HasTraits):
 class StringEditColumnView(HasTraits):
     model = Instance(IColumnModel)
 
-    def format_display(self, value, step):
+    def format_display(self, value, row):
         return str(value)
 
-    def get_check_state(self, value, step):
+    def get_check_state(self, value, row):
         return None
 
-    def get_flags(self, step):
+    def get_flags(self, row):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
 
     def create_editor(self, parent, context):
@@ -57,7 +57,7 @@ class StringEditColumnView(HasTraits):
 
 
 class StringViewOnlyColumnView(StringEditColumnView):
-    def get_flags(self, step):
+    def get_flags(self, row):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
 
@@ -65,21 +65,21 @@ class StringViewOnlyColumnView(StringEditColumnView):
 class CheckboxView(BaseColumnView):
     """Generic view for boolean/checkbox fields."""
 
-    def format_display(self, value, step):
+    def format_display(self, value, row):
         """Return empty string for checkboxes (no text display)."""
         return ""
 
-    def get_check_state(self, value, step):
+    def get_check_state(self, value, row):
         """Get check state, but not for groups."""
 
-        if isinstance(step, GroupStep):
+        if isinstance(row, GroupRow):
             return None
         return Qt.Checked if value else Qt.Unchecked
 
-    def get_flags(self, step):
+    def get_flags(self, row):
         """Checkboxes are checkable, but not for groups."""
         base = Qt.ItemIsEnabled | Qt.ItemIsSelectable
-        if isinstance(step, GroupStep):
+        if isinstance(row, GroupRow):
             return base
         return base | Qt.ItemIsUserCheckable
 
@@ -89,10 +89,10 @@ class CheckboxHandler(HasTraits):
     model = Instance(IColumnModel)
     view = Instance(CheckboxView)
 
-    def on_interact(self, step, model, value):
+    def on_interact(self, row, model, value):
         # Qt sends 2 for Checked, 0 for Unchecked. Convert to Bool for Model.
         is_checked = value == Qt.Checked or value == 2 or value is True
-        return model.set_value(step, is_checked)
+        return model.set_value(row, is_checked)
 
 
 @provides(IColumnView)
@@ -101,16 +101,16 @@ class DoubleSpinBoxColumnView(BaseColumnView):
 
     model = Instance(IDoubleSpinBoxColumnModel)
 
-    def format_display(self, value, step) -> str:
+    def format_display(self, value, row) -> str:
         """Format as float with 2 decimal places."""
         if value is None:
             return ""
 
         return f"{float(value):.2f}"
 
-    def get_flags(self, step) -> int:
+    def get_flags(self, row) -> int:
         """Editable, but not for groups."""
-        if isinstance(step, GroupStep):
+        if isinstance(row, GroupRow):
             return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
@@ -139,7 +139,7 @@ class IntSpinBoxColumnView(BaseColumnView):
 
     model = Instance(INumericSpinBoxColumnModel)
 
-    def format_display(self, value, step) -> str:
+    def format_display(self, value, row) -> str:
         """Format as integer."""
         if value is None:
             return ""
@@ -148,7 +148,7 @@ class IntSpinBoxColumnView(BaseColumnView):
 
     def get_flags(self, step) -> int:
         """Editable, but not for groups."""
-        if isinstance(step, GroupStep):
+        if isinstance(step, GroupRow):
             return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable

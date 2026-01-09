@@ -2,12 +2,12 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu
 from PySide6.QtCore import Qt
 
 from ..models.qt_tree import MvcTreeModel, ProtocolGridDelegate
-from ..models.steps import GroupStep, ActionStep
+from ..models.row import ActionRow, GroupRow
 
 from enum import Enum
 
 
-class NodeType(Enum):
+class RowType(Enum):
     step = "step"
     group = "group"
 
@@ -22,7 +22,7 @@ class ProtocolEditorWidget(QWidget):
         super().__init__(parent)
 
         self.columns = columns or []
-        self.root_step = GroupStep(name="Root")
+        self.root_node = GroupRow(name="Root")
 
         # UI Setup
         self._layout = QVBoxLayout(self)
@@ -31,7 +31,7 @@ class ProtocolEditorWidget(QWidget):
         self.tree = QTreeView()
         self._layout.addWidget(self.tree)
 
-        self.model = MvcTreeModel(self.root_step, self.columns)
+        self.model = MvcTreeModel(self.root_node, self.columns)
         self.tree.setModel(self.model)
 
         # Connect signals
@@ -50,10 +50,10 @@ class ProtocolEditorWidget(QWidget):
         self.tree.expand(index)
         self.tree.setCurrentIndex(index)
 
-    def add_node(self, pos, step_type: NodeType):
+    def add_node(self, pos, row_type: RowType):
         index = self.tree.indexAt(pos)
 
-        node = ActionStep() if step_type == NodeType.step else GroupStep(name="Group")
+        node = ActionRow() if row_type == RowType.step else GroupRow(name="Group")
 
         self.model.add_node(index, node)
 
@@ -62,11 +62,11 @@ class ProtocolEditorWidget(QWidget):
         index = self.tree.indexAt(pos)
 
         # Add actions
-        menu.addAction("Add Step", lambda: self.add_node(pos, NodeType.step))
+        menu.addAction("Add Step", lambda: self.add_node(pos, RowType.step))
 
         menu.addAction(
             "Add Group",
-            lambda: self.model.add_node(index, GroupStep(name="Group")),
+            lambda: self.model.add_node(index, GroupRow(name="Group")),
         )
 
         # Show menu

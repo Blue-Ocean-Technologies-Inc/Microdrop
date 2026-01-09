@@ -2,7 +2,7 @@ from traits.api import List, Instance
 
 from .tree_widget import ProtocolEditorWidget
 from ..interfaces.i_column import IColumn
-from ..models.steps import GroupStep
+from ..models.row import GroupRow
 
 from pyface.tasks.dock_pane import DockPane
 
@@ -15,7 +15,7 @@ class ProtocolPane(DockPane):
 
     # Dependencies injected by Envisage Plugins
     columns = List(IColumn)
-    root_step = Instance(GroupStep)
+    root_step = Instance(GroupRow)
 
     def create_contents(self, parent):
         """

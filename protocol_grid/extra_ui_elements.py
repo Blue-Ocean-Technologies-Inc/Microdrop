@@ -483,7 +483,7 @@ class EditContextMenu(QMenu):
         self.addSeparator()
         
         structural_actions = [
-            ("Insert Step Above", self.widget.insert_step),
+            ("Insert Step Above", self.widget.insert_row),
             ("Insert Group Above", self.widget.insert_group),
             ("Delete", self.widget.delete_selected),
         ]

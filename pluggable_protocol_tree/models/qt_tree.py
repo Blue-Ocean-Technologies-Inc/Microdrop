@@ -1,7 +1,7 @@
 from pyface.qt.QtCore import QAbstractItemModel, Signal, QModelIndex, Qt
 from pyface.qt.QtWidgets import QStyledItemDelegate
 
-from pluggable_protocol_tree.models.steps import GroupStep, ActionStep
+from pluggable_protocol_tree.models.row import GroupRow
 
 
 class MvcTreeModel(QAbstractItemModel):
@@ -24,17 +24,17 @@ class MvcTreeModel(QAbstractItemModel):
 
         column_bundle = self._cols[i.column()]
 
-        step = i.internalPointer()
-        val = column_bundle.model.get_value(step)
+        row = i.internalPointer()
+        val = column_bundle.model.get_value(row)
 
         if role == Qt.DisplayRole:
-            return column_bundle.view.format_display(val, step)
+            return column_bundle.view.format_display(val, row)
 
         if role == Qt.CheckStateRole:
-            return column_bundle.view.get_check_state(val, step)
+            return column_bundle.view.get_check_state(val, row)
 
         if role == Qt.UserRole:
-            return step
+            return row
 
         return None
 
@@ -64,7 +64,7 @@ class MvcTreeModel(QAbstractItemModel):
         if idx.isValid():
             target = idx.internalPointer()
 
-            if isinstance(target, GroupStep):
+            if isinstance(target, GroupRow):
                 # Add INSIDE the group
                 parent_node = target
                 parent_index = idx
@@ -80,10 +80,10 @@ class MvcTreeModel(QAbstractItemModel):
         self.beginInsertRows(parent_index, insert_pos, insert_pos)
 
         if insert_pos >= len(parent_node.children):
-            parent_node.add_step(node)
+            parent_node.add_row(node)
 
         else:
-            parent_node.insert_step(insert_pos, node)
+            parent_node.insert_row(insert_pos, node)
 
         self.endInsertRows()
 
@@ -93,7 +93,7 @@ class MvcTreeModel(QAbstractItemModel):
 
     def rowCount(self, p=QModelIndex()):
         n = p.internalPointer() if p.isValid() else self._root
-        return len(n.children) if isinstance(n, GroupStep) else 0
+        return len(n.children) if isinstance(n, GroupRow) else 0
 
     def columnCount(self, p=QModelIndex()):
         return len(self._cols)
@@ -134,18 +134,21 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.columns = columns
 
+    def get_row_data(self, index):
+        return index.data(Qt.UserRole)
+
     def createEditor(self, parent, option, index):
         return self.columns[index.column()].view.create_editor(parent, None)
 
     def setEditorData(self, editor, index):
         col = self.columns[index.column()]
-        step = index.data(Qt.UserRole)
-        col.view.set_editor_data(editor, col.model.get_value(step))
+        row = self.get_row_data(index)
+        col.view.set_editor_data(editor, col.model.get_value(row))
 
     def setModelData(self, editor, model, index):
         column_bundle = self.columns[index.column()]
-        step = index.data(Qt.UserRole)
+        row = self.get_row_data(index)
         val = column_bundle.view.get_editor_data(editor)
 
-        if column_bundle.handler.on_interact(step, column_bundle.model, val):
+        if column_bundle.handler.on_interact(row, column_bundle.model, val):
             model.dataChanged.emit(index, index)

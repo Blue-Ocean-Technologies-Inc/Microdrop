@@ -12,12 +12,12 @@ class BaseColumnModel(HasTraits):
     col_name = Str
     default_value = Any(None)
 
-    def get_value(self, step):
-        return step.trait_get(self.col_id).get(self.col_id)
+    def get_value(self, row):
+        return row.trait_get(self.col_id).get(self.col_id)
 
-    def set_value(self, step, value):
+    def set_value(self, row, value):
         new_traits = {self.col_id: value}
-        step.trait_set(**new_traits)
+        row.trait_set(**new_traits)
 
 
 @provides(INumericSpinBoxColumnModel)

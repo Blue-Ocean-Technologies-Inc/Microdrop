@@ -1,5 +1,5 @@
 from traits.api import Interface, Any, Instance, Str, Float, Int
-from .i_step import IStep
+from .i_row import IRow
 
 from pyface.qt.QtGui import QWidget
 
@@ -8,11 +8,11 @@ class IColumnModel(Interface):
     col_id = Str
     col_name = Str
 
-    def get_value(self, step: IStep) -> Any:
-        """get value from given step of this field"""
+    def get_value(self, row: IRow) -> Any:
+        """get value from given row of this field"""
 
-    def set_value(self, step: IStep, value: Any) -> bool:
-        """set value for this column in given step"""
+    def set_value(self, row: IRow, value: Any) -> bool:
+        """set value for this column in given row"""
 
 
 class INumericSpinBoxColumnModel(IColumnModel):
@@ -30,13 +30,13 @@ class IColumnView(Interface):
 
     model = Instance(IColumnModel)
 
-    def format_display(self, value: Any, step: IStep) -> str:
+    def format_display(self, value: Any, row: IRow) -> str:
         """Text to show for this column on protocol tree if string display required"""
 
-    def get_check_state(self, value: Any, step: IStep) -> Any:
+    def get_check_state(self, value: Any, row: IRow) -> Any:
         """return None if no checkbox display, else return check state"""
 
-    def get_flags(self, step: IStep) -> int:
+    def get_flags(self, row: IRow) -> int:
         """is it checkable, editable etc"""
 
     def create_editor(self, parent: QWidget, context: Any) -> QWidget:
@@ -53,7 +53,7 @@ class IColumnHandler(Interface):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
 
-    def on_interact(self, step: IStep, model: IColumnModel, value: Any) -> bool:
+    def on_interact(self, row: IRow, model: IColumnModel, value: Any) -> bool:
         pass
 
 

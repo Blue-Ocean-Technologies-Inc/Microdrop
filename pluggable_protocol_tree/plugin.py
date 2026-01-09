@@ -6,7 +6,7 @@ from traits.trait_types import List, Str, Any
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from .interfaces.i_column import IColumn
-from .models.steps import ActionStep
+from .models.row import ActionRow
 
 from .consts import PKG, PKG_name, PROTOCOL_COLUMNS
 from .views.column.default_column_views import get_id_column
@@ -58,9 +58,9 @@ class PluggableProtocolTreePlugin(Plugin):
     def start(self):
         super().start()
 
-        # Patch ActionStep dynamically based on contributions
+        # Patch ActionRow dynamically based on contributions
         for col in self.columns:
             attr = col.model.col_id
             default = col.model.default_value
             # Don't overwrite base traits
-            ActionStep.add_class_trait(attr, Any(default))
+            ActionRow.add_class_trait(attr, Any(default))
