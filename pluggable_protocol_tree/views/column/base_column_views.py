@@ -1,3 +1,4 @@
+from .column import BaseColumnHandler
 from ...models.row import GroupRow
 from ...interfaces.i_column import (
     IColumnView,
@@ -85,7 +86,7 @@ class CheckboxView(BaseColumnView):
 
 
 @provides(IColumnHandler)
-class CheckboxHandler(HasTraits):
+class CheckboxHandler(BaseColumnHandler):
     model = Instance(IColumnModel)
     view = Instance(CheckboxView)
 
