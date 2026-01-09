@@ -20,5 +20,8 @@ class Column(HasTraits):
 
         self.view.model = self.model
 
+        if self.handler is not None:
+            self.handler = BaseColumnHandler()
+
         self.handler.model = self.model
         self.handler.view = self.view
