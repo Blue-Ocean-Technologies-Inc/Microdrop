@@ -1,12 +1,12 @@
 from traits.api import List, Instance
 
 from .tree_widget import ProtocolEditorWidget
-from .interfaces.i_column import IColumn
-from .models.steps import GroupStep
+from ..interfaces.i_column import IColumn
+from ..models.steps import GroupStep
 
 from pyface.tasks.dock_pane import DockPane
 
-from .consts import PKG
+from ..consts import PKG
 
 
 class ProtocolPane(DockPane):

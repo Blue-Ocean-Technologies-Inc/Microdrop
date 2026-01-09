@@ -1,8 +1,8 @@
 from pluggable_protocol_tree.models.column import BaseColumnModel
-from pluggable_protocol_tree.tree_widget import ProtocolEditorWidget
 from pluggable_protocol_tree.views.base_column_views import StringEditColumnView
 from pluggable_protocol_tree.views.column import Column
 from pluggable_protocol_tree.views.default_column_views import IDView
+from pluggable_protocol_tree.views.tree_widget import ProtocolEditorWidget
 
 if __name__ == "__main__":
     import sys

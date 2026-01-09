@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu
 from PySide6.QtCore import Qt
 
-from pluggable_protocol_tree.models.qt_tree import MvcTreeModel, ProtocolGridDelegate
-from pluggable_protocol_tree.models.steps import GroupStep, ActionStep
+from ..models.qt_tree import MvcTreeModel, ProtocolGridDelegate
+from ..models.steps import GroupStep, ActionStep
 
 from enum import Enum
 
