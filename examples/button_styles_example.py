@@ -4,15 +4,13 @@ This demonstrates the benefits of the centralized approach.
 """
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton
-from PySide6.QtCore import Qt
 import sys
 
 # Import the centralized button styles
 from microdrop_style.button_styles import (
     get_button_style, get_button_dimensions, 
-    PRIMARY_BUTTON_STYLE, DANGER_BUTTON_STYLE
+    PRIMARY_BUTTON_STYLE
 )
-from microdrop_style.colors import PRIMARY_COLOR, SECONDARY_COLOR
 
 class ButtonStylesExample(QWidget):
     def __init__(self):
