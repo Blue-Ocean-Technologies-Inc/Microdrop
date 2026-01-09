@@ -11,6 +11,7 @@ from .base_column_views import (
     IntSpinBoxColumnView,
     CheckboxView,
     CheckboxHandler,
+    StringEditColumnView,
 )
 
 
@@ -56,4 +57,10 @@ def get_checkbox_column(id, name):
         model=BaseColumnModel(col_id=id, col_name=name),
         view=CheckboxView(),
         handler=CheckboxHandler(),
+    )
+
+def get_string_editor_column(id, name):
+    return Column(
+        model=BaseColumnModel(col_id=id, col_name=name),
+        view=StringEditColumnView(),
     )

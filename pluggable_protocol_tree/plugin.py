@@ -11,8 +11,7 @@ from pluggable_protocol_tree.models.steps import ActionStep
 
 from .consts import PKG, PKG_name, PROTOCOL_COLUMNS
 from .dock_pane import ProtocolPane
-from .views.base_column_views import StringEditColumnView
-from .views.column import Column
+from .views.column import Column, get_string_editor_column
 from .views.default_column_views import IDView
 
 
@@ -50,10 +49,7 @@ class PluggableProtocolTreePlugin(Plugin):
             # 1. HIERARCHICAL ID COLUMN (Read-Only, Leftmost)
             Column(model=BaseColumnModel(col_name="ID", col_id="id"), view=IDView()),
             # 2. Standard Columns
-            Column(
-                model=BaseColumnModel(col_name="Name", col_id="name"),
-                view=StringEditColumnView(),
-            ),
+            get_string_editor_column(name="Name", id="name"),
         ] + self.columns
 
         pane.columns = columns
@@ -65,7 +61,7 @@ class PluggableProtocolTreePlugin(Plugin):
 
         # Patch ActionStep dynamically based on contributions
         for col in self.columns:
-            attr = col.model.col_name
+            attr = col.model.col_id
             default = col.model.default_value
             # Don't overwrite base traits
             ActionStep.add_class_trait(attr, Any(default))
