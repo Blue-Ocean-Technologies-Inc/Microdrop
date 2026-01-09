@@ -35,6 +35,7 @@ class BaseDoubleSpinBoxColumnModel(BaseColumnModel):
     low = Float(0, desc="min value in range for this column values")
     high = Float(1000, desc="max value in range for this column values")
     decimals = Int(2, desc="number of decimals for this column values in spinner")
+    single_step = Float(0.5, desc="single step increment value for this column values in spinner")
 
     def traits_init(self):
         if self.default_value is None:

@@ -24,6 +24,9 @@ class IDoubleSpinBoxColumnModel(IColumnModel):
     low = Float(desc="min value in range for this column values")
     high = Float(desc="max value in range for this column values")
     decimals = Int(desc="number of decimals for this column values in spinner")
+    single_step = Float(
+        0.5, desc="single step increment value for this column values in spinner"
+    )
 
 
 class IColumnView(Interface):
@@ -54,6 +57,24 @@ class IColumnHandler(Interface):
     view = Instance(IColumnView)
 
     def on_interact(self, row: IRow, model: IColumnModel, value: Any) -> bool:
+        pass
+
+    def on_protocol_start(self, context):
+        """Called once before the first step runs."""
+        pass
+
+    def on_protocol_end(self, context):
+        """Called once after the last step finishes."""
+        pass
+
+    def on_run_step(self, row, context):
+        """
+        The main hook. Called when the row is the active step.
+
+        Args:
+            row: The row object (HasTraits)
+            context: A shared dictionary for passing data between steps
+        """
         pass
 
 

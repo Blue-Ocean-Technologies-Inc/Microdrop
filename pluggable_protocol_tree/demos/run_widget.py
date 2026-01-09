@@ -1,7 +1,10 @@
 from pluggable_protocol_tree.models.column import BaseColumnModel
 from pluggable_protocol_tree.views.column.base_column_views import StringEditColumnView
 from pluggable_protocol_tree.views.column.column import Column
-from pluggable_protocol_tree.views.column.default_column_views import get_id_column
+from pluggable_protocol_tree.views.column.default_columns import (
+    get_id_column,
+    get_duration_column,
+)
 from pluggable_protocol_tree.views.tree_widget import ProtocolEditorWidget
 
 if __name__ == "__main__":
@@ -15,6 +18,7 @@ if __name__ == "__main__":
             model=BaseColumnModel(col_name="Name", col_id="name"),
             view=StringEditColumnView(),
         ),
+        get_duration_column()
     ]
 
     # 4. Run App

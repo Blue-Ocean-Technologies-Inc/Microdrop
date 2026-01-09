@@ -122,6 +122,7 @@ class DoubleSpinBoxColumnView(BaseColumnView):
         editor.setMinimum(self.model.low)
         editor.setMaximum(self.model.high)
         editor.setDecimals(self.model.decimals)
+        editor.setSingleStep(self.model.single_step)
 
         return editor
 

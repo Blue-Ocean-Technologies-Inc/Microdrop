@@ -9,8 +9,8 @@ from .interfaces.i_column import IColumn
 from .models.row import ActionRow
 
 from .consts import PKG, PKG_name, PROTOCOL_COLUMNS
-from .views.column.default_column_views import get_id_column
-from .views.column.helpers import get_string_editor_column
+from .views.column.default_columns import get_id_column, get_duration_column
+from .views.column.helpers import get_string_editor_column, get_double_spinner_column
 from .views.dock_pane import ProtocolPane
 
 
@@ -24,7 +24,7 @@ class PluggableProtocolTreePlugin(Plugin):
 
     # Extension Point: Other plugins contribute columns here.
     # Envisage handles the aggregation; no manual flattening needed.
-    columns = ExtensionPoint(List(IColumn), id=PROTOCOL_COLUMNS)
+    column_contributions = ExtensionPoint(List(IColumn), id=PROTOCOL_COLUMNS)
 
     # The task id to contribute task extension view to
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
@@ -43,24 +43,26 @@ class PluggableProtocolTreePlugin(Plugin):
     def get_protocol_pane(self, *args, **kwargs):
         pane = ProtocolPane(*args, **kwargs)
 
-        # id and name columns first then contributed columns
-        columns = [
-            # 1. HIERARCHICAL ID COLUMN (Read-Only, Leftmost)
-            get_id_column(),
-            # 2. Standard Columns
-            get_string_editor_column(name="Name", id="name"),
-        ] + self.columns
-
-        pane.columns = columns
+        pane.columns = self.columns
 
         return pane
 
     def start(self):
         super().start()
 
+        default_columns = [
+            get_id_column(),
+            get_string_editor_column(name="Name", id="name"),
+            get_duration_column(),
+        ]
+
+        self.columns = default_columns + self.column_contributions
+
         # Patch ActionRow dynamically based on contributions
-        for col in self.columns:
+        for col in self.column_contributions:
             attr = col.model.col_id
             default = col.model.default_value
             # Don't overwrite base traits
             ActionRow.add_class_trait(attr, Any(default))
+
+

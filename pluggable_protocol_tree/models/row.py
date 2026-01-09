@@ -1,4 +1,4 @@
-from traits.api import HasTraits, Instance, Str, List, provides, UUID
+from traits.api import HasTraits, Instance, Str, List, provides, UUID, Float
 
 from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 
@@ -7,6 +7,7 @@ from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 class BaseRow(HasTraits):
     id = UUID()
     name = Str("Step")
+    duration = Float(1.0)
     parent = Instance(IRow)
 
 

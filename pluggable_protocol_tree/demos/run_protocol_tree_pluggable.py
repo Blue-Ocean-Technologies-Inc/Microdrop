@@ -43,6 +43,7 @@ def main(args):
                 low=1.5,
                 high=200.5,
                 decimals=2,
+                single_step=0.5,
             )
             check_col = get_checkbox_column(
                 name="checkbox_column", id="checkbox_column"
