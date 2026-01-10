@@ -15,10 +15,10 @@ from ...models.column import (
 )
 
 
-def get_double_spinner_column(id, name, low, high, decimals):
+def get_double_spinner_column(id, name, low, high, decimals, single_step):
     return Column(
         model=BaseDoubleSpinBoxColumnModel(
-            col_id=id, col_name=name, low=low, high=high, decimals=decimals
+            col_id=id, col_name=name, low=low, high=high, decimals=decimals, single_step=single_step
         ),
         view=DoubleSpinBoxColumnView(),
     )
