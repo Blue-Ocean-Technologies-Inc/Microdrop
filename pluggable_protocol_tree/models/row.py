@@ -1,14 +1,29 @@
-from traits.api import HasTraits, Instance, Str, List, provides, UUID, Float
+from traits.api import HasTraits, Instance, Str, List, provides, Float, Property
 
 from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 
 
 @provides(IRow)
 class BaseRow(HasTraits):
-    id = UUID()
+    id = Property(Str)
     name = Str("Step")
-    duration = Float(1.0)
+    duration_s = Float(1.0)
     parent = Instance(IRow)
+
+    def _get_id(self):
+        indices = []
+        current_row = self
+
+        while current_row.parent:
+            try:
+                # Add 1 because users expect 1-based indexing
+                idx = current_row.parent.children.index(current_row) + 1
+                indices.insert(0, str(idx))
+            except ValueError:
+                break
+            current_row = current_row.parent
+
+        return ".".join(indices) if indices else ""
 
 
 @provides(IGroupRow)
@@ -31,7 +46,6 @@ class GroupRow(BaseRow):
 
 class ActionRow(BaseRow):
     """
-    Dummy class to inject with further columns
+    Dummy class to inject with further columns.
     """
-
     pass
