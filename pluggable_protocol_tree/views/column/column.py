@@ -5,8 +5,21 @@ from ...interfaces.i_column import IColumn, IColumnModel, IColumnView, IColumnHa
 
 @provides(IColumnHandler)
 class BaseColumnHandler(HasTraits):
+    model = Instance(IColumnModel)
+    view = Instance(IColumnView)
+
     def on_interact(self, step, model, value):
         return model.set_value(step, value)
+
+    def on_run_step(self, row, context=None):
+        """
+        The main hook. Called when the row is the active step.
+
+        Args:
+            row: The row object (HasTraits)
+            context: A shared dictionary for passing data between steps
+        """
+        pass
 
 
 @provides(IColumn)

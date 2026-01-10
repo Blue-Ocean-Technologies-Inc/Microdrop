@@ -1,3 +1,4 @@
+from PySide6.QtGui import QBrush, QColor
 from pyface.qt.QtCore import QAbstractItemModel, Signal, QModelIndex, Qt
 from pyface.qt.QtWidgets import QStyledItemDelegate
 
@@ -11,6 +12,14 @@ class MvcTreeModel(QAbstractItemModel):
         super().__init__()
         self._root = root
         self._cols = columns
+        self._active_node = None # track which node is running
+
+    def set_active_node(self, node):
+        """Updates the active node and refreshes the view."""
+        self._active_node = node
+        # Force a refresh of the entire view (simplest approach)
+        # For optimization, you would calculate specific QModelIndex
+        self.layoutChanged.emit()
 
     def flags(self, index):
         if not index.isValid():
@@ -25,6 +34,13 @@ class MvcTreeModel(QAbstractItemModel):
         column_bundle = self._cols[i.column()]
 
         row = i.internalPointer()
+
+        # --- NEW: Highlighting Logic ---
+        if role == Qt.BackgroundRole:
+            if row == self._active_node:
+                return QBrush(QColor(200, 255, 200))  # Light Green
+        # -------------------------------
+
         val = column_bundle.model.get_value(row)
 
         if role == Qt.DisplayRole:
