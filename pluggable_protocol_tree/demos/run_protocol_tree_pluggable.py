@@ -1,6 +1,10 @@
 import sys
 from pathlib import Path
 
+from message_router.plugin import MessageRouterPlugin
+from microdrop_utils.broker_server_helpers import dramatiq_workers_context
+from pluggable_protocol_tree.views.column.column import BaseColumnHandler
+
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent)
 )  # include microdrop package directory
@@ -52,7 +56,24 @@ def main(args):
                 name="string_editor_column", id="string_editor_column"
             )
 
-            return [int_col, double_col, check_col, str_edit_col]
+            class AwaitHandler(BaseColumnHandler):
+                def on_run_step(self, row, context=None):
+                    """
+                    The main hook. Called when the row is the active step.
+
+                    Args:
+                        row: The row object (HasTraits)
+                        context: A shared dictionary for passing data between steps
+                    """
+                    return None
+
+
+            col_with_response = get_int_spinner_column(
+                name="Await Reply", id="await_reply_dramatiq", low=0, high=1000, handler=AwaitHandler()
+            )
+
+
+            return [int_col, double_col, check_col, str_edit_col, col_with_response]
 
     plugins = [
         CorePlugin(),
@@ -60,11 +81,13 @@ def main(args):
         BlankMicrodropCanvasPlugin(),
         PluggableProtocolTreePlugin(task_id_to_contribute_view="microdrop_canvas.task"),
         ExtraColumnsPlugin(),
+        MessageRouterPlugin()
     ]
 
     app = MicrodropCanvasTaskApplication(plugins=plugins)
 
-    app.run()
+    with dramatiq_workers_context():
+        app.run()
 
 
 if __name__ == "__main__":

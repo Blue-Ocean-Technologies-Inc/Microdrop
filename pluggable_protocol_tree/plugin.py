@@ -4,11 +4,12 @@ from envisage.plugin import Plugin
 from envisage.ui.tasks.task_extension import TaskExtension
 from traits.trait_types import List, Str, Any
 
+from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from .interfaces.i_column import IColumn
 from .models.row import ActionRow
 
-from .consts import PKG, PKG_name, PROTOCOL_COLUMNS
+from .consts import PKG, PKG_name, PROTOCOL_COLUMNS, ACTOR_TOPIC_DICT
 from .views.column.default_columns import get_id_column, get_duration_column
 from .views.column.helpers import get_string_editor_column, get_double_spinner_column
 from .views.dock_pane import ProtocolPane
@@ -25,6 +26,9 @@ class PluggableProtocolTreePlugin(Plugin):
     # Extension Point: Other plugins contribute columns here.
     # Envisage handles the aggregation; no manual flattening needed.
     column_contributions = ExtensionPoint(List(IColumn), id=PROTOCOL_COLUMNS)
+
+    # This plugin contributes some actors that can be called using certain routing keys.
+    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     # The task id to contribute task extension view to
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
@@ -64,5 +68,3 @@ class PluggableProtocolTreePlugin(Plugin):
             default = col.model.default_value
             # Don't overwrite base traits
             ActionRow.add_class_trait(attr, Any(default))
-
-
