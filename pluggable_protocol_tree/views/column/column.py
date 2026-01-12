@@ -1,4 +1,4 @@
-from traits.api import provides, HasTraits, Instance
+from traits.api import provides, HasTraits, Instance, observe
 
 from ...interfaces.i_column import IColumn, IColumnModel, IColumnView, IColumnHandler
 
@@ -26,15 +26,33 @@ class BaseColumnHandler(HasTraits):
 class Column(HasTraits):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
-    handler = Instance(IColumnHandler, BaseColumnHandler())
+    handler = Instance(IColumnHandler)
 
     def traits_init(self):
         """Connect model view and the handler here"""
 
         self.view.model = self.model
 
-        if self.handler is not None:
+        if self.handler is None:
             self.handler = BaseColumnHandler()
 
         self.handler.model = self.model
         self.handler.view = self.view
+
+    @observe('handler', post_init=True)
+    def _handler_changed(self, event):
+        print("handler changed")
+        self.handler.model = self.model
+        self.handler.view = self.view
+
+    @observe('view', post_init=True)
+    def _view_changed(self, event):
+        print("view changed")
+        self.view.model = self.model
+        self.handler.view = self.view
+
+    @observe('model', post_init=True)
+    def _model_changed(self, event):
+        print("model changed")
+        self.view.model = self.model
+
