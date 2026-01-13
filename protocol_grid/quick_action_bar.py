@@ -76,7 +76,7 @@ class QuickProtocolActionsController:
         self.view = view
         self.protocol_grid = protocol_grid
 
-        self.view.actions["add_step"].clicked.connect(self.add_step)
+        self.view.actions["add_step"].clicked.connect(self.protocol_grid.add_step)
 
         self.view.actions["delete_row"].clicked.connect(
             self.protocol_grid._protected_delete_selected
@@ -96,43 +96,6 @@ class QuickProtocolActionsController:
             self.protocol_grid.new_protocol
         )
 
-    def add_step(self):
-        selected_paths = self.protocol_grid.get_selected_paths()
-
-        if selected_paths:
-            current_item = self.protocol_grid.get_item_by_path(selected_paths[0])
-            if current_item and current_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                self.protocol_grid.add_step_to_current_group()
-                return
-
-        scroll_pos = self.protocol_grid.save_scroll_positions()
-        saved_selection = self.protocol_grid.save_selection()
-
-        selected_paths = self.protocol_grid.get_selected_paths()
-        if not selected_paths:
-            target_elements = self.protocol_grid.state.sequence
-            row = len(target_elements)
-        else:
-            target_path = selected_paths[0]
-            target_item = self.protocol_grid.get_item_by_path(target_path)
-            if not target_item:
-                return
-            parent_path = target_path[:-1]
-            target_elements = self.protocol_grid._find_elements_by_path(parent_path)
-            row = target_path[-1] + 1
-
-        self.protocol_grid.state.snapshot_for_undo()
-
-        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
-        self.protocol_grid.state.assign_uid_to_step(new_step)
-        target_elements.insert(row, new_step)
-
-        self.protocol_grid.reassign_ids()
-        self.protocol_grid.load_from_state()
-        # self.sync_to_state()
-        self.protocol_grid.restore_scroll_positions(scroll_pos)
-        self.protocol_grid.restore_selection(saved_selection)
-        self.protocol_grid._mark_protocol_modified()
 
     def on_selection_changed(self):
         if (

@@ -2541,7 +2541,7 @@ class PGCWidget(QWidget):
                 row = target_path[0]
             else:
                 parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
+                target_elements = self.state.get_element_by_path(parent_path).elements
                 row = target_path[-1]
 
         self.state.snapshot_for_undo()
@@ -2572,13 +2572,68 @@ class PGCWidget(QWidget):
                 row = target_path[0]
             else:
                 parent_path = target_path[:-1]
-                target_elements = self._find_elements_by_path(parent_path)
+                target_elements = self.state.get_element_by_path(parent_path).elements
                 row = target_path[-1]
 
         self.state.snapshot_for_undo()
 
         new_group = ProtocolGroup(parameters=dict(group_defaults), name="Group")
         target_elements.insert(row, new_group)
+
+        self.reassign_ids()
+        self.load_from_state()
+        # self.sync_to_state()
+        self.restore_scroll_positions(scroll_pos)
+        self.restore_selection(saved_selection)
+        self._mark_protocol_modified()
+
+    def add_step(self):
+
+        scroll_pos = self.save_scroll_positions()
+        saved_selection = self.save_selection()
+
+        selected_paths = self.get_selected_paths()
+
+        # if no selected path, add group to end of sequence at root level
+        if not selected_paths:
+            print("No selection")
+            target_elements = self.state.sequence
+            row = len(target_elements)
+
+        else:
+
+            # check if we have a group
+            target_path = selected_paths[0]
+            selected_element = self.state.get_element_by_path(target_path)
+
+            if isinstance(selected_element, ProtocolGroup):
+                # if it is a group, insert at the end of its children element sequence
+                target_elements = selected_element.elements
+                row = len(target_elements)
+
+            else:  # it is a step
+
+                # it is not a nested step. So we can add the group after it in the root state sequence
+                if len(target_path) == 1:
+                    # at root, so we just have a list containing one idx up from now
+                    target_elements = self.state.sequence
+                    row = target_path[0] + 1
+
+                else:
+                    # nested step selected
+                    # get the parent group item, set as target requence to add the new group
+                    parent_element = self.state.get_element_by_path(
+                        target_path[:-1]
+                    )
+                    target_elements = parent_element.elements
+                    # add new group after the selected step in the group's sequence
+                    row = target_path[-1] + 1
+
+        self.state.snapshot_for_undo()
+
+        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
+
+        target_elements.insert(row, new_step)
 
         self.reassign_ids()
         self.load_from_state()
@@ -2616,7 +2671,7 @@ class PGCWidget(QWidget):
                 if len(target_path) == 1:
                     # at root, so we just have a list containing one idx up from now
                     target_elements = self.state.sequence
-                    row = [target_path[0] + 1]
+                    row = target_path[0] + 1
 
                 else:
                     # nested step selected
@@ -2630,7 +2685,6 @@ class PGCWidget(QWidget):
 
         new_group = ProtocolGroup(parameters=dict(group_defaults), name="Group")
 
-        print(row)
         target_elements.insert(row, new_group)
 
         self.reassign_ids()
