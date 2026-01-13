@@ -25,10 +25,13 @@ DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 
+START_PROTOCOL_RUN = "microdrop/protocol_runner/start_protocol_run"
+
+
 ACTOR_TOPIC_DICT = {
     LISTENER_NAME: [
 
-        'test', "START PROTOCOl RUN"
+        START_PROTOCOL_RUN
         # DEVICE_VIEWER_STATE_CHANGED,
         # DROPBOT_DISCONNECTED,
         # CHIP_INSERTED,

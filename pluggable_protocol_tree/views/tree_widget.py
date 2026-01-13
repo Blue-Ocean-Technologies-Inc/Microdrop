@@ -6,11 +6,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QAbstractItemView,
 )
-from PySide6.QtCore import Qt, QPersistentModelIndex, QModelIndex, QThread, QObject
+from PySide6.QtCore import Qt, QPersistentModelIndex
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..execution.runner import ProtocolRunnerWorker
 from ..models.qt_tree import MvcTreeModel, ProtocolGridDelegate
 from ..models.row import ActionRow, GroupRow
+from ..consts import START_PROTOCOL_RUN
 
 from enum import Enum
 
@@ -67,35 +70,17 @@ class ProtocolEditorWidget(QWidget):
             root_node=self.root_node, columns=self.columns
         )
 
-        # 2. Define a QObject protocol runner Wrapper to use QThreads
-        class QProtocolRunner(QObject):
-            def __init__(self, runner, parent=None):
-                super().__init__(parent)
-                self.runner = runner
-
-            # CRITICAL: This method belongs to the QObject that we move to the thread.
-            # Calling this via Signal/Slot ensures it runs IN that thread.
-            def start_worker(self):
-                self.runner.start_protocol()
-
         # Instantiate and Move
-        self.protocol_runner = QProtocolRunner(protocol_runner)
-        self.worker_thread = QThread()
-        self.protocol_runner.moveToThread(self.worker_thread)
-
-        # Connect Thread Logic
-        self.worker_thread.started.connect(self.protocol_runner.start_worker)
-
-        # Connect cleanup
-        self.protocol_runner.runner.qsignals.protocol_finished.connect(
-            self.worker_thread.quit
-        )
+        self.protocol_runner = protocol_runner
 
         # 5. Connect UI Updates
         # These signals come from the runner. qsignals is likely a QObject helper you made earlier.
-        self.protocol_runner.runner.qsignals.step_started.connect(self.on_step_started)
-        self.protocol_runner.runner.qsignals.protocol_finished.connect(
+        self.protocol_runner.qsignals.step_started.connect(self.on_step_started)
+        self.protocol_runner.qsignals.protocol_finished.connect(
             self.on_run_finished
+        )
+        self.protocol_runner.qsignals.protocol_started.connect(
+            self.on_run_start
         )
 
         # Add Run Controls
@@ -104,7 +89,13 @@ class ProtocolEditorWidget(QWidget):
         self._layout.addWidget(self.btn_run)  # Add to layout
 
     def start_execution(self):
+        # we publish to start the runner in a separate thread
+        publish_message(topic=START_PROTOCOL_RUN, message="test")
+
+
+    def on_run_start(self):
         self.btn_run.setEnabled(False)
+
 
         # --- 1. UI Updates (These will happen instantly now) ---
         self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -116,19 +107,10 @@ class ProtocolEditorWidget(QWidget):
         self._node_map = {}
         self._cache_indices(self.model.index(0, 0))
 
-        # --- 3. Start the Background Thread ---
-        # This returns immediately, allowing the UI to process the
-        # clearSelection() event above.
-        self.worker_thread.start()
-
     def stop_execution(self):
         # Notify worker to stop (Cross-thread call is safe here because
         # your stop() implementation uses thread-safe locks/conditions)
-        self.protocol_runner.runner.stop()
-
-        # Wait for thread to actually exit
-        self.worker_thread.quit()
-        self.worker_thread.wait()
+        self.protocol_runner.stop()
 
     def _cache_indices(self, parent_index):
         """Recursively maps every Node object to its QModelIndex."""

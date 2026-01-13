@@ -6,19 +6,21 @@ from PySide6.QtCore import Signal, QObject
 
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
-    generate_class_method_dramatiq_listener_actor
+    generate_class_method_dramatiq_listener_actor,
 )
-from pluggable_protocol_tree.consts import LISTENER_NAME
-from pluggable_protocol_tree.interfaces.i_column import IColumn
-from pluggable_protocol_tree.interfaces.i_row import IGroupRow
+from ..consts import LISTENER_NAME, START_PROTOCOL_RUN
+from ..interfaces.i_column import IColumn
+from ..interfaces.i_row import IGroupRow
 
 logger = get_logger(__name__)
+
 
 class ProtocolRunnerListener(HasTraits):
     """
     Helper class to handle Dramatiq listener setup.
     Passes messages to the worker via a thread-safe callback.
     """
+
     runner = Any()  # Reference to the worker instance
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     listener_name = LISTENER_NAME
@@ -26,16 +28,21 @@ class ProtocolRunnerListener(HasTraits):
     def traits_init(self):
         logger.info(f"Initializing {self.listener_name}")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name,
-            class_method=self.listener_actor_routine
+            listener_name=self.listener_name, class_method=self.listener_actor_routine
         )
 
     def listener_actor_routine(self, message, topic):
         """
         Callback triggered by the Dramatiq actor infrastructure.
         """
-        if self.runner:
+        print("Topic: ", topic, " Message: ", message)
+
+        if topic == START_PROTOCOL_RUN:
+            self.runner.start_protocol()
+
+        else:
             self.runner.handle_message(topic, message)
+
 
 class ProtocolRunnerWorkerSignals(QObject):
     """
@@ -48,6 +55,7 @@ class ProtocolRunnerWorkerSignals(QObject):
     step_finished = Signal(object)
     protocol_finished = Signal()
     protocol_started = Signal()
+
 
 class ProtocolRunnerWorker(HasTraits):
     """
@@ -62,7 +70,6 @@ class ProtocolRunnerWorker(HasTraits):
 
     qsignals = Instance(ProtocolRunnerWorkerSignals)
     listener = Instance(ProtocolRunnerListener)
-
 
     def traits_init(self):
 
@@ -104,7 +111,6 @@ class ProtocolRunnerWorker(HasTraits):
 
         if len(self.awaiting_step_tasks) == 0:
             self.on_step_tasks_finished()
-
 
     def start_protocol(self):
 

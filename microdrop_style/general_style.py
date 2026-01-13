@@ -5,7 +5,7 @@ TARGET_WIDGETS = (
     ".QWidget, QFrame, QGroupBox, QScrollArea, "
     "QLabel, QCheckBox, QRadioButton, QLineEdit, QTextEdit, "
     "QAbstractSpinBox, QProgressBar, QComboBox, QTabWidget, "
-    "QTableView, QToolButton, QPushButton"
+    "QTableView, QToolButton, QPushButton, QTreeView"
 )
 
 DARK_MODE_STYLESHEET = f"""
