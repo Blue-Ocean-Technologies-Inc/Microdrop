@@ -2526,29 +2526,74 @@ class PGCWidget(QWidget):
                     index, QItemSelectionModel.Select | QItemSelectionModel.Rows
                 )
 
-    def insert_step(self):
+
+    def _get_target_elements_from_path(self, target_path):
+        if len(target_path) == 1: # at root level
+            target_elements = self.state.sequence
+
+        else: # addition to a group
+            target_elements = self.state.get_element_by_path(
+                target_path[:-1]
+            ).elements
+
+        return target_elements
+
+    def _make_protocol_element(self, item_type: str, mode: str):
+        """
+        Unified logic for creating and inserting elements.
+        :param item_type: 'step' or 'group'
+        :param mode: 'insert' (at current position/start) or 'add' (append/after)
+        """
         scroll_pos = self.save_scroll_positions()
         saved_selection = self.save_selection()
 
         selected_paths = self.get_selected_paths()
+
+        # --- 1. Determine Target List and Row Index ---
+        target_elements = None
+        row = 0
+
         if not selected_paths:
+            # No selection: Insert at top (insert) or Append to end (add)
             target_elements = self.state.sequence
-            row = 0
+            row = 0 if mode == "insert" else len(target_elements)
+
         else:
             target_path = selected_paths[0]
-            if len(target_path) == 1:
-                target_elements = self.state.sequence
-                row = target_path[0]
-            else:
-                parent_path = target_path[:-1]
-                target_elements = self.state.get_element_by_path(parent_path).elements
+
+            # 'insert' mode: Always places item AT the current index (shifting current item down)
+            if mode == "insert":
+                target_elements = self._get_target_elements_from_path(target_path)
                 row = target_path[-1]
 
+            # 'add' mode: Logic depends on whether we selected a Group or a Step
+            elif mode == "add":
+
+                selected_element = self.state.get_element_by_path(target_path)
+
+                if isinstance(selected_element, ProtocolGroup):
+                    # If group selected: Append to INSIDE the group
+                    target_elements = selected_element.elements
+                    row = len(target_elements)
+
+                else:
+                    target_elements = self._get_target_elements_from_path(target_path)
+                    row = target_path[-1] + 1
+
+        # --- 2. Create the Object ---
         self.state.snapshot_for_undo()
 
-        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
-        self.state.assign_uid_to_step(new_step)
-        target_elements.insert(row, new_step)
+        new_item = None
+        if item_type == "step":
+            new_item = ProtocolStep(parameters=dict(step_defaults), name="Step")
+            # Ensure ID assignment happens for all steps (unified from insert_step logic)
+            if hasattr(self.state, "assign_uid_to_step"):
+                self.state.assign_uid_to_step(new_item)
+        elif item_type == "group":
+            new_item = ProtocolGroup(parameters=dict(group_defaults), name="Group")
+
+        # --- 3. Insert and Restore ---
+        target_elements.insert(row, new_item)
 
         self.reassign_ids()
         self.load_from_state()
@@ -2556,143 +2601,20 @@ class PGCWidget(QWidget):
         self.restore_scroll_positions(scroll_pos)
         self.restore_selection(saved_selection)
         self._mark_protocol_modified()
+
+    # --- Public Wrappers ---
+
+    def insert_step(self):
+        self._make_protocol_element("step", "insert")
 
     def insert_group(self):
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-
-        selected_paths = self.get_selected_paths()
-        if not selected_paths:
-            target_elements = self.state.sequence
-            row = 0
-        else:
-            target_path = selected_paths[0]
-            if len(target_path) == 1:
-                target_elements = self.state.sequence
-                row = target_path[0]
-            else:
-                parent_path = target_path[:-1]
-                target_elements = self.state.get_element_by_path(parent_path).elements
-                row = target_path[-1]
-
-        self.state.snapshot_for_undo()
-
-        new_group = ProtocolGroup(parameters=dict(group_defaults), name="Group")
-        target_elements.insert(row, new_group)
-
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
+        self._make_protocol_element("group", "insert")
 
     def add_step(self):
-
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-
-        selected_paths = self.get_selected_paths()
-
-        # if no selected path, add group to end of sequence at root level
-        if not selected_paths:
-            print("No selection")
-            target_elements = self.state.sequence
-            row = len(target_elements)
-
-        else:
-
-            # check if we have a group
-            target_path = selected_paths[0]
-            selected_element = self.state.get_element_by_path(target_path)
-
-            if isinstance(selected_element, ProtocolGroup):
-                # if it is a group, insert at the end of its children element sequence
-                target_elements = selected_element.elements
-                row = len(target_elements)
-
-            else:  # it is a step
-
-                # it is not a nested step. So we can add the group after it in the root state sequence
-                if len(target_path) == 1:
-                    # at root, so we just have a list containing one idx up from now
-                    target_elements = self.state.sequence
-                    row = target_path[0] + 1
-
-                else:
-                    # nested step selected
-                    # get the parent group item, set as target requence to add the new group
-                    parent_element = self.state.get_element_by_path(
-                        target_path[:-1]
-                    )
-                    target_elements = parent_element.elements
-                    # add new group after the selected step in the group's sequence
-                    row = target_path[-1] + 1
-
-        self.state.snapshot_for_undo()
-
-        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
-
-        target_elements.insert(row, new_step)
-
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
+        self._make_protocol_element("step", "add")
 
     def add_group(self):
-        scroll_pos = self.save_scroll_positions()
-        saved_selection = self.save_selection()
-
-        selected_paths = self.get_selected_paths()
-
-        # if no selected path, add group to end of sequence at root level
-        if not selected_paths:
-            print("No selection")
-            target_elements = self.state.sequence
-            row = len(target_elements)
-
-        else:
-
-            # check if we have a group
-            target_path = selected_paths[0]
-            selected_element = self.state.get_element_by_path(target_path)
-
-            if isinstance(selected_element, ProtocolGroup):
-                # if it is a group, insert at the end of its children element sequence
-                target_elements = selected_element.elements
-                row = len(target_elements)
-
-            else:  # it is a step
-
-                # it is not a nested step. So we can add the group after it in the root state sequence
-                if len(target_path) == 1:
-                    # at root, so we just have a list containing one idx up from now
-                    target_elements = self.state.sequence
-                    row = target_path[0] + 1
-
-                else:
-                    # nested step selected
-                    # get the parent group item, set as target requence to add the new group
-                    parent_element = self.state.get_element_by_path(target_path[:-1])
-                    target_elements = parent_element.elements
-                    # add new group after the selected step in the group's sequence
-                    row = target_path[-1] + 1
-
-        self.state.snapshot_for_undo()
-
-        new_group = ProtocolGroup(parameters=dict(group_defaults), name="Group")
-
-        target_elements.insert(row, new_group)
-
-        self.reassign_ids()
-        self.load_from_state()
-        # self.sync_to_state()
-        self.restore_scroll_positions(scroll_pos)
-        self.restore_selection(saved_selection)
-        self._mark_protocol_modified()
+        self._make_protocol_element("group", "add")
 
     def new_protocol(self):
         self.tree.selectionModel().clear()
