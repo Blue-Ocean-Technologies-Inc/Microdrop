@@ -1,10 +1,23 @@
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
-from protocol_grid.consts import step_defaults, group_defaults, ROW_TYPE_ROLE, GROUP_TYPE, STEP_TYPE
+from protocol_grid.consts import (
+    step_defaults,
+    group_defaults,
+    ROW_TYPE_ROLE,
+    GROUP_TYPE,
+    STEP_TYPE,
+)
 from protocol_grid.state.protocol_state import ProtocolStep, ProtocolGroup
 
 import sys
 from PySide6.QtGui import QFont, QIcon
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QApplication, QMainWindow, QVBoxLayout
+from PySide6.QtWidgets import (
+    QWidget,
+    QHBoxLayout,
+    QPushButton,
+    QApplication,
+    QMainWindow,
+    QVBoxLayout,
+)
 
 # Assuming these imports work in your environment
 from microdrop_style.font_paths import load_material_symbols_font, load_inter_font
@@ -15,17 +28,16 @@ from microdrop_style.font_paths import load_material_symbols_font, load_inter_fo
 # from protocol_grid.widget import PGCWidget
 
 
-
 quick_protocol_actions = [
-            ("add_step", "add", "Add step below selection"),
-            ("delete_row", "delete", "Delete selected step / group"),
-            ("add_group", "playlist_add", "Add group"),
-            ("import_protocol", "unarchive", "Import protocol to selected group"),
-            ("open_protocol", "file_open", "Open Protocol"),
-            ("save_protocol", "save", "Save Protocol"),
-            ("new_protocol", "new_window", "New protocol")
-
+    ("add_step", "add", "Add step below selection"),
+    ("delete_row", "delete", "Delete selected step / group"),
+    ("add_group", "playlist_add", "Add group"),
+    ("import_protocol", "unarchive", "Import protocol to selected group"),
+    ("open_protocol", "file_open", "Open Protocol"),
+    ("save_protocol", "save", "Save Protocol"),
+    ("new_protocol", "new_window", "New protocol"),
 ]
+
 
 class QuickProtocolActions(QHBoxLayout):
 
@@ -44,18 +56,13 @@ class QuickProtocolActions(QHBoxLayout):
             self.addWidget(button)
 
         for id, text, tooltip in [
-
             ("add_step", "add", "Add step below selection"),
             ("delete_row", "delete", "Delete selected step / group"),
-
             ("add_group", "playlist_add", "Add group"),
-
             ("import_protocol", "unarchive", "Import protocol to selected group"),
             ("open_protocol", "file_open", "Open Protocol"),
             ("save_protocol", "save", "Save Protocol"),
-
-            ("new_protocol", "new_window", "New protocol")
-
+            ("new_protocol", "new_window", "New protocol"),
         ]:
 
             _add_button(id, text, tooltip)
@@ -65,18 +72,29 @@ class QuickProtocolActions(QHBoxLayout):
 
 class QuickProtocolActionsController:
 
-    def __init__(self, view, protocol_grid: 'PGCWidget'):
+    def __init__(self, view, protocol_grid: "PGCWidget"):
         self.view = view
         self.protocol_grid = protocol_grid
 
         self.view.actions["add_step"].clicked.connect(self.add_step)
 
-        self.view.actions["delete_row"].clicked.connect(self.protocol_grid._protected_delete_selected)
+        self.view.actions["delete_row"].clicked.connect(
+            self.protocol_grid._protected_delete_selected
+        )
         self.view.actions["add_group"].clicked.connect(self.protocol_grid.add_group)
 
-        self.view.actions["import_protocol"].clicked.connect(self.protocol_grid.import_into_json)
-        self.view.actions["open_protocol"].clicked.connect(self.protocol_grid.import_from_json)
-        self.view.actions["save_protocol"].clicked.connect(self.protocol_grid.export_to_json)
+        self.view.actions["import_protocol"].clicked.connect(
+            self.protocol_grid.import_into_json
+        )
+        self.view.actions["open_protocol"].clicked.connect(
+            self.protocol_grid.import_from_json
+        )
+        self.view.actions["save_protocol"].clicked.connect(
+            self.protocol_grid.export_to_json
+        )
+        self.view.actions["new_protocol"].clicked.connect(
+            self.protocol_grid.new_protocol
+        )
 
     def add_step(self):
         selected_paths = self.protocol_grid.get_selected_paths()
@@ -105,10 +123,7 @@ class QuickProtocolActionsController:
 
         self.protocol_grid.state.snapshot_for_undo()
 
-        new_step = ProtocolStep(
-            parameters=dict(step_defaults),
-            name="Step"
-        )
+        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
         self.protocol_grid.state.assign_uid_to_step(new_step)
         target_elements.insert(row, new_step)
 
@@ -120,11 +135,17 @@ class QuickProtocolActionsController:
         self.protocol_grid._mark_protocol_modified()
 
     def on_selection_changed(self):
-        if hasattr(self.protocol_grid, '_processing_device_viewer_message') and self.protocol_grid._processing_device_viewer_message:
+        if (
+            hasattr(self.protocol_grid, "_processing_device_viewer_message")
+            and self.protocol_grid._processing_device_viewer_message
+        ):
             return
         if self.protocol_grid._programmatic_change:
             return
-        if hasattr(self.protocol_grid, '_restoring_selection') and self.protocol_grid._restoring_selection:
+        if (
+            hasattr(self.protocol_grid, "_restoring_selection")
+            and self.protocol_grid._restoring_selection
+        ):
             return
         if self.protocol_grid._protocol_running:
             return
@@ -137,6 +158,7 @@ class QuickProtocolActionsController:
     def _update_ui_enabled_state(self, enabled):
         for id in [el[0] for el in quick_protocol_actions]:
             getattr(self.view, id).setEnabled(enabled)
+
 
 if __name__ == "__main__":
     app = QApplication.instance() or QApplication(sys.argv)
@@ -154,7 +176,9 @@ if __name__ == "__main__":
 
     central_widget.setLayout(QuickProtocolActions())
 
-    central_widget.setStyleSheet(get_complete_stylesheet(theme="dark" if is_dark_mode() else "light"))
+    central_widget.setStyleSheet(
+        get_complete_stylesheet(theme="dark" if is_dark_mode() else "light")
+    )
 
     window.setCentralWidget(central_widget)
 
