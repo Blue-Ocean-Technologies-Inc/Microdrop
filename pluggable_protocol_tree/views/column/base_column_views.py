@@ -79,10 +79,10 @@ class CheckboxView(BaseColumnView):
 
     def get_flags(self, row):
         """Checkboxes are checkable, but not for groups."""
-        base = Qt.ItemIsEnabled | Qt.ItemIsSelectable
         if isinstance(row, GroupRow):
-            return base
-        return base | Qt.ItemIsUserCheckable
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+
+        return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable
 
 
 @provides(IColumnHandler)
