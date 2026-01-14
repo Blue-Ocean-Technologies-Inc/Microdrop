@@ -1790,83 +1790,54 @@ class PGCWidget(QWidget):
         menu.exec(global_pos)
 
     def setup_shortcuts(self):
+
+        # protected wrapper methods for keyboard shortcuts
+        def _protected_wrapper(func):
+            if not self._protocol_running:
+                func()
+
         shortcuts = [
-            (QKeySequence.Delete, self._protected_delete_selected),
-            (QKeySequence("Ctrl+C"), self._protected_copy_selected),
-            (QKeySequence("Ctrl+X"), self._protected_cut_selected),
-            (QKeySequence("Ctrl+V"), self._protected_paste_selected),
-            (QKeySequence("Ctrl+Z"), self._protected_undo_last),
-            (QKeySequence("Ctrl+Y"), self._protected_redo_last),
-            (QKeySequence("Ctrl+Shift+Y"), self._protected_redo_last),
-            (QKeySequence("Ctrl+A"), self._protected_select_all),
-            (QKeySequence("Ctrl+D"), self._protected_deselect_rows),
-            (QKeySequence("Ctrl+I"), self._protected_invert_row_selection),
-            (QKeySequence("Insert"), self._protected_insert_step),
-            (QKeySequence("Ctrl+Insert"), self._protected_insert_group),
-            (QKeySequence("Ctrl+Shift+V"), self._protected_paste_into),
+            (QKeySequence.Delete, self.delete_selected),
+            (QKeySequence("Ctrl+C"), self.copy_selected),
+            (QKeySequence("Ctrl+X"), self.cut_selected),
+            (QKeySequence("Ctrl+V"), self.paste_selected),
+            (QKeySequence("Ctrl+Z"), self.undo_last),
+            (QKeySequence("Ctrl+Y"), self.redo_last),
+            (QKeySequence("Ctrl+Shift+Y"), self.redo_last),
+            (QKeySequence("Ctrl+A"), self.select_all),
+            (QKeySequence("Ctrl+D"), self.deselect_rows),
+            (QKeySequence("Ctrl+I"), self.invert_row_selection),
+            (QKeySequence("Insert"), self.insert_step),
+            (QKeySequence("Ctrl+Insert"), self.insert_group),
+            (QKeySequence("Ctrl+Shift+V"), self.paste_into),
             (QKeySequence("A"), self.navigate_to_first_step),
             (QKeySequence("S"), self.navigate_to_previous_step),
             (QKeySequence("D"), self.navigate_to_next_step),
             (QKeySequence("F"), self.navigate_to_last_step),
-            (QKeySequence("E"), self._protected_add_step_to_current_group),
+            (QKeySequence("E"), self.add_step),
+            (QKeySequence("W"), self.add_group),
         ]
 
         for key_seq, slot in shortcuts:
             shortcut = QShortcut(key_seq, self)
-            shortcut.activated.connect(slot)
+            shortcut.activated.connect(self._only_call_when_no_protocol_run(slot))
+
+    def _only_call_when_no_protocol_run(self, func):
+        """
+        Returns a wrapper function that checks the protocol state
+        before executing the original slot.
+        """
+
+        def wrapper():
+            if not self._protocol_running:
+                func()
+
+        return wrapper
 
     # protected wrapper methods for keyboard shortcuts
     def _protected_delete_selected(self):
         if not self._protocol_running:
             self.delete_selected()
-
-    def _protected_copy_selected(self):
-        if not self._protocol_running:
-            self.copy_selected()
-
-    def _protected_cut_selected(self):
-        if not self._protocol_running:
-            self.cut_selected()
-
-    def _protected_paste_selected(self):
-        if not self._protocol_running:
-            self.paste_selected()
-
-    def _protected_undo_last(self):
-        if not self._protocol_running:
-            self.undo_last()
-
-    def _protected_redo_last(self):
-        if not self._protocol_running:
-            self.redo_last()
-
-    def _protected_select_all(self):
-        if not self._protocol_running:
-            self.select_all()
-
-    def _protected_deselect_rows(self):
-        if not self._protocol_running:
-            self.deselect_rows()
-
-    def _protected_invert_row_selection(self):
-        if not self._protocol_running:
-            self.invert_row_selection()
-
-    def _protected_insert_step(self):
-        if not self._protocol_running:
-            self.insert_step()
-
-    def _protected_insert_group(self):
-        if not self._protocol_running:
-            self.insert_group()
-
-    def _protected_paste_into(self):
-        if not self._protocol_running:
-            self.paste_into()
-
-    def _protected_add_step_to_current_group(self):
-        if not self._protocol_running:
-            self.add_step_to_current_group()
 
     def show_column_toggle_dialog(self):
         dialog = ColumnToggleDialog(self)

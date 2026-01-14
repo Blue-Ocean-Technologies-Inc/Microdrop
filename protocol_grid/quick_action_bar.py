@@ -79,7 +79,9 @@ class QuickProtocolActionsController:
         self.view.actions["add_step"].clicked.connect(self.protocol_grid.add_step)
 
         self.view.actions["delete_row"].clicked.connect(
-            self.protocol_grid._protected_delete_selected
+            self.protocol_grid._only_call_when_no_protocol_run(
+                self.protocol_grid._protected_delete_selected
+            )
         )
         self.view.actions["add_group"].clicked.connect(self.protocol_grid.add_group)
 
@@ -95,7 +97,6 @@ class QuickProtocolActionsController:
         self.view.actions["new_protocol"].clicked.connect(
             self.protocol_grid.new_protocol
         )
-
 
     def on_selection_changed(self):
         if (
