@@ -531,7 +531,7 @@ class EditContextMenu(QMenu):
         
         import_export_actions = [
             ("Import Into", self.widget.import_into_json),
-            ("Save As", self.widget.export_to_json),
+            ("Save As", self.widget.save_protocol_as),
             ("Load", self.widget.import_from_json),
         ]
         for name, slot in import_export_actions:

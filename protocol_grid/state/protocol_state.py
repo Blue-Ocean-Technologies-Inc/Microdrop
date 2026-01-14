@@ -332,3 +332,16 @@ class ProtocolState:
                     return last_step
 
             return None
+
+    def remove_last_element(self, sequence=None):
+        if sequence is None:
+            sequence = self.sequence
+
+        if sequence is not None:
+            last_element = sequence[-1]
+            if isinstance(last_element, ProtocolGroup):
+                if last_element.elements:
+                    self.remove_last_element(last_element.elements)
+                    return
+
+            sequence.pop()

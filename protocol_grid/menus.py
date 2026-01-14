@@ -21,9 +21,9 @@ def save_dialogue_menu_factory():
     """
 
     return DockPaneAction(
-        id=PKG + ".save_as_protocol_dialogue",
+        id=PKG + ".save_protocol_dialogue",
         dock_pane_id=PKG + ".dock_pane",
-        name="Save As",
+        name="Save",
         method="save_protocol_dialog",
     )
 
@@ -40,6 +40,7 @@ def save_as_dialogue_menu_factory():
         method="save_as_protocol_dialog",
     )
 
+
 def new_experiment_factory():
     """
     Increment experiment ID with new timestamp, and create new exp directory.
@@ -53,12 +54,24 @@ def new_experiment_factory():
     )
 
 
+def new_protocol_menu_factory():
+    """
+    Create a new protocol replacing the current.
+    """
+    return DockPaneAction(
+        id=PKG + ".new_protocol_dialogue",
+        dock_pane_id=PKG + ".dock_pane",
+        name="Create New",
+        method="new_protocol",
+    )
+
+
 def tools_menu_factory():
     return SMenu(
-
+        new_protocol_menu_factory(),
         load_dialog_menu_factory(),
+        save_dialogue_menu_factory(),
         save_as_dialogue_menu_factory(),
-
-        id="protocol_tools", name="Protocol"
-
+        id="protocol_tools",
+        name="Protocol",
     )
