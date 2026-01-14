@@ -2599,9 +2599,10 @@ class PGCWidget(QWidget):
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
+
         if not selected_paths:
-            target_elements = self.state.sequence
-            target_elements.pop()
+            self.state.remove_last_element()
+
         self.state.snapshot_for_undo()
 
         selected_paths.sort(reverse=True)
@@ -2842,8 +2843,9 @@ class PGCWidget(QWidget):
         if target_item is None:
             return
 
+        default_dir = str(self.experiment_manager.get_experiment_directory())
         file_name, _ = QFileDialog.getOpenFileName(
-            self, "Import Protocol from JSON", "", "JSON Files (*.json)"
+            self, "Import Protocol from JSON", default_dir, "JSON Files (*.json)"
         )
         if not file_name:
             return
