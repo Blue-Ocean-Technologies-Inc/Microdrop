@@ -529,8 +529,8 @@ class PGCWidget(QWidget):
 
     def _mark_protocol_modified(self):
         """mark the protocol as modified and update display."""
-        if not self.protocol_state_tracker._is_modified:
-            self.protocol_state_tracker._is_modified = True
+        if not self.protocol_state_tracker.is_modified:
+            self.protocol_state_tracker.is_modified = True
 
     # -----------------------------------------------
 
@@ -653,8 +653,8 @@ class PGCWidget(QWidget):
         try:
             # auto-save current protocol with smart filename
             protocol_data = self.state.to_flat_export()
-            protocol_name = self.protocol_state_tracker.get_protocol_name()
-            is_modified = self.protocol_state_tracker._is_modified
+            protocol_name = self.protocol_state_tracker.protocol_name
+            is_modified = self.protocol_state_tracker.is_modified
 
             saved_path = self.experiment_manager.auto_save_protocol(
                 protocol_data, protocol_name, is_modified
@@ -2526,15 +2526,12 @@ class PGCWidget(QWidget):
                     index, QItemSelectionModel.Select | QItemSelectionModel.Rows
                 )
 
-
     def _get_target_elements_from_path(self, target_path):
-        if len(target_path) == 1: # at root level
+        if len(target_path) == 1:  # at root level
             target_elements = self.state.sequence
 
-        else: # addition to a group
-            target_elements = self.state.get_element_by_path(
-                target_path[:-1]
-            ).elements
+        else:  # addition to a group
+            target_elements = self.state.get_element_by_path(target_path[:-1]).elements
 
         return target_elements
 
@@ -2627,8 +2624,7 @@ class PGCWidget(QWidget):
         self.reassign_ids()
 
         # update protocol state tracker
-        self.protocol_state_tracker.set_loaded_protocol(None)
-        self._mark_protocol_modified()
+        self.protocol_state_tracker.reset()
 
     def delete_selected(self):
         selected_paths = self.get_selected_paths()
@@ -2775,16 +2771,36 @@ class PGCWidget(QWidget):
     def _reset_undo_snapshotted(self):
         self._undo_snapshotted = False
 
-    def export_to_json(self):
+    def save_protocol(self):
+        if self.protocol_state_tracker.is_modified:
+            self.save_protocol_as(
+                file_name=self.protocol_state_tracker.loaded_protocol_path
+            )
+
+        else:
+            logger.warning(
+                f"{self.protocol_state_tracker.protocol_name} has already been saved."
+            )
+
+    def save_protocol_as(self, file_name=None):
         if self._protocol_running:
             return
 
         # use experiment directory as default save location
         default_dir = str(self.experiment_manager.get_experiment_directory())
 
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)"
-        )
+        if not file_name:
+
+            user_selected_file_name, _ = QFileDialog.getSaveFileName(
+                self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)"
+            )
+
+            if user_selected_file_name:
+                file_name = user_selected_file_name
+
+            else:
+                logger.error("No file for export provided.")
+
         if file_name:
             try:
                 flat_data = self.state.to_flat_export()
@@ -2799,12 +2815,12 @@ class PGCWidget(QWidget):
 
     def import_from_json(self):
         default_dir = str(self.experiment_manager.get_experiment_directory())
-        file_name, _ = QFileDialog.getOpenFileName(
+        file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Protocol from JSON", default_dir, "JSON Files (*.json)"
         )
-        if file_name:
+        if file_path:
             try:
-                with open(file_name, "r") as f:
+                with open(file_path, "r") as f:
                     data = json.load(f)
 
                 # flag to prevent marking as modified during an import
@@ -2814,7 +2830,7 @@ class PGCWidget(QWidget):
                     self.load_from_state()
 
                     # update protocol state tracker
-                    self.protocol_state_tracker.set_loaded_protocol(file_name)
+                    self.protocol_state_tracker.set_loaded_protocol(file_path)
 
                 finally:
                     self._loading_from_file = False

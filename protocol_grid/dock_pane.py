@@ -56,7 +56,7 @@ class PGCDockPane(DockPane):
         self.control.widget().import_from_json()
 
     def save_as_protocol_dialog(self):
-        self.control.widget().export_to_json()
+        self.control.widget().save_protocol_as()
 
     def setup_new_experiment(self):
         self.control.widget().setup_new_experiment()

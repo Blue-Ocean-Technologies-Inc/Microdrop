@@ -90,7 +90,7 @@ class QuickProtocolActionsController:
             self.protocol_grid.import_from_json
         )
         self.view.actions["save_protocol"].clicked.connect(
-            self.protocol_grid.export_to_json
+            self.protocol_grid.save_protocol
         )
         self.view.actions["new_protocol"].clicked.connect(
             self.protocol_grid.new_protocol
