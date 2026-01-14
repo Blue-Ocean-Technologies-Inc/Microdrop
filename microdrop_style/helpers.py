@@ -7,6 +7,7 @@ from .combo_box_style import get_combobox_style
 from .font_paths import load_material_symbols_font, load_inter_font
 from .general_style import get_general_style
 from .label_style import get_label_style
+from .message_box_style import get_message_box_style
 
 QT_THEME_NAMES = {
     Qt.ColorScheme.Dark: "dark",
@@ -34,6 +35,7 @@ def get_complete_stylesheet(theme="light", button_type="default"):
     combos = get_combobox_style(theme)
     buttons = get_button_style(theme, button_type)
     tooltips = get_tooltip_style(theme)
+    message_box = get_message_box_style(theme)
 
     # Order matters slightly: General generic rules first, specific widgets last.
-    return f"{general}\n{labels}\n{combos}\n{buttons}\n{tooltips}"
+    return f"{general}\n{labels}\n{combos}\n{buttons}\n{tooltips}{message_box}"
