@@ -2785,6 +2785,26 @@ class PGCWidget(QWidget):
                 logger.info(self, "Export Error", f"Failed to export: {str(e)}")
 
     def import_from_json(self):
+
+        if self.protocol_state_tracker.is_modified:
+
+            if (
+                confirm(
+                    self,
+                    "Current protocol has unsaved changes.\nLoad a different protocol anyway?",
+                    title="Unsaved Protocol Changes",
+                    cancel=False,
+                    # no_label="No",
+                    # yes_label="Yes",
+                    # detail="This is some details over here",
+                )
+                == NO
+            ):
+                logger.info(
+                    "Import Cancelled. Save current protocol before loading new protocol."
+                )
+                return
+
         default_dir = str(self.experiment_manager.get_experiment_directory())
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Protocol from JSON", default_dir, "JSON Files (*.json)"
