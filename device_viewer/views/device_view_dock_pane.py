@@ -1,73 +1,98 @@
 # Site package imports
+import json
 import traceback
 from pathlib import Path
+
 import dramatiq
-
-from traits.api import Instance, observe, Str, provides
-from traits.observation.events import ListChangeEvent, TraitChangeEvent, DictChangeEvent
-
-from pyface.api import FileDialog, OK, confirm, YES, NO, error, error
-from pyface.qt.QtGui import QGraphicsScene, QGraphicsPixmapItem, QTransform
-from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
-from pyface.qt.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QApplication, QSizePolicy, QPushButton, QScrollArea, QFrame
-from pyface.qt.QtCore import QTimer, QPointF, QSizeF, Qt
-from pyface.tasks.api import TraitsDockPane
-from pyface.undo.api import UndoManager, CommandStack
-from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.api import NO, OK, YES, FileDialog, confirm, error
+from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
+from pyface.qt.QtGui import QGraphicsPixmapItem, QGraphicsScene, QTransform
 from pyface.qt.QtMultimedia import QMediaCaptureSession
+from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QMenu,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+from pyface.tasks.api import TraitsDockPane
+from pyface.undo.api import CommandStack, UndoManager
 
+from traits.api import Instance, Str, observe, provides
+from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
+from traitsui.view import View
+
+# ext consts
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from logger.logger_service import get_logger
 from microdrop_style.button_styles import get_tooltip_style
-from .viewport_settings_view.widget import ZoomViewModel, ZoomControlWidget
-##### local imports ######
-from ..default_settings import video_key
-from ..models.alpha import AlphaValue
-from ..models.electrodes import Electrodes
-from ..preferences import DeviceViewerPreferences
-from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
-from ..utils.message_utils import gui_models_to_message_model
-from ..models.messages import DeviceViewerMessageModel
-from ..consts import listener_name, device_modified_tag, camera_place_status_message_text, \
-    camera_edit_status_message_text
-from ..utils.commands import TraitChangeCommand, ListChangeCommand, DictChangeCommand
-
-# models and services
-from ..models.main_model import DeviceViewMainModel
-from ..models.route import Route
-from ..consts import PKG, PKG_name
-from ..services.electrode_interaction_service import ElectrodeInteractionControllerService
-
-# For sidebar
-from .alpha_view.alpha_table import alpha_table_view
-from .calibration_view.widget import CalibrationWidget, CalibrationController
-from .camera_control_view.widget import CameraControlWidget
-from .mode_picker.widget import ModePicker, ModePickerViewModel
-
-# Device Viewer electrode and route views
-from .electrode_view.electrode_scene import ElectrodeScene
-from .electrode_view.electrode_layer import ElectrodeLayer
-from .route_selection_view.route_selection_view import RouteLayerView
-
+from microdrop_style.helpers import (
+    QT_THEME_NAMES,
+    get_complete_stylesheet,
+    is_dark_mode,
+)
+from microdrop_utils.datetime_helpers import TimestampedMessage
+from microdrop_utils.dramatiq_controller_base import (
+    basic_listener_actor_routine,
+    generate_class_method_dramatiq_listener_actor,
+)
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # utils imports
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
-from microdrop_utils.pyside_helpers import CollapsibleVStackBox
-from microdrop_utils.dramatiq_controller_base import basic_listener_actor_routine, generate_class_method_dramatiq_listener_actor
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
-
-# ext consts
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
+from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
-from microdrop_style.helpers import is_dark_mode, QT_THEME_NAMES, get_complete_stylesheet
 
-import json
+from ..consts import (
+    PKG,
+    PKG_name,
+    camera_edit_status_message_text,
+    camera_place_status_message_text,
+    device_modified_tag,
+    listener_name,
+)
 
-from logger.logger_service import get_logger
+##### local imports ######
+from ..default_settings import video_key
+from ..models.alpha import AlphaValue
+from ..models.electrodes import Electrodes
+
+# models and services
+from ..models.main_model import DeviceViewMainModel
+from ..models.messages import DeviceViewerMessageModel
+from ..models.route import Route
+from ..preferences import DeviceViewerPreferences, sidebar_settings_grid
+from ..services.electrode_interaction_service import (
+    ElectrodeInteractionControllerService,
+)
+from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
+from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
+from ..utils.message_utils import gui_models_to_message_model
+
+# For sidebar
+from .alpha_view.alpha_table import alpha_table_view
+from .calibration_view.widget import CalibrationController, CalibrationWidget
+from .camera_control_view.widget import CameraControlWidget
+from .electrode_view.electrode_layer import ElectrodeLayer
+
+# Device Viewer electrode and route views
+from .electrode_view.electrode_scene import ElectrodeScene
+from .mode_picker.widget import ModePicker, ModePickerViewModel
+from .route_selection_view.route_selection_view import RouteLayerView
+from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
+
 logger = get_logger(__name__)
 
 _dock_pane_name = f"{PKG_name} Dock Pane"
+
 
 @provides(IDramatiqControllerBase)
 class DeviceViewerDockPane(TraitsDockPane):
@@ -93,15 +118,17 @@ class DeviceViewerDockPane(TraitsDockPane):
     mode_picker_view = None
 
     # Variables
-    _undoing = False # Used to prevent changes made in undo() and redo() from being added to the undo stack
-    _disable_state_messages = False # Used to disable state messages when the model is being updated, to prevent infinite loops
-    message_buffer = Str() # Buffer to hold the message to be sent when the debounce timer expires
+    _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
+    _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
+    message_buffer = (
+        Str()
+    )  # Buffer to hold the message to be sent when the debounce timer expires
     video_item = None  # The video item for the camera feed
     opencv_pixmap = None  # Pixmap item for OpenCV images
     debounce_timer = None  # Timer to debounce state messages
 
     ###################################################################################
-    #------------- IDramatiqControllerBase Interface -------------------- #
+    # ------------- IDramatiqControllerBase Interface -------------------- #
     ###################################################################################
     listener_name = listener_name
     dramatiq_listener_actor = Instance(dramatiq.Actor)
@@ -114,16 +141,20 @@ class DeviceViewerDockPane(TraitsDockPane):
     def traits_init(self):
         logger.info("Starting DeviceViewer listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name,
-            class_method=self.listener_actor_routine)
+            listener_name=self.listener_name, class_method=self.listener_actor_routine
+        )
 
         ###############################################################################################################
-        #--------------Setup device view model ---------------------------------- #
+        # --------------Setup device view model ---------------------------------- #
         ##############################################################################################################
 
         ########### Load preferences: for app level, and device viewer level: ######################
-        self.app_preferences = self.task.window.application.preferences_helper.preferences
-        self.device_viewer_preferences = DeviceViewerPreferences(preferences=self.app_preferences)
+        self.app_preferences = (
+            self.task.window.application.preferences_helper.preferences
+        )
+        self.device_viewer_preferences = DeviceViewerPreferences(
+            preferences=self.app_preferences
+        )
 
         ################ Load undo manager ###################################################
 
@@ -131,7 +162,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
         ################ Create Model ######################################################
-        self.model = DeviceViewMainModel(undo_manager=self.undo_manager, preferences=self.device_viewer_preferences)
+        self.model = DeviceViewMainModel(
+            undo_manager=self.undo_manager, preferences=self.device_viewer_preferences
+        )
 
         ################################################################################################################
         # ------------------Load preferences to model --------------------------------------------#
@@ -150,8 +183,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################################################################################################
 
         self.scene = ElectrodeScene()
-        self.device_view = AutoFitGraphicsView(self.scene, auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale)
-        self.device_view.setObjectName('device_view')
+        self.device_view = AutoFitGraphicsView(
+            self.scene,
+            auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale,
+        )
+        self.device_view.setObjectName("device_view")
         self.device_view.setViewport(QOpenGLWidget())
 
     ################################################################################################
@@ -181,7 +217,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         Handle capacitance updates from the device viewer.
         """
-        capacitance_str = json.loads(message).get('capacitance', None)
+        capacitance_str = json.loads(message).get("capacitance", None)
         if capacitance_str is not None:
             capacitance = float(capacitance_str.split("pF")[0])
             self.model.last_capacitance = capacitance
@@ -197,7 +233,9 @@ class DeviceViewerDockPane(TraitsDockPane):
                 try:
                     capture_data = json.loads(message)
                 except (json.JSONDecodeError, TypeError):
-                    logger.debug("Screen capture message is not JSON, using default capture")
+                    logger.debug(
+                        "Screen capture message is not JSON, using default capture"
+                    )
 
             self.camera_control_widget.screen_capture_signal.emit(capture_data)
 
@@ -214,16 +252,24 @@ class DeviceViewerDockPane(TraitsDockPane):
                     if isinstance(recording_data, dict):
                         action = recording_data.get("action", "").lower()
                         if action in ["start", "stop"]:
-                            self.camera_control_widget.screen_recording_signal.emit(recording_data)
+                            self.camera_control_widget.screen_recording_signal.emit(
+                                recording_data
+                            )
                         else:
                             is_start = message.lower() == "true"
-                            self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                            self.camera_control_widget.screen_recording_signal.emit(
+                                {"action": "start" if is_start else "stop"}
+                            )
                     else:
                         is_start = message.lower() == "true"
-                        self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                        self.camera_control_widget.screen_recording_signal.emit(
+                            {"action": "start" if is_start else "stop"}
+                        )
                 except (json.JSONDecodeError, TypeError):
                     is_start = message.lower() == "true"
-                    self.camera_control_widget.screen_recording_signal.emit({"action": "start" if is_start else "stop"})
+                    self.camera_control_widget.screen_recording_signal.emit(
+                        {"action": "start" if is_start else "stop"}
+                    )
 
     def _on_camera_active_triggered(self, message):
         """
@@ -231,7 +277,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Camera activation triggered: {message}")
         if self.model and self.camera_control_widget:
-            self.camera_control_widget.camera_active_signal.emit(message.lower() == "true")
+            self.camera_control_widget.camera_active_signal.emit(
+                message.lower() == "true"
+            )
 
     def _on_drops_detected_triggered(self, message):
         message_obj = json.loads(message)
@@ -258,12 +306,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.push(command)
 
     def undo(self):
-        self._undoing = True # We need to prevent the changes made in undo() from being added to the undo stack
+        self._undoing = True  # We need to prevent the changes made in undo() from being added to the undo stack
         self.model.undo_manager.undo()
         self._undoing = False
 
     def redo(self):
-        self._undoing = True # We need to prevent the changes made in redo() from being added to the undo stack
+        self._undoing = True  # We need to prevent the changes made in redo() from being added to the undo stack
         self.model.undo_manager.redo()
         self._undoing = False
 
@@ -276,7 +324,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             return  # Ignore messages that are from the same model
 
         # Reset the model to clear any existing routes and channels
-        self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
+        self._disable_state_messages = (
+            True  # Prevent state messages from being sent while we apply the new state
+        )
         self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
         self.model.reset()
 
@@ -294,10 +344,14 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Apply electrode channel mapping
         for electrode_id, electrode in self.model.electrodes.electrodes.items():
-            electrode.channel = message_model.id_to_channel.get(electrode_id, electrode.channel)
+            electrode.channel = message_model.id_to_channel.get(
+                electrode_id, electrode.channel
+            )
 
         # Apply electrode on/off states
-        self.model.electrodes.channels_states_map.update(message_model.channels_activated)
+        self.model.electrodes.channels_states_map.update(
+            message_model.channels_activated
+        )
 
         # Apply routes
         for route, color in message_model.routes:
@@ -309,13 +363,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
     def publish_model_message(self):
-        logger.debug(f"Publishing message for updated viewer state {self.message_buffer}")
+        logger.debug(
+            f"Publishing message for updated viewer state {self.message_buffer}"
+        )
         publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def publish_electrode_update(self):
         message_obj = {}
-        for channel in self.model.electrodes.channels_electrode_ids_map: # Make sure all channels are explicitly included
-            message_obj[channel] = self.model.electrodes.channels_states_map.get(channel, False)
+        for (
+            channel
+        ) in (
+            self.model.electrodes.channels_electrode_ids_map
+        ):  # Make sure all channels are explicitly included
+            message_obj[channel] = self.model.electrodes.channels_states_map.get(
+                channel, False
+            )
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
 
     def publish_calibration_message(self):
@@ -323,8 +385,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         Publish a message with the current calibration values.
         """
         message = {
-            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area, # In pF/mm^2
-            "filler_capacitance_over_area": self.model.filler_capacitance_over_area, # In pF/mm^2
+            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area,  # In pF/mm^2
+            "filler_capacitance_over_area": self.model.filler_capacitance_over_area,  # In pF/mm^2
         }
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
@@ -333,7 +395,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     # --------------UI view content creation / configuration helpers ---------------------------------
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
-        logger.debug(f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}")
+        logger.debug(
+            f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}"
+        )
 
         # Initialize the electrode mouse / key interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
@@ -347,7 +411,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scene.interaction_service = interaction_service
         self.scene.interaction_service.electrode_state_recolor(None)
 
-        logger.debug(f"Setting up handlers for new layer for new electrodes model {new_model}")
+        logger.debug(
+            f"Setting up handlers for new layer for new electrodes model {new_model}"
+        )
 
     def remove_current_layer(self):
         """
@@ -366,26 +432,37 @@ class DeviceViewerDockPane(TraitsDockPane):
         x, y = scene_rect.center().toTuple()
         w, h = scene_rect.size().toTuple()
         w, h = w / 4, h / 4
-        self.model.camera_perspective.default_rect = [QPointF(x - w, y - h), QPointF(x + w, y - h),
-                                                      QPointF(x + w, y + h), QPointF(x - w, y + h)]  # bounding_box
+        self.model.camera_perspective.default_rect = [
+            QPointF(x - w, y - h),
+            QPointF(x + w, y - h),
+            QPointF(x + w, y + h),
+            QPointF(x - w, y + h),
+        ]  # bounding_box
         if len(self.model.camera_perspective.reference_rect) != 4:
             # force update so rotation is shown
             self.model.camera_perspective.update_transformation()
 
-    def set_view_from_model(self, new_electrodes_model: 'Electrodes'):
+    def set_view_from_model(self, new_electrodes_model: "Electrodes"):
         self.remove_current_layer()
 
         # use model method to figure out default alpha values taking into account visible settings.
-        default_alphas = {key: self.model.get_alpha(key) for key in self.device_viewer_preferences.default_alphas}
+        default_alphas = {
+            key: self.model.get_alpha(key)
+            for key in self.device_viewer_preferences.default_alphas
+        }
 
         # create new electrode layer and add to scene
-        self.current_electrode_layer = ElectrodeLayer(new_electrodes_model, default_alphas)
+        self.current_electrode_layer = ElectrodeLayer(
+            new_electrodes_model, default_alphas
+        )
         self.current_electrode_layer.add_all_items_to_scene(self.scene)
 
         # Fit the View
         self.device_view.resetTransform()
 
-        layer_bounding_rect = self.current_electrode_layer.get_electrodes_views_bounding_rect()
+        layer_bounding_rect = (
+            self.current_electrode_layer.get_electrodes_views_bounding_rect()
+        )
 
         if layer_bounding_rect and not layer_bounding_rect.isEmpty():
             # Update the scene's boundary to match the new focus area
@@ -420,8 +497,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.reset()
 
         # create model using svg data
-        self.model.electrodes.set_electrodes_from_svg_file(svg_file)  # FIXME: Slow! Calculating centers via np.mean
-        logger.debug(f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}")
+        self.model.electrodes.set_electrodes_from_svg_file(
+            svg_file
+        )  # FIXME: Slow! Calculating centers via np.mean
+        logger.debug(
+            f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}"
+        )
 
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
@@ -436,15 +517,44 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
 
         except Exception as e:
-            logger.error(f"Could not create electrodes from SVG file: {svg_file}. Error: {e}", exc_info=True)
-            error(self.control, f"Could not create electrodes from SVG file: {svg_file}",
-                  informative=f"Reason: {e}",
-                  detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
-                  title="Error: Cannot Load Device SVG"
-                  )
+            logger.error(
+                f"Could not create electrodes from SVG file: {svg_file}. Error: {e}",
+                exc_info=True,
+            )
+            error(
+                self.control,
+                f"Could not create electrodes from SVG file: {svg_file}",
+                informative=f"Reason: {e}",
+                detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                title="Error: Cannot Load Device SVG",
+            )
             return
 
-    #--------------------- UI initialization -----------------------
+    # --------------------- UI initialization -----------------------
+
+    @observe(
+        "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT]",
+        post_init=True,
+    )
+    def _set_device_view_layout_width(self, event=None):
+
+        if self.scroll_area and self.scroll_content:
+
+            self.scroll_area.setMaximumWidth(
+                self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
+            )
+            self.scroll_content.setMaximumWidth(
+                self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH - 5
+            )  # offset to fit within the area
+            self.alpha_view_ui.control.setMinimumHeight(
+                self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT
+            )
+            self.alpha_view_ui.control.setMaximumWidth(
+                self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
+            )
+            self.layer_ui.control.setMinimumHeight(
+                self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT
+            )
 
     def create_contents(self, parent):
         """Called when the task is activated."""
@@ -454,11 +564,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         ###################################################################
         # Initialize camera primitives
         ###################################################################
-        self.capture_session = QMediaCaptureSession()  # Initialize capture session for the device viewer
+        self.capture_session = (
+            QMediaCaptureSession()
+        )  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
-        self.video_item.setZValue(-100)  # Set a low z-value to ensure the video is behind other items
+        self.video_item.setZValue(
+            -100
+        )  # Set a low z-value to ensure the video is behind other items
         self.opencv_pixmap = QGraphicsPixmapItem()
-        self.opencv_pixmap.setZValue(-100)  # Set a low z-value to ensure the pixmap is behind other items
+        self.opencv_pixmap.setZValue(
+            -100
+        )  # Set a low z-value to ensure the pixmap is behind other items
         self.opencv_pixmap.setVisible(True)  # Initially hide the pixmap item
         self.video_item.setOpacity(self.model.get_alpha("video"))
         self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
@@ -485,15 +601,58 @@ class DeviceViewerDockPane(TraitsDockPane):
         # --- Right Side: Collapsible Scroll Area ---
 
         # Create the Scroll Area and its container
-        scroll_area = QScrollArea()
+        self.scroll_area = scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
 
-        scroll_area.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
         # Initially hide the scroll area
         scroll_area.setVisible(True)
 
-        scroll_content = QWidget()
-        scroll_content.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH-5) # offset to fit within the area
+        self.scroll_content = scroll_content = QWidget()
+
+        # -------------------------------------------------------------------------
+        # NEW: Context Menu to Open Preferences
+        # -------------------------------------------------------------------------
+        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
+
+        self.prefs_ui = None
+
+        def _on_sidebar_context_menu(point):
+
+            # 1. Create the menu
+            menu = QMenu(self.scroll_content)
+
+            # 2. Create the action
+            settings_action = menu.addAction("Modify Layout...")
+
+            # 3. Define the trigger
+            def open_settings():
+                if self.prefs_ui:
+                    control = self.prefs_ui.control
+
+                    # Check if it's actually visible and valid
+                    try:
+                        if control.isVisible():
+                            control.raise_()  # Bring to top of stack
+                            control.activateWindow()  # Give it keyboard focus
+                            return  # STOP here
+                    except RuntimeError:
+                        # Handle case where the C++ widget was destroyed but Python ref exists
+                        self._prefs_window = None
+
+                else:
+
+                    self.prefs_ui = self.device_viewer_preferences.edit_traits(
+                        view=View(sidebar_settings_grid, resizable=True)
+                    )
+
+            settings_action.triggered.connect(open_settings)
+
+            # 4. Show the menu at the global position
+            menu.exec(self.scroll_content.mapToGlobal(point))
+
+        self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
+        # -------------------------------------------------------------------------
+
         scroll_layout = QVBoxLayout(scroll_content)
 
         # device_view code
@@ -504,38 +663,51 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alpha_view code
         self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
 
-        self.alpha_view_ui.control.setMinimumHeight(self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT)
-        self.alpha_view_ui.control.setMaximumWidth(self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
-
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.routes.edit_traits(view=layer_view)
-
-        self.layer_ui.control.setMinimumHeight(self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT)
 
         # mode_picker_view code
         _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
         self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
 
         # camera_control_widget code
-        self.camera_control_widget = CameraControlWidget(self.model, self.capture_session, self.video_item, self.opencv_pixmap, self.scene, self.app_preferences)
+        self.camera_control_widget = CameraControlWidget(
+            self.model,
+            self.capture_session,
+            self.video_item,
+            self.opencv_pixmap,
+            self.scene,
+            self.app_preferences,
+        )
 
         # calibration_view code
         self.calibration_view = CalibrationWidget()
-        self.calibration_controller = CalibrationController(model=self.model.calibration, view=self.calibration_view)
+        self.calibration_controller = CalibrationController(
+            model=self.model.calibration, view=self.calibration_view
+        )
 
         vm = ZoomViewModel(model=self.model)
-        self.viewport_controls_widget =  ZoomControlWidget(vm)
+        self.viewport_controls_widget = ZoomControlWidget(vm)
 
         scroll_layout.addWidget(
-            CollapsibleVStackBox("Viewport Controls",
-                                 control_widgets=self.viewport_controls_widget)
+            CollapsibleVStackBox(
+                "Viewport Controls", control_widgets=self.viewport_controls_widget
+            )
         )
         scroll_layout.addWidget(
-            CollapsibleVStackBox("Camera Controls", control_widgets=[self.camera_control_widget, self.alpha_view_ui.control])
+            CollapsibleVStackBox(
+                "Camera Controls",
+                control_widgets=[
+                    self.camera_control_widget,
+                    self.alpha_view_ui.control,
+                ],
+            )
         )
         scroll_layout.addWidget(
-            CollapsibleVStackBox("Paths", control_widgets=[self.layer_ui.control, self.mode_picker_view])
+            CollapsibleVStackBox(
+                "Paths", control_widgets=[self.layer_ui.control, self.mode_picker_view]
+            )
         )
         scroll_layout.addWidget(
             CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
@@ -543,6 +715,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         scroll_layout.addStretch()
 
         scroll_area.setWidget(scroll_content)
+
+        self._set_device_view_layout_width()
 
         reveal_button = QPushButton("chevron_right")
 
@@ -564,14 +738,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
 
         ####### Assemble main layout ################
-        main_layout.addWidget(self.device_view, 1) # left side
-        main_layout.addWidget(reveal_button) # middle
-        main_layout.addWidget(scroll_area) # right side
+        main_layout.addWidget(self.device_view, 1)  # left side
+        main_layout.addWidget(reveal_button)  # middle
+        main_layout.addWidget(scroll_area)  # right side
 
         main_container.setLayout(main_layout)
 
         # ---------------------------------- Theme aware styling ----------------------------------#
-        def _apply_theme_style(theme: 'Qt.ColorScheme'):
+        def _apply_theme_style(theme: "Qt.ColorScheme"):
             """Handle application level theme updates"""
 
             theme_name = QT_THEME_NAMES[theme]
@@ -585,10 +759,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.device_view.setStyleSheet(get_tooltip_style(theme_name))
 
             # reveal requires the narrow button type specified
-            reveal_button.setStyleSheet(get_complete_stylesheet(theme_name, button_type="narrow"))
+            reveal_button.setStyleSheet(
+                get_complete_stylesheet(theme_name, button_type="narrow")
+            )
 
         # Apply initial theme styling
-        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
+        _apply_theme_style(
+            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
+        )
 
         # Call theme application method whenever global theme changes occur as well
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
@@ -607,9 +785,11 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # --- 1. Open a dialog for the user to select a source file ---
         # This is decoupled from self.file to allow loading any file at any time.
-        dialog = FileDialog(action='open',
-                            default_path=str(self.device_viewer_preferences.DEFAULT_SVG_FILE),
-                            wildcard='SVG Files (*.svg)|*.svg|All Files (*.*)|*.*')
+        dialog = FileDialog(
+            action="open",
+            default_path=str(self.device_viewer_preferences.DEFAULT_SVG_FILE),
+            wildcard="SVG Files (*.svg)|*.svg|All Files (*.*)|*.*",
+        )
 
         if dialog.open() != OK:
             logger.info("File selection cancelled by user.")
@@ -622,7 +802,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We just select it in the UI and do not need to copy anything.
         logger.debug("Checking for chosen file in repo...")
         if src_file.parent == repo_dir:
-            logger.debug(f"File '{src_file.name}' is already in the repo. Selecting it.")
+            logger.debug(
+                f"File '{src_file.name}' is already in the repo. Selecting it."
+            )
             self._set_device_view_from_svg(src_file)
             return OK
 
@@ -635,7 +817,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             self._set_device_view_from_svg(safe_copy_file(src_file, dst_file))
 
-            logger.info(f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before.")
+            logger.info(
+                f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before."
+            )
 
             return OK
 
@@ -646,7 +830,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             confirm_overwrite = confirm(
                 parent=None,
                 message=f"A file named '{dst_file.name}' already exists in "
-                        "the repository. What would you like to do?",
+                "the repository. What would you like to do?",
                 title="Warning: File Already Exists",
                 cancel=True,
                 yes_label="Overwrite",
@@ -665,10 +849,12 @@ class DeviceViewerDockPane(TraitsDockPane):
                 # --- Open a 'Save As' dialog to choose a new name ---
                 logger.debug("User chose 'Save As...'. Opening save dialog.")
 
-                dialog = FileDialog(action='save as',
-                                    default_directory=str(repo_dir),
-                                    default_filename=src_file.stem + " - Copy",
-                                    wildcard='SVG Files (*.svg)|*.svg')
+                dialog = FileDialog(
+                    action="save as",
+                    default_directory=str(repo_dir),
+                    default_filename=src_file.stem + " - Copy",
+                    wildcard="SVG Files (*.svg)|*.svg",
+                )
 
                 ###### Handle Save As Dialog ######################
                 if dialog.open() == OK:
@@ -691,9 +877,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
-        dialog = FileDialog(action='save as', wildcard='SVG Files (*.svg)|*.svg')
+        dialog = FileDialog(action="save as", wildcard="SVG Files (*.svg)|*.svg")
         if dialog.open() == OK:
-            new_filename = dialog.path if dialog.path.endswith(".svg") else str(dialog.path) + ".svg"
+            new_filename = (
+                dialog.path
+                if dialog.path.endswith(".svg")
+                else str(dialog.path) + ".svg"
+            )
             self.model.electrodes.svg_save_as(new_filename)
             self.name = self.name.replace(device_modified_tag, "")
 
@@ -710,16 +900,18 @@ class DeviceViewerDockPane(TraitsDockPane):
     ###### Trait Observers -- Model and Model Traits ########
     #################################################################################################################
 
-    @observe('model:electrodes:svg_model:area_scale', post_init=True)
-    @observe('model:electrodes:svg_model:auto_found_connections')
-    @observe('model:electrodes:electrode_ids_channels_map:items', post_init=True)
+    @observe("model:electrodes:svg_model:area_scale", post_init=True)
+    @observe("model:electrodes:svg_model:auto_found_connections")
+    @observe("model:electrodes:electrode_ids_channels_map:items", post_init=True)
     def _svg_data_changed(self, event):
         logger.debug(f"Svg data changed event: {event}")
         if "modified" not in self.name:
             logger.info("Svg data changed")
             self.name += device_modified_tag
 
-    @observe("model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items")
+    @observe(
+        "model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items"
+    )
     @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
     def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
@@ -728,11 +920,17 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self.undo()  # Revert changes if not editable
                 return
 
-    @observe("model")  # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
+    @observe(
+        "model"
+    )  # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
     @observe("model.routes.layers.items.route.route.items")  # When a route is modified
     @observe("model.routes.layers.items")  # When an electrode changes state
-    @observe("model.electrodes.electrodes.items.channel")  # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    @observe(
+        "model.electrodes.electrodes.items.channel"
+    )  # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe(
+        "model.electrodes.channels_states_map.items"
+    )  # When an electrode changes state
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
@@ -741,17 +939,23 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model_change_handler_with_timeout(event)
         if not self._disable_state_messages and self.debounce_timer:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            logger.info(f"Buffering message for device viewer state change: {self.message_buffer}")
+            logger.info(
+                f"Buffering message for device viewer state change: {self.message_buffer}"
+            )
             self.debounce_timer.start(200)  # Start timeout for sending message
 
-    @observe("model.electrodes.channels_states_map.items")  # When an electrode changes state
+    @observe(
+        "model.electrodes.channels_states_map.items"
+    )  # When an electrode changes state
     def electrode_click_handler(self, event=None):
         # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
         logger.info("Sending electrode update")
         self.publish_electrode_update()
         logger.info("Electrode update sent")
 
-    @observe("model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale")
+    @observe(
+        "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
+    )
     def calibration_change_handler(self, event=None):
         """
         Handle changes to the calibration values and publish a message.
@@ -773,9 +977,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.video_item.setTransform(self.model.camera_perspective.transformation)
         if self.opencv_pixmap:
             scale = QTransform()
-            scale.scale(self.scene.width() / self.model.camera_perspective.camera_resolution[0],
-                        self.scene.height() / self.model.camera_perspective.camera_resolution[1])
-            self.opencv_pixmap.setTransform(scale * self.model.camera_perspective.transformation)
+            scale.scale(
+                self.scene.width() / self.model.camera_perspective.camera_resolution[0],
+                self.scene.height()
+                / self.model.camera_perspective.camera_resolution[1],
+            )
+            self.opencv_pixmap.setTransform(
+                scale * self.model.camera_perspective.transformation
+            )
 
     @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
