@@ -17,9 +17,15 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 
+# The order of plugins matters. This determines whose start routine will be run first,
+# and whose contributions will be prioritized
+# For example: the microdrop plugin and the tasks contributes a preferences dialog service.
+# The dialog contributed by the plugin listed first will be used. That is how the envisage application get_service
+# method works.
+
 FRONTEND_PLUGINS = [
-    TasksPlugin,
     MicrodropPlugin,
+    TasksPlugin,
     # DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,

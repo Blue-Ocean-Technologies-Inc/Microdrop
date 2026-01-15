@@ -38,7 +38,16 @@ def stop_app(app, signum, frame):
 
 
 def main(plugins, contexts, application, persist):
-    """Run the application."""
+    """
+    Run the application.
+
+    **Note**
+    The order of plugins matters. This determines whose start routine will be run first, and whose contributions will be prioritized
+    For example: the microdrop plugin and the tasks contributes a preferences dialog service.
+    The dialog contributed by the plugin listed first will be used. That is how the envisage application get_service
+    method works.
+
+    """
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
 
