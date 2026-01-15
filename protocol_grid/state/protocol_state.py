@@ -180,7 +180,7 @@ class ProtocolState:
         self.fields = data.get("fields", list(protocol_grid_fields))
         self._uid_counter = data.get("_uid_counter", 1)
 
-        # NEW: Load calibration data
+        # Load calibration data
         self._liquid_capacitance_over_area = data.get("_liquid_capacitance_over_area")
         self._filler_capacitance_over_area = data.get("_filler_capacitance_over_area")
 

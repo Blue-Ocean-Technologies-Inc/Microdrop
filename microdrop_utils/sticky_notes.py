@@ -369,7 +369,7 @@ def run_sticky_manager(command_queue, log_queue):
             if cmd_type == "NEW":
                 _, base_dir, exp_name = command_data
 
-                # --- NEW LOGIC: Check for existing window ---
+                # --- Check for existing window ---
                 existing_ctrl = None
 
                 # Filter out closed windows first (optional cleanup)

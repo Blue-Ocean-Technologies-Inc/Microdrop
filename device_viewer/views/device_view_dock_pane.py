@@ -610,11 +610,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scroll_content = scroll_content = QWidget()
 
         # -------------------------------------------------------------------------
-        # NEW: Context Menu to Open Preferences
+        # Context Menu to Open Preferences
         # -------------------------------------------------------------------------
         self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        self.prefs_ui = None
+        self.edit_sidebar_layout_ui = None
 
         def _on_sidebar_context_menu(point):
 
@@ -626,8 +626,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             # 3. Define the trigger
             def open_settings():
-                if self.prefs_ui:
-                    control = self.prefs_ui.control
+                if self.edit_sidebar_layout_ui:
+                    control = self.edit_sidebar_layout_ui.control
 
                     # Check if it's actually visible and valid
                     try:
@@ -637,11 +637,11 @@ class DeviceViewerDockPane(TraitsDockPane):
                             return  # STOP here
                     except RuntimeError:
                         # Handle case where the C++ widget was destroyed but Python ref exists
-                        self._prefs_window = None
+                        self.edit_sidebar_layout_ui = None
 
                 else:
 
-                    self.prefs_ui = self.device_viewer_preferences.edit_traits(
+                    self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
                         view=View(sidebar_settings_grid, resizable=True)
                     )
 
