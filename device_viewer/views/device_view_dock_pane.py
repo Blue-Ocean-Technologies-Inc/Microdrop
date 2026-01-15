@@ -609,50 +609,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.scroll_content = scroll_content = QWidget()
 
-        # -------------------------------------------------------------------------
-        # Context Menu to Open Preferences
-        # -------------------------------------------------------------------------
-        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
-
-        self.edit_sidebar_layout_ui = None
-
-        def _on_sidebar_context_menu(point):
-
-            # 1. Create the menu
-            menu = QMenu(self.scroll_content)
-
-            # 2. Create the action
-            settings_action = menu.addAction("Modify Layout...")
-
-            # 3. Define the trigger
-            def open_settings():
-                if self.edit_sidebar_layout_ui:
-                    control = self.edit_sidebar_layout_ui.control
-
-                    # Check if it's actually visible and valid
-                    try:
-                        if control.isVisible():
-                            control.raise_()  # Bring to top of stack
-                            control.activateWindow()  # Give it keyboard focus
-                            return  # STOP here
-                    except RuntimeError:
-                        # Handle case where the C++ widget was destroyed but Python ref exists
-                        self.edit_sidebar_layout_ui = None
-
-                else:
-
-                    self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
-                        view=View(sidebar_settings_grid, resizable=True)
-                    )
-
-            settings_action.triggered.connect(open_settings)
-
-            # 4. Show the menu at the global position
-            menu.exec(self.scroll_content.mapToGlobal(point))
-
-        self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
-        # -------------------------------------------------------------------------
-
         scroll_layout = QVBoxLayout(scroll_content)
 
         # device_view code
@@ -743,6 +699,51 @@ class DeviceViewerDockPane(TraitsDockPane):
         main_layout.addWidget(scroll_area)  # right side
 
         main_container.setLayout(main_layout)
+
+        # -------------------------------------------------------------------------
+        # Context Menu to Open Preferences
+        # -------------------------------------------------------------------------
+        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
+        reveal_button.setContextMenuPolicy(Qt.CustomContextMenu)
+
+        self.edit_sidebar_layout_ui = None
+
+        def _on_sidebar_context_menu(point):
+
+            # 1. Create the menu
+            menu = QMenu(self.scroll_content)
+
+            # 2. Create the action
+            settings_action = menu.addAction("Modify Layout...")
+
+            # 3. Define the trigger
+            def open_settings():
+                if self.edit_sidebar_layout_ui:
+                    control = self.edit_sidebar_layout_ui.control
+
+                    # Check if it's actually visible and valid
+                    if control:
+                        if control.isVisible():
+                            control.raise_()  # Bring to top of stack
+                            control.activateWindow()  # Give it keyboard focus
+
+                        return  # STOP here
+
+                    else:
+                        # Handle case where the C++ widget was destroyed but Python ref exists
+                        self.edit_sidebar_layout_ui = None
+
+                self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
+                    view=View(sidebar_settings_grid, resizable=True)
+                )
+
+            settings_action.triggered.connect(open_settings)
+
+            # 4. Show the menu at the global position
+            menu.exec(self.scroll_content.mapToGlobal(point))
+
+        self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
+        reveal_button.customContextMenuRequested.connect(_on_sidebar_context_menu)
 
         # ---------------------------------- Theme aware styling ----------------------------------#
         def _apply_theme_style(theme: "Qt.ColorScheme"):
