@@ -5,7 +5,16 @@ from traits.api import List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
-from envisage.api import Plugin, PREFERENCES, PREFERENCES_PANES, PREFERENCES_CATEGORIES, TASKS
+from envisage.api import (
+    Plugin,
+    PREFERENCES,
+    PREFERENCES_PANES,
+    PREFERENCES_CATEGORIES,
+    TASKS,
+    SERVICE_OFFERS,
+    ServiceOffer,
+)
+
 from envisage.ui.tasks.api import TaskFactory
 
 # local imports
@@ -25,7 +34,9 @@ class MicrodropPlugin(Plugin):
 
     #### Contributions to extension points made by this plugin ################
 
+    my_service_offers = List(contributes_to=SERVICE_OFFERS)
     tasks = List(contributes_to=TASKS)
+
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
@@ -50,8 +61,8 @@ class MicrodropPlugin(Plugin):
 
     def _preferences_categories_default(self):
         from .preferences import microdrop_tab
-        return [microdrop_tab]
 
+        return [microdrop_tab]
 
     def _tasks_default(self):
         from .task import MicrodropTask
@@ -63,3 +74,34 @@ class MicrodropPlugin(Plugin):
                 factory=MicrodropTask,
             )
         ]
+
+    ########################################################################
+    # Service Offers
+    # ######################################################################
+
+    # We are contributing a custom preferences dialog for microdrop:
+    # This supports apply and revert button functionality.
+
+    def _my_service_offers_default(self):
+        preferences_dialog_service_offer = ServiceOffer(
+            protocol="envisage.ui.tasks.preferences_dialog.PreferencesDialog",
+            factory=self._create_preferences_dialog_service,
+        )
+
+        return [preferences_dialog_service_offer]
+
+    def _create_preferences_dialog_service(self):
+        """Factory method for preferences dialog service."""
+        from .preferences_dialog import PreferencesDialog
+
+        dialog = PreferencesDialog(application=self.application)
+
+        dialog.trait_set(
+            categories=self.application.get_extensions(PREFERENCES_CATEGORIES),
+            panes=[
+                factory(dialog=dialog)
+                for factory in self.application.get_extensions(PREFERENCES_PANES)
+            ],
+        )
+
+        return dialog
