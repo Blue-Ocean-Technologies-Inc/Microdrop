@@ -407,12 +407,12 @@ class ElectrodeInteractionControllerService(HasTraits):
             # If last electrode view is none then no electrode was clicked yet (for example, first click was not on electrode)
             if mode in ("edit", "draw", "edit-draw") and electrode_view and self._last_electrode_id_visited:
 
-                    found_connection_item = find_path_item(self.device_view.scene(),
+                found_connection_item = find_path_item(self.device_view.scene(),
                                                            (self._last_electrode_id_visited, electrode_view.id))
 
-                    if found_connection_item:  # Are the electrodes neighbours? (This excludes self)
-                        self.handle_route_draw(self._last_electrode_id_visited, electrode_view.id)
-                        self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
+                if found_connection_item:  # Are the electrodes neighbours? (This excludes self)
+                    self.handle_route_draw(self._last_electrode_id_visited, electrode_view.id)
+                    self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
 
             elif mode == "auto" and electrode_view:
                 # only proceed if a new electrode id was visited
@@ -490,7 +490,6 @@ class ElectrodeInteractionControllerService(HasTraits):
                 def set_camera_place_mode():
                     self.model.mode = "camera-place"
 
-
                 reference_rect_edit_action = QAction("Edit Reference Rect", checkable=True,
                                               checked=self._edit_reference_rect,
                                               toolTip="Edit Reference Rectangle without changing camera perspective")
@@ -529,7 +528,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             context_menu.exec(event.screenPos())
 
     ################################################################################################################
-    #------------------ Traits observers --------------------------------------------
+    # ------------------ Traits observers --------------------------------------------
     ################################################################################################################
 
     @observe("model.routes.layers.items.visible")
@@ -557,11 +556,17 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
 
-    @observe("model:camera_perspective:transformed_reference_rect:items")
-    @observe("rect_buffer:items")
+    @observe("model:camera_perspective:transformed_reference_rect")
     def _reference_rect_change(self, event):
+        logger.debug(f"Reference rectangle change: {event}")
         if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
-                self.electrode_view_layer.redraw_reference_rect(rect=event.object)
+            self.electrode_view_layer.redraw_reference_rect(rect=event.new)
+
+    @observe("model:camera_perspective:transformed_reference_rect:items")
+    def _reference_rect_items_change(self, event):
+        logger.debug(f"Reference rectangle items change: {event}")
+        if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
+            self.electrode_view_layer.redraw_reference_rect(rect=event.object)
 
     @observe("rect_buffer:items")
     def _rect_buffer_change(self, event):
@@ -578,6 +583,9 @@ class ElectrodeInteractionControllerService(HasTraits):
             if self.model.mode != "camera-edit":
                 logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
                 self.model.mode = "camera-edit"  # Switch to camera-edit mode if not already there
+
+        else:
+            self.electrode_view_layer.redraw_reference_rect(rect=event.object)
 
     @observe("model:mode")
     def _on_mode_change(self, event):
@@ -626,7 +634,3 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model:reset_view_event", post_init=True)
     def _reset_view_event_triggered(self, event):
         self.device_view.fit_to_scene_rect()
-
-
-
-
