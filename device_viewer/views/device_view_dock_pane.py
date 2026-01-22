@@ -9,7 +9,6 @@ from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsPixmapItem, QGraphicsScene, QTransform
 from pyface.qt.QtMultimedia import QMediaCaptureSession
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from pyface.qt.QtOpenGLWidgets import QOpenGLWidget
 from pyface.qt.QtWidgets import (
     QApplication,
     QFrame,
@@ -188,7 +187,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale,
         )
         self.device_view.setObjectName("device_view")
-        self.device_view.setViewport(QOpenGLWidget())
 
     ################################################################################################
     # ------- Dramatiq handlers ---------------------------
