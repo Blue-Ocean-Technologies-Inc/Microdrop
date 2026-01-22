@@ -1,22 +1,29 @@
-import logging
-import signal
 import sys
 import os
 import re
-from multiprocessing import Process, Queue
 from pathlib import Path
 
-from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QToolBar,
-                               QColorDialog, QWidget, QVBoxLayout,
-                               QPushButton, QSizePolicy, QLabel)
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QTextEdit,
+    QToolBar,
+    QColorDialog,
+    QWidget,
+    QVBoxLayout,
+    QPushButton,
+    QSizePolicy,
+    QLabel,
+)
 from PySide6.QtGui import QAction, QIcon, QFont, QColor, QTextListFormat, QKeySequence
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import GREY, SECONDARY_SHADE, WHITE
-from microdrop_style.font_paths import load_material_symbols_font, load_inter_font
+from microdrop_style.font_paths import load_material_symbols_font
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -45,7 +52,7 @@ def _spacer():
 # ===========================================================================
 class StickyModel:
     def __init__(self, base_dir="Notes", experiment_name="None"):
-        self.base_dir = Path(base_dir) / 'Notes'
+        self.base_dir = Path(base_dir) / "Notes"
         self.experiment = experiment_name
 
         self.current_filename = None
@@ -74,7 +81,7 @@ class StickyModel:
         try:
             # We save the div with the specific color context
             full_html = f"<div style='background-color:{self.current_color}; height:100%;'>{html_content}</div>"
-            with open(full_path, 'w', encoding='utf-8') as f:
+            with open(full_path, "w", encoding="utf-8") as f:
                 f.write(full_html)
             return True, full_path
         except Exception as e:
@@ -125,7 +132,9 @@ class StickyView(QWidget):
 
         self.act_underline = QAction("format_underlined", self)
         self.act_underline.setCheckable(True)
-        self.act_underline.setShortcut(QKeySequence.Underline)  # Standard Underline (Ctrl+U)
+        self.act_underline.setShortcut(
+            QKeySequence.Underline
+        )  # Standard Underline (Ctrl+U)
         self.act_underline.setToolTip("Underline (Ctrl+U)")
         self.addAction(self.act_underline)
 
@@ -174,13 +183,17 @@ class StickyView(QWidget):
 
     def set_background_color(self, hex_bg):
         text_color = get_readable_text_color(hex_bg)
-        self.setStyleSheet(f"""
+        self.setStyleSheet(
+            f"""
             QWidget {{ background-color: {hex_bg}; border: 1px solid #999; }}
             QLabel {{ color: {text_color}; }}
             /* Ensure tooltips are readable regardless of theme */
             QToolTip {{ color: #000000; background-color: #FFFFE0; border: 1px solid #888; }}
-        """)
-        self.editor.setStyleSheet(f"background-color: transparent; color: {text_color};")
+        """
+        )
+        self.editor.setStyleSheet(
+            f"background-color: transparent; color: {text_color};"
+        )
 
         style = f"""
         QToolBar {{background: transparent; border: none;}}
@@ -208,7 +221,7 @@ class StickyView(QWidget):
 # 4. CONTROLLER & LAUNCHER
 # ===========================================================================
 class StickyController:
-    def __init__(self, model: 'StickyModel', view: 'StickyView'):
+    def __init__(self, model: "StickyModel", view: "StickyView"):
         self.model = model
         self.view = view
 
@@ -231,13 +244,19 @@ class StickyController:
 
     def text_changed(self, *args, **kwargs):
         if self.model.current_filename:
-            self.view.editor.setPlaceholderText(f"Unsaved changes ({self.model.current_filename})")
-            self.view.file_save_label.setText(f"Unsaved changes ({self.model.current_filename})")
+            self.view.editor.setPlaceholderText(
+                f"Unsaved changes ({self.model.current_filename})"
+            )
+            self.view.file_save_label.setText(
+                f"Unsaved changes ({self.model.current_filename})"
+            )
 
     def save_note(self):
         success, result = self.model.save_note(self.view.get_html())
         if success:
-            self.view.editor.setPlaceholderText(f"Saved ({self.model.current_filename})")
+            self.view.editor.setPlaceholderText(
+                f"Saved ({self.model.current_filename})"
+            )
             self.view.file_save_label.setText(f"Saved ({self.model.current_filename})")
             logger.info(f"Saved to {result}")
         else:
@@ -252,7 +271,11 @@ class StickyController:
             self.save_note()
 
     def toggle_bold(self):
-        self._fmt(lambda f: f.setFontWeight(QFont.Normal if f.fontWeight() > QFont.Normal else QFont.Bold))
+        self._fmt(
+            lambda f: f.setFontWeight(
+                QFont.Normal if f.fontWeight() > QFont.Normal else QFont.Bold
+            )
+        )
 
     def toggle_italic(self):
         self._fmt(lambda f: f.setFontItalic(not f.fontItalic()))
@@ -295,180 +318,104 @@ class StickyController:
         self.view.act_list.setChecked(bool(self.view.editor.textCursor().currentList()))
 
 
-class LauncherWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Sticky Manager")
-        self.resize(300, 100)
-        self.active_notes = []
-
-        central = QWidget()
-        layout = QVBoxLayout()
-
-        btn = QPushButton("＋ New Desktop Note")
-        btn.setFont(QFont("Segoe UI", 12))
-        btn.setMinimumHeight(40)
-        btn.clicked.connect(self.launch_note)
-
-        layout.addWidget(btn)
-        central.setLayout(layout)
-        self.setCentralWidget(central)
-
-    def launch_note(self):
-        model = StickyModel()
-        view = StickyView()
-        ctrl = StickyController(model, view)
-        view.show()
-        self.active_notes.append(ctrl)
-
-class QueueLogHandler(logging.Handler):
-    def __init__(self, queue):
-        super().__init__()
-        self.queue = queue
-
-    def emit(self, record):
-        try:
-            # Format the message (adds timestamp, level, etc.)
-            msg = self.format(record)
-            # Send string to Main Process
-            self.queue.put(msg)
-        except Exception:
-            self.handleError(record)
-
-def run_sticky_manager(command_queue, log_queue):
+class StickyWindowManager:
     """
-    Runs in a SEPARATE process.
-    Loads Qt once, then waits for commands.
-    """
-    # 1. Initialize Qt (Heavy lifting happens only once here)
-    app = QApplication.instance() or QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-
-    # --- SETUP LOGGING FOR DAEMON ---
-    # This redirects all logs in this process to the queue
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    # Create our custom handler
-    queue_handler = QueueLogHandler(log_queue)
-    root_logger.addHandler(queue_handler)
-
-    # 2. Load heavy resources
-    load_material_symbols_font()
-    QIcon.setThemeName("Material Symbols Outlined")
-
-    # 3. Keep references to prevent Garbage Collection
-    active_notes = []
-
-    def check_queue():
-        """Polled by QTimer to check for new requests"""
-        while not command_queue.empty():
-            command_data = command_queue.get()
-            cmd_type = command_data[0]
-
-            if cmd_type == "NEW":
-                _, base_dir, exp_name = command_data
-
-                # --- Check for existing window ---
-                existing_ctrl = None
-
-                # Filter out closed windows first (optional cleanup)
-                active_notes[:] = [c for c in active_notes if c.view.isVisible()]
-
-                for ctrl in active_notes:
-                    # Check if model matches the requested parameters
-                    # We compare string paths to be safe
-                    if (str(ctrl.model.base_dir) == str(Path(base_dir) / 'Notes') and
-                            ctrl.model.experiment == exp_name):
-                        existing_ctrl = ctrl
-                        break
-
-                if existing_ctrl:
-                    logger.info(f"Daemon: Note for {exp_name} already exists. Showing it.")
-                    # Bring existing window to front
-                    if existing_ctrl.view.isMinimized():
-                        existing_ctrl.view.showNormal()
-                    existing_ctrl.view.show()
-                    existing_ctrl.view.raise_()
-                    existing_ctrl.view.activateWindow()
-                else:
-                    logger.info(f"Daemon: Creating note for {exp_name} in {base_dir}")
-                    # Create MVP
-                    model = StickyModel(base_dir, exp_name)
-                    view = StickyView()  # Top level
-                    ctrl = StickyController(model, view)
-                    view.show()
-                    active_notes.append(ctrl)
-                # ---------------------------------------------
-
-            elif cmd_type == "TERMINATE":
-                logger.info("Daemon: Shutting down.")
-                app.quit()
-
-    # 4. QTimer polls the queue efficiently
-    timer = QTimer()
-    timer.timeout.connect(check_queue)
-    timer.start(500)  # Check every 500ms (Changed from 1000 for better responsiveness)
-
-    logger.info("Sticky Note Daemon Started. Waiting for commands...")
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    sys.exit(app.exec())
-
-
-# ===========================================================================
-# 3. THE LAUNCHER (Your API)
-# ===========================================================================
-class NoteLauncher:
-    """
-    A helper class you can use anywhere in your main app.
-    It manages the connection to the background daemon.
+    Manages multiple Sticky Note windows.
     """
 
     def __init__(self):
-        self.daemon_process = None
+        # Dictionary to keep windows alive: { "experiment_name": controller_instance }
+        self.active_notes = {}
 
-    def start_daemon(self):
-        if self.daemon_process and self.daemon_process.is_alive():
-            logger.info("Daemon already running.")
-            return
-
-        # Create Queue
-        self.command_queue = Queue()
-        self.log_queue = Queue()
-
-        # Start Process
-        self.daemon_process = Process(target=run_sticky_manager,
-                                      args=(self.command_queue, self.log_queue))
-
-        self.daemon_process.start()
-        logger.info("Launcher: Daemon process started.")
+        # CRITICAL: This ensures the app doesn't close when the "Launcher"
+        # window is closed, as long as sticky notes are still open.
+        app = QApplication.instance()
+        if app:
+            app.setQuitOnLastWindowClosed(False)
 
     def request_new_note(self, base_dir="Notes", experiment_name="General"):
-        if not (self.command_queue and self.daemon_process and self.daemon_process.is_alive()):
-            logger.error("Launcher Error: Daemon is not running. Starting it now...")
-            self.start_daemon()
+        # 1. Unique ID for the window (to prevent duplicates)
+        # Using a tuple of path + name ensures uniqueness
+        note_id = (str(Path(base_dir) / "Notes"), experiment_name)
 
-        # Send tuple safely (No string parsing needed!)
-        self.command_queue.put(("NEW", base_dir, experiment_name))
+        # 2. Check if this note is already open
+        if note_id in self.active_notes:
+            logger.info(
+                f"Manager: Note '{experiment_name}' is already open. Bringing to front."
+            )
+            ctrl = self.active_notes[note_id]
+
+            # Use Qt magic to bring the existing window to user's attention
+            if ctrl.view.isMinimized():
+                ctrl.view.showNormal()
+            ctrl.view.show()
+            ctrl.view.raise_()
+            ctrl.view.activateWindow()
+            return
+
+        # 3. Create the new Note
+        logger.info(f"Manager: Creating new note for '{experiment_name}'")
+        model = StickyModel(base_dir, experiment_name)
+        view = StickyView()
+        ctrl = StickyController(model, view)
+
+        # 4. Handle Cleanup (Crucial for Memory Management)
+        # We tell Qt to delete the widget from memory when closed
+        view.setAttribute(Qt.WA_DeleteOnClose)
+
+        # We connect the 'destroyed' signal to a lambda that removes
+        # the reference from our dictionary.
+        # If we don't do this, the dictionary grows forever.
+        view.destroyed.connect(lambda: self._cleanup_closed_note(note_id))
+
+        # 5. Store reference and Show
+        self.active_notes[note_id] = ctrl
+        view.show()
+
+    def _cleanup_closed_note(self, note_id):
+        if note_id in self.active_notes:
+            logger.info(f"Manager: Closed note '{note_id[1]}'")
+            del self.active_notes[note_id]
 
     def shutdown(self):
-        if self.command_queue:
-            self.command_queue.put(("TERMINATE",))
-        if self.daemon_process:
-            self.daemon_process.join()
+        """Optional: Close all notes programmatically"""
+        # Create a copy of values list because we will be modifying the dict during iteration
+        for ctrl in list(self.active_notes.values()):
+            ctrl.view.close()
 
 
 if __name__ == "__main__":
+    import random
+
+    class LauncherWindowExample(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("Sticky Manager")
+            self.resize(300, 100)
+
+            self.manager = StickyWindowManager()
+
+            central = QWidget()
+            layout = QVBoxLayout()
+
+            btn = QPushButton("＋ New Desktop Note")
+            btn.clicked.connect(self.launch_note)
+
+            layout.addWidget(btn)
+            central.setLayout(layout)
+            self.setCentralWidget(central)
+
+        def launch_note(self):
+            r_id = random.randint(100, 999)
+            self.manager.request_new_note(experiment_name=f"Exp-{r_id}")
+
+    # Standard Setup
     app = QApplication.instance() or QApplication(sys.argv)
 
-    # Load the Material Symbols font
+    # Load fonts once globally
     load_material_symbols_font()
-    # load inter font and set with some size
-    LABEL_FONT_FAMILY = load_inter_font()
 
-    app.setFont(QFont(LABEL_FONT_FAMILY, 11))
-    QIcon.setThemeName("Material Symbols Outlined")
+    launcher = LauncherWindowExample()
+    launcher.show()
 
-    launcher = LauncherWindow()
-    launcher.launch_note()
     sys.exit(app.exec())
