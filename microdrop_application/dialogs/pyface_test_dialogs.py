@@ -99,6 +99,9 @@ class MainWindow(ApplicationWindow):
                 ("Warning with RTF", self.test_warning_rtf),
                 ("Confirm with Details", self.test_confirm_details),
                 ("Error with Details", self.test_error_details),
+                ("Info with Details", self.test_information_details),
+                ("Success with Details", self.test_success_details),
+                ("Confirm Simple Details", self.test_confirm_simple_details),
             ],
         )
 
@@ -254,6 +257,61 @@ class MainWindow(ApplicationWindow):
             detail=detail_text,
             text_format="auto",
         )
+
+    def test_information_details(self):
+        """Test information dialog with details."""
+        msg = "Analysis complete."
+        details = (
+            "Processed 150 samples.\n"
+            "Average signal: 45.2\n"
+            "Standard deviation: 2.1\n"
+            "All parameters within normal range."
+        )
+        information(
+            parent=self.control,
+            message=msg,
+            title="Analysis Info",
+            detail=details,
+        )
+
+    def test_success_details(self):
+        """Test success dialog with details."""
+        msg = "Data export successful."
+        details = (
+            "File saved to: C:/Users/Docs/export.csv\n"
+            "Size: 1.2 MB\n"
+            "Rows: 1500\n"
+            "Columns: 12"
+        )
+        success(
+            parent=self.control,
+            message=msg,
+            title="Export Success",
+            detail=details,
+        )
+
+    def test_confirm_simple_details(self):
+        """Test confirm dialog with simple details (no RTF)."""
+        msg = "Are you sure you want to delete the selected items?"
+        details = (
+            "Items to delete:\n"
+            "- Sample_001.dat\n"
+            "- Sample_002.dat\n"
+            "- Sample_003.dat\n\n"
+            "This action cannot be undone."
+        )
+        if (
+            confirm(
+                parent=self.control,
+                message=msg,
+                title="Confirm Delete",
+                detail=details,
+                yes_label="Delete",
+                no_label="Cancel",
+            )
+            == YES
+        ):
+            print("User chose Delete")
 
     def log_info_dialog(self):
         """Log an info message and show the dialog."""
