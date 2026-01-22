@@ -6,13 +6,12 @@ from pathlib import Path
 
 # Enthought library imports.
 from envisage.api import Plugin
-from envisage.ids import PREFERENCES_PANES
-from traits.api import List, observe
+from traits.api import  observe
 
+# Local imports
 from .logger_service import init_logger, LEVELS
-from .preferences import LoggerPreferences
 from .consts import PKG, PKG_name
-
+from .preferences import LoggerPreferences
 
 
 class LoggerPlugin(Plugin):
@@ -25,20 +24,8 @@ class LoggerPlugin(Plugin):
     #: The plugin name (suitable for displaying to the user).
     name = PKG_name + " Plugin"
 
-    #### Contributions to extension points made by this plugin ################
-    # views = List(contributes_to=VIEWS)
-    preferences_panes = List(contributes_to=PREFERENCES_PANES)
-
-    ###########################################################################
-    # Protected interface.
-    ###########################################################################
-
-    def _preferences_panes_default(self):
-        from .preferences import LoggerPreferencesPane
-        return [LoggerPreferencesPane]
-
     # #### Plugin interface #####################################################
-    #
+
     def start(self):
         """Starts the plugin."""
         init_logger(preferred_log_level=LEVELS.get(LoggerPreferences().level, logging.INFO),

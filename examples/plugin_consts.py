@@ -1,5 +1,6 @@
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
 from logger.plugin import LoggerPlugin
+from logger_ui.plugin import LoggerUIPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
@@ -26,6 +27,7 @@ from peripherals_ui.plugin import PeripheralUiPlugin
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
+    LoggerUIPlugin,
     # DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
     DropbotStatusPlugin,
