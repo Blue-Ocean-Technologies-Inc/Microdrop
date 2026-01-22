@@ -427,7 +427,7 @@ class BaseMessageDialog(QDialog):
         self.header_frame = QFrame()
         self.header_frame.setObjectName("headerFrame")
         header_layout = QVBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(20, 0, 20, 30)
+        header_layout.setContentsMargins(20, 0, 20, 20)
         header_layout.setSpacing(1)
         header_layout.setAlignment(Qt.AlignTop)
 
