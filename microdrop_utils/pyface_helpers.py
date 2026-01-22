@@ -1,11 +1,8 @@
 from PySide6.QtWidgets import QLabel
 from pyface.action.api import StatusBarManager as _StatusBarManager
 from pyface.qt.QtWidgets import QApplication,QStatusBar
-from pyface.qt.QtCore import QObject, Signal, Qt
+from pyface.qt.QtCore import Qt
 from pyface.tasks.dock_pane import DockPane
-
-from traits.api import provides, HasTraits, observe, Str, Any, Bool, Instance, Property, List
-
 from logger.logger_service import get_logger
 from microdrop_style.helpers import QT_THEME_NAMES, is_dark_mode
 from microdrop_style.label_style import get_label_style
