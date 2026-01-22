@@ -6,8 +6,7 @@ from pathlib import Path
 import dramatiq
 from pyface.api import NO, OK, YES, FileDialog, confirm, error
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
-from pyface.qt.QtGui import QGraphicsPixmapItem, QGraphicsScene, QTransform
-from pyface.qt.QtMultimedia import QMediaCaptureSession
+from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -123,7 +122,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
     video_item = None  # The video item for the camera feed
-    opencv_pixmap = None  # Pixmap item for OpenCV images
     debounce_timer = None  # Timer to debounce state messages
 
     ###################################################################################
@@ -241,33 +239,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         Handle screen recording events from the device viewer.
         """
-        logger.debug(f"Screen recording triggered: {message}")
-        if self.model and self.camera_control_widget:
-            recording_data = None
-            if message and message.strip():
-                try:
-                    recording_data = json.loads(message)
-                    if isinstance(recording_data, dict):
-                        action = recording_data.get("action", "").lower()
-                        if action in ["start", "stop"]:
-                            self.camera_control_widget.screen_recording_signal.emit(
-                                recording_data
-                            )
-                        else:
-                            is_start = message.lower() == "true"
-                            self.camera_control_widget.screen_recording_signal.emit(
-                                {"action": "start" if is_start else "stop"}
-                            )
-                    else:
-                        is_start = message.lower() == "true"
-                        self.camera_control_widget.screen_recording_signal.emit(
-                            {"action": "start" if is_start else "stop"}
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    is_start = message.lower() == "true"
-                    self.camera_control_widget.screen_recording_signal.emit(
-                        {"action": "start" if is_start else "stop"}
-                    )
+        logger.critical(f"Screen recording triggered: {message}")
+
+        recording_data = json.loads(message)
+        self.camera_control_widget.screen_recording_signal.emit(recording_data)
 
     def _on_camera_active_triggered(self, message):
         """
@@ -562,29 +537,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         ###################################################################
         # Initialize camera primitives
         ###################################################################
-        self.capture_session = (
-            QMediaCaptureSession()
-        )  # Initialize capture session for the device viewer
         self.video_item = QGraphicsVideoItem()
         self.video_item.setZValue(
             -100
         )  # Set a low z-value to ensure the video is behind other items
-        self.opencv_pixmap = QGraphicsPixmapItem()
-        self.opencv_pixmap.setZValue(
-            -100
-        )  # Set a low z-value to ensure the pixmap is behind other items
-        self.opencv_pixmap.setVisible(True)  # Initially hide the pixmap item
         self.video_item.setOpacity(self.model.get_alpha("video"))
-        self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
         ################### Determine Size for video #####################
-
         self.configure_camera_to_scene_size()
-
-        ########## Add video to scene and set as output. ###################
-        self.scene.addItem(self.video_item)
-        self.scene.addItem(self.opencv_pixmap)
-        self.capture_session.setVideoOutput(self.video_item)
 
         ###################### Create debounce timer #############################################
         self.debounce_timer = QTimer()
@@ -628,9 +588,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # camera_control_widget code
         self.camera_control_widget = CameraControlWidget(
             self.model,
-            self.capture_session,
             self.video_item,
-            self.opencv_pixmap,
             self.scene,
             self.app_preferences,
         )
@@ -731,8 +689,10 @@ class DeviceViewerDockPane(TraitsDockPane):
                         # Handle case where the C++ widget was destroyed but Python ref exists
                         self.edit_sidebar_layout_ui = None
 
-                self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
-                    view=View(sidebar_settings_grid, resizable=True)
+                self.edit_sidebar_layout_ui = (
+                    self.device_viewer_preferences.edit_traits(
+                        view=View(sidebar_settings_grid, resizable=True)
+                    )
                 )
 
             settings_action.triggered.connect(open_settings)
@@ -974,16 +934,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
-        if self.opencv_pixmap:
-            scale = QTransform()
-            scale.scale(
-                self.scene.width() / self.model.camera_perspective.camera_resolution[0],
-                self.scene.height()
-                / self.model.camera_perspective.camera_resolution[1],
-            )
-            self.opencv_pixmap.setTransform(
-                scale * self.model.camera_perspective.transformation
-            )
 
     @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
@@ -994,9 +944,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             if changed_key == video_key and self.video_item:
                 self.video_item.setOpacity(self.model.get_alpha(video_key))
-
-            if changed_key == "opencv_pixmap" and self.opencv_pixmap:
-                self.opencv_pixmap.setOpacity(self.model.get_alpha("opencv_pixmap"))
 
     @observe("model.step_label")
     @observe("model.free_mode")
