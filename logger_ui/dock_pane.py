@@ -61,6 +61,7 @@ class LogPane(TraitsDockPane):
     id = f"{PKG}.dock_pane"
     name = "Microdrop Console Logs"
     model = Instance(LogModel)
+    scroll_index = Int()
 
     clicked = Instance(TabularEditorEvent)
 
@@ -81,6 +82,7 @@ class LogPane(TraitsDockPane):
                 dclicked="pane.clicked",
                 vertical_lines=False,
                 horizontal_lines=False,
+                scroll_to_row="pane.scroll_index",
             ),
             style_sheet=f"""
                         QTableView {{
@@ -111,3 +113,10 @@ class LogPane(TraitsDockPane):
     @observe("clicked")
     def observe_event_click_right(self, event):
         logger.critical(event)
+
+    # 3. Observer to update the scroll index when logs change
+    @observe("model:logs.items")
+    def _scroll_to_bottom(self, event):
+        if self.model and self.model.logs:
+            # Set the index to the last item in the list
+            self.scroll_index = len(self.model.logs) - 1
