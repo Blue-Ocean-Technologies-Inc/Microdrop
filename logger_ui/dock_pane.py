@@ -39,10 +39,10 @@ class LogAdapter(TabularAdapter):
     # --- 2. Text Color Logic ---
     def get_text_color(self, object, trait, row, column=0):
         level = get_log(object, row).level
-        if column == 1:
+        if COLUMNS[column][0] == "Level":
             return LEVEL_COLORS[level]
 
-        elif column == 2:
+        elif COLUMNS[column][0] == "Source":
             source = object.logs[row].source
             # Assign a color to the logger name if it doesn't have one
             if source not in self._logger_colors:
@@ -55,8 +55,12 @@ class LogAdapter(TabularAdapter):
             return "#F9FAFB"
 
     # --- Tooltip Logic (Solves the "Long Message" issue) ---
-    # When user hovers over ANY column, show the full message
+    # When user hovers over the message column, show the full message
     def get_tooltip(self, object, trait, row, column):
+
+        if not COLUMNS[column][0] == "Message":
+            return
+
         log = get_log(object, row)
 
         return log.message
