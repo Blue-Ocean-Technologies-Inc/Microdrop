@@ -2,6 +2,9 @@ import webbrowser
 from pathlib import Path
 from shutil import copy2
 from typing import Union
+import subprocess
+import os
+import platform
 
 from logger.logger_service import get_logger
 
@@ -30,3 +33,11 @@ def safe_copy_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
     except Exception as e:
         logger.error(f"Error loading file: {e}", exc_info=True)
         raise
+
+def open_file(filepath):
+    if platform.system() == "Darwin":  # macOS
+        subprocess.call(("open", filepath))
+    elif platform.system() == "Windows":  # Windows
+        os.startfile(filepath)
+    else:  # linux variants
+        subprocess.call(("xdg-open", filepath))
