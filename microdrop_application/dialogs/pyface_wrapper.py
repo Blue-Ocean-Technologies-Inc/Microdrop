@@ -53,6 +53,7 @@ def _prepare_dialog(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
+    detail_collapsible: Optional[bool] = True,
     **kwargs
 ) -> BaseMessageDialog:
     """
@@ -76,7 +77,7 @@ def _prepare_dialog(
 
     # Add detail in collapsible section if provided
     if detail:
-        dialog.add_details_with_copy(detail, "Details:", collapsible=True, visible_lines=detail_visible_lines)
+        dialog.add_details_with_copy(detail, "Details:", collapsible=detail_collapsible, visible_lines=detail_visible_lines)
 
     return dialog
 
@@ -139,6 +140,7 @@ def information(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
+    detail_collapsible: Optional[bool] = True,
     **kwargs
 ) -> int:
     """
@@ -148,7 +150,7 @@ def information(
     def create_dialog(**opts):
         return InformationDialog(exit=cancel, **opts)
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, detail_collapsible, **kwargs)
 
     result = dialog.exec()
 
