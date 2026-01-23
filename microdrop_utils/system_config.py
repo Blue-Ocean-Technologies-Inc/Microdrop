@@ -18,9 +18,7 @@ def detect_rpi():
 
 def set_rpi_mode():
     """
-    Sets the global flag.
-    If manual_value is provided, it uses that.
-    Otherwise, it auto-detects based on system checks.
+    Sets the rpi mode flag.
     """
     global _IS_RASPBERRY_PI, _INITIALIZED
 
