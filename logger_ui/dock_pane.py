@@ -16,7 +16,7 @@ from traits.api import observe
 from .consts import LEVEL_COLORS, COLORS, LOGGER_COLORS, PKG
 
 from logger.logger_service import get_logger
-from .model import LogModel, _log_model_instance
+from .model import LogModel
 
 logger = get_logger(__name__)
 
@@ -72,12 +72,8 @@ class LogPane(TraitsDockPane):
     id = f"{PKG}.dock_pane"
     name = "Microdrop Console Logs"
     model = Instance(LogModel)
-    scroll_index = Int()
 
     dclicked = Instance(TabularEditorEvent)
-
-    def _model_default(self):
-        return _log_model_instance
 
     # Define the View
     traits_view = View(
@@ -93,7 +89,6 @@ class LogPane(TraitsDockPane):
                 dclicked="pane.dclicked",
                 vertical_lines=False,
                 horizontal_lines=False,
-                scroll_to_row="pane.scroll_index",
             ),
             style_sheet=f"""
                         QTableView {{
@@ -184,10 +179,3 @@ class LogPane(TraitsDockPane):
 
             # Stop after the first valid link found (prevent spamming dialogs)
             return
-
-    # 3. Observer to update the scroll index when logs change
-    @observe("model:logs.items")
-    def _scroll_to_bottom(self, event):
-        if self.model and self.model.logs:
-            # Set the index to the last item in the list
-            self.scroll_index = len(self.model.logs) - 1

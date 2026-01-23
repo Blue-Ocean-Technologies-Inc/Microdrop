@@ -1,5 +1,5 @@
 import logging
-from traits.api import HasTraits, List, Str, Instance, Enum
+from traits.api import HasTraits, List, Str, Instance, Enum, observe, Int
 from pyface.api import GUI
 
 import re
@@ -25,6 +25,8 @@ class LogModel(HasTraits):
     """Singleton model holding the list of logs."""
     logs = List(Instance(LogMessage))
 
+    buffer_size = Int(1000)
+
     def add_log(self, record):
         dt = datetime.fromtimestamp(record.created)
         time_str = (
@@ -38,16 +40,35 @@ class LogModel(HasTraits):
             source=clean_ansi_text(record.name)
         )
 
-        self.logs.append(msg)
+        self.logs.insert(0, msg)
 
-# Global instance to be shared between the Handler and the Plugin
-_log_model_instance = LogModel()
+        # Ring buffer logic: trim the end of the list if we exceed buffer_size
+        if len(self.logs) > self.buffer_size:
+            self.logs = self.logs[: self.buffer_size]
+
+    def reset(self):
+        """Clears all logs."""
+        self.logs.clear()
+
+    @observe("buffer_size")
+    def _buffer_size_changed(self, old, new):
+        """
+        Traits handler: Automatically trims the list if the user
+        dynamically reduces the buffer size at runtime.
+        """
+        if len(self.logs) > new:
+            self.logs = self.logs[:new]
+
 
 class EnvisageLogHandler(logging.Handler):
     """
     Custom logging handler that pipes logs to the LogModel.
     """
+    def __init__(self, _log_model_instance):
+        super().__init__()
+        self._log_model_instance = _log_model_instance
+
     def emit(self, record):
         # Python logging is thread-safe, but updating the UI/Traits is not.
         # We must push the update to the GUI thread.
-        GUI.invoke_later(_log_model_instance.add_log, record)
+        GUI.invoke_later(self._log_model_instance.add_log, record)

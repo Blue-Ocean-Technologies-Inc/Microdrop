@@ -10,7 +10,6 @@ from traits.trait_types import Str
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
-from .model import EnvisageLogHandler
 from .consts import PKG, PKG_name
 
 
@@ -41,12 +40,11 @@ class LoggerUIPlugin(Plugin):
         return [LoggerPreferencesPane]
 
     def _contributed_task_extensions_default(self):
-        from .dock_pane import LogPane
 
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,  # specify which task id it has to add on to
-                dock_pane_factories=[LogPane],
+                dock_pane_factories=[self._dock_pane_factory],
             )
         ]
 
@@ -54,7 +52,15 @@ class LoggerUIPlugin(Plugin):
     #
     def start(self):
         """Starts the plugin."""
-        self._handler = EnvisageLogHandler()
+        from .model import LogModel, EnvisageLogHandler
+
+        self._logger_model = LogModel()
+        _handler = EnvisageLogHandler(_log_model_instance=self._logger_model)
 
         root_logger = logging.getLogger()
-        root_logger.addHandler(self._handler)
+        root_logger.addHandler(_handler)
+
+    def _dock_pane_factory(self, *args, **kwargs):
+        from .dock_pane import LogPane
+
+        return LogPane(model=self._logger_model)
