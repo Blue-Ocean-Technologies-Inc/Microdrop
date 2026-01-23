@@ -1,5 +1,5 @@
 import logging
-from traits.api import HasTraits, List, Str, Instance, Enum, observe, Range
+from traits.api import HasTraits, List, Str, Instance, Enum, observe, Range, Bool, Property, cached_property
 from pyface.api import GUI
 
 import re
@@ -27,6 +27,39 @@ class LogModel(HasTraits):
 
     buffer_size = Range(10, 100000, mode="spinner")
 
+    # --- 1. Filter Checkboxes ---
+    show_debug = Bool(True, label="Debug")
+    show_info = Bool(True, label="Info")
+    show_warning = Bool(True, label="Warning")
+    show_error = Bool(True, label="Error")
+
+    allowed_logs = Property(
+        List(Str),
+        observe="show_debug, show_info, show_warning, show_error",
+    )
+
+    @cached_property
+    def _get_allowed_logs(self):
+        """Returns only the logs that match the selected checkboxes."""
+        # Mapping standard Python logging string levels to our booleans
+        # Adjust strings (e.g. 'WARN' vs 'WARNING') to match your record.levelname
+        allowed = []
+        if self.show_debug:
+            allowed.append("DEBUG")
+        if self.show_info:
+            allowed.append("INFO")
+        if self.show_warning:
+            allowed.extend(["WARNING", "WARN"])
+        if self.show_error:
+            allowed.extend(["ERROR"])
+
+        # Return filtered list (deque converted to list)
+        return allowed
+
+    @observe("allowed_logs")
+    def _allowed_logs_change(self, event):
+        self.logs = [el for el in self.logs if el.level in self.allowed_logs]
+
     def add_log(self, record):
         dt = datetime.fromtimestamp(record.created)
         time_str = (
@@ -39,6 +72,10 @@ class LogModel(HasTraits):
             message=clean_ansi_text(record.getMessage()),
             source=clean_ansi_text(record.name)
         )
+
+        # we do not update list if the log is not allowed.
+        if not msg.level in self.allowed_logs:
+            return
 
         self.logs.insert(0, msg)
 

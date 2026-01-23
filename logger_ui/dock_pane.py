@@ -11,7 +11,8 @@ from microdrop_application.dialogs.pyface_wrapper import information
 
 from traitsui.api import (
     View,
-    Group,
+    VGroup,
+    HGroup,
     Item,
     TabularEditor,
     TabularAdapter,
@@ -131,20 +132,29 @@ class LogPane(TraitsDockPane):
 
     # Define the View
     traits_view = View(
-        Group(
+        VGroup(
+            # --- Top: Filter Controls ---
+            HGroup(
+                Item("object.show_debug"),
+                Item("object.show_info"),
+                Item("object.show_warning"),
+                Item("object.show_error"),
+                label="Log Filters: ",
+            ),
+            # --- Middle: The Log Table ---
             Item(
                 "object.logs",
                 editor=log_records_editor,
                 show_label=False,
                 style_sheet=table_style_sheet,
             ),
-            Group(
+            # --- Bottom: Controls ---
+            HGroup(
                 Item("pane.reset_button"),
-                Group(Item("buffer_size")),
+                HGroup(Item("buffer_size", label="Buffer")),
                 spring,
                 Item("pane.show_button"),
                 Item("pane.copy_button"),
-                orientation="horizontal",
                 show_labels=False,
             ),
             show_labels=False,
@@ -253,4 +263,3 @@ class LogPane(TraitsDockPane):
     def _buffer_size_changed(self, event):
         app = self.task.window.application
         app.preferences.set("microdrop.logger_ui.buffer_size", event.new)
-
