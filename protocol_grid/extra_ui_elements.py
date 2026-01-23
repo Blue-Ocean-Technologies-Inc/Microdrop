@@ -345,11 +345,11 @@ class StatusBar(QScrollArea):
         layout.setSpacing(10)
 
 
-        self.lbl_total_time = QLabel("Total Time: 0.00 s")
+        self.lbl_total_time = QLabel("Total Time: 0 s")
         self.lbl_total_time.setFixedWidth(120)
         self.lbl_total_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
-        self.lbl_step_time = QLabel("Step Time: 0.00 s")
+        self.lbl_step_time = QLabel("Step Time: 0 s")
         self.lbl_step_time.setFixedWidth(115)
         self.lbl_step_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 

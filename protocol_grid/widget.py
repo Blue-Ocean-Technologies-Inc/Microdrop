@@ -629,9 +629,9 @@ class PGCWidget(QWidget):
 
     def update_status_bar(self, status):
         self.status_bar.lbl_total_time.setText(
-            f"Total Time: {status['total_time']:.2f} s"
+            f"Total Time: {int(status['total_time'])} s"
         )
-        self.status_bar.lbl_step_time.setText(f"Step Time: {status['step_time']:.2f} s")
+        self.status_bar.lbl_step_time.setText(f"Step Time: {int(status['step_time'])} s")
         self.status_bar.lbl_step_progress.setText(
             f"Step {status['step_idx']}/{status['step_total']}"
         )
@@ -1154,8 +1154,8 @@ class PGCWidget(QWidget):
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
     def reset_status_bar(self):
-        self.status_bar.lbl_total_time.setText("Total Time: 0.00 s")
-        self.status_bar.lbl_step_time.setText("Step Time: 0.00 s")
+        self.status_bar.lbl_total_time.setText("Total Time: 0 s")
+        self.status_bar.lbl_step_time.setText("Step Time: 0 s")
         self.status_bar.lbl_step_progress.setText("Step 0/0")
         self.status_bar.lbl_step_repetition.setText("Repetition 0/0")
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
