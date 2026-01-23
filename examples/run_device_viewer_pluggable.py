@@ -1,31 +1,28 @@
 import contextlib
 import os
 import sys
+from pathlib import Path
 import signal
 import time
 from functools import partial
 
+from envisage.ui.tasks.tasks_application import TasksApplication
+from pyface.qt.QtWidgets import QApplication
+
 # add microdrop module to path to access other submodules in microdrop (e.g. microdrop_utils)
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
+from microdrop_style.helpers import style_app
 
 from microdrop_utils.system_config import is_rpi
 # Set environment variables for Qt for pi
 if is_rpi():
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
-
-from envisage.ui.tasks.tasks_application import TasksApplication
-from PySide6.QtWidgets import QApplication
-
-from microdrop_style.helpers import style_app
-
-from logger.logger_service import get_logger
-from microdrop_utils.root_dir_utils import get_project_root
-root = get_project_root()
-
-os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "") # Add root to PATH for PyInstaller. Should do nothing normal operation
-
-logger = get_logger(__name__)
-
+    logger.info("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
 
 def stop_app(app, signum, frame):
     print("Shutting down...")
