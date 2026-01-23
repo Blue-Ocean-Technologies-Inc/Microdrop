@@ -1,5 +1,5 @@
 import logging
-from traits.api import HasTraits, List, Str, Instance, Enum, observe, Int
+from traits.api import HasTraits, List, Str, Instance, Enum, observe, Range
 from pyface.api import GUI
 
 import re
@@ -25,7 +25,7 @@ class LogModel(HasTraits):
     """Singleton model holding the list of logs."""
     logs = List(Instance(LogMessage))
 
-    buffer_size = Int(1000)
+    buffer_size = Range(10, 100000, mode="spinner")
 
     def add_log(self, record):
         dt = datetime.fromtimestamp(record.created)
@@ -51,13 +51,13 @@ class LogModel(HasTraits):
         self.logs.clear()
 
     @observe("buffer_size")
-    def _buffer_size_changed(self, old, new):
+    def _buffer_size_changed(self, event):
         """
         Traits handler: Automatically trims the list if the user
         dynamically reduces the buffer size at runtime.
         """
-        if len(self.logs) > new:
-            self.logs = self.logs[:new]
+        if len(self.logs) > event.new:
+            self.logs = self.logs[:event.new]
 
 
 class EnvisageLogHandler(logging.Handler):
