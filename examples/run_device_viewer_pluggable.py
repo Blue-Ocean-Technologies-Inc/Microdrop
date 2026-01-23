@@ -5,9 +5,9 @@ import signal
 import time
 from functools import partial
 
-import platform
+from microdrop_utils.system_config import is_rpi
 # Set environment variables for Qt for pi
-if "pi" in platform.uname().node.lower():
+if is_rpi():
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
 
 from envisage.ui.tasks.tasks_application import TasksApplication
