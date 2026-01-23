@@ -5,6 +5,9 @@ import signal
 import time
 from functools import partial
 
+# add microdrop module to path to access other submodules in microdrop (e.g. microdrop_utils)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from microdrop_utils.system_config import is_rpi
 # Set environment variables for Qt for pi
 if is_rpi():
@@ -14,8 +17,6 @@ from envisage.ui.tasks.tasks_application import TasksApplication
 from PySide6.QtWidgets import QApplication
 
 from microdrop_style.helpers import style_app
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from logger.logger_service import get_logger
 from microdrop_utils.root_dir_utils import get_project_root
