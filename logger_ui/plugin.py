@@ -1,21 +1,16 @@
 # Standard library imports.
 import logging
-import uuid
-import os
-from pathlib import Path
 
 # Enthought library imports.
 from envisage.api import Plugin
 from envisage.ids import PREFERENCES_PANES, TASK_EXTENSIONS
 from envisage.ui.tasks.task_extension import TaskExtension
-from traits.api import List, observe
+from traits.api import List
 from traits.trait_types import Str
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 from .model import EnvisageLogHandler
-from logger.logger_service import init_logger, LEVELS
-from .preferences import LoggerPreferences
 from .consts import PKG, PKG_name
 
 
