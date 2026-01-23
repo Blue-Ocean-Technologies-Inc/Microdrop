@@ -22,7 +22,7 @@ from microdrop_utils.system_config import is_rpi
 # Set environment variables for Qt for pi
 if is_rpi():
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
-    logger.info("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
+    print("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
 
 def stop_app(app, signum, frame):
     print("Shutting down...")
@@ -50,7 +50,7 @@ def main(plugins, contexts, application, persist):
 
     style_app(app_instance)
 
-    logger.debug(f"Instantiating application {application} with plugins {plugins}")
+    print(f"Instantiating application {application} with plugins {plugins}")
 
     # Instantiate plugins
     plugin_instances = [plugin() for plugin in plugins]
