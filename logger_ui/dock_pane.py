@@ -5,6 +5,7 @@ import html
 
 from pyface.tasks.api import TraitsDockPane
 from pyface.api import clipboard
+
 from microdrop_application.dialogs.pyface_wrapper import information
 
 
@@ -20,11 +21,14 @@ from traits.api import observe, Button, Instance, Dict, Int, Str
 from traitsui.qt.tabular_editor import TabularEditorEvent
 
 from .consts import LEVEL_COLORS, COLORS, LOGGER_COLORS, PKG
-
-from logger.logger_service import get_logger
 from .model import LogModel
 
+import logging
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+from microdrop_utils.file_handler import open_file
+
 
 COLUMNS = [
     ("Time", "time"),
@@ -87,6 +91,7 @@ class LogPane(TraitsDockPane):
 
     reset_button = Button("Reset Logs")
     copy_button = Button("Copy Log to Clipboard")
+    show_button = Button("Open Log File")
 
     _current_message = Str()
 
@@ -136,6 +141,7 @@ class LogPane(TraitsDockPane):
             Group(
                 Item("pane.reset_button"),
                 spring,
+                Item("pane.show_button"),
                 Item("pane.copy_button"),
                 orientation="horizontal",
                 show_labels=False,
@@ -233,3 +239,12 @@ class LogPane(TraitsDockPane):
 
     def _copy_button_fired(self):
         clipboard.text_data = self._current_message
+
+    def _reset_button_fired(self):
+        self.model.reset()
+
+    def _show_button_fired(self):
+        for handler in logging.getLogger().handlers[:]:  # Iterate on a copy!
+            if isinstance(handler, logging.FileHandler):
+                open_file(handler.baseFilename)
+
