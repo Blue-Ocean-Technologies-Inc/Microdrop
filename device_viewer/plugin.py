@@ -47,8 +47,9 @@ class DeviceViewerPlugin(Plugin):
 
     def _preferences_panes_default(self):
         from .preferences import DeviceViewerPreferencesPane
+        from .views.camera_control_view.preferences import CameraPreferencesPane
 
-        return [DeviceViewerPreferencesPane]
+        return [DeviceViewerPreferencesPane, CameraPreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import device_viewer_tab
