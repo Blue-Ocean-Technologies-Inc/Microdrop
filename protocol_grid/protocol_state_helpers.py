@@ -1,7 +1,3 @@
-from protocol_grid.state.protocol_state import ProtocolStep, ProtocolGroup
-from protocol_grid.state.device_state import DeviceState
-from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
-
 def flatten_protocol_for_run(protocol_state):
     """
     Returns a list of dicts:
