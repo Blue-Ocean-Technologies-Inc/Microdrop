@@ -1,7 +1,8 @@
-from traitsui.api import View, Item,EnumEditor, Group
-
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
+from traitsui.api import View, Item,EnumEditor, Group
+from apptools.preferences.api import PreferencesHelper
+from traits.api import Range, Bool
 
 from logger.preferences import LoggerPreferences
 from microdrop_application.preferences import microdrop_tab
@@ -12,6 +13,25 @@ from logger.logger_service import get_logger, LEVELS
 logger = get_logger(__name__)
 
 from microdrop_style.text_styles import preferences_group_style_sheet
+
+
+class LoggerUIPreferences(PreferencesHelper):
+    """The preferences helper, inspired by envisage one for the Attractors application.
+    The underlying preference object is the global default since we do not pass a
+    Preference object. See source code for PreferencesHelper for more details."""
+
+    #### 'PreferencesHelper' interface ########################################
+
+    # The path to the preference node that contains the preferences.
+    preferences_path = "microdrop.logger_ui"
+
+    #### Preferences ##########################################################
+    buffer_size = Range(10, 100000)
+    show_debug = Bool(False)
+    show_info = Bool(True)
+    show_warning = Bool(True)
+    show_error = Bool(True)
+
 
 class LoggerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""

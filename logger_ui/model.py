@@ -5,6 +5,8 @@ from pyface.api import GUI
 import re
 from datetime import datetime
 
+from logger_ui.preferences import LoggerUIPreferences
+
 # Compile the regex once at module level for performance
 ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -33,10 +35,20 @@ class LogModel(HasTraits):
     show_warning = Bool(True, label="Warning")
     show_error = Bool(True, label="Error")
 
+    preferences = Instance(LoggerUIPreferences)
+
     allowed_logs = Property(
         List(Str),
         observe="show_debug, show_info, show_warning, show_error",
     )
+
+    def traits_init(self):
+        if self.preferences:
+            self.buffer_size = self.preferences.buffer_size
+            self.show_debug = self.preferences.show_debug
+            self.show_info = self.preferences.show_info
+            self.show_warning = self.preferences.show_warning
+            self.show_error = self.preferences.show_error
 
     @cached_property
     def _get_allowed_logs(self):
@@ -95,6 +107,10 @@ class LogModel(HasTraits):
         """
         if len(self.logs) > event.new:
             self.logs = self.logs[:event.new]
+
+    @observe("[buffer_size, show_debug, show_info, show_warning, show_error]")
+    def _save_preferences(self, event):
+        self.preferences.trait_set(**{event.name: event.new})
 
 
 class EnvisageLogHandler(logging.Handler):

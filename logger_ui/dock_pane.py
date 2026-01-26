@@ -18,7 +18,7 @@ from traitsui.api import (
     TabularAdapter,
     spring,
 )
-from traits.api import observe, Button, Instance, Dict, Int, Str, Range
+from traits.api import observe, Button, Instance, Dict, Int, Str
 from traitsui.qt.tabular_editor import TabularEditorEvent
 
 from .consts import LEVEL_COLORS, COLORS, LOGGER_COLORS, PKG
@@ -258,8 +258,3 @@ class LogPane(TraitsDockPane):
         for handler in logging.getLogger().handlers[:]:  # Iterate on a copy!
             if isinstance(handler, logging.FileHandler):
                 open_file(handler.baseFilename)
-
-    @observe("model:buffer_size")
-    def _buffer_size_changed(self, event):
-        app = self.task.window.application
-        app.preferences.set("microdrop.logger_ui.buffer_size", event.new)

@@ -53,9 +53,11 @@ class LoggerUIPlugin(Plugin):
     def start(self):
         """Starts the plugin."""
         from .model import LogModel, EnvisageLogHandler
+        from .preferences import LoggerUIPreferences
 
-        buffer_size = self.application.preferences.get("microdrop.logger_ui.buffer_size", 1000)
-        self._logger_model = LogModel(buffer_size=int(buffer_size))
+        self._logger_model = LogModel(
+            preferences=LoggerUIPreferences(),
+        )
         _handler = EnvisageLogHandler(_log_model_instance=self._logger_model)
 
         root_logger = logging.getLogger()
