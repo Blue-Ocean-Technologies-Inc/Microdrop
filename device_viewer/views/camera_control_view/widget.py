@@ -471,12 +471,16 @@ class CameraControlWidget(QWidget):
         directory = None
         step_description = None
         step_id = None
+        show_dialog = True
 
         # extract data if provided
         if isinstance(capture_data, dict):
             directory = capture_data.get("directory")
             step_description = capture_data.get("step_description")
             step_id = capture_data.get("step_id")
+            show_dialog = capture_data.get("show_dialog")
+
+        self.show_media_capture_dialog = show_dialog
 
         # Ensure camera is on for capture
         was_camera_off = not self.ensure_camera_on()
@@ -579,8 +583,9 @@ class CameraControlWidget(QWidget):
                 directory = recording_data.get("directory")
                 step_description = recording_data.get("step_description")
                 step_id = recording_data.get("step_id")
+                show_dialog = recording_data.get("show_dialog", True)
 
-                self.video_record_start(directory, step_description, step_id)
+                self.video_record_start(directory, step_description, step_id, show_dialog)
 
             elif action == "stop":
                 self.video_record_stop()
@@ -629,7 +634,7 @@ class CameraControlWidget(QWidget):
             self.video_record_start()
 
     @Slot()
-    def video_record_start(self, directory=None, step_description=None, step_id=None):
+    def video_record_start(self, directory=None, step_description=None, step_id=None, show_dialog=True):
         if self.ffmpeg_process:
             return
 
@@ -648,14 +653,14 @@ class CameraControlWidget(QWidget):
             path = Path(directory) / "recordings" / filename
             path.parent.mkdir(parents=True, exist_ok=True)
             self.recording_file_path = str(path)
-            self.show_media_capture_dialog = False
 
         else:
             self.recording_file_path = str(
                 Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation))
                 / filename
             )
-            self.show_media_capture_dialog = True
+
+        self.show_media_capture_dialog = show_dialog
 
         # 1. Grab a sample frame to determine recording dimensions
         # This ensures the video size matches the transformed AR view
@@ -670,7 +675,7 @@ class CameraControlWidget(QWidget):
             self.rec_height -= 1
 
         fps = int(
-            self.available_formats[self.combo_resolutions.currentIndex()].maxFrameRate()
+            self.combo_resolutions.currentData().maxFrameRate()
         )
 
         if not fps:
@@ -816,9 +821,9 @@ class CameraControlWidget(QWidget):
         file_url = QUrl.fromLocalFile(save_path).toString()
 
         formatted_message = (
-            f"<p style='margin-bottom: 2px;'>"  # 1. Wrapper with 10px bottom margin
-            f"<b>{name.title()} captured successfully.</b> File saved to:</p>"
-            f"<a href='{file_url}' style='color: #0078d7;'>{save_path}</a>"
+            f"File saved to:<br>"
+            f"<a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
+            f"Click on link to open file. Press ok to exit..."
         )
 
         if self.show_media_capture_dialog:
@@ -826,7 +831,6 @@ class CameraControlWidget(QWidget):
             information(
                 None,
                 formatted_message,
-                informative="Click on link to open file. Press ok to exit...",
                 title=f"{name.title()} Captured",
             )
 

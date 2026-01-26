@@ -257,7 +257,8 @@ class ProtocolRunnerController(QObject):
             message_data = {
                 "directory": experiment_dir,
                 "step_description": step_description,
-                "step_id": step_id
+                "step_id": step_id,
+                "show_dialog": False
             }
             publish_message(topic=DEVICE_VIEWER_SCREEN_CAPTURE, message=json.dumps(message_data))
             logger.info(f"Published camera capture control for step {step_id}")
@@ -270,7 +271,8 @@ class ProtocolRunnerController(QObject):
             "action": "start",
             "directory": experiment_dir,
             "step_description": step_description,
-            "step_id": step_id
+            "step_id": step_id,
+            "show_dialog": False
         }
         publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
         logger.critical(f"Started recording for step {step_id}")
