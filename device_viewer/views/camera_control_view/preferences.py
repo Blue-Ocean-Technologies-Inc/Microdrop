@@ -1,9 +1,9 @@
 import platform
 
 from envisage.ui.tasks.api import PreferencesPane
-from traitsui.api import View, VGroup, HGroup, Label, Item, Group
+from traitsui.api import View, Item, Group
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Str, Bool
+from traits.api import Str, Bool, Enum
 
 from device_viewer.preferences import device_viewer_tab
 from microdrop_style.text_styles import preferences_group_style_sheet
@@ -13,19 +13,19 @@ os_name = platform.system()
 
 if os_name == "Windows":
     default_video_format = "NV12"
-    strict_video_format = False
+    strict_video_format = True
 
 elif os_name == "Linux":
-    default_video_format = "Jpeg"
+    default_video_format = "JPEG"
     strict_video_format = True
 
 elif os_name == "Darwin":
     default_video_format = "NV12"
-    strict_video_format = False
+    strict_video_format = True
 
 else:
     strict_video_format = False
-    default_video_format = "Jpeg"
+    default_video_format = "JPEG"
 
 
 class CameraPreferences(PreferencesHelper):
@@ -40,7 +40,7 @@ class CameraPreferences(PreferencesHelper):
 
     #### Preferences ##########################################################
     selected_camera = Str
-    preferred_video_format = Str
+    preferred_video_format = Enum("NV12", "JPEG")
     strict_video_format = Bool
     resolution = Str
 
