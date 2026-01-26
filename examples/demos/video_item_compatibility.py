@@ -7,6 +7,7 @@ os_name = platform.system()
 if os_name == "Windows":
     print("Running on Windows")
     default_video_format = "NV12"
+    strict = False
 
 elif os_name == "Linux":
     print("Running on Linux")
@@ -17,9 +18,12 @@ elif os_name == "Linux":
 elif os_name == "Darwin":
     print("Running on macOS")
     default_video_format = "NV12"
+    strict = False
 
 else:
     print(f"Running on unknown OS: {os_name}")
+    strict = False
+    default_video_format = "Jpeg"
 
 from PySide6.QtWidgets import (
     QApplication,
