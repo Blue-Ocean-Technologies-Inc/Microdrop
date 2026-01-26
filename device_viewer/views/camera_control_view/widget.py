@@ -647,6 +647,9 @@ class CameraControlWidget(QWidget):
             )
             return
 
+        # Ensure camera is on for capture
+        was_camera_off = not self.ensure_camera_on()
+
         # Generate filename
         filename = self._generate_recording_filename(step_description, step_id)
         if directory:
