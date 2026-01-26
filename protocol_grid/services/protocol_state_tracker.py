@@ -42,7 +42,7 @@ class ProtocolStateTracker(HasTraits):
             self.loaded_protocol_path = str(path)
             self.protocol_name = path.stem  # filename without extension
             self.is_modified = False
-            logger.info(f"Protocol loaded: {self.protocol_name}")
+            logger.critical(f"Protocol loaded: {self.protocol_name}\n Path: {self.loaded_protocol_path}")
 
         else:
             raise Warning("Cannot set loaded protocol to tracker. Need a non empty string file path.")
@@ -57,7 +57,7 @@ class ProtocolStateTracker(HasTraits):
             self.loaded_protocol_path = str(path)
             self.protocol_name = path.stem
             self.is_modified = False
-            logger.critical(f"Protocol saved as: {self.protocol_name}")
+            logger.critical(f"Protocol saved as: {self.protocol_name}\n Path: {self.loaded_protocol_path}")
 
     def get_protocol_display_name(self):
         """get protocol name with modification status."""

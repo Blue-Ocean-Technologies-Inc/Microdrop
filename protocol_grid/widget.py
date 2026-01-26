@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from pyface.api import confirm, NO, YES
+from microdrop_application.dialogs.pyface_wrapper import confirm, warning, NO, YES
 from PySide6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
@@ -94,13 +94,29 @@ def ensure_protocol_saved(func):
     def wrapper(self, *args, **kwargs):
         # 1. Check if we need to warn the user
         if self.protocol_state_tracker.is_modified:
+            logger.warning("Attempting to overwrite usaved protocol.")
 
             # 2. Show the dialog
             # I generalized the text slightly to fit New/Load/Exit scenarios
-            user_choice = confirm(
-                self,
+            user_choice = warning(
+                None,
                 "Current protocol has unsaved changes.\nProceed without saving?",
                 title="Unsaved Protocol Changes",
+                cancel=False,
+            )
+
+            # 3. If user says NO, stop here. Do not run the function.
+            if user_choice == NO:
+                logger.warning("Action cancelled due to unsaved changes.")
+                return
+
+        elif not Path(self.protocol_state_tracker.loaded_protocol_path).exists():
+            logger.warning("Protocol state file does not exist.")
+
+            user_choice = warning(
+                None,
+                "Current protocol file has been deleted.\nProceed without saving?",
+                title="Procol File Not Found!",
                 cancel=False,
             )
 
@@ -703,8 +719,7 @@ class PGCWidget(QWidget):
             # initialize new experiment if user wants
             if (
                 confirm(
-                    self,
-                    "Create a new experiment?",
+                    None,
                     title="Create New Experiment?",
                     cancel=False,
                     # no_label="No",
