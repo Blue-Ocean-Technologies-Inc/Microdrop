@@ -90,6 +90,38 @@ logger = get_logger(__name__)
 
 from functools import wraps
 
+from PySide6.QtWidgets import QComboBox, QLineEdit, QFormLayout, QDialogButtonBox
+
+class BulkSetDialog(QDialog):
+    def __init__(self, columns, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Bulk Set Values")
+        self.resize(300, 150)
+
+        self.layout = QVBoxLayout(self)
+        self.form_layout = QFormLayout()
+
+        # Column Selector
+        self.combo_columns = QComboBox()
+        self.combo_columns.addItems(columns)
+        self.form_layout.addRow("Target Column:", self.combo_columns)
+
+        # Value Input
+        self.edit_value = QLineEdit()
+        self.edit_value.setPlaceholderText("Enter new value (or 1/0 for checkboxes)")
+        self.form_layout.addRow("New Value:", self.edit_value)
+
+        self.layout.addLayout(self.form_layout)
+
+        # Buttons
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        self.layout.addWidget(self.buttons)
+
+    def get_data(self):
+        return self.combo_columns.currentText(), self.edit_value.text()
+
 
 def ensure_protocol_saved(func):
     @wraps(func)
@@ -1879,6 +1911,110 @@ class PGCWidget(QWidget):
         menu = EditContextMenu(self)
         global_pos = self.tree.mapToGlobal(pos)
         menu.exec(global_pos)
+
+    def bulk_set_values(self):
+        """
+        Opens a dialog to set a specific value for a specific column
+        across all currently selected steps.
+        """
+        if self._protocol_running:
+            return
+
+        selected_paths = self.get_selected_paths()
+        if not selected_paths:
+            return
+
+        # Filter out columns that should not be manually set via bulk edit
+        # (ID is auto-gen, Run Time is calculated, etc.)
+        read_only_cols = ["ID", "Run Time", "UID", "Max. Path Length"]
+        editable_cols = [f for f in protocol_grid_fields if f not in read_only_cols]
+
+        dialog = BulkSetDialog(editable_cols, self)
+        if not dialog.exec():
+            return
+
+        target_col_name, new_value = dialog.get_data()
+
+        # Find column index
+        try:
+            col_idx = protocol_grid_fields.index(target_col_name)
+        except ValueError:
+            return
+
+        # Snapshot for Undo
+        self.state.snapshot_for_undo()
+
+        # Flags to determine how to handle the data
+        is_checkbox_col = target_col_name in ["Video", "Capture", "Record", "Magnet"]
+
+        # Optimize: Pause programmatic sync during the loop
+        self._programmatic_change = True
+
+        try:
+            for path in selected_paths:
+                # Get the Step item (column 0)
+                step_item = self.get_item_by_path(path)
+                if not step_item:
+                    continue
+
+                # Get the specific cell item
+                parent = step_item.parent() or self.model.invisibleRootItem()
+                row = step_item.row()
+                target_item = parent.child(row, col_idx)
+
+                if not target_item:
+                    continue
+
+                # Apply Logic based on Column Type
+                if is_checkbox_col:
+                    # Convert "1"/"true" to Checked, others to Unchecked
+                    is_checked = new_value.strip().lower() in ("1", "true", "yes", "on")
+                    new_state = Qt.Checked if is_checked else Qt.Unchecked
+                    target_item.setData(new_state, Qt.CheckStateRole)
+
+                    # Manually trigger the helper to handle side effects (like Magnet Height visibility)
+                    self._handle_checkbox_change(parent, row, target_col_name)
+
+                else:
+                    # Standard Text/Numeric Fields
+                    target_item.setText(new_value)
+
+                    # If it is a numeric field, validate formatting immediately
+                    if target_col_name in (
+                        "Duration",
+                        "Repeat Duration",
+                        "Volume Threshold",
+                        "Voltage",
+                        "Frequency",
+                    ):
+                        self._validate_numeric_field(target_item, target_col_name)
+
+                    # Trigger specific updates (Force calculation, Trail fields, etc.)
+                    # We call the logic that usually happens in on_item_changed manually here
+                    # because we suppressed signals/programmatic_change
+                    if target_col_name == "Voltage":
+                        try:
+                            v = float(target_item.text())
+                            ForceCalculationService.update_step_force_in_model(
+                                step_item, self.state, v
+                            )
+                        except ValueError:
+                            pass
+
+                    if target_col_name in ("Trail Length", "Trail Overlay"):
+                        self._handle_trail_fields(parent, row)
+
+                    # Update step calculations (Run Time, etc)
+                    self.update_single_step_dev_fields(
+                        step_item, changed_field=target_col_name
+                    )
+
+        finally:
+            # Re-enable sync and force a full state update
+            self._programmatic_change = False
+            self.sync_to_state()
+            self._mark_protocol_modified()
+            self.update_all_group_aggregations()
 
     def setup_shortcuts(self):
 
