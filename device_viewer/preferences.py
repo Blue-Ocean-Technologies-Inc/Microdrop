@@ -190,8 +190,6 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         main_view_settings,
         Item("_"),  # Separator
         sidebar_settings_grid,
-        Item(
-            "_"
-        ),  # Separator to space this out from further contributions to the pane.
+        Item("_"),  # Separator
         resizable=True,
     )
