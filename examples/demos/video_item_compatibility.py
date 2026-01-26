@@ -11,8 +11,8 @@ if os_name == "Windows":
 elif os_name == "Linux":
     print("Running on Linux")
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
-    allowed_video_formats = ["Jpeg"]
     default_video_format = "Jpeg"
+    strict = True
 
 elif os_name == "Darwin":
     print("Running on macOS")
@@ -195,6 +195,12 @@ class CameraSceneFix(QMainWindow):
             w, h = fmt.resolution().width(), fmt.resolution().height()
             res_key = (w, h)
 
+            # if strict mode, only proceed if given format is the default video format
+            fmt_name = str(fmt.pixelFormat()).upper()
+            if strict:
+                if default_video_format.upper() not in fmt_name:
+                    continue
+
             if res_key not in seen_resolutions:
                 # Mark as seen
                 seen_resolutions.add(res_key)
@@ -210,14 +216,10 @@ class CameraSceneFix(QMainWindow):
                 # KEY CHANGE: Store the actual 'fmt' object in the combo box item
                 self.combo_resolutions.addItem(label, userData=fmt)
 
-        # Select the top item (highest resolution) by default
-        if self.combo_resolutions.count() > 0:
-            self.combo_resolutions.setCurrentIndex(0)
-
         self.combo_resolutions.blockSignals(False)
 
         self.combo_resolutions.setCurrentIndex(
-            len(self.available_formats) // 2
+            len(seen_resolutions) // 2
         )  # set a resolution in the middle
         self.combo_resolutions.blockSignals(False)
 
