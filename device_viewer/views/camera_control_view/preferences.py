@@ -39,6 +39,7 @@ class CameraPreferences(PreferencesHelper):
     preferences_path = "camera"
 
     #### Preferences ##########################################################
+    selected_camera = Str
     preferred_video_format = Str
     strict_video_format = Bool
     resolution = Str
@@ -48,9 +49,6 @@ class CameraPreferences(PreferencesHelper):
 
     def _strict_video_format_default(self):
         return strict_video_format
-
-    def resolution_default(self):
-        return "1280x720 [Format_NV12] @ 30.0 fps"
 
 
 class CameraPreferencesPane(PreferencesPane):
@@ -64,9 +62,12 @@ class CameraPreferencesPane(PreferencesPane):
     category = device_viewer_tab.id
 
     ########################################################################################
-    video_format_item = create_item_label_group("preferred_video_format", label_text="Preferred Video Format")
-    strict_video_format_item = create_item_label_group("strict_video_format",
-                                                       label_text="Strictly Use Only Preferred Video Format?")
+    video_format_item = create_item_label_group(
+        "preferred_video_format", label_text="Preferred Video Format"
+    )
+    strict_video_format_item = create_item_label_group(
+        "strict_video_format", label_text="Strictly Use Only Preferred Video Format?"
+    )
 
     view = View(
         Item("_"),  # Separator

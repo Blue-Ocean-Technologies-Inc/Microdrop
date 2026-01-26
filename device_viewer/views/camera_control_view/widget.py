@@ -26,10 +26,12 @@ from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.api import information, error
 
+from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
 
 class CameraControlWidget(QWidget):
 
@@ -50,7 +52,7 @@ class CameraControlWidget(QWidget):
         self.model = model
         self.video_item = video_item  # The video item for the camera feed
         self.scene = scene
-        self.preferences = preferences
+        self.preferences = CameraPreferences(preferences=preferences)
 
         self.session = QMediaCaptureSession()
         self.camera = None  # Will be set when a camera is selected
@@ -181,7 +183,7 @@ class CameraControlWidget(QWidget):
 
     def turn_on_camera(self):
         logger.info("Turning camera on")
-        self.preferences.set("camera.camera_state", "on")
+        self.preferences.camera_state = True
         if self.camera:
             self.camera.start()
             self.camera_toggle_button.setText("videocam")
@@ -190,7 +192,7 @@ class CameraControlWidget(QWidget):
 
     def turn_off_camera(self):
         logger.info("Turning camera off")
-        self.preferences.set("camera.camera_state", "off")
+        self.preferences.camera_state = False
         if self.camera:
             self.camera.stop()
             self.camera_toggle_button.setText("videocam_off")
@@ -266,7 +268,7 @@ class CameraControlWidget(QWidget):
 
     def initialize_camera_list(self):
         """Populate the camera combo box with available cameras."""
-        preferences_camera = self.preferences.get("camera.selected_camera", None)
+        preferences_camera = self.preferences.selected_camera
 
         if preferences_camera:
             old_camera_name = preferences_camera
@@ -321,9 +323,7 @@ class CameraControlWidget(QWidget):
         # Initialize new camera
         self.camera = QCamera(self.available_cameras[index])
         self.session.setCamera(self.camera)
-        self.preferences.set(
-            "camera.selected_camera", self.available_cameras[index].description()
-        )
+        self.preferences.selected_camera = self.available_cameras[index].description()
 
         # 3. Populate resolutions for this camera
         self.populate_resolutions()
@@ -335,40 +335,76 @@ class CameraControlWidget(QWidget):
     def populate_resolutions(self):
         """Populate the resolution combo box with available resolutions."""
 
-        self.combo_resolutions.blockSignals(
-            True
-        )  # Prevent triggering change while filling
+        # Prevent triggering change while filling
+        self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
 
-        self.available_formats = self.camera.cameraDevice().videoFormats()
+        # 1. Get all raw formats
+        formats = self.camera.cameraDevice().videoFormats()
 
-        # Sort by width (descending)
-        self.available_formats.sort(key=lambda f: f.resolution().width(), reverse=True)
+        def format_sort_key(fmt):
+            """
+            Sort hierarchy (Higher value = appears first):
+            1. Resolution Width
+            2. Resolution Height
+            3. Is it the preferred format? (Bool)
+            4. Max Frame Rate
+            """
+            res = fmt.resolution()
+            # Helper to detect if this is our preferred format (returns 1 or 0)
+            # We check the string representation safely
+            fmt_name = str(fmt.pixelFormat()).upper()
 
-        for i, fmt in enumerate(self.available_formats):
+            return (
+                res.width(),
+                res.height(),
+                self.preferences.preferred_video_format.upper() in fmt_name,
+                fmt.maxFrameRate(),
+            )
 
-            width, height = (fmt.resolution().width(), fmt.resolution().height())
-            pix_name = str(fmt.pixelFormat()).split(".")[-1]
-            fps = fmt.maxFrameRate()
+        # 2. Sort the list descending based on our criteria
+        # This puts the "Best" (Largest, Preferred, Fastest) formats at the top.
+        formats.sort(key=format_sort_key, reverse=True)
 
-            label = f"{width}x{height} [{pix_name}] @ {fps} fps"
-            self.combo_resolutions.addItem(label)
+        # 3. Deduplicate
+        # Since the list is sorted, the first time we see a "Width x Height",
+        # it is guaranteed to be the best version (MJPEG + High FPS).
+        seen_resolutions = set()
 
-        preferences_resolution = self.preferences.get("camera.resolution", None)
-        if preferences_resolution:
-            index = self.combo_resolutions.findText(preferences_resolution)
-            if index != -1:
-                self.combo_resolutions.setCurrentIndex(index)
-                self.on_resolution_changed(index)
+        for fmt in formats:
+            w, h = fmt.resolution().width(), fmt.resolution().height()
+            res_key = (w, h)
 
-        else:
-            self.combo_resolutions.setCurrentIndex(0)
-            # Set the current index to the first resolution if preferred resolution not found
-            self.on_resolution_changed(
-                0
-            )  # Set the resolution to the first item in the list
+            # if strict mode, only proceed if given format is the default video format
+            fmt_name = str(fmt.pixelFormat()).upper()
+            if self.preferences.strict_video_format:
+                if self.preferences.preferred_video_format.upper() not in fmt_name:
+                    continue
+
+            if res_key not in seen_resolutions:
+                # Mark as seen
+                seen_resolutions.add(res_key)
+
+                # 4. Add to Combo
+                # We construct a clean label
+                fps = fmt.maxFrameRate()
+                # Clean up pixel format name (e.g., "Format_MJPEG" -> "MJPEG")
+                pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+
+                label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+
+                # KEY CHANGE: Store the actual 'fmt' object in the combo box item
+                self.combo_resolutions.addItem(label, userData=fmt)
 
         self.combo_resolutions.blockSignals(False)
+
+        self.combo_resolutions.setCurrentIndex(
+            len(seen_resolutions) // 2
+        )  # set a resolution in the middle
+        self.combo_resolutions.blockSignals(False)
+
+        # Manually trigger the resolution update for the logic to apply
+        self.on_resolution_changed(len(self.available_formats) // 2)
 
     def on_resolution_changed(self, index):
         """Set the camera resolution based on the selected index."""
@@ -379,7 +415,7 @@ class CameraControlWidget(QWidget):
         if index < 0:
             return
 
-        fmt = self.available_formats[index]
+        fmt = self.combo_resolutions.itemData(index)
 
         was_running = self.camera.isActive()
         if was_running:
@@ -391,7 +427,7 @@ class CameraControlWidget(QWidget):
         resolution = self.combo_resolutions.itemText(index)
         logger.info(f"Camera Resolution Changed: {resolution}")
 
-        self.preferences.set("camera.resolution", resolution)
+        self.preferences.resolution = resolution
         self.model.camera_perspective.camera_resolution = (
             fmt.resolution().width(),
             fmt.resolution().height(),
@@ -443,7 +479,7 @@ class CameraControlWidget(QWidget):
         image.save(str(save_path), "PNG")
         logger.info(f"Image captured successfully to {save_path}")
 
-        self._show_media_capture_dialog('Image', str(save_path))
+        self._show_media_capture_dialog("Image", str(save_path))
 
         # Restore camera state if we turned it on
         if was_camera_off:
@@ -526,7 +562,9 @@ class CameraControlWidget(QWidget):
             elif action == "stop":
                 self.video_record_stop()
         else:
-            logger.error(f"Invalid recording data: {recording_data}. Needs to be a json dict.")
+            logger.error(
+                f"Invalid recording data: {recording_data}. Needs to be a json dict."
+            )
 
     # --- Transformation Logic ---
     def get_transformed_frame(self):
@@ -587,14 +625,14 @@ class CameraControlWidget(QWidget):
             path = Path(directory) / "recordings" / filename
             path.parent.mkdir(parents=True, exist_ok=True)
             self.recording_file_path = str(path)
-            self.show_media_capture_dialog=False
+            self.show_media_capture_dialog = False
 
         else:
             self.recording_file_path = str(
                 Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation))
                 / filename
             )
-            self.show_media_capture_dialog=True
+            self.show_media_capture_dialog = True
 
         # 1. Grab a sample frame to determine recording dimensions
         # This ensures the video size matches the transformed AR view
@@ -608,13 +646,15 @@ class CameraControlWidget(QWidget):
         if self.rec_height % 2 != 0:
             self.rec_height -= 1
 
-        fps = int(self.available_formats[self.combo_resolutions.currentIndex()].maxFrameRate())
+        fps = int(
+            self.available_formats[self.combo_resolutions.currentIndex()].maxFrameRate()
+        )
 
         if not fps:
             fps = 15
         else:
             # adjust fps down to account for some frame loss since we have to manually apply transforms to frames
-            fps = int(0.75*fps)
+            fps = int(0.75 * fps)
 
         command = [
             "ffmpeg",
@@ -740,7 +780,7 @@ class CameraControlWidget(QWidget):
         self.record_toggle_button.setChecked(False)
         self.restore_camera_state()
 
-        self._show_media_capture_dialog('Video', self.recording_file_path)
+        self._show_media_capture_dialog("Video", self.recording_file_path)
 
     def _show_media_capture_dialog(self, name: str, save_path: str):
         """Handle a media capture dialog
