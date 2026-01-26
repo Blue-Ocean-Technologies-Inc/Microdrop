@@ -18,7 +18,15 @@ except ImportError:
     winreg = None
 
 from PySide6.QtCore import Qt, QPoint, QMimeData, QTimer, QSize, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap, QTextDocument
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPixmap,
+    QTextDocument,
+    QDesktopServices,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -987,6 +995,12 @@ class BaseMessageDialog(QDialog):
         """Create and configure the details text browser."""
         details_browser = QTextBrowser()
         details_browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Disable internal navigation so the widget doesn't try to "go" to the page.
+        details_browser.setOpenLinks(False)
+        # Listen for clicks and open them in the OS default app/browser.
+        details_browser.anchorClicked.connect(QDesktopServices.openUrl)
+
         details_font = QFont(self.text_font_family, 11)
         details_browser.setFont(details_font)
         line_height = details_browser.fontMetrics().lineSpacing()
