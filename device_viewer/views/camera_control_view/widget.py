@@ -54,6 +54,14 @@ class CameraControlWidget(QWidget):
         self.scene = scene
         self.preferences = CameraPreferences(preferences=preferences)
 
+        self.preferences.observe(
+            self._preferred_video_format_change, "preferred_video_format"
+        )
+
+        self.preferences.observe(
+            self._preferred_video_format_change, "strict_video_format"
+        )
+
         self.session = QMediaCaptureSession()
         self.camera = None  # Will be set when a camera is selected
         self.available_cameras = None
@@ -180,6 +188,15 @@ class CameraControlWidget(QWidget):
         # Check initial camera state
         self.initialize_camera_list()
         self.check_initial_camera_state()
+
+    ############################## preference change observers ##############################
+
+    def _preferred_video_format_change(self, event):
+        strict_flag = "strictly" if self.preferences.strict_video_format else ""
+        logger.critical(f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}")
+        self.populate_resolutions()
+
+    ########################################################################################
 
     def turn_on_camera(self):
         logger.info("Turning camera on")
@@ -398,13 +415,7 @@ class CameraControlWidget(QWidget):
 
         self.combo_resolutions.blockSignals(False)
 
-        self.combo_resolutions.setCurrentIndex(
-            len(seen_resolutions) // 2
-        )  # set a resolution in the middle
-        self.combo_resolutions.blockSignals(False)
-
-        # Manually trigger the resolution update for the logic to apply
-        self.on_resolution_changed(len(self.available_formats) // 2)
+        self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
 
     def on_resolution_changed(self, index):
         """Set the camera resolution based on the selected index."""
