@@ -24,7 +24,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from pyface.api import information, error
+from microdrop_application.dialogs.pyface_wrapper import information, error, warning
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
@@ -349,7 +349,7 @@ class CameraControlWidget(QWidget):
         if was_running:
             self.camera.start()
 
-    def populate_resolutions(self):
+    def populate_resolutions(self, allow_strict_mode=True):
         """Populate the resolution combo box with available resolutions."""
 
         # Prevent triggering change while filling
@@ -394,7 +394,7 @@ class CameraControlWidget(QWidget):
 
             # if strict mode, only proceed if given format is the default video format
             fmt_name = str(fmt.pixelFormat()).upper()
-            if self.preferences.strict_video_format:
+            if self.preferences.strict_video_format and allow_strict_mode:
                 if self.preferences.preferred_video_format.upper() not in fmt_name:
                     continue
 
@@ -413,9 +413,21 @@ class CameraControlWidget(QWidget):
                 # KEY CHANGE: Store the actual 'fmt' object in the combo box item
                 self.combo_resolutions.addItem(label, userData=fmt)
 
-        self.combo_resolutions.blockSignals(False)
+        # check if any resolutions found. else use strict mode if not already on.
+        if len(seen_resolutions) > 0:
 
-        self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+            self.combo_resolutions.blockSignals(False)
+            self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+
+        elif self.preferences.strict_video_format:
+            warning_message = (f"Preferred video format <b>{self.preferences.preferred_video_format}</b> not supported by "
+                               f"<b>{self.preferences.selected_camera}</b>.<br><br>"
+                               f"Will ignore strict mode request for <b>{self.preferences.selected_camera}</b> ...")
+
+            logger.warning(warning_message)
+            warning(None, warning_message)
+
+            self.populate_resolutions(allow_strict_mode=False)
 
     def on_resolution_changed(self, index):
         """Set the camera resolution based on the selected index."""
