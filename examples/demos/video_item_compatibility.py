@@ -1,8 +1,25 @@
-import sys
 import os
+import sys
+import platform
 
-if sys.platform.startswith('linux'):
+os_name = platform.system()
+
+if os_name == "Windows":
+    print("Running on Windows")
+    default_video_format = "NV12"
+
+elif os_name == "Linux":
+    print("Running on Linux")
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
+    allowed_video_formats = ["Jpeg"]
+    default_video_format = "Jpeg"
+
+elif os_name == "Darwin":
+    print("Running on macOS")
+    default_video_format = "NV12"
+
+else:
+    print(f"Running on unknown OS: {os_name}")
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -140,37 +157,77 @@ class CameraSceneFix(QMainWindow):
             self.camera.start()
 
     def populate_resolutions(self):
-        """Populate resolution dropdown, prioritizing MJPEG."""
-        self.combo_resolutions.blockSignals(
-            True
-        )  # Prevent triggering change while filling
+        """
+        Populates dropdown with resolutions.
+        Prioritizes MJPEG formats and highest Frame Rates.
+        """
+        self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
 
-        self.available_formats = self.camera.cameraDevice().videoFormats()
+        # 1. Get all raw formats
+        formats = self.camera.cameraDevice().videoFormats()
 
-        # Sort by width (descending)
-        self.available_formats.sort(key=lambda f: f.resolution().width(), reverse=True)
+        def format_sort_key(fmt):
+            """
+            Sort hierarchy (Higher value = appears first):
+            1. Resolution Width
+            2. Resolution Height
+            3. Is it the preferred format? (Bool)
+            4. Max Frame Rate
+            """
+            res = fmt.resolution()
+            # Helper to detect if this is our preferred format (returns 1 or 0)
+            # We check the string representation safely
+            fmt_name = str(fmt.pixelFormat()).upper()
 
-        for i, fmt in enumerate(self.available_formats):
+            return (res.width(), res.height(), default_video_format.upper() in fmt_name, fmt.maxFrameRate())
 
-            width, height = (fmt.resolution().width(), fmt.resolution().height())
-            pix_name = str(fmt.pixelFormat()).split(".")[-1]
-            fps = fmt.maxFrameRate()
+        # 2. Sort the list descending based on our criteria
+        # This puts the "Best" (Largest, Preferred, Fastest) formats at the top.
+        formats.sort(key=format_sort_key, reverse=True)
 
-            label = f"{width}x{height} [{pix_name}] @ {fps} fps"
-            self.combo_resolutions.addItem(label)
+        # 3. Deduplicate
+        # Since the list is sorted, the first time we see a "Width x Height",
+        # it is guaranteed to be the best version (MJPEG + High FPS).
+        seen_resolutions = set()
 
-        self.combo_resolutions.setCurrentIndex(len(self.available_formats)//2) # set a resolution in the middle
+        for fmt in formats:
+            w, h = fmt.resolution().width(), fmt.resolution().height()
+            res_key = (w, h)
+
+            if res_key not in seen_resolutions:
+                # Mark as seen
+                seen_resolutions.add(res_key)
+
+                # 4. Add to Combo
+                # We construct a clean label
+                fps = fmt.maxFrameRate()
+                # Clean up pixel format name (e.g., "Format_MJPEG" -> "MJPEG")
+                pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+
+                label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+
+                # KEY CHANGE: Store the actual 'fmt' object in the combo box item
+                self.combo_resolutions.addItem(label, userData=fmt)
+
+        # Select the top item (highest resolution) by default
+        if self.combo_resolutions.count() > 0:
+            self.combo_resolutions.setCurrentIndex(0)
+
+        self.combo_resolutions.blockSignals(False)
+
+        self.combo_resolutions.setCurrentIndex(
+            len(self.available_formats) // 2
+        )  # set a resolution in the middle
         self.combo_resolutions.blockSignals(False)
 
         # Manually trigger the resolution update for the logic to apply
         self.on_resolution_changed(len(self.available_formats)//2)
 
     def on_resolution_changed(self, index):
-
         if index < 0:
             return
-        fmt = self.available_formats[index]
+        fmt = self.combo_resolutions.itemData(index)
         res = fmt.resolution()
         print(f"Resolution: {res.width()}x{res.height()}")
 
