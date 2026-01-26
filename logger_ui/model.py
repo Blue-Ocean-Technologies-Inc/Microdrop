@@ -55,7 +55,7 @@ class LogModel(HasTraits):
         """Returns only the logs that match the selected checkboxes."""
         # Mapping standard Python logging string levels to our booleans
         # Adjust strings (e.g. 'WARN' vs 'WARNING') to match your record.levelname
-        allowed = []
+        allowed = ["CRITICAL"]
         if self.show_debug:
             allowed.append("DEBUG")
         if self.show_info:
