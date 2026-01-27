@@ -10,7 +10,7 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        CAPACITANCE_UPDATED)
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
-                                  CALIBRATION_DATA)
+                                  CALIBRATION_DATA, DEVICE_VIEWER_MEDIA_CAPTURED)
 
 logger = get_logger(__name__)
 
@@ -67,6 +67,9 @@ class MessageListener(HasTraits):
             elif topic == ZSTAGE_POSITION_UPDATED:
                 logger.debug("Received z-stage position updated message")
                 self.signal_emitter.zstage_position_updated.emit(float(message))
+
+            elif topic == DEVICE_VIEWER_MEDIA_CAPTURED:
+                logger.info(f"Received media captured message: {message}")
                 
             else:
                 logger.info(f"Unhandled message topic: {topic}")
