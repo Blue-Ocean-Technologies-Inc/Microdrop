@@ -27,6 +27,9 @@ ACTOR_TOPIC_DICT = {
         DROPLETS_DETECTED
     ]}
 
+# published topics
+MEDIA_CAPTURED = "microdrop/device_viewer/camera/media_captured"
+
 # GUI configuration
 DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
