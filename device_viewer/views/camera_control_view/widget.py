@@ -29,6 +29,8 @@ from microdrop_application.dialogs.pyface_wrapper import information, error, war
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from logger.logger_service import get_logger
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
+
 logger = get_logger(__name__)
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -462,10 +464,6 @@ class CameraControlWidget(QWidget):
         if was_running:
             self.camera.start()
 
-    def get_next_image_id(self):
-        """Generate a unique image ID for captured images."""
-        return str(int(time.time()))
-
     # ------------------------ Callbacks -------------------------------
 
     @Slot()
@@ -546,33 +544,26 @@ class CameraControlWidget(QWidget):
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setChecked(False)
 
-    def _generate_capture_filename(self, step_description=None, step_id=None):
-        timestamp = self.get_next_image_id()
+    def _generate_media_filename(self, step_description=None, step_id=None, file_extension=".png"):
+        """Generate a filename based on the selected step."""
+        timestamp = get_current_utc_datetime()
 
         if step_description and step_id:
             clean_desc = "".join(
                 c for c in step_description if c.isalnum() or c in (" ", "-", "_")
             ).rstrip()
             clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}.png"
+            return f"{clean_desc}_{step_id}_{timestamp}{file_extension}"
         elif step_id:
-            return f"step_{step_id}_{timestamp}.png"
+            return f"step_{step_id}_{timestamp}{file_extension}"
         else:
-            return f"captured_image_{timestamp}.png"
+            return f"captured_image_{timestamp}{file_extension}"
+
+    def _generate_capture_filename(self, step_description=None, step_id=None):
+        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".png")
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        timestamp = self.get_next_image_id()
-
-        if step_description and step_id:
-            clean_desc = "".join(
-                c for c in step_description if c.isalnum() or c in (" ", "-", "_")
-            ).rstrip()
-            clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}.mp4"
-        elif step_id:
-            return f"step_{step_id}_{timestamp}.mp4"
-        else:
-            return f"video_recording_{timestamp}.mp4"
+        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".mp4")
 
     ##### Video recording #######
     def on_recording_active(self, recording_data):
