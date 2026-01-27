@@ -312,26 +312,10 @@ class ProtocolRunnerController(QObject):
                     channel = device_state.id_to_channel[electrode_id]
                     actuated_channels.append(channel)
 
-            # calculate actuated area
-            actuated_area = 0.0
-            if hasattr(step, 'device_state') and step.device_state:
-                # get calibration data from protocol state for electrode areas
-                if hasattr(self, 'protocol_state') and hasattr(self.protocol_state, 'get_calibration_data'):
-                    try:
-                        calibration_data = self.protocol_state.get_calibration_data()
-                        electrode_areas = calibration_data.get('electrode_areas', {})
-
-                        for electrode_id in phase_electrodes:
-                            if phase_electrodes[electrode_id] and electrode_id in electrode_areas:
-                                actuated_area += electrode_areas[electrode_id]
-                    except Exception as e:
-                        logger.debug(f"Could not get electrode areas for data logging: {e}")
-                        # Area remains 0 if calibration data not available
-
             return {
                 'step_id': step.parameters.get("ID", ""),
                 'actuated_channels': sorted(actuated_channels),
-                'actuated_area': actuated_area
+                'actuated_area': step.device_state.activated_electrodes_area_mm2,
             }
 
         except Exception as e:
@@ -1666,7 +1650,7 @@ class ProtocolRunnerController(QObject):
 
             msg_model.editable = True
 
-            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.model_dump_json())
 
             if not self._preview_mode:
                 deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
