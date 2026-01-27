@@ -837,6 +837,17 @@ class CameraControlWidget(QWidget):
             f"Click on link to open file. Press ok to exit..."
         )
 
+        ## Publish message that media has been captured
+        media_capture_message = MediaCaptureMessageModel(
+            path=Path(save_path),
+            type=name.lower(),
+        )
+
+        publish_message(
+            topic=DEVICE_VIEWER_MEDIA_CAPTURED,
+            message=media_capture_message.model_dump_json(),
+        )
+
         if self.show_media_capture_dialog:
 
             information(
@@ -847,17 +858,5 @@ class CameraControlWidget(QWidget):
 
         else:
             logger.critical(f"Saved {name} to {save_path}.")
-
-        ## Publish message that media has been captured
-        media_capture_message = MediaCaptureMessageModel(
-            path=Path(save_path),
-            type=name.lower(),
-
-        )
-
-        publish_message(
-            topic=DEVICE_VIEWER_MEDIA_CAPTURED,
-            message=media_capture_message.model_dump_json()
-        )
 
         return True
