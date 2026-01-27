@@ -4,12 +4,20 @@ PySide6 helper widgets and utilities for the Microdrop application.
 This module provides reusable UI components that enhance the user interface
 with consistent styling and behavior across the application.
 """
-
+import functools
 from typing import Union, List, Optional
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QToolButton, QLabel, QPushButton, QApplication
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QToolButton,
+    QLabel,
+    QPushButton,
+    QApplication,
+    QProgressDialog,
+)
+from PySide6.QtCore import Qt, QTimer, QThread, QEventLoop
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
@@ -237,3 +245,73 @@ class DebouncedToolButton(QToolButton):
 
         # 2. Re-enable after timeout
         QTimer.singleShot(self.timeout, lambda: self.setEnabled(True))
+
+
+def with_loading_screen(message: str = "Processing..."):
+    """
+    A decorator for QWidget methods that executes the function in a background thread
+    while displaying a modal loading dialog.
+
+    This decorator blocks the main UI thread's execution of the decorated function
+    using a local QEventLoop. This ensures the function behaves synchronously
+    (blocking) while keeping the GUI responsive and showing a 'busy' animation.
+
+    Args:
+        message (str): The text to display in the progress dialog.
+            Defaults to "Processing...".
+
+    Returns:
+        Callable: The wrapped function.
+
+    Raises:
+        Exception: Re-raises any exception caught within the background thread
+            onto the main thread.
+
+    Note:
+        The decorated function runs in a background thread. Do NOT perform
+        direct GUI updates (e.g., self.label.setText()) inside the decorated
+        method. Use signals for GUI updates.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            # 1. Setup the Modal Dialog using 'self' (the widget) as parent
+            progress = QProgressDialog(message, None, 0, 0, self)
+            progress.setWindowTitle("Please Wait")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setCancelButton(None)
+            progress.show()
+
+            # Ensure the dialog is painted before starting the thread
+            QApplication.processEvents()
+
+            # 2. Setup the Worker Thread
+            class Worker(QThread):
+                def run(self):
+                    self.result = None
+                    self.error = None
+                    try:
+                        # Call the original function
+                        self.result = func(self.parent_obj, *args, **kwargs)
+                    except Exception as e:
+                        self.error = e
+
+            worker = Worker()
+            worker.parent_obj = self
+            loop = QEventLoop()
+
+            # 3. Connect signals to control the local event loop
+            worker.finished.connect(loop.quit)
+            worker.finished.connect(progress.close)
+
+            # 4. Start execution and block the current thread
+            worker.start()
+            loop.exec()
+
+            # 5. Handle potential errors and return result
+            if worker.error:
+                raise worker.error
+            return worker.result
+
+        return wrapper
+    return decorator

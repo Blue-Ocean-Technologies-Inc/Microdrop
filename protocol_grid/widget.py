@@ -21,7 +21,7 @@ from traits.has_traits import HasTraits
 from microdrop_style.button_styles import get_button_style
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
-from microdrop_utils.pyside_helpers import DebouncedToolButton
+from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
 from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
@@ -720,6 +720,8 @@ class PGCWidget(QWidget):
                     data_file_path
                 )
 
+            self.generate_summary()
+
             # initialize new experiment if user wants
             if (
                 confirm(
@@ -737,6 +739,10 @@ class PGCWidget(QWidget):
 
         except Exception as e:
             logger.error(f"Error handling regular mode completion: {e}")
+
+    @with_loading_screen("Generating Run Report...")
+    def generate_summary(self):
+        self.protocol_data_logger.generate_summary()
 
     def setup_new_experiment(self):
         new_experiment_dir = self.experiment_manager.initialize_new_experiment()
