@@ -19,7 +19,7 @@ class DeviceViewerMessageModel(BaseModel):
 
     activated_electrodes_area_mm2: Optional[float] = 0
 
-    uuid: UUID4
+    uuid: Optional[UUID4] = None
 
     @computed_field
     @property
