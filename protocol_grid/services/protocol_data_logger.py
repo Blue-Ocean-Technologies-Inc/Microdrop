@@ -6,6 +6,7 @@ from typing import Dict, Optional
 
 from PySide6.QtCore import QObject
 
+from device_viewer.models.media_capture_model import MediaCaptureMessageModel, MediaType
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -15,7 +16,12 @@ class ProtocolDataLogger(QObject):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+
         self._data_entries = []
+        self._video_captures = []
+        self._image_captures = []
+        self._other_media_captures = []
+
         self._is_logging_active = False
         self._latest_capacitance_per_unit_area = None
         self._current_protocol_context = None
@@ -46,6 +52,10 @@ class ProtocolDataLogger(QObject):
         self._is_logging_active = True
         self._experiment_directory = experiment_directory
         self._preview_mode = preview_mode
+
+        self._video_captures.clear()
+        self._image_captures.clear()
+        self._other_media_captures.clear()
         
         # reset timing for new protocol run
         self._protocol_start_timestamp = None
@@ -56,7 +66,7 @@ class ProtocolDataLogger(QObject):
     def stop_logging(self):
         self._is_logging_active = False
         logger.info("Stopped protocol data logging")
-    
+
     def set_protocol_context(self, context: Dict):
         self._current_protocol_context = context
     
@@ -70,6 +80,14 @@ class ProtocolDataLogger(QObject):
         minutes = int((elapsed_seconds % 3600) // 60)
         seconds = int(elapsed_seconds % 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def log_media_capture(self, message: MediaCaptureMessageModel):
+        if message.type == MediaType.VIDEO:
+            self._video_captures.append(message.path)
+        elif message.type == MediaType.IMAGE:
+            self._image_captures.append(message.path)
+        elif message.type == MediaType.OTHER:
+            self._other_media_captures.append(message.path)
     
     def log_capacitance_data(self, capacitance_message: str):
         if not self._is_logging_active or self._preview_mode:

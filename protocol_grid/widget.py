@@ -7,12 +7,10 @@ from PySide6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
     QWidget,
-    QHBoxLayout,
     QFileDialog,
     QMessageBox,
     QApplication,
     QMainWindow,
-    QPushButton,
     QDialog,
     QToolButton,
 )
@@ -367,6 +365,12 @@ class PGCWidget(QWidget):
             ):
                 message_listener = self._protocol_grid_plugin.get_listener()
                 if message_listener and hasattr(message_listener, "signal_emitter"):
+
+                    # connect media capture data logging\
+                    message_listener.signal_emitter.media_captured.connect(
+                        self.protocol_data_logger.log_media_capture
+                    )
+
                     # connect to device viewer messages
                     message_listener.signal_emitter.device_viewer_message_received.connect(
                         self.on_device_viewer_message

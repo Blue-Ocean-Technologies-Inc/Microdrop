@@ -3,6 +3,7 @@ import dramatiq
 from traits.api import HasTraits, Str, Instance
 from PySide6.QtCore import Signal, QObject
 
+from device_viewer.models.media_capture_model import MediaCaptureMessageModel
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from logger.logger_service import get_logger
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
@@ -22,6 +23,7 @@ class MessageListenerSignalEmitter(QObject):
     calibration_data_received = Signal(str, str)  # message, topic
     capacitance_updated = Signal(str) # capacitance updated signal -> CAPACITANCE_UPDATED message
     zstage_position_updated = Signal(float)
+    media_captured = Signal(MediaCaptureMessageModel)
 
 
 class MessageListener(HasTraits):
@@ -70,6 +72,15 @@ class MessageListener(HasTraits):
 
             elif topic == DEVICE_VIEWER_MEDIA_CAPTURED:
                 logger.info(f"Received media captured message: {message}")
+
+                try:
+                    loaded_message = MediaCaptureMessageModel.model_validate_json(message)
+
+                except Exception as e:
+                    logger.error(f"Failed to validate message: {message}\nError: {e}", exc_info=True)
+                    return
+
+                self.signal_emitter.media_captured.emit(loaded_message)
                 
             else:
                 logger.info(f"Unhandled message topic: {topic}")
