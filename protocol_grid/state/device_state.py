@@ -11,11 +11,13 @@ class DeviceState:
     def __init__(self, activated_electrodes: Optional[Dict[str, bool]] = None,
                  paths: Optional[List[List[str]]] = None,
                  id_to_channel: Optional[Dict[str, int]] = None,
-                 route_colors: Optional[List[str]] = None):
+                 route_colors: Optional[List[str]] = None,
+                 activated_electrodes_area_mm2: Optional[float] = 0):
         self.activated_electrodes = activated_electrodes or {}
         self.paths = paths or []
         self.id_to_channel = id_to_channel or {}
         self.route_colors = route_colors or []
+        self.activated_electrodes_area_mm2 = activated_electrodes_area_mm2
 
     def longest_path_length(self):
         if not self.paths:
@@ -225,7 +227,8 @@ def device_state_from_device_viewer_message(dv_msg):
         activated_electrodes=activated_electrodes,
         paths=paths,
         id_to_channel=id_to_channel,
-        route_colors=route_colors
+        route_colors=route_colors,
+        activated_electrodes_area_mm2=dv_msg.activated_electrodes_area_mm2
     )
 
 def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: str=None, 
