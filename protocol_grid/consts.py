@@ -25,6 +25,7 @@ CALIBRATION_DATA = "ui/calibration_data"
 DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
+DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
@@ -35,7 +36,8 @@ ACTOR_TOPIC_DICT = {
         DROPLETS_DETECTED,
         CALIBRATION_DATA,
         CAPACITANCE_UPDATED,
-        ZSTAGE_POSITION_UPDATED
+        ZSTAGE_POSITION_UPDATED,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
     ]
 }
 

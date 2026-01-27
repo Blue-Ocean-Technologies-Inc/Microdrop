@@ -34,8 +34,7 @@ logger = get_logger(__name__)
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ...models.media_capture_model import MediaCaptureMessageModel, MediaType
-from ...consts import MEDIA_CAPTURED
-
+from protocol_grid.consts import DEVICE_VIEWER_MEDIA_CAPTURED
 
 
 class CameraControlWidget(QWidget):
@@ -859,8 +858,8 @@ class CameraControlWidget(QWidget):
         )
 
         publish_message(
-            topic=MEDIA_CAPTURED,
-            message=media_capture_message
+            topic=DEVICE_VIEWER_MEDIA_CAPTURED,
+            message=media_capture_message.model_dump_json()
         )
 
         return True
