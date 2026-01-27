@@ -4,6 +4,7 @@ from traits.api import HasTraits, Str, Instance
 from PySide6.QtCore import Signal, QObject
 
 from device_viewer.models.media_capture_model import MediaCaptureMessageModel
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from logger.logger_service import get_logger
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
@@ -21,7 +22,7 @@ class MessageListenerSignalEmitter(QObject):
     dropbot_connection_changed = Signal(bool)  # dropbot connection status
     droplets_detected = Signal(str)  # droplet detection response
     calibration_data_received = Signal(str, str)  # message, topic
-    capacitance_updated = Signal(str) # capacitance updated signal -> CAPACITANCE_UPDATED message
+    capacitance_updated = Signal(TimestampedMessage) # capacitance updated signal -> CAPACITANCE_UPDATED message
     zstage_position_updated = Signal(float)
     media_captured = Signal(MediaCaptureMessageModel)
 
