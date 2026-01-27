@@ -1,6 +1,5 @@
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID
 from pyface.undo.api import UndoManager
-import uuid
 
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
@@ -57,7 +56,7 @@ class DeviceViewMainModel(HasTraits):
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
 
-    uuid = str(uuid.uuid4())  # The uuid of the model. Used to figure out if a state message is from this model or not.
+    uuid = UUID(desc="The uuid of the model. Used to figure out if a state message is from this model or not.")
 
     # -------------------------------------- events ----------------------------------
     zoom_in_event = Event(desc="Increase device view scale -- zoom into device view")
