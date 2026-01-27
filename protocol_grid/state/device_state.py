@@ -6,7 +6,7 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-
+#TODO: Convert to pydantic
 class DeviceState:
     def __init__(self, activated_electrodes: Optional[Dict[str, bool]] = None,
                  paths: Optional[List[List[str]]] = None,
@@ -129,6 +129,7 @@ class DeviceState:
     def to_dict(self) -> Dict:
         return {
             'activated_electrodes': self.activated_electrodes,
+            'activated_electrodes_area_mm2': self.activated_electrodes_area_mm2,
             'paths': self.paths,
             'route_colors': self.route_colors,
             'id_to_channel': self.id_to_channel,
@@ -136,6 +137,7 @@ class DeviceState:
     
     def from_dict(self, data: Dict):
         self.activated_electrodes = data.get('activated_electrodes', {})
+        self.activated_electrodes_area_mm2 = data.get('activated_electrodes_area_mm2', 0)
         self.paths = data.get('paths', [])
         self.route_colors = data.get('route_colors', [])
         self.id_to_channel = data.get('id_to_channel', {})
@@ -195,7 +197,7 @@ class DeviceState:
             
     def __str__(self):
         active_count = len(self.get_activated_electrode_ids())
-        return (f"DeviceState(active_electrodes={active_count}, "
+        return (f"DeviceState(active_electrodes={active_count}, activated_area_mm2={self.activated_electrodes_area_mm2}"
                 f"paths={len(self.paths)}, longest_path={self.longest_path_length()})")
     
     def __repr__(self):
