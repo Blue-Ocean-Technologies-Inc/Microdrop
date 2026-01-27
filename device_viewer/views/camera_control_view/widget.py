@@ -5,7 +5,6 @@ import ctypes
 import signal
 import subprocess
 import ctypes.util
-import warnings
 
 from pathlib import Path
 from apptools.preferences.api import Preferences
@@ -825,7 +824,7 @@ class CameraControlWidget(QWidget):
 
         """
 
-        if name not in MediaType.get_media_types():
+        if name.lower() not in MediaType.get_media_types():
             error_msg = f"Provide one of these media types: {", ".join(MediaType.get_media_types())}. Got {name}"
             raise ValueError(error_msg)
 
@@ -850,10 +849,9 @@ class CameraControlWidget(QWidget):
             logger.critical(f"Saved {name} to {save_path}.")
 
         ## Publish message that media has been captured
-
         media_capture_message = MediaCaptureMessageModel(
             path=Path(save_path),
-            type=name,
+            type=name.lower(),
 
         )
 
