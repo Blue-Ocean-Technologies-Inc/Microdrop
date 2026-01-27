@@ -21,6 +21,7 @@ class ProtocolDataLogger(QObject):
         super().__init__(parent)
 
         self._data_entries = []
+        self._data_files = []
         self._video_captures = []
         self._image_captures = []
         self._other_media_captures = []
@@ -49,7 +50,8 @@ class ProtocolDataLogger(QObject):
 
         self._start_timestamp = get_current_utc_datetime()
 
-        self._data_entries = []
+        self._data_entries.clear()
+        self._data_files.clear()
         self._is_logging_active = True
         self._experiment_directory = experiment_directory
         self._preview_mode = preview_mode
@@ -203,10 +205,8 @@ class ProtocolDataLogger(QObject):
             logger.info("No data to save or no experiment directory")
             return None
 
-        start_timestamp = self._start_timestamp
-
         try:
-            data_file_path = self._experiment_directory / f"data_{start_timestamp}.json"
+            data_file_path = self._experiment_directory / f"data_{self._start_timestamp}.json"
 
             columnar_data = self._convert_to_columnar_format()
 
@@ -216,6 +216,9 @@ class ProtocolDataLogger(QObject):
             logger.info(
                 f"Saved {len(self._data_entries)} data entries to: {data_file_path}"
             )
+
+            self._data_files.append(data_file_path)
+
             return str(data_file_path)
 
         except Exception as e:
@@ -278,8 +281,7 @@ class ProtocolDataLogger(QObject):
             logger.error(f"Error loading data as DataFrame: {e}")
             return None
 
-    @staticmethod
-    def save_dataframe_as_csv(file_path: str, output_path: str = None):
+    def save_dataframe_as_csv(self, file_path: str, output_path: str = None):
         """
         Load JSON data and save as CSV file.
 
@@ -300,8 +302,50 @@ class ProtocolDataLogger(QObject):
 
             df.to_csv(output_path, index=False)
             logger.critical(f"Saved CSV file: {output_path}")
+            self._data_files.append(file_path)
+
             return str(output_path)
 
         except Exception as e:
             logger.error(f"Error saving CSV file: {e}")
             return None
+
+    def get_files_summary(self, media_list, header):
+        summary_str = ""
+
+        if len(media_list) == 0:
+            return summary_str
+
+        summary_str += f"<b>{header}</b><br><br>"
+
+        for i, el in enumerate(media_list):
+            summary_str += f"<b>{i+1}.</b> {el}<br><br>"
+
+        return summary_str
+
+    def generate_summary(self):
+        # media files
+        video_str = self.get_files_summary(self._video_captures, "Video Captures:")
+        image_str = self.get_files_summary(self._image_captures, "Image Captures:")
+
+        # data files
+        data_str = self.get_files_summary(self._data_files, "Data Files:")
+
+        report =             f"""
+            <b>Run Summary</b>:<br><br>
+            
+            <b>Experimental Directory</b>: {self._experiment_directory}<br><br>
+            {video_str}
+            {image_str}
+            {data_str}
+"""
+
+        report_path = Path(self._experiment_directory) / f"report_{get_current_utc_datetime()}.html"
+
+        with report_path.open("w") as f:
+            f.write(report)
+            logger.critical(f"Run summary report saved to: {report_path}")
+
+        logger.critical(report.replace("<br>", "\n").replace("<b>", "").replace("</b>", ""))
+
+        return True
