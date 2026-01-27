@@ -98,7 +98,7 @@ def ensure_protocol_saved(func):
 
             # 2. Show the dialog
             # I generalized the text slightly to fit New/Load/Exit scenarios
-            user_choice = warning(
+            user_choice = confirm(
                 None,
                 "Current protocol has unsaved changes.\nProceed without saving?",
                 title="Unsaved Protocol Changes",
@@ -113,7 +113,7 @@ def ensure_protocol_saved(func):
         elif not Path(self.protocol_state_tracker.loaded_protocol_path).exists():
             logger.warning("Protocol state file does not exist.")
 
-            user_choice = warning(
+            user_choice = confirm(
                 None,
                 "Current protocol file has been deleted.\nProceed without saving?",
                 title="Procol File Not Found!",
