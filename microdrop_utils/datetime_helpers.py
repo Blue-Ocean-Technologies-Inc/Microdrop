@@ -14,15 +14,13 @@ class TimestampedMessage(str):
         instance = super().__new__(cls, str(content))
         # Store the timestamp as an instance attribute in ISO format
         if timestamp is None:
-            timestamp_iso = "Timestamp not available"
             timestamp_dt = dt.datetime.min
         else:
             timestamp_dt = dt.datetime.fromtimestamp(timestamp / 1000)
-            timestamp_iso = timestamp_dt.isoformat()
 
         # Store the timestamp as an instance attribute
         instance._timestamp_dt = timestamp_dt
-        instance._timestamp = timestamp_iso
+        instance._timestamp = timestamp_dt.strftime('%Y_%m_%d-%H_%M_%S_%f')
         instance._timestamp_ms = timestamp
         instance._content = content if content not in ["", "None"] else None
 
