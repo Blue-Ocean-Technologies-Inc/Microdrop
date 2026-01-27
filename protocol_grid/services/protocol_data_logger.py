@@ -25,6 +25,7 @@ class ProtocolDataLogger(QObject):
         self._video_captures = []
         self._image_captures = []
         self._other_media_captures = []
+        self.last_saved_summary_path = None
 
         self._is_logging_active = False
         self._latest_capacitance_per_unit_area = None
@@ -302,7 +303,7 @@ class ProtocolDataLogger(QObject):
 
             df.to_csv(output_path, index=False)
             logger.critical(f"Saved CSV file: {output_path}")
-            self._data_files.append(file_path)
+            self._data_files.append(output_path)
 
             return str(output_path)
 
@@ -319,11 +320,30 @@ class ProtocolDataLogger(QObject):
         summary_str += f"<b>{header}</b><br><br>"
 
         for i, el in enumerate(media_list):
-            summary_str += f"<b>{i+1}.</b> {el}<br><br>"
+            path_obj = Path(el)
+            # file_url is for the 'under the hood' link
+            file_url = path_obj.as_uri()
+            # display_name is just the file (e.g., "video_01.mp4")
+            display_name = path_obj.name
+
+            media_file = "<br><br>"
+
+            if "Image" in header:
+                media_file += f'<img src="{file_url}" width="360" height="240">'
+
+            if "Video" in header:
+                media_file += f"""
+ <video width="360" height="240" controls>
+  <source src={file_url} type="video/mp4">
+Your browser does not support the video tag.
+</video> """
+
+            clickable_path = f'<a href="{file_url}">{display_name}</a>' + media_file
+            summary_str += f"<b>{i+1}.</b> {clickable_path}<br><br>"
 
         return summary_str
 
-    def generate_summary(self):
+    def generate_report(self):
         # media files
         video_str = self.get_files_summary(self._video_captures, "Video Captures:")
         image_str = self.get_files_summary(self._image_captures, "Image Captures:")
@@ -331,21 +351,27 @@ class ProtocolDataLogger(QObject):
         # data files
         data_str = self.get_files_summary(self._data_files, "Data Files:")
 
-        report =             f"""
+        # Also make the experimental directory clickable
+        exp_dir_link = f'<a href="file:///{self._experiment_directory}">{self._experiment_directory}</a>'
+
+        report = f"""
             <b>Run Summary</b>:<br><br>
-            
-            <b>Experimental Directory</b>: {self._experiment_directory}<br><br>
+
+            <b>Experimental Directory</b>: {exp_dir_link}<br><br>
             {video_str}
             {image_str}
             {data_str}
-"""
+        """
+        return report
+
+    def generate_and_save_report(self):
+        report = self.generate_report()
 
         report_path = Path(self._experiment_directory) / f"report_{get_current_utc_datetime()}.html"
 
         with report_path.open("w") as f:
             f.write(report)
             logger.critical(f"Run summary report saved to: {report_path}")
+            self.last_saved_summary_path = report_path
 
-        logger.critical(report.replace("<br>", "\n").replace("<b>", "").replace("</b>", ""))
-
-        return True
+        return report

@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from microdrop_application.dialogs.pyface_wrapper import confirm, warning, NO, YES
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information
 from PySide6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QToolButton,
 )
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QUrl
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
@@ -720,8 +720,6 @@ class PGCWidget(QWidget):
                     data_file_path
                 )
 
-            self.generate_summary()
-
             # initialize new experiment if user wants
             if (
                 confirm(
@@ -734,15 +732,31 @@ class PGCWidget(QWidget):
                 )
                 == YES
             ):
-
                 self.setup_new_experiment()
+
+            report = self.generate_summary()
+
+            # Convert local path to a valid URL (handles Windows backslashes automatically)
+            file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
+
+            formatted_message = (
+                f"Report file saved to:<br>"
+                f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
+                f"Click on link to open file. Press ok to exit..."
+            )
+
+            information(
+                None,
+                formatted_message,
+                title="Run Summary Generated",
+            )
 
         except Exception as e:
             logger.error(f"Error handling regular mode completion: {e}")
 
     @with_loading_screen("Generating Run Report...")
     def generate_summary(self):
-        self.protocol_data_logger.generate_summary()
+        return self.protocol_data_logger.generate_and_save_report()
 
     def setup_new_experiment(self):
         new_experiment_dir = self.experiment_manager.initialize_new_experiment()
