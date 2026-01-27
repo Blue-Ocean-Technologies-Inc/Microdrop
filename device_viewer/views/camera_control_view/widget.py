@@ -5,6 +5,7 @@ import ctypes
 import signal
 import subprocess
 import ctypes.util
+import warnings
 
 from pathlib import Path
 from apptools.preferences.api import Preferences
@@ -29,8 +30,12 @@ from microdrop_application.dialogs.pyface_wrapper import information, error, war
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from logger.logger_service import get_logger
-
 logger = get_logger(__name__)
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from ...models.media_capture_model import MediaCaptureMessageModel, MediaType
+from ...consts import MEDIA_CAPTURED
+
 
 
 class CameraControlWidget(QWidget):
@@ -820,6 +825,11 @@ class CameraControlWidget(QWidget):
         save_path [str]: Path to save the captured image / video
 
         """
+
+        if name not in MediaType.get_media_types():
+            error_msg = f"Provide one of these media types: {", ".join(MediaType.get_media_types())}. Got {name}"
+            raise ValueError(error_msg)
+
         # Convert local path to a valid URL (handles Windows backslashes automatically)
         file_url = QUrl.fromLocalFile(save_path).toString()
 
@@ -839,3 +849,18 @@ class CameraControlWidget(QWidget):
 
         else:
             logger.critical(f"Saved {name} to {save_path}.")
+
+        ## Publish message that media has been captured
+
+        media_capture_message = MediaCaptureMessageModel(
+            path=Path(save_path),
+            type=name,
+
+        )
+
+        publish_message(
+            topic=MEDIA_CAPTURED,
+            message=media_capture_message
+        )
+
+        return True

@@ -7,6 +7,10 @@ class MediaType(str, Enum):
     IMAGE = "image"
     OTHER = "other"
 
+    @classmethod
+    def get_media_types(self) -> list[str]:
+        return [self.VIDEO, self.IMAGE, self.OTHER]
+
 
 class MediaCaptureMessageModel(BaseModel):
     path: FilePath  # Validates input points to an existing path
