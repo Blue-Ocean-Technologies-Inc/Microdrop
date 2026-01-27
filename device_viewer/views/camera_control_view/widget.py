@@ -507,7 +507,6 @@ class CameraControlWidget(QWidget):
             )
 
         image.save(str(save_path), "PNG")
-        logger.info(f"Image captured successfully to {save_path}")
 
         self._show_media_capture_dialog("Image", str(save_path))
 
@@ -856,7 +855,6 @@ class CameraControlWidget(QWidget):
                 title=f"{name.title()} Captured",
             )
 
-        else:
-            logger.critical(f"Saved {name} to {save_path}.")
+        logger.critical(f"Saved {name} media to {save_path}.")
 
         return True
