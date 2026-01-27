@@ -5,12 +5,8 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from microdrop_style.colors import (
-    PRIMARY_SHADE, SECONDARY_SHADE, GREY, BLACK, WHITE
-)
-from microdrop_style.button_styles import (
-    get_button_style, get_button_dimensions, BUTTON_SPACING
-)
+
+from microdrop_style.button_styles import get_button_dimensions
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
@@ -40,7 +36,6 @@ ACTOR_TOPIC_DICT = {
         CALIBRATION_DATA,
         CAPACITANCE_UPDATED,
         ZSTAGE_POSITION_UPDATED
-        # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
     ]
 }
 
