@@ -180,11 +180,11 @@ class ProtocolRunnerController(QObject):
 
             if (video_enabled or capture_enabled or record_enabled):
                 if not self._video_enabled_for_protocol:
-                    logger.critical(f"Step {step_id}: Requesting to turn video on for protocol.")
+                    logger.info(f"Step {step_id}: Requesting to turn video on for protocol.")
                     self._publish_camera_video_control("true")
                     self._video_enabled_for_protocol = True
             else:
-                logger.critical(f"Step {step_id}: Requesting to turn video off for protocol.")
+                logger.info(f"Step {step_id}: Requesting to turn video off for protocol.")
                 self._publish_camera_video_control("false")
                 self._video_enabled_for_protocol = False
 
@@ -192,18 +192,18 @@ class ProtocolRunnerController(QObject):
             def _start_recording():
                 self._start_step_recording(step_id, step_description, experiment_dir)
                 self._recording_active = True
-                logger.critical(f"Step {step_id}: Sent capture video capture request.")
+                logger.info(f"Step {step_id}: Sent capture video capture request.")
 
             def _stop_recording():
                 self._stop_step_recording()
                 self._recording_active=False
-                logger.critical(f"Step {step_id}: Sent stop video capture request.")
+                logger.info(f"Step {step_id}: Sent stop video capture request.")
 
             def _capture_image():
                 self._publish_camera_capture_control(
                     step_id, step_description, experiment_dir
                 )
-                logger.critical(f"Step {step_id}: Sent capture image request.")
+                logger.info(f"Step {step_id}: Sent capture image request.")
 
             ############################# Media Capture logic ##############################################
             # We want captures in the beginning and end of the video capturing if simultaneously requested.
@@ -211,11 +211,11 @@ class ProtocolRunnerController(QObject):
             if _record_enabled_changed:  # video recording state has changed
                 if record_enabled: # video start requested
                     if capture_enabled: # Capture image in this case since its starting of recording block
-                        logger.info(f"Step {step_id}: Image Capture enabled at video start. First capturing image, then starting video recording.")
+                        logger.debug(f"Step {step_id}: Image Capture enabled at video start. First capturing image, then starting video recording.")
                         _capture_image()
 
                     else:
-                        logger.info(f"Step {step_id}: Starting video recording.")
+                        logger.debug(f"Step {step_id}: Starting video recording.")
 
                     # send the video start request
                     _start_recording()
@@ -224,10 +224,10 @@ class ProtocolRunnerController(QObject):
                     _stop_recording()
 
                     if capture_enabled:
-                        logger.info(f"Step {step_id}: Video recording stop with image capture at end.")
+                        logger.debug(f"Step {step_id}: Video recording stop with image capture at end.")
                         _capture_image()
                     else:
-                        logger.info(f"Step {step_id}: Video recording start with image capture at end.")
+                        logger.debug(f"Step {step_id}: Video recording start with image capture at end.")
 
             else: # video recording state has not changed
                 if not record_enabled:
@@ -1107,21 +1107,21 @@ class ProtocolRunnerController(QObject):
 
                 step_height = MagnetService.validate_magnet_height(step.parameters.get("Magnet Height (mm)"))
                 if bool(int(step.parameters.get("Magnet", False))):
-                    logger.critical("Magnet requested to be on:")
+                    logger.info("Magnet requested to be on:")
                     if step_height == "Default":
-                        logger.info("Request to use default up position height for magnet")
+                        logger.debug("Request to use default up position height for magnet")
                         self.expected_magnet_height = self.zstage_preferences.up_height_mm
                     else:
                         self.expected_magnet_height = step_height
 
-                    logger.critical(f"Step height: {self.expected_magnet_height}")
+                    logger.debug(f"Step height: {self.expected_magnet_height}")
 
                 else:
-                    logger.critical("Magnet requested to be off")
+                    logger.info("Magnet requested to be off")
                     self.expected_magnet_height = 0.0
 
                 if abs(self.current_magnet_height - self.expected_magnet_height) > 0.1:
-                    logger.critical(f"Requesting magnet to height {self.expected_magnet_height}")
+                    logger.debug(f"Requesting magnet to height {self.expected_magnet_height}")
 
                     # use ho home if request is for magnet off.
                     if self.expected_magnet_height == 0.0:
@@ -1133,7 +1133,7 @@ class ProtocolRunnerController(QObject):
 
                 else:
                     # magnet already at expected level. proceed now.
-                    logger.critical("Magnet is already at expected height.")
+                    logger.debug("Magnet is already at expected height.")
                     self._waiting_for_magnet = False
                     self._start_step_timers_and_logic()
                     return
