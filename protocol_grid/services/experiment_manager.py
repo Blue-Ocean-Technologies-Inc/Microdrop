@@ -76,27 +76,20 @@ class ExperimentManager:
             logger.error(f"Error checking if save is in experiment directory: {e}")
             return False
 
-    def auto_save_protocol(self, protocol_data, protocol_name=None, is_modified=False):
+    def auto_save_protocol(self, protocol_data) -> Path | None:
         """auto-save protocol to experiment directory with standard filename."""
         try:
-            directory = self.get_experiment_directory()
-            # create filename
-            if protocol_name and protocol_name != "untitled" and not is_modified:
-                # use current protocol name if not modified
-                filename = f"{protocol_name}.json"
-            else:
-                # use experiment ID if untitled or modified
-                filename = f"protocol_{directory.stem}.json"
+            parent_dir = self.get_experiment_directory() / "protocols"
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            file_path = parent_dir / f"protocol_{get_current_utc_datetime()}.json"
 
-            file_path = self.get_experiment_directory() / filename
-            
             # save protocol
             with open(file_path, "w") as f:
                 json.dump(protocol_data, f, indent=2)
-            
+
             logger.info(f"Auto-saved protocol to: {file_path}")
-            return str(file_path)
-            
+            return file_path
+
         except Exception as e:
             logger.error(f"Failed to auto-save protocol: {e}")
             return None

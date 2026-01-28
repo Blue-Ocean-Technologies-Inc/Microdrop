@@ -712,12 +712,9 @@ class PGCWidget(QWidget):
         try:
             # auto-save current protocol with smart filename
             protocol_data = self.state.to_flat_export()
-            protocol_name = self.protocol_state_tracker.protocol_name
-            is_modified = self.protocol_state_tracker.is_modified
 
-            saved_path = self.experiment_manager.auto_save_protocol(
-                protocol_data, protocol_name, is_modified
-            )
+            # save_protocol_snapshot
+            saved_path = self.experiment_manager.auto_save_protocol(protocol_data)
 
             if saved_path:
                 # update protocol state tracker to reflect the auto-saved protocol
