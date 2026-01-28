@@ -22,6 +22,7 @@ from microdrop_style.button_styles import get_button_style
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
 from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
+from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
@@ -212,7 +213,9 @@ class PGCWidget(QWidget):
         self.btn_new_note.setText("sticky_note")
         self.btn_new_note.setToolTip("New Note")
 
-        self.btn_new_note.clicked.connect(self.dock_pane.create_new_note)
+        self.note_manager = StickyWindowManager()
+
+        self.btn_new_note.clicked.connect(self.create_new_note)
         self.btn_new_note.setCursor(Qt.PointingHandCursor)
 
         self.navigation_bar = NavigationBar(self)
@@ -282,6 +285,13 @@ class PGCWidget(QWidget):
         )
 
         self.application.observe(self.save_column_settings, "application_exiting")
+
+    def create_new_note(self):
+
+        base_dir = self.experiment_manager.get_experiment_directory()
+        experiment_name = base_dir.stem
+
+        self.note_manager.request_new_note(base_dir, experiment_name)
 
     def _on_application_palette_changed(self):
         """Handle application palette changes (system theme switches)."""
