@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
 from PySide6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
@@ -742,10 +742,9 @@ class PGCWidget(QWidget):
             formatted_message = (
                 f"Report file saved to:<br>"
                 f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
-                f"Click on link to open file. Press ok to exit..."
             )
 
-            information(
+            success(
                 None,
                 formatted_message,
                 title="Run Summary Generated",

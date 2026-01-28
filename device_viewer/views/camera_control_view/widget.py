@@ -824,7 +824,6 @@ class CameraControlWidget(QWidget):
         formatted_message = (
             f"File saved to:<br>"
             f"<a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
-            f"Click on link to open file. Press ok to exit..."
         )
 
         ## Publish message that media has been captured
@@ -840,7 +839,7 @@ class CameraControlWidget(QWidget):
 
         if self.show_media_capture_dialog:
 
-            information(
+            success(
                 None,
                 formatted_message,
                 title=f"{name.title()} Captured",
