@@ -318,7 +318,7 @@ class ProtocolDataLogger(QObject):
         if len(media_list) == 0:
             return summary_str
 
-        summary_str += f"<b>{header}</b><br><br>"
+        summary_str += f"<h3>{header}</h3>"
 
         for i, el in enumerate(media_list):
             path_obj = Path(el)
@@ -367,8 +367,8 @@ Your browser does not support the video tag.
         exp_dir_link = f'<a href="file:///{self._experiment_directory}">{self._experiment_directory}</a>'
 
         report = f"""
-            <b>Run Summary</b>:<br><br>
-
+            <h1>Run Summary</h1>
+            <h2>Meta Data:</h2>
             <b>Experimental Directory</b>: {exp_dir_link}<br><br>
             {video_str}
             {image_str}
