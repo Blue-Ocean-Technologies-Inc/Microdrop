@@ -758,7 +758,7 @@ class PGCWidget(QWidget):
             )
 
         except Exception as e:
-            logger.error(f"Error handling regular mode completion: {e}")
+            logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
 
     @with_loading_screen("Generating Run Report...")
     def generate_summary(self):
