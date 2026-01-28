@@ -24,7 +24,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from microdrop_application.dialogs.pyface_wrapper import information, error, warning
+from microdrop_application.dialogs.pyface_wrapper import error, warning, success
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
