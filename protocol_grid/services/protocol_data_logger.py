@@ -364,7 +364,7 @@ Your browser does not support the video tag.
         data_str = self.get_files_summary(self._data_files, "Data Files:")
 
         # Also make the experimental directory clickable
-        exp_dir_link = f'<a href="file:///{self._experiment_directory}">{self._experiment_directory}</a>'
+        exp_dir_link = f'<a href="file:///{self._experiment_directory}">{Path(self._experiment_directory).name}</a>'
 
         report = f"""
             <h1>Run Summary</h1>
