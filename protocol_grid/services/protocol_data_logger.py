@@ -10,6 +10,7 @@ from microdrop_utils.datetime_helpers import (
     TimestampedMessage,
     get_current_utc_datetime,
 )
+from microdrop_utils.sticky_notes import StickyWindowManager
 
 logger = get_logger(__name__)
 
@@ -338,6 +339,9 @@ class ProtocolDataLogger(QObject):
 Your browser does not support the video tag.
 </video> """
 
+            if "Note" in header:
+                media_file += f'<iframe src={file_url} width="360" height="240"></iframe>'
+
             clickable_path = f'<a href="{file_url}">{display_name}</a>' + media_file
             summary_str += f"<b>{i+1}.</b> {clickable_path}<br><br>"
 
@@ -347,6 +351,14 @@ Your browser does not support the video tag.
         # media files
         video_str = self.get_files_summary(self._video_captures, "Video Captures:")
         image_str = self.get_files_summary(self._image_captures, "Image Captures:")
+
+        notes_str = ""
+        # consume notes history for reporting if possible
+        if hasattr(self.parent(), "note_manager"):
+            note_manager = getattr(self.parent(), "note_manager")
+            if isinstance(note_manager, StickyWindowManager):
+                notes_str = self.get_files_summary(note_manager.saved_notes_paths, "Notes Saved:")
+                note_manager.clear_saved_notes_history()
 
         # data files
         data_str = self.get_files_summary(self._data_files, "Data Files:")
@@ -361,6 +373,7 @@ Your browser does not support the video tag.
             {video_str}
             {image_str}
             {data_str}
+            {notes_str}
         """
         return report
 
