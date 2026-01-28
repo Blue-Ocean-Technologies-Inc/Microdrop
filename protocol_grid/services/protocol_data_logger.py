@@ -402,18 +402,18 @@ class ProtocolDataLogger:
             media_file = ""
 
             if "Image" in header:
-                media_file += f'<img src="{file_url}" width="360" height="240">'
+                media_file += f'<br><br><img src="{file_url}" width="360" height="240">'
 
             if "Video" in header:
                 media_file += f"""
-                                 <video width="360" height="240" controls>
+                                 <br><br><video width="360" height="240" controls>
                                   <source src={file_url} type="video/mp4">
                                 Your browser does not support the video tag.
                                 </video> """
 
             if "Note" in header:
                 media_file += (
-                    f'<iframe src={file_url} width="360" height="240"></iframe>'
+                    f'<br><br><iframe src={file_url} width="360" height="240"></iframe>'
                 )
 
             clickable_path = f'<a href="{file_url}">{display_name}</a>' + media_file
