@@ -21,6 +21,7 @@ class ProtocolDataLogger(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self._completed_steps = 0
         self._data_entries = []
         self._data_files = []
         self._video_captures = []
@@ -44,7 +45,10 @@ class ProtocolDataLogger(QObject):
             "actuated_area_mm2",
         ]
 
-    def start_logging(self, experiment_directory: Path, preview_mode: bool = False):
+    def start_logging(self, experiment_directory: Path,
+                      preview_mode: bool = False,
+                      n_steps: int = 1,):
+
         if preview_mode:
             logger.info("Skipping data logging in preview mode")
             self._is_logging_active = False
@@ -52,19 +56,29 @@ class ProtocolDataLogger(QObject):
 
         self._start_timestamp = get_current_utc_datetime()
 
+        # clear data
         self._data_entries.clear()
         self._data_files.clear()
-        self._is_logging_active = True
-        self._experiment_directory = experiment_directory
-        self._preview_mode = preview_mode
-
         self._video_captures.clear()
         self._image_captures.clear()
         self._other_media_captures.clear()
 
+        # set flags
+        self._is_logging_active = True
+        self._preview_mode = preview_mode
+
+        # set metadata
+        self._experiment_directory = experiment_directory
+        self._total_nsteps = n_steps
+
         logger.info(f"Started protocol data logging to: {experiment_directory}")
 
-    def stop_logging(self):
+    def stop_logging(self, completed_steps=None):
+        if completed_steps:
+            self._completed_steps = completed_steps
+        else:
+            self._completed_steps = self._total_nsteps
+
         self._is_logging_active = False
         logger.info("Stopped protocol data logging")
 
@@ -370,6 +384,7 @@ Your browser does not support the video tag.
             <h1>Run Summary</h1>
             <h2>Meta Data:</h2>
             <b>Experimental Directory</b>: {exp_dir_link}<br><br>
+            <b>Steps Completed</b>: {self._completed_steps} / {self._total_nsteps}<br><br>
             {video_str}
             {image_str}
             {data_str}

@@ -679,7 +679,7 @@ class PGCWidget(QWidget):
         else:
             self.status_bar.lbl_repeat_protocol_status.setText("1/")
 
-    def on_protocol_finished(self):
+    def on_protocol_finished(self, completed_steps=None):
         self.clear_highlight()
         self._protocol_running = False
         self._disable_phase_navigation()
@@ -691,7 +691,7 @@ class PGCWidget(QWidget):
         self._update_ui_enabled_state()
 
         # stop data logging and save file
-        self.protocol_data_logger.stop_logging()
+        self.protocol_data_logger.stop_logging(completed_steps=completed_steps)
 
         # handle auto-save and new experiment creation based on mode
         advanced_mode = self.navigation_bar.is_advanced_user_mode()
@@ -1015,7 +1015,9 @@ class PGCWidget(QWidget):
 
         # start data logging
         self.protocol_data_logger.start_logging(
-            self.experiment_manager.get_experiment_directory(), preview_mode
+            self.experiment_manager.get_experiment_directory(),
+            preview_mode,
+            n_steps=len(run_order)
         )
 
         self.protocol_runner.set_preview_mode(preview_mode)
@@ -1183,23 +1185,21 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
 
     def stop_protocol(self):
-        # stop data logging
-        self.protocol_data_logger.stop_logging()
 
-        self.protocol_runner.stop()
-        self.clear_highlight()
-        self.reset_status_bar()
-        self._protocol_running = False
+        self.protocol_runner.pause()
 
-        self._disable_phase_navigation()
+        user_choice = confirm(
+            None,
+            informative="Select <b>Yes</b> to force finish protocol...",
+        )
 
-        self.navigation_bar.btn_play.setText(ICON_PLAY)
-        self.navigation_bar.btn_play.setToolTip("Play Protocol")
+        if user_choice == YES:
+            completed_steps = self.protocol_runner.current_index
 
-        self._update_navigation_buttons_state()
-        self._update_ui_enabled_state()
+            self.protocol_runner.stop()
+            self.reset_status_bar()
 
-        QTimer.singleShot(10, self._cleanup_after_protocol_operation)
+            self.on_protocol_finished(completed_steps)
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0 s")
