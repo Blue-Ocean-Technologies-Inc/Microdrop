@@ -52,6 +52,7 @@ from protocol_grid.consts import (
     LIGHT_MODE_STYLESHEET,
     DARK_MODE_STYLESHEET,
     copy_fields_for_new_step,
+    LOGS_STOP_SETTLING_TIME_MS,
 )
 from protocol_grid.extra_ui_elements import (
     EditContextMenu,
@@ -127,7 +128,6 @@ def ensure_protocol_saved(func):
         return func(self, *args, **kwargs)
 
     return wrapper
-
 
 class PGCWidget(QWidget):
 
@@ -704,7 +704,7 @@ class PGCWidget(QWidget):
                     saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
                     self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
 
-                self.protocol_data_logger.stop_logging(completed_steps=completed_steps)
+                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=LOGS_STOP_SETTLING_TIME_MS)
 
                 # initialize new experiment if user wants
                 if (

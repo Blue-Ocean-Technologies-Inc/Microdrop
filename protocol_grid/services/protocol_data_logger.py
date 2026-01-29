@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
+from PySide6.QtCore import QTimer
 
 from device_viewer.models.media_capture_model import MediaCaptureMessageModel, MediaType
 from microdrop_utils.datetime_helpers import (
@@ -88,7 +89,7 @@ class ProtocolDataLogger:
         logger.info(f"Started protocol data logging to: {experiment_directory} at {self._start_timestamp}")
 
     @require_active_logging
-    def stop_logging(self, completed_steps=None):
+    def stop_logging(self, completed_steps=None, settling_time_ms=2000):
 
         # log metadata before stopping the logging
 
@@ -106,8 +107,14 @@ class ProtocolDataLogger:
             }
         )
 
-        self._is_logging_active = False
-        logger.info(f"Stopped protocol data logging at {self._start_timestamp} after {_elapsed_time}")
+        # receive logs for another few seconds for background processes to settle
+        def _block_logging():
+            self._is_logging_active = False
+
+        QTimer.singleShot(settling_time_ms, _block_logging)
+
+        logger.info(f"Stopped protocol data logging at {self._start_timestamp} after {_elapsed_time}.\n"
+                    f"Further logs will be allowed for {settling_time_ms} for background tasks to settle and input logs.")
 
     def set_protocol_context(self, context: Dict):
         self._current_protocol_context = context
@@ -116,7 +123,6 @@ class ProtocolDataLogger:
         self._latest_capacitance_per_unit_area = c_unit_area
         logger.debug(f"Updated capacitance per unit area: {c_unit_area}")
 
-    @require_active_logging
     def log_media_capture(self, message: MediaCaptureMessageModel):
         if not self._is_logging_active:
             logger.warning("Logger not active")
@@ -512,7 +518,6 @@ class ProtocolDataLogger:
             data_visuals_section = ""
 
         return data_str, data_section, data_visuals_section
-
 
     def _generate_report_html(self):
 

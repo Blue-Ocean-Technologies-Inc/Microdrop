@@ -142,3 +142,5 @@ def get_dark_mode_stylesheet():
 # Legacy constants for backward compatibility
 LIGHT_MODE_STYLESHEET = get_light_mode_stylesheet()
 DARK_MODE_STYLESHEET = get_dark_mode_stylesheet()
+
+LOGS_STOP_SETTLING_TIME_MS = 2000 # milliseconds to wait before blocking logs input for after protocol run ends.
