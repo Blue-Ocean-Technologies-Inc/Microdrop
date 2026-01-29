@@ -459,7 +459,9 @@ class ProtocolDataLogger:
         plots_html += "</div>"
         return plots_html
 
-    def get_files_summary(self, media_list, media_type):
+    ############### Data processing to html methods ###########################
+
+    def _get_files_summary(self, media_list, media_type):
         summary_str = ""
 
         if len(media_list) == 0:
@@ -494,14 +496,42 @@ class ProtocolDataLogger:
 
         return summary_str
 
-    def generate_report(self):
+    def _process_data_files_to_html_report(self):
+        # data visuals if we have any data
+        if self._data_files:
+            # Get the file list string
+            data_str = self._get_files_summary(self._data_files, "Data Files:")
+
+            ## create overall data summary table
+            data_section = f"""
+                        <div class="table-container">
+                            {self._summarize_overall_data_to_html_table(self._data_files[0])}
+                        </div>
+                    """
+
+            ## Create data visuals
+            data_visuals_section = f"""
+                                    <div class="table-container">
+                                        {self._create_html_plots_for_all_float_columns(self._data_files[0])}
+                                    </div>
+                                """
+
+        else:
+            data_str = ""
+            data_section = ""
+            data_visuals_section = ""
+
+        return data_str, data_section, data_visuals_section
+
+
+    def _generate_report_html(self):
 
         notes_str = ""
         # consume notes history for reporting if possible
         if hasattr(self.parent, "note_manager"):
             note_manager = getattr(self.parent, "note_manager")
             if isinstance(note_manager, StickyWindowManager):
-                notes_str = self.get_files_summary(
+                notes_str = self._get_files_summary(
                     note_manager.saved_notes_paths, "Notes Saved:"
                 )
                 note_manager.clear_saved_notes_history()
@@ -528,13 +558,13 @@ class ProtocolDataLogger:
             <h2>Data Trends:</h2>
             {data_viz_str}
             
-            <h2>Media Captures:</h2>k
+            <h2>Media Captures:</h2>
             
             <h3>Video Captures:</h3>
-            {self.get_files_summary(self._video_captures, "Video")}
+            {self._get_files_summary(self._video_captures, "Video")}
             
             <h3>Image Captures:</h3>
-            {self.get_files_summary(self._image_captures, "Image")}
+            {self._get_files_summary(self._image_captures, "Image")}
             
             <h2>Notes:</h2>
             {notes_str}
@@ -542,13 +572,20 @@ class ProtocolDataLogger:
 
         return report
 
-    def generate_and_save_report(self):
-        report = self.generate_report()
+    #############################################################################
 
-        report_path = (
-            Path(self._experiment_directory)
-            / "reports"/ f"report_{get_current_utc_datetime()}.html"
-        )
+    def generate_and_save_report(self, report_path=None):
+        # save data files
+        self.generate_data_files()
+
+        report = self._generate_report_html()
+
+        if not report_path:
+
+            report_path = (
+                Path(self._experiment_directory)
+                / "reports"/ f"report_{get_current_utc_datetime()}.html"
+            )
 
         report_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -559,29 +596,8 @@ class ProtocolDataLogger:
 
         return report
 
-    def _process_data_files_to_html_report(self):
-        # data visuals if we have any data
-        if self._data_files:
-            # Get the file list string
-            data_str = self.get_files_summary(self._data_files, "Data Files:")
+    def generate_data_files(self):
+        data_file_path = self.save_data_file()
+        csv_file_path = self.save_dataframe_as_csv(data_file_path) if data_file_path else None
 
-            ## create overall data summary table
-            data_section = f"""
-                        <div class="table-container">
-                            {self._summarize_overall_data_to_html_table(self._data_files[0])}
-                        </div>
-                    """
-
-            ## Create data visuals
-            data_visuals_section = f"""
-                                    <div class="table-container">
-                                        {self._create_html_plots_for_all_float_columns(self._data_files[0])}
-                                    </div>
-                                """
-
-        else:
-            data_str = ""
-            data_section = ""
-            data_visuals_section = ""
-
-        return data_str, data_section, data_visuals_section
+        return data_file_path, csv_file_path
