@@ -239,18 +239,6 @@ class ProtocolDataLogger:
         for entry in self._data_entries:
             for col in self._columns:
                 value = entry.get(col)
-                if value is None:
-                    if col in [
-                        "force_per_unit_area",
-                        "actuated_area_mm2",
-                        "capacitance_pf",
-                        "voltage",
-                    ]:
-                        value = 0.0
-                    elif col == "actuated_channels":
-                        value = []
-                    else:
-                        value = ""
                 columnar_data[col].append(value)
 
         result = {
