@@ -690,60 +690,55 @@ class PGCWidget(QWidget):
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
 
-        # stop data logging and save file
-        self.protocol_data_logger.stop_logging(completed_steps=completed_steps)
+        if not self.navigation_bar.is_preview_mode():
+            try:
+                # auto-save current protocol with smart filename
+                protocol_data = self.state.to_flat_export()
 
-        preview_mode = self.navigation_bar.is_preview_mode()
+                # save_protocol_snapshot
+                saved_path = self.experiment_manager.auto_save_protocol(protocol_data)
 
-        if not preview_mode:
-            self._handle_regular_mode_completion()
+                if saved_path:
+                    # update protocol state tracker to reflect the auto-saved protocol
+                    logger.critical(f"Protocol saved as: {saved_path}")
+                    saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
+                    self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
+
+                self.protocol_data_logger.stop_logging(completed_steps=completed_steps)
+
+                # initialize new experiment if user wants
+                if (
+                    confirm(
+                        None,
+                        title="Create New Experiment?",
+                        cancel=False,
+                    )
+                    == YES
+                ):
+                    self.setup_new_experiment()
+
+
+
+                self.generate_summary()
+
+                # Convert local path to a valid URL (handles Windows backslashes automatically)
+                file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
+
+                formatted_message = (
+                    f"Report file saved to:<br>"
+                    f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
+                )
+
+                success(
+                    None,
+                    formatted_message,
+                    title="Run Summary Generated",
+                )
+
+            except Exception as e:
+                logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
 
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
-
-    def _handle_regular_mode_completion(self):
-        """handle protocol completion in regular mode: auto-save + new experiment."""
-        try:
-            # auto-save current protocol with smart filename
-            protocol_data = self.state.to_flat_export()
-
-            # save_protocol_snapshot
-            saved_path = self.experiment_manager.auto_save_protocol(protocol_data)
-
-            if saved_path:
-                # update protocol state tracker to reflect the auto-saved protocol
-                logger.critical(f"Protocol saved as: {saved_path}")
-                saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
-                self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
-
-            # initialize new experiment if user wants
-            if (
-                confirm(
-                    None,
-                    title="Create New Experiment?",
-                    cancel=False,
-                )
-                == YES
-            ):
-                self.setup_new_experiment()
-
-            self.generate_summary()
-
-            # Convert local path to a valid URL (handles Windows backslashes automatically)
-            file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
-
-            formatted_message = (
-                f"Report file saved to:<br>"
-                f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
-            )
-
-            success(
-                None,
-                formatted_message,
-                title="Run Summary Generated",
-            )
-
-        except Exception as e:
-            logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
 
     @with_loading_screen("Generating Run Report...")
     def generate_summary(self):
