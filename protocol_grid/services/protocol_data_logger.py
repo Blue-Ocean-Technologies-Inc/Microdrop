@@ -11,6 +11,7 @@ from microdrop_utils.datetime_helpers import (
     get_current_utc_datetime,
     get_elapsed_time_from_utc_datetime,
 )
+import plotly.express as px
 from microdrop_utils.sticky_notes import StickyWindowManager
 
 logger = get_logger(__name__)
@@ -118,7 +119,7 @@ class ProtocolDataLogger:
         for key in data_point.keys():
             if key not in self._columns:
                 self._columns.append(key)
-    
+
     def log_metadata(self, data_point:dict):
         self._metadata_entries.update(data_point)
 
@@ -384,13 +385,66 @@ class ProtocolDataLogger:
 
         return html_table
 
-    def get_files_summary(self, media_list, header):
+    def _create_html_plots_for_all_float_columns(self, file_path: str):
+        df = self.load_data_as_dataframe(file_path)
+
+        # 1. Filter active float columns
+        float_cols = df.select_dtypes(include=["float"]).columns.tolist()
+        active_floats = [col for col in float_cols if (df[col] != 0).any()]
+
+        if not active_floats:
+            return "<p>No active numeric data to summarize.</p>"
+
+        plots_html = '<div style="display: flex; flex-direction: column; gap: 80px; width: 100%;">'
+
+        for col in active_floats:
+            # 2. Group by both Index and ID to keep the ID available for the label
+            # We sort by index to ensure chronological order top-to-bottom
+            stats = (
+                df.groupby(["step_idx", "step_id"])[col]
+                .agg(["mean", "std"])
+                .reset_index()
+            )
+            stats = stats.sort_values("step_idx", ascending=False)
+
+            # 3. Create Horizontal Bar Chart
+            fig = px.bar(
+                stats,
+                x="mean",
+                y="step_id",
+                error_x="std",  # Horizontal error bars
+                orientation="h",
+                title=col,
+                labels={"mean": f"Average {col}", "step_id": "step_id"},
+                template="plotly_white",
+                color_discrete_sequence=["#17a2b8"],  # Nice teal color
+            )
+
+            # 4. Refine the axis to show every Step ID clearly
+            fig.update_layout(
+                yaxis=dict(type="category", title="Protocol Steps"),
+                xaxis=dict(title=f"Mean {col}"),
+                margin=dict(l=20, r=20, t=50, b=20),
+                # Height grows with the number of steps to prevent overlap
+                height=250 + (len(stats) * 35),
+            )
+
+            fig_div = fig.to_html(full_html=False, include_plotlyjs="cdn")
+
+            plots_html += f"""
+                <div style="width: 100%; padding-bottom: 40px; border-bottom: 2px solid #f0f0f0;">
+                    {fig_div}
+                </div>
+            """
+
+        plots_html += "</div>"
+        return plots_html
+
+    def get_files_summary(self, media_list, media_type):
         summary_str = ""
 
         if len(media_list) == 0:
             return summary_str
-
-        summary_str += f"<h3>{header}</h3>"
 
         for i, el in enumerate(media_list):
             path_obj = Path(el)
@@ -401,17 +455,17 @@ class ProtocolDataLogger:
 
             media_file = ""
 
-            if "Image" in header:
+            if "Image" in media_type:
                 media_file += f'<br><br><img src="{file_url}" width="360" height="240">'
 
-            if "Video" in header:
+            if "Video" in media_type:
                 media_file += f"""
                                  <br><br><video width="360" height="240" controls>
                                   <source src={file_url} type="video/mp4">
                                 Your browser does not support the video tag.
                                 </video> """
 
-            if "Note" in header:
+            if "Note" in media_type:
                 media_file += (
                     f'<br><br><iframe src={file_url} width="360" height="240"></iframe>'
                 )
@@ -422,9 +476,6 @@ class ProtocolDataLogger:
         return summary_str
 
     def generate_report(self):
-        # media files
-        video_str = self.get_files_summary(self._video_captures, "Video Captures:")
-        image_str = self.get_files_summary(self._image_captures, "Image Captures:")
 
         notes_str = ""
         # consume notes history for reporting if possible
@@ -436,40 +487,37 @@ class ProtocolDataLogger:
                 )
                 note_manager.clear_saved_notes_history()
 
-        # summarize data if we have any
-        if self._data_files:
-            # Get the file list string
-            data_str = self.get_files_summary(self._data_files, "Data Files:")
-
-            # Generate the HTML table for the first data file
-            # Ensure this function returns the HTML table string
-            data_summary_table = self._summarize_overall_data_to_html_table(self._data_files[0])
-
-            # Wrap it in a header for the report
-            data_section = f"""
-                <h4>Data Summary:</h4>
-                <div class="table-container">
-                    {data_summary_table}
-                </div>
-            """
-        else:
-            data_str = ""
-            data_section = ""
-
-
         # make meta data
         metadata_str = ""
         for key, val in self._metadata_entries.items():
             metadata_str += f"<b>{key}:</b> {val}<br><br>"
 
+        data_str, data_section, data_viz_str = self._process_data_files_to_html_report()
+
         report = f"""
             <h1>Run Summary</h1>
+            
             <h2>Meta Data:</h2>
             {metadata_str}
-            {data_section}
-            {video_str}
-            {image_str}
+            
+            <h2>Data Files:</h2>
             {data_str}
+            
+            <h2>Data Summary:</h2>
+            {data_section}
+            
+            <h2>Data Trends:</h2>
+            {data_viz_str}
+            
+            <h2>Media Captures:</h2>k
+            
+            <h3>Video Captures:</h3>
+            {self.get_files_summary(self._video_captures, "Video")}
+            
+            <h3>Image Captures:</h3>
+            {self.get_files_summary(self._image_captures, "Image")}
+            
+            <h2>Notes:</h2>
             {notes_str}
         """
 
@@ -491,3 +539,30 @@ class ProtocolDataLogger:
             self.last_saved_summary_path = report_path
 
         return report
+
+    def _process_data_files_to_html_report(self):
+        # data visuals if we have any data
+        if self._data_files:
+            # Get the file list string
+            data_str = self.get_files_summary(self._data_files, "Data Files:")
+
+            ## create overall data summary table
+            data_section = f"""
+                        <div class="table-container">
+                            {self._summarize_overall_data_to_html_table(self._data_files[0])}
+                        </div>
+                    """
+
+            ## Create data visuals
+            data_visuals_section = f"""
+                                    <div class="table-container">
+                                        {self._create_html_plots_for_all_float_columns(self._data_files[0])}
+                                    </div>
+                                """
+
+        else:
+            data_str = ""
+            data_section = ""
+            data_visuals_section = ""
+
+        return data_str, data_section, data_visuals_section
