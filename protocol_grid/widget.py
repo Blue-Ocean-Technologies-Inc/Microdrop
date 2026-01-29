@@ -686,6 +686,7 @@ class PGCWidget(QWidget):
 
         self.navigation_bar.btn_play.setText(ICON_PLAY)
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
+        self.navigation_bar.btn_stop.setEnabled(False)
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
@@ -1031,6 +1032,7 @@ class PGCWidget(QWidget):
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+        self.navigation_bar.btn_stop.setEnabled(True)
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
