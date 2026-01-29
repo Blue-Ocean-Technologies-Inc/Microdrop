@@ -5,7 +5,6 @@ from typing import Dict, Optional
 import pandas as pd
 
 from device_viewer.models.media_capture_model import MediaCaptureMessageModel, MediaType
-from logger.logger_service import get_logger
 from microdrop_utils.datetime_helpers import (
     TimestampedMessage,
     get_current_utc_datetime,
@@ -14,7 +13,21 @@ from microdrop_utils.datetime_helpers import (
 import plotly.express as px
 from microdrop_utils.sticky_notes import StickyWindowManager
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+from functools import wraps
+
+def require_active_logging(func):
+    """Decorator to ensure logging is active before executing a method."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not getattr(self, "_is_logging_active", False):
+            logger.warning(f"Attempted to call '{func.__name__}', but logger is not active.")
+            return None  # Early exit
+        return func(self, *args, **kwargs)
+    return wrapper
+
 
 class ProtocolDataLogger:
     """Service for logging capacitance data during protocol execution."""
@@ -75,6 +88,7 @@ class ProtocolDataLogger:
 
         logger.info(f"Started protocol data logging to: {experiment_directory}")
 
+    @require_active_logging
     def stop_logging(self, completed_steps=None):
         if completed_steps:
             _completed_nsteps = completed_steps
@@ -100,7 +114,12 @@ class ProtocolDataLogger:
         self._latest_capacitance_per_unit_area = c_unit_area
         logger.debug(f"Updated capacitance per unit area: {c_unit_area}")
 
+    @require_active_logging
     def log_media_capture(self, message: MediaCaptureMessageModel):
+        if not self._is_logging_active:
+            logger.warning("Logger not active")
+            return
+
         if message.type == MediaType.VIDEO:
             self._video_captures.append(message.path)
         elif message.type == MediaType.IMAGE:
@@ -108,6 +127,7 @@ class ProtocolDataLogger:
         elif message.type == MediaType.OTHER:
             self._other_media_captures.append(message.path)
 
+    @require_active_logging
     def log_data(self, data_point:dict):
         # Automatically add a timestamp if it's missing
         if "utc_time" not in data_point:
@@ -120,13 +140,12 @@ class ProtocolDataLogger:
             if key not in self._columns:
                 self._columns.append(key)
 
+    @require_active_logging
     def log_metadata(self, data_point:dict):
         self._metadata_entries.update(data_point)
 
+    @require_active_logging
     def log_capacitance_data(self, capacitance_message: TimestampedMessage):
-        if not self._is_logging_active or self._preview_mode:
-            return
-
         try:
             # parse capacitance message
             capacitance_data = json.loads(capacitance_message)
