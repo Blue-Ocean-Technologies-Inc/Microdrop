@@ -314,7 +314,7 @@ class ProtocolRunnerController(QObject):
 
             return {
                 'step_id': step.parameters.get("ID", ""),
-                'step_idx': str(self.current_index),
+                'step_idx': self.current_index,
                 'actuated_channels': sorted(actuated_channels),
                 'actuated_area': step.device_state.activated_electrodes_area_mm2,
             }
