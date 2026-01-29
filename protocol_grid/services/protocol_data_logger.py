@@ -76,36 +76,38 @@ class ProtocolDataLogger:
         # set metadata
         self._experiment_directory = experiment_directory
         self._total_nsteps = n_steps
-        _start_timestamp = get_current_utc_datetime()
+        self._start_timestamp = get_current_utc_datetime()
 
         self.log_metadata(
             {
                 "Experiment Directory": f'<a href="file:///{self._experiment_directory}">{Path(self._experiment_directory).name}</a>',
                 "Steps Completed": f"0 / {self._total_nsteps}",
-                "Start Time": _start_timestamp,
             }
         )
 
-        logger.info(f"Started protocol data logging to: {experiment_directory}")
+        logger.info(f"Started protocol data logging to: {experiment_directory} at {self._start_timestamp}")
 
     @require_active_logging
     def stop_logging(self, completed_steps=None):
-        if completed_steps:
-            _completed_nsteps = completed_steps
-        else:
-            _completed_nsteps = self._total_nsteps
 
-        self.log_metadata({"Steps Completed": f"{_completed_nsteps} / {self._total_nsteps}"})
+        # log metadata before stopping the logging
 
-        self._is_logging_active = False
-        logger.info("Stopped protocol data logging")
+        _completed_nsteps = completed_steps if completed_steps else self._total_nsteps
 
         _stop_timestamp = get_current_utc_datetime()
-        _start_timestamp = self._metadata_entries.get("Start Time")
-        _elapsed_time = get_elapsed_time_from_utc_datetime(_start_timestamp, _stop_timestamp)
+        _elapsed_time = get_elapsed_time_from_utc_datetime(self._start_timestamp, _stop_timestamp)
 
-        self.log_metadata({"Stop Time": _stop_timestamp,
-                           "Elapsed Time": _elapsed_time})
+        self.log_metadata(
+            {
+                "Start Time": self._start_timestamp,
+                "Stop Time": _stop_timestamp,
+                "Elapsed Time": _elapsed_time,
+                "Steps Completed": f"{_completed_nsteps} / {self._total_nsteps}"
+            }
+        )
+
+        self._is_logging_active = False
+        logger.info(f"Stopped protocol data logging at {self._start_timestamp} after {_elapsed_time}")
 
     def set_protocol_context(self, context: Dict):
         self._current_protocol_context = context
