@@ -60,7 +60,6 @@ from protocol_grid.extra_ui_elements import (
     StatusBar,
     make_separator,
     ExperimentLabel,
-    ExperimentCompleteDialog,
     DropbotDisconnectedBeforeRunDialogAction,
 )
 
@@ -694,17 +693,10 @@ class PGCWidget(QWidget):
         # stop data logging and save file
         self.protocol_data_logger.stop_logging(completed_steps=completed_steps)
 
-        # handle auto-save and new experiment creation based on mode
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
         preview_mode = self.navigation_bar.is_preview_mode()
 
         if not preview_mode:
-            if advanced_mode:
-                # advanced mode: show dialog and handle response
-                self._handle_advanced_mode_completion()
-            else:
-                # regular mode: auto-save and create new experiment
-                self._handle_regular_mode_completion()
+            self._handle_regular_mode_completion()
 
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
@@ -723,28 +715,18 @@ class PGCWidget(QWidget):
                 saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
                 self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
 
-            # save data file
-            data_file_path = self.protocol_data_logger.save_data_file()
-            if data_file_path:
-                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(
-                    data_file_path
-                )
-
             # initialize new experiment if user wants
             if (
                 confirm(
                     None,
                     title="Create New Experiment?",
                     cancel=False,
-                    # no_label="No",
-                    # yes_label="Yes",
-                    # detail="This is some details over here",
                 )
                 == YES
             ):
                 self.setup_new_experiment()
 
-            report = self.generate_summary()
+            self.generate_summary()
 
             # Convert local path to a valid URL (handles Windows backslashes automatically)
             file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
@@ -774,27 +756,6 @@ class PGCWidget(QWidget):
             # update information panel with new experiment ID
             self.experiment_label.update_experiment_id(new_experiment_dir.stem)
             logger.info(f"Started new experiment: {new_experiment_dir.stem}")
-
-    def _handle_advanced_mode_completion(self):
-        """handle protocol completion in advanced mode: show dialog."""
-        try:
-            # save data file
-            data_file_path = self.protocol_data_logger.save_data_file()
-            if data_file_path:
-                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(
-                    data_file_path
-                )
-
-            dialog = ExperimentCompleteDialog(self)
-            result = dialog.exec()
-
-            if result == QDialog.Accepted:
-                # user chose YES: same as regular mode
-                self._handle_regular_mode_completion()
-            # if NO or closed: do nothing, stay with current experiment
-
-        except Exception as e:
-            logger.error(f"Error handling advanced mode completion: {e}")
 
     def _cleanup_after_protocol_operation(self):
         if not getattr(self, "_programmatic_change", False):
