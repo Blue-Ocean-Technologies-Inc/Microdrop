@@ -476,11 +476,24 @@ class ProtocolDataLogger:
                 media_file += f'<br><br><img src="{file_url}" width="360" height="240">'
 
             if "Video" in media_type:
+                # We create a placeholder DIV.
+                # The 'onclick' JavaScript swaps this DIV for the actual VIDEO tag when clicked.
+                # We use single quotes escaped with backslashes (\') inside the HTML string to avoid conflicts.
                 media_file += f"""
-                                 <br><br><video width="360" height="240" controls>
-                                  <source src={file_url} type="video/mp4">
-                                Your browser does not support the video tag.
-                                </video> """
+                        <br><br>
+                        <div onclick="this.outerHTML='<video width=\\'360\\' height=\\'240\\' controls autoplay><source src=\\'{file_url}\\' type=\\'video/mp4\\'>Your browser does not support the video tag.</video>'" 
+                             style="cursor: pointer; 
+                                    width: 360px; 
+                                    height: 240px; 
+                                    background-color: #000; 
+                                    display: flex; 
+                                    align-items: center; 
+                                    justify-content: center; 
+                                    position: relative;">
+
+                            <div style="font-size: 50px; color: white;">&#9658;</div>
+                        </div> 
+                    """
 
             if "Note" in media_type:
                 media_file += (
