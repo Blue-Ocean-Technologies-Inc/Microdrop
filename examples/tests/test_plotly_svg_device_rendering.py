@@ -150,7 +150,7 @@ def test_plotly_heatmap_invisible_polygon_hitboxes(valid_electrodes_model_from_s
                    showgrid=False, zeroline=False, showticklabels=False)
     )
 
-    output_path = Path(TEST_PATH) / "plotly_heatmap_hitboxes.html"
+    output_path = Path(TEST_PATH) / "plotly_heatmap.html"
     fig.write_html(output_path)
 
     print(f"\nReport saved: {output_path.absolute()}")
