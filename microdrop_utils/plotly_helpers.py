@@ -26,8 +26,14 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
             device_electrodes = processor.svg_to_electrodes(child)
             break
 
-    min_freq = min(channel_frequency_dict.values())
-    max_freq = max(channel_frequency_dict.values())
+    if not channel_frequency_dict.values():
+        channel_frequencies = [0]
+
+    else:
+        channel_frequencies = channel_frequency_dict.values()
+
+    min_freq = min(channel_frequencies)
+    max_freq = max(channel_frequencies)
 
     # Colors
     norm = mcolors.Normalize(vmin=0, vmax=max_freq)
