@@ -31,7 +31,7 @@ def test_create_plotly_svg_dropbot_device_heatmap(valid_electrodes_model_from_sv
     # Dummy Data
     channels = list(valid_electrodes_model_from_svg.channels_electrode_ids_map.keys())
     np.random.seed(42)
-    channel_frequencies = {c: np.random.randint(0, 1000) for c in channels}
+    channel_frequencies = {c: np.random.randint(0, 200) for c in channels}
 
     fig = create_plotly_svg_dropbot_device_heatmap(sample_svg_path, channel_frequencies)
 

@@ -113,7 +113,7 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
         opacity=0,
         marker=dict(
             size=0,
-            color=[0, 1000],  # Range
+            color=[min_freq, max_freq],  # Range
             colorscale='Reds',
             showscale=True,
             colorbar=dict(title="Frequency")
