@@ -16,4 +16,5 @@ def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessa
         uuid=model.uuid,
         editable=model.editable,
         activated_electrodes_area_mm2=model.electrodes.get_activated_electrode_area_mm2(),
+        svg_file=model.electrodes.svg_model.filename
     )

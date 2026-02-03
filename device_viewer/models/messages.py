@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, computed_field, UUID4
 
@@ -20,6 +21,8 @@ class DeviceViewerMessageModel(BaseModel):
     activated_electrodes_area_mm2: Optional[float] = 0
 
     uuid: Optional[UUID4] = None
+
+    svg_file: Optional[Path | str] = None
 
     @computed_field
     @property
@@ -68,7 +71,8 @@ if __name__ == "__main__":
         id_to_channel={"a": 1},
         step_info=test_step_info,
         uuid=uuid.uuid4(),
-        activated_electrodes_area_mm2=1324.314
+        activated_electrodes_area_mm2=1324.314,
+        svg_file=Path("test.svg"),
     )
 
     print(f"Routes as Channels: {test.get_routes_with_channels()}")

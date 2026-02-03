@@ -53,7 +53,8 @@ class ProtocolDataLogger:
 
     def start_logging(
         self,
-        experiment_directory: Path,
+        experiment_directory: Path | str,
+        device_svg_path: Path | str,
         preview_mode: bool = False,
         n_steps: int = 1,
     ):
@@ -76,12 +77,14 @@ class ProtocolDataLogger:
 
         # set metadata
         self._experiment_directory = experiment_directory
+        self._svg_file = device_svg_path
         self._total_nsteps = n_steps
         self._start_timestamp = get_current_utc_datetime()
 
         self.log_metadata(
             {
                 "Experiment Directory": f'<a href="file:///{self._experiment_directory}">{Path(self._experiment_directory).name}</a>',
+                "Device Svg": f'<a href="file:///{self._svg_file}">{Path(self._svg_file).name}</a>',
                 "Steps Completed": f"0 / {self._total_nsteps}",
             }
         )

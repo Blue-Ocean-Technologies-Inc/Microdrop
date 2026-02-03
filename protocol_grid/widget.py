@@ -136,6 +136,7 @@ class PGCWidget(QWidget):
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
 
+        self._active_device_svg_file = None
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
@@ -454,17 +455,9 @@ class PGCWidget(QWidget):
             return
         if self._protocol_running:
             return
-        # self._processing_device_viewer_message = True
-        # self._programmatic_change = True
-
-        # scroll_pos = self.save_scroll_positions()
-        # saved_selection = self.save_selection()
-
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
-            # if dv_msg.free_mode:
-            # if dv_msg.step_id is None:
             active_electrodes = []
             for channel_str, is_active in dv_msg.channels_activated.items():
                 if is_active:
@@ -480,6 +473,9 @@ class PGCWidget(QWidget):
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
                 logger.info(f"Updated tracked active electrodes: {active_electrodes}")
+
+            if dv_msg.svg_file != self._active_device_svg_file:
+                self._active_device_svg_file = dv_msg.svg_file
 
             if dv_msg.step_id:
                 self._processing_device_viewer_message = True
@@ -972,6 +968,7 @@ class PGCWidget(QWidget):
         # start data logging
         self.protocol_data_logger.start_logging(
             self.experiment_manager.get_experiment_directory(),
+            self._active_device_svg_file,
             preview_mode,
             n_steps=len(run_order)
         )
