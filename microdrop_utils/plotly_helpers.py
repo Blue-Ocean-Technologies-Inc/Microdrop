@@ -30,7 +30,7 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
     max_freq = max(channel_frequency_dict.values())
 
     # Colors
-    norm = mcolors.Normalize(vmin=min_freq, vmax=max_freq)
+    norm = mcolors.Normalize(vmin=0, vmax=max_freq)
     cmap = plt.get_cmap('Reds')
 
     # --- 2. Build Layers ---
