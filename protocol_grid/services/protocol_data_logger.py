@@ -12,6 +12,8 @@ from microdrop_utils.datetime_helpers import (
     get_elapsed_time_from_utc_datetime,
 )
 import plotly.express as px
+
+from microdrop_utils.plotly_helpers import create_plotly_svg_dropbot_device_heatmap
 from microdrop_utils.sticky_notes import StickyWindowManager
 
 from logger.logger_service import get_logger
@@ -24,7 +26,7 @@ def require_active_logging(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not getattr(self, "_is_logging_active", False):
-            logger.warning(f"Attempted to call '{func.__name__}', but logger is not active.")
+            logger.debug(f"Attempted to call '{func.__name__}', but logger is not active.")
             return None  # Early exit
         return func(self, *args, **kwargs)
     return wrapper
@@ -48,6 +50,7 @@ class ProtocolDataLogger:
         self._current_protocol_context = None
         self._experiment_directory = None
         self._preview_mode = False
+        self._active_analysis_df = None
 
         self._columns = []
 
@@ -162,7 +165,8 @@ class ProtocolDataLogger:
             capacitance_data = json.loads(capacitance_message)
             capacitance_str = capacitance_data.get("capacitance", "-")
             voltage_str = capacitance_data.get("voltage", "-")
-            timestamp = capacitance_message.timestamp
+            instrument_timestamp = capacitance_data.get("instrument_time", 0)
+            reception_timestamp = capacitance_data.get("reception_time", 0)
 
             if capacitance_str == "-" or voltage_str == "-":
                 logger.debug("Invalid capacitance/voltage data, skipping log entry")
@@ -203,9 +207,10 @@ class ProtocolDataLogger:
             force = self._calculate_force(voltage_value)
 
             data_entry = {
-                "utc_time": timestamp,
-                "step_id": step_id,
                 "step_idx": step_idx,
+                "utc_time": reception_timestamp,
+                "instrument_time": instrument_timestamp,
+                "step_id": step_id,
                 "Capacitance (pF)": capacitance_value,
                 "Voltage (V)": voltage_value,
                 "Force Over Unit Area (mN/mm^2)": force,
@@ -272,15 +277,38 @@ class ProtocolDataLogger:
             data_file_path.parent.mkdir(parents=True, exist_ok=True)
 
             columnar_data = self._convert_to_columnar_format()
+            json_str = json.dumps(columnar_data, separators=(",", ":"))
 
-            with open(data_file_path, "w") as f:
-                json.dump(columnar_data, f, separators=(",", ":"))
+            df = self.load_data_as_dataframe(json_data=json_str)
+
+            ### Compute corrected instrument time ######
+            # 1. Define the 32-bit limit
+            # 2**32 = 4,294,967,296
+            UINT32_MAX = 2**32
+
+            # 2. Calculate difference between steps
+            diffs = df["instrument_time"].diff()
+
+            # 3. Detect Rollover
+            # If the difference is a huge negative number (e.g., < -2 billion), a rollover occurred.
+            rollovers = diffs < -(UINT32_MAX // 2)
+
+            # 4. Calculate the offset
+            # Each time a rollover happens, we add 2^32 to all subsequent values
+            rollover_offsets = rollovers.cumsum() * UINT32_MAX
+
+            # 5. Apply correction
+            df["corr_instrument_time"] = df["instrument_time"] + rollover_offsets
+
+            df.to_json(data_file_path)
 
             logger.info(
                 f"Saved {len(self._data_entries)} data entries to: {data_file_path}"
             )
 
             self._data_files.append(data_file_path)
+
+            self._active_analysis_df = df
 
             return data_file_path
 
@@ -293,19 +321,20 @@ class ProtocolDataLogger:
         return len(self._data_entries)
 
     @staticmethod
-    def load_data_as_dataframe(file_path: str):
+    def load_data_as_dataframe(json_data=None):
         """
         Load the optimized JSON format and convert to pandas DataFrame.
 
         Args:
-            file_path: Path to the JSON data file
+            file_path: Optional Path to the JSON data file
+            json_data: Optional JSON data. Used directly even if filepath provided
 
         Returns:
             pandas.DataFrame: Data with proper column headers
         """
         try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
+
+            data = json.loads(json_data)
 
             # extract values
             columns = data.get("columns", [])
@@ -338,7 +367,7 @@ class ProtocolDataLogger:
             logger.error(f"Error loading data as DataFrame: {e}")
             return None
 
-    def save_dataframe_as_csv(self, file_path: str | Path, output_path: str | Path = None):
+    def save_dataframe_as_csv(self, file_path: str | Path = None, output_path: str | Path = None):
         """
         Load JSON data and save as CSV file.
 
@@ -347,7 +376,10 @@ class ProtocolDataLogger:
             output_path: Path for output CSV (optional, defaults to same directory)
         """
         try:
-            df = self.load_data_as_dataframe(file_path)
+            if not file_path:
+                df = self._active_analysis_df
+            else:
+                df = pd.read_json(file_path)
 
             if df is None or df.empty:
                 logger.warning("No data to save as CSV")
@@ -367,8 +399,8 @@ class ProtocolDataLogger:
             logger.error(f"Error saving CSV file: {e}")
             return None
 
-    def _summarize_overall_data_to_html_table(self, file_path: str):
-        df = self.load_data_as_dataframe(file_path)
+    def _summarize_overall_data_to_html_table(self):
+        df = self._active_analysis_df
 
         # 1. Isolate float columns and filter out all-zero columns
         float_cols = df.select_dtypes(include=["float"]).columns.tolist()
@@ -397,29 +429,25 @@ class ProtocolDataLogger:
 
         return html_table
 
-    def _channel_id_frequency_hist_html(self, file_path: str):
-        df = self.load_data_as_dataframe(file_path)
-        exploded_df = df.explode("actuated_channels")
+    def _get_channel_duration(self) -> dict:
+        df = self._active_analysis_df
 
-        fig = px.histogram(
-            exploded_df,
-            y="actuated_channels",
-            orientation="h",
-            title="Frequency of Actuated Channels",
-            template="plotly_dark",
-        )
-        # FORCE discrete bins: Treat every number as a unique category
-        fig.update_yaxes(type="category")
+        # find number of data points recorded for each channel
+        num_data_points_per_channel = df.explode("actuated_channels")["actuated_channels"].value_counts()
 
-        # Sort by Frequency (biggest bars on top)
-        fig.update_yaxes(categoryorder="total ascending")
+        # find average time
+        df["step_delta"] = df["corr_instrument_time"].diff()
 
-        return fig
+        # insturment time is in us, convert to seconds * 1e-6
+        average_capacitance_update_interval_s = df.sort_values("corr_instrument_time")["corr_instrument_time"].diff().fillna(0).mean() * 1e-6
 
+        # multiply n hits by update time to get estimated channel actuation duration.
+        channel_duration_series = (num_data_points_per_channel * average_capacitance_update_interval_s)
 
+        return channel_duration_series.to_dict()
 
-    def _create_html_plots_for_all_float_columns(self, file_path: str):
-        df = self.load_data_as_dataframe(file_path)
+    def _create_html_plots_for_all_float_columns(self):
+        df = self._active_analysis_df
 
         # 1. Filter active float columns
         float_cols = df.select_dtypes(include=["float"]).columns.tolist()
@@ -532,15 +560,20 @@ class ProtocolDataLogger:
             ## create overall data summary table
             data_section = f"""
                         <div class="table-container">
-                            {self._summarize_overall_data_to_html_table(self._data_files[0])}
+                            {self._summarize_overall_data_to_html_table()}
                         </div>
                     """
 
             ## Create data visuals
+            device_svg_heatmap_plotly_fig = create_plotly_svg_dropbot_device_heatmap(
+                svg_file=self._svg_file,
+                channel_quantity_dict=self._get_channel_duration()
+            )
+
             data_visuals_section = f"""
                                     <div class="table-container">
-                                        {self._channel_id_frequency_hist_html(self._data_files[0]).to_html(full_html=False, include_plotlyjs="cdn")} <br>
-                                        {self._create_html_plots_for_all_float_columns(self._data_files[0])}
+                                        {device_svg_heatmap_plotly_fig.to_html(full_html=False, include_plotlyjs="cdn")} <br>
+                                        {self._create_html_plots_for_all_float_columns()}
                                     </div>
                                 """
 
@@ -621,10 +654,45 @@ class ProtocolDataLogger:
             logger.critical(f"Run summary report saved to: {report_path}")
             self.last_saved_summary_path = report_path
 
+        # cleanup:
+        del self._active_analysis_df
+
         return report
 
     def generate_data_files(self):
         data_file_path = self.save_data_file()
-        csv_file_path = self.save_dataframe_as_csv(data_file_path) if data_file_path else None
+        csv_file_path = self.save_dataframe_as_csv()
 
         return data_file_path, csv_file_path
+
+if __name__ == "__main__":
+
+    from pathlib import Path
+
+    file = Path(
+        "C:\\Users\\Info\\Documents\\Sci-Bots\\Microdrop\\Experiments\\2026_02_03-19_56_22\\data\\data_2026_02_03-19_57_54.json"
+    )
+
+    df = ProtocolDataLogger.load_data_as_dataframe(str(file))
+
+    # 1. Define the 32-bit limit
+    # 2**32 = 4,294,967,296
+    UINT32_MAX = 2**32
+
+    # 2. Calculate difference between steps
+    diffs = df["instrument_time"].diff()
+
+    # 3. Detect Rollover
+    # If the difference is a huge negative number (e.g., < -2 billion), a rollover occurred.
+    rollovers = diffs < -(UINT32_MAX // 2)
+
+    # 4. Calculate the offset
+    # Each time a rollover happens, we add 2^32 to all subsequent values
+    rollover_offsets = rollovers.cumsum() * UINT32_MAX
+
+    # 5. Apply correction
+    df["corr_instrument_time"] = df["instrument_time"] + rollover_offsets
+
+    df["delta"] = df["corr_instrument_time"] - df["instrument_time"]
+
+    print(df[["instrument_time", "corr_instrument_time", "delta"]])

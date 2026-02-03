@@ -6,7 +6,7 @@ from pathlib import Path
 from device_viewer.utils.dmf_utils_helpers import SVGProcessor
 
 
-def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequency_dict: dict) -> go.Figure:
+def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_quantity_dict: dict) -> go.Figure:
     """
     Generates a Plotly heatmap with 'Invisible Polygon Hitboxes'.
 
@@ -26,17 +26,16 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
             device_electrodes = processor.svg_to_electrodes(child)
             break
 
-    if not channel_frequency_dict.values():
-        channel_frequencies = [0]
+    if not channel_quantity_dict.values():
+        channel_quant = [0]
 
     else:
-        channel_frequencies = channel_frequency_dict.values()
+        channel_quant = channel_quantity_dict.values()
 
-    min_freq = min(channel_frequencies)
-    max_freq = max(channel_frequencies)
+    max_time = max(channel_quant)
 
     # Colors
-    norm = mcolors.Normalize(vmin=0, vmax=max_freq)
+    norm = mcolors.Normalize(vmin=0, vmax=max_time)
     cmap = plt.get_cmap('Reds')
 
     # --- 2. Build Layers ---
@@ -51,8 +50,8 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
 
             # Resolve ID & Frequency
             chan_id = elec_data.channel
-            freq = channel_frequency_dict.get(chan_id, 0)
-            fill_color = mcolors.to_hex(cmap(norm(freq)))
+            quant = channel_quantity_dict.get(chan_id, 0)
+            fill_color = mcolors.to_hex(cmap(norm(quant)))
 
             # --- VISIBLE LAYER (layout.shapes) ---
             # Reconstruct SVG path string for the visual fill
@@ -78,7 +77,7 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
             tooltip_text = (
                 f"<b>Electrode ID:</b> {elec_id}<br>"
                 f"<b>Channel ID:</b> {chan_id}<br>"
-                f"<b># Actuations:</b> {freq}"
+                f"<b>Actuation Time:</b> {round(quant, 2)} sec"
             )
 
             hitbox_traces.append(go.Scatter(
@@ -119,17 +118,17 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
         opacity=0,
         marker=dict(
             size=0,
-            color=[min_freq, max_freq],  # Range
+            color=[0, max_time],  # Range
             colorscale='Reds',
             showscale=True,
-            colorbar=dict(title="Frequency")
+            colorbar=dict(title="Time (s)")
         ),
         hoverinfo='skip',
         showlegend=False
     ))
 
     fig.update_layout(
-        title="Actuation Frequency Heatmap",
+        title="Actuation times (s) across channels",
         width=1000, height=800,
         plot_bgcolor="white",
 
