@@ -922,7 +922,7 @@ class PGCWidget(QWidget):
             try:
                 self._pending_play_pause_action()
             except Exception as e:
-                logger.error(f"Error in debounced play/pause action: {e}")
+                logger.error(f"Error in debounced play/pause action: {e}", exc_info=True)
             finally:
                 self._pending_play_pause_action = None
 
