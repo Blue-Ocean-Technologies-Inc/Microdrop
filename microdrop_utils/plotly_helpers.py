@@ -43,50 +43,49 @@ def create_plotly_svg_dropbot_device_heatmap(svg_file: Path | str, channel_frequ
         if len(points) >= 3:
             all_points_list.append(points)
 
-        # Resolve ID & Frequency
+            # Resolve ID & Frequency
+            chan_id = elec_data.channel
+            freq = channel_frequency_dict.get(chan_id, 0)
+            fill_color = mcolors.to_hex(cmap(norm(freq)))
 
-        chan_id = elec_data.channel
-        freq = channel_frequency_dict[chan_id]
-        fill_color = mcolors.to_hex(cmap(norm(freq)))
+            # --- VISIBLE LAYER (layout.shapes) ---
+            # Reconstruct SVG path string for the visual fill
+            path_str = f"M {points[0, 0]} {points[0, 1]}"
+            for pt in points[1:]:
+                path_str += f" L {pt[0]} {pt[1]}"
+            path_str += " Z"
 
-        # --- VISIBLE LAYER (layout.shapes) ---
-        # Reconstruct SVG path string for the visual fill
-        path_str = f"M {points[0, 0]} {points[0, 1]}"
-        for pt in points[1:]:
-            path_str += f" L {pt[0]} {pt[1]}"
-        path_str += " Z"
+            plotly_shapes.append(dict(
+                type="path",
+                path=path_str,
+                fillcolor=fill_color,
+                line=dict(color="#444444", width=0.5),
+                layer="below"  # Draw shapes below the interactive traces
+            ))
 
-        plotly_shapes.append(dict(
-            type="path",
-            path=path_str,
-            fillcolor=fill_color,
-            line=dict(color="#444444", width=0.5),
-            layer="below"  # Draw shapes below the interactive traces
-        ))
+            # --- INTERACTIVE LAYER Hitbox ---
+            # Close the loop explicitly for the Scatter trace
+            x_hitbox = np.append(points[:, 0], points[0, 0])
+            y_hitbox = np.append(points[:, 1], points[0, 1])
 
-        # --- INTERACTIVE LAYER Hitbox ---
-        # Close the loop explicitly for the Scatter trace
-        x_hitbox = np.append(points[:, 0], points[0, 0])
-        y_hitbox = np.append(points[:, 1], points[0, 1])
+            # Pre-format the tooltip text
+            tooltip_text = (
+                f"<b>Electrode ID:</b> {elec_id}<br>"
+                f"<b>Channel ID:</b> {chan_id}<br>"
+                f"<b># Actuations:</b> {freq}"
+            )
 
-        # Pre-format the tooltip text
-        tooltip_text = (
-            f"<b>Electrode ID:</b> {elec_id}<br>"
-            f"<b>Channel ID:</b> {chan_id}<br>"
-            f"<b># Actuations:</b> {freq}"
-        )
-
-        hitbox_traces.append(go.Scatter(
-            x=x_hitbox,
-            y=y_hitbox,
-            fill="toself",  # Fills the polygon to capture hover events
-            mode='lines',  # Required to define boundary
-            opacity=0,  # <--- INVISIBLE (The Magic)
-            name=elec_id,  # Trace name (hidden but good for debugging)
-            text=tooltip_text,  # The tooltip string
-            hoverinfo='text',  # Only show the 'text' string
-            showlegend=False
-        ))
+            hitbox_traces.append(go.Scatter(
+                x=x_hitbox,
+                y=y_hitbox,
+                fill="toself",  # Fills the polygon to capture hover events
+                mode='lines',  # Required to define boundary
+                opacity=0,  # <--- INVISIBLE (The Magic)
+                name=elec_id,  # Trace name (hidden but good for debugging)
+                text=tooltip_text,  # The tooltip string
+                hoverinfo='text',  # Only show the 'text' string
+                showlegend=False
+            ))
 
     # --- 3. Auto-Scaling ---
     all_coords = np.vstack(all_points_list)

@@ -41,3 +41,31 @@ def test_create_plotly_svg_dropbot_device_heatmap(valid_electrodes_model_from_sv
     print(f"\nReport saved: {output_path.absolute()}")
     fig.show()
     assert output_path.exists()
+
+def test_create_plotly_svg_dropbot_device_heatmap_missing_channels_frequencies(valid_electrodes_model_from_svg):
+    """
+    Generates a Plotly heatmap with 'Invisible Polygon Hitboxes'.
+
+    Architecture:
+    1. Visual Layer: layout.shapes (Colored SVG Paths).
+    2. Interaction Layer: go.Scatter traces with opacity=0 and fill="toself".
+       - This creates a transparent "hitbox" covering the entire electrode.
+       - Hovering anywhere on the electrode triggers the tooltip.
+    """
+
+    # --- 1. Setup Data ---
+
+    # Dummy Data
+    channels = list(valid_electrodes_model_from_svg.channels_electrode_ids_map.keys())
+    np.random.seed(42)
+    channel_frequencies = {c: np.random.randint(0, 1000) for c in channels if c%2} # only feed odd channels in
+
+    fig = create_plotly_svg_dropbot_device_heatmap(sample_svg_path, channel_frequencies)
+
+    output_path = Path(TEST_PATH) / "plotly_heatmap.html"
+    fig.write_html(output_path)
+
+    print(f"\nReport saved: {output_path.absolute()}")
+    fig.show()
+    assert output_path.exists()
+
