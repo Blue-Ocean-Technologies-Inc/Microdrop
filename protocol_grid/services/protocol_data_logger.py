@@ -234,10 +234,9 @@ class ProtocolDataLogger:
             return None
 
     def _convert_to_columnar_format(self) -> Dict:
-        """Convert list of entry dictionaries to columnar format with single start timestamp."""
+        """Convert list of entry dictionaries to columnar."""
         if not self._data_entries:
             return {
-                "start_timestamp": None,
                 "columns": self._columns,
                 "data": [[] for _ in self._columns],
             }
@@ -250,7 +249,6 @@ class ProtocolDataLogger:
                 columnar_data[col].append(value)
 
         result = {
-            "start_timestamp": self._metadata_entries.get("Start Time"),
             "columns": self._columns,
             "data": [columnar_data[col] for col in self._columns],
         }
@@ -307,7 +305,6 @@ class ProtocolDataLogger:
                 data = json.load(f)
 
             # extract values
-            start_timestamp = data.get("start_timestamp")
             columns = data.get("columns", [])
             data_values = data.get("data", [])
 
@@ -324,9 +321,6 @@ class ProtocolDataLogger:
                     df_data[col] = []
 
             df = pd.DataFrame(df_data)
-
-            if start_timestamp:
-                df["start_timestamp"] = start_timestamp
 
             logger.info(
                 f"Loaded DataFrame with {len(df)} rows and {len(df.columns)} columns"
@@ -399,6 +393,27 @@ class ProtocolDataLogger:
         )
 
         return html_table
+
+    def _channel_id_frequency_hist_html(self, file_path: str):
+        df = self.load_data_as_dataframe(file_path)
+        exploded_df = df.explode("actuated_channels")
+
+        fig = px.histogram(
+            exploded_df,
+            y="actuated_channels",
+            orientation="h",
+            title="Frequency of Actuated Channels",
+            template="plotly_dark",
+        )
+        # FORCE discrete bins: Treat every number as a unique category
+        fig.update_yaxes(type="category")
+
+        # Sort by Frequency (biggest bars on top)
+        fig.update_yaxes(categoryorder="total ascending")
+
+        return fig
+
+
 
     def _create_html_plots_for_all_float_columns(self, file_path: str):
         df = self.load_data_as_dataframe(file_path)
@@ -521,6 +536,7 @@ class ProtocolDataLogger:
             ## Create data visuals
             data_visuals_section = f"""
                                     <div class="table-container">
+                                        {self._channel_id_frequency_hist_html(self._data_files[0]).to_html(full_html=False, include_plotlyjs="cdn")} <br>
                                         {self._create_html_plots_for_all_float_columns(self._data_files[0])}
                                     </div>
                                 """
