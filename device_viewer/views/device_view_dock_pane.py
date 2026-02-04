@@ -190,7 +190,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # ------- Dramatiq handlers ---------------------------
     ################################################################################################
 
-    def _on_chip_inserted(self, message):
+    def _on_chip_inserted_triggered(self, message):
         if message == "True" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             self.publish_model_message()

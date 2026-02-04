@@ -49,7 +49,7 @@ class ProtocolRunnerController(QObject):
         self.signals = ProtocolRunnerSignals()
         self._is_running = False
         self._is_paused = False
-        self._current_index = 0
+        self.current_index = 0
         self._run_order = []
         self._start_time = None
         self._step_start_time = None
@@ -164,7 +164,7 @@ class ProtocolRunnerController(QObject):
             step_id = step.parameters.get("ID", "")
             step_description = step.parameters.get("Description", "Step")
             ## Check previous step
-            last_step = self._run_order[self._current_index-1]["step"] if self._current_index > 0 else None
+            last_step = self._run_order[self.current_index - 1]["step"] if self.current_index > 0 else None
 
             experiment_dir = str(self.experiment_manager.get_experiment_directory())
 
@@ -180,11 +180,11 @@ class ProtocolRunnerController(QObject):
 
             if (video_enabled or capture_enabled or record_enabled):
                 if not self._video_enabled_for_protocol:
-                    logger.critical(f"Step {step_id}: Requesting to turn video on for protocol.")
+                    logger.info(f"Step {step_id}: Requesting to turn video on for protocol.")
                     self._publish_camera_video_control("true")
                     self._video_enabled_for_protocol = True
             else:
-                logger.critical(f"Step {step_id}: Requesting to turn video off for protocol.")
+                logger.info(f"Step {step_id}: Requesting to turn video off for protocol.")
                 self._publish_camera_video_control("false")
                 self._video_enabled_for_protocol = False
 
@@ -192,18 +192,18 @@ class ProtocolRunnerController(QObject):
             def _start_recording():
                 self._start_step_recording(step_id, step_description, experiment_dir)
                 self._recording_active = True
-                logger.critical(f"Step {step_id}: Sent capture video capture request.")
+                logger.info(f"Step {step_id}: Sent capture video capture request.")
 
             def _stop_recording():
                 self._stop_step_recording()
                 self._recording_active=False
-                logger.critical(f"Step {step_id}: Sent stop video capture request.")
+                logger.info(f"Step {step_id}: Sent stop video capture request.")
 
             def _capture_image():
                 self._publish_camera_capture_control(
                     step_id, step_description, experiment_dir
                 )
-                logger.critical(f"Step {step_id}: Sent capture image request.")
+                logger.info(f"Step {step_id}: Sent capture image request.")
 
             ############################# Media Capture logic ##############################################
             # We want captures in the beginning and end of the video capturing if simultaneously requested.
@@ -211,11 +211,11 @@ class ProtocolRunnerController(QObject):
             if _record_enabled_changed:  # video recording state has changed
                 if record_enabled: # video start requested
                     if capture_enabled: # Capture image in this case since its starting of recording block
-                        logger.info(f"Step {step_id}: Image Capture enabled at video start. First capturing image, then starting video recording.")
+                        logger.debug(f"Step {step_id}: Image Capture enabled at video start. First capturing image, then starting video recording.")
                         _capture_image()
 
                     else:
-                        logger.info(f"Step {step_id}: Starting video recording.")
+                        logger.debug(f"Step {step_id}: Starting video recording.")
 
                     # send the video start request
                     _start_recording()
@@ -224,10 +224,10 @@ class ProtocolRunnerController(QObject):
                     _stop_recording()
 
                     if capture_enabled:
-                        logger.info(f"Step {step_id}: Video recording stop with image capture at end.")
+                        logger.debug(f"Step {step_id}: Video recording stop with image capture at end.")
                         _capture_image()
                     else:
-                        logger.info(f"Step {step_id}: Video recording start with image capture at end.")
+                        logger.debug(f"Step {step_id}: Video recording start with image capture at end.")
 
             else: # video recording state has not changed
                 if not record_enabled:
@@ -291,11 +291,11 @@ class ProtocolRunnerController(QObject):
 
     def _get_current_logging_context(self) -> Optional[Dict]:
         """Get current execution context for data logging."""
-        if not self._is_running or self._preview_mode or self._current_index >= len(self._run_order):
+        if not self._is_running or self._preview_mode or self.current_index >= len(self._run_order):
             return None
 
         try:
-            step_info = self._run_order[self._current_index]
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
 
@@ -312,26 +312,11 @@ class ProtocolRunnerController(QObject):
                     channel = device_state.id_to_channel[electrode_id]
                     actuated_channels.append(channel)
 
-            # calculate actuated area
-            actuated_area = 0.0
-            if hasattr(step, 'device_state') and step.device_state:
-                # get calibration data from protocol state for electrode areas
-                if hasattr(self, 'protocol_state') and hasattr(self.protocol_state, 'get_calibration_data'):
-                    try:
-                        calibration_data = self.protocol_state.get_calibration_data()
-                        electrode_areas = calibration_data.get('electrode_areas', {})
-
-                        for electrode_id in phase_electrodes:
-                            if phase_electrodes[electrode_id] and electrode_id in electrode_areas:
-                                actuated_area += electrode_areas[electrode_id]
-                    except Exception as e:
-                        logger.debug(f"Could not get electrode areas for data logging: {e}")
-                        # Area remains 0 if calibration data not available
-
             return {
                 'step_id': step.parameters.get("ID", ""),
+                'step_idx': self.current_index,
                 'actuated_channels': sorted(actuated_channels),
-                'actuated_area': actuated_area
+                'actuated_area': step.device_state.activated_electrodes_area_mm2,
             }
 
         except Exception as e:
@@ -371,22 +356,22 @@ class ProtocolRunnerController(QObject):
             return False
 
         # skip if current step has no electrodes/paths/loops
-        if self._current_index >= len(self._run_order):
+        if self.current_index >= len(self._run_order):
             logger.debug("Skipping droplet check: no current step")
             return False
 
         # check if droplet detection was already attempted for this step
-        if self._droplet_check_attempted_for_step.get(self._current_index, False):
+        if self._droplet_check_attempted_for_step.get(self.current_index, False):
             # if skipping until phase navigation, do not check
             if self._droplet_check_skipped_until_phase_nav:
-                logger.debug(f"Skipping droplet check for step {self._current_index} - already attempted and skipped until phase nav")
+                logger.debug(f"Skipping droplet check for step {self.current_index} - already attempted and skipped until phase nav")
                 return False
             else:
                 # phase navigation occurred, allow re-check
-                logger.debug(f"Allowing droplet check for step {self._current_index} - phase navigation reset")
+                logger.debug(f"Allowing droplet check for step {self.current_index} - phase navigation reset")
                 # do not return
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
 
@@ -411,9 +396,9 @@ class ProtocolRunnerController(QObject):
                 return
 
             # mark attempted droplet detection for this step
-            self._droplet_check_attempted_for_step[self._current_index] = True
+            self._droplet_check_attempted_for_step[self.current_index] = True
 
-            step_info = self._run_order[self._current_index]
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
 
@@ -645,9 +630,9 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_failed = False
         self._expected_electrodes_for_check = []
 
-        self._current_index += 1
+        self.current_index += 1
 
-        if self._current_index >= len(self._run_order):
+        if self.current_index >= len(self._run_order):
             self._on_protocol_finished()
         else:
             self._execute_next_step()
@@ -664,7 +649,7 @@ class ProtocolRunnerController(QObject):
         self._recording_active = False
         self._is_paused = False
         self._status_timer.start()
-        self._current_index = 0
+        self.current_index = 0
         self._current_protocol_repeat = 1
         if not hasattr(self, "_run_order") or not self._run_order:
             self._run_order = self.flatten_func(self.protocol_state)
@@ -744,8 +729,8 @@ class ProtocolRunnerController(QObject):
             self._paused_phase_index = self._current_phase_index
 
         # remaining step time
-        if self._current_index < len(self._run_order):
-            step_info = self._run_order[self._current_index]
+        if self.current_index < len(self._run_order):
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
             if not device_state:
@@ -897,7 +882,7 @@ class ProtocolRunnerController(QObject):
         if not self._paused_original_electrodes or self._preview_mode:
             return
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
         if not device_state:
@@ -959,8 +944,8 @@ class ProtocolRunnerController(QObject):
         self._was_advanced_hardware_mode = False
 
         # send final message of the step that was being executed before stopped
-        if self._is_running and self._current_index < len(self._run_order):
-            current_step_info = self._run_order[self._current_index]
+        if self._is_running and self.current_index < len(self._run_order):
+            current_step_info = self._run_order[self.current_index]
             current_step = current_step_info["step"]
 
             device_state = current_step.device_state if hasattr(current_step, 'device_state') and current_step.device_state else None
@@ -1000,7 +985,7 @@ class ProtocolRunnerController(QObject):
         self._timer.stop()
         self._phase_timer.stop()
 
-        self._current_index = 0
+        self.current_index = 0
         self._run_order = []
         self._start_time = None
         self._step_start_time = None
@@ -1059,7 +1044,7 @@ class ProtocolRunnerController(QObject):
         if self._is_paused or not self._is_running:
             return
 
-        if self._current_index >= len(self._run_order):
+        if self.current_index >= len(self._run_order):
             self._on_protocol_finished()
             return
 
@@ -1070,7 +1055,7 @@ class ProtocolRunnerController(QObject):
                 self._data_logger.set_protocol_context(context)
 
         try:
-            step_info = self._run_order[self._current_index]
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             path = step_info["path"]
             rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
@@ -1079,7 +1064,7 @@ class ProtocolRunnerController(QObject):
             if not self._preview_mode:
                 self._handle_camera_controls(step_info)
 
-            logger.info(f"Executing step {self._current_index + 1}/{len(self._run_order)}: "
+            logger.info(f"Executing step {self.current_index + 1}/{len(self._run_order)}: "
                         f"{step.parameters.get('Description', 'Step')} (rep {rep_idx}/{rep_total})")
 
             self.signals.highlight_step.emit(path)
@@ -1088,7 +1073,7 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
 
-            logger.info(f"Executing step {self._current_index + 1} with device state: {device_state}")
+            logger.info(f"Executing step {self.current_index + 1} with device state: {device_state}")
 
             self._current_execution_plan = PathExecutionService.calculate_step_execution_plan(step, device_state)
             self._current_phase_index = 0
@@ -1123,21 +1108,21 @@ class ProtocolRunnerController(QObject):
 
                 step_height = MagnetService.validate_magnet_height(step.parameters.get("Magnet Height (mm)"))
                 if bool(int(step.parameters.get("Magnet", False))):
-                    logger.critical("Magnet requested to be on:")
+                    logger.info("Magnet requested to be on:")
                     if step_height == "Default":
-                        logger.info("Request to use default up position height for magnet")
+                        logger.debug("Request to use default up position height for magnet")
                         self.expected_magnet_height = self.zstage_preferences.up_height_mm
                     else:
                         self.expected_magnet_height = step_height
 
-                    logger.critical(f"Step height: {self.expected_magnet_height}")
+                    logger.debug(f"Step height: {self.expected_magnet_height}")
 
                 else:
-                    logger.critical("Magnet requested to be off")
+                    logger.info("Magnet requested to be off")
                     self.expected_magnet_height = 0.0
 
                 if abs(self.current_magnet_height - self.expected_magnet_height) > 0.1:
-                    logger.critical(f"Requesting magnet to height {self.expected_magnet_height}")
+                    logger.debug(f"Requesting magnet to height {self.expected_magnet_height}")
 
                     # use ho home if request is for magnet off.
                     if self.expected_magnet_height == 0.0:
@@ -1149,7 +1134,7 @@ class ProtocolRunnerController(QObject):
 
                 else:
                     # magnet already at expected level. proceed now.
-                    logger.critical("Magnet is already at expected height.")
+                    logger.debug("Magnet is already at expected height.")
                     self._waiting_for_magnet = False
                     self._start_step_timers_and_logic()
                     return
@@ -1172,10 +1157,10 @@ class ProtocolRunnerController(QObject):
         Starts the logic/timers for the step.
         This is separated so it can be called immediately OR after magnet delay.
         """
-        if self._current_index >= len(self._run_order):
+        if self.current_index >= len(self._run_order):
             return
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
 
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
@@ -1245,7 +1230,7 @@ class ProtocolRunnerController(QObject):
 
             logger.info(f"Executing phase {self._current_phase_index + 1}/{len(self._current_execution_plan)}: {plan_item['activated_electrodes']}")
 
-            step_info = self._run_order[self._current_index]
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
             if not device_state:
@@ -1366,7 +1351,7 @@ class ProtocolRunnerController(QObject):
         if self._start_time:
             self._elapsed_time = current_time - self._start_time
 
-        self._current_index = target_index
+        self.current_index = target_index
 
         # clear droplet detection tracking for navigation
         self._droplet_check_skipped_until_phase_nav = False
@@ -1388,7 +1373,7 @@ class ProtocolRunnerController(QObject):
         if not self._is_paused:
             self._execute_next_step()
         else:
-            step_info = self._run_order[self._current_index]
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             path = step_info["path"]
             self.signals.highlight_step.emit(path)
@@ -1418,10 +1403,10 @@ class ProtocolRunnerController(QObject):
         return True
 
     def get_current_step_path(self):
-        if not self._is_running or self._current_index >= len(self._run_order):
+        if not self._is_running or self.current_index >= len(self._run_order):
             return None
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         return step_info["path"]
 
     def get_run_order_index_by_path(self, step_path):
@@ -1431,10 +1416,10 @@ class ProtocolRunnerController(QObject):
         return -1
 
     def _get_current_phase_electrodes(self):
-        if not self._is_running or self._current_index >= len(self._run_order):
+        if not self._is_running or self.current_index >= len(self._run_order):
             return {}
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
         if not device_state:
@@ -1548,10 +1533,10 @@ class ProtocolRunnerController(QObject):
         return last_phase_electrodes
 
     def _publish_advanced_pause_message(self):
-        if not self._is_running or self._current_index >= len(self._run_order):
+        if not self._is_running or self.current_index >= len(self._run_order):
             return
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
         if not device_state:
@@ -1644,8 +1629,8 @@ class ProtocolRunnerController(QObject):
             self._publish_camera_video_control("false")
 
         # message with last executed step
-        if self._current_index > 0 and self._current_index <= len(self._run_order):
-            last_step_info = self._run_order[self._current_index - 1]
+        if self.current_index > 0 and self.current_index <= len(self._run_order):
+            last_step_info = self._run_order[self.current_index - 1]
             last_step = last_step_info["step"]
 
             device_state = last_step.device_state if hasattr(last_step, 'device_state') and last_step.device_state else None
@@ -1666,7 +1651,7 @@ class ProtocolRunnerController(QObject):
 
             msg_model.editable = True
 
-            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+            publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.model_dump_json())
 
             if not self._preview_mode:
                 deactivated_hardware_message = PathExecutionService.create_deactivated_hardware_electrode_message(device_state)
@@ -1690,7 +1675,7 @@ class ProtocolRunnerController(QObject):
     def _emit_status_update(self):
         if not self._is_running or not self._run_order:
             return
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
 
@@ -1698,7 +1683,7 @@ class ProtocolRunnerController(QObject):
         for i, entry in enumerate(self._run_order):
             if entry["rep_idx"] == 1:
                 current_step_position += 1
-                if i >= self._current_index:
+                if i >= self.current_index:
                     break
 
         step_total = self._unique_step_count
@@ -1739,10 +1724,10 @@ class ProtocolRunnerController(QObject):
             "step_total": step_total,
             "step_rep_idx": current_repetition,
             "step_rep_total": total_repetitions,
-            "recent_step": self._run_order[self._current_index - 1]["step"].parameters.get("Description", "-")
-            if self._current_index > 0 else "-",
-            "next_step": self._run_order[self._current_index + 1]["step"].parameters.get("Description", "-")
-            if self._current_index + 1 < len(self._run_order) else "-",
+            "recent_step": self._run_order[self.current_index - 1]["step"].parameters.get("Description", "-")
+            if self.current_index > 0 else "-",
+            "next_step": self._run_order[self.current_index + 1]["step"].parameters.get("Description", "-")
+            if self.current_index + 1 < len(self._run_order) else "-",
             "protocol_repeat_idx": self._current_protocol_repeat,
             "protocol_repeat_total": self._repeat_protocol_n
         }
@@ -1967,10 +1952,10 @@ class ProtocolRunnerController(QObject):
             self.signals.protocol_paused.emit()
 
     def can_navigate_phases(self):
-        if not self._is_running or self._current_index >= len(self._run_order):
+        if not self._is_running or self.current_index >= len(self._run_order):
             return False
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
 
@@ -2028,7 +2013,7 @@ class ProtocolRunnerController(QObject):
         if not self._current_execution_plan or not self._is_paused:
             return
 
-        step_info = self._run_order[self._current_index]
+        step_info = self._run_order[self.current_index]
         step = step_info["step"]
         device_state = step.device_state if hasattr(step, 'device_state') and step.device_state else None
         if not device_state:
@@ -2082,7 +2067,7 @@ class ProtocolRunnerController(QObject):
         target_step.parameters["Frequency"] = str(new_frequency)
 
         # if its the currently running step, publish immediately
-        if target_step_index == self._current_index:
+        if target_step_index == self.current_index:
             VoltageFrequencyService.publish_immediate_voltage_frequency(
                 str(new_voltage), str(new_frequency), self._preview_mode
             )

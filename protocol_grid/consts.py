@@ -5,12 +5,8 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from microdrop_style.colors import (
-    PRIMARY_SHADE, SECONDARY_SHADE, GREY, BLACK, WHITE
-)
-from microdrop_style.button_styles import (
-    get_button_style, get_button_dimensions, BUTTON_SPACING
-)
+
+from microdrop_style.button_styles import get_button_dimensions
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 
 ICON_FONT_FAMILY = "Material Symbols Outlined"
@@ -29,6 +25,7 @@ CALIBRATION_DATA = "ui/calibration_data"
 DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
+DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
@@ -39,8 +36,8 @@ ACTOR_TOPIC_DICT = {
         DROPLETS_DETECTED,
         CALIBRATION_DATA,
         CAPACITANCE_UPDATED,
-        ZSTAGE_POSITION_UPDATED
-        # DEVICE_NAME_CHANGED,  #TODO: uncomment when implemented
+        ZSTAGE_POSITION_UPDATED,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
     ]
 }
 
@@ -145,3 +142,5 @@ def get_dark_mode_stylesheet():
 # Legacy constants for backward compatibility
 LIGHT_MODE_STYLESHEET = get_light_mode_stylesheet()
 DARK_MODE_STYLESHEET = get_dark_mode_stylesheet()
+
+LOGS_STOP_SETTLING_TIME_MS = 2000 # milliseconds to wait before blocking logs input for after protocol run ends.

@@ -1,6 +1,5 @@
 import json
-from datetime import datetime
-import time
+from datetime import datetime, UTC
 
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
 from dropbot.proxy import I2cAddressNotSet
@@ -220,12 +219,18 @@ class DropbotControllerBase(HasTraits):
 
     @staticmethod
     def _capacitance_updated_wrapper(signal: dict[str, str]):
+        utc_timestamp = datetime.now(UTC).timestamp()
         capacitance = float(signal.get('new_value', 0.0)) * ureg.farad
         capacitance_formatted = f"{capacitance.to(ureg.picofarad):.4g~P}"
         voltage = float(signal.get('V_a', 0.0)) * ureg.volt
         voltage_formatted = f"{voltage:.3g~P}"
+        dropbot_timestamp = int(signal.get('time_us', 0))
+        # create new timestamp
+
+
         publish_message(topic=CAPACITANCE_UPDATED,
-                        message=json.dumps({'capacitance': capacitance_formatted, 'voltage': voltage_formatted}))
+                        message=json.dumps({'capacitance': capacitance_formatted, 'voltage': voltage_formatted,
+                                            'instrument_time_us': dropbot_timestamp, 'reception_time': utc_timestamp}),)
 
     @staticmethod
     def _shorts_detected_wrapper(signal: dict[str, str]):

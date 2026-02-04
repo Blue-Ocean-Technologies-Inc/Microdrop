@@ -241,6 +241,7 @@ class LogPane(TraitsDockPane):
         information(
             None,
             meta_html,
+            cancel=False,
             detail=html_content,
             detail_collapsible=False,
             title="Log Details",

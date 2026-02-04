@@ -2,28 +2,27 @@ import copy
 import json
 from pathlib import Path
 
-from microdrop_application.dialogs.pyface_wrapper import confirm, warning, NO, YES
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
 from PySide6.QtWidgets import (
     QTreeView,
     QVBoxLayout,
     QWidget,
-    QHBoxLayout,
     QFileDialog,
     QMessageBox,
     QApplication,
     QMainWindow,
-    QPushButton,
     QDialog,
     QToolButton,
 )
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal
+from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QUrl
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.decorators import debounce
-from microdrop_utils.pyside_helpers import DebouncedToolButton
+from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
+from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
@@ -53,6 +52,7 @@ from protocol_grid.consts import (
     LIGHT_MODE_STYLESHEET,
     DARK_MODE_STYLESHEET,
     copy_fields_for_new_step,
+    LOGS_STOP_SETTLING_TIME_MS,
 )
 from protocol_grid.extra_ui_elements import (
     EditContextMenu,
@@ -61,7 +61,6 @@ from protocol_grid.extra_ui_elements import (
     StatusBar,
     make_separator,
     ExperimentLabel,
-    ExperimentCompleteDialog,
     DropbotDisconnectedBeforeRunDialogAction,
 )
 
@@ -130,7 +129,6 @@ def ensure_protocol_saved(func):
 
     return wrapper
 
-
 class PGCWidget(QWidget):
 
     protocolChanged = Signal()
@@ -138,6 +136,7 @@ class PGCWidget(QWidget):
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
 
+        self._active_device_svg_file = None
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
@@ -214,7 +213,9 @@ class PGCWidget(QWidget):
         self.btn_new_note.setText("sticky_note")
         self.btn_new_note.setToolTip("New Note")
 
-        self.btn_new_note.clicked.connect(self.dock_pane.create_new_note)
+        self.note_manager = StickyWindowManager()
+
+        self.btn_new_note.clicked.connect(self.create_new_note)
         self.btn_new_note.setCursor(Qt.PointingHandCursor)
 
         self.navigation_bar = NavigationBar(self)
@@ -284,6 +285,13 @@ class PGCWidget(QWidget):
         )
 
         self.application.observe(self.save_column_settings, "application_exiting")
+
+    def create_new_note(self):
+
+        base_dir = self.experiment_manager.get_experiment_directory()
+        experiment_name = base_dir.stem
+
+        self.note_manager.request_new_note(base_dir, experiment_name)
 
     def _on_application_palette_changed(self):
         """Handle application palette changes (system theme switches)."""
@@ -367,6 +375,12 @@ class PGCWidget(QWidget):
             ):
                 message_listener = self._protocol_grid_plugin.get_listener()
                 if message_listener and hasattr(message_listener, "signal_emitter"):
+
+                    # connect media capture data logging\
+                    message_listener.signal_emitter.media_captured.connect(
+                        self.protocol_data_logger.log_media_capture
+                    )
+
                     # connect to device viewer messages
                     message_listener.signal_emitter.device_viewer_message_received.connect(
                         self.on_device_viewer_message
@@ -441,17 +455,9 @@ class PGCWidget(QWidget):
             return
         if self._protocol_running:
             return
-        # self._processing_device_viewer_message = True
-        # self._programmatic_change = True
-
-        # scroll_pos = self.save_scroll_positions()
-        # saved_selection = self.save_selection()
-
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
-            # if dv_msg.free_mode:
-            # if dv_msg.step_id is None:
             active_electrodes = []
             for channel_str, is_active in dv_msg.channels_activated.items():
                 if is_active:
@@ -467,6 +473,9 @@ class PGCWidget(QWidget):
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
                 logger.info(f"Updated tracked active electrodes: {active_electrodes}")
+
+            if dv_msg.svg_file != self._active_device_svg_file:
+                self._active_device_svg_file = dv_msg.svg_file
 
             if dv_msg.step_id:
                 self._processing_device_viewer_message = True
@@ -665,74 +674,71 @@ class PGCWidget(QWidget):
         else:
             self.status_bar.lbl_repeat_protocol_status.setText("1/")
 
-    def on_protocol_finished(self):
+    def on_protocol_finished(self, completed_steps=None):
         self.clear_highlight()
         self._protocol_running = False
         self._disable_phase_navigation()
 
         self.navigation_bar.btn_play.setText(ICON_PLAY)
         self.navigation_bar.btn_play.setToolTip("Play Protocol")
+        self.navigation_bar.btn_stop.setEnabled(False)
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
 
-        # stop data logging and save file
-        self.protocol_data_logger.stop_logging()
+        if not self.navigation_bar.is_preview_mode():
+            try:
+                # auto-save current protocol with smart filename
+                protocol_data = self.state.to_flat_export()
 
-        # handle auto-save and new experiment creation based on mode
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
-        preview_mode = self.navigation_bar.is_preview_mode()
+                # save_protocol_snapshot
+                saved_path = self.experiment_manager.auto_save_protocol(protocol_data)
 
-        if not preview_mode:
-            if advanced_mode:
-                # advanced mode: show dialog and handle response
-                self._handle_advanced_mode_completion()
-            else:
-                # regular mode: auto-save and create new experiment
-                self._handle_regular_mode_completion()
+                if saved_path:
+                    # update protocol state tracker to reflect the auto-saved protocol
+                    logger.critical(f"Protocol saved as: {saved_path}")
+                    saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
+                    self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
+
+                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=LOGS_STOP_SETTLING_TIME_MS)
+
+                # initialize new experiment if user wants
+                if (
+                    confirm(
+                        None,
+                        title="Create New Experiment?",
+                        cancel=False,
+                    )
+                    == YES
+                ):
+                    self.setup_new_experiment()
+
+
+
+                self.generate_summary()
+
+                # Convert local path to a valid URL (handles Windows backslashes automatically)
+                file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
+
+                formatted_message = (
+                    f"Report file saved to:<br>"
+                    f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
+                )
+
+                success(
+                    None,
+                    formatted_message,
+                    title="Run Summary Generated",
+                )
+
+            except Exception as e:
+                logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
 
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
-    def _handle_regular_mode_completion(self):
-        """handle protocol completion in regular mode: auto-save + new experiment."""
-        try:
-            # auto-save current protocol with smart filename
-            protocol_data = self.state.to_flat_export()
-            protocol_name = self.protocol_state_tracker.protocol_name
-            is_modified = self.protocol_state_tracker.is_modified
-
-            saved_path = self.experiment_manager.auto_save_protocol(
-                protocol_data, protocol_name, is_modified
-            )
-
-            if saved_path:
-                # update protocol state tracker to reflect the auto-saved protocol
-                logger.critical(f"Protocol saved as: {saved_path}")
-
-            # save data file
-            data_file_path = self.protocol_data_logger.save_data_file()
-            if data_file_path:
-                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(
-                    data_file_path
-                )
-
-            # initialize new experiment if user wants
-            if (
-                confirm(
-                    None,
-                    title="Create New Experiment?",
-                    cancel=False,
-                    # no_label="No",
-                    # yes_label="Yes",
-                    # detail="This is some details over here",
-                )
-                == YES
-            ):
-
-                self.setup_new_experiment()
-
-        except Exception as e:
-            logger.error(f"Error handling regular mode completion: {e}")
+    @with_loading_screen("Generating Run Report...")
+    def generate_summary(self):
+        return self.protocol_data_logger.generate_and_save_report()
 
     def setup_new_experiment(self):
         new_experiment_dir = self.experiment_manager.initialize_new_experiment()
@@ -741,27 +747,6 @@ class PGCWidget(QWidget):
             # update information panel with new experiment ID
             self.experiment_label.update_experiment_id(new_experiment_dir.stem)
             logger.info(f"Started new experiment: {new_experiment_dir.stem}")
-
-    def _handle_advanced_mode_completion(self):
-        """handle protocol completion in advanced mode: show dialog."""
-        try:
-            # save data file
-            data_file_path = self.protocol_data_logger.save_data_file()
-            if data_file_path:
-                csv_file_path = self.protocol_data_logger.save_dataframe_as_csv(
-                    data_file_path
-                )
-
-            dialog = ExperimentCompleteDialog(self)
-            result = dialog.exec()
-
-            if result == QDialog.Accepted:
-                # user chose YES: same as regular mode
-                self._handle_regular_mode_completion()
-            # if NO or closed: do nothing, stay with current experiment
-
-        except Exception as e:
-            logger.error(f"Error handling advanced mode completion: {e}")
 
     def _cleanup_after_protocol_operation(self):
         if not getattr(self, "_programmatic_change", False):
@@ -937,7 +922,7 @@ class PGCWidget(QWidget):
             try:
                 self._pending_play_pause_action()
             except Exception as e:
-                logger.error(f"Error in debounced play/pause action: {e}")
+                logger.error(f"Error in debounced play/pause action: {e}", exc_info=True)
             finally:
                 self._pending_play_pause_action = None
 
@@ -982,7 +967,10 @@ class PGCWidget(QWidget):
 
         # start data logging
         self.protocol_data_logger.start_logging(
-            self.experiment_manager.get_experiment_directory(), preview_mode
+            self.experiment_manager.get_experiment_directory(),
+            self._active_device_svg_file,
+            preview_mode,
+            n_steps=len(run_order)
         )
 
         self.protocol_runner.set_preview_mode(preview_mode)
@@ -997,6 +985,7 @@ class PGCWidget(QWidget):
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+        self.navigation_bar.btn_stop.setEnabled(True)
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
@@ -1150,23 +1139,21 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
 
     def stop_protocol(self):
-        # stop data logging
-        self.protocol_data_logger.stop_logging()
 
-        self.protocol_runner.stop()
-        self.clear_highlight()
-        self.reset_status_bar()
-        self._protocol_running = False
+        self.protocol_runner.pause()
 
-        self._disable_phase_navigation()
+        user_choice = confirm(
+            None,
+            informative="Select <b>Yes</b> to force finish protocol...",
+        )
 
-        self.navigation_bar.btn_play.setText(ICON_PLAY)
-        self.navigation_bar.btn_play.setToolTip("Play Protocol")
+        if user_choice == YES:
+            completed_steps = self.protocol_runner.current_index
 
-        self._update_navigation_buttons_state()
-        self._update_ui_enabled_state()
+            self.protocol_runner.stop()
+            self.reset_status_bar()
 
-        QTimer.singleShot(10, self._cleanup_after_protocol_operation)
+            self.on_protocol_finished(completed_steps)
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0 s")

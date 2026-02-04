@@ -145,6 +145,7 @@ class NavigationBar(QWidget):
 
         self.btn_stop = QPushButton(ICON_STOP)
         self.btn_stop.setToolTip("Stop Protocol")
+        self.btn_stop.setEnabled(False)
 
         self.btn_next = QPushButton(ICON_NEXT)
         self.btn_next.setToolTip("Next Step")
@@ -741,79 +742,6 @@ class StepMessageDialog(QDialog):
             self.reject()  # Escape = NO
         else:
             super().keyPressEvent(event)
-
-
-class ExperimentCompleteDialog(QDialog):
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setup_ui()
-        
-        self.setAttribute(Qt.WA_DeleteOnClose, False)
-        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
-        self.setModal(True)
-    
-    def setup_ui(self):
-        self.setWindowTitle("Experiment Complete")
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
-        
-        message_label = QLabel("Experiment complete. Would you like to start a new experiment?")
-        message_label.setWordWrap(True)
-        message_label.setAlignment(Qt.AlignCenter)
-        message_label.setMinimumWidth(400)
-        message_label.setStyleSheet("QLabel { font-size: 14pt; padding: 15px; }")
-        layout.addWidget(message_label)
-        
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        # Use centralized button styles
-        no_button = QPushButton("NO")
-        no_button.setStyleSheet(get_button_style("light", "default"))
-        no_button.setMinimumWidth(100)
-        no_button.clicked.connect(self.reject)        
-        
-        yes_button = QPushButton("YES")
-        yes_button.setStyleSheet(get_button_style("light", "default"))
-        yes_button.setDefault(True)
-        yes_button.setMinimumWidth(100)
-        yes_button.clicked.connect(self.accept)
-
-        button_layout.addWidget(yes_button)
-        button_layout.addWidget(no_button)
-        
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-        
-        self.adjustSize()
-        
-        # center on parent if available
-        if self.parent():
-            parent_geometry = self.parent().geometry()
-            x = parent_geometry.x() + (parent_geometry.width() - self.width()) // 2
-            y = parent_geometry.y() + (parent_geometry.height() - self.height()) // 2
-            self.move(x, y)
-    
-    def show_completion_dialog(self):
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        
-    def closeEvent(self, event):
-        self.reject()
-        event.accept()
-    
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            self.accept()
-        elif event.key() == Qt.Key_Escape:
-            self.reject()
-        else:
-            super().keyPressEvent(event)
-
 
 class DropbotDisconnectedBeforeRunDialog(QDialog):
     def __init__(self, parent=None):

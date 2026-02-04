@@ -1,7 +1,4 @@
-import os
 from pathlib import Path
-
-from traits.etsconfig.api import ETSConfig
 
 from dropbot_controller.consts import CHIP_INSERTED, CAPACITANCE_UPDATED, DROPLETS_DETECTED
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_CAMERA_ACTIVE, DEVICE_VIEWER_SCREEN_RECORDING

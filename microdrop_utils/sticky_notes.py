@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QAction, QIcon, QFont, QColor, QTextListFormat, QKeySequence
 from PySide6.QtCore import Qt
+from traits.api import HasTraits, Instance, List, Dict, Event
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import GREY, SECONDARY_SHADE, WHITE
@@ -61,6 +62,8 @@ class StickyModel:
 
         self.base_dir.mkdir(exist_ok=True)
 
+        self.saved_notes = []
+
     def _get_next_filename(self):
         existing_files = os.listdir(self.base_dir)
         max_index = 0
@@ -83,6 +86,8 @@ class StickyModel:
             full_html = f"<div style='background-color:{self.current_color}; height:100%;'>{html_content}</div>"
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(full_html)
+
+            self.saved_notes.append(full_path)
             return True, full_path
         except Exception as e:
             return False, str(e)
@@ -220,10 +225,13 @@ class StickyView(QWidget):
 # ===========================================================================
 # 4. CONTROLLER & LAUNCHER
 # ===========================================================================
-class StickyController:
-    def __init__(self, model: "StickyModel", view: "StickyView"):
-        self.model = model
-        self.view = view
+class StickyController(HasTraits):
+
+    model = Instance(StickyModel)
+    view = Instance(StickyView)
+    note_saved_event = Event
+
+    def traits_init(self, *args, **kwargs):
 
         self._connect_signals()
 
@@ -259,6 +267,7 @@ class StickyController:
             )
             self.view.file_save_label.setText(f"Saved ({self.model.current_filename})")
             logger.info(f"Saved to {result}")
+            self.note_saved_event = result
         else:
             logger.error("Error saving")
 
@@ -318,15 +327,14 @@ class StickyController:
         self.view.act_list.setChecked(bool(self.view.editor.textCursor().currentList()))
 
 
-class StickyWindowManager:
+class StickyWindowManager(HasTraits):
     """
     Manages multiple Sticky Note windows.
     """
+    active_notes = Dict
+    saved_notes_paths = List
 
-    def __init__(self):
-        # Dictionary to keep windows alive: { "experiment_name": controller_instance }
-        self.active_notes = {}
-
+    def traits_init(self, *args, **kwargs):
         # CRITICAL: This ensures the app doesn't close when the "Launcher"
         # window is closed, as long as sticky notes are still open.
         app = QApplication.instance()
@@ -357,7 +365,9 @@ class StickyWindowManager:
         logger.info(f"Manager: Creating new note for '{experiment_name}'")
         model = StickyModel(base_dir, experiment_name)
         view = StickyView()
-        ctrl = StickyController(model, view)
+        ctrl = StickyController(model=model, view=view)
+
+        ctrl.observe(self._on_note_saved, "note_saved_event")
 
         # 4. Handle Cleanup (Crucial for Memory Management)
         # We tell Qt to delete the widget from memory when closed
@@ -382,6 +392,15 @@ class StickyWindowManager:
         # Create a copy of values list because we will be modifying the dict during iteration
         for ctrl in list(self.active_notes.values()):
             ctrl.view.close()
+
+    ## --- Trait observers ------------
+    def _on_note_saved(self, event):
+        if event.new not in self.saved_notes_paths:
+            self.saved_notes_paths.append(event.new)
+
+    def clear_saved_notes_history(self):
+        logger.warning(f"Notes Manager: Clearing saved notes paths history")
+        self.saved_notes_paths.clear()
 
 
 if __name__ == "__main__":

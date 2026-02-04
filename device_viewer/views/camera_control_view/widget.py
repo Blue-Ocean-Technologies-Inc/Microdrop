@@ -24,13 +24,18 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from microdrop_application.dialogs.pyface_wrapper import information, error, warning
+from microdrop_application.dialogs.pyface_wrapper import error, warning, success
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
 from logger.logger_service import get_logger
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
 logger = get_logger(__name__)
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from ...models.media_capture_model import MediaCaptureMessageModel, MediaType
+from protocol_grid.consts import DEVICE_VIEWER_MEDIA_CAPTURED
 
 
 class CameraControlWidget(QWidget):
@@ -459,10 +464,6 @@ class CameraControlWidget(QWidget):
         if was_running:
             self.camera.start()
 
-    def get_next_image_id(self):
-        """Generate a unique image ID for captured images."""
-        return str(int(time.time()))
-
     # ------------------------ Callbacks -------------------------------
 
     @Slot()
@@ -504,7 +505,6 @@ class CameraControlWidget(QWidget):
             )
 
         image.save(str(save_path), "PNG")
-        logger.info(f"Image captured successfully to {save_path}")
 
         self._show_media_capture_dialog("Image", str(save_path))
 
@@ -544,33 +544,26 @@ class CameraControlWidget(QWidget):
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setChecked(False)
 
-    def _generate_capture_filename(self, step_description=None, step_id=None):
-        timestamp = self.get_next_image_id()
+    def _generate_media_filename(self, step_description=None, step_id=None, file_extension=".png"):
+        """Generate a filename based on the selected step."""
+        timestamp = get_current_utc_datetime()
 
         if step_description and step_id:
             clean_desc = "".join(
                 c for c in step_description if c.isalnum() or c in (" ", "-", "_")
             ).rstrip()
             clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}.png"
+            return f"{clean_desc}_{step_id}_{timestamp}{file_extension}"
         elif step_id:
-            return f"step_{step_id}_{timestamp}.png"
+            return f"step_{step_id}_{timestamp}{file_extension}"
         else:
-            return f"captured_image_{timestamp}.png"
+            return f"captured_image_{timestamp}{file_extension}"
+
+    def _generate_capture_filename(self, step_description=None, step_id=None):
+        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".png")
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        timestamp = self.get_next_image_id()
-
-        if step_description and step_id:
-            clean_desc = "".join(
-                c for c in step_description if c.isalnum() or c in (" ", "-", "_")
-            ).rstrip()
-            clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}.mp4"
-        elif step_id:
-            return f"step_{step_id}_{timestamp}.mp4"
-        else:
-            return f"video_recording_{timestamp}.mp4"
+        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".mp4")
 
     ##### Video recording #######
     def on_recording_active(self, recording_data):
@@ -820,22 +813,38 @@ class CameraControlWidget(QWidget):
         save_path [str]: Path to save the captured image / video
 
         """
+
+        if name.lower() not in MediaType.get_media_types():
+            error_msg = f"Provide one of these media types: {", ".join(MediaType.get_media_types())}. Got {name}"
+            raise ValueError(error_msg)
+
         # Convert local path to a valid URL (handles Windows backslashes automatically)
         file_url = QUrl.fromLocalFile(save_path).toString()
 
         formatted_message = (
             f"File saved to:<br>"
             f"<a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
-            f"Click on link to open file. Press ok to exit..."
+        )
+
+        ## Publish message that media has been captured
+        media_capture_message = MediaCaptureMessageModel(
+            path=Path(save_path),
+            type=name.lower(),
+        )
+
+        publish_message(
+            topic=DEVICE_VIEWER_MEDIA_CAPTURED,
+            message=media_capture_message.model_dump_json(),
         )
 
         if self.show_media_capture_dialog:
 
-            information(
+            success(
                 None,
                 formatted_message,
                 title=f"{name.title()} Captured",
             )
 
-        else:
-            logger.critical(f"Saved {name} to {save_path}.")
+        logger.critical(f"Saved {name} media to {save_path}.")
+
+        return True

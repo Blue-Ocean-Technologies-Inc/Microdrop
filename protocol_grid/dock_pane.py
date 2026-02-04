@@ -1,9 +1,7 @@
 # enthought imports
-from PySide6.QtWidgets import QApplication
 from traits.api import Str
 from pyface.tasks.dock_pane import DockPane
 
-from microdrop_utils.sticky_notes import StickyWindowManager
 # local imports
 from .widget import PGCWidget
 
@@ -45,9 +43,6 @@ class PGCDockPane(DockPane):
             logger.error(f"could not set plugin reference via dock pane: {e}")
             raise Exception(f"could not set plugin reference via dock pane: {e}")
 
-        # secondary notes widget that pgc widget could open
-        self.note_manager = StickyWindowManager()
-
         return widget
 
     def new_protocol(self):
@@ -64,11 +59,3 @@ class PGCDockPane(DockPane):
 
     def setup_new_experiment(self):
         self.control.widget().setup_new_experiment()
-
-    def create_new_note(self):
-        widget = self.control.widget()
-
-        base_dir = widget.experiment_manager.get_experiment_directory()
-        experiment_name = base_dir.stem
-
-        self.note_manager.request_new_note(base_dir, experiment_name)
