@@ -165,7 +165,7 @@ class ProtocolDataLogger:
             capacitance_data = json.loads(capacitance_message)
             capacitance_str = capacitance_data.get("capacitance", "-")
             voltage_str = capacitance_data.get("voltage", "-")
-            instrument_timestamp = capacitance_data.get("instrument_time", 0)
+            instrument_timestamp_us = capacitance_data.get("instrument_time_us", 0)
             reception_timestamp = capacitance_data.get("reception_time", 0)
 
             if capacitance_str == "-" or voltage_str == "-":
@@ -208,8 +208,8 @@ class ProtocolDataLogger:
 
             data_entry = {
                 "step_idx": step_idx,
-                "utc_time": reception_timestamp,
-                "instrument_time": instrument_timestamp,
+                "utc_time": int(reception_timestamp), # we care only about precision to the second.
+                "instrument_time_us": instrument_timestamp_us,
                 "step_id": step_id,
                 "Capacitance (pF)": capacitance_value,
                 "Voltage (V)": voltage_value,
@@ -263,63 +263,6 @@ class ProtocolDataLogger:
 
         return result
 
-    def save_data_file(self) -> Path | None:
-        """save accumulated data to JSON file."""
-        if not self._data_entries or not self._experiment_directory:
-            logger.info("No data to save or no experiment directory")
-            return None
-
-        try:
-            data_file_path = Path(
-                self._experiment_directory / "data" / f"data_{self._metadata_entries.get("Start Time", get_current_utc_datetime())}.json"
-            )
-
-            data_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-            columnar_data = self._convert_to_columnar_format()
-            json_str = json.dumps(columnar_data, separators=(",", ":"))
-
-            df = self.load_data_as_dataframe(json_data=json_str)
-
-            ### Compute corrected instrument time ######
-            # 1. Define the 32-bit limit
-            # 2**32 = 4,294,967,296
-            UINT32_MAX = 2**32
-
-            # 2. Calculate difference between steps
-            diffs = df["instrument_time"].diff()
-
-            # 3. Detect Rollover
-            # If the difference is a huge negative number (e.g., < -2 billion), a rollover occurred.
-            rollovers = diffs < -(UINT32_MAX // 2)
-
-            # 4. Calculate the offset
-            # Each time a rollover happens, we add 2^32 to all subsequent values
-            rollover_offsets = rollovers.cumsum() * UINT32_MAX
-
-            # 5. Apply correction
-            df["corr_instrument_time"] = df["instrument_time"] + rollover_offsets
-
-            df.to_json(data_file_path)
-
-            logger.info(
-                f"Saved {len(self._data_entries)} data entries to: {data_file_path}"
-            )
-
-            self._data_files.append(data_file_path)
-
-            self._active_analysis_df = df
-
-            return data_file_path
-
-        except Exception as e:
-            logger.error(f"Error saving data file: {e}")
-            return None
-
-    def get_data_entry_count(self) -> int:
-        """get number of logged data entries."""
-        return len(self._data_entries)
-
     @staticmethod
     def load_data_as_dataframe(json_data=None):
         """
@@ -367,6 +310,61 @@ class ProtocolDataLogger:
             logger.error(f"Error loading data as DataFrame: {e}")
             return None
 
+    def save_data_file(self) -> Path | None:
+        """save accumulated data to JSON file."""
+        if not self._data_entries or not self._experiment_directory:
+            logger.info("No data to save or no experiment directory")
+            return None
+
+        try:
+            data_file_path = Path(
+                self._experiment_directory / "data" / f"data_{self._metadata_entries.get("Start Time", get_current_utc_datetime())}.json"
+            )
+
+            data_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            columnar_data = self._convert_to_columnar_format()
+            json_str = json.dumps(columnar_data, separators=(",", ":"))
+
+            df = self.load_data_as_dataframe(json_data=json_str)
+
+            ### Compute corrected instrument time ######
+            # 1. Define the 32-bit limit
+            # 2**32 = 4,294,967,296
+            UINT32_MAX = 2**32
+
+            # 2. Calculate difference between steps
+            diffs = df["instrument_time_us"].diff()
+
+            # 3. Detect Rollover
+            # If the difference is a huge negative number (e.g., < -2 billion), a rollover occurred.
+            rollovers = diffs < -(UINT32_MAX // 2)
+
+            # 4. Calculate the offset
+            # Each time a rollover happens, we add 2^32 to all subsequent values
+            rollover_offsets = rollovers.cumsum() * UINT32_MAX
+
+            # 5. Apply correction
+            df["corr_instrument_time_us"] = df["instrument_time_us"] + rollover_offsets
+
+            df.to_json(data_file_path)
+
+            logger.info(
+                f"Saved {len(self._data_entries)} data entries to: {data_file_path}"
+            )
+
+            self._active_analysis_df = df
+
+            return data_file_path
+
+        except Exception as e:
+            logger.error(f"Error saving data file: {e}")
+            return None
+
+    def get_data_entry_count(self) -> int:
+        """get number of logged data entries."""
+        return len(self._data_entries)
+
     def save_dataframe_as_csv(self, file_path: str | Path = None, output_path: str | Path = None):
         """
         Load JSON data and save as CSV file.
@@ -376,10 +374,7 @@ class ProtocolDataLogger:
             output_path: Path for output CSV (optional, defaults to same directory)
         """
         try:
-            if not file_path:
-                df = self._active_analysis_df
-            else:
-                df = pd.read_json(file_path)
+            df = pd.read_json(file_path) if file_path else self._active_analysis_df
 
             if df is None or df.empty:
                 logger.warning("No data to save as CSV")
@@ -393,7 +388,7 @@ class ProtocolDataLogger:
             logger.critical(f"Saved CSV file: {output_path}")
             self._data_files.append(output_path)
 
-            return str(output_path)
+            return output_path
 
         except Exception as e:
             logger.error(f"Error saving CSV file: {e}")
@@ -436,10 +431,10 @@ class ProtocolDataLogger:
         num_data_points_per_channel = df.explode("actuated_channels")["actuated_channels"].value_counts()
 
         # find average time
-        df["step_delta"] = df["corr_instrument_time"].diff()
+        df["step_delta"] = df["corr_instrument_time_us"].diff()
 
         # insturment time is in us, convert to seconds * 1e-6
-        average_capacitance_update_interval_s = df.sort_values("corr_instrument_time")["corr_instrument_time"].diff().fillna(0).mean() * 1e-6
+        average_capacitance_update_interval_s = df.sort_values("corr_instrument_time_us")["corr_instrument_time_us"].diff().fillna(0).mean() * 1e-6
 
         # multiply n hits by update time to get estimated channel actuation duration.
         channel_duration_series = (num_data_points_per_channel * average_capacitance_update_interval_s)
@@ -661,7 +656,9 @@ class ProtocolDataLogger:
 
     def generate_data_files(self):
         data_file_path = self.save_data_file()
-        csv_file_path = self.save_dataframe_as_csv()
+        csv_file_path = self.save_dataframe_as_csv(output_path=data_file_path.with_suffix(".csv"))
+
+        self._data_files = [data_file_path, csv_file_path]
 
         return data_file_path, csv_file_path
 
@@ -680,7 +677,7 @@ if __name__ == "__main__":
     UINT32_MAX = 2**32
 
     # 2. Calculate difference between steps
-    diffs = df["instrument_time"].diff()
+    diffs = df["instrument_time_us"].diff()
 
     # 3. Detect Rollover
     # If the difference is a huge negative number (e.g., < -2 billion), a rollover occurred.
@@ -691,8 +688,8 @@ if __name__ == "__main__":
     rollover_offsets = rollovers.cumsum() * UINT32_MAX
 
     # 5. Apply correction
-    df["corr_instrument_time"] = df["instrument_time"] + rollover_offsets
+    df["corr_instrument_time_us"] = df["instrument_time_us"] + rollover_offsets
 
-    df["delta"] = df["corr_instrument_time"] - df["instrument_time"]
+    df["delta"] = df["corr_instrument_time_us"] - df["instrument_time_us"]
 
-    print(df[["instrument_time", "corr_instrument_time", "delta"]])
+    print(df[["instrument_time_us", "corr_instrument_time_us", "delta"]])

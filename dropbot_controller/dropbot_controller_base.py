@@ -230,7 +230,7 @@ class DropbotControllerBase(HasTraits):
 
         publish_message(topic=CAPACITANCE_UPDATED,
                         message=json.dumps({'capacitance': capacitance_formatted, 'voltage': voltage_formatted,
-                                            'instrument_time': dropbot_timestamp, 'reception_time': utc_timestamp}),)
+                                            'instrument_time_us': dropbot_timestamp, 'reception_time': utc_timestamp}),)
 
     @staticmethod
     def _shorts_detected_wrapper(signal: dict[str, str]):
