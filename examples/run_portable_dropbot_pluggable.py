@@ -2,6 +2,7 @@ import sys
 import os
 
 from portable_dropbot_controller.plugin import PortDropbotControllerPlugin
+from portable_dropbot_status.plugin import PortDropbotStatusPlugin
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -11,7 +12,7 @@ from examples.plugin_consts import *
 
 BACKEND_PLUGINS = [PortDropbotControllerPlugin]
 
-FRONTEND_PLUGINS = [PortDropbotControllerPlugin]
+FRONTEND_PLUGINS = [PortDropbotStatusPlugin]
 
 
 def main():
@@ -22,8 +23,8 @@ def main():
     run_device_viewer_pluggable(
         plugins=plugins,
         contexts=REQUIRED_CONTEXT + SERVER_CONTEXT,
-        application=BACKEND_APPLICATION,
-        persist=True,
+        application=DEFAULT_APPLICATION,
+        persist=False,
     )
 
 
