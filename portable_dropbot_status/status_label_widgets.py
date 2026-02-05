@@ -29,6 +29,8 @@ class DropBotIconWidget(QPushButton):
         self._pixmap = QPixmap()
         self._current_status_color = QColor("transparent")
 
+        self.setDisabled(True)
+
     def set_pixmap_from_path(self, path):
         """Loads the pixmap and triggers a repaint."""
         self._pixmap = QPixmap(path)
