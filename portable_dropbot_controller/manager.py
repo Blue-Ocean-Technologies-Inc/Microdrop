@@ -1,3 +1,4 @@
+import json
 import logging
 from threading import Event
 import serial.tools.list_ports as lsp
@@ -11,7 +12,7 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
+from .consts import PORT_DROPBOT_STATUS_UPDATE
 from .utils import (
     decode_login_response,
     decode_status_data,
@@ -76,6 +77,8 @@ def _handle_ready_read(cmd, data):
         print(f"  └─ {board} board login response: {decode_login_response(data)}")
     elif cmd & 0xFF == 0x04:  # Signal board version response
         result = decode_status_data(cmd, data)
+        res_json = json.dumps(result)
+        publish_message(res_json, PORT_DROPBOT_STATUS_UPDATE)
         print(f">>> {board} board status: {result}")
 
         pass
