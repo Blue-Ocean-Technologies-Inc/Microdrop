@@ -21,7 +21,8 @@ from .utils import (
 
 from .portable_dropbot_sevice import DropletBotUart
 
-logger = logging.getLogger(__name__)
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 # ------------------------------------------------------------------
@@ -79,7 +80,7 @@ def _handle_ready_read(cmd, data):
         result = decode_status_data(cmd, data)
         res_json = json.dumps(result)
         publish_message(res_json, PORT_DROPBOT_STATUS_UPDATE)
-        print(f">>> {board} board status: {result}")
+        logger.debug(f">>> {board} board status: {result}")
 
         pass
     elif cmd & 0xFF == 0x32:  # Signal board high voltage test response
