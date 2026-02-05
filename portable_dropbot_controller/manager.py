@@ -174,6 +174,7 @@ class ConnectionManager(HasTraits):
     # Control methods dramatiq
     # ------------------------------------------------------------------
     def _on_toggle_dropbot_loading_request(self, *args, **kwargs):
+        logger.info("Processing dropbot loading...")
         if self.connected:
             self.driver.setTray(not self.driver.getTray())
 
