@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from threading import Event
 
 import dramatiq
@@ -29,6 +30,8 @@ from .portable_dropbot_sevice import DropletBotUart
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+CMD_RESPONSES = {}
 
 
 # ------------------------------------------------------------------
@@ -103,8 +106,10 @@ def _handle_ready_read(cmd, data):
     elif cmd == 0x1121:
         if data == 0:
             print('Tray is in')
+            publish_message("true", "dropbot/requests/toggle_tray_")
         else:
             print('tray is out')
+            publish_message("false", "dropbot/requests/toggle_tray_")
 
     else:
         print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
@@ -181,8 +186,11 @@ class ConnectionManager(HasTraits):
     # ------------------------------------------------------------------
     def _on_toggle_tray_request(self, *args, **kwargs):
         logger.critical("Processing dropbot loading...")
-        if self.connected:
-            self.driver.setTray(not self.driver.getTray())
+        self.driver.getTray()
+
+    def _on_toggle_tray__request(self, msg):
+        logger.debug("Processing dropbot loading... Recieved response from dropbot")
+        self.driver.setTray(True if msg == "true" else False)
 
     # ------------------------------------------------------------------
     # Connection Control
