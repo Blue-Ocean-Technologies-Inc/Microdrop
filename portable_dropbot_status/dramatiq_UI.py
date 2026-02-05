@@ -10,10 +10,8 @@ from traits.trait_types import Instance
 
 # local imports
 from logger.logger_service import get_logger
-from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.datetime_helpers import TimestampedMessage
-from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import RETRY_CONNECTION
 from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude
