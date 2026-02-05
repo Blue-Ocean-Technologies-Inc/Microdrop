@@ -11,7 +11,8 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .portable_dropbot_dramatiq_control import (
+
+from .utils import (
     decode_login_response,
     decode_status_data,
     decode_adc_data,
@@ -74,7 +75,9 @@ def _handle_ready_read(cmd, data):
     if cmd & 0xFF == 0x01:  # Signal board login response
         print(f"  └─ {board} board login response: {decode_login_response(data)}")
     elif cmd & 0xFF == 0x04:  # Signal board version response
-        print(f">>> {board} board status: {decode_status_data(cmd, data)}")
+        result = decode_status_data(cmd, data)
+        print(f">>> {board} board status: {result}")
+
         pass
     elif cmd & 0xFF == 0x32:  # Signal board high voltage test response
         print(f"||| Channel Capacitances: {[x for x in data]}")

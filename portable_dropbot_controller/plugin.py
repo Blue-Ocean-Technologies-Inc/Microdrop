@@ -1,17 +1,15 @@
-
 from envisage.plugin import Plugin
 
 # microdrop imports
 from logger.logger_service import get_logger
-
 # Initialize logger
 logger = get_logger(__name__)
 
-PKG="port_db"
+from .consts import PKG, PKG_name
 
 class PortDropbotControllerPlugin(Plugin):
     id = PKG + ".plugin"
-    name = f" Port db Plugin"
+    name = PKG_name
 
 
     def start(self):
