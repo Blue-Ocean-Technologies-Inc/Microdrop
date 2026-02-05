@@ -27,8 +27,6 @@ class PortDropbotControllerPlugin(Plugin):
 
         self.dropbot_controller = ConnectionManager()
 
-        self.dropbot_controller.on_start_device_monitoring_request()
-
     def stop(self):
         """Cleanup when the plugin is stopped."""
         if hasattr(self, "dropbot_controller"):

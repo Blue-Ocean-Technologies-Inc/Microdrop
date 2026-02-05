@@ -4,7 +4,7 @@ PKG_name = PKG.title().replace("_", " ")
 
 
 PORT_DROPBOT_STATUS_UPDATE = "portable_dropbot/signals/board_status_update"
-TOGGLE_DROPBOT_LOADING = "dropbot/requests/toggle_dropbot_loading"
+TOGGLE_DROPBOT_LOADING = "dropbot/requests/toggle_tray"
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {

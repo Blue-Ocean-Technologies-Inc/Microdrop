@@ -151,7 +151,7 @@ class ConnectionManager(HasTraits):
     name = f"{PKG}_listener"
 
     def traits_init(self):
-        logger.info("Starting SSH controls listener")
+        logger.info("Starting Portable dropbot controls listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.name,
             class_method=self.listener_actor_routine)
@@ -173,8 +173,8 @@ class ConnectionManager(HasTraits):
     # ------------------------------------------------------------------
     # Control methods dramatiq
     # ------------------------------------------------------------------
-    def _on_toggle_dropbot_loading_request(self, *args, **kwargs):
-        logger.info("Processing dropbot loading...")
+    def _on_toggle_tray_request(self, *args, **kwargs):
+        logger.critical("Processing dropbot loading...")
         if self.connected:
             self.driver.setTray(not self.driver.getTray())
 
@@ -223,7 +223,7 @@ class ConnectionManager(HasTraits):
         # Add logic here to filter by HWID if known
         return ports[0].device if ports else None
 
-    def _on_start_device_monitoring_request(self):
+    def _on_start_device_monitoring_request(self, *args, **kwargs):
         """
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
