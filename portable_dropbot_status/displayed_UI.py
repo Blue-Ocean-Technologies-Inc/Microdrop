@@ -108,6 +108,8 @@ class DropBotStatusViewModel(HasTraits):
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
 
+        self.view_signals.disable_icon_widget.emit(event.new)
+
     @observe("model:chip_inserted")
     def update_chip_status(self, event):
         self.view_signals.disable_icon_widget.emit(False)
