@@ -4,9 +4,9 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
 from PySide6.QtCore import Signal, QObject
 from traits.api import HasTraits, observe, Instance
 
-from dropbot_status.consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
-from dropbot_status.model import DropBotStatusModel
-from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
+from .consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
+from .model import DropBotStatusModel
+from .status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 from logger.logger_service import get_logger
