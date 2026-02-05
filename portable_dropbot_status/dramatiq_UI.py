@@ -122,8 +122,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
     ################# board status change updated readings ##################
 
     def _on_board_status_update_triggered(self, body):
-        print(msg)
         msg = json.loads(body)
+        print(msg)
         new_capacitance = msg.get('chip_cap', '-')
         new_voltage = msg.get('hv_vol', '-')
         chip_status = msg.get('chip_on_pad', '-')
