@@ -14,7 +14,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class DropbotStatusPlugin(Plugin):
+class PortDropbotStatusPlugin(Plugin):
     """ Contributes a dropbot status UI view. """
 
     #### 'IPlugin' interface ##################################################
