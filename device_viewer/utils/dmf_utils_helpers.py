@@ -7,7 +7,7 @@ from shapely.geometry import Polygon, LineString
 from shapely.strtree import STRtree
 from collections import defaultdict
 from typing import List, Dict, Set, Union
-from traits.api import HasTraits, Int, Array
+from traits.api import HasTraits, Instance, Array
 
 from svg.path import parse_path
 
@@ -254,7 +254,7 @@ def create_adjacency_dict(neighbours) -> dict:
 
 
 class ElectrodeData(HasTraits):
-    channel = Int
+    channel = Instance(int, allow_none=True) # Int() doesn't seem to follow allow_none for some reason
     path = Array
 
 class SVGProcessor:
