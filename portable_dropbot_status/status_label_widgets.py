@@ -1,54 +1,93 @@
-from PySide6.QtGui import Qt, QPixmap
-from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout
-from logger.logger_service import get_logger
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QWidget, QGridLayout, QPushButton, QSizePolicy
+from PySide6.QtGui import QPixmap, QCursor, QColor, QPainter
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 BORDER_RADIUS = 4
 
-class DropBotIconWidget(QLabel):
+class DropBotIconWidget(QPushButton):
     """
-    A scalable widget to display the DropBot's icon and connection status color.
-    The image scales proportionally to the widget's size.
+    A button widget to display the DropBot's icon and connection status color.
+    Inherits from QPushButton for native click handling and styling.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # Sizing and Policy
         self.setMinimumWidth(60)
         self.setMaximumWidth(106)
         self.setFixedHeight(106)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+        # Cursor
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+        # Internal image storage
         self._pixmap = QPixmap()
+        self._current_status_color = QColor("transparent")
 
     def set_pixmap_from_path(self, path):
-        """Loads the pixmap from a file path."""
+        """Loads the pixmap and triggers a repaint."""
         self._pixmap = QPixmap(path)
         if self._pixmap.isNull():
             logger.error(f"Failed to load image: {path}")
-        self.update_scaled_pixmap()
 
-    def resizeEvent(self, event):
+        # Trigger a UI update
+        self.update()
+
+    def paintEvent(self, event):
         """
-        Overrides the resize event to rescale the pixmap while maintaining aspect ratio.
+        Custom paint event to draw the button background (via stylesheet)
+        and then draw the scaled image on top.
         """
-        super().resizeEvent(event)
+        # 1. Let QPushButton draw the background/borders/pressed state first
+        super().paintEvent(event)
+
+        # 2. Draw the image on top
         if not self._pixmap.isNull():
-            self.update_scaled_pixmap()
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-    def update_scaled_pixmap(self):
-        """Scales the pixmap to fit the label's current size."""
-        scaled_pixmap = self._pixmap.scaled(
-            self.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        self.setPixmap(scaled_pixmap)
+            # Calculate the rectangle to center the image while keeping aspect ratio
+            rect = self.rect()
+            scaled_pixmap = self._pixmap.scaled(
+                rect.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
 
-    def set_status_color(self, color: str):
-        """Sets the background color and border radius of the icon."""
-        self.setStyleSheet(f'background-color: {color}; border-radius: {BORDER_RADIUS}px;')
+            # Center the image in the button
+            x = (rect.width() - scaled_pixmap.width()) // 2
+            y = (rect.height() - scaled_pixmap.height()) // 2
+
+            painter.drawPixmap(x, y, scaled_pixmap)
+
+    def set_status_color(self, color_str: str):
+        """
+        Sets the background color and defines the 'pressed' state appearance.
+        """
+        self._current_status_color = QColor(color_str)
+        pressed_color = self._current_status_color.darker(120)
+
+        normal_rgb = self._current_status_color.name()
+        pressed_rgb = pressed_color.name()
+
+        # Note: We target 'DropBotIconWidget' so it applies to this class
+        stylesheet = f"""
+            DropBotIconWidget {{
+                background-color: {normal_rgb};
+                border-radius: {BORDER_RADIUS}px;
+                border: 1px solid transparent;
+            }}
+            DropBotIconWidget:pressed {{
+                background-color: {pressed_rgb};
+                border: 1px solid {pressed_color.darker(110).name()};
+            }}
+        """
+        self.setStyleSheet(stylesheet)
 
 
 class DropBotStatusGridWidget(QWidget):

@@ -4,6 +4,8 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
 from PySide6.QtCore import Signal, QObject
 from traits.api import HasTraits, observe, Instance
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from portable_dropbot_controller.consts import TOGGLE_DROPBOT_LOADING
 from .consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
 from .model import DropBotStatusModel
 from .status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
@@ -26,6 +28,7 @@ class DropbotStatusViewModelSignals(QObject):
     # Signals that the View will bind to
     icon_path_changed = Signal(str)
     icon_color_changed = Signal(str)
+    disable_icon_widget = Signal(bool)
 
     connection_status_text_changed = Signal(str)
     chip_status_text_changed = Signal(str)
@@ -72,7 +75,6 @@ class DropBotStatusViewModel(HasTraits):
         and emits it on a specified signal.
         """
 
-
         def decorator(func):
             @wraps(func)
             def wrapper(self, event):
@@ -108,6 +110,7 @@ class DropBotStatusViewModel(HasTraits):
 
     @observe("model:chip_inserted")
     def update_chip_status(self, event):
+        self.view_signals.disable_icon_widget.emit(False)
         self.view_signals.chip_status_text_changed.emit(self._get_chip_status_text())
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
@@ -132,6 +135,12 @@ class DropBotStatusViewModel(HasTraits):
     @format_and_emit_measurements("force_changed")
     def update_force_reading(self, event):
         pass
+
+    ##### Handle input from the view #####
+    def _on_icon_widget_clicked(self, *args, **kwargs):
+        logger.info("Toggling dropbot loading status")
+        publish_message(topic=TOGGLE_DROPBOT_LOADING, message="")
+        self.view_signals.disable_icon_widget.emit(True)
 
 class DropBotStatusView(QWidget):
     """
@@ -165,12 +174,16 @@ class DropBotStatusView(QWidget):
         self.main_layout.addSpacerItem(spacer)
 
         # --- Data Binding ---
-        # Connect ViewModel signals to the appropriate widget slots/methods.
+        # Connect ViewModel signals to the appropriate widget slots/methods: ViewModel -> View
         self._view_model_signals.icon_path_changed.connect(self.icon_widget.set_pixmap_from_path)
         self._view_model_signals.icon_color_changed.connect(self.icon_widget.set_status_color)
+        self._view_model_signals.disable_icon_widget.connect(self.icon_widget.setDisabled)
         self._view_model_signals.connection_status_text_changed.connect(self.grid_widget.connection_status.setText)
         self._view_model_signals.chip_status_text_changed.connect(self.grid_widget.chip_status.setText)
         self._view_model_signals.capacitance_changed.connect(self.grid_widget.capacitance_reading.setText)
         self._view_model_signals.voltage_changed.connect(self.grid_widget.voltage_reading.setText)
         self._view_model_signals.pressure_changed.connect(self.grid_widget.pressure_reading.setText)
         self._view_model_signals.force_changed.connect(self.grid_widget.force_reading.setText)
+
+        # Connect user input to view model methods: View -> ViewModel
+        self.icon_widget.clicked.connect(self._view_model._on_icon_widget_clicked)

@@ -143,7 +143,6 @@ class ConnectionManager(HasTraits):
 
     monitor_scheduler = Instance(BackgroundScheduler)
 
-
     ###################################################################################
     # IDramatiqControllerBase Interface
     ###################################################################################
@@ -165,12 +164,18 @@ class ConnectionManager(HasTraits):
         self.driver.on_error = _handle_error
         self.driver.on_alarm = _handle_alarm
 
-
     def listener_actor_routine(self, message, topic):
         if "dropbot" in topic.split("/")[0]:
             return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
         else:
             return None
+
+    # ------------------------------------------------------------------
+    # Control methods dramatiq
+    # ------------------------------------------------------------------
+    def _on_toggle_dropbot_loading_request(self, *args, **kwargs):
+        if self.connected:
+            self.driver.setTray(not self.driver.getTray())
 
     # ------------------------------------------------------------------
     # Connection Control
