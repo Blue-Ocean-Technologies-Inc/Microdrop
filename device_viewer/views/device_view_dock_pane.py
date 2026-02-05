@@ -4,7 +4,7 @@ import traceback
 from pathlib import Path
 
 import dramatiq
-from pyface.api import NO, OK, YES, FileDialog, confirm, error
+from microdrop_application.dialogs.pyface_wrapper import NO, OK, YES, FileDialog, confirm, error
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -742,6 +742,22 @@ class DeviceViewerDockPane(TraitsDockPane):
     @app_statusbar_message_from_dock_pane("...Loading Svg")
     def load_svg_dialog(self):
 
+        # -- 0. Make sure user saves existing changes if file modified:
+
+        if "modified" in self.name:
+            ### Open a confirmation dialog ####
+            user_choice = confirm(
+                None,
+                "Current device svg has unsaved changes.\nProceed without saving?",
+                title="Unsaved Protocol Changes",
+                cancel=False,
+            )
+
+            # 3. If user says NO, stop here. Do not run the function.
+            if user_choice == NO:
+                logger.warning("Action cancelled due to unsaved changes.")
+                return
+
         # --- 1. Open a dialog for the user to select a source file ---
         # This is decoupled from self.file to allow loading any file at any time.
         dialog = FileDialog(
@@ -861,7 +877,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("model:electrodes:svg_model:area_scale", post_init=True)
     @observe("model:electrodes:svg_model:auto_found_connections")
-    @observe("model:electrodes:electrode_ids_channels_map:items", post_init=True)
+    @observe("model.electrodes.electrodes.items.channel", post_init=True)
     def _svg_data_changed(self, event):
         logger.debug(f"Svg data changed event: {event}")
         if "modified" not in self.name:
