@@ -122,37 +122,37 @@ class DramatiqDropBotStatusViewModel(HasTraits):
     ################# board status change updated readings ##################
 
     def _on_board_status_update_triggered(self, body):
-        if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
-            msg = json.loads(body)
-            new_capacitance = msg.get('chip_cap', '-')
-            new_voltage = msg.get('hv_vol', '-')
-            chip_status = msg.get('chip_on_pad', '-')
+        print(msg)
+        msg = json.loads(body)
+        new_capacitance = msg.get('chip_cap', '-')
+        new_voltage = msg.get('hv_vol', '-')
+        chip_status = msg.get('chip_on_pad', '-')
 
-            if chip_status != self.model.chip_inserted:
-                self.model.chip_inserted = chip_status
+        if chip_status != self.model.chip_inserted:
+            self.model.chip_inserted = chip_status
 
-            old_capacitance = self.model.capacitance
-            old_voltage = self.model.voltage
+        old_capacitance = self.model.capacitance
+        old_voltage = self.model.voltage
 
-            self.capacitances.append(get_ureg_magnitude(new_capacitance))
+        self.capacitances.append(get_ureg_magnitude(new_capacitance))
 
-            if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
-                new_capacitance = sum(self.capacitances) / len(self.capacitances)
-                new_capacitance = new_capacitance * ureg.picofarad
-                new_capacitance = f"{new_capacitance:.4g~P}"
-                self.capacitances = []
+        if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
+            new_capacitance = sum(self.capacitances) / len(self.capacitances)
+            new_capacitance = new_capacitance * ureg.picofarad
+            new_capacitance = f"{new_capacitance:.4g~P}"
+            self.capacitances = []
 
-            else:
-                new_capacitance = old_capacitance
+        else:
+            new_capacitance = old_capacitance
 
-            cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
-            voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
+        cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
+        voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
 
-            if cap_change_significant:
-                self.model.capacitance = new_capacitance
+        if cap_change_significant:
+            self.model.capacitance = new_capacitance
 
-            if voltage_change_significant:
-                self.model.voltage = new_voltage
+        if voltage_change_significant:
+            self.model.voltage = new_voltage
 
     ####### Dropbot Icon Image Control Methods ###########
 
