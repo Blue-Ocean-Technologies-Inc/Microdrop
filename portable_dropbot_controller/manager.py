@@ -223,7 +223,7 @@ class ConnectionManager(HasTraits):
         # Add logic here to filter by HWID if known
         return ports[0].device if ports else None
 
-    def on_start_device_monitoring_request(self):
+    def _on_start_device_monitoring_request(self):
         """
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
