@@ -107,7 +107,9 @@ def _handle_ready_read(cmd, data):
         if data == 0:
             print('Tray is in')
             publish_message("true", "dropbot/requests/toggle_tray_")
-        else:
+
+    elif cmd == 0x1120:
+        if data == 0:
             print('tray is out')
             publish_message("false", "dropbot/requests/toggle_tray_")
 
