@@ -11,7 +11,7 @@ class DeviceViewerMessageModel(BaseModel):
     routes: list[tuple[list[str], str]]
 
     # Map electrode ID to channel number
-    id_to_channel: dict[str, int]
+    id_to_channel: dict[str, int | None]
 
     # Raw step info dictionary
     step_info: Optional[dict] = None
