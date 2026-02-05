@@ -100,6 +100,12 @@ def _handle_ready_read(cmd, data):
         print(f"ADC data: {decode_adc_data(data)}")
     elif cmd & 0xFF in skip_commands:
         return
+    elif cmd == 0x1121:
+        if data == 0:
+            print('Tray is in')
+        else:
+            print('tray is out')
+
     else:
         print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
 
