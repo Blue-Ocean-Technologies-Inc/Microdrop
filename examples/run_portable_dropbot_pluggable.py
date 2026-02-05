@@ -12,7 +12,21 @@ from examples.plugin_consts import *
 
 BACKEND_PLUGINS = [PortDropbotControllerPlugin]
 
-FRONTEND_PLUGINS = [PortDropbotStatusPlugin]
+
+FRONTEND_PLUGINS = [
+    MicrodropPlugin,
+    TasksPlugin,
+    LoggerUIPlugin,
+    PortDropbotStatusPlugin,
+    # DropbotStatusPlotPlugin,
+    # DropbotToolsMenuPlugin,
+    # DropbotStatusPlugin,
+    # ManualControlsPlugin,
+    # ProtocolGridControllerUIPlugin,
+    # DeviceViewerPlugin,
+    # PeripheralUiPlugin,
+    # DropbotPreferencesPlugin
+]
 
 
 def main():
