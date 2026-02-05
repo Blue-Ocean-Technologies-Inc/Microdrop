@@ -1,6 +1,6 @@
 import os
 
-from dropbot_controller.consts import DROPBOT_CONNECTED
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 from portable_dropbot_controller.consts import PORT_DROPBOT_STATUS_UPDATE
 
 # # This module's package.
@@ -13,6 +13,6 @@ DROPBOT_CHIP_INSERTED_IMAGE = os.path.join(current_folder_path, "images", 'dropb
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [PORT_DROPBOT_STATUS_UPDATE, "ui/calibration_data", DROPBOT_CONNECTED]}
+    f"{PKG}_listener": [PORT_DROPBOT_STATUS_UPDATE, "ui/calibration_data", DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]}
 
 NUM_CAPACITANCE_READINGS_AVERAGED = 5

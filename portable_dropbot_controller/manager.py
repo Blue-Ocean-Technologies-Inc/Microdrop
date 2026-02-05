@@ -1,18 +1,24 @@
 import json
 import logging
 from threading import Event
+
+import dramatiq
 import serial.tools.list_ports as lsp
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
 from traits.api import HasTraits, Bool, Instance
+from traits.has_traits import provides
 
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
 )
+from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, \
+    basic_listener_actor_routine
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from .consts import PORT_DROPBOT_STATUS_UPDATE
+from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
+from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG
 from .utils import (
     decode_login_response,
     decode_status_data,
@@ -75,13 +81,16 @@ def _handle_ready_read(cmd, data):
 
     # Try to decode known command responses
     if cmd & 0xFF == 0x01:  # Signal board login response
-        print(f"  └─ {board} board login response: {decode_login_response(data)}")
+        result = decode_login_response(data)
+        print(f"  └─ {board} board login response: {result}")
+        if "SUCCESS" in result:
+            publish_message(topic=DROPBOT_CONNECTED, message=result)
+
     elif cmd & 0xFF == 0x04:  # Signal board version response
         result = decode_status_data(cmd, data)
         res_json = json.dumps(result)
         publish_message(res_json, PORT_DROPBOT_STATUS_UPDATE)
         logger.debug(f">>> {board} board status: {result}")
-
         pass
     elif cmd & 0xFF == 0x32:  # Signal board high voltage test response
         print(f"||| Channel Capacitances: {[x for x in data]}")
@@ -119,6 +128,7 @@ def _handle_alarm(cmd, alarms):
         print(f"  └─ {alarm}")
 
 
+@provides(IDramatiqControllerBase)
 class ConnectionManager(HasTraits):
     """
     Manages the serial connection to the DropBot in a background thread.
@@ -134,7 +144,19 @@ class ConnectionManager(HasTraits):
     monitor_scheduler = Instance(BackgroundScheduler)
 
 
+    ###################################################################################
+    # IDramatiqControllerBase Interface
+    ###################################################################################
+
+    dramatiq_listener_actor = Instance(dramatiq.Actor)
+    name = f"{PKG}_listener"
+
     def traits_init(self):
+        logger.info("Starting SSH controls listener")
+        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=self.name,
+            class_method=self.listener_actor_routine)
+
         self.driver = DropletBotUart()
         self._stop_event = Event()
 
@@ -142,6 +164,13 @@ class ConnectionManager(HasTraits):
         self.driver.on_ready_read = _handle_ready_read
         self.driver.on_error = _handle_error
         self.driver.on_alarm = _handle_alarm
+
+
+    def listener_actor_routine(self, message, topic):
+        if "dropbot" in topic.split("/")[0]:
+            return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
+        else:
+            return None
 
     # ------------------------------------------------------------------
     # Connection Control

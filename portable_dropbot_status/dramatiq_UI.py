@@ -116,17 +116,20 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                                         f"You may continue using the DropBot, but the affected channels have "
                                         f"been disabled until the DropBot is restarted (e.g. unplug all cabled and plug "
                                         f"back in).")     
-                    
+
             self.view_signals.show_shorts_popup.emit({'title': title, 'text': text})
 
     ################# board status change updated readings ##################
-    def _on_board_status_update_triggered(self, body):
-        print(body)
 
-    def _on_capacitance_updated_triggered(self, body):
+    def _on_board_status_update_triggered(self, body):
         if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
-            new_capacitance = json.loads(body).get('capacitance', '-')
-            new_voltage = json.loads(body).get('voltage', '-')
+            msg = json.loads(body)
+            new_capacitance = msg.get('chip_cap', '-')
+            new_voltage = msg.get('hv_vol', '-')
+            chip_status = msg.get('chip_on_pad', '-')
+
+            if chip_status != self.model.chip_inserted:
+                self.model.chip_inserted = chip_status
 
             old_capacitance = self.model.capacitance
             old_voltage = self.model.voltage
@@ -142,7 +145,6 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             else:
                 new_capacitance = old_capacitance
 
-
             cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
             voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
 
@@ -151,44 +153,14 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
             if voltage_change_significant:
                 self.model.voltage = new_voltage
-                force = None
-
-                if self.model.pressure != "-":
-                    force = ForceCalculationService.calculate_force_for_step(
-                        get_ureg_magnitude(new_voltage),
-                        get_ureg_magnitude(self.model.pressure)
-                    )
-
-                self.model.force = f"{force:.4f} mN/m" if force is not None else "-"
 
     ####### Dropbot Icon Image Control Methods ###########
 
-    @timestamped_value('connected_message')
     def _on_disconnected_triggered(self, body):
         self.model.connected = False
-        self._on_realtime_mode_updated_triggered(TimestampedMessage("False", None), force_update=True) # Set realtime mode to False when disconnected
 
-    @timestamped_value('connected_message')
     def _on_connected_triggered(self, body):
         self.model.connected = True
-        
-    @timestamped_value('chip_inserted_message')
-    def _on_chip_inserted_triggered(self, body : TimestampedMessage):
-        if body == 'True':
-            chip_inserted = True
-        elif body == 'False':
-            chip_inserted = False
-        else:
-            logger.error(f"Invalid chip inserted value: {body}")
-            chip_inserted = False
-        logger.debug(f"Chip inserted: {chip_inserted}")
-        self.model.chip_inserted = chip_inserted
-
-    @timestamped_value('realtime_mode_message')
-    def _on_realtime_mode_updated_triggered(self, body):
-        self.realtime_mode = body == 'True'
-        if not self.realtime_mode:
-            self.model.reset_readings()
 
     ##################################################################################################
 
