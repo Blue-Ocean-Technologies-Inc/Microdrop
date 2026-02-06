@@ -136,14 +136,14 @@ ManualControlView = View(
                 # Disabled if disconnected OR waiting for response
                 enabled_when="connected and chip_locked_enabled and device_loaded_enabled",
             ),
-            Item(
-                name="device_loaded",
-                show_label=False,
-                editor=ToggleEditorFactory(
-                    on_label="Device Loaded", off_label="Device Unloaded"
-                ),
-                # Disabled if disconnected OR waiting for response
-                enabled_when="connected and device_loaded_enabled and chip_locked_enabled",
+            # Item(
+            #     name="device_loaded",
+            #     show_label=False,
+            #     editor=ToggleEditorFactory(
+            #         on_label="Device Loaded", off_label="Device Unloaded"
+            #     ),
+            #     # Disabled if disconnected OR waiting for response
+            #     enabled_when="connected and device_loaded_enabled and chip_locked_enabled",
             ),
             Item(
                 name="realtime_mode",
