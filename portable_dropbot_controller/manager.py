@@ -1,10 +1,7 @@
 import json
-import logging
-import time
 from threading import Event
 
 import dramatiq
-import numpy as np
 import serial.tools.list_ports as lsp
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -35,6 +32,37 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 CMD_RESPONSES = {}
+
+from functools import wraps
+import threading
+
+
+def require_active_driver(func):
+    """
+    Thread-safe decorator.
+    1. Acquires self._driver_lock.
+    2. Checks if self.driver exists.
+    3. Runs the function if safe, otherwise logs an error.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Ensure the lock exists (defensive programming)
+        if not hasattr(self, "_driver_lock"):
+            self._driver_lock = threading.RLock()
+
+        with self._driver_lock:
+            # Standard check for driver availability
+            if not hasattr(self, "driver") or self.driver is None:
+                # Use the function name to make the log useful
+                operation = func.__name__.replace("_", " ").strip()
+                logger.error(f"Driver not available for: {operation}")
+                return
+
+            # If we get here, it is safe to run the actual logic
+            return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 # ------------------------------------------------------------------
@@ -184,6 +212,8 @@ class ConnectionManager(HasTraits):
         self.driver.on_error = _handle_error
         self.driver.on_alarm = _handle_alarm
 
+        self._driver_lock = threading.RLock()
+
     def listener_actor_routine(self, message, topic):
         if "dropbot" in topic.split("/")[0]:
             return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
@@ -311,27 +341,60 @@ class ConnectionManager(HasTraits):
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
+    @require_active_driver
     def _on_electrodes_state_change_request(self, message):
-        # Create and validate message model
-        channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
-            num_available_channels=120,
-            property_dtype=bool,
-            channels_properties_json=message,
-        ).model
+        # 1. Validation (Safe to do inside lock for simplicity)
+        try:
+            channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
+                num_available_channels=120,
+                property_dtype=bool,
+                channels_properties_json=message,
+            ).model
 
-        # Validate boolean mask size
-        expected_channels = 120
-        mask_size = len(channel_states_map_model.channels_properties_array)
-
-        if mask_size != expected_channels:
-            logger.error(
-                f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}"
-            )
+            if len(channel_states_map_model.channels_properties_array) != 120:
+                logger.error("Boolean mask size mismatch: expected 120")
+                return
+        except Exception as e:
+            logger.error(f"Error validating electrode message: {e}")
             return
 
-        self.driver.setElectrodeStates(channel_states_map_model.channels_properties_array)
-
+        # 2. Hardware Action (Driver is guaranteed to exist here)
+        self.driver.setElectrodeStates(
+            channel_states_map_model.channels_properties_array
+        )
         app_globals["last_channel_states_requested"] = message
+
+    @require_active_driver
+    def on_set_voltage_request(self, message):
+        try:
+            voltage = float(message)
+            if not (30 <= voltage <= 150):
+                raise ValueError("Voltage must be between 30 and 150 V")
+
+            self.driver.voltage = voltage
+            logger.info(f"Set voltage to {voltage} V")
+
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Proxy error setting voltage: {e}")
+        except Exception as e:
+            logger.error(f"Error setting voltage: {e}")
+            raise  # Re-raising is safe, the lock releases automatically
+
+    @require_active_driver
+    def on_set_frequency_request(self, message):
+        try:
+            frequency = float(message)
+            if not (100 <= frequency <= 20000):
+                raise ValueError("Frequency must be between 100 and 20000 Hz")
+
+            self.driver.frequency = frequency
+            logger.info(f"Set frequency to {frequency} Hz")
+
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Proxy error setting frequency: {e}")
+        except Exception as e:
+            logger.error(f"Error setting frequency: {e}")
+            raise
 
     ################################# Protected methods ######################################
     def _device_found(self, event):

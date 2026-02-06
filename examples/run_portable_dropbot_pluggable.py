@@ -21,7 +21,7 @@ FRONTEND_PLUGINS = [
     # DropbotStatusPlotPlugin,
     # DropbotToolsMenuPlugin,
     # DropbotStatusPlugin,
-    # ManualControlsPlugin,
+    ManualControlsPlugin,
     # ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
     # PeripheralUiPlugin,
