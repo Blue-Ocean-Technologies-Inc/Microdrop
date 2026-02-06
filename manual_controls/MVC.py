@@ -147,39 +147,47 @@ class ManualControlModel(HasTraits):
 
 ManualControlView = View(
     Group(
+        # -- Vertical Group for Voltage & Frequency --
         Group(
             Item(
-                name='voltage',
-                label='Voltage (V)',
+                name="voltage",
+                label="Voltage (V)",
                 resizable=True,
             ),
             Item(
-                name='frequency',
-                label='Frequency (Hz)',
+                name="frequency",
+                label="Frequency (Hz)",
                 resizable=True,
             ),
-            # New Toggle: Lock Chip
+        ),
+        # -- Horizontal Group for the Buttons --
+        Group(
             Item(
-                name='chip_locked',
-                show_label=False,  # No side label, button text acts as label
-                editor=ToggleEditorFactory(on_label="Unlock Chip", off_label="Lock Chip"),
-                enabled_when='connected',
-            ),
-            # New Toggle: Insert Device
-            Item(
-                name='device_inserted',
-                show_label=False,  # No side label
-                editor=ToggleEditorFactory(on_label="Remove Device", off_label="Insert Device"),
-                enabled_when='connected',
+                name="chip_locked",
+                show_label=False,
+                editor=ToggleEditorFactory(
+                    on_label="Unlock Chip", off_label="Lock Chip"
+                ),
+                enabled_when="connected",
             ),
             Item(
-                name='realtime_mode',
-                label='Realtime Mode',
-                style='custom',
-                resizable=True,
-                editor=ToggleEditorFactory(on_label="On", off_label="Off"),
-                enabled_when='connected',
+                name="device_inserted",
+                show_label=False,
+                editor=ToggleEditorFactory(
+                    on_label="Remove Device", off_label="Insert Device"
+                ),
+                enabled_when="connected",
             ),
+            Item(
+                name="realtime_mode",
+                show_label=False,  # Removed label to fit better horizontally
+                editor=ToggleEditorFactory(
+                    on_label="Realtime: On", off_label="Realtime: Off"
+                ),
+                enabled_when="connected",
+            ),
+            orientation="horizontal",
+            show_border=False,
         ),
         show_border=True,
         padding=10,
@@ -187,7 +195,6 @@ ManualControlView = View(
     title=PKG_name,
     resizable=True,
 )
-
 
 @provides(IDramatiqControllerBase)
 class ManualControlControl(Controller):
