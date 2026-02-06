@@ -1319,7 +1319,7 @@ class DropletBotUart:
         else:
             cmd = SignalBoard.ILLUMINATION_CTRL
         intensity = min(max(0, intensity), 100)
-        buf = struct.pack('>h', intensity)
+        buf = struct.pack('>H', int(intensity/2))
         packet = self._make_cmd_packet(cmd, buf)
         self._w(packet)
 
