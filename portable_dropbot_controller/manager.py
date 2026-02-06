@@ -563,6 +563,7 @@ class ConnectionManager(HasTraits):
         Handles requests to set a motor to a specific abstract 'state' (index or boolean).
         Resolves the actual absolute position using loaded driver parameters.
         """
+        logger.critical(message)
         try:
             msg = json.loads(message)
             motor_id = msg.get("motor_id")
