@@ -25,7 +25,7 @@ from .consts import PKG_name, listener_name
 
 # Define topics for new controls
 SET_CHIP_LOCK = "dropbot/requests/lock_chip"
-SET_DEVICE_LOADED = "dropbot/requests/load_device"
+SET_LIGHT_INTENSITY = "dropbot/requests/set_light_intensity"
 
 logger = get_logger(__name__)
 
@@ -109,15 +109,17 @@ class ManualControlModel(HasTraits):
 
     # --- Data Traits ---
     chip_locked = Bool(False, desc="Lock state of the chip")
-    device_loaded = Bool(False, desc="Loading state of the device")
 
     # --- UI Enable State Traits ---
     # These control whether the user can click the buttons
     chip_locked_enabled = Bool(True)
-    device_loaded_enabled = Bool(True)
 
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
     connected = Bool(False, desc="Connected to dropbot?")
+
+    # Light Controls
+    light_intensity = Range(0, 100, value=100, desc="Light intensity percentage")
+    lights_on = Bool(False, desc="Master toggle for lights")
 
 
 ManualControlView = View(
@@ -125,6 +127,12 @@ ManualControlView = View(
         Group(
             Item(name="voltage", label="Voltage (V)", resizable=True),
             Item(name="frequency", label="Frequency (Hz)", resizable=True),
+            Item(
+                name="light_intensity",
+                label="Light Intensity (%)",
+                resizable=True,
+                enabled_when="lights_on",
+            ),
         ),
         Group(
             Item(
@@ -134,17 +142,17 @@ ManualControlView = View(
                     on_label="Chip Locked", off_label="Chip Unlocked"
                 ),
                 # Disabled if disconnected OR waiting for response
-                enabled_when="connected and chip_locked_enabled and device_loaded_enabled",
+                enabled_when="connected and chip_locked_enabled",
             ),
-            # Item(
-            #     name="device_loaded",
-            #     show_label=False,
-            #     editor=ToggleEditorFactory(
-            #         on_label="Device Loaded", off_label="Device Unloaded"
-            #     ),
-            #     # Disabled if disconnected OR waiting for response
-            #     enabled_when="connected and device_loaded_enabled and chip_locked_enabled",
-            # ),
+            Item(
+                name="lights_on",
+                show_label=False,
+                editor=ToggleEditorFactory(
+                    on_label="Lights: On", off_label="Lights: Off"
+                ),
+                # Disable button while waiting for light intensity confirmation
+                enabled_when="connected",
+            ),
             Item(
                 name="realtime_mode",
                 show_label=False,
@@ -185,18 +193,11 @@ class ManualControlControl(Controller):
 
     # These store the raw messages for the new listeners
     chip_locked_message = Instance(TimestampedMessage)
-    device_loaded_message = Instance(TimestampedMessage)
 
     def _realtime_mode_message_default(self):
         return TimestampedMessage("", 0)
 
     def _disconnected_message_default(self):
-        return TimestampedMessage("", 0)
-
-    def _chip_locked_message_default(self):
-        return TimestampedMessage("", 0)
-
-    def _device_loaded_message_default(self):
         return TimestampedMessage("", 0)
 
     def _publish_message_if_realtime(self, topic: str, message: str) -> bool:
@@ -231,11 +232,9 @@ class ManualControlControl(Controller):
         self.model.connected = False
         self.model.realtime_mode = False
         self.model.chip_locked = False
-        self.model.device_loaded = False
 
         # Reset enable states on disconnect just in case
         self.model.chip_locked_enabled = True
-        self.model.device_loaded_enabled = True
 
     @timestamped_value("disconnected_message")
     def _on_connected_triggered(self, message):
@@ -255,16 +254,10 @@ class ManualControlControl(Controller):
         confirmed_state = str(message).lower() == "true"
         logger.debug(f"Confirmation received: Device Loaded = {confirmed_state}")
 
-        # 1. Update the value to what the hardware confirmed
-        self.model.device_loaded = confirmed_state
-
-        # 2. Re-enable the button
-        self.model.device_loaded_enabled = True
-
-        # 1. Update the value to what the hardware confirmed
+        # Update the value to what the hardware confirmed
         self.model.chip_locked = confirmed_state
 
-        # 2. Re-enable the button
+        # Re-enable the button
         self.model.chip_locked_enabled = True
 
     ###################################################################################
@@ -277,6 +270,15 @@ class ManualControlControl(Controller):
 
     @debounce(wait_seconds=0.3)
     def frequency_setattr(self, info, object, traitname, value):
+        return super().setattr(info, object, traitname, value)
+
+    @debounce(wait_seconds=0.1)
+    def light_intensity_setattr(self, info, object, traitname, value):
+        return super().setattr(info, object, traitname, value)
+
+    @debounce(wait_seconds=0.5)
+    def lights_on_setattr(self, info, object, traitname, value):
+        info.lights_on.control.setChecked(value)
         return super().setattr(info, object, traitname, value)
 
     @debounce(wait_seconds=1)
@@ -295,19 +297,6 @@ class ManualControlControl(Controller):
         info.chip_locked.control.setChecked(value)
 
         # 3. Proceed with setting the attribute (triggers _chip_locked_changed)
-        return super().setattr(info, object, traitname, value)
-
-    @debounce(wait_seconds=0.5)
-    def device_loaded_setattr(self, info, object, traitname, value):
-        logger.debug(f"User clicked Device Load -> Requesting: {value}")
-
-        # 1. Disable the button immediately
-        info.object.device_loaded_enabled = False
-
-        # 2. Force visual update
-        info.device_loaded.control.setChecked(value)
-
-        # 3. Proceed with setting the attribute
         return super().setattr(info, object, traitname, value)
 
     ###################################################################################
@@ -334,21 +323,26 @@ class ManualControlControl(Controller):
 
     @observe("model:chip_locked")
     def _chip_locked_changed(self, event):
-        # NOTE: Only publish if the change came from the User (UI).
-        # If the change came from _on_chip_locked_triggered, we are just syncing state
-        # and don't want to re-send the command.
-        # However, simplicity suggests we just publish. The backend should handle idempotency.
-        # If you need to distinguish, you'd check `self.model.chip_locked_enabled`.
-        # If enabled is False, it means we are waiting for a response,
-        # so this change likely came from the UI setter.
-
         if not self.model.chip_locked_enabled:
             publish_message(topic=SET_CHIP_LOCK, message=str(event.new))
 
-    @observe("model:device_loaded")
-    def _device_loaded_changed(self, event):
-        if not self.model.device_loaded_enabled:
-            publish_message(topic=SET_DEVICE_LOADED, message=str(event.new))
+    @observe("model:light_intensity")
+    def _light_intensity_changed(self, event):
+        # Publish the new intensity
+        msg = str(event.new)
+        publish_message(topic=SET_LIGHT_INTENSITY, message=msg)
+        logger.info(f"Requesting Light Intensity: {event.new}")
+
+    @observe("model:lights_on")
+    def _lights_on_changed(self, event):
+        if event.new:
+            publish_message(
+                topic=SET_LIGHT_INTENSITY, message=str(self.model.light_intensity)
+            )
+        else:
+            publish_message(
+                topic=SET_LIGHT_INTENSITY, message="0"
+            )
 
 
 if __name__ == "__main__":

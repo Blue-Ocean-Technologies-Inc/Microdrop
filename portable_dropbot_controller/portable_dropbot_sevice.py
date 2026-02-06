@@ -1311,10 +1311,13 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         self._w(packet)
 
-    def setLEDIntensity(self, intensity: int = 0):
+    def setLEDIntensity(self, intensity: int = 0, fluorescence=True):
         if not self.sig_board_connected:
             return False
-        cmd = SignalBoard.ILLUMINATION_CTRL
+        if fluorescence:
+            cmd = SignalBoard.FLUORESCENCE_CTRL
+        else:
+            cmd = SignalBoard.ILLUMINATION_CTRL
         intensity = min(max(0, intensity), 100)
         buf = struct.pack('>B', intensity)
         packet = self._make_cmd_packet(cmd, buf)

@@ -226,6 +226,7 @@ class ConnectionManager(HasTraits):
 
     voltage = Range(30, 200)
     frequency = Range(50, 60_000)
+    light_intensity = Range(0, 100)
     realtime_mode = Bool
     channel_states_arr = Array
 
@@ -502,6 +503,20 @@ class ConnectionManager(HasTraits):
             self.driver.frequency = event.new
             logger.info(f"Set frequency to {self.frequency} Hz")
 
+    def _on_set_light_intensity_request(self, message):
+        try:
+            self.light_intensity = int(message)
+        except Exception as e:
+            logger.error(f"Cannot request light intensity {self.light_intensity} %: {e}", exc_info=True)
+
+    @observe("light_intensity")
+    @require_realtime_mode
+    @require_active_driver
+    def _light_intensity_change(self, event):
+        if event.new != event.old:
+            self.driver.setLEDIntensity(int(event.new))
+            logger.info(f"Set light intensity to {self.light_intensity}%")
+
     def _on_set_realtime_mode_request(self, message):
         realtime_mode = message.lower() == "true"
 
@@ -512,6 +527,7 @@ class ConnectionManager(HasTraits):
             if self.realtime_mode:
                 self.driver.voltage = self.voltage
                 self.driver.frequency = self.frequency
+                self.driver.setLEDIntensity(self.light_intensity)
                 self.driver.setElectrodeStates(self.channel_states_arr)
 
             else:
