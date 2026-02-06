@@ -8,15 +8,21 @@ from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
-from traits.api import HasTraits, Bool, Instance, provides, Int, Array
+from dropbot.notebooks.calibrate_hv import voltage
+from svgwrite.data.pattern import frequency
+from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, observe
 
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
 )
 from dropbot_controller.dropbot_controller_base import app_globals
-from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
-from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, \
-    basic_listener_actor_routine
+from dropbot_controller.models.dropbot_channels_properties_model import (
+    DropbotChannelsPropertiesModelFromJSON,
+)
+from microdrop_utils.dramatiq_controller_base import (
+    generate_class_method_dramatiq_listener_actor,
+    basic_listener_actor_routine,
+)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG
@@ -29,40 +35,13 @@ from .utils import (
 from .portable_dropbot_sevice import DropletBotUart
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 CMD_RESPONSES = {}
 
 from functools import wraps
 import threading
-
-
-def require_active_driver(func):
-    """
-    Thread-safe decorator.
-    1. Acquires self._driver_lock.
-    2. Checks if self.driver exists.
-    3. Runs the function if safe, otherwise logs an error.
-    """
-
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        # Ensure the lock exists (defensive programming)
-        if not hasattr(self, "_driver_lock"):
-            self._driver_lock = threading.RLock()
-
-        with self._driver_lock:
-            # Standard check for driver availability
-            if not hasattr(self, "driver") or self.driver is None:
-                # Use the function name to make the log useful
-                operation = func.__name__.replace("_", " ").strip()
-                logger.error(f"Driver not available for: {operation}")
-                return
-
-            # If we get here, it is safe to run the actual logic
-            return func(self, *args, **kwargs)
-
-    return wrapper
 
 
 # ------------------------------------------------------------------
@@ -176,6 +155,60 @@ def _handle_alarm(cmd, alarms):
         logger.info(f"  └─ {alarm}")
 
 
+# util decorators
+def require_active_driver(func):
+    """
+    Thread-safe decorator.
+    1. Acquires self._driver_lock.
+    2. Checks if self.driver exists.
+    3. Runs the function if safe, otherwise logs an error.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Ensure the lock exists (defensive programming)
+        if not hasattr(self, "_driver_lock"):
+            self._driver_lock = threading.RLock()
+
+        with self._driver_lock:
+            # Standard check for driver availability
+            if not hasattr(self, "driver") or self.driver is None:
+                # Use the function name to make the log useful
+                operation = func.__name__.replace("_", " ").strip()
+                logger.error(f"Driver not available for: {operation}")
+                return
+
+            # If we get here, it is safe to run the actual logic
+            return func(self, *args, **kwargs)
+
+    return wrapper
+
+
+def require_realtime_mode(func):
+    """
+    Thread-safe decorator.
+    1. Acquires self._driver_lock.
+    2. Checks if self.driver exists.
+    3. Runs the function if safe, otherwise logs an error.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Ensure the lock exists (defensive programming)
+        if not self.realtime_mode:
+            # Use the function name to make the log useful
+            operation = func.__name__.replace("_", " ").strip()
+            logger.warning(
+                f"Realtime mode not enabled for {self}. Cannot perform {operation} "
+            )
+            return
+
+        # If we get here, it is safe to run the actual logic
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 @provides(IDramatiqControllerBase)
 class ConnectionManager(HasTraits):
     """
@@ -191,8 +224,8 @@ class ConnectionManager(HasTraits):
 
     monitor_scheduler = Instance(BackgroundScheduler)
 
-    voltage = Int
-    frequency = Int
+    voltage = Range(30, 200)
+    frequency = Range(50, 60_000)
     realtime_mode = Bool
     channel_states_arr = Array
 
@@ -206,8 +239,8 @@ class ConnectionManager(HasTraits):
     def traits_init(self):
         logger.info("Starting Portable dropbot controls listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.name,
-            class_method=self.listener_actor_routine)
+            listener_name=self.name, class_method=self.listener_actor_routine
+        )
 
         self.driver = DropletBotUart()
         self._stop_event = Event()
@@ -221,7 +254,9 @@ class ConnectionManager(HasTraits):
 
     def listener_actor_routine(self, message, topic):
         if "dropbot" in topic.split("/")[0]:
-            return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
+            return basic_listener_actor_routine(
+                self, message, topic, handler_name_pattern="_on_{topic}_request"
+            )
         else:
             return None
 
@@ -348,7 +383,7 @@ class ConnectionManager(HasTraits):
             logger.info("requesting tray to go out")
             self.driver.setTray(1)
 
-    @require_active_driver
+    # @require_active_driver
     def _on_electrodes_state_change_request(self, message):
         # 1. Validation (Safe to do inside lock for simplicity)
         try:
@@ -363,64 +398,56 @@ class ConnectionManager(HasTraits):
                 logger.error("Boolean mask size mismatch: expected 120")
                 return
 
+            if not np.array_equal(
+                channel_states_map_model.channels_properties_array,
+                self.channel_states_arr,
+            ):
+                self.channel_states_arr = (
+                    channel_states_map_model.channels_properties_array
+                )
+
         except Exception as e:
             logger.error(f"Error validating electrode message: {e}")
             return
 
-        if not np.array_equal(channel_states_map_model.channels_properties_array, self.channel_states_arr):
-
-            # 2. Hardware Action (Driver is guaranteed to exist here)
-            self.driver.setElectrodeStates(
-                channel_states_map_model.channels_properties_array
-            )
-            app_globals["last_channel_states_requested"] = message
-    
-            self.channel_states_arr = channel_states_map_model.channels_properties_array
-
+    @observe("channel_states_arr")
+    @require_realtime_mode
     @require_active_driver
+    def _actuate_electrodes(self, event=None):
+        # 2. Hardware Action (Driver is guaranteed to exist here)
+        self.driver.setElectrodeStates(self.channel_states_arr)
+        app_globals["last_channel_states_requested"] = self.channel_states_arr
+
     def _on_set_voltage_request(self, message):
         try:
-            voltage = int(message)
-
-            if voltage != self.voltage and self.realtime_mode:
-
-                if not (30 <= voltage <= 200):
-                    raise ValueError("Voltage must be between 30 and 150 V")
-
-                self.driver.voltage = voltage
-                logger.info(f"Set voltage to {voltage} V")
-
-                self.voltage = voltage
-
-        except (TimeoutError, RuntimeError) as e:
-            logger.error(f"Driver error setting voltage: {e}")
+            self.voltage = int(message)
         except Exception as e:
-            logger.error(f"Error setting voltage: {e}")
-            raise  # Re-raising is safe, the lock releases automatically
+            logger.error(f"Cannot request voltage {voltage} V: {e}", exc_info=True)
 
+    @observe("voltage")
+    @require_realtime_mode
     @require_active_driver
+    def _voltage_change(self, event):
+        if event.new != event.old:
+            self.driver.frequency = event.new
+            logger.info(f"Set voltage to {self.voltage} V")
+
     def _on_set_frequency_request(self, message):
         try:
-            frequency = int(message)
-
-            if frequency != self.frequency and self.realtime_mode:
-
-                if not (100 <= frequency <= 60_000):
-                    raise ValueError("Frequency must be between 100 and 20000 Hz")
-
-                self.driver.frequency = frequency
-                logger.info(f"Set frequency to {frequency} Hz")
-                self.frequency = frequency
-
-        except (TimeoutError, RuntimeError) as e:
-            logger.error(f"Driver error setting frequency: {e}")
+            self.frequency = int(message)
         except Exception as e:
-            logger.error(f"Error setting frequency: {e}")
-            raise
+            logger.error(f"Cannot request frequency {frequency}: {e}", exc_info=True)
 
+    @observe("frequency")
+    @require_realtime_mode
     @require_active_driver
+    def _frequency_change(self, event):
+        if event.new != event.old:
+            self.driver.frequency = event.new
+            logger.info(f"Set frequency to {self.frequency} Hz")
+
     def _on_set_realtime_mode_request(self, message):
-        realtime_mode = message.lower() == 'true'
+        realtime_mode = message.lower() == "true"
 
         if realtime_mode != self.realtime_mode:
             self.realtime_mode = realtime_mode
@@ -430,7 +457,7 @@ class ConnectionManager(HasTraits):
                 self.driver.voltage = self.voltage
                 self.driver.frequency = self.frequency
                 self.driver.setElectrodeStates(self.channel_states_arr)
-            
+
             else:
                 self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
