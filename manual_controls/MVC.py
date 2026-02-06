@@ -27,7 +27,7 @@ from .consts import PKG_name, listener_name
 
 # Define topics for new controls (Adjust these strings if your backend expects different topics)
 SET_CHIP_LOCK = "dropbot/requests/lock_chip"
-SET_DEVICE_INSERTED = "dropbot/requests/insert_device"
+SET_DEVICE_LOADED = "dropbot/requests/load_device"
 
 logger = get_logger(__name__)
 
@@ -139,7 +139,7 @@ class ManualControlModel(HasTraits):
 
     # New traits for Chip and Device
     chip_locked = Bool(False, desc="Lock state of the chip")
-    device_inserted = Bool(False, desc="Insertion state of the device")
+    device_loaded = Bool(False, desc="Loading state of the device")
 
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
     connected = Bool(False, desc="Connected to dropbot?")
@@ -166,15 +166,15 @@ ManualControlView = View(
                 name="chip_locked",
                 show_label=False,
                 editor=ToggleEditorFactory(
-                    on_label="Unlock Chip", off_label="Lock Chip"
+                    on_label="Chip Locked", off_label="Chip Unlocked"
                 ),
                 enabled_when="connected",
             ),
             Item(
-                name="device_inserted",
+                name="device_loaded",
                 show_label=False,
                 editor=ToggleEditorFactory(
-                    on_label="Remove Device", off_label="Insert Device"
+                    on_label="Device Loaded", off_label="Device Unloaded"
                 ),
                 enabled_when="connected",
             ),
@@ -293,9 +293,9 @@ class ManualControlControl(Controller):
         return super().setattr(info, object, traitname, value)
 
     @debounce(wait_seconds=0.5)
-    def device_inserted_setattr(self, info, object, traitname, value):
+    def device_loaded_setattr(self, info, object, traitname, value):
         logger.debug(f"Set device inserted to {value}")
-        info.device_inserted.control.setChecked(value)
+        info.device_loaded.control.setChecked(value)
         return super().setattr(info, object, traitname, value)
 
     ###################################################################################
@@ -326,13 +326,13 @@ class ManualControlControl(Controller):
         # but following your pattern, we use _publish_message_if_realtime
         # OR you can force it if these buttons should always work.
         # Assuming they act like voltage/frequency:
-        if self._publish_message_if_realtime(topic=SET_CHIP_LOCK, message=str(event.new)):
-            logger.debug(f"Requesting Chip Lock: {event.new}")
+        publish_message(topic=SET_CHIP_LOCK, message=str(event.new))
+        logger.debug(f"Requesting Chip Lock: {event.new}")
 
-    @observe("model:device_inserted")
-    def _device_inserted_changed(self, event):
-        if self._publish_message_if_realtime(topic=SET_DEVICE_INSERTED, message=str(event.new)):
-            logger.debug(f"Requesting Device Insert: {event.new}")
+    @observe("model:device_loaded")
+    def _device_loaded_changed(self, event):
+        publish_message(topic=SET_DEVICE_LOADED, message=str(event.new))
+        logger.debug(f"Requesting Device Insert: {event.new}")
 
 
 if __name__ == "__main__":

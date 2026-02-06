@@ -328,7 +328,6 @@ class ConnectionManager(HasTraits):
 
         return tray_pos == expected_home_pos
 
-
     def _auto_detect_port(self):
         """Simple auto-detection strategy."""
         ports = lsp.comports()
@@ -413,15 +412,31 @@ class ConnectionManager(HasTraits):
             publish_message("True", CHIP_INSERTED)
 
     @require_active_driver
-    def _on_toggle_tray__request(self, msg):
-        logger.debug("Processing dropbot loading... Recieved response from dropbot")
-        if msg == "out":
-            logger.info("requesting tray to go in")
+    def _on_load_device_request(self, message):
+        logger.critical("Processing dropbot loading...")
+
+        request = message.lower() == 'true'
+
+        if request:
             self.driver.setTray(0)
             publish_message("True", CHIP_INSERTED)
-        elif msg == "in":
-            logger.info("requesting tray to go out")
+
+        else:
             self.driver.setTray(1)
+            publish_message("False", CHIP_INSERTED)
+
+    @require_active_driver
+    def _on_lock_chip_request(self, message):
+        logger.critical("Processing dropbot loading...")
+
+        request = message.lower() == "true"
+
+        if request:
+            self.driver.setPogo(0)
+            publish_message("True", CHIP_INSERTED)
+
+        else:
+            self.driver.setPogo(1)
             publish_message("False", CHIP_INSERTED)
 
     # @require_active_driver
