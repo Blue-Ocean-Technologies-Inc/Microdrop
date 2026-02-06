@@ -9,10 +9,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
 from svgwrite.data.pattern import frequency
-from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, observe
+from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, observe, Dict
 
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
+    CHIP_INSERTED,
 )
 from dropbot_controller.dropbot_controller_base import app_globals
 from dropbot_controller.models.dropbot_channels_properties_model import (
@@ -112,19 +113,19 @@ def _handle_ready_read(cmd, data):
         logger.info(f"ADC data: {decode_adc_data(data)}")
     elif cmd & 0xFF in skip_commands:
         return
-    elif cmd == 0x1121:
-        logger.info(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
-
-        is_tray_out = bool(data[0])
-
-        if not is_tray_out:
-            # If data is 0x00 (False)
-            logger.info("Tray is in")
-            publish_message("in", "dropbot/requests/toggle_tray_")
-        else:
-            # If data is 0x01 (True)
-            logger.info("tray is out")
-            publish_message("out", "dropbot/requests/toggle_tray_")
+    # elif cmd == 0x1121:
+    #     logger.info(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
+    #
+    #     is_tray_out = bool(data[0])
+    #
+    #     if not is_tray_out:
+    #         # If data is 0x00 (False)
+    #         logger.info("Tray is in")
+    #         publish_message("in", "dropbot/requests/toggle_tray_")
+    #     else:
+    #         # If data is 0x01 (True)
+    #         logger.info("tray is out")
+    #         publish_message("out", "dropbot/requests/toggle_tray_")
 
     else:
         logger.info(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
@@ -228,6 +229,8 @@ class ConnectionManager(HasTraits):
     realtime_mode = Bool
     channel_states_arr = Array
 
+    driver_params = Dict
+
     ###################################################################################
     # IDramatiqControllerBase Interface
     ###################################################################################
@@ -290,6 +293,14 @@ class ConnectionManager(HasTraits):
         # Success - Update State
         self.port_name = port
         self.connected = True
+        # get params
+        self.driver_params = self.driver.getParams()
+
+        ## send out initial pogo status
+        if self._check_pogo_home():
+            publish_message(topic=CHIP_INSERTED, message="True")
+        else:
+            publish_message(topic=CHIP_INSERTED, message="False")
 
         # Fetch Versions
         s_ver, m_ver = self.driver.getVersions()
@@ -297,6 +308,26 @@ class ConnectionManager(HasTraits):
         self.motor_version = m_ver or "Unknown"
 
         return True
+
+    def _check_pogo_home(self):
+        motor_pos = self.driver.getMotorPositions()
+        pogo_left = motor_pos.get("pogo_left")
+        pogo_right = motor_pos.get("pogo_right")
+
+        total_pogo_pos = pogo_left + pogo_right
+
+        expected_home_pos = self.driver_params.get("motor_board").get("pogo_defaults") * 2
+
+        return total_pogo_pos == expected_home_pos
+
+    def _check_tray_home(self):
+        motor_pos = self.driver.getMotorPositions()
+
+        tray_pos = motor_pos.get("tray")
+        expected_home_pos = self.driver_params.get("motor_board").get("tray_defaults").get("in_pos")
+
+        return tray_pos == expected_home_pos
+
 
     def _auto_detect_port(self):
         """Simple auto-detection strategy."""
@@ -370,7 +401,16 @@ class ConnectionManager(HasTraits):
     @require_active_driver
     def _on_toggle_tray_request(self, *args, **kwargs):
         logger.critical("Processing dropbot loading...")
-        self.driver.getTray()
+
+        # check if tray and the pogo are home
+        if self._check_tray_home() and self._check_tray_home():
+            logger.info("Both the tray and pogo are home: chip is loaded. Getting it out")
+            self.driver.setTray(1)
+            publish_message("False", CHIP_INSERTED)
+        else:
+            logger.info("One of the tray or pogo motors are not homed. Setting them in")
+            self.driver.setTray(0)
+            publish_message("True", CHIP_INSERTED)
 
     @require_active_driver
     def _on_toggle_tray__request(self, msg):
@@ -378,9 +418,11 @@ class ConnectionManager(HasTraits):
         if msg == "out":
             logger.info("requesting tray to go in")
             self.driver.setTray(0)
+            publish_message("True", CHIP_INSERTED)
         elif msg == "in":
             logger.info("requesting tray to go out")
             self.driver.setTray(1)
+            publish_message("False", CHIP_INSERTED)
 
     # @require_active_driver
     def _on_electrodes_state_change_request(self, message):
