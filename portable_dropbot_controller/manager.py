@@ -428,7 +428,7 @@ class ConnectionManager(HasTraits):
     @require_active_driver
     def _voltage_change(self, event):
         if event.new != event.old:
-            self.driver.frequency = event.new
+            self.driver.voltage = event.new
             logger.info(f"Set voltage to {self.voltage} V")
 
     def _on_set_frequency_request(self, message):
