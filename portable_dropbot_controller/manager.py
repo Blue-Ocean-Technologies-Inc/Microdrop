@@ -419,7 +419,7 @@ class ConnectionManager(HasTraits):
             raise
 
     @require_active_driver
-    def _on_realtime_mode_request(self, message):
+    def _on_set_realtime_mode_request(self, message):
         realtime_mode = message.lower() == 'true'
 
         if realtime_mode != self.realtime_mode:
