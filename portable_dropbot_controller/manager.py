@@ -256,6 +256,7 @@ class ConnectionManager(HasTraits):
         self._driver_lock = threading.RLock()
 
     def listener_actor_routine(self, message, topic):
+        print(message, topic)
         if "dropbot" in topic.split("/")[0]:
             return basic_listener_actor_routine(
                 self, message, topic, handler_name_pattern="_on_{topic}_request"
