@@ -1,5 +1,6 @@
 # enthought imports
-from traits.api import Str
+from envisage.ids import TASK_EXTENSIONS
+from traits.api import Str, List
 from envisage.api import Plugin
 from envisage.ui.tasks.api import TaskExtension
 
@@ -14,13 +15,17 @@ class MotorControlsPlugin(Plugin):
     #### 'IPlugin' interface ##################################################
 
     #: The plugin unique identifier.
-    id = PKG + ".plugin"
+    id = "motor_controls.plugin"
 
     #: The plugin name (suitable for displaying to the user).
-    name = f"{PKG_name} Plugin"
+    name = f"Motor Controls Plugin"
 
     #: The task id to contribute task extension view to
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
+
+    #### Contributions to extension points made by this plugin ################
+
+    contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
     #### Trait initializers ###################################################
 
