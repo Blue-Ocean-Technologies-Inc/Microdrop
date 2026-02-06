@@ -144,7 +144,7 @@ ManualControlView = View(
             #     ),
             #     # Disabled if disconnected OR waiting for response
             #     enabled_when="connected and device_loaded_enabled and chip_locked_enabled",
-            ),
+            # ),
             Item(
                 name="realtime_mode",
                 show_label=False,
