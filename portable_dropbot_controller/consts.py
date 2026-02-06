@@ -18,4 +18,5 @@ SET_TOGGLE_MOTOR = "dropbot/requests/toggle_motor"
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "dropbot/requests/#",
+SET_TOGGLE_MOTOR, SET_MOTOR_HOME, SET_MOTOR_RELATIVE_MOVE, SET_MOTOR_ABSOLUTE_MOVE,
     ]}
