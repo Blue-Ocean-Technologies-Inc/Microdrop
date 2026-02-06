@@ -537,6 +537,7 @@ class ConnectionManager(HasTraits):
         logger.critical(f"Homing Motor {motor_id}...")
         self.driver.motorHome(motor_id)
 
+    @require_active_driver
     def _on_motor_relative_move_request(self, message):
 
         msg = json.loads(message)
@@ -546,6 +547,80 @@ class ConnectionManager(HasTraits):
 
         self.driver.motorRelativeMove(motor_id, move_distance)
 
+    @require_active_driver
+    def _on_motor_absolute_move_request(self, message):
+
+        msg = json.loads(message)
+
+        motor_id = msg.get("motor_id")
+        move_distance = msg.get("move_distance")
+
+        self.driver.motorAbsoluteMove(motor_id, move_distance)
+
+    @require_active_driver
+    def _on_toggle_motor_request(self, message):
+        """
+        Handles requests to set a motor to a specific abstract 'state' (index or boolean).
+        Resolves the actual absolute position using loaded driver parameters.
+        """
+        try:
+            msg = json.loads(message)
+            motor_id = msg.get("motor_id")
+            # 'state' can be an integer index (for PMT/Filter) or boolean (for Tray/Magnet)
+            state = int(msg.get("state"))
+
+            # 1. Get the configuration for the motor board
+            params = self.driver_params.get("motor_board", {})
+            target_pos = None
+
+            # 2. Resolve target position based on Motor ID
+
+            # --- TRAY (ID 0) ---
+            if motor_id == "tray":
+                defaults = params.get("tray_defaults", {})
+                # State 1 = Out, State 0 = In
+                target_pos = (
+                    defaults.get("out_pos") if state else defaults.get("in_pos")
+                )
+
+            # --- PMT (ID 1) ---
+            elif motor_id == "pmt":
+                defaults = params.get("pmt_defaults", {})
+                # State is the index (0-4), key format is 'pmt_pos_X'
+                target_pos = defaults.get(f"pmt_pos_{int(state)}")
+
+            # --- MAGNET (ID 2) ---
+            elif motor_id == "magnet":
+                defaults = params.get("magnet_defaults", {})
+                # State 1 = Up (Active), State 0 = Down (Rest)
+                target_pos = defaults.get("z_up") if state else defaults.get("z_down")
+
+            # --- FILTER (ID 3) ---
+            elif motor_id == "filter":
+                defaults = params.get("filter_defaults", {})
+                # State is the index (0-4), key format is 'filter_pos_X'
+                target_pos = defaults.get(f"filter_pos_{int(state)}")
+
+            # --- POGO LEFT (ID 4) & RIGHT (ID 5) ---
+            elif "pogo" in motor_id:
+                # 'pogo_defaults' is a single int value (Extended Position)
+                extended_pos = params.get("pogo_defaults", 2250)
+                # State 1 = Up (Extended), State 0 = Down (Retracted/0)
+                target_pos = extended_pos if state else 0
+
+            # 3. Execute the Move
+            if target_pos is not None:
+                logger.info(
+                    f"Setting ID = {motor_id} to State {state} -> {target_pos} steps"
+                )
+                self.driver.motorAbsoluteMove(motor_id, int(target_pos))
+            else:
+                logger.error(
+                    f"Could not resolve position for ID = {motor_id} with state '{state}'"
+                )
+
+        except Exception as e:
+            logger.error(f"Error processing toggle motor request: {e}", exc_info=True)
 
     ################################# Protected methods ######################################
     def _device_found(self, event):

@@ -3,6 +3,7 @@ import os
 
 from portable_dropbot_controller.plugin import PortDropbotControllerPlugin
 from portable_dropbot_status.plugin import PortDropbotStatusPlugin
+from portable_motor_control.plugin import MotorControlsPlugin
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -22,6 +23,7 @@ FRONTEND_PLUGINS = [
     # DropbotToolsMenuPlugin,
     # DropbotStatusPlugin,
     ManualControlsPlugin,
+    MotorControlsPlugin,
     # ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
     # PeripheralUiPlugin,
