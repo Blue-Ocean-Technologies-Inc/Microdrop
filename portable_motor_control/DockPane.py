@@ -78,7 +78,7 @@ class MotorControlModel(HasTraits):
         """Helper to serialize and publish."""
         msg = json.dumps(payload)
         print(f"Publishing to {topic}: {msg}")
-        publish_message(msg, topic)
+        publish_message(message=msg, topic=topic)
 
     def _btn_1_fired(self):
         """
