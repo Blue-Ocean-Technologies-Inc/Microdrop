@@ -138,8 +138,6 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(volt_label, 3, 0)
         layout.addWidget(self.voltage_reading, 3, 1)
 
-        # ... existing widgets (up to row 5 for Force) ...
-
         # Frequency
         freq_label = QLabel("Frequency:")
         freq_label.setFont(bold_font)

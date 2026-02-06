@@ -170,7 +170,7 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 return f"{val:{fmt}} {unit_str}"
             return "-"
 
-        self.model.frequency = format_val("hv_freq", "Hz")
+        self.model.frequency = format_val("hv_freq", "Hz", ".0f")
         self.model.chip_temp = format_val("cur_temp", "°C")
         self.model.device_temp = format_val("dev_temp", "°C")
         self.model.device_humidity = format_val("dev_hum", "%")
