@@ -10,12 +10,14 @@ class DropBotStatusModel(HasTraits):
     # Sensor readings
     capacitance = Str("-", desc="Raw capacitance in pF")
     voltage = Str("-", desc="Voltage set to device in V")
-    pressure = Str("-", desc="Pressure reading in pF/mm^2 ")
-    force = Str("-", desc="Calculated force in N")
+
+    frequency - Str("-", desc="Frequency of chip in Hz")
+    chip_temp = Str("-", desc="Chip temperature in C")
+    device_temp = Str("-", desc="Device temperature in C")
+    device_humidity = Str("-", desc="Humidity in %")
+
 
     def reset_readings(self):
         """Reset the readings reading counter."""
-        self.capacitance = "-"
-        self.voltage = "-"
-        self.pressure = "-"
-        self.force = "-"
+        self.capacitance = self.voltage = self.frequency = self.chip_temp = self.device_temp = self.device_humidity = "-"
+

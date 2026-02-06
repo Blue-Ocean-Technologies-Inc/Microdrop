@@ -161,6 +161,17 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             if voltage_change_significant:
                 self.model.voltage = new_voltage
 
+
+        frequency = msg.get('hv_freq', '-') * ureg.hertz
+        chip_temp = msg.get('cur_temp', '-') * ureg.degC
+        device_temp = msg.get('dev_temp', '-') * ureg.degC
+        device_humidity = msg.get('dev_hum', '-') * ureg.percent
+
+        self.model.frequency = str(frequency)
+        self.model.chip_temp = str(chip_temp)
+        self.model.device_temp = str(device_temp)
+        self.model.device_humidity = str(device_humidity)
+
     ####### Dropbot Icon Image Control Methods ###########
 
     def _on_disconnected_triggered(self, body):

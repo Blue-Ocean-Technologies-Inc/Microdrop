@@ -138,20 +138,35 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(volt_label, 3, 0)
         layout.addWidget(self.voltage_reading, 3, 1)
 
-        # c_device (Pressure)
-        c_device_label = QLabel("c<sub>device</sub>:")
-        c_device_label.setFont(bold_font)
-        self.pressure_reading = QLabel("-")
-        layout.addWidget(c_device_label, 4, 0)
-        layout.addWidget(self.pressure_reading, 4, 1)
+        # ... existing widgets (up to row 5 for Force) ...
 
-        # Force
-        force_label = QLabel("Force:")
-        force_label.setFont(bold_font)
-        self.force_reading = QLabel("-")
-        layout.addWidget(force_label, 5, 0)
-        layout.addWidget(self.force_reading, 5, 1)
+        # Frequency
+        freq_label = QLabel("Frequency:")
+        freq_label.setFont(bold_font)
+        self.frequency_reading = QLabel("-")
+        layout.addWidget(freq_label, 6, 0)
+        layout.addWidget(self.frequency_reading, 6, 1)
 
+        # Device Temperature
+        dev_temp_label = QLabel("Device Temp:")
+        dev_temp_label.setFont(bold_font)
+        self.device_temp_reading = QLabel("-")
+        layout.addWidget(dev_temp_label, 7, 0)
+        layout.addWidget(self.device_temp_reading, 7, 1)
+
+        # Device Humidity
+        dev_hum_label = QLabel("Device Humidity:")
+        dev_hum_label.setFont(bold_font)
+        self.device_humidity_reading = QLabel("-")
+        layout.addWidget(dev_hum_label, 8, 0)
+        layout.addWidget(self.device_humidity_reading, 8, 1)
+
+        # Chip Temperature
+        chip_temp_label = QLabel("Chip Temp:")
+        chip_temp_label.setFont(bold_font)
+        self.chip_temp_reading = QLabel("-")
+        layout.addWidget(chip_temp_label, 9, 0)
+        layout.addWidget(self.chip_temp_reading, 9, 1)
 
         # The 'Maximum' policy tells the layout that the widget's size hint
         # is also its maximum size.

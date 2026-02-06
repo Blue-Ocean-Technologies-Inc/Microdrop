@@ -128,14 +128,24 @@ class DropBotStatusViewModel(HasTraits):
     def update_voltage_reading(self, event):
         pass
 
-    @observe("model:pressure")
-    @format_and_emit_measurements("pressure_changed")
-    def update_pressure_reading(self, event):
+    @observe("model:frequency")
+    @format_and_emit_measurements("frequency_changed")
+    def update_frequency_reading(self, event):
         pass
 
-    @observe("model:force")
-    @format_and_emit_measurements("force_changed")
-    def update_force_reading(self, event):
+    @observe("model:chip_temp")
+    @format_and_emit_measurements("chip_temp_changed")
+    def update_chip_temp_reading(self, event):
+        pass
+
+    @observe("model:device_temp")
+    @format_and_emit_measurements("device_temp_changed")
+    def update_device_temp_reading(self, event):
+        pass
+
+    @observe("model:device_humidity")
+    @format_and_emit_measurements("device_humidity_changed")
+    def update_device_humidity_reading(self, event):
         pass
 
     ##### Handle input from the view #####
@@ -182,10 +192,14 @@ class DropBotStatusView(QWidget):
         self._view_model_signals.disable_icon_widget.connect(self.icon_widget.setDisabled)
         self._view_model_signals.connection_status_text_changed.connect(self.grid_widget.connection_status.setText)
         self._view_model_signals.chip_status_text_changed.connect(self.grid_widget.chip_status.setText)
+
         self._view_model_signals.capacitance_changed.connect(self.grid_widget.capacitance_reading.setText)
         self._view_model_signals.voltage_changed.connect(self.grid_widget.voltage_reading.setText)
-        self._view_model_signals.pressure_changed.connect(self.grid_widget.pressure_reading.setText)
-        self._view_model_signals.force_changed.connect(self.grid_widget.force_reading.setText)
+
+        self._view_model_signals.frequency_changed.connect(self.grid_widget.frequency_reading.setText)
+        self._view_model_signals.device_temp_changed.connect(self.grid_widget.device_temp_reading.setText)
+        self._view_model_signals.device_humidity_changed.connect(self.grid_widget.device_humidity_reading.setText)
+        self._view_model_signals.chip_temp_changed.connect(self.grid_widget.chip_temp_reading.setText)
 
         # Connect user input to view model methods: View -> ViewModel
         self.icon_widget.clicked.connect(self._view_model._on_icon_widget_clicked)
