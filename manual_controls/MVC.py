@@ -225,7 +225,7 @@ class ManualControlControl(Controller):
         self.model.connected = False
         # Reset other states on disconnect if needed
         self.model.chip_locked = False
-        self.model.device_inserted = False
+        self.model.device_loaded = False
 
     @timestamped_value('disconnected_message')
     def _on_connected_triggered(self, message):
