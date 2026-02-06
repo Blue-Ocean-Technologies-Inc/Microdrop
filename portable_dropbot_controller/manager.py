@@ -105,14 +105,16 @@ def _handle_ready_read(cmd, data):
         return
     elif cmd == 0x1121:
         print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
-        print(data)
-        print(type(data))
-        print(data.hex(' '))
-        if f"{data.hex(' ')}" == "00":
-            print('Tray is in')
+
+        is_tray_out = bool(data[0])
+
+        if not is_tray_out:
+            # If data is 0x00 (False)
+            print("Tray is in")
             publish_message("in", "dropbot/requests/toggle_tray_")
         else:
-            print('tray is out')
+            # If data is 0x01 (True)
+            print("tray is out")
             publish_message("out", "dropbot/requests/toggle_tray_")
 
     else:
