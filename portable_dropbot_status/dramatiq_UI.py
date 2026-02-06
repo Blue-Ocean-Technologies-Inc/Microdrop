@@ -164,7 +164,11 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 return ureg.Quantity(val, unit)
             return "-"
 
-        self.model.frequency = f"{get_formatted_measurement("hv_freq", ureg.hertz).to_compact():.5g~P}"
+        formatted_freq_measurement = get_formatted_measurement("hv_freq", ureg.hertz)
+        if formatted_freq_measurement != "-":
+            self.model.frequency = f"{formatted_freq_measurement.to_compact():.5g~P}"
+        else:
+            self.model.frequency = "-"
         self.model.chip_temp = str(get_formatted_measurement("cur_temp", ureg.degC))
         self.model.device_temp = str(get_formatted_measurement("dev_temp", ureg.degC))
         self.model.device_humidity = str(get_formatted_measurement("dev_hum", ureg.percent))
