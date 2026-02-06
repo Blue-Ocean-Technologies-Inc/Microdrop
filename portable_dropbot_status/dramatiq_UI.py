@@ -169,8 +169,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             return "-"
 
         self.model.frequency = format_val("hv_freq", "Hz")
-        self.model.chip_temp = format_val("cur_temp", "celsius")
-        self.model.device_temp = format_val("dev_temp", "celsius")
+        self.model.chip_temp = format_val("cur_temp", "°C")
+        self.model.device_temp = format_val("dev_temp", "°C")
         self.model.device_humidity = format_val("dev_hum", "%")
 
     ####### Dropbot Icon Image Control Methods ###########
