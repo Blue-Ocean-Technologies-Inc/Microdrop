@@ -510,7 +510,6 @@ class ConnectionManager(HasTraits):
             logger.error(f"Cannot request light intensity {self.light_intensity} %: {e}", exc_info=True)
 
     @observe("light_intensity")
-    @require_realtime_mode
     @require_active_driver
     def _light_intensity_change(self, event):
         if event.new != event.old:
