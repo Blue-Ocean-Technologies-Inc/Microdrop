@@ -6,16 +6,13 @@ from envisage.ui.tasks.api import TaskExtension
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
-from .consts import PKG, PKG_name
-
-
 class MotorControlsPlugin(Plugin):
     """ Contributes UI actions on top of the IPython Kernel Plugin. """
 
     #### 'IPlugin' interface ##################################################
 
     #: The plugin unique identifier.
-    id = "motor_controls.plugin"
+    id = f"motor_controls.plugin"
 
     #: The plugin name (suitable for displaying to the user).
     name = f"Motor Controls Plugin"
