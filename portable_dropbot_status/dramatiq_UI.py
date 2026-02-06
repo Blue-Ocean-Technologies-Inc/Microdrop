@@ -161,11 +161,13 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             if voltage_change_significant:
                 self.model.voltage = new_voltage
 
-        def format_val(key, unit_str):
+        def format_val(key, unit_str, fmt=".2f"):
             val = msg.get(key)
-            # Check if value exists and is a number (int or float)
+            # Check if value exists and is a number
             if isinstance(val, (int, float)):
-                return f"{val} {unit_str}"
+                # The :f forces fixed-point notation (no scientific)
+                # The fmt variable controls decimal places (default 2)
+                return f"{val:{fmt}} {unit_str}"
             return "-"
 
         self.model.frequency = format_val("hv_freq", "Hz")
