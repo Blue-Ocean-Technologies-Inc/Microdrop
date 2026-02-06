@@ -19,14 +19,10 @@ from microdrop_utils.decorators import timestamped_value
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
 from microdrop_style.colors import GREY, SUCCESS_COLOR
+from portable_dropbot_controller.consts import SET_CHIP_LOCK, SET_LIGHT_INTENSITY
 from protocol_grid.consts import step_defaults
 
 from .consts import PKG_name, listener_name
-
-# Define topics for new controls
-SET_CHIP_LOCK = "dropbot/requests/lock_chip"
-SET_LIGHT_INTENSITY = "dropbot/requests/set_light_intensity"
-
 logger = get_logger(__name__)
 
 

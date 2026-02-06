@@ -532,6 +532,21 @@ class ConnectionManager(HasTraits):
             else:
                 self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
+    @require_active_driver
+    def _on_motor_home_request(self, motor_id):
+        logger.critical(f"Homing Motor {motor_id}...")
+        self.driver.motorHome(motor_id)
+
+    def _on_motor_relative_move_request(self, message):
+
+        msg = json.loads(message)
+
+        motor_id = msg.get("motor_id")
+        move_distance = msg.get("move_distance")
+
+        self.driver.motorRelativeMove(motor_id, move_distance)
+
+
     ################################# Protected methods ######################################
     def _device_found(self, event):
         """
