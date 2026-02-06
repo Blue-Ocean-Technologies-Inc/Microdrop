@@ -7,12 +7,11 @@ from pyface.tasks.api import TraitsDockPane
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
     SET_TOGGLE_MOTOR,
-    SET_MOTOR_RELATIVE_MOVE,
     SET_MOTOR_HOME,
+    SET_MOTOR_RELATIVE_MOVE,
     SET_MOTOR_ABSOLUTE_MOVE,
-    PKG,
 )
-
+from .consts import PKG
 
 # --- 1. Define Motor Data Structure ---
 class MotorDef:
