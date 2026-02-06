@@ -221,22 +221,6 @@ class ConnectionManager(HasTraits):
             return None
 
     # ------------------------------------------------------------------
-    # Control methods dramatiq
-    # ------------------------------------------------------------------
-    def _on_toggle_tray_request(self, *args, **kwargs):
-        logger.critical("Processing dropbot loading...")
-        self.driver.getTray()
-
-    def _on_toggle_tray__request(self, msg):
-        logger.debug("Processing dropbot loading... Recieved response from dropbot")
-        if msg == "out":
-            print("requesting tray to go in")
-            self.driver.setTray(0)
-        elif msg == "in":
-            print("requesting tray to go out")
-            self.driver.setTray(1)
-
-    # ------------------------------------------------------------------
     # Connection Control
     # ------------------------------------------------------------------
     def connect(self, port: str = None, baud: int = 115200) -> bool:
@@ -341,6 +325,24 @@ class ConnectionManager(HasTraits):
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
+    # ------------------------------------------------------------------
+    # Control methods dramatiq
+    # ------------------------------------------------------------------
+    @require_active_driver
+    def _on_toggle_tray_request(self, *args, **kwargs):
+        logger.critical("Processing dropbot loading...")
+        self.driver.getTray()
+
+    @require_active_driver
+    def _on_toggle_tray__request(self, msg):
+        logger.debug("Processing dropbot loading... Recieved response from dropbot")
+        if msg == "out":
+            print("requesting tray to go in")
+            self.driver.setTray(0)
+        elif msg == "in":
+            print("requesting tray to go out")
+            self.driver.setTray(1)
+
     @require_active_driver
     def _on_electrodes_state_change_request(self, message):
         # 1. Validation (Safe to do inside lock for simplicity)
@@ -365,7 +367,7 @@ class ConnectionManager(HasTraits):
         app_globals["last_channel_states_requested"] = message
 
     @require_active_driver
-    def on_set_voltage_request(self, message):
+    def _on_set_voltage_request(self, message):
         try:
             voltage = float(message)
             if not (30 <= voltage <= 150):
@@ -375,13 +377,13 @@ class ConnectionManager(HasTraits):
             logger.info(f"Set voltage to {voltage} V")
 
         except (TimeoutError, RuntimeError) as e:
-            logger.error(f"Proxy error setting voltage: {e}")
+            logger.error(f"Driver error setting voltage: {e}")
         except Exception as e:
             logger.error(f"Error setting voltage: {e}")
             raise  # Re-raising is safe, the lock releases automatically
 
     @require_active_driver
-    def on_set_frequency_request(self, message):
+    def _on_set_frequency_request(self, message):
         try:
             frequency = float(message)
             if not (100 <= frequency <= 20000):
@@ -391,7 +393,23 @@ class ConnectionManager(HasTraits):
             logger.info(f"Set frequency to {frequency} Hz")
 
         except (TimeoutError, RuntimeError) as e:
-            logger.error(f"Proxy error setting frequency: {e}")
+            logger.error(f"Driver error setting frequency: {e}")
+        except Exception as e:
+            logger.error(f"Error setting frequency: {e}")
+            raise
+
+    @require_active_driver
+    def _on_realtime_mode_request(self, message):
+        try:
+            frequency = float(message)
+            if not (100 <= frequency <= 20000):
+                raise ValueError("Frequency must be between 100 and 20000 Hz")
+
+            self.driver.frequency = frequency
+            logger.info(f"Set frequency to {frequency} Hz")
+
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Driver error setting frequency: {e}")
         except Exception as e:
             logger.error(f"Error setting frequency: {e}")
             raise
