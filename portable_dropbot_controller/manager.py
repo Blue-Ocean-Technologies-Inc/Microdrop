@@ -4,6 +4,7 @@ import time
 from threading import Event
 
 import dramatiq
+import numpy as np
 import serial.tools.list_ports as lsp
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -15,6 +16,8 @@ from traits.has_traits import provides
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
 )
+from dropbot_controller.dropbot_controller_base import app_globals
+from dropbot_controller.models.dropbot_channels_properties_model import DropbotChannelsPropertiesModelFromJSON
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, \
     basic_listener_actor_routine
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -248,6 +251,8 @@ class ConnectionManager(HasTraits):
         # Add logic here to filter by HWID if known
         return ports[0].device if ports else None
 
+    ######## Request handlers ####################################################
+
     def _on_start_device_monitoring_request(self, *args, **kwargs):
         """
         Method to start looking for dropbots connected using their hwids.
@@ -305,6 +310,47 @@ class ConnectionManager(HasTraits):
         logger.info("DropBot monitor created and started")
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
+
+    def on_electrodes_state_change_request(self, message):
+        try:
+            if not hasattr(self, "proxy") or self.proxy is None:
+                logger.error("Proxy not available for electrode state change")
+                return
+
+            # Use safe proxy access for electrode state changes
+            with self.proxy.transaction_lock:
+
+                # Create and validate message model
+                channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
+                    num_available_channels=120,
+                    property_dtype=bool,
+                    channels_properties_json=message,
+                ).model
+
+                # Validate boolean mask size
+                expected_channels = 120
+                mask_size = len(channel_states_map_model.channels_properties_array)
+
+                if mask_size != expected_channels:
+                    logger.error(
+                        f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}"
+                    )
+                    return
+
+                self.driver.setElectrodeStates(channel_states_map_model.channels_properties_array)
+
+                app_globals["last_channel_states_requested"] = message
+
+                # active_channels = self.proxy.state_of_channels.sum()
+                # logger.info(f"{active_channels} channels actuated: {actuated_channels}")
+                # logger.debug(f"{self.proxy.state_of_channels}")
+
+        # except TimeoutError:
+        #     logger.error("Timeout waiting for electrode state change")
+        # except RuntimeError as e:
+        #     logger.error(f"Proxy state error during electrode state change: {e}")
+        except Exception as e:
+            logger.error(f"Error processing electrode state change: {e}")
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
