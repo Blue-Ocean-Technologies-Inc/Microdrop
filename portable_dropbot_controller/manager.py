@@ -595,7 +595,7 @@ class ConnectionManager(HasTraits):
             elif motor_id == "magnet":
                 defaults = params.get("magnet_defaults", {})
                 # State 1 = Up (Active), State 0 = Down (Rest)
-                target_pos = defaults.get("z_up") if state else defaults.get("z_down")
+                target_pos = defaults.get("z_up") if not state else defaults.get("z_down")
 
             # --- FILTER (ID 3) ---
             elif motor_id == "filter":
