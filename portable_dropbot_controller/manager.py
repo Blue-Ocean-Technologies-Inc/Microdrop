@@ -8,7 +8,6 @@ from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
-from dropbot.notebooks.calibrate_hv import voltage
 from svgwrite.data.pattern import frequency
 from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, observe
 
@@ -422,7 +421,7 @@ class ConnectionManager(HasTraits):
         try:
             self.voltage = int(message)
         except Exception as e:
-            logger.error(f"Cannot request voltage {voltage} V: {e}", exc_info=True)
+            logger.error(f"Cannot request voltage {self.voltage} V: {e}", exc_info=True)
 
     @observe("voltage")
     @require_realtime_mode
