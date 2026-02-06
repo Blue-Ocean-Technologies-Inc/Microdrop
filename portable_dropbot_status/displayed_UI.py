@@ -35,8 +35,11 @@ class DropbotStatusViewModelSignals(QObject):
 
     capacitance_changed = Signal(str)
     voltage_changed = Signal(str)
-    pressure_changed = Signal(str)
-    force_changed = Signal(str)
+
+    frequency_changed = Signal(str)
+    device_temp_changed = Signal(str)
+    device_humidity_changed = Signal(str)
+    chip_temp_changed = Signal(str)
 
 class DropBotStatusViewModel(HasTraits):
     """
