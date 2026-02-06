@@ -192,8 +192,10 @@ class ConnectionManager(HasTraits):
     def _on_toggle_tray__request(self, msg):
         logger.debug("Processing dropbot loading... Recieved response from dropbot")
         if msg == "out":
+            print("requesting tray to go in")
             self.driver.setTray(0)
         elif msg == "in":
+            print("requesting tray to go out")
             self.driver.setTray(1)
 
     # ------------------------------------------------------------------
