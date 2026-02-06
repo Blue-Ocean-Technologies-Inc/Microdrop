@@ -2,13 +2,13 @@ import json
 from threading import Event
 
 import dramatiq
+import numpy as np
 import serial.tools.list_ports as lsp
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
-from traits.api import HasTraits, Bool, Instance
-from traits.has_traits import provides
+from traits.api import HasTraits, Bool, Instance, provides, Int, Array
 
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
@@ -81,7 +81,7 @@ def _handle_ready_read(cmd, data):
     # if cmd in status_commands:
     #     # Show brief status message instead of full hex dump
     #     board_name = "Signal Board" if (cmd >> 8) == 0x12 else "Driver Board"
-    #     print(f"  └─ {board_name} Status (0x{cmd:04X}) - {len(data)} bytes > {data[:21].decode().strip()}")
+    #     logger.info(f"  └─ {board_name} Status (0x{cmd:04X}) - {len(data)} bytes > {data[:21].decode().strip()}")
     #     return
 
     if cmd >> 8 == 0x12:
@@ -116,7 +116,7 @@ def _handle_ready_read(cmd, data):
     # Try to decode known command responses
     if cmd & 0xFF == 0x01:  # Signal board login response
         result = decode_login_response(data)
-        print(f"  └─ {board} board login response: {result}")
+        logger.info(f"  └─ {board} board login response: {result}")
         if "SUCCESS" in result:
             publish_message(topic=DROPBOT_CONNECTED, message=result)
 
@@ -127,36 +127,36 @@ def _handle_ready_read(cmd, data):
         logger.debug(f">>> {board} board status: {result}")
         pass
     elif cmd & 0xFF == 0x32:  # Signal board high voltage test response
-        print(f"||| Channel Capacitances: {[x for x in data]}")
+        logger.info(f"||| Channel Capacitances: {[x for x in data]}")
     elif cmd & 0xFF == 0x34:  # Signal board capacitor calibration progress response
-        print(f"!!! Channel capacitance > {data[1]} / {data[0]} : {data[2]}")
+        logger.info(f"!!! Channel capacitance > {data[1]} / {data[0]} : {data[2]}")
     elif cmd & 0xFF == 0xA5:  # Signal board ADC data response
-        print(f"ADC data: {decode_adc_data(data)}")
+        logger.info(f"ADC data: {decode_adc_data(data)}")
     elif cmd & 0xFF in skip_commands:
         return
     elif cmd == 0x1121:
-        print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
+        logger.info(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
 
         is_tray_out = bool(data[0])
 
         if not is_tray_out:
             # If data is 0x00 (False)
-            print("Tray is in")
+            logger.info("Tray is in")
             publish_message("in", "dropbot/requests/toggle_tray_")
         else:
             # If data is 0x01 (True)
-            print("tray is out")
+            logger.info("tray is out")
             publish_message("out", "dropbot/requests/toggle_tray_")
 
     else:
-        print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
+        logger.info(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
 
 
 def _handle_error(err_code, cmd_str):
     """
     This function is called when an error is reported by the UART driver.
     """
-    print(f"[ERROR] Code: {err_code}, Message: {cmd_str}")
+    logger.info(f"[ERROR] Code: {err_code}, Message: {cmd_str}")
 
 
 def _handle_alarm(cmd, alarms):
@@ -169,11 +169,11 @@ def _handle_alarm(cmd, alarms):
         board = "Motor"
     else:
         board = "Unknown"
-    print(f" {board} board reported alarms")
+    logger.info(f" {board} board reported alarms")
     for alarm in alarms:
         alarm = alarm.replace("开路", " Motor Not Connected (Open Circuit)")
         alarm = alarm.replace("原点信号一直触发", " Home signal triggered continuously")
-        print(f"  └─ {alarm}")
+        logger.info(f"  └─ {alarm}")
 
 
 @provides(IDramatiqControllerBase)
@@ -190,6 +190,11 @@ class ConnectionManager(HasTraits):
     driver = Instance(DropletBotUart)
 
     monitor_scheduler = Instance(BackgroundScheduler)
+
+    voltage = Int
+    frequency = Int
+    realtime_mode = Bool
+    channel_states_arr = Array
 
     ###################################################################################
     # IDramatiqControllerBase Interface
@@ -337,16 +342,17 @@ class ConnectionManager(HasTraits):
     def _on_toggle_tray__request(self, msg):
         logger.debug("Processing dropbot loading... Recieved response from dropbot")
         if msg == "out":
-            print("requesting tray to go in")
+            logger.info("requesting tray to go in")
             self.driver.setTray(0)
         elif msg == "in":
-            print("requesting tray to go out")
+            logger.info("requesting tray to go out")
             self.driver.setTray(1)
 
     @require_active_driver
     def _on_electrodes_state_change_request(self, message):
         # 1. Validation (Safe to do inside lock for simplicity)
         try:
+
             channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
                 num_available_channels=120,
                 property_dtype=bool,
@@ -356,25 +362,35 @@ class ConnectionManager(HasTraits):
             if len(channel_states_map_model.channels_properties_array) != 120:
                 logger.error("Boolean mask size mismatch: expected 120")
                 return
+
         except Exception as e:
             logger.error(f"Error validating electrode message: {e}")
             return
 
-        # 2. Hardware Action (Driver is guaranteed to exist here)
-        self.driver.setElectrodeStates(
-            channel_states_map_model.channels_properties_array
-        )
-        app_globals["last_channel_states_requested"] = message
+        if not np.array_equal(channel_states_map_model.channels_properties_array, self.channel_states_arr):
+
+            # 2. Hardware Action (Driver is guaranteed to exist here)
+            self.driver.setElectrodeStates(
+                channel_states_map_model.channels_properties_array
+            )
+            app_globals["last_channel_states_requested"] = message
+    
+            self.channel_states_arr = channel_states_map_model.channels_properties_array
 
     @require_active_driver
     def _on_set_voltage_request(self, message):
         try:
             voltage = int(message)
-            if not (30 <= voltage <= 150):
-                raise ValueError("Voltage must be between 30 and 150 V")
 
-            self.driver.voltage = voltage
-            logger.info(f"Set voltage to {voltage} V")
+            if voltage != self.voltage and self.realtime_mode:
+
+                if not (30 <= voltage <= 200):
+                    raise ValueError("Voltage must be between 30 and 150 V")
+
+                self.driver.voltage = voltage
+                logger.info(f"Set voltage to {voltage} V")
+
+                self.voltage = voltage
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Driver error setting voltage: {e}")
@@ -386,11 +402,15 @@ class ConnectionManager(HasTraits):
     def _on_set_frequency_request(self, message):
         try:
             frequency = int(message)
-            if not (100 <= frequency <= 20000):
-                raise ValueError("Frequency must be between 100 and 20000 Hz")
 
-            self.driver.frequency = frequency
-            logger.info(f"Set frequency to {frequency} Hz")
+            if frequency != self.frequency and self.realtime_mode:
+
+                if not (100 <= frequency <= 60_000):
+                    raise ValueError("Frequency must be between 100 and 20000 Hz")
+
+                self.driver.frequency = frequency
+                logger.info(f"Set frequency to {frequency} Hz")
+                self.frequency = frequency
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Driver error setting frequency: {e}")
@@ -400,7 +420,19 @@ class ConnectionManager(HasTraits):
 
     @require_active_driver
     def _on_realtime_mode_request(self, message):
-        print("realtime mode requested")
+        realtime_mode = message.lower() == 'true'
+
+        if realtime_mode != self.realtime_mode:
+            self.realtime_mode = realtime_mode
+
+            ## apply stored values i true
+            if self.realtime_mode:
+                self.driver.voltage = self.voltage
+                self.driver.frequency = self.frequency
+                self.driver.setElectrodeStates(self.channel_states_arr)
+            
+            else:
+                self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
