@@ -78,7 +78,7 @@ class MotorControlModel(HasTraits):
         """Helper to serialize and publish."""
         msg = json.dumps(payload)
         print(f"Publishing to {topic}: {msg}")
-        publish_message(topic, msg)
+        publish_message(msg, topic)
 
     def _btn_1_fired(self):
         """
@@ -128,7 +128,7 @@ class MotorControlModel(HasTraits):
         # Based on your backend code: `_on_motor_home_request(self, motor_id)`
         # it seems to expect just the ID string directly, not JSON.
         print(f"Homing {motor.name}...")
-        publish_message(SET_MOTOR_HOME, motor.name)
+        publish_message(topic=SET_MOTOR_HOME, message=motor.name)
 
     def _move_rel_btn_fired(self):
         """Send Relative Move Command"""
