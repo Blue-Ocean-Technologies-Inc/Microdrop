@@ -369,7 +369,7 @@ class ConnectionManager(HasTraits):
     @require_active_driver
     def _on_set_voltage_request(self, message):
         try:
-            voltage = float(message)
+            voltage = int(message)
             if not (30 <= voltage <= 150):
                 raise ValueError("Voltage must be between 30 and 150 V")
 
@@ -385,7 +385,7 @@ class ConnectionManager(HasTraits):
     @require_active_driver
     def _on_set_frequency_request(self, message):
         try:
-            frequency = float(message)
+            frequency = int(message)
             if not (100 <= frequency <= 20000):
                 raise ValueError("Frequency must be between 100 and 20000 Hz")
 
@@ -400,19 +400,7 @@ class ConnectionManager(HasTraits):
 
     @require_active_driver
     def _on_realtime_mode_request(self, message):
-        try:
-            frequency = float(message)
-            if not (100 <= frequency <= 20000):
-                raise ValueError("Frequency must be between 100 and 20000 Hz")
-
-            self.driver.frequency = frequency
-            logger.info(f"Set frequency to {frequency} Hz")
-
-        except (TimeoutError, RuntimeError) as e:
-            logger.error(f"Driver error setting frequency: {e}")
-        except Exception as e:
-            logger.error(f"Error setting frequency: {e}")
-            raise
+        print("realtime mode requested")
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
