@@ -311,7 +311,7 @@ class ConnectionManager(HasTraits):
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
-    def on_electrodes_state_change_request(self, message):
+    def _on_electrodes_state_change_request(self, message):
         try:
             if not hasattr(self, "proxy") or self.proxy is None:
                 logger.error("Proxy not available for electrode state change")
