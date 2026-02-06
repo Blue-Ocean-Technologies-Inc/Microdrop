@@ -11,7 +11,7 @@ class DropBotStatusModel(HasTraits):
     capacitance = Str("-", desc="Raw capacitance in pF")
     voltage = Str("-", desc="Voltage set to device in V")
 
-    frequency - Str("-", desc="Frequency of chip in Hz")
+    frequency = Str("-", desc="Frequency of chip in Hz")
     chip_temp = Str("-", desc="Chip temperature in C")
     device_temp = Str("-", desc="Device temperature in C")
     device_humidity = Str("-", desc="Humidity in %")
