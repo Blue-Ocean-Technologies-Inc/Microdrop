@@ -312,45 +312,26 @@ class ConnectionManager(HasTraits):
         self.monitor_scheduler.start()
 
     def _on_electrodes_state_change_request(self, message):
-        try:
-            if not hasattr(self, "proxy") or self.proxy is None:
-                logger.error("Proxy not available for electrode state change")
-                return
+        # Create and validate message model
+        channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
+            num_available_channels=120,
+            property_dtype=bool,
+            channels_properties_json=message,
+        ).model
 
-            # Use safe proxy access for electrode state changes
-            with self.proxy.transaction_lock:
+        # Validate boolean mask size
+        expected_channels = 120
+        mask_size = len(channel_states_map_model.channels_properties_array)
 
-                # Create and validate message model
-                channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
-                    num_available_channels=120,
-                    property_dtype=bool,
-                    channels_properties_json=message,
-                ).model
+        if mask_size != expected_channels:
+            logger.error(
+                f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}"
+            )
+            return
 
-                # Validate boolean mask size
-                expected_channels = 120
-                mask_size = len(channel_states_map_model.channels_properties_array)
+        self.driver.setElectrodeStates(channel_states_map_model.channels_properties_array)
 
-                if mask_size != expected_channels:
-                    logger.error(
-                        f"Boolean mask size mismatch: expected {expected_channels}, got {mask_size}"
-                    )
-                    return
-
-                self.driver.setElectrodeStates(channel_states_map_model.channels_properties_array)
-
-                app_globals["last_channel_states_requested"] = message
-
-                # active_channels = self.proxy.state_of_channels.sum()
-                # logger.info(f"{active_channels} channels actuated: {actuated_channels}")
-                # logger.debug(f"{self.proxy.state_of_channels}")
-
-        # except TimeoutError:
-        #     logger.error("Timeout waiting for electrode state change")
-        # except RuntimeError as e:
-        #     logger.error(f"Proxy state error during electrode state change: {e}")
-        except Exception as e:
-            logger.error(f"Error processing electrode state change: {e}")
+        app_globals["last_channel_states_requested"] = message
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
