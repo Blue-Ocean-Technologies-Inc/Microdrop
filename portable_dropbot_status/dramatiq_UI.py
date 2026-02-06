@@ -161,19 +161,17 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             if voltage_change_significant:
                 self.model.voltage = new_voltage
 
-        def format_val(key, unit_str, fmt=".2f"):
+        def get_formatted_measurement(key, unit):
             val = msg.get(key)
-            # Check if value exists and is a number
+            # Only apply unit if the value is a valid number (int or float)
             if isinstance(val, (int, float)):
-                # The :f forces fixed-point notation (no scientific)
-                # The fmt variable controls decimal places (default 2)
-                return f"{val:{fmt}} {unit_str}"
+                return ureg.Quantity(val, unit)
             return "-"
 
-        self.model.frequency = format_val("hv_freq", "Hz", ".0f")
-        self.model.chip_temp = format_val("cur_temp", "°C")
-        self.model.device_temp = format_val("dev_temp", "°C")
-        self.model.device_humidity = format_val("dev_hum", "%")
+        self.model.frequency = f"{get_formatted_measurement("hv_freq", ureg.hertz):.5g~P}"
+        self.model.chip_temp = str(get_formatted_measurement("cur_temp", ureg.degC))
+        self.model.device_temp = str(get_formatted_measurement("dev_temp", ureg.degC))
+        self.model.device_humidity = str(get_formatted_measurement("dev_hum", ureg.percent))
 
     ####### Dropbot Icon Image Control Methods ###########
 
