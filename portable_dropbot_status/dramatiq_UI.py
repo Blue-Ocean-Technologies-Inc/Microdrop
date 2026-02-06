@@ -62,6 +62,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
     def traits_init(self):
 
         self.capacitances = []
+        # Track how many times we've seen "False" in a row
+        self._chip_missing_count = 0
         # flag for if no pwoer is true or not
         self.no_power_dialog = None
         self.no_power = None
@@ -126,8 +128,21 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         voltage = msg.get('hv_vol', '-')
         chip_status = msg.get('chip_on_pad', False)
 
-        if chip_status != self.model.chip_inserted:
-            self.model.chip_inserted = chip_status
+        if chip_status:
+            # If chip is detected, reset the failure counter immediately
+            self._chip_missing_count = 0
+
+            # Update model immediately if it was previously False
+            if not self.model.chip_inserted:
+                self.model.chip_inserted = True
+
+        else:
+            # If chip is NOT detected, increment the counter
+            self._chip_missing_count += 1
+
+            # Only update model to False if we have seen 2 or more failures in a row
+            if self._chip_missing_count >= 2 and self.model.chip_inserted:
+                self.model.chip_inserted = False
 
         old_capacitance = self.model.capacitance
         old_voltage = self.model.voltage
