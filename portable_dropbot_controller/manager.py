@@ -105,7 +105,10 @@ def _handle_ready_read(cmd, data):
         return
     elif cmd == 0x1121:
         print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
-        if data == 0:
+        print(data)
+        print(type(data))
+        print(data.hex(' '))
+        if f"{data.hex(' ')}" == "00":
             print('Tray is in')
             publish_message("in", "dropbot/requests/toggle_tray_")
         else:
@@ -192,8 +195,10 @@ class ConnectionManager(HasTraits):
     def _on_toggle_tray__request(self, msg):
         logger.debug("Processing dropbot loading... Recieved response from dropbot")
         if msg == "out":
+            print("requesting tray to go in")
             self.driver.setTray(0)
         elif msg == "in":
+            print("requesting tray to go out")
             self.driver.setTray(1)
 
     # ------------------------------------------------------------------
