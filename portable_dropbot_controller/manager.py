@@ -432,11 +432,11 @@ class ConnectionManager(HasTraits):
         request = message.lower() == "true"
 
         if request:
-            self.driver.setPogo(0)
+            self.driver.setPogo(1)
             publish_message("True", CHIP_INSERTED)
 
         else:
-            self.driver.setPogo(1)
+            self.driver.setPogo(0)
             publish_message("False", CHIP_INSERTED)
 
     # @require_active_driver
