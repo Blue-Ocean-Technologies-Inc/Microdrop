@@ -104,8 +104,7 @@ def _handle_ready_read(cmd, data):
     elif cmd & 0xFF in skip_commands:
         return
     elif cmd == 0x1121:
-        print(cmd)
-        print(data)
+        print(f"[<-- RECV] CMD: {cmd:04X}, Data: {data.hex(' ')}")
         if data == 0:
             print('Tray is in')
             publish_message("in", "dropbot/requests/toggle_tray_")
