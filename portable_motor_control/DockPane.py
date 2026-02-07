@@ -1,7 +1,11 @@
 import json
-from traits.api import HasTraits, Enum, Str, Button, Float, Instance, observe, Dict, Int
-from traitsui.api import View, Item, VGroup, HGroup, ButtonEditor, Spring
+from traits.api import HasTraits, Enum, Str, Button, Instance, observe, Dict, Int, Property
+from traitsui.api import View, Item, VGroup, HGroup, ButtonEditor
 from pyface.tasks.api import TraitsDockPane
+
+from logger.logger_service import get_logger, init_logger
+
+logger = get_logger(__name__)
 
 # Import pub/sub helper
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -66,21 +70,90 @@ class MotorControlModel(HasTraits):
     # Stores current index for motors like PMT/Filter locally
     _cycle_indices = Dict()
 
-    # -- Logic --
 
-    @observe("selected_motor_name")
+# -- View Definition --
+motors_view = View(
+    VGroup(
+        # 1. Motor Selector
+        VGroup(
+            Item("selected_motor_name", label="Target Motor"),
+            show_border=True,
+            label="Select Motor",
+        ),
+        # 2. Macros (Toggle / Cycle)
+        VGroup(
+            HGroup(
+                Item(
+                    "btn_1",
+                    editor=ButtonEditor(label_value="btn_1_label"),
+                    show_label=False,
+                ),
+                Item(
+                    "btn_2",
+                    editor=ButtonEditor(label_value="btn_2_label"),
+                    show_label=False,
+                ),
+                Item("home_btn", show_label=False),
+            ),
+            show_border=True,
+            label="Macros",
+        ),
+        # 3. Precision Move
+        VGroup(
+            HGroup(
+                Item("rel_distance", label="Move By (\u03bcm)"),
+                Item("move_rel_btn", show_label=False),
+            ),
+            HGroup(
+                Item("abs_position", label="Move to (\u03bcm)"),
+                Item("move_abs_btn", show_label=False),
+            ),
+            show_border=True,
+            label="Manual Move",
+        ),
+    ),
+    resizable=True,
+)
+
+
+# --- 3. The Dock Pane (Controller)---
+class MotorControlDockPane(TraitsDockPane):
+    id = f"motor_controls.pane"
+    name = "Motor Controls"
+    model = Instance(MotorControlModel, ())
+
+    traits_view = motors_view
+
+    _cycle_indices = Property(Dict(), observe="model._cycle_indices")
+
+    selected_motor_name = Property(Enum(*MOTOR_NAMES), observe="model.selected_motor_name")
+
+    def _get__cycle_indices(self):
+        return self.model._cycle_indices
+
+    def _set__cycle_indices(self, value):
+        self.model._cycle_indices = value
+
+    def _get_selected_motor_name(self):
+        return self.model.selected_motor_name
+
+    def _set_selected_motor_name(self, value):
+        self.model.selected_motor_name = value
+
+    @observe("model:selected_motor_name")
     def _update_ui_context(self, event):
         """Update button labels when the motor selection changes."""
         motor_def = MOTOR_MAP[self.selected_motor_name]
-        self.btn_1_label, self.btn_2_label = motor_def.labels
+        self.model.btn_1_label, self.model.btn_2_label = motor_def.labels
 
     def _publish(self, topic, payload):
         """Helper to serialize and publish."""
         msg = json.dumps(payload)
-        print(f"Publishing to {topic}: {msg}")
+        logger.info(f"Publishing to {topic}: {msg}")
         publish_message(message=msg, topic=topic)
 
-    def _btn_1_fired(self):
+    @observe("model:btn_1")
+    def _btn_1_fired(self, event):
         """
         Toggle Mode: Sends False (State 0 / In / Down)
         Cycle Mode: Decrements Index
@@ -99,7 +172,8 @@ class MotorControlModel(HasTraits):
 
             self._publish(SET_TOGGLE_MOTOR, {"motor_id": motor.name, "state": new_idx})
 
-    def _btn_2_fired(self):
+    @observe("model:btn_2")
+    def _btn_2_fired(self, event):
         """
         Toggle Mode: Sends True (State 1 / Out / Up)
         Cycle Mode: Increments Index
@@ -118,91 +192,35 @@ class MotorControlModel(HasTraits):
 
             self._publish(SET_TOGGLE_MOTOR, {"motor_id": motor.name, "state": new_idx})
 
-    def _home_btn_fired(self):
+    @observe("model:home_btn")
+    def _home_btn_fired(self, event):
         motor = MOTOR_MAP[self.selected_motor_name]
         # Reset local cycle index on home
         if motor.mode == "cycle":
             self._cycle_indices[motor.name] = 0
 
-        # Send simple string or JSON depending on backend expectation.
-        # Based on your backend code: `_on_motor_home_request(self, motor_id)`
-        # it seems to expect just the ID string directly, not JSON.
-        print(f"Homing {motor.name}...")
+        logger.info(f"Homing {motor.name}...")
         publish_message(topic=SET_MOTOR_HOME, message=motor.name)
 
-    def _move_rel_btn_fired(self):
+    @observe("model:move_rel_btn")
+    def _move_rel_btn_fired(self, event):
         """Send Relative Move Command"""
         motor = MOTOR_MAP[self.selected_motor_name]
         self._publish(
             SET_MOTOR_RELATIVE_MOVE,
-            {"motor_id": motor.name, "move_distance": self.rel_distance},
+            {"motor_id": motor.name, "move_distance": self.model.rel_distance},
         )
 
-    def _move_abs_btn_fired(self):
+    @observe("model:move_abs_btn")
+    def _move_abs_btn_fired(self, event):
         """Send Absolute Move Command"""
         motor = MOTOR_MAP[self.selected_motor_name]
         self._publish(
             SET_MOTOR_ABSOLUTE_MOVE,
-            {"motor_id": motor.name, "move_distance": self.abs_position},
+            {"motor_id": motor.name, "move_distance": self.model.abs_position},
         )
-
-    # -- View Definition --
-    traits_view = View(
-        VGroup(
-            # 1. Motor Selector
-            VGroup(
-                Item("selected_motor_name", label="Target Motor"),
-                show_border=True,
-                label="Select Motor",
-            ),
-            # 2. Macros (Toggle / Cycle)
-            VGroup(
-                HGroup(
-                    Item(
-                        "btn_1",
-                        editor=ButtonEditor(label_value="btn_1_label"),
-                        show_label=False,
-                        springy=True,
-                    ),
-                    Item(
-                        "btn_2",
-                        editor=ButtonEditor(label_value="btn_2_label"),
-                        show_label=False,
-                        springy=True,
-                    ),
-                    Item("home_btn", show_label=False, springy=True),
-                ),
-                show_border=True,
-                label="Macros",
-            ),
-            # 3. Precision Move
-            VGroup(
-                HGroup(
-                    Item("rel_distance", label="Move By (\u03bcm)"),
-                    Item("move_rel_btn", show_label=False),
-                ),
-                HGroup(
-                    Item("abs_position", label="Move to (\u03bcm)"),
-                    Item("move_abs_btn", show_label=False),
-                ),
-                show_border=True,
-                label="Manual Move",
-            ),
-        )
-    )
-
-
-# --- 3. The Dock Pane ---
-class MotorControlDockPane(TraitsDockPane):
-    id = f"motor_controls.pane"
-    name = "Motor Controls"
-    model = Instance(MotorControlModel, ())
-
-    def create_contents(self, parent):
-        ui = self.model.edit_traits(kind="subpanel", parent=parent)
-        return ui.control
 
 
 if __name__ == "__main__":
-    model = MotorControlModel()
-    model.configure_traits()
+    init_logger()
+    MotorControlDockPane().configure_traits()
