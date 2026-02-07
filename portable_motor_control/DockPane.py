@@ -12,6 +12,7 @@ from portable_dropbot_controller.consts import (
     SET_MOTOR_ABSOLUTE_MOVE,
 )
 
+
 # --- 1. Define Motor Data Structure ---
 class MotorDef:
     def __init__(self, name, btn1_label, btn2_label, mode="toggle", max_states=2):
@@ -169,11 +170,7 @@ class MotorControlModel(HasTraits):
                         show_label=False,
                         springy=True,
                     ),
-                ),
-                HGroup(
-                    Spring(),
-                    Item("home_btn", show_label=False),
-                    Spring(),
+                    Item("home_btn", show_label=False, springy=True),
                 ),
                 show_border=True,
                 label="Macros",
@@ -181,11 +178,11 @@ class MotorControlModel(HasTraits):
             # 3. Precision Move
             VGroup(
                 HGroup(
-                    Item("rel_distance", label="Move By (\u03BCm)"),
+                    Item("rel_distance", label="Move By (\u03bcm)"),
                     Item("move_rel_btn", show_label=False),
                 ),
                 HGroup(
-                    Item("abs_position", label="Move to (\u03BCm)"),
+                    Item("abs_position", label="Move to (\u03bcm)"),
                     Item("move_abs_btn", show_label=False),
                 ),
                 show_border=True,
