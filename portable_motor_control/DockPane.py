@@ -11,7 +11,6 @@ from portable_dropbot_controller.consts import (
     SET_MOTOR_RELATIVE_MOVE,
     SET_MOTOR_ABSOLUTE_MOVE,
 )
-from .consts import PKG
 
 # --- 1. Define Motor Data Structure ---
 class MotorDef:
@@ -25,16 +24,16 @@ class MotorDef:
 # Define Configuration
 MOTOR_CONFIG = [
     # Toggle: True=Out, False=In
-    MotorDef("tray", "In (False)", "Out (True)", mode="toggle"),
+    MotorDef("tray", "In", "Out", mode="toggle"),
     # Cycle: Moves between indices 0-4
     MotorDef("pmt", "Prev Pos", "Next Pos", mode="cycle", max_states=5),
     # Toggle: True=Up, False=Down
-    MotorDef("magnet", "Up (True)", "Down (False)", mode="toggle"),
+    MotorDef("magnet", "Up", "Down", mode="toggle"),
     # Cycle: Moves between indices 0-4
     MotorDef("filter", "Prev Pos", "Next Pos", mode="cycle", max_states=5),
     # Toggle: True=Up, False=Down
-    MotorDef("pogo_left", "Up (True)", "Down (False)", mode="toggle"),
-    MotorDef("pogo_right", "Up (True)", "Down (False)", mode="toggle"),
+    MotorDef("pogo_left", "Up", "Down", mode="toggle"),
+    MotorDef("pogo_right", "Up", "Down", mode="toggle"),
 ]
 
 MOTOR_MAP = {m.name: m for m in MOTOR_CONFIG}
@@ -182,11 +181,11 @@ class MotorControlModel(HasTraits):
             # 3. Precision Move
             VGroup(
                 HGroup(
-                    Item("rel_distance", label="Move By (mm)"),
+                    Item("rel_distance", label="Move By (\u03BCm)"),
                     Item("move_rel_btn", show_label=False),
                 ),
                 HGroup(
-                    Item("abs_position", label="Move to (mm)"),
+                    Item("abs_position", label="Move to (\u03BCm)"),
                     Item("move_abs_btn", show_label=False),
                 ),
                 show_border=True,
@@ -198,7 +197,7 @@ class MotorControlModel(HasTraits):
 
 # --- 3. The Dock Pane ---
 class MotorControlDockPane(TraitsDockPane):
-    id = f"{PKG}.pane"
+    id = f"motor_controls.pane"
     name = "Motor Controls"
     model = Instance(MotorControlModel, ())
 
