@@ -126,17 +126,25 @@ class MotorControlDockPane(TraitsDockPane):
 
     traits_view = motors_view
 
+    ##################################################################
+    ### Controller Interface
+    ##################################################################
+
+    # ----- Helpers method ----------------------------
+    @staticmethod
+    def _publish(topic, payload):
+        """Helper to serialize and publish."""
+        msg = json.dumps(payload)
+        logger.info(f"Publishing to {topic}: {msg}")
+        publish_message(message=msg, topic=topic)
+
+    ## ----- Trait Observers -------------- ######
+
     @observe("model:selected_motor_name")
     def _update_ui_context(self, event):
         """Update button labels when the motor selection changes."""
         motor_def = MOTOR_MAP[self.model.selected_motor_name]
         self.model.btn_1_label, self.model.btn_2_label = motor_def.labels
-
-    def _publish(self, topic, payload):
-        """Helper to serialize and publish."""
-        msg = json.dumps(payload)
-        logger.info(f"Publishing to {topic}: {msg}")
-        publish_message(message=msg, topic=topic)
 
     @observe("model:btn_1")
     def _btn_1_fired(self, event):
