@@ -1,5 +1,5 @@
 import json
-from traits.api import HasTraits, Enum, Str, Button, Float, Instance, observe, Dict
+from traits.api import HasTraits, Enum, Str, Button, Float, Instance, observe, Dict, Int
 from traitsui.api import View, Item, VGroup, HGroup, ButtonEditor, Spring
 from pyface.tasks.api import TraitsDockPane
 
@@ -56,9 +56,9 @@ class MotorControlModel(HasTraits):
     home_btn = Button("Home")
 
     # -- Manual Move Fields --
-    rel_distance = Float(10.0)
+    rel_distance = Int(10)
     move_rel_btn = Button("Go")
-    abs_position = Float(0.0)
+    abs_position = Int(0)
     move_abs_btn = Button("Go")
 
     # -- State Tracking for Cycling Motors --
