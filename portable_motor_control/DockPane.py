@@ -1,5 +1,5 @@
 import json
-from traits.api import HasTraits, Enum, Str, Button, Instance, observe, Dict, Int, Property
+from traits.api import HasTraits, Enum, Str, Button, Instance, observe, Dict, Int
 from traitsui.api import View, Item, VGroup, HGroup, ButtonEditor
 from pyface.tasks.api import TraitsDockPane
 
@@ -126,26 +126,10 @@ class MotorControlDockPane(TraitsDockPane):
 
     traits_view = motors_view
 
-    _cycle_indices = Property(Dict(), observe="model._cycle_indices")
-
-    selected_motor_name = Property(Enum(*MOTOR_NAMES), observe="model.selected_motor_name")
-
-    def _get__cycle_indices(self):
-        return self.model._cycle_indices
-
-    def _set__cycle_indices(self, value):
-        self.model._cycle_indices = value
-
-    def _get_selected_motor_name(self):
-        return self.model.selected_motor_name
-
-    def _set_selected_motor_name(self, value):
-        self.model.selected_motor_name = value
-
     @observe("model:selected_motor_name")
     def _update_ui_context(self, event):
         """Update button labels when the motor selection changes."""
-        motor_def = MOTOR_MAP[self.selected_motor_name]
+        motor_def = MOTOR_MAP[self.model.selected_motor_name]
         self.model.btn_1_label, self.model.btn_2_label = motor_def.labels
 
     def _publish(self, topic, payload):
@@ -160,7 +144,7 @@ class MotorControlDockPane(TraitsDockPane):
         Toggle Mode: Sends False (State 0 / In / Down)
         Cycle Mode: Decrements Index
         """
-        motor = MOTOR_MAP[self.selected_motor_name]
+        motor = MOTOR_MAP[self.model.selected_motor_name]
 
         if motor.mode == "toggle":
             # State False (0) is In/Down/Retracted
@@ -168,9 +152,9 @@ class MotorControlDockPane(TraitsDockPane):
 
         elif motor.mode == "cycle":
             # Decrement Index
-            current_idx = self._cycle_indices.get(motor.name, 0)
+            current_idx = self.model._cycle_indices.get(motor.name, 0)
             new_idx = (current_idx - 1) % motor.max_states
-            self._cycle_indices[motor.name] = new_idx
+            self.model._cycle_indices[motor.name] = new_idx
 
             self._publish(SET_TOGGLE_MOTOR, {"motor_id": motor.name, "state": new_idx})
 
@@ -180,7 +164,7 @@ class MotorControlDockPane(TraitsDockPane):
         Toggle Mode: Sends True (State 1 / Out / Up)
         Cycle Mode: Increments Index
         """
-        motor = MOTOR_MAP[self.selected_motor_name]
+        motor = MOTOR_MAP[self.model.selected_motor_name]
 
         if motor.mode == "toggle":
             # State True (1) is Out/Up/Extended
@@ -188,18 +172,18 @@ class MotorControlDockPane(TraitsDockPane):
 
         elif motor.mode == "cycle":
             # Increment Index
-            current_idx = self._cycle_indices.get(motor.name, 0)
+            current_idx = self.model._cycle_indices.get(motor.name, 0)
             new_idx = (current_idx + 1) % motor.max_states
-            self._cycle_indices[motor.name] = new_idx
+            self.model._cycle_indices[motor.name] = new_idx
 
             self._publish(SET_TOGGLE_MOTOR, {"motor_id": motor.name, "state": new_idx})
 
     @observe("model:home_btn")
     def _home_btn_fired(self, event):
-        motor = MOTOR_MAP[self.selected_motor_name]
+        motor = MOTOR_MAP[self.model.selected_motor_name]
         # Reset local cycle index on home
         if motor.mode == "cycle":
-            self._cycle_indices[motor.name] = 0
+            self.model._cycle_indices[motor.name] = 0
 
         logger.info(f"Homing {motor.name}...")
         publish_message(topic=SET_MOTOR_HOME, message=motor.name)
@@ -207,7 +191,7 @@ class MotorControlDockPane(TraitsDockPane):
     @observe("model:move_rel_btn")
     def _move_rel_btn_fired(self, event):
         """Send Relative Move Command"""
-        motor = MOTOR_MAP[self.selected_motor_name]
+        motor = MOTOR_MAP[self.model.selected_motor_name]
         self._publish(
             SET_MOTOR_RELATIVE_MOVE,
             {"motor_id": motor.name, "move_distance": self.model.rel_distance},
@@ -216,7 +200,7 @@ class MotorControlDockPane(TraitsDockPane):
     @observe("model:move_abs_btn")
     def _move_abs_btn_fired(self, event):
         """Send Absolute Move Command"""
-        motor = MOTOR_MAP[self.selected_motor_name]
+        motor = MOTOR_MAP[self.model.selected_motor_name]
         self._publish(
             SET_MOTOR_ABSOLUTE_MOVE,
             {"motor_id": motor.name, "move_distance": self.model.abs_position},
