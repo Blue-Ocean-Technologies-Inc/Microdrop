@@ -404,7 +404,7 @@ class ConnectionManager(HasTraits):
         logger.critical("Processing dropbot loading...")
 
         # check if tray and the pogo are home
-        if self._check_tray_home() and self._check_tray_home():
+        if self._check_tray_home() and self._check_pogo_home():
             logger.info("Both the tray and pogo are home: chip is loaded. Getting it out")
             self.driver.setTray(1)
             publish_message("False", CHIP_INSERTED)
@@ -412,20 +412,6 @@ class ConnectionManager(HasTraits):
             logger.info("One of the tray or pogo motors are not homed. Setting them in")
             self.driver.setTray(0)
             publish_message("True", CHIP_INSERTED)
-
-    @require_active_driver
-    def _on_load_device_request(self, message):
-        logger.critical("Processing dropbot loading...")
-
-        request = message.lower() == 'true'
-
-        if request:
-            self.driver.setTray(0)
-            publish_message("True", CHIP_INSERTED)
-
-        else:
-            self.driver.setTray(1)
-            publish_message("False", CHIP_INSERTED)
 
     @require_active_driver
     def _on_lock_chip_request(self, message):
