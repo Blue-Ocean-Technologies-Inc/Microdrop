@@ -14,9 +14,12 @@ SET_MOTOR_ABSOLUTE_MOVE = "dropbot/requests/motor_absolute_move"
 SET_MOTOR_HOME = "dropbot/requests/motor_home"
 SET_TOGGLE_MOTOR = "dropbot/requests/toggle_motor"
 
+from peripheral_controller.consts import GO_HOME, SET_POSITION, MOVE_UP, MOVE_DOWN
+
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "dropbot/requests/#",
 SET_TOGGLE_MOTOR, SET_MOTOR_HOME, SET_MOTOR_RELATIVE_MOVE, SET_MOTOR_ABSOLUTE_MOVE,
+        GO_HOME, MOVE_UP, MOVE_DOWN, SET_POSITION
     ]}
