@@ -257,13 +257,7 @@ class ConnectionManager(HasTraits):
 
     def listener_actor_routine(self, message, topic):
         print(message, topic)
-        if "dropbot" in topic.split("/")[0]:
-            return basic_listener_actor_routine(
-                self, message, topic, handler_name_pattern="_on_{topic}_request"
-            )
-        else:
-            return None
-
+        return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
     # ------------------------------------------------------------------
     # Connection Control
     # ------------------------------------------------------------------
