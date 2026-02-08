@@ -1,6 +1,5 @@
 import shutil
 import sys
-import time
 import ctypes
 import signal
 import subprocess
@@ -194,6 +193,13 @@ class CameraControlWidget(QWidget):
         self.initialize_camera_list()
         self.check_initial_camera_state()
 
+    @staticmethod
+    def _is_ir_camera_name(camera_name) -> bool:
+        """
+        Return True if the camera name indicates an IR camera.
+        """
+        return bool(camera_name) and ("ir" in str(camera_name).lower())
+
     ############################## preference change observers ##############################
 
     def _preferred_video_format_change(self, event):
@@ -225,13 +231,6 @@ class CameraControlWidget(QWidget):
         """Toggle camera on/off state."""
         self.turn_off_camera() if self.is_camera_on else self.turn_on_camera()
         self.is_camera_on = not self.is_camera_on
-
-    def toggle_recording(self):
-        """Toggle recording on/off state."""
-        if self.is_recording:
-            self.video_record_stop()
-        else:
-            self.video_record_start()
 
     def toggle_align_camera_mode(self):
 
@@ -429,8 +428,10 @@ class CameraControlWidget(QWidget):
                                f"<b>{self.preferences.selected_camera}</b>.<br><br>"
                                f"Will ignore strict mode request for <b>{self.preferences.selected_camera}</b> ...")
 
-            logger.warning(warning_message)
-            warning(None, warning_message)
+            # Mute this warning for IR cameras (common to lack preferred formats).
+            if not self._is_ir_camera_name(self.preferences.selected_camera):
+                logger.warning(warning_message)
+                warning(None, warning_message)
 
             self.populate_resolutions(allow_strict_mode=False)
 
