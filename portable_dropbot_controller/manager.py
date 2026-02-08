@@ -437,8 +437,8 @@ class ConnectionManager(HasTraits):
                 return
 
             if not np.array_equal(
-                channel_states_map_model.channels_properties_array,
-                self.channel_states_arr,
+                    channel_states_map_model.channels_properties_array,
+                    self.channel_states_arr,
             ):
                 self.channel_states_arr = (
                     channel_states_map_model.channels_properties_array
@@ -603,6 +603,34 @@ class ConnectionManager(HasTraits):
 
         except Exception as e:
             logger.error(f"Error processing toggle motor request: {e}", exc_info=True)
+
+    @require_active_driver
+    def _on_go_home_request(self, message):
+        """
+        Home z stage
+        """
+        self.driver.motorHome("magnet")
+
+    @require_active_driver
+    def _on_move_up_request(self, message):
+        """
+        Move up z stage
+        """
+        self.driver.setMagnet(1)
+
+    @require_active_driver
+    def _on_move_down_request(self, message):
+        """
+        Move down z stage
+        """
+        self.driver.setMagnet(0)
+
+    @require_active_driver
+    def _on_set_position_request(self, message):
+        """
+        Move z stage to position.
+        """
+        self.driver.motorAbsoluteMove("magnet", int(message))
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
