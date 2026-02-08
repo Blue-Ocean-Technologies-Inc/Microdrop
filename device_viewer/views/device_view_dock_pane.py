@@ -372,12 +372,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}"
         )
 
+        # Clean up previous interaction service (e.g., gamepad listeners) to avoid duplicates.
+        try:
+            old_service = getattr(self.scene, "interaction_service", None)
+            if old_service and hasattr(old_service, "cleanup"):
+                old_service.cleanup()
+        except Exception:
+            pass
+
         # Initialize the electrode mouse / key interaction service with the new model and layer
         interaction_service = ElectrodeInteractionControllerService(
             model=new_model,
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
+            status_bar_manager=self.task.window.status_bar_manager,
         )
 
         # Update the scene with the interaction service
