@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 
+from dropbot_controller.consts import SET_REALTIME_MODE
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
 from PySide6.QtWidgets import (
     QTreeView,
@@ -1093,6 +1094,8 @@ class PGCWidget(QWidget):
         target_step_item = self.get_item_by_path(target_step_path)
         if not target_step_item:
             return
+
+        publish_message(topic=SET_REALTIME_MODE, message=str(True))
 
         parameters = {}
         step_params = self.state.get_element_by_path(target_step_path).parameters
