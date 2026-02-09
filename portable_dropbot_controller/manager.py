@@ -520,6 +520,12 @@ class ConnectionManager(HasTraits):
         logger.critical(f"Homing Motor {motor_id}...")
         self.driver.motorHome(motor_id)
 
+        if motor_id == "magnet":
+            publish_message(
+                str(self.driver_params.get("motor_board", {}).get("magnet_defaults", {}).get("z_down", 0) / 1000),
+                ZSTAGE_POSITION_UPDATED
+            )
+
     @require_active_driver
     def _on_motor_relative_move_request(self, message):
 
@@ -541,7 +547,7 @@ class ConnectionManager(HasTraits):
         self.driver.motorAbsoluteMove(motor_id, move_distance)
 
     @require_active_driver
-    def _on_toggle_motor_request(self, message):
+    def _on_toggle_motor_request(self, message) -> None:
         """
         Handles requests to set a motor to a specific abstract 'state' (index or boolean).
         Resolves the actual absolute position using loaded driver parameters.
@@ -578,6 +584,11 @@ class ConnectionManager(HasTraits):
                 defaults = params.get("magnet_defaults", {})
                 target_pos = defaults.get("z_down") if state else defaults.get("z_up")
 
+                self.driver.motorAbsoluteMove(motor_id, int(target_pos))
+                publish_message(str(target_pos / 1000), ZSTAGE_POSITION_UPDATED)
+
+                return None
+
             # --- FILTER (ID 3) ---
             elif motor_id == "filter":
                 defaults = params.get("filter_defaults", {})
@@ -597,7 +608,8 @@ class ConnectionManager(HasTraits):
                 self.driver.motorAbsoluteMove(motor_id, int(target_pos))
             else:
                 logger.error(
-                    f"Could not resolve position for ID = {motor_id} with state '{state}'"
+                    f"Could not resolve position for ID = {motor_id} with state '{state}'",
+                    exc_info=True
                 )
 
         except Exception as e:
@@ -630,7 +642,8 @@ class ConnectionManager(HasTraits):
         Move z stage to position. Received message is the distance in mm (milli meters)
         """
         logger.info(f"Moving magnet to {message}mm position")
-        self.driver.motorAbsoluteMove("magnet", int(message) * 1000)
+        self.driver.motorAbsoluteMove("magnet", int(float(message) * 1000))
+        publish_message(message, ZSTAGE_POSITION_UPDATED)
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
