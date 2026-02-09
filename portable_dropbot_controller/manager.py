@@ -606,28 +606,29 @@ class ConnectionManager(HasTraits):
         """
         Home z stage
         """
-        self.driver.motorHome("magnet")
+        self._on_motor_home_request("magnet")
 
     @require_active_driver
     def _on_move_up_request(self, message):
         """
         Move up z stage
         """
-        self.driver.setMagnet(1)
+        self._on_toggle_motor_request(json.dumps({"motor_id": "magnet", "state": 0}))
 
     @require_active_driver
     def _on_move_down_request(self, message):
         """
         Move down z stage
         """
-        self.driver.setMagnet(0)
+        self._on_toggle_motor_request(json.dumps({"motor_id": "magnet", "state": 1}))
 
     @require_active_driver
     def _on_set_position_request(self, message):
         """
-        Move z stage to position.
+        Move z stage to position. Received message is the distance in mm (milli meters)
         """
-        self.driver.motorAbsoluteMove("magnet", int(message))
+        logger.info(f"Moving magnet to {message}mm position")
+        self.driver.motorAbsoluteMove("magnet", int(message) * 1000)
 
     ################################# Protected methods ######################################
     def _device_found(self, event):
