@@ -12,34 +12,42 @@ from traits.api import HasTraits, Instance, Array
 from svg.path import parse_path
 
 from logger.logger_service import get_logger
-from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line
+from microdrop_application.dialogs.pyface_wrapper import error
+from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line, draw_polygons_and_line
 
-logger = get_logger(__name__, "INFO")
+logger = get_logger(__name__, "DEBUG")
 
-DPI=96
+DPI = 96
 INCH_TO_MM = 25.4
+
 
 def pixels_to_mm(pixels):
     return pixels * INCH_TO_MM / DPI
+
 
 def points_to_mm(points):
     pixels = points * DPI / 72
     return pixels_to_mm(pixels)
 
+
 def picas_to_mm(picas):
     points = picas * 12
     return points_to_mm(points)
 
+
 def mm_to_pixels(mm):
     return mm * DPI / INCH_TO_MM
+
 
 def mm_to_points(mm):
     pixels = mm_to_pixels(mm)
     return pixels * 72 / DPI
 
+
 def mm_to_picas(mm):
     points = mm_to_points(mm)
     return points / 12
+
 
 inkscape_units = [
     "mm",
@@ -145,7 +153,7 @@ class PolygonNeighborFinder:
 
         ###### Check if we can proceed with looser conditions #######
         logger.warning(f"Could not find a solution where each line intersects exactly 2 polygons "
-            f"after {max_attempts} attempts.")
+                       f"after {max_attempts} attempts.")
 
         if np.all(counts >= 2):
             logger.warning("Proceeding with solution taking first and last polygin intersected by line")
@@ -170,9 +178,67 @@ class PolygonNeighborFinder:
             # do this by sorting polygon indices by distance of corresponding polygon to line start
             # then we take the first and last elements of the sorted list
             if len(intersecting_poly_indices) > 2:
-                intersecting_poly_indices = sort_polygon_indices_along_line(line=self.lines[line_idx],
-                                                                            polygons=self.polygons,
-                                                                            indices=list(intersecting_poly_indices))
+                try:
+                    intersecting_poly_indices = sort_polygon_indices_along_line(
+                        line=self.lines[line_idx],
+                        polygons=np.array(self.polygons)[intersecting_poly_indices],
+                        indices=intersecting_poly_indices)
+
+                except Exception as e:
+
+                    import uuid
+                    from pathlib import Path
+                    import tempfile
+
+                    # Create a unique temp filename
+                    # utilizing UUID to ensure no file conflicts
+                    temp_path = tempfile.gettempdir() / Path(f"poly_debug_{uuid.uuid4().hex[:8]}.png")
+
+                    fig, ax = draw_polygons_and_line(
+                        np.array(self.polygons)[intersecting_poly_indices],
+                        self.lines[line_idx],
+                        index_labels=list(intersecting_poly_indices))
+
+                    # 1. Save the figure
+                    fig.tight_layout()
+                    ax.title.set_text("")
+                    fig.savefig(temp_path)
+
+                    # 2. Log the error to your backend/console
+                    logger.error(f"Error: {e}. Saving debug plot to {temp_path}. Proceeding with random endpoints...",
+                                 exc_info=True)
+
+                    # 3. Format the polygon list for the report
+                    # Added a header and newlines for cleaner HTML formatting
+                    polygons_str = "<br><br>".join(
+                        [f"<b>{idx}</b>: {self.polygons[idx]}" for idx in intersecting_poly_indices])
+
+                    # 4. Construct the URI
+                    uri = temp_path.as_uri()
+
+                    debug_plot = (
+                        f"<b>Debug Plot</b>:<br>"
+                        f"<a href='{uri}' target='_blank'>"
+                        f"  <img src='{uri}' alt='Debug Plot' style='max-width:50%; max-height: 50%; border:1px solid #ccc; cursor:zoom-in;'>"
+                        f"</a><br>"
+                        f"<small>(Click image to maximize)</small>"
+                    )
+
+                    # 5. Send the error report
+                    error(
+                        None,
+
+                        title="Device Loading Error",
+
+                        message=(
+                            f"<b>Error</b>: {e}. Proceeding with random polygon endpoints...<br><br>"
+                            f"{debug_plot}"
+                        ),
+
+                        detail=f"<b>Affected Line</b>: {line_idx}: {self.lines[line_idx]}<br><br>"
+                            f"<b>Affected Polygons</b>:<br>{polygons_str} <br><br>"
+
+                    )
 
             # Just take first and last ones -- endpoint polygons.
             poly1_idx, poly2_idx = intersecting_poly_indices[0], intersecting_poly_indices[-1]
@@ -254,14 +320,16 @@ def create_adjacency_dict(neighbours) -> dict:
 
 
 class ElectrodeData(HasTraits):
-    channel = Instance(int, allow_none=True) # Int() doesn't seem to follow allow_none for some reason
+    channel = Instance(int, allow_none=True)  # Int() doesn't seem to follow allow_none for some reason
     path = Array
+
 
 class SVGProcessor:
     """
     Parses SVG files to extract path data for electrodes and connections,
     respecting the original SVG coordinate system (top-left origin).
     """
+
     def __init__(self, filename: str):
         """Initializes the processor by loading and parsing an SVG file."""
         tree = ET.parse(filename)
@@ -270,7 +338,7 @@ class SVGProcessor:
         self.min_x = self.min_y = self.max_x = self.max_y = None
 
         ### Set unit normalization func to get all values in mm everytime.
-        _svg_file_units = 'px' # default value is pixels if nothing given or invalid values given in svg file
+        _svg_file_units = 'px'  # default value is pixels if nothing given or invalid values given in svg file
         svg_width, svg_height = self.root.get("width"), self.root.get("height")
 
         for unit in inkscape_units:
@@ -347,8 +415,8 @@ class SVGProcessor:
 
                 channel_str = element.attrib.get('data-channels')
                 electrodes[element_id] = ElectrodeData(
-                    channel = int(channel_str) if channel_str is not None else None,
-                    path = transformed_path
+                    channel=int(channel_str) if channel_str is not None else None,
+                    path=transformed_path
                 )
                 all_electrode_paths.append(transformed_path)
             else:
@@ -404,7 +472,6 @@ class SVGProcessor:
                     try:
                         path_obj = parse_path(d_string)
                         if path_obj:
-
                             # The start point is the start of the first segment
                             start_point = path_obj[0].start
                             # The end point is the end of the last segment
@@ -425,14 +492,14 @@ class SVGProcessor:
 
         # convert list to np array to easily apply tranformations
         lines = np.array(lines)
-        lines = (lines.reshape(-1, 2) + transform).reshape(-1,4) # apply translation to start and end points
+        lines = (lines.reshape(-1, 2) + transform).reshape(-1, 4)  # apply translation to start and end points
         return self.unit_normalization_func(lines)
-
 
 
 if __name__ == "__main__":
 
     from matplotlib import pyplot as plt
+
 
     # func to plot shapely polygons and lines.
     def plot_shapes_lines(polygons, lines):
@@ -558,12 +625,10 @@ if __name__ == "__main__":
         polygon_names=_polygon_names,
     )
 
-
-
     expected = {'v1': ['v3', 'v2', 'v4'], 'v2': ['v3', 'v1', 'v4'], 'v3': ['v2', 'v4', 'v1'],
                 'v4': ['v2', 'v3', 'v1']}
 
-    map = util.get_polygon_neighbours(max_attempts=1000, buffer_factor=-2**5)
+    map = util.get_polygon_neighbours(max_attempts=1000, buffer_factor=-2 ** 5)
 
     for el in map:
         if sorted(map[el]) != sorted(expected[el]):
@@ -573,5 +638,3 @@ if __name__ == "__main__":
     print("*" * 1000)
     print("PASS")
     print("*" * 1000)
-
-

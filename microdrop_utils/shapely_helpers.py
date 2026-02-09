@@ -49,36 +49,20 @@ def sort_polygon_indices_along_line(line: LineString, polygons: list[Polygon], i
         list[int]: A new list of indices sorted from the start of the line to the end.
     """
 
-    def _get_distance_along_line(poly_idx):
-        return get_polygon_distance_from_line_start(polygons[poly_idx], line)
+    def _get_distance_along_line(polygon):
+        return get_polygon_distance_from_line_start(polygon, line)
 
-    # Sort the list of indices using the calculated distance of polygons from line start as the key.
-    try:
-        # 1. Compute distances first to avoid calling the geometric function twice
-        #    and to easily filter out None values.
-        # sorted_indices = sorted(indices, key=_get_distance_along_line)
+    # Compute distances first to avoid calling the geometric function twice
+    #    and to easily filter out None values.
+    # sorted_indices = sorted(indices, key=_get_distance_along_line)
 
-        poly_dist_along_line = [(idx, _get_distance_along_line(idx)) for idx in indices]
+    poly_dist_along_line = [(indices[idx], _get_distance_along_line(polygon)) for idx, polygon in
+                            enumerate(polygons)]
 
-        sorted_indices = [el[0] for el in poly_dist_along_line if el[1] != float('inf')]
+    sorted_indices = [el[0] for el in poly_dist_along_line if el[1] != float('inf')]
 
-        return sorted_indices
+    return sorted_indices
 
-    except Exception as e:
-        import numpy as np
-        import uuid
-        from pathlib import Path
-        import tempfile
-
-        # Create a unique temp filename
-        # utilizing UUID to ensure no file conflicts
-        temp_path = tempfile.gettempdir() / Path(f"poly_debug_{uuid.uuid4().hex[:8]}.png")
-
-        fig, ax = draw_polygons_and_line(np.array(polygons)[indices], line, index_labels=indices)
-        fig.savefig(temp_path)
-        logger.error(f"Error: {e}. Saving debug plot to {temp_path}", exc_info=True)
-
-        return indices
 
 def draw_polygons_and_line(polygons, line, sorted_result=None, index_labels=None):
     # 3. Visualize with Matplotlib
