@@ -593,7 +593,7 @@ class ConnectionManager(HasTraits):
             # 3. Execute the Move
             if target_pos is not None:
                 logger.info(
-                    f"Setting ID = {motor_id} to State {state} -> {target_pos} steps"
+                    f"Setting ID = {motor_id} to State {state} -> {target_pos}um"
                 )
                 self.driver.motorAbsoluteMove(motor_id, int(target_pos))
             else:
