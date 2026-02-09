@@ -97,17 +97,17 @@ class MagnetService:
     @staticmethod
     def publish_magnet_height(magnet_str):
         """publish magnet height for a step execution."""
-        logger.critical(f"Trying to Publish magnet height for step {magnet_str}")
+        logger.info(f"Trying to Publish magnet height for step {magnet_str}")
         # validate height
         magnet_height = MagnetService.validate_magnet_height(magnet_str)
-        logger.critical(f"Magnet height is {magnet_height}")
+        logger.info(f"Magnet height is {magnet_height}")
 
         if magnet_height == 'Default':
             publish_message("", MOVE_UP)
-            logger.critical(f"No magnet height given. Using the configured Default Up height.")
+            logger.info(f"No magnet height given. Using the configured Default Up height.")
 
         else:
-            logger.critical(f"Published magnet height: {magnet_height}")
+            logger.info(f"Published magnet height: {magnet_height}")
             publish_message(str(magnet_height), SET_POSITION)
 
 
