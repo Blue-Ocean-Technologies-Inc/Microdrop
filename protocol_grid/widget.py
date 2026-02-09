@@ -70,7 +70,10 @@ from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
 from protocol_grid.services.hardware_setter_services import VoltageFrequencyService
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
+
 from device_viewer.models.messages import DeviceViewerMessageModel
+from device_viewer.preferences import DeviceViewerPreferences
+
 from protocol_grid.state.device_state import (
     DeviceState,
     device_state_from_device_viewer_message,
@@ -135,8 +138,6 @@ class PGCWidget(QWidget):
 
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
-
-        self._active_device_svg_file = None
         self._protocol_grid_plugin = None
 
         self.state = state or ProtocolState()
@@ -148,6 +149,10 @@ class PGCWidget(QWidget):
             flatten_protocol_for_run,
             preferences=self.application.preferences,
         )
+
+        _device_viewer_prefs = DeviceViewerPreferences(preferences=self.application.preferences)
+        self._active_device_svg_file = _device_viewer_prefs.DEFAULT_SVG_FILE
+
         self.protocol_runner.signals.highlight_step.connect(self.highlight_step)
         self.protocol_runner.signals.update_status.connect(self.update_status_bar)
         self.protocol_runner.signals.protocol_finished.connect(
