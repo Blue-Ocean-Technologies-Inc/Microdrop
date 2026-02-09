@@ -258,7 +258,7 @@ class ConnectionManager(HasTraits):
         self._driver_lock = threading.RLock()
 
     def listener_actor_routine(self, message, topic):
-        print(message, topic)
+        logger.debug(message, topic)
         return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
     # ------------------------------------------------------------------
     # Connection Control
@@ -460,7 +460,7 @@ class ConnectionManager(HasTraits):
 
     def _on_set_voltage_request(self, message):
         try:
-            self.voltage = int(message)
+            self.voltage = int(float(message))
         except Exception as e:
             logger.error(f"Cannot request voltage {self.voltage} V: {e}", exc_info=True)
 
@@ -474,7 +474,7 @@ class ConnectionManager(HasTraits):
 
     def _on_set_frequency_request(self, message):
         try:
-            self.frequency = int(message)
+            self.frequency = int(float(message))
         except Exception as e:
             logger.error(f"Cannot request frequency {frequency}: {e}", exc_info=True)
 
