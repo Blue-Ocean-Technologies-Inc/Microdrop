@@ -574,8 +574,7 @@ class ConnectionManager(HasTraits):
             # --- MAGNET (ID 2) ---
             elif motor_id == "magnet":
                 defaults = params.get("magnet_defaults", {})
-                # State 1 = Up (Active), State 0 = Down (Rest)
-                target_pos = defaults.get("z_up") if not state else defaults.get("z_down")
+                target_pos = defaults.get("z_down") if state else defaults.get("z_up")
 
             # --- FILTER (ID 3) ---
             elif motor_id == "filter":
@@ -585,10 +584,8 @@ class ConnectionManager(HasTraits):
 
             # --- POGO LEFT (ID 4) & RIGHT (ID 5) ---
             elif "pogo" in motor_id:
-                # 'pogo_defaults' is a single int value (Extended Position)
-                extended_pos = params.get("pogo_defaults", 2250)
-                # State 1 = Up (Extended), State 0 = Down (Retracted/0)
-                target_pos = extended_pos if state else 0
+                down_pos = params.get("pogo_defaults", 2250)
+                target_pos = down_pos if state else 0
 
             # 3. Execute the Move
             if target_pos is not None:
