@@ -112,15 +112,19 @@ class DropBotStatusViewModel(HasTraits):
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
 
-        self.view_signals.disable_icon_widget.emit(not event.new)
+        # self.view_signals.disable_icon_widget.emit(not event.new)
 
     @observe("model:chip_inserted")
     def update_chip_status(self, event):
+        logger.debug(event)
         self.view_signals.disable_icon_widget.emit(False)
         self.view_signals.chip_status_text_changed.emit(self._get_chip_status_text())
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
         self.view_signals.icon_path_changed.emit(self._get_icon_path())
+
+        if self.model.chip_inserted:
+            self.model.connected = True
 
     @observe("model:capacitance")
     @format_and_emit_measurements("capacitance_changed")
