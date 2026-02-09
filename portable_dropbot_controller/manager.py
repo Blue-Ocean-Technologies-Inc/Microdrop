@@ -615,7 +615,10 @@ class ConnectionManager(HasTraits):
         except Exception as e:
             logger.error(f"Error processing toggle motor request: {e}", exc_info=True)
 
+    ######## Z Stage Topic Handlers ########################################
+
     @require_active_driver
+    @require_realtime_mode
     def _on_go_home_request(self, message):
         """
         Home z stage
@@ -623,6 +626,7 @@ class ConnectionManager(HasTraits):
         self._on_motor_home_request("magnet")
 
     @require_active_driver
+    @require_realtime_mode
     def _on_move_up_request(self, message):
         """
         Move up z stage
@@ -630,6 +634,7 @@ class ConnectionManager(HasTraits):
         self._on_toggle_motor_request(json.dumps({"motor_id": "magnet", "state": 0}))
 
     @require_active_driver
+    @require_realtime_mode
     def _on_move_down_request(self, message):
         """
         Move down z stage
@@ -637,6 +642,7 @@ class ConnectionManager(HasTraits):
         self._on_toggle_motor_request(json.dumps({"motor_id": "magnet", "state": 1}))
 
     @require_active_driver
+    @require_realtime_mode
     def _on_set_position_request(self, message):
         """
         Move z stage to position. Received message is the distance in mm (milli meters)
