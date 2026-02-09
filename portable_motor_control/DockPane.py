@@ -107,7 +107,7 @@ motors_view = View(
                 Item("move_rel_btn", show_label=False),
             ),
             HGroup(
-                Item("abs_position", label="Move to (\u03bcm)"),
+                Item("abs_position", label="Move To (\u03bcm)"),
                 Item("move_abs_btn", show_label=False),
             ),
             show_border=True,
