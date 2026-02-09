@@ -26,7 +26,7 @@ FRONTEND_PLUGINS = [
     MotorControlsPlugin,
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
-    # PeripheralUiPlugin,
+    PeripheralUiPlugin,
     # DropbotPreferencesPlugin
 ]
 
