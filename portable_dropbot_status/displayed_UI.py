@@ -34,6 +34,7 @@ class DropbotStatusViewModelSignals(QObject):
     chip_status_text_changed = Signal(str)
 
     capacitance_changed = Signal(str)
+    zstage_position_changed = Signal(str)
     voltage_changed = Signal(str)
 
     frequency_changed = Signal(str)
@@ -131,6 +132,11 @@ class DropBotStatusViewModel(HasTraits):
     def update_voltage_reading(self, event):
         pass
 
+    @observe("model:zstage_position")
+    @format_and_emit_measurements("zstage_position_changed")
+    def update_zstage_position_reading(self, event):
+        pass
+
     @observe("model:frequency")
     @format_and_emit_measurements("frequency_changed")
     def update_frequency_reading(self, event):
@@ -203,6 +209,8 @@ class DropBotStatusView(QWidget):
         self._view_model_signals.device_temp_changed.connect(self.grid_widget.device_temp_reading.setText)
         self._view_model_signals.device_humidity_changed.connect(self.grid_widget.device_humidity_reading.setText)
         self._view_model_signals.chip_temp_changed.connect(self.grid_widget.chip_temp_reading.setText)
+
+        self._view_model_signals.zstage_position_changed.connect(self.grid_widget.zstage_position.setText)
 
         # Connect user input to view model methods: View -> ViewModel
         self.icon_widget.clicked.connect(self._view_model._on_icon_widget_clicked)

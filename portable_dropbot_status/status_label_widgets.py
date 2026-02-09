@@ -128,8 +128,15 @@ class DropBotStatusGridWidget(QWidget):
         cap_label = QLabel("Capacitance:")
         cap_label.setFont(bold_font)
         self.capacitance_reading = QLabel("-")
-        layout.addWidget(cap_label, 2, 0)
-        layout.addWidget(self.capacitance_reading, 2, 1)
+        # layout.addWidget(cap_label, 2, 0)
+        # layout.addWidget(self.capacitance_reading, 2, 1)
+
+        # z height
+        zstage_position_label = QLabel("Magnet Height:")
+        zstage_position_label.setFont(bold_font)
+        self.zstage_position = QLabel("-")
+        layout.addWidget(zstage_position_label, 2, 0)
+        layout.addWidget(self.zstage_position, 2, 1)
 
         # Voltage
         volt_label = QLabel("Voltage:")

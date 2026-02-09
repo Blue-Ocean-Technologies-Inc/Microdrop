@@ -9,6 +9,7 @@ class DropBotStatusModel(HasTraits):
 
     # Sensor readings
     capacitance = Str("-", desc="Raw capacitance in pF")
+    zstage_position = Str("-", desc="Zstage height in mm")
     voltage = Str("-", desc="Voltage set to device in V")
 
     frequency = Str("-", desc="Frequency of chip in Hz")

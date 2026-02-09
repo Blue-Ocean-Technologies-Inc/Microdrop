@@ -119,6 +119,9 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
     ################# board status change updated readings ##################
 
+    def _on_position_updated_triggered(self, body):
+        self.model.zstage_position = f"{body} mm"
+
     def _on_board_status_update_triggered(self, body):
         msg = json.loads(body)
         print(msg)
