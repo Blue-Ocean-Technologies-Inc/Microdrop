@@ -25,6 +25,7 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
+from peripheral_controller.consts import CONNECTED, ZSTAGE_POSITION_UPDATED
 from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG
 from .utils import (
     decode_login_response,
@@ -98,6 +99,7 @@ def _handle_ready_read(cmd, data):
         logger.info(f"  └─ {board} board login response: {result}")
         if "SUCCESS" in result:
             publish_message(topic=DROPBOT_CONNECTED, message=result)
+            publish_message("", CONNECTED)
 
     elif cmd & 0xFF == 0x04:  # Signal board version response
         result = decode_status_data(cmd, data)
