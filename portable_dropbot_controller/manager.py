@@ -468,9 +468,8 @@ class ConnectionManager(HasTraits):
     @require_realtime_mode
     @require_active_driver
     def _voltage_change(self, event):
-        if event.new != event.old:
-            self.driver.voltage = event.new
-            logger.info(f"Set voltage to {self.voltage} V")
+        self.driver.voltage = event.new
+        logger.info(f"Set voltage to {self.voltage} V")
 
     def _on_set_frequency_request(self, message):
         try:
@@ -482,9 +481,8 @@ class ConnectionManager(HasTraits):
     @require_realtime_mode
     @require_active_driver
     def _frequency_change(self, event):
-        if event.new != event.old:
-            self.driver.frequency = event.new
-            logger.info(f"Set frequency to {self.frequency} Hz")
+        self.driver.frequency = event.new
+        logger.info(f"Set frequency to {self.frequency} Hz")
 
     def _on_set_light_intensity_request(self, message):
         try:
@@ -495,9 +493,8 @@ class ConnectionManager(HasTraits):
     @observe("light_intensity")
     @require_active_driver
     def _light_intensity_change(self, event):
-        if event.new != event.old:
-            self.driver.setLEDIntensity(int(event.new))
-            logger.info(f"Set light intensity to {self.light_intensity}%")
+        self.driver.setLEDIntensity(int(event.new))
+        logger.info(f"Set light intensity to {self.light_intensity}%")
 
     def _on_set_realtime_mode_request(self, message):
         realtime_mode = message.lower() == "true"
