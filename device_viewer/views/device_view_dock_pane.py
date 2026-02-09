@@ -758,7 +758,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             user_choice = confirm(
                 None,
                 "Current device svg has unsaved changes.\nProceed without saving?",
-                title="Unsaved Protocol Changes",
+                title="Unsaved Device SVG Changes",
                 cancel=False,
             )
 
