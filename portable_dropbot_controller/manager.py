@@ -178,7 +178,7 @@ def require_active_driver(func):
                 # Use the function name to make the log useful
                 operation = func.__name__.replace("_", " ").strip()
                 logger.error(f"Driver not available for: {operation}")
-                return
+                # return
 
             # If we get here, it is safe to run the actual logic
             return func(self, *args, **kwargs)
@@ -272,7 +272,7 @@ class ConnectionManager(HasTraits):
         if port is None:
             port = self._auto_detect_port()
             if not port:
-                logger.error("No valid port found.")
+                # logger.error("No valid port found.")
                 return False
 
         logger.info(f"Connecting to {port} at {baud}...")
@@ -390,8 +390,8 @@ class ConnectionManager(HasTraits):
 
         logger.info("DropBot monitor created and started")
         # self._error_shown = False  # Reset error state when starting monitoring
-        self.monitor_scheduler.start()
-
+        # self.monitor_scheduler.start()
+        self._device_found(None)
     # ------------------------------------------------------------------
     # Control methods dramatiq
     # ------------------------------------------------------------------
@@ -502,15 +502,15 @@ class ConnectionManager(HasTraits):
         if realtime_mode != self.realtime_mode:
             self.realtime_mode = realtime_mode
 
-            ## apply stored values i true
-            if self.realtime_mode:
-                self.driver.voltage = self.voltage
-                self.driver.frequency = self.frequency
-                self.driver.setLEDIntensity(self.light_intensity)
-                self.driver.setElectrodeStates(self.channel_states_arr)
-
-            else:
-                self.driver.setElectrodeStates(self.channel_states_arr * 0)
+            # ## apply stored values i true
+            # if self.realtime_mode:
+            #     self.driver.voltage = self.voltage
+            #     self.driver.frequency = self.frequency
+            #     self.driver.setLEDIntensity(self.light_intensity)
+            #     self.driver.setElectrodeStates(self.channel_states_arr)
+            #
+            # else:
+            #     self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
     @require_active_driver
     def _on_motor_home_request(self, motor_id):
@@ -560,6 +560,57 @@ class ConnectionManager(HasTraits):
             params = self.driver_params.get("motor_board", {})
             target_pos = None
 
+            params = {'filter_defaults': {'filter_pos_0': 0, 'filter_pos_1': 30000, 'filter_pos_2': 59000,
+                                                      'filter_pos_3': 89000, 'filter_pos_4': 115000},
+                                  'tray_defaults': {'out_pos': 170000, 'mag_pos': 4500, 'in_pos': 4500},
+                                  'magnet_defaults': {'z_up': 18000, 'z_down': 500, 'y_0': 0, 'y_space': 0},
+                                  'pmt_defaults': {'pmt_pos_0': 0, 'pmt_pos_1': 85000, 'pmt_pos_2': 30000,
+                                                   'pmt_pos_3': 40000, 'pmt_pos_4': 50000}, 'pogo_defaults': 2250,
+                                  'product_model': {'model_id': 0, 'pmt_motor': True,
+                                                    'magnet_endstop_location': 'down'},
+                                  'tray_motor': {'lower_limit_position': -1000.0, 'upper_limit_position': 170000.0,
+                                                 'lead_per_revolution': 1270.0, 'origin_offset': 2000.0,
+                                                 'origin_area': 25000.0, 'single_step_length': 0.7940000295639038,
+                                                 'direction': 1, 'holding_current': 8, 'moving_current': 20,
+                                                 'microstepping': 8, 'moving_stallguard_threshold': -5,
+                                                 'homing_stallguard_threshold': 0, 'homing_speed': 12800,
+                                                 'moving_speed': 19600},
+                                  'pmt_motor': {'lower_limit_position': -5000.0, 'upper_limit_position': 90000.0,
+                                                'lead_per_revolution': 609.5999755859375, 'origin_offset': 1000.0,
+                                                'origin_area': 6000.0, 'single_step_length': 0.0949999988079071,
+                                                'direction': 1, 'holding_current': 3, 'moving_current': 6,
+                                                'microstepping': 32, 'moving_stallguard_threshold': 0,
+                                                'homing_stallguard_threshold': 0, 'homing_speed': 9600,
+                                                'moving_speed': 19200},
+                                  'magnet_motor': {'lower_limit_position': -1500.0, 'upper_limit_position': 25000.0,
+                                                   'lead_per_revolution': 1270.0, 'origin_offset': 750.0,
+                                                   'origin_area': 1000.0, 'single_step_length': 0.7940000295639038,
+                                                   'direction': 1, 'holding_current': 8, 'moving_current': 20,
+                                                   'microstepping': 8, 'moving_stallguard_threshold': 0,
+                                                   'homing_stallguard_threshold': -50, 'homing_speed': 8000,
+                                                   'moving_speed': 15000},
+                                  'filter_motor': {'lower_limit_position': -500.0, 'upper_limit_position': 125000.0,
+                                                   'lead_per_revolution': 1270.0, 'origin_offset': 1000.0,
+                                                   'origin_area': 10000.0, 'single_step_length': 0.7940000295639038,
+                                                   'direction': 1, 'holding_current': 6, 'moving_current': 16,
+                                                   'microstepping': 8, 'moving_stallguard_threshold': 0,
+                                                   'homing_stallguard_threshold': 0, 'homing_speed': 12800,
+                                                   'moving_speed': 25600},
+                                  'pogo_motor_left': {'lower_limit_position': -1000.0, 'upper_limit_position': 10000.0,
+                                                      'lead_per_revolution': 1270.0, 'origin_offset': 1000.0,
+                                                      'origin_area': 3000.0, 'single_step_length': 0.793749988079071,
+                                                      'direction': 1, 'holding_current': 4, 'moving_current': 15,
+                                                      'microstepping': 8, 'moving_stallguard_threshold': 0,
+                                                      'homing_stallguard_threshold': 0, 'homing_speed': 5000,
+                                                      'moving_speed': 15000},
+                                  'pogo_motor_right': {'lower_limit_position': -1000.0, 'upper_limit_position': 10000.0,
+                                                       'lead_per_revolution': 1270.0, 'origin_offset': 1000.0,
+                                                       'origin_area': 3000.0, 'single_step_length': 0.793749988079071,
+                                                       'direction': 1, 'holding_current': 4, 'moving_current': 15,
+                                                       'microstepping': 8, 'moving_stallguard_threshold': 0,
+                                                       'homing_stallguard_threshold': 0, 'homing_speed': 5000,
+                                                       'moving_speed': 15000}}
+
             # 2. Resolve target position based on Motor ID
 
             # --- TRAY (ID 0) ---
@@ -602,7 +653,7 @@ class ConnectionManager(HasTraits):
                 logger.info(
                     f"Setting ID = {motor_id} to State {state} -> {target_pos}um"
                 )
-                self.driver.motorAbsoluteMove(motor_id, int(target_pos))
+                # self.driver.motorAbsoluteMove(motor_id, int(target_pos))
             else:
                 logger.error(
                     f"Could not resolve position for ID = {motor_id} with state '{state}'",
@@ -659,3 +710,13 @@ class ConnectionManager(HasTraits):
 
         logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
+
+        chip_inserted = self._check_pogo_home() and self._check_tray_home()
+
+
+        if  chip_inserted:
+            publish_message("True", CHIP_INSERTED)
+
+        else:
+            publish_message("False", CHIP_INSERTED)
+
