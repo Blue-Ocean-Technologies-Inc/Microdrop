@@ -149,7 +149,7 @@ class MotorControlDockPane(TraitsDockPane):
     @observe("model:btn_1")
     def _btn_1_fired(self, event):
         """
-        Toggle Mode: Sends False (State 0 / In / Down)
+        Toggle Mode: Sends False
         Cycle Mode: Decrements Index
         """
         motor = MOTOR_MAP[self.model.selected_motor_name]
@@ -169,7 +169,7 @@ class MotorControlDockPane(TraitsDockPane):
     @observe("model:btn_2")
     def _btn_2_fired(self, event):
         """
-        Toggle Mode: Sends True (State 1 / Out / Up)
+        Toggle Mode: Sends True
         Cycle Mode: Increments Index
         """
         motor = MOTOR_MAP[self.model.selected_motor_name]
