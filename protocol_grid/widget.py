@@ -717,18 +717,6 @@ class PGCWidget(QWidget):
 
                 self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=LOGS_STOP_SETTLING_TIME_MS)
 
-                # initialize new experiment if user wants
-                if (
-                    confirm(
-                        None,
-                        title="Create New Experiment?",
-                        cancel=False,
-                    )
-                    == YES
-                ):
-                    self.setup_new_experiment()
-
-
                 ### In case of force stops, check if report needs to be generated.
                 _generate_report = True
                 if self._force_stop:
@@ -742,7 +730,19 @@ class PGCWidget(QWidget):
                     ) == NO:
                         _generate_report = False
 
-                if  _generate_report:
+                else:
+                    # initialize new experiment if user wants
+                    if (
+                        confirm(
+                            None,
+                            title="Create New Experiment?",
+                            cancel=False,
+                        )
+                        == YES
+                    ):
+                        self.setup_new_experiment()
+
+                if _generate_report:
 
                     self.generate_summary()
 
