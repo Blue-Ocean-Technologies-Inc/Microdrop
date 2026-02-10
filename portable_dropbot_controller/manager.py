@@ -232,10 +232,22 @@ class ConnectionManager(HasTraits):
 
     monitor_scheduler = Instance(BackgroundScheduler)
 
-    voltage = Range(VOLTAGE_LIM[0], VOLTAGE_LIM[1])
-    frequency = Range(FREQUENCY_LIM[0], FREQUENCY_LIM[1])
+    voltage = Range(
+        VOLTAGE_LIM[0], VOLTAGE_LIM[1], value=DropbotPreferences().default_voltage, #TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)"
+    )
+    frequency = Range(
+        FREQUENCY_LIM[0], FREQUENCY_LIM[1], value=DropbotPreferences().default_frequency, #TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)"
+    )
 
-    light_intensity = Range(0, 100)
+    # Light Controls
+    light_intensity = Range(
+        0,
+        100,
+        value=PeripheralPreferences().default_light_intensity,
+        desc="Light intensity percentage",
+    )
     realtime_mode = Bool
     channel_states_arr = Array
 
@@ -446,7 +458,6 @@ class ConnectionManager(HasTraits):
     def _on_set_voltage_request(self, message):
         try:
             self.voltage = int(float(message))
-            self.dropbot_preferences.default_voltage = self.voltage
         except Exception as e:
             logger.error(f"Cannot request voltage {self.voltage} V: {e}", exc_info=True)
 
@@ -454,13 +465,13 @@ class ConnectionManager(HasTraits):
     @require_realtime_mode
     @require_active_driver
     def _voltage_change(self, event):
+        self.dropbot_preferences.default_voltage = self.voltage
         self.driver.voltage = event.new
         logger.info(f"Set voltage to {self.voltage} V")
 
     def _on_set_frequency_request(self, message):
         try:
             self.frequency = int(float(message))
-            self.dropbot_preferences.default_frequency = self.frequency
         except Exception as e:
             logger.error(f"Cannot request frequency {frequency}: {e}", exc_info=True)
 
@@ -468,19 +479,20 @@ class ConnectionManager(HasTraits):
     @require_realtime_mode
     @require_active_driver
     def _frequency_change(self, event):
+        self.dropbot_preferences.default_frequency = self.frequency
         self.driver.frequency = event.new
         logger.info(f"Set frequency to {self.frequency} Hz")
 
     def _on_set_light_intensity_request(self, message):
         try:
             self.light_intensity = int(message)
-            self.peripheral_preferences.default_light_intensity = self.light_intensity
         except Exception as e:
             logger.error(f"Cannot request light intensity {self.light_intensity} %: {e}", exc_info=True)
 
     @observe("light_intensity")
     @require_active_driver
     def _light_intensity_change(self, event):
+        self.peripheral_preferences.default_light_intensity = self.light_intensity
         self.driver.setLEDIntensity(int(event.new))
         logger.info(f"Set light intensity to {self.light_intensity}%")
 
@@ -490,15 +502,18 @@ class ConnectionManager(HasTraits):
         if realtime_mode != self.realtime_mode:
             self.realtime_mode = realtime_mode
 
-            ## apply stored values i true
-            if self.realtime_mode:
-                self.driver.voltage = self.voltage
-                self.driver.frequency = self.frequency
-                self.driver.setLEDIntensity(self.light_intensity)
-                self.driver.setElectrodeStates(self.channel_states_arr)
+            ## apply stored values if true
+        if self.realtime_mode:
+            self._sync_driver_to_model()
+            self.driver.setElectrodeStates(self.channel_states_arr)
+        else:
+            self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
-            else:
-                self.driver.setElectrodeStates(self.channel_states_arr * 0)
+    def _sync_driver_to_model(self):
+        ## apply stored values
+        self.driver.voltage = self.voltage
+        self.driver.frequency = self.frequency
+        self.driver.setLEDIntensity(self.light_intensity)
 
     @require_active_driver
     def _on_motor_home_request(self, motor_id):
@@ -647,6 +662,14 @@ class ConnectionManager(HasTraits):
 
         logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
+
+        # sync connected driver to model
+        self._sync_driver_to_model()
+
+        if self.realtime_mode:
+            self.driver.setElectrodeStates(self.channel_states_arr)
+        else:
+            self.driver.setElectrodeStates(self.channel_states_arr * 0)
 
         self._send_device_status_update()
 
