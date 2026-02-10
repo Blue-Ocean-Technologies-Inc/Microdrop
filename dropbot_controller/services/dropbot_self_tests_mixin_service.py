@@ -181,8 +181,8 @@ class DropbotSelfTestsMixinService(HasTraits):
 
                 # Run Test
                 try:
-                    results[name] = func(proxy)
                     session.update(name, i)  # Send Progress
+                    results[name] = func(proxy)
                 except Exception as e:
                     logger.error(f"Test {name} failed: {e}")
 
