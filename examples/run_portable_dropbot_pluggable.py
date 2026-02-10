@@ -38,7 +38,7 @@ def main():
 
     run_device_viewer_pluggable(
         plugins=plugins,
-        contexts=REQUIRED_CONTEXT + SERVER_CONTEXT,
+        contexts=SERVER_CONTEXT + REQUIRED_CONTEXT,
         application=DEFAULT_APPLICATION,
         persist=False,
     )

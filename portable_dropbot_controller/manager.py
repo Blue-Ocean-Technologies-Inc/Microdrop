@@ -97,9 +97,6 @@ def _handle_ready_read(cmd, data):
     if cmd & 0xFF == 0x01:  # Signal board login response
         result = decode_login_response(data)
         logger.info(f"  └─ {board} board login response: {result}")
-        if "SUCCESS" in result:
-            publish_message(topic=DROPBOT_CONNECTED, message=result)
-            publish_message("", CONNECTED)
 
     elif cmd & 0xFF == 0x04:  # Signal board version response
         result = decode_status_data(cmd, data)
@@ -294,37 +291,12 @@ class ConnectionManager(HasTraits):
         # get params
         self.driver_params = self.driver.getParams()
 
-        ## send out initial pogo status
-        if self._check_pogo_home():
-            publish_message(topic=CHIP_INSERTED, message="True")
-        else:
-            publish_message(topic=CHIP_INSERTED, message="False")
-
         # Fetch Versions
         s_ver, m_ver = self.driver.getVersions()
         self.signal_version = s_ver or "Unknown"
         self.motor_version = m_ver or "Unknown"
 
         return True
-
-    def _check_pogo_home(self):
-        motor_pos = self.driver.getMotorPositions()
-        pogo_left = motor_pos.get("pogo_left")
-        pogo_right = motor_pos.get("pogo_right")
-
-        total_pogo_pos = pogo_left + pogo_right
-
-        expected_home_pos = self.driver_params.get("motor_board").get("pogo_defaults") * 2
-
-        return total_pogo_pos == expected_home_pos
-
-    def _check_tray_home(self):
-        motor_pos = self.driver.getMotorPositions()
-
-        tray_pos = motor_pos.get("tray")
-        expected_home_pos = self.driver_params.get("motor_board").get("tray_defaults").get("in_pos")
-
-        return tray_pos == expected_home_pos
 
     def _auto_detect_port(self):
         """Simple auto-detection strategy."""
@@ -341,7 +313,7 @@ class ConnectionManager(HasTraits):
         """
         # if dropbot already connected, exit after publishing connection and chip details
         if self.connected:
-            publish_message("dropbot_connected", DROPBOT_CONNECTED)
+            self._send_device_status_update()
             return None
 
         ## handle cases where monitor scheduler object already exists
@@ -660,11 +632,34 @@ class ConnectionManager(HasTraits):
         logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
 
+        self._send_device_status_update()
+
+    def _send_device_status_update(self):
+
         chip_inserted = self._check_pogo_home() and self._check_tray_home()
 
+        publish_message("", DROPBOT_CONNECTED)
 
         if  chip_inserted:
             publish_message("True", CHIP_INSERTED)
-
         else:
             publish_message("False", CHIP_INSERTED)
+
+    def _check_pogo_home(self):
+        motor_pos = self.driver.getMotorPositions()
+        pogo_left = motor_pos.get("pogo_left")
+        pogo_right = motor_pos.get("pogo_right")
+
+        total_pogo_pos = pogo_left + pogo_right
+
+        expected_home_pos = self.driver_params.get("motor_board").get("pogo_defaults") * 2
+
+        return total_pogo_pos == expected_home_pos
+
+    def _check_tray_home(self):
+        motor_pos = self.driver.getMotorPositions()
+
+        tray_pos = motor_pos.get("tray")
+        expected_home_pos = self.driver_params.get("motor_board").get("tray_defaults").get("in_pos")
+
+        return tray_pos == expected_home_pos
