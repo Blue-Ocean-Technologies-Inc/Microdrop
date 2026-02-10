@@ -158,7 +158,9 @@ class WaitForTestDialog(QDialog):
             Qt.WindowCloseButtonHint, False
         )  # Explicitly disable X button
 
-        self.setMinimumSize(400, 150)
+        _width = 450
+        self.setMinimumWidth(_width)
+        # self.setMinimumHeight(int(_width/1.618))
 
         # Main Layout
         layout = QVBoxLayout(self)
@@ -166,6 +168,8 @@ class WaitForTestDialog(QDialog):
         # Header Label
         self.label = QLabel(f"{test_name} in progress...")
         self.label.setAlignment(Qt.AlignCenter)
+        # Allow text to wrap to multiple lines
+        self.label.setWordWrap(True)
         layout.addWidget(self.label)
 
         # --- Spinner Setup ---
@@ -196,6 +200,8 @@ class WaitForTestDialog(QDialog):
         # --- Cancel UI ---
         self.cancelling_label = QLabel("Cancelling...")
         self.cancelling_label.setAlignment(Qt.AlignCenter)
+        # Allow text to wrap to multiple lines
+        self.cancelling_label.setWordWrap(True)
         self.cancelling_label.setVisible(False)
         self.cancelling_label.setStyleSheet("color: red; font-weight: bold;")
         layout.addWidget(self.cancelling_label)
@@ -241,6 +247,13 @@ class WaitForTestDialog(QDialog):
 
             if self.current_test_label.isVisible():
                 self.current_test_label.setText(f"Testing: {display_name}\n\n")
+
+    def set_progress_end(self, msg="Tests Completed!"):
+        """Update the progress bar if in progress mode."""
+        if self.mode == "progress_bar" and self.progress_bar:
+            self.progress_bar.setValue(100)
+            if self.current_test_label.isVisible():
+                self.current_test_label.setText(msg)
 
     @Slot()
     def on_cancel(self):
@@ -310,6 +323,10 @@ class WaitForTestDialogAction:
     def set_progress(self, value, test_name):
         if self.dialog:
             self.dialog.set_progress(value, test_name)
+
+    def set_progress_end(self, msg):
+        if self.dialog:
+            self.dialog.set_progress_end(msg)
 
     def publish_cancel_message(self):
         """Publish a cancel message to the dropbot controller."""

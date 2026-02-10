@@ -1,7 +1,7 @@
 # system imports.
 import json
 import dramatiq
-
+from PySide6.QtCore import QTimer
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
@@ -176,8 +176,10 @@ class MicrodropTask(Task):
         GUI.invoke_later(_show)
 
     def _handle_progress(self, payload):
+        # message sent right before test is run
+        # So the last test was completed.
         name = payload.get("test_name", "")
-        idx = int(payload.get("test_index", 0)) + 1
+        idx = int(payload.get("test_index", 0))
         def _update():
             if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
                 # You might need to pass 'total' in payload or store it in self
@@ -187,9 +189,14 @@ class MicrodropTask(Task):
         GUI.invoke_later(_update)
 
     def _handle_session_end(self, payload):
-        def _close():
+
+        def _cleanup_reference():
             if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
                 self.wait_for_test_dialog.close()
                 self.wait_for_test_dialog = None  # Cleanup reference
+
+        def _close():
+                self.wait_for_test_dialog.set_progress_end("Dropbot Self Test(s) are Complete! \n\nReport will be opened shortly...")
+                QTimer.singleShot(1200, _cleanup_reference)
 
         GUI.invoke_later(_close)
