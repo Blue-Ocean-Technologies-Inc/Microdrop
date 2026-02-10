@@ -24,8 +24,7 @@ class PortDropbotControllerPlugin(Plugin):
         """Initialize the dropbot on plugin start"""
 
         from .manager import ConnectionManager
-
-        self.dropbot_controller = ConnectionManager()
+        self.dropbot_controller = ConnectionManager(app_preferences=self.application.preferences)
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

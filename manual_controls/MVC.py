@@ -1,6 +1,7 @@
 import functools
 
 import dramatiq
+from peripheral_controller.preferences import PeripheralPreferences
 from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict, Str
 from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
@@ -111,7 +112,7 @@ class ManualControlModel(HasTraits):
     connected = Bool(False, desc="Connected to dropbot?")
 
     # Light Controls
-    light_intensity = Range(0, 100, value=100, desc="Light intensity percentage")
+    light_intensity = Range(0, 100, value=PeripheralPreferences().default_light_intensity, desc="Light intensity percentage")
     lights_on = Bool(False, desc="Master toggle for lights")
 
 

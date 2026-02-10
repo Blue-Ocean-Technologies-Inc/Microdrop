@@ -74,6 +74,13 @@ class PeripheralPreferences(PreferencesHelper):
         desc="Height of stage when down command sent"
     )
 
+    default_light_intensity = RangeWithViewHints(
+        value=50,
+        low=0,
+        high=100,
+        desc="Intensity of light level",
+    )
+
     #### Preferences ##########################################################
 
     preferences_name_map = Property(Dict)

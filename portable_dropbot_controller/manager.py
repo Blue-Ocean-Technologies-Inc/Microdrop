@@ -4,10 +4,14 @@ from threading import Event
 import dramatiq
 import numpy as np
 import serial.tools.list_ports as lsp
+from apptools.preferences.i_preferences import IPreferences
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.interval import IntervalTrigger
+from peripheral_controller.preferences import PeripheralPreferences
+
+from dropbot_controller.preferences import DropbotPreferences
 from svgwrite.data.pattern import frequency
 from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, observe, Dict
 
@@ -220,6 +224,9 @@ class ConnectionManager(HasTraits):
     # --- Public Status Traits (Observed by ViewModel) ---
     connected = Bool(False)
 
+    # -- preferences
+    app_preferences = Instance(IPreferences)
+
     # --- Internal Control ---
     driver = Instance(DropletBotUart)
 
@@ -256,6 +263,9 @@ class ConnectionManager(HasTraits):
         self.driver.on_alarm = _handle_alarm
 
         self._driver_lock = threading.RLock()
+
+        self.dropbot_preferences = DropbotPreferences(preferences=self.app_preferences)
+        self.peripheral_preferences = PeripheralPreferences(preferences=self.app_preferences)
 
     def listener_actor_routine(self, message, topic):
         logger.debug(message, topic)
@@ -436,6 +446,7 @@ class ConnectionManager(HasTraits):
     def _on_set_voltage_request(self, message):
         try:
             self.voltage = int(float(message))
+            self.dropbot_preferences.default_voltage = self.voltage
         except Exception as e:
             logger.error(f"Cannot request voltage {self.voltage} V: {e}", exc_info=True)
 
@@ -449,6 +460,7 @@ class ConnectionManager(HasTraits):
     def _on_set_frequency_request(self, message):
         try:
             self.frequency = int(float(message))
+            self.dropbot_preferences.default_frequency = self.frequency
         except Exception as e:
             logger.error(f"Cannot request frequency {frequency}: {e}", exc_info=True)
 
@@ -462,6 +474,7 @@ class ConnectionManager(HasTraits):
     def _on_set_light_intensity_request(self, message):
         try:
             self.light_intensity = int(message)
+            self.peripheral_preferences.default_light_intensity = self.light_intensity
         except Exception as e:
             logger.error(f"Cannot request light intensity {self.light_intensity} %: {e}", exc_info=True)
 
