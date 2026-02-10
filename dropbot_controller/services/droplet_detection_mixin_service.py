@@ -93,7 +93,16 @@ class DropletDetectionMixinService(HasTraits):
 
     def _execute_detection_steps(self, proxy: 'DramatiqDropbotSerialProxy', channels: list[int]) -> list[int]:
         """Run the sequence of operations to detect droplets."""
+        frequency = proxy.frequency
+        if frequency > DROPLET_DETECTION_FREQUENCY:
+            proxy.update_state(frequency=DROPLET_DETECTION_FREQUENCY)
+            time.sleep(0.05)  # Allow settings to settle
+            
         capacitances_array = self._get_capacitances(proxy, channels)
+        
+        if frequency > DROPLET_DETECTION_FREQUENCY:
+            proxy.update_state(frequency=frequency)
+        
         # normalized_caps, threshold_factor = self._normalize_capacitances(proxy, capacitances_array)
 
         channels_with_drops = self._find_channels_above_threshold(capacitances_array, threshold=self.preferences.droplet_detection_capacitance)

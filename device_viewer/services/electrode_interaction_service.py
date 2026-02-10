@@ -15,7 +15,9 @@ except Exception:
 
 from device_viewer.models.electrodes import Electrode
 from device_viewer.utils.electrode_route_helpers import find_shortest_paths
-from dropbot_controller.consts import DETECT_DROPLETS
+from dropbot_controller.consts import (
+    DETECT_DROPLETS, SET_REALTIME_MODE
+)
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
@@ -92,9 +94,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
 
-    _x_modifier_down = Bool(False, desc="When True, arrow presses are split steps.")
+    _x_modifier_down = Bool(False, desc="When True (B held), arrow presses are split steps.")
     _add_modifier_down = Bool(False, desc="When True (Y held), arrows extend active electrodes.")
-    _remove_modifier_down = Bool(False, desc="When True (B held), arrows shrink active electrodes.")
+    _remove_modifier_down = Bool(False, desc="When True (X held), arrows shrink active electrodes.")
     # NOTE: Traits `Str` does not accept None reliably; use "" as the unset sentinel.
     _split_axis = Str("", desc="Split axis: 'h' or 'v'. Empty means unset.")
     _split_arm_neg = Str("", desc="Negative-direction split arm electrode id. Empty means unset.")
@@ -117,6 +119,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     _btn_split = Instance(int, allow_none=True)
     _btn_add_modifier = Instance(int, allow_none=True)
     _btn_remove_modifier = Instance(int, allow_none=True)
+    _btn_realtime_toggle = Instance(int, allow_none=True)
 
     _hud_message = Str("")
 
@@ -132,16 +135,28 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._split_sessions: list[dict] = []
         self._split_base_ids: set[str] | None = None
 
-        # D-pad debounce to prevent overly-fast presses
-        # - Move/Split: slower (avoid overshooting)
-        # - Add/Remove: faster (building/shaping droplets)
+        # Per-action debounce (seconds). Each action category has its own timer.
         self._dpad_debounce_move_split_s = self._env_float(
             "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_S", 0.7
         )
         self._dpad_debounce_add_remove_s = self._env_float(
             "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_ADD_REMOVE_S", 0.3
         )
+        self._btn_debounce_find_liquid_s = self._env_float(
+            "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S", 2.0
+        )
+        self._btn_debounce_realtime_s = self._env_float(
+            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", 2.0
+        )
+        # Per-category last-action timestamps (independent debounce).
         self._last_dpad_action_ts = 0.0
+        self._last_find_liquid_ts = 0.0
+        self._last_realtime_toggle_ts = 0.0
+
+        # Track realtime-mode state locally for toggling.
+        self._realtime_mode_on = False
+        # Track cumulative device-view rotation in 90-degree steps.
+        self._device_rotation_deg = 0
 
     def _set_hud(self, text: str) -> None:
         mgr = getattr(self, "status_bar_manager", None)
@@ -221,19 +236,21 @@ class ElectrodeInteractionControllerService(HasTraits):
             return False
 
         # Button mapping (override if needed):
-        #   MICRODROP_GAMEPAD_BTN_CLEAR (defaults to 1)      -> A
-        #   MICRODROP_GAMEPAD_BTN_FIND  (defaults to 8)      -> Select
-        #   MICRODROP_GAMEPAD_BTN_SPLIT (defaults to 0)      -> X (hold)
-        #   MICRODROP_GAMEPAD_BTN_ADD_MOD (defaults to 3)    -> Y (hold)
-        #   MICRODROP_GAMEPAD_BTN_REMOVE_MOD (defaults to 2) -> B (hold)
+        #   MICRODROP_GAMEPAD_BTN_CLEAR (defaults to 1)            -> A  = clear all
+        #   MICRODROP_GAMEPAD_BTN_FIND  (defaults to 8)            -> Select = find liquid
+        #   MICRODROP_GAMEPAD_BTN_SPLIT (defaults to 2)            -> B (hold) = split
+        #   MICRODROP_GAMEPAD_BTN_ADD_MOD (defaults to 3)          -> Y (hold) = add electrode
+        #   MICRODROP_GAMEPAD_BTN_REMOVE_MOD (defaults to 0)       -> X (hold) = remove electrode
+        #   MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE (defaults to 9)  -> Start = toggle realtime
         #
         # For the common "USB gamepad" NES/SNES-style controller (per probe output):
         #   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
         self._btn_clear = self._env_int("MICRODROP_GAMEPAD_BTN_CLEAR", 1)
         self._btn_find_liquid = self._env_int("MICRODROP_GAMEPAD_BTN_FIND", 8)
-        self._btn_split = self._env_int("MICRODROP_GAMEPAD_BTN_SPLIT", 0)
+        self._btn_split = self._env_int("MICRODROP_GAMEPAD_BTN_SPLIT", 2)
         self._btn_add_modifier = self._env_int("MICRODROP_GAMEPAD_BTN_ADD_MOD", 3)
-        self._btn_remove_modifier = self._env_int("MICRODROP_GAMEPAD_BTN_REMOVE_MOD", 2)
+        self._btn_remove_modifier = self._env_int("MICRODROP_GAMEPAD_BTN_REMOVE_MOD", 0)
+        self._btn_realtime_toggle = self._env_int("MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE", 9)
 
         # D-pad mapping: prefer HAT, but allow axis-based D-pad for some devices.
         default_dpad_x = None
@@ -258,8 +275,10 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._pygame_timer = timer
 
         logger.info(
-            "pygame gamepad enabled. If buttons don't match, set env vars "
-            "MICRODROP_GAMEPAD_BTN_CLEAR / _BTN_FIND / _BTN_SPLIT / _BTN_ADD_MOD / _BTN_REMOVE_MOD."
+            "pygame gamepad enabled. Mapping: A=clear, Select=find, B=split, "
+            "Y=add, X=remove, Start=realtime. Override with env vars "
+            "MICRODROP_GAMEPAD_BTN_CLEAR / _BTN_FIND / _BTN_SPLIT / _BTN_ADD_MOD / "
+            "_BTN_REMOVE_MOD / _BTN_REALTIME_TOGGLE."
         )
         return True
 
@@ -343,24 +362,29 @@ class ElectrodeInteractionControllerService(HasTraits):
         if pressed:
             logger.debug(f"pygame button down: {btn}")
 
+        # A = clear all electrodes
         if btn == self._btn_clear and pressed:
             self.model.electrodes.clear_electrode_states()
-            # Clear split memory so next selection starts fresh.
             self._reset_split_state()
+            self._set_hud("Cleared all electrodes")
             return
 
+        # Select = find liquid (debounced, with temporary freq/voltage)
         if btn == self._btn_find_liquid and pressed:
-            # User requested: Select should clear first, then find liquid.
+            now = time.monotonic()
+            if now - self._last_find_liquid_ts < self._btn_debounce_find_liquid_s:
+                logger.debug("find-liquid debounced")
+                return
+            self._last_find_liquid_ts = now
             self.model.electrodes.clear_electrode_states()
             self._reset_split_state()
             self.detect_droplet()
             return
 
+        # B (hold) = split modifier
         if btn == self._btn_split:
-            # Start a fresh split session every time X is pressed.
             if pressed and not self._x_modifier_down:
                 self._reset_split_state()
-                # Ensure the next D-pad motion triggers even if flags were "stuck".
                 self._axis_left_pressed = False
                 self._axis_right_pressed = False
                 self._axis_up_pressed = False
@@ -370,12 +394,24 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self._reset_split_state()
             return
 
+        # Y (hold) = add-electrode modifier
         if btn == self._btn_add_modifier:
             self._add_modifier_down = bool(pressed)
             return
 
+        # X (hold) = remove-electrode modifier
         if btn == self._btn_remove_modifier:
             self._remove_modifier_down = bool(pressed)
+            return
+
+        # Start = toggle realtime mode (debounced)
+        if btn == self._btn_realtime_toggle and pressed:
+            now = time.monotonic()
+            if now - self._last_realtime_toggle_ts < self._btn_debounce_realtime_s:
+                logger.debug("realtime-toggle debounced")
+                return
+            self._last_realtime_toggle_ts = now
+            self._toggle_realtime_mode()
             return
 
     def _handle_pygame_hat(self, value: tuple[int, int]) -> None:
@@ -413,9 +449,31 @@ class ElectrodeInteractionControllerService(HasTraits):
             self._axis_up_pressed = up_now
             self._axis_down_pressed = down_now
 
+    def _get_device_rotation_deg(self) -> int:
+        """Return tracked device-view rotation (0/90/180/270)."""
+        return int(getattr(self, "_device_rotation_deg", 0) or 0) % 360
+
+    def _map_direction_for_device_rotation(self, direction: str) -> str:
+        """
+        Map an input direction (controller/keyboard) to the device-frame direction
+        based on the current view rotation.
+
+        Example: if view is rotated +90 deg, pressing "up" should move visually up,
+        which corresponds to device-frame "left".
+        """
+        if direction not in {"up", "right", "down", "left"}:
+            return direction
+
+        rotation_deg = self._get_device_rotation_deg()
+        steps = (rotation_deg // 90) % 4
+        dirs = ["up", "right", "down", "left"]
+        idx = dirs.index(direction)
+        return dirs[(idx - steps) % 4]
+
     def _on_gamepad_direction(self, direction: str) -> None:
         # Make sure modifier state reflects current joystick holds.
         self._sync_modifiers_from_pygame_state()
+        mapped_direction = self._map_direction_for_device_rotation(direction)
 
         now = time.monotonic()
         if self._add_modifier_down or self._remove_modifier_down:
@@ -424,19 +482,21 @@ class ElectrodeInteractionControllerService(HasTraits):
             debounce_s = float(getattr(self, "_dpad_debounce_move_split_s", 0.7) or 0.0)
         if debounce_s > 0 and (now - float(getattr(self, "_last_dpad_action_ts", 0.0))) < debounce_s:
             mode = "SPLIT" if self._x_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
-            self._set_hud(f"Pad: {mode} {direction} (debounce {debounce_s:.0f}s)")
+            self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} (debounce {debounce_s:.0f}s)")
             return
         self._last_dpad_action_ts = now
 
         mode = "SPLIT" if self._x_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
-        axis = "H" if direction in ("left", "right") else "V"
+        axis = "H" if mapped_direction in ("left", "right") else "V"
         active_n = len(self._get_active_electrode_ids())
-        self._set_hud(f"Pad: {mode} {direction} axis={axis} active={active_n}")
+        self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} axis={axis} active={active_n}")
 
         if os.environ.get("MICRODROP_GAMEPAD_DEBUG", "").strip() == "1":
             logger.info(
-                "gamepad dir=%s x=%s add=%s remove=%s active=%d",
+                "gamepad dir=%s mapped=%s rot=%d x=%s add=%s remove=%s active=%d",
                 direction,
+                mapped_direction,
+                self._get_device_rotation_deg(),
                 self._x_modifier_down,
                 self._add_modifier_down,
                 self._remove_modifier_down,
@@ -444,13 +504,13 @@ class ElectrodeInteractionControllerService(HasTraits):
             )
 
         if self._x_modifier_down:
-            self._split_step(direction)
+            self._split_step(mapped_direction)
         elif self._add_modifier_down:
-            self._extend_active_electrodes(direction)
+            self._extend_active_electrodes(mapped_direction)
         elif self._remove_modifier_down:
-            self._shrink_active_electrodes(direction)
+            self._shrink_active_electrodes(mapped_direction)
         else:
-            self._step_active_electrodes(direction)
+            self._step_active_electrodes(mapped_direction)
 
     # ------------------ Electrode actuation helpers ------------------
 
@@ -938,6 +998,17 @@ class ElectrodeInteractionControllerService(HasTraits):
             self._last_electrode_id_visited = next(iter(desired_all))
         return
 
+    # -----------------------------------------------------------------
+    # Realtime-mode toggle (Start button)
+    # -----------------------------------------------------------------
+    def _toggle_realtime_mode(self) -> None:
+        """Toggle realtime mode on/off via the Start button."""
+        self._realtime_mode_on = not getattr(self, "_realtime_mode_on", False)
+        publish_message(topic=SET_REALTIME_MODE, message=str(self._realtime_mode_on))
+        state_str = "ON" if self._realtime_mode_on else "OFF"
+        self._set_hud(f"Realtime mode: {state_str}")
+        logger.info(f"Gamepad: realtime mode toggled {state_str}")
+
     def cleanup(self) -> None:
         """Disconnect controller listeners on model reloads."""
         try:
@@ -993,10 +1064,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         # rotate entire view:
         self.device_view.rotate(angle_step)
+        # Track cumulative device-view rotation to remap controller directions.
+        self._device_rotation_deg = (int(getattr(self, "_device_rotation_deg", 0) or 0) + int(angle_step)) % 360
         # undo rotation on text for maintaining readability
         self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
 
         self.device_view.fit_to_scene_rect()
+        self._set_hud(f"Device orientation: {self._get_device_rotation_deg()} deg")
 
     def _apply_pan_mode(self):
         enabled = self.model.mode == "pan"
@@ -1227,13 +1301,13 @@ class ElectrodeInteractionControllerService(HasTraits):
             key_up = {getattr(Qt, "Key_Up", None), getattr(getattr(Qt, "Key", None), "Key_Up", None)}
             key_down = {getattr(Qt, "Key_Down", None), getattr(getattr(Qt, "Key", None), "Key_Down", None)}
             if key in key_left:
-                self._step_active_electrodes("left")
+                self._step_active_electrodes(self._map_direction_for_device_rotation("left"))
             elif key in key_right:
-                self._step_active_electrodes("right")
+                self._step_active_electrodes(self._map_direction_for_device_rotation("right"))
             elif key in key_up:
-                self._step_active_electrodes("up")
+                self._step_active_electrodes(self._map_direction_for_device_rotation("up"))
             elif key in key_down:
-                self._step_active_electrodes("down")
+                self._step_active_electrodes(self._map_direction_for_device_rotation("down"))
 
         if (event.modifiers() & Qt.ControlModifier):
             if event.key() == Qt.Key_Right:
