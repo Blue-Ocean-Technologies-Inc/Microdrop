@@ -184,6 +184,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
         self._protocol_running = False
+        self._force_stop = False
         self._processing_palette_change = False
         self._last_published_step_id = None
         self._last_selected_step_id = None
@@ -720,22 +721,36 @@ class PGCWidget(QWidget):
                     self.setup_new_experiment()
 
 
+                ### In case of force stops, check if report needs to be generated.
+                _generate_report = True
+                if self._force_stop:
+                    msg = "Protocol was stopped before completion."
 
-                self.generate_summary()
+                    if confirm(
+                                None,
+                                title="Generate Run Summary?",
+                                message=msg + "<br><br>Press <b>YES</b> to create run summary.",
+                                cancel=False,
+                    ) == NO:
+                        _generate_report = False
 
-                # Convert local path to a valid URL (handles Windows backslashes automatically)
-                file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
+                if  _generate_report:
 
-                formatted_message = (
-                    f"Report file saved to:<br>"
-                    f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
-                )
+                    self.generate_summary()
 
-                success(
-                    None,
-                    formatted_message,
-                    title="Run Summary Generated",
-                )
+                    # Convert local path to a valid URL (handles Windows backslashes automatically)
+                    file_url = QUrl.fromLocalFile(self.protocol_data_logger.last_saved_summary_path).toString()
+
+                    formatted_message = (
+                        f"Report file saved to:<br>"
+                        f"<a href='{file_url}' style='color: #0078d7;'>{Path(self.protocol_data_logger.last_saved_summary_path).name}</a><br><br>"
+                    )
+
+                    success(
+                        None,
+                        formatted_message,
+                        title="Run Summary Generated",
+                    )
 
             except Exception as e:
                 logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
@@ -1148,6 +1163,8 @@ class PGCWidget(QWidget):
 
     def stop_protocol(self):
 
+        self._force_stop = True
+
         self.protocol_runner.pause()
 
         user_choice = confirm(
@@ -1162,6 +1179,8 @@ class PGCWidget(QWidget):
             self.reset_status_bar()
 
             self.on_protocol_finished(completed_steps)
+
+        self._force_stop = False
 
     def reset_status_bar(self):
         self.status_bar.lbl_total_time.setText("Total Time: 0 s")
