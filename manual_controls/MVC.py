@@ -6,6 +6,7 @@ from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
+from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase,
@@ -91,16 +92,12 @@ class ToggleEditorFactory(BasicEditorFactory):
 
 class ManualControlModel(HasTraits):
     voltage = Range(
-        30,
-        150,
-        value=int(float(step_defaults["Voltage"])),
-        desc="the voltage to set on the dropbot device",
+        30, 150, value=DropbotPreferences().default_voltage, #TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)"
     )
     frequency = Range(
-        100,
-        20000,
-        value=int(float(step_defaults["Frequency"])),
-        desc="the frequency to set on the dropbot device",
+        100, 20000, value=DropbotPreferences().default_frequency, #TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)"
     )
 
     # --- Data Traits ---

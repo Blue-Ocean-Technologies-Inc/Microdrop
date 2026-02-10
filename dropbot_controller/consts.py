@@ -60,3 +60,6 @@ ACTOR_TOPIC_DICT = {
 # capacitance threshold to detect droplets. This is the multiplier to the minimum device capacitance
 DROPLET_DETECTION_CAPACITANCE_THRESHOLD = 10
 DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection
+
+DEFAULT_VOLTAGE = 100
+DEFAULT_FREQUENCY = 10_000

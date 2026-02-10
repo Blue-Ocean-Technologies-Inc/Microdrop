@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from dropbot_controller.consts import SET_REALTIME_MODE
+from dropbot_controller.preferences import DropbotPreferences
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
 from PySide6.QtWidgets import (
     QTreeView,
@@ -150,6 +151,13 @@ class PGCWidget(QWidget):
             flatten_protocol_for_run,
             preferences=self.application.preferences,
         )
+
+        _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
+
+        step_defaults.update({
+        "Voltage": f"{float(_dropbot_preferences.default_voltage)}",
+        "Frequency": f"{float(_dropbot_preferences.default_frequency)}",
+        })
 
         _device_viewer_prefs = DeviceViewerPreferences(preferences=self.application.preferences)
         self._active_device_svg_file = _device_viewer_prefs.DEFAULT_SVG_FILE

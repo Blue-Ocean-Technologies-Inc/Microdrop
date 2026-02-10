@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
+from dropbot_controller.preferences import DropbotPreferences
 
 from microdrop_style.button_styles import get_button_dimensions
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
@@ -76,9 +77,9 @@ step_defaults = {
     "ID": "", 
     "Repetitions": "1",
     "Duration": "1.0",
-    "Voltage": "100.0",
     "Force": "",
-    "Frequency": "10000",
+    "Voltage": f"{float(DropbotPreferences().default_voltage)}",
+    "Frequency": f"{float(DropbotPreferences().default_frequency)}",
     "Message": "",
     "Repeat Duration": "0.0",
     "Trail Length": "1",
