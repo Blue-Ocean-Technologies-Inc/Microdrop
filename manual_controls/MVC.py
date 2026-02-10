@@ -19,12 +19,18 @@ from microdrop_utils.decorators import debounce
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
-from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
+from dropbot_controller.consts import (
+    SET_VOLTAGE,
+    SET_FREQUENCY,
+    SET_REALTIME_MODE,
+    VOLTAGE_LIM,
+    FREQUENCY_LIM,
+)
 from microdrop_style.colors import GREY, SUCCESS_COLOR
 from portable_dropbot_controller.consts import SET_CHIP_LOCK, SET_LIGHT_INTENSITY
-from protocol_grid.consts import step_defaults
 
 from .consts import PKG_name, listener_name
+
 logger = get_logger(__name__)
 
 
@@ -93,12 +99,16 @@ class ToggleEditorFactory(BasicEditorFactory):
 
 class ManualControlModel(HasTraits):
     voltage = Range(
-        30, 150, value=DropbotPreferences().default_voltage, #TODO: May need to give as input application preferences.
-        desc="the voltage to set on the dropbot device (V)"
+        VOLTAGE_LIM[0],
+        VOLTAGE_LIM[1],
+        value=DropbotPreferences().default_voltage,  # TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)",
     )
     frequency = Range(
-        100, 20000, value=DropbotPreferences().default_frequency, #TODO: May need to give as input application preferences.
-        desc="the frequency to set on the dropbot device (Hz)"
+        FREQUENCY_LIM[0],
+        FREQUENCY_LIM[1],
+        value=DropbotPreferences().default_frequency,  # TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)",
     )
 
     # --- Data Traits ---
@@ -112,7 +122,12 @@ class ManualControlModel(HasTraits):
     connected = Bool(False, desc="Connected to dropbot?")
 
     # Light Controls
-    light_intensity = Range(0, 100, value=PeripheralPreferences().default_light_intensity, desc="Light intensity percentage")
+    light_intensity = Range(
+        0,
+        100,
+        value=PeripheralPreferences().default_light_intensity,
+        desc="Light intensity percentage",
+    )
     lights_on = Bool(False, desc="Master toggle for lights")
 
 
@@ -334,9 +349,7 @@ class ManualControlControl(Controller):
                 topic=SET_LIGHT_INTENSITY, message=str(self.model.light_intensity)
             )
         else:
-            publish_message(
-                topic=SET_LIGHT_INTENSITY, message="0"
-            )
+            publish_message(topic=SET_LIGHT_INTENSITY, message="0")
 
 
 if __name__ == "__main__":
