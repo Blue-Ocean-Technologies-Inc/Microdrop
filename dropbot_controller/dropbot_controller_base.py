@@ -176,6 +176,8 @@ class DropbotControllerBase(HasTraits):
         try:
             self.proxy.update_state(
                 capacitance_update_interval_ms=self.preferences.capacitance_update_interval,
+                voltage=self.preferences.default_voltage,
+                frequency=self.preferences.default_frequency,
                 hv_output_selected=False,
                 hv_output_enabled=False,
                 event_mask=EVENT_CHANNELS_UPDATED | EVENT_SHORTS_DETECTED | EVENT_ENABLE
