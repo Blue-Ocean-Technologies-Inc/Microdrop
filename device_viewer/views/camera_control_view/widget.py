@@ -420,9 +420,15 @@ class CameraControlWidget(QWidget):
 
         # check if any resolutions found. else use strict mode if not already on.
         if len(seen_resolutions) > 0:
-
+            # find preferred resolution. If not set it
             self.combo_resolutions.blockSignals(False)
-            self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+            if not self.preferences.resolution:
+                self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+
+            else:
+                for i in range(self.combo_resolutions.count()):
+                    if self.preferences.resolution == self.combo_resolutions.itemText(i):
+                        self.combo_resolutions.setCurrentIndex(i)
 
         elif self.preferences.strict_video_format:
             warning_message = (f"Preferred video format <b>{self.preferences.preferred_video_format}</b> not supported by "
@@ -443,22 +449,20 @@ class CameraControlWidget(QWidget):
         if index < 0:
             return
 
-        fmt = self.combo_resolutions.itemData(index)
+        resolution = self.combo_resolutions.itemData(index)
 
         was_running = self.camera.isActive()
         if was_running:
             self.camera.stop()
             QApplication.processEvents()
 
-        self.camera.setCameraFormat(fmt)
-
-        resolution = self.combo_resolutions.itemText(index)
+        self.camera.setCameraFormat(resolution)
+        self.preferences.resolution = self.combo_resolutions.itemText(index)
         logger.info(f"Camera Resolution Changed: {resolution}")
 
-        self.preferences.resolution = resolution
         self.model.camera_perspective.camera_resolution = (
-            fmt.resolution().width(),
-            fmt.resolution().height(),
+            resolution.resolution().width(),
+            resolution.resolution().height(),
         )
 
         if was_running:
