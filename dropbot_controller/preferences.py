@@ -8,6 +8,8 @@ from .consts import (
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
     DEFAULT_VOLTAGE,
     DEFAULT_FREQUENCY,
+    VOLTAGE_LIM,
+    FREQUENCY_LIM,
 )
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
@@ -34,14 +36,14 @@ class DropbotPreferences(PreferencesHelper):
     capacitance_update_interval = Int(desc="how often to poll capacitance from dropbot (in ms)")
 
     default_voltage = Range(
-        30,
-        150,
+        VOLTAGE_LIM[0],
+        VOLTAGE_LIM[1],
         value=DEFAULT_VOLTAGE,
         desc="the voltage to set on the dropbot device in V",
     )
     default_frequency = Range(
-        100,
-        20000,
+        FREQUENCY_LIM[0],
+        FREQUENCY_LIM[1],
         value=DEFAULT_FREQUENCY,
         desc="the frequency to set on the dropbot device in Hz",
     )

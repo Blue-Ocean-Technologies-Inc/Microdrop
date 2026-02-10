@@ -14,6 +14,8 @@ from traits.api import HasTraits, Bool, Instance, provides, Int, Array, Range, o
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     CHIP_INSERTED,
+    VOLTAGE_LIM,
+    FREQUENCY_LIM,
 )
 from dropbot_controller.dropbot_controller_base import app_globals
 from dropbot_controller.models.dropbot_channels_properties_model import (
@@ -223,8 +225,9 @@ class ConnectionManager(HasTraits):
 
     monitor_scheduler = Instance(BackgroundScheduler)
 
-    voltage = Range(30, 200)
-    frequency = Range(50, 60_000)
+    voltage = Range(VOLTAGE_LIM[0], VOLTAGE_LIM[1])
+    frequency = Range(FREQUENCY_LIM[0], FREQUENCY_LIM[1])
+
     light_intensity = Range(0, 100)
     realtime_mode = Bool
     channel_states_arr = Array
