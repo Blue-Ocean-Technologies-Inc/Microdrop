@@ -1,18 +1,20 @@
-import time
-
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Float, Int, Dict, Property
+from traits.api import Float, Int, Dict, Property, Range
 from logger.logger_service import get_logger
-from microdrop_utils.decorators import debounce
 
 logger = get_logger(__name__)
 
-from .consts import DROPLET_DETECTION_CAPACITANCE_THRESHOLD
+from .consts import (
+    DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
+    DEFAULT_VOLTAGE,
+    DEFAULT_FREQUENCY,
+)
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 preferences_names = [
             'droplet_detection_capacitance',
             'capacitance_update_interval',
+            'default_voltage', 'default_frequency'
         ]
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -30,6 +32,19 @@ class DropbotPreferences(PreferencesHelper):
     #### Preferences ##########################################################
     droplet_detection_capacitance = Float(desc="Threshold for electrode capcitance past which we consider a droplet present.")
     capacitance_update_interval = Int(desc="how often to poll capacitance from dropbot (in ms)")
+
+    default_voltage = Range(
+        30,
+        150,
+        value=DEFAULT_VOLTAGE,
+        desc="the voltage to set on the dropbot device in V",
+    )
+    default_frequency = Range(
+        100,
+        20000,
+        value=DEFAULT_FREQUENCY,
+        desc="the frequency to set on the dropbot device in Hz",
+    )
 
     preferences_name_map = Property(Dict)
 
