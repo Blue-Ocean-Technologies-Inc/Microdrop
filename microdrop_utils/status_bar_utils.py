@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pyface.api import GUI
 
 def get_status_bar(window=None):
