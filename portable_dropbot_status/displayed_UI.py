@@ -1,7 +1,7 @@
 from functools import wraps
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal, QObject, QTimer
 from traits.api import HasTraits, observe, Instance
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -202,7 +202,7 @@ class DropBotStatusView(QWidget):
         # Connect ViewModel signals to the appropriate widget slots/methods: ViewModel -> View
         self._view_model_signals.icon_path_changed.connect(self.icon_widget.set_pixmap_from_path)
         self._view_model_signals.icon_color_changed.connect(self.icon_widget.set_status_color)
-        self._view_model_signals.disable_icon_widget.connect(self.icon_widget.setDisabled)
+        self._view_model_signals.disable_icon_widget.connect(self.set_icon_widget_disabled_with_timeout)
         self._view_model_signals.connection_status_text_changed.connect(self.grid_widget.connection_status.setText)
         self._view_model_signals.chip_status_text_changed.connect(self.grid_widget.chip_status.setText)
 
@@ -218,3 +218,7 @@ class DropBotStatusView(QWidget):
 
         # Connect user input to view model methods: View -> ViewModel
         self.icon_widget.clicked.connect(self._view_model._on_icon_widget_clicked)
+
+    def set_icon_widget_disabled_with_timeout(self, status: bool, timeout_s=10):
+        self.icon_widget.setDisabled(status)
+        QTimer.singleShot(timeout_s * 1000, lambda: self.icon_widget.setDisabled(not status))
