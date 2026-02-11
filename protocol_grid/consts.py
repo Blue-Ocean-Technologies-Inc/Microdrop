@@ -129,19 +129,4 @@ copy_fields_for_new_step = [
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4
 
-# Get button styles based on theme
-def get_light_mode_stylesheet():
-    """Get light mode stylesheet with button styles."""
-    from microdrop_style.helpers import get_complete_stylesheet
-    return get_complete_stylesheet("light", "default")
-
-def get_dark_mode_stylesheet():
-    """Get dark mode stylesheet with button styles."""
-    from microdrop_style.helpers import get_complete_stylesheet
-    return get_complete_stylesheet("dark", "default")
-
-# Legacy constants for backward compatibility
-LIGHT_MODE_STYLESHEET = get_light_mode_stylesheet()
-DARK_MODE_STYLESHEET = get_dark_mode_stylesheet()
-
 LOGS_STOP_SETTLING_TIME_MS = 2000 # milliseconds to wait before blocking logs input for after protocol run ends.
