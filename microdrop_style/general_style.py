@@ -3,7 +3,7 @@
 TARGET_WIDGETS = (
     "QMainWindow, QDialog, QDockWidget, "
     ".QWidget, QFrame, QGroupBox, QScrollArea, "
-    "QLabel, QCheckBox, QRadioButton, QLineEdit, QTextEdit, "
+    "QLabel, QRadioButton, QLineEdit, QTextEdit, "
     "QAbstractSpinBox, QProgressBar, QComboBox, QTabWidget, "
     "QTableView, QToolButton, QPushButton"
 )

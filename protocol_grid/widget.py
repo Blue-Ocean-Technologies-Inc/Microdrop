@@ -14,14 +14,14 @@ from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QDialog,
-    QToolButton,
+    QToolButton, QHBoxLayout,
 )
 from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QUrl
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style
-from microdrop_style.helpers import is_dark_mode
+from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
 from microdrop_utils.decorators import debounce
 from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
 from microdrop_utils.sticky_notes import StickyWindowManager
@@ -51,8 +51,6 @@ from protocol_grid.consts import (
     group_defaults,
     protocol_grid_fields,
     protocol_grid_column_widths,
-    LIGHT_MODE_STYLESHEET,
-    DARK_MODE_STYLESHEET,
     copy_fields_for_new_step,
     LOGS_STOP_SETTLING_TIME_MS,
 )
@@ -261,7 +259,15 @@ class PGCWidget(QWidget):
         layout.addWidget(self.tree)
 
         quick_actions = QuickProtocolActions()
-        layout.addLayout(quick_actions)
+        self.quick_actions_bar = QWidget()
+        quick_action_layout = QHBoxLayout()
+
+        for button in quick_actions.actions.values():
+            quick_action_layout.addWidget(button)
+
+        self.quick_actions_bar.setLayout(quick_action_layout)
+        layout.addWidget(self.quick_actions_bar)
+
         self.quick_action_controller = QuickProtocolActionsController(
             quick_actions, self
         )
@@ -309,28 +315,46 @@ class PGCWidget(QWidget):
         self.note_manager.request_new_note(base_dir, experiment_name)
 
     def _on_application_palette_changed(self):
-        """Handle application palette changes (system theme switches)."""
+        """
+        Handle application palette changes (system theme switches).
 
-        # Update main widget styling
-        style_sheet = DARK_MODE_STYLESHEET if is_dark_mode() else LIGHT_MODE_STYLESHEET
+        This method is triggered when the operating system or Qt application signals a
+        palette change (e.g., switching between Dark and Light mode).
 
-        self.setStyleSheet(style_sheet)
+        Implementation Note:
+            The style update logic is deferred using `QTimer.singleShot(0, ...)` rather
+            than executed immediately. This is necessary to resolve a race condition:
 
-        toolbtn_style = get_button_style(
-            theme="dark" if is_dark_mode() else "light", button_type="tool"
-        )
-        self.btn_new_exp.setStyleSheet(toolbtn_style)
-        self.btn_new_note.setStyleSheet(toolbtn_style)
+            1.  **Stale State**: When the palette change signal first fires, the internal
+                Qt theme engine or OS flags (checking `is_dark_mode()`) may typically
+                still report the *previous* theme state.
+            2.  **Event Loop Ordering**: By using a 0ms timer, we push the update to the
+                end of the current event loop iteration. This ensures the system has
+                fully completed its transition and flags are settled before we apply
+                our overrides.
+        """
 
-        self.navigation_bar.left_slot_container.setStyleSheet(
-            "background-color: #1e1e1e;" if is_dark_mode() else ""
-        )
+        def _f():
 
-        # Clear highlights
-        self.clear_highlight()
+            _theme = "dark" if is_dark_mode() else "light"
 
-        # Update any open dialogs
-        self._update_theme_styling_for_dialogs()
+            _stylesheet = get_complete_stylesheet(_theme, "default")
+
+            _toolbtnstyle = get_button_style(_theme, "tool")
+
+            self.quick_actions_bar.setStyleSheet(_stylesheet)
+
+            self.navigation_bar.nav_container.setStyleSheet(_stylesheet)
+            self.navigation_bar.left_slot_container.setStyleSheet(_toolbtnstyle)
+
+            # Clear highlights
+            self.clear_highlight()
+
+            # Update any open dialogs
+            self._update_theme_styling_for_dialogs()
+
+        QTimer.singleShot(0, _f)
+
 
     def _update_theme_styling_for_dialogs(self):
         """Update theme styling for any open dialogs."""

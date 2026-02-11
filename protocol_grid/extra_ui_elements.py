@@ -12,8 +12,7 @@ from pyface.action.api import Action
 from traits.api import Str
 
 from protocol_grid.consts import (protocol_grid_fields, field_groupings, 
-                                  fixed_fields, ROW_TYPE_ROLE, STEP_TYPE,
-                                  LIGHT_MODE_STYLESHEET, DARK_MODE_STYLESHEET)
+                                  fixed_fields, ROW_TYPE_ROLE, STEP_TYPE)
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_STOP, ICON_NEXT,
@@ -126,17 +125,23 @@ class ExperimentLabel(QLabel):
 class NavigationBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # VLayout: Navigation buttons above checkbox
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(5)
-        
-        # HLayout: Navigation buttons
-        self.button_layout = QHBoxLayout()
-        self.button_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_layout.setSpacing(BUTTON_SPACING)
 
-        # main navigation buttons
+        # ============================================================
+        # 1. MAIN LAYOUT (Vertical Stack)
+        # ============================================================
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)  # Remove spacing so containers touch
+
+        # ============================================================
+        # 2. TOP CONTAINER: Navigation Buttons
+        # ============================================================
+        self.nav_container = QWidget()
+        nav_layout = QHBoxLayout(self.nav_container)
+        nav_layout.setContentsMargins(5, 5, 5, 5)  # Padding for the bar itself
+        nav_layout.setSpacing(BUTTON_SPACING)
+
+        # --- Define Buttons ---
         self.btn_first = QPushButton(ICON_FIRST)
         self.btn_first.setToolTip("First Step")
 
@@ -155,8 +160,8 @@ class NavigationBar(QWidget):
 
         self.btn_play = QPushButton(ICON_PLAY)
         self.btn_play.setToolTip("Play Protocol")
-        
-        # phase navigation buttons (initially hidden)
+
+        # --- Play/Phase Sub-Container ---
         self.btn_prev_phase = QPushButton(ICON_PREVIOUS_PHASE)
         self.btn_prev_phase.setToolTip("Previous Phase")
 
@@ -166,61 +171,60 @@ class NavigationBar(QWidget):
         self.btn_next_phase = QPushButton(ICON_NEXT_PHASE)
         self.btn_next_phase.setToolTip("Next Phase")
 
-        # container widget for the play/phase buttons area
         self.play_phase_container = QWidget()
+        self.play_phase_container.setObjectName("play_phase_subcontainer")
         self.play_phase_layout = QHBoxLayout(self.play_phase_container)
         self.play_phase_layout.setContentsMargins(0, 0, 0, 0)
         self.play_phase_layout.setSpacing(BUTTON_SPACING)
-        
+
         self.play_phase_layout.addWidget(self.btn_play)
-        
         for btn in [self.btn_prev_phase, self.btn_resume, self.btn_next_phase]:
             btn.setVisible(False)
             self.play_phase_layout.addWidget(btn)
-        
-        # Set consistent sizing for all buttons
+
+        # --- Sizing ---
         all_buttons = [
             self.btn_first, self.btn_prev, self.btn_play,
             self.btn_stop, self.btn_next, self.btn_last,
             self.btn_prev_phase, self.btn_resume, self.btn_next_phase
         ]
-        
         for btn in all_buttons:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        self.play_phase_container.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        # add in correct order
-        self.button_layout.addWidget(self.btn_first)
-        self.button_layout.addWidget(self.btn_prev)
-        self.button_layout.addWidget(self.play_phase_container)
-        self.button_layout.addWidget(self.btn_stop)
-        self.button_layout.addWidget(self.btn_next)
-        self.button_layout.addWidget(self.btn_last)
-        
-        # track navigation state
-        self._phase_navigation_active = False
-        
-        checkbox_layout = QHBoxLayout()
-        checkbox_layout.setContentsMargins(0, 0, 0, 0)
-        checkbox_layout.setSpacing(10)
+        self.play_phase_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        # Create a LEFT SLOT container
+        # --- Add to Nav Layout ---
+        nav_layout.addWidget(self.btn_first)
+        nav_layout.addWidget(self.btn_prev)
+        nav_layout.addWidget(self.play_phase_container)
+        nav_layout.addWidget(self.btn_stop)
+        nav_layout.addWidget(self.btn_next)
+        nav_layout.addWidget(self.btn_last)
+
+        self._phase_navigation_active = False
+
+        # ============================================================
+        # 3. BOTTOM CONTAINER: Left Slot + Right Slot (Checkboxes)
+        # ============================================================
+        self.bottom_container = QWidget()
+        bottom_layout = QHBoxLayout(self.bottom_container)
+        bottom_layout.setContentsMargins(5, 5, 5, 5)
+        bottom_layout.setSpacing(10)
+
+        # --- A. Left Slot Container ---
         self.left_slot_container = QWidget()
         self.left_slot_layout = QHBoxLayout(self.left_slot_container)
         self.left_slot_layout.setContentsMargins(0, 0, 0, 0)
         self.left_slot_layout.setSpacing(5)
 
-        # Add the left slot to the layout FIRST
-        checkbox_layout.addWidget(self.left_slot_container)
+        # --- B. Right Slot Container (Checkboxes) ---
+        self.right_slot_container = QWidget()
+        self.right_slot_layout = QHBoxLayout(self.right_slot_container)
+        self.right_slot_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_slot_layout.setSpacing(10)
 
-        # 2. Add Stretch (pushes left slot to left, checkboxes to right)
-        checkbox_layout.addStretch()
-
-        # Add Checkboxes
+        # Define Checkboxes
         self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip( "Droplet Detection on step end")
+        self.droplet_check_checkbox.setToolTip("Droplet Detection on step end")
 
         self.preview_mode_checkbox = QCheckBox("Preview Mode")
         msg = "Send no hardware messages on protocol run and do not trigger errors."
@@ -231,43 +235,23 @@ class NavigationBar(QWidget):
             "When checked, navigation buttons remain enabled during protocol execution for advanced users"
         )
         self.advanced_user_mode_checkbox.setVisible(False)
-        
-        checkbox_layout.addWidget(self.preview_mode_checkbox)
-        checkbox_layout.addWidget(self.droplet_check_checkbox)
-        # checkbox_layout.addWidget(self.advanced_user_mode_checkbox)
 
-        main_layout.addLayout(self.button_layout)
-        main_layout.addLayout(checkbox_layout)
-        
-        self.setLayout(main_layout)
-        
-        # apply initial styling and change on future changes
-        self._apply_styling()
-        QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
-    
-    def _apply_styling(self):
-        if is_dark_mode():
-            button_style = DARK_MODE_STYLESHEET
-            checkbox_style = f"""
-                QCheckBox {{
-                    color: {WHITE};
-                    background-color: #1e1e1e;
-                }}
-            """
-        else:
-            button_style = LIGHT_MODE_STYLESHEET
-            checkbox_style = f"""
-                QCheckBox {{
-                    color: {BLACK};
-                }}
-            """
-        self.setStyleSheet(button_style)
-        self.droplet_check_checkbox.setStyleSheet(checkbox_style)
-        self.advanced_user_mode_checkbox.setStyleSheet(checkbox_style)
-        self.preview_mode_checkbox.setStyleSheet(checkbox_style)
-    
-    def update_theme_styling(self):
-        self._apply_styling()
+        # Add Checkboxes to Right Slot Layout
+        self.right_slot_layout.addWidget(self.preview_mode_checkbox)
+        self.right_slot_layout.addWidget(self.droplet_check_checkbox)
+        # self.right_slot_layout.addWidget(self.advanced_user_mode_checkbox)
+
+        # --- Assemble Bottom Bar ---
+        bottom_layout.addWidget(self.left_slot_container)
+        bottom_layout.addStretch()  # Pushes left slot left, right slot right
+        bottom_layout.addWidget(self.right_slot_container)
+
+        # ============================================================
+        # 4. FINAL ASSEMBLY
+        # ============================================================
+        main_layout.addWidget(self.nav_container)
+        main_layout.addWidget(self.bottom_container)
+
 
     def is_droplet_check_enabled(self):
         return self.droplet_check_checkbox.isChecked()
