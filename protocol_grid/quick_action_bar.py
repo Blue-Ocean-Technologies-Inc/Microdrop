@@ -39,7 +39,7 @@ quick_protocol_actions = [
 ]
 
 
-class QuickProtocolActions(QHBoxLayout):
+class QuickProtocolActions:
 
     def __init__(self):
         super().__init__()
@@ -53,8 +53,6 @@ class QuickProtocolActions(QHBoxLayout):
             setattr(self, id, button)
             self.actions[id] = button
 
-            self.addWidget(button)
-
         for id, text, tooltip in [
             ("add_step", "add", "Add step below selection"),
             ("delete_row", "delete", "Delete selected step / group"),
@@ -67,12 +65,9 @@ class QuickProtocolActions(QHBoxLayout):
 
             _add_button(id, text, tooltip)
 
-        self.addStretch()
-
-
 class QuickProtocolActionsController:
 
-    def __init__(self, view, protocol_grid: "PGCWidget"):
+    def __init__(self, view: 'QuickProtocolActions', protocol_grid: "PGCWidget"):
         self.view = view
         self.protocol_grid = protocol_grid
 
