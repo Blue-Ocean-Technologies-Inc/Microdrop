@@ -4,6 +4,8 @@ import traceback
 from pathlib import Path
 
 import dramatiq
+from PySide6.QtGui import QColor, QBrush
+
 from microdrop_application.dialogs.pyface_wrapper import NO, OK, YES, FileDialog, confirm, error
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene
@@ -30,6 +32,7 @@ from traitsui.view import View
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from logger.logger_service import get_logger
 from microdrop_style.button_styles import get_tooltip_style
+from microdrop_style.colors import BLACK
 from microdrop_style.helpers import (
     QT_THEME_NAMES,
     get_complete_stylesheet,
@@ -725,6 +728,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             # device view uses opengl so a complete stylesheet with widget style specs cannot be added:
             # but other elements like tooltips do need updating
             self.device_view.setStyleSheet(get_tooltip_style(theme_name))
+
+            bg_color = BLACK # if is_dark_mode() else "#263238" #TODO: figure out light mode color
+            self.device_view.setBackgroundBrush(QBrush(QColor(bg_color)))
 
             # reveal requires the narrow button type specified
             reveal_button.setStyleSheet(

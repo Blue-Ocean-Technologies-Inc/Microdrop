@@ -22,9 +22,10 @@ class AutoFitGraphicsView(QGraphicsView):
         self.auto_fit_margin_scale = kwargs.pop('auto_fit_margin_scale', AUTO_FIT_MARGIN_SCALE)
 
         super().__init__(*args, **kwargs)
-        
+
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.TextAntialiasing, True)
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
 
     def resizeEvent(self, event):
         if self.auto_fit:
@@ -49,7 +50,6 @@ class AutoFitGraphicsView(QGraphicsView):
                 if hasattr(scene, 'interaction_service'):
                     scene.interaction_service.handle_key_press_event(event)
                     return
-
 
         super().keyPressEvent(event)
 
