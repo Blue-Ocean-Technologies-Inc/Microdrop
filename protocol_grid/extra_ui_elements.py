@@ -464,6 +464,10 @@ class EditContextMenu(QMenu):
     def build_menu(self):
         action_select_fields = QAction("Select Fields", self)
         action_select_fields.triggered.connect(self.widget.show_column_toggle_dialog)
+
+        action_bulk = self.addAction("Bulk Set Values...")
+        action_bulk.triggered.connect(self.widget.bulk_set_values)
+
         self.addAction(action_select_fields)
         self.addSeparator()
         
@@ -539,7 +543,6 @@ class EditContextMenu(QMenu):
         run_step_action.setEnabled(not self.widget._protocol_running and has_step_selected)
         
         self.addAction(run_step_action)
-
 
 class ShowEditContextMenuAction(Action):
     name = "Show Edit Context Menu"

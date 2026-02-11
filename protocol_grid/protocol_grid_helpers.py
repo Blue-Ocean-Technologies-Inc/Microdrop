@@ -1,11 +1,28 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QWidget, QHBoxLayout
+from PySide6.QtWidgets import (
+    QStyledItemDelegate,
+    QLineEdit,
+    QCheckBox,
+    QSpinBox,
+    QDoubleSpinBox,
+    QAbstractItemView,
+    QStyleOptionViewItem,
+    QStyle,
+    QApplication,
+)
 from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
-from protocol_grid.consts import GROUP_TYPE, STEP_TYPE, ROW_TYPE_ROLE, protocol_grid_fields
+from protocol_grid.consts import (
+    GROUP_TYPE,
+    STEP_TYPE,
+    ROW_TYPE_ROLE,
+    protocol_grid_fields,
+    CHECKBOX_COLS,
+    ALLOWED_group_fields,
+)
 
 
 class PGCItem(QStandardItem):
@@ -22,11 +39,20 @@ class PGCItem(QStandardItem):
 
 
 class ProtocolGridDelegate(QStyledItemDelegate):
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
-        
+
+    def paint(self, painter, option, index):
+        """
+        Overridden to prevent "Ghost Text" behind the editor.
+        """
+        # Do not paint any reading text in a cell where editing is in progress. Hand off to editor widget.
+        _widget = option.widget
+        if not (_widget.state() == QAbstractItemView.EditingState and _widget.currentIndex() == index):
+            super().paint(painter, option, index)
+
     def createEditor(self, parent, option, index):
         # prevent editing during protocol execution
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
@@ -39,31 +65,14 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                     return None
             else:
                 return None
-        
+
         field = protocol_grid_fields[index.column()]
-        
+
         if field == "Force":
-            return None
-
-        if field in ("Video", "Capture", "Record", "Magnet"):
-            # Create a container widget to hold the checkbox
-            container = QWidget(parent)
-
-            # Create the checkbox
-            checkbox = QCheckBox(container)
-
-            # Enable centering
-            layout = QHBoxLayout(container)
-            layout.addWidget(checkbox)
-            layout.setAlignment(Qt.AlignCenter)
-            layout.setContentsMargins(0, 0, 0, 0)
-
-            # Important: Set the focus proxy so the delegate knows
-            # the checkbox is the actual editor
-            container.setFocusProxy(checkbox)
-
-            return container
-
+            return None            
+        if field in CHECKBOX_COLS:
+            editor = QCheckBox(parent)
+            return editor
         elif field in ("Magnet Height (mm)"):
             editor = QDoubleSpinBox(parent)
             editor.setFrame(False)  # Often looks better in tables
@@ -134,7 +143,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             return
 
             # --- 1. Checkboxes ---
-        if field in ("Video", "Capture", "Record", "Magnet"):
+        if field in CHECKBOX_COLS:
             check_state = index.model().data(index, Qt.CheckStateRole)
             if check_state is not None:
                 checked = check_state == Qt.Checked or check_state == 2
@@ -241,10 +250,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
 
     for field in protocol_grid_fields:
         if row_type == GROUP_TYPE:
-            allowed_group_fields = {
-                "Description", "ID", "Repetitions", "Duration", "Run Time",
-                "Voltage", "Frequency", "Trail Length"
-            }
+            allowed_group_fields = ALLOWED_group_fields
             
             if field in allowed_group_fields:
                 value = overrides.get(field, defaults.get(field, ""))
@@ -261,7 +267,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
                 if hidden_field in overrides:
                     item.setData(overrides[hidden_field], Qt.UserRole + 1000 + hash(hidden_field) % 1000)
 
-        if row_type == STEP_TYPE and field in ("Video", "Capture", "Record", "Magnet"):
+        if row_type == STEP_TYPE and field in CHECKBOX_COLS:
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             
@@ -297,7 +303,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
             else:
                 item.setEditable(False)
                 item.setText("")
-                if field in ("Video", "Capture", "Record", "Magnet"):
+                if field in CHECKBOX_COLS:
                     item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
                     item.setData(None, Qt.CheckStateRole)
         elif row_type == STEP_TYPE and field == "ID":
