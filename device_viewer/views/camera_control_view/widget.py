@@ -26,8 +26,9 @@ from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from microdrop_application.dialogs.pyface_wrapper import error, warning, success
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
-from microdrop_style.colors import SECONDARY_SHADE, WHITE
+from microdrop_style.colors import SECONDARY_SHADE, WHITE, GREY
 from logger.logger_service import get_logger
+from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
 logger = get_logger(__name__)
@@ -176,6 +177,7 @@ class CameraControlWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.sync_buttons_and_label()
+        QApplication.styleHints().colorSchemeChanged.connect(self.sync_buttons_and_label)
 
         # Connect toggle buttons with proper toggle logic
         self.camera_toggle_button.clicked.connect(self.toggle_camera)
@@ -204,7 +206,9 @@ class CameraControlWidget(QWidget):
 
     def _preferred_video_format_change(self, event):
         strict_flag = "strictly" if self.preferences.strict_video_format else ""
-        logger.critical(f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}")
+        logger.critical(
+            f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}"
+        )
         self.populate_resolutions()
 
     ########################################################################################
@@ -269,8 +273,8 @@ class CameraControlWidget(QWidget):
     def sync_buttons_and_label(self):
         """Set checked states and label based on model.mode."""
         if self.model.mode == "camera-place":
-            self.button_align.setStyleSheet(self.button_reset.styleSheet())
             self.button_align.setChecked(True)
+            self.button_align.setStyleSheet(get_complete_stylesheet("dark" if is_dark_mode() else "light"))
 
         elif self.model.mode == "camera-edit":
             self.button_align.setChecked(True)
@@ -278,7 +282,7 @@ class CameraControlWidget(QWidget):
 
         else:
             self.button_align.setChecked(False)
-            self.button_align.setStyleSheet(self.button_reset.styleSheet())
+            self.button_align.setStyleSheet(get_complete_stylesheet("dark" if is_dark_mode() else "light"))
 
     def reset(self):
         """Reset the camera control widget to its initial state."""
@@ -426,13 +430,17 @@ class CameraControlWidget(QWidget):
 
             else:
                 for i in range(self.combo_resolutions.count()):
-                    if self.preferences.resolution == self.combo_resolutions.itemText(i):
+                    if self.preferences.resolution == self.combo_resolutions.itemText(
+                        i
+                    ):
                         self.combo_resolutions.setCurrentIndex(i)
 
         elif self.preferences.strict_video_format:
-            warning_message = (f"Preferred video format <b>{self.preferences.preferred_video_format}</b> not supported by "
-                               f"<b>{self.preferences.selected_camera}</b>.<br><br>"
-                               f"Will ignore strict mode request for <b>{self.preferences.selected_camera}</b> ...")
+            warning_message = (
+                f"Preferred video format <b>{self.preferences.preferred_video_format}</b> not supported by "
+                f"<b>{self.preferences.selected_camera}</b>.<br><br>"
+                f"Will ignore strict mode request for <b>{self.preferences.selected_camera}</b> ..."
+            )
 
             # Mute this warning for IR cameras (common to lack preferred formats).
             if not self._is_ir_camera_name(self.preferences.selected_camera):
@@ -549,7 +557,9 @@ class CameraControlWidget(QWidget):
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setChecked(False)
 
-    def _generate_media_filename(self, step_description=None, step_id=None, file_extension=".png"):
+    def _generate_media_filename(
+        self, step_description=None, step_id=None, file_extension=".png"
+    ):
         """Generate a filename based on the selected step."""
         timestamp = get_current_utc_datetime()
 
@@ -565,10 +575,14 @@ class CameraControlWidget(QWidget):
             return f"captured_image_{timestamp}{file_extension}"
 
     def _generate_capture_filename(self, step_description=None, step_id=None):
-        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".png")
+        return self._generate_media_filename(
+            step_description=step_description, step_id=step_id, file_extension=".png"
+        )
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        return self._generate_media_filename(step_description=step_description, step_id=step_id, file_extension=".mp4")
+        return self._generate_media_filename(
+            step_description=step_description, step_id=step_id, file_extension=".mp4"
+        )
 
     ##### Video recording #######
     def on_recording_active(self, recording_data):
@@ -583,7 +597,9 @@ class CameraControlWidget(QWidget):
                 step_id = recording_data.get("step_id")
                 show_dialog = recording_data.get("show_dialog", True)
 
-                self.video_record_start(directory, step_description, step_id, show_dialog)
+                self.video_record_start(
+                    directory, step_description, step_id, show_dialog
+                )
 
             elif action == "stop":
                 self.video_record_stop()
@@ -632,7 +648,9 @@ class CameraControlWidget(QWidget):
             self.video_record_start()
 
     @Slot()
-    def video_record_start(self, directory=None, step_description=None, step_id=None, show_dialog=True):
+    def video_record_start(
+        self, directory=None, step_description=None, step_id=None, show_dialog=True
+    ):
         if self.ffmpeg_process:
             return
 
@@ -675,9 +693,7 @@ class CameraControlWidget(QWidget):
         if self.rec_height % 2 != 0:
             self.rec_height -= 1
 
-        fps = int(
-            self.combo_resolutions.currentData().maxFrameRate()
-        )
+        fps = int(self.combo_resolutions.currentData().maxFrameRate())
 
         if not fps:
             fps = 15
