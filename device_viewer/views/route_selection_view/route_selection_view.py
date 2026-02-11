@@ -1,10 +1,10 @@
-from traitsui.api import View, VGroup, Item, ObjectColumn, TableEditor, Handler
+from traitsui.api import View, VGroup, Item, TableEditor, Handler
 from traitsui.ui import UIInfo
 
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
 
-from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn
+from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn
 
 class RouteLayerHandler(Handler):
     # For these handlers, info is as usual, and rows is a list of rows that the action is acting on

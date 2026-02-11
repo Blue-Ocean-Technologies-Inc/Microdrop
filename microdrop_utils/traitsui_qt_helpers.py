@@ -2,15 +2,40 @@ from typing import Any
 
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QStyledItemDelegate
-from traits.trait_types import self
-from traitsui.table_column import ObjectColumn
+from traitsui.api import ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_
 from traits.api import Str, Instance
 
 from traitsui.api import RangeEditor
 
 import logger
 from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.colors import WHITE, BLACK
+from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF
+
+
+class TableColumn(TableColumn_):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.cell_color = None
+        self.read_only_cell_color = None
+
+    def get_text_color(self, object):
+        """Returns the text color for the column for a specified object."""
+        return WHITE if is_dark_mode() else BLACK
+
+
+class ObjectColumn(ObjectTableColumn_):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.cell_color = None
+        self.read_only_cell_color = None
+
+    def get_text_color(self, object):
+        """Returns the text color for the column for a specified object."""
+        return "white" if is_dark_mode() else "black"
 
 
 class ColorRenderer(QStyledItemDelegate):
@@ -63,7 +88,9 @@ class RangeColumn(ObjectColumn):
         ### when in edit-mode we have to check which row is edited and remove the static read-mode text
         self.format_func = self.formatter
 
-    def formatter(self, value, object):  # No self since were just passing it as a function
+    def formatter(
+        self, value, object
+    ):  # No self since were just passing it as a function
         if object.key == self.editing_object_key:
             return ""
         return value
@@ -86,10 +113,13 @@ class RangeColumn(ObjectColumn):
 
         class _RangeEditor(RangeEditor):
             parent_column = Instance(RangeColumn)
+
             def __del__(self):
                 self.parent_column.editing_object_key = ""
 
-        editor = _RangeEditor(low=_editor.low, high=_editor.high, mode=_editor.mode, parent_column=self)
+        editor = _RangeEditor(
+            low=_editor.low, high=_editor.high, mode=_editor.mode, parent_column=self
+        )
 
         return editor
 
@@ -102,7 +132,6 @@ class RangeColumn(ObjectColumn):
             return self.format % (self.get_raw_value(object),)
         except:
             logger.exception(
-                "Error occurred trying to format a %s value"
-                % self.__class__.__name__
+                "Error occurred trying to format a %s value" % self.__class__.__name__
             )
             return "Format!"
