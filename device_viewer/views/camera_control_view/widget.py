@@ -112,7 +112,6 @@ class CameraControlWidget(QWidget):
         self.record_toggle_button = QPushButton("album")
         self.record_toggle_button.setToolTip("Start Recording Video")
         self.record_toggle_button.setCheckable(True)
-        self.is_recording = False
 
         self.capture_image_button = QPushButton("camera")
         self.capture_image_button.setToolTip("Capture Image")
@@ -748,9 +747,6 @@ class CameraControlWidget(QWidget):
             # Start timer to feed frames to ffmpeg
             self.recording_timer.start(int(1000 / fps))
             self.record_toggle_button.setChecked(True)
-            self.record_toggle_button.setStyleSheet(
-                f"background-color: {SECONDARY_SHADE[900]}; color: {WHITE};"
-            )
 
             logger.info(f"Recording started: {self.recording_file_path}")
 
@@ -821,7 +817,6 @@ class CameraControlWidget(QWidget):
                 self.ffmpeg_process.wait()
             self.ffmpeg_process = None
 
-        self.record_toggle_button.setStyleSheet("")
         self.record_toggle_button.setChecked(False)
         self.restore_camera_state()
 
