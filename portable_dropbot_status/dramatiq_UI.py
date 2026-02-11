@@ -124,7 +124,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
     def _on_board_status_update_triggered(self, body):
         msg = json.loads(body)
-        print(msg)
+        # Receiving board status implies we're connected
+        self.model.connected = True
         capacitance = msg.get('chip_cap', '-')
         voltage = msg.get('hv_vol', '-')
 

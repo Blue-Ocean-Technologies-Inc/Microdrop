@@ -169,6 +169,11 @@ class MotorControlConnectionListener(HasTraits):
         if self.model:
             self.model.connected = False
 
+    def _on_board_status_update_triggered(self, body):
+        """Receiving board status implies we're connected."""
+        if self.model:
+            self.model.connected = True
+
 
 # --- 4. The Dock Pane (Controller)---
 class MotorControlDockPane(TraitsDockPane):
