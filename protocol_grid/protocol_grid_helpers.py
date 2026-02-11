@@ -1,5 +1,15 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox
+from PySide6.QtWidgets import (
+    QStyledItemDelegate,
+    QLineEdit,
+    QCheckBox,
+    QSpinBox,
+    QDoubleSpinBox,
+    QAbstractItemView,
+    QStyleOptionViewItem,
+    QStyle,
+    QApplication,
+)
 from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
@@ -29,11 +39,43 @@ class PGCItem(QStandardItem):
 
 
 class ProtocolGridDelegate(QStyledItemDelegate):
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
-        
+
+    def paint(self, painter, option, index):
+        """
+        Overridden to prevent "Ghost Text" behind the editor (SpinBox/ComboBox).
+        """
+        # 1. Get the view (tree/table) from the option
+        view = option.widget
+        is_editing_this_cell = False
+
+        if view:
+            # Check if the view is in Editing State
+            if view.state() == QAbstractItemView.EditingState:
+                # Check if the index being painted is the one being edited
+                if view.currentIndex() == index:
+                    is_editing_this_cell = True
+
+        if is_editing_this_cell:
+            # 2. If editing, we paint the background but ERASE the text
+            # Create a copy of the style option to modify it safely
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+
+            # Nuke the text so it doesn't draw behind the spinner
+            opt.text = ""
+
+            # Use the application style to draw the item (Background, Focus Rect) without text
+            style = opt.widget.style() if opt.widget else QApplication.style()
+            style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+
+        else:
+            # 3. Standard drawing for all other cells
+            super().paint(painter, option, index)
+
     def createEditor(self, parent, option, index):
         # prevent editing during protocol execution
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
@@ -46,9 +88,9 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                     return None
             else:
                 return None
-        
+
         field = protocol_grid_fields[index.column()]
-        
+
         if field == "Force":
             return None            
         if field in CHECKBOX_COLS:
