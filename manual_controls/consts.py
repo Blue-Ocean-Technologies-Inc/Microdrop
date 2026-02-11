@@ -7,6 +7,7 @@ from dropbot_controller.consts import (
     CHIP_INSERTED,
     CHIP_LOCK_FAILED,
 )
+from portable_dropbot_controller.consts import PORT_DROPBOT_STATUS_UPDATE
 
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -22,5 +23,6 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_CONNECTED,
         CHIP_INSERTED,
         CHIP_LOCK_FAILED,
+        PORT_DROPBOT_STATUS_UPDATE,
     ]
 }

@@ -249,6 +249,11 @@ class ManualControlControl(Controller):
     def _on_connected_triggered(self, message):
         logger.debug("Connected to dropbot")
         self.model.connected = True
+        self.model.chip_locked_enabled = True
+
+    def _on_board_status_update_triggered(self, message):
+        """Receiving board status implies we're connected."""
+        self.model.connected = True
 
     @timestamped_value("realtime_mode_message")
     def _on_realtime_mode_updated_triggered(self, message):

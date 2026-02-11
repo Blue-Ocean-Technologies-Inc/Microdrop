@@ -246,11 +246,31 @@ class ConnectionManager(HasTraits):
     name = f"{PKG}_listener"
 
     def _handle_driver_error(self, err_code, cmd_str):
-        """Handle UART driver errors (e.g. serial disconnect)."""
+        """Handle UART driver errors (e.g. serial disconnect). Attempt reconnect only when UART breaks."""
         logger.error(f"[ERROR] Code: {err_code}, Message: {cmd_str}")
         if self.connected:
             self.connected = False
             publish_message("", DROPBOT_DISCONNECTED)
+            # Defer close+resume so we don't deadlock (callback runs from driver's listen thread)
+
+            def _attempt_reconnect():
+                import time
+                time.sleep(0.5)
+                if getattr(self, "_shutting_down", False):
+                    return
+                try:
+                    self.driver.close()
+                except Exception as e:
+                    logger.warning(f"Driver close during reconnect: {e}")
+                if (
+                    hasattr(self, "monitor_scheduler")
+                    and self.monitor_scheduler is not None
+                    and self.monitor_scheduler.state == STATE_PAUSED
+                ):
+                    logger.info("UART broken. Resuming monitor to attempt reconnection.")
+                    self.monitor_scheduler.resume()
+
+            threading.Thread(target=_attempt_reconnect, daemon=True).start()
 
     def traits_init(self):
         logger.info("Starting Portable dropbot controls listener")
