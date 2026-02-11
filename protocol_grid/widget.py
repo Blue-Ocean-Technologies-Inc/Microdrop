@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QUrl
 from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
-from microdrop_style.button_styles import get_button_style
+from microdrop_style.button_styles import get_button_style, get_tooltip_style
 from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
 from microdrop_utils.decorators import debounce
 from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
@@ -339,13 +339,14 @@ class PGCWidget(QWidget):
             _theme = "dark" if is_dark_mode() else "light"
 
             _stylesheet = get_complete_stylesheet(_theme, "default")
-
             _toolbtnstyle = get_button_style(_theme, "tool")
+            _tooltip_style = get_tooltip_style(_theme)
 
             self.quick_actions_bar.setStyleSheet(_stylesheet)
 
             self.navigation_bar.nav_container.setStyleSheet(_stylesheet)
             self.navigation_bar.left_slot_container.setStyleSheet(_toolbtnstyle)
+            self.navigation_bar.right_slot_container.setStyleSheet(_tooltip_style)
 
             # Clear highlights
             self.clear_highlight()
