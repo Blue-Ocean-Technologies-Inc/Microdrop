@@ -94,6 +94,7 @@ step_defaults = {
     "Run Time": "0.0",
     "UID": ""
 }
+
 group_defaults = {
     "Description": "Group",
     "ID": "",
@@ -124,6 +125,15 @@ copy_fields_for_new_step = [
     "Max. Path Length",
     "Run Time"
 ]
+
+CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet")
+
+ALLOWED_group_fields = {
+    "Description",
+    "ID",
+    "Repetitions",
+    "Run Time",
+}
 
 # Button styling constants (now imported from button_styles)
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")

@@ -53,6 +53,8 @@ from protocol_grid.consts import (
     protocol_grid_column_widths,
     copy_fields_for_new_step,
     LOGS_STOP_SETTLING_TIME_MS,
+    CHECKBOX_COLS,
+    ALLOWED_group_fields,
 )
 from protocol_grid.extra_ui_elements import (
     EditContextMenu,
@@ -90,37 +92,102 @@ logger = get_logger(__name__)
 
 from functools import wraps
 
-from PySide6.QtWidgets import QComboBox, QLineEdit, QFormLayout, QDialogButtonBox
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QDialogButtonBox,
+    QTreeView,
+    QHeaderView,
+    QAbstractItemView,
+)
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt
+
 
 class BulkSetDialog(QDialog):
-    def __init__(self, columns, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent_widget):
+        super().__init__(parent_widget)
         self.setWindowTitle("Bulk Set Values")
-        self.resize(300, 150)
+        self.resize(800, 120)
 
+        self.main_widget = parent_widget
         self.layout = QVBoxLayout(self)
-        self.form_layout = QFormLayout()
 
-        # Column Selector
-        self.combo_columns = QComboBox()
-        self.combo_columns.addItems(columns)
-        self.form_layout.addRow("Target Column:", self.combo_columns)
+        # 1. Tree Setup
+        self.tree = QTreeView()
+        self.tree.setFixedHeight(85)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setRootIsDecorated(False)
+        self.tree.setEditTriggers(QAbstractItemView.AllEditTriggers)
 
-        # Value Input
-        self.edit_value = QLineEdit()
-        self.edit_value.setPlaceholderText("Enter new value (or 1/0 for checkboxes)")
-        self.form_layout.addRow("New Value:", self.edit_value)
+        # 2. Model Setup
+        source_model = self.main_widget.model
+        self.model = QStandardItemModel(1, source_model.columnCount())
 
-        self.layout.addLayout(self.form_layout)
+        for col in range(source_model.columnCount()):
+            # Copy Header
+            header_text = str(source_model.headerData(col, Qt.Horizontal))
+            self.model.setHorizontalHeaderItem(col, QStandardItem(header_text))
 
-        # Buttons
+            # Create Item
+            item = QStandardItem("")
+
+            # If this column is supposed to be a checkbox, we must enable it manually
+            if header_text in CHECKBOX_COLS:
+                item.setCheckable(True)
+                item.setCheckState(Qt.Unchecked)
+                item.setEditable(
+                    False
+                )  # Checkboxes usually shouldn't accept text input
+                item.setData(
+                    False, Qt.UserRole
+                )  # Initialize UserRole to match Unchecked
+
+            self.model.setItem(0, col, item)
+
+        self.tree.setModel(self.model)
+
+        # 3. Reuse Delegate (For Dropdowns/Spinners)
+        self.tree.setItemDelegate(self.main_widget.delegate)
+        self.tree.header().setSectionResizeMode(QHeaderView.ResizeToContents)
+
+        self.layout.addWidget(self.tree)
+
+        # 4. Buttons
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         self.layout.addWidget(self.buttons)
 
-    def get_data(self):
-        return self.combo_columns.currentText(), self.edit_value.text()
+    def get_row_data(self):
+        """
+        Returns a dict of {col_index: new_value} for modified cells.
+        """
+        updates = {}
+        for col in range(self.model.columnCount()):
+            item = self.model.item(0, col)
+            if not item:
+                continue
+
+            # 1. Handle Checkboxes
+            # Now that we setCheckable(True) in init, this will work
+            if item.isCheckable():
+                # For checkboxes, we return the Boolean state
+                updates[col] = item.checkState() == Qt.Checked
+                continue
+
+            # 2. Handle Text/Values (Standard Logic)
+            val = item.data(Qt.UserRole)
+            if val is None:
+                val = item.data(Qt.EditRole)
+            if val is None:
+                val = item.text()
+
+            # Filter out empty text cells (so we don't blank out columns we didn't touch)
+            if str(val).strip() != "":
+                updates[col] = val
+
+        return updates
 
 
 def ensure_protocol_saved(func):
@@ -387,7 +454,6 @@ class PGCWidget(QWidget):
             self._update_theme_styling_for_dialogs()
 
         QTimer.singleShot(0, _f)
-
 
     def _update_theme_styling_for_dialogs(self):
         """Update theme styling for any open dialogs."""
@@ -845,17 +911,7 @@ class PGCWidget(QWidget):
                 self._programmatic_change = False
 
     def _clean_group_parameters_recursive(self, elements):
-        allowed_group_fields = {
-            "Description",
-            "ID",
-            "Repetitions",
-            "Duration",
-            "Run Time",
-            "Voltage",
-            "Frequency",
-            "Trail Length",
-            "UID",
-        }
+        allowed_group_fields = ALLOWED_group_fields
 
         for element in elements:
             if hasattr(element, "elements"):  # group
@@ -1914,8 +1970,9 @@ class PGCWidget(QWidget):
 
     def bulk_set_values(self):
         """
-        Opens a dialog to set a specific value for a specific column
-        across all currently selected steps.
+        Opens a dialog to set specific values for columns.
+        - If a Step is selected, it updates that step.
+        - If a Group is selected, it updates all DIRECT child steps (non-recursive).
         """
         if self._protocol_running:
             return
@@ -1924,93 +1981,114 @@ class PGCWidget(QWidget):
         if not selected_paths:
             return
 
-        # Filter out columns that should not be manually set via bulk edit
-        # (ID is auto-gen, Run Time is calculated, etc.)
-        read_only_cols = ["ID", "Run Time", "UID", "Max. Path Length"]
-        editable_cols = [f for f in protocol_grid_fields if f not in read_only_cols]
-
-        dialog = BulkSetDialog(editable_cols, self)
+        # 1. Open the Dialog
+        dialog = BulkSetDialog(self)
         if not dialog.exec():
             return
 
-        target_col_name, new_value = dialog.get_data()
-
-        # Find column index
-        try:
-            col_idx = protocol_grid_fields.index(target_col_name)
-        except ValueError:
+        # 2. Get Updates
+        updates = dialog.get_row_data()
+        if not updates:
             return
 
-        # Snapshot for Undo
         self.state.snapshot_for_undo()
-
-        # Flags to determine how to handle the data
-        is_checkbox_col = target_col_name in ["Video", "Capture", "Record", "Magnet"]
-
-        # Optimize: Pause programmatic sync during the loop
         self._programmatic_change = True
 
         try:
-            for path in selected_paths:
-                # Get the Step item (column 0)
-                step_item = self.get_item_by_path(path)
-                if not step_item:
+            for col_idx, new_value in updates.items():
+                try:
+                    target_col_name = protocol_grid_fields[col_idx]
+                except IndexError:
                     continue
 
-                # Get the specific cell item
-                parent = step_item.parent() or self.model.invisibleRootItem()
-                row = step_item.row()
-                target_item = parent.child(row, col_idx)
+                is_checkbox_col = target_col_name in CHECKBOX_COLS
 
-                if not target_item:
-                    continue
+                for path in selected_paths:
+                    # Get the item selected in the UI (Could be Step OR Group)
+                    selected_item = self.get_item_by_path(path)
+                    if not selected_item:
+                        continue
 
-                # Apply Logic based on Column Type
-                if is_checkbox_col:
-                    # Convert "1"/"true" to Checked, others to Unchecked
-                    is_checked = new_value.strip().lower() in ("1", "true", "yes", "on")
-                    new_state = Qt.Checked if is_checked else Qt.Unchecked
-                    target_item.setData(new_state, Qt.CheckStateRole)
+                    # --- DETERMINE WHICH ROWS TO UPDATE ---
+                    target_step_items = []
+                    item_type = selected_item.data(ROW_TYPE_ROLE)
 
-                    # Manually trigger the helper to handle side effects (like Magnet Height visibility)
-                    self._handle_checkbox_change(parent, row, target_col_name)
+                    if item_type == STEP_TYPE:
+                        # Case 1: User selected a single step
+                        target_step_items.append(selected_item)
 
-                else:
-                    # Standard Text/Numeric Fields
-                    target_item.setText(new_value)
+                    elif item_type == GROUP_TYPE:
+                        # Case 2: User selected a Group
+                        # Iterate DIRECT children only (No recursion into subgroups)
+                        for row in range(selected_item.rowCount()):
+                            child = selected_item.child(row, 0)
+                            if child and child.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                                target_step_items.append(child)
 
-                    # If it is a numeric field, validate formatting immediately
-                    if target_col_name in (
-                        "Duration",
-                        "Repeat Duration",
-                        "Volume Threshold",
-                        "Voltage",
-                        "Frequency",
-                    ):
-                        self._validate_numeric_field(target_item, target_col_name)
+                    # --- APPLY TO IDENTIFIED STEPS ---
+                    for step_item in target_step_items:
+                        parent = step_item.parent() or self.model.invisibleRootItem()
+                        row = step_item.row()
 
-                    # Trigger specific updates (Force calculation, Trail fields, etc.)
-                    # We call the logic that usually happens in on_item_changed manually here
-                    # because we suppressed signals/programmatic_change
-                    if target_col_name == "Voltage":
-                        try:
-                            v = float(target_item.text())
-                            ForceCalculationService.update_step_force_in_model(
-                                step_item, self.state, v
+                        # Get the specific cell (Column) for this step row
+                        target_item = parent.child(row, col_idx)
+
+                        if not target_item:
+                            continue
+
+                        # Apply Value Logic
+                        if is_checkbox_col:
+                            if isinstance(new_value, bool):
+                                is_checked = new_value
+                            else:
+                                is_checked = str(new_value).strip().lower() in (
+                                    "1",
+                                    "true",
+                                    "yes",
+                                    "on",
+                                )
+
+                            new_state = Qt.Checked if is_checked else Qt.Unchecked
+                            target_item.setData(new_state, Qt.CheckStateRole)
+
+                            self._handle_checkbox_change(parent, row, target_col_name)
+
+                        else:
+                            # Standard Text/Numeric Fields
+                            str_val = str(new_value)
+                            target_item.setText(str_val)
+                            target_item.setData(new_value, Qt.EditRole)
+
+                            # Validations
+                            if target_col_name in (
+                                "Duration",
+                                "Repeat Duration",
+                                "Volume Threshold",
+                                "Voltage",
+                                "Frequency",
+                            ):
+                                self._validate_numeric_field(
+                                    target_item, target_col_name
+                                )
+
+                            # Side Effects
+                            if target_col_name == "Voltage":
+                                try:
+                                    v = float(str_val)
+                                    ForceCalculationService.update_step_force_in_model(
+                                        step_item, self.state, v
+                                    )
+                                except ValueError:
+                                    pass
+
+                            if target_col_name in ("Trail Length", "Trail Overlay"):
+                                self._handle_trail_fields(parent, row)
+
+                            self.update_single_step_dev_fields(
+                                step_item, changed_field=target_col_name
                             )
-                        except ValueError:
-                            pass
-
-                    if target_col_name in ("Trail Length", "Trail Overlay"):
-                        self._handle_trail_fields(parent, row)
-
-                    # Update step calculations (Run Time, etc)
-                    self.update_single_step_dev_fields(
-                        step_item, changed_field=target_col_name
-                    )
 
         finally:
-            # Re-enable sync and force a full state update
             self._programmatic_change = False
             self.sync_to_state()
             self._mark_protocol_modified()
@@ -2117,7 +2195,7 @@ class PGCWidget(QWidget):
                     if not item:
                         continue
 
-                    if field in ("Video", "Capture", "Record", "Magnet"):
+                    if field in CHECKBOX_COLS:
                         check_state = item.data(Qt.CheckStateRole)
                         if check_state is not None:
                             checked = check_state == Qt.Checked or check_state == 2
@@ -2152,16 +2230,7 @@ class PGCWidget(QWidget):
                     target_list.append(step)
 
                 elif row_type == GROUP_TYPE:
-                    allowed_group_fields = {
-                        "Description",
-                        "ID",
-                        "Repetitions",
-                        "Duration",
-                        "Run Time",
-                        "Voltage",
-                        "Frequency",
-                        "Trail Length",
-                    }
+                    allowed_group_fields = ALLOWED_group_fields
                     filtered_parameters = {}
                     for field, value in parameters.items():
                         if field in allowed_group_fields and value.strip():
@@ -2252,28 +2321,41 @@ class PGCWidget(QWidget):
                     row_items = make_row(step_defaults, element.parameters, STEP_TYPE)
                     row_items[0].setData(element.device_state, Qt.UserRole + 100)
                     parent_item.appendRow(row_items)
-                elif isinstance(element, ProtocolGroup):
-                    allowed_group_fields = {
-                        "Description",
-                        "ID",
-                        "Repetitions",
-                        "Duration",
-                        "Run Time",
-                        "Voltage",
-                        "Frequency",
-                        "Trail Length",
-                        "UID",
-                    }
 
+                elif isinstance(element, ProtocolGroup):
+                    # 1. Filter parameters (existing logic)
                     filtered_group_parameters = {}
                     for field, value in element.parameters.items():
-                        if field in allowed_group_fields:
+                        if field in ALLOWED_group_fields:
                             filtered_group_parameters[field] = value
 
+                    # 2. Create the row items
                     row_items = make_row(
                         group_defaults, filtered_group_parameters, GROUP_TYPE
                     )
+
+                    # 3. Process Non-Allowed Fields to make them INVISIBLE
+                    for col, item in enumerate(row_items):
+                        if col < len(protocol_grid_fields):
+                            field_name = protocol_grid_fields[col]
+
+                            # If this specific column is NOT in the allowed group fields list
+                            if field_name not in ALLOWED_group_fields:
+
+                                # A. Set Text Color to Transparent (Invisible)
+                                # This works regardless of dark/light mode or selection state
+                                item.setForeground(QBrush(Qt.transparent))
+
+                                # B. Remove the Editable flag
+                                flags = item.flags()
+                                flags &= ~Qt.ItemIsEditable
+                                item.setFlags(flags)
+
+                                # C. Ensure Background is Default (Transparent/Base)
+                                item.setBackground(QBrush())
+
                     parent_item.appendRow(row_items)
+
                     # Recursively add children
                     add_recursive(element.elements, row_items[0])
 
@@ -2335,7 +2417,7 @@ class PGCWidget(QWidget):
                         f"Invalid voltage value for force calculation: {item.text()}"
                     )
 
-        if field in ("Video", "Capture", "Record", "Magnet"):
+        if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
             if not self._protocol_running or (
                 self._protocol_running
@@ -2352,8 +2434,8 @@ class PGCWidget(QWidget):
             self.update_single_step_dev_fields(desc_item, changed_field=field)
 
         if field in ("Voltage", "Frequency", "Trail Length"):
-            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
-                self._set_field_for_group(desc_item, field, item.text())
+            # if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+            #     self._set_field_for_group(desc_item, field, item.text())
             if not self._block_aggregation:
                 self._update_parent_aggregations(parent)
 
