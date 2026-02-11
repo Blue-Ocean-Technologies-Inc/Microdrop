@@ -147,6 +147,7 @@ class MotorControlConnectionListener(HasTraits):
 
     model = Instance(MotorControlModel)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
+    name = listener_name
 
     def traits_init(self):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
