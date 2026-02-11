@@ -46,34 +46,11 @@ class ProtocolGridDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         """
-        Overridden to prevent "Ghost Text" behind the editor (SpinBox/ComboBox).
+        Overridden to prevent "Ghost Text" behind the editor.
         """
-        # 1. Get the view (tree/table) from the option
-        view = option.widget
-        is_editing_this_cell = False
-
-        if view:
-            # Check if the view is in Editing State
-            if view.state() == QAbstractItemView.EditingState:
-                # Check if the index being painted is the one being edited
-                if view.currentIndex() == index:
-                    is_editing_this_cell = True
-
-        if is_editing_this_cell:
-            # 2. If editing, we paint the background but ERASE the text
-            # Create a copy of the style option to modify it safely
-            opt = QStyleOptionViewItem(option)
-            self.initStyleOption(opt, index)
-
-            # Nuke the text so it doesn't draw behind the spinner
-            opt.text = ""
-
-            # Use the application style to draw the item (Background, Focus Rect) without text
-            style = opt.widget.style() if opt.widget else QApplication.style()
-            style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
-
-        else:
-            # 3. Standard drawing for all other cells
+        # Do not paint any reading text in a cell where editing is in progress. Hand off to editor widget.
+        _widget = option.widget
+        if not (_widget.state() == QAbstractItemView.EditingState and _widget.currentIndex() == index):
             super().paint(painter, option, index)
 
     def createEditor(self, parent, option, index):
