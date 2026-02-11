@@ -185,7 +185,16 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         self.model.connected = True
 
     def _on_chip_inserted_triggered(self, body):
-        self.model.chip_inserted = body.lower() == "true"
+        content = str(body) if body is not None else ""
+        self.model.chip_inserted = content.lower() == "true"
+
+    def _on_tray_toggle_failed_triggered(self, body):
+        """Re-enable tray icon when hardware reports tray move failure."""
+        self.model.tray_operation_failed = True
+
+    def _on_calibration_data_triggered(self, body):
+        """No-op: calibration data is consumed by protocol_grid; portable status doesn't display it."""
+        pass
 
     ##################################################################################################
 

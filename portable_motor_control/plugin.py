@@ -3,8 +3,11 @@ from envisage.ids import TASK_EXTENSIONS
 from traits.api import Str, List
 from envisage.api import Plugin
 from envisage.ui.tasks.api import TaskExtension
+from message_router.consts import ACTOR_TOPIC_ROUTES
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from .consts import ACTOR_TOPIC_DICT
+
 
 class MotorControlsPlugin(Plugin):
     """ Contributes UI actions on top of the IPython Kernel Plugin. """
@@ -23,6 +26,7 @@ class MotorControlsPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     #### Trait initializers ###################################################
 

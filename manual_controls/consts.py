@@ -5,6 +5,7 @@ from dropbot_controller.consts import (
     DROPBOT_DISCONNECTED,
     DROPBOT_CONNECTED,
     CHIP_INSERTED,
+    CHIP_LOCK_FAILED,
 )
 
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -19,6 +20,7 @@ ACTOR_TOPIC_DICT = {
         REALTIME_MODE_UPDATED,
         DROPBOT_DISCONNECTED,
         DROPBOT_CONNECTED,
-        CHIP_INSERTED
+        CHIP_INSERTED,
+        CHIP_LOCK_FAILED,
     ]
 }

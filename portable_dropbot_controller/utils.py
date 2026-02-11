@@ -1,6 +1,6 @@
 
 import serial.tools.list_ports as lsp
-from .portable_dropbot_sevice import (
+from .portable_dropbot_service import (
     SysStatusMotorBoard,
     SysStatusSignalBoard,
     AdcData,

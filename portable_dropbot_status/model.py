@@ -6,6 +6,7 @@ class DropBotStatusModel(HasTraits):
     # Connection state
     connected = Bool(False, desc="True if the DropBot is connected")
     chip_inserted = Bool(False, desc="True if a chip is inserted")
+    tray_operation_failed = Bool(False, desc="True when tray toggle failed, triggers icon re-enable")
 
     # Sensor readings
     capacitance = Str("-", desc="Raw capacitance in pF")

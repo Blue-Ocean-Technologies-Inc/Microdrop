@@ -269,6 +269,11 @@ class ManualControlControl(Controller):
         # Re-enable the button
         self.model.chip_locked_enabled = True
 
+    def _on_chip_lock_failed_triggered(self, message):
+        """Called when chip lock/unlock failed; re-enable the button."""
+        logger.warning("Chip lock operation failed, re-enabling button")
+        self.model.chip_locked_enabled = True
+
     ###################################################################################
     # SetAttr handlers (UI Click Handlers)
     ###################################################################################

@@ -18,10 +18,10 @@ from .displayed_UI import disconnected_color, connected_no_device_color, connect
 class DropbotStatusDockPane(DockPane):
     """
     A dock pane to view the status of the dropbot.
+    Uses dropbot_status.dock_pane id for layout compatibility (MicrodropTask
+    layout references this pane; portable_dropbot_status is a drop-in replacement).
     """
-    #### 'ITaskPane' interface ################################################
-
-    id = PKG + ".dock_pane"
+    id = "dropbot_status.dock_pane"
     name = f"{PKG_name} Dock Pane"
 
     def create_contents(self, parent):
@@ -79,7 +79,10 @@ class DropbotStatusDockPane(DockPane):
         def set_status_color(color):
             dropbot_status.setStyleSheet(f"color: {color}")
 
-        self.control.widget()._view_model_signals.icon_color_changed.connect(set_status_color)
+        control_widget = self.control.widget() if hasattr(self.control, "widget") else self.control
+        view_signals = getattr(control_widget, "_view_model_signals", None)
+        if view_signals is not None:
+            view_signals.icon_color_changed.connect(set_status_color)
 
         self.status_bar_icon = dropbot_status
 

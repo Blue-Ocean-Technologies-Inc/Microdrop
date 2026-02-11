@@ -24,6 +24,8 @@ def get_combobox_style(theme):
     QComboBox {{
         background-color: {colors['bg']};
         color: {colors['text']};
+        padding: 4px 8px 4px 10px;
+        min-width: 80px;
     }}
 
     QComboBox:hover {{

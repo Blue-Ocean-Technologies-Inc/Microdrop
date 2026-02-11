@@ -10,7 +10,7 @@ from .consts import DROPBOT_CHIP_INSERTED_IMAGE, DROPBOT_IMAGE
 from .model import DropBotStatusModel
 from .status_label_widgets import DropBotIconWidget, DropBotStatusGridWidget
 
-from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
+from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits
 
@@ -28,7 +28,7 @@ class DropbotStatusViewModelSignals(QObject):
     # Signals that the View will bind to
     icon_path_changed = Signal(str)
     icon_color_changed = Signal(str)
-    disable_icon_widget = Signal(bool)
+    disable_icon_widget = Signal(bool, int)  # (disable: bool, timeout_s: int)
 
     connection_status_text_changed = Signal(str)
     chip_status_text_changed = Signal(str)
@@ -112,19 +112,23 @@ class DropBotStatusViewModel(HasTraits):
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
 
-        self.view_signals.disable_icon_widget.emit(not event.new)
+        self.view_signals.disable_icon_widget.emit(not event.new, 0)
 
     @observe("model:chip_inserted")
     def update_chip_status(self, event):
         logger.debug(event)
-        self.view_signals.disable_icon_widget.emit(False)
+        self.view_signals.disable_icon_widget.emit(False, 0)
         self.view_signals.chip_status_text_changed.emit(self._get_chip_status_text())
 
         self.view_signals.icon_color_changed.emit(self._get_icon_color())
         self.view_signals.icon_path_changed.emit(self._get_icon_path())
 
-        if self.model.chip_inserted:
-            self.model.connected = True
+    @observe("model:tray_operation_failed")
+    def update_tray_icon_on_failure(self, event):
+        """Re-enable tray icon when tray operation fails (via server message)."""
+        if event.new:
+            self.view_signals.disable_icon_widget.emit(False, 0)
+            self.model.tray_operation_failed = False
 
     @observe("model:capacitance")
     @format_and_emit_measurements("capacitance_changed")
@@ -165,7 +169,7 @@ class DropBotStatusViewModel(HasTraits):
     def _on_icon_widget_clicked(self, *args, **kwargs):
         logger.info("Toggling dropbot loading status")
         publish_message(topic=TOGGLE_DROPBOT_LOADING, message="")
-        self.view_signals.disable_icon_widget.emit(True)
+        self.view_signals.disable_icon_widget.emit(True, 10)
 
 class DropBotStatusView(QWidget):
     """
@@ -179,13 +183,17 @@ class DropBotStatusView(QWidget):
 
         self._view_model = view_model
         self._view_model_signals = self._view_model.view_signals
+        self._icon_wait_timer = QTimer(self)
+        self._icon_wait_timer.setSingleShot(True)
+        self._icon_wait_timer.timeout.connect(self._on_icon_timeout_fired)
 
         # --- Create and lay out child widgets ---
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setSpacing(15)
 
-        # initialize icon widget
+        # initialize icon widget (disabled until connected)
         self.icon_widget = DropBotIconWidget()
+        self.icon_widget.setDisabled(True)
         self.icon_widget.set_status_color(disconnected_color)
         self.icon_widget.set_pixmap_from_path(DROPBOT_IMAGE)
 
@@ -202,7 +210,9 @@ class DropBotStatusView(QWidget):
         # Connect ViewModel signals to the appropriate widget slots/methods: ViewModel -> View
         self._view_model_signals.icon_path_changed.connect(self.icon_widget.set_pixmap_from_path)
         self._view_model_signals.icon_color_changed.connect(self.icon_widget.set_status_color)
-        self._view_model_signals.disable_icon_widget.connect(self.set_icon_widget_disabled_with_timeout)
+        self._view_model_signals.disable_icon_widget.connect(
+            lambda dis, t_s: self.set_icon_widget_disabled_with_timeout(dis, t_s)
+        )
         self._view_model_signals.connection_status_text_changed.connect(self.grid_widget.connection_status.setText)
         self._view_model_signals.chip_status_text_changed.connect(self.grid_widget.chip_status.setText)
 
@@ -219,6 +229,20 @@ class DropBotStatusView(QWidget):
         # Connect user input to view model methods: View -> ViewModel
         self.icon_widget.clicked.connect(self._view_model._on_icon_widget_clicked)
 
-    def set_icon_widget_disabled_with_timeout(self, status: bool, timeout_s=10):
-        self.icon_widget.setDisabled(status)
-        QTimer.singleShot(timeout_s * 1000, lambda: self.icon_widget.setDisabled(not status))
+    def _on_icon_timeout_fired(self):
+        """Fail-safe: re-enable tray icon only if still connected."""
+        if self._view_model.model.connected:
+            self.icon_widget.setDisabled(False)
+
+    def set_icon_widget_disabled_with_timeout(self, status: bool, timeout_s: int = 10):
+        # Enable events should always take effect immediately and clear any pending timeout.
+        if not status:
+            self._icon_wait_timer.stop()
+            self.icon_widget.setDisabled(False)
+            return
+
+        # Disable while waiting for hardware response.
+        self.icon_widget.setDisabled(True)
+        # Only start fail-safe timer when waiting for user-initiated action (timeout_s > 0).
+        if timeout_s > 0:
+            self._icon_wait_timer.start(timeout_s * 1000)
