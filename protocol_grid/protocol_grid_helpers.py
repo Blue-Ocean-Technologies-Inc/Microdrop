@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QWidget, QHBoxLayout
+from PySide6.QtWidgets import QStyledItemDelegate, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox
 from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
@@ -43,27 +43,10 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         field = protocol_grid_fields[index.column()]
         
         if field == "Force":
-            return None
-
+            return None            
         if field in ("Video", "Capture", "Record", "Magnet"):
-            # Create a container widget to hold the checkbox
-            container = QWidget(parent)
-
-            # Create the checkbox
-            checkbox = QCheckBox(container)
-
-            # Enable centering
-            layout = QHBoxLayout(container)
-            layout.addWidget(checkbox)
-            layout.setAlignment(Qt.AlignCenter)
-            layout.setContentsMargins(0, 0, 0, 0)
-
-            # Important: Set the focus proxy so the delegate knows
-            # the checkbox is the actual editor
-            container.setFocusProxy(checkbox)
-
-            return container
-
+            editor = QCheckBox(parent)
+            return editor
         elif field in ("Magnet Height (mm)"):
             editor = QDoubleSpinBox(parent)
             editor.setFrame(False)  # Often looks better in tables
