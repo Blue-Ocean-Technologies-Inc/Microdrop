@@ -4,8 +4,9 @@ import threading
 from typing import List, Tuple
 import queue
 
-from PySide6.QtCore import QPointF
-from PySide6.QtGui import QImage, QTransform, Qt
+from PySide6.QtCore import QPointF, QRectF, Slot, Signal, QObject
+from PySide6.QtGui import QImage, QTransform, Qt, QPainter
+from PySide6.QtMultimedia import QVideoFrame
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -28,7 +29,6 @@ def qpointf_list_deserialize(data: str) -> List[QPointF]:
     return [QPointF(*coord_tuple) for coord_tuple in json.loads(data)]
 
 
-
 class VideoRecorder:
     def __init__(self, ffmpeg_binary="ffmpeg"):
         self._output_path = None
@@ -37,22 +37,27 @@ class VideoRecorder:
         self._worker_thread = None
         self._queue = queue.Queue()
         self._is_recording = False
-        self._width = 0
-        self._height = 0
+        self.width = 0
+        self.height = 0
+        self.resolution = (0,0)
 
-    def start(self, output_path, width, height, fps=30):
+    def start(self, output_path, resolution, fps=30):
         if self._is_recording:
             return False
 
         self._output_path = output_path
 
+        width, height = resolution
+
         # Ensure even dimensions (required by libx264)
-        self._width = int(width)
-        self._height = int(height)
-        if self._width % 2 != 0:
-            self._width -= 1
-        if self._height % 2 != 0:
-            self._height -= 1
+        self.width = int(width)
+        self.height = int(height)
+        if self.width % 2 != 0:
+            self.width -= 1
+        if self.height % 2 != 0:
+            self.height -= 1
+
+        self.resolution = (self.width, self.height)
 
         self._is_recording = True
 
@@ -70,7 +75,7 @@ class VideoRecorder:
             "-vcodec",
             "rawvideo",
             "-s",
-            f"{self._width}x{self._height}",
+            f"{self.width}x{self.height}",
             "-pix_fmt",
             "rgba",
             "-r",
@@ -109,13 +114,18 @@ class VideoRecorder:
     def write_frame(self, qimage):
         if not self._is_recording:
             return
+
+        if not qimage:
+            logger.error(f"Frame drop: {e}")
+            return
+
         try:
             # Check for resolution mismatch (e.g., camera rotated or changed)
-            if qimage.width() != self._width or qimage.height() != self._height:
+            if qimage.width() != self.width or qimage.height() != self.height:
                 # Fast scaling (SmoothTransformation is better quality but slower)
                 qimage = qimage.scaled(
-                    self._width,
-                    self._height,
+                    self.width,
+                    self.height,
                     Qt.IgnoreAspectRatio,
                     Qt.FastTransformation,
                 )
@@ -163,3 +173,78 @@ class VideoRecorder:
                     self._process.stdin.write(data)
                 except:
                     break
+
+class VideoRecorderWorker(QObject):
+    finished = Signal()
+    error_occurred = Signal(str)
+
+    def __init__(self, recorder):
+        super().__init__()
+        self.recorder = recorder
+
+        self._is_recording = True
+
+    def process_frame(self, src_image: QImage, src_rect: QRectF, target_rect: QRectF, transform: QTransform):
+        """
+        Runs the heavy transformation and writing logic in the background.
+        """
+        if not self._is_recording:
+            return
+        try:
+            result_image = get_transformed_frame(src_image, src_rect, target_rect, transform, target_resolution=self.recorder.resolution)
+
+            # --- 3. Write to FFmpeg (Blocking I/O) ---
+            if not result_image.isNull():
+                self.recorder.write_frame(result_image)
+
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
+    def stop(self):
+        self._is_recording = False
+
+
+# --- Transformation Logic ---
+def get_transformed_frame(src_image: QImage,
+                          src_rect: QRectF, target_rect: QRectF,
+                          transform: QTransform,
+                          target_resolution: tuple[int, int]):
+    """
+    Manually paints the QVideoFrame applying the QGraphicsVideoItem's
+    current transform (Rotation, Scale, Shear).
+    """
+
+    # Convert frame to a format QPainter likes (ARGB32)
+    source_image = src_image.convertToFormat(QImage.Format_ARGB32)
+
+    width = int(src_rect.width())
+    height = int(src_rect.height())
+
+    # 3. Create the canvas
+    # Note: If mapped_rect is massive (30k+ pixels), this line will fail (return Null)
+    image = QImage(width, height, QImage.Format_ARGB32)
+    image.fill(Qt.transparent)
+
+    # 4. Setup the Painter (Identical to your working logic)
+    painter = QPainter(image)
+    # Optional: Improve scaling quality since we are doing manual image scaling now
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+    # Shift origin so the top-left of the SCENE rect aligns with (0,0) of the IMAGE
+    painter.translate(-src_rect.x(), -src_rect.y())
+
+    # Apply the item's local transforms (Rotation, etc.)
+    painter.setTransform(transform, combine=True)
+
+    # This stretches the video frame to fit the item's size,
+    # matching the behavior of the video item.
+    painter.drawImage(target_rect, source_image)
+
+    painter.end()
+
+    target_resolution_w, target_resolution_h = target_resolution
+
+    image = image.scaled(target_resolution_w, target_resolution_h)
+
+    return image
