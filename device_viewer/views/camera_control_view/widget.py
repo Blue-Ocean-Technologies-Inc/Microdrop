@@ -26,7 +26,6 @@ from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from microdrop_application.dialogs.pyface_wrapper import error, warning, success
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
-from microdrop_style.colors import SECONDARY_SHADE, WHITE, GREY
 from logger.logger_service import get_logger
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
@@ -395,37 +394,45 @@ class CameraControlWidget(QWidget):
         # it is guaranteed to be the best version (MJPEG + High FPS).
         seen_resolutions = set()
 
+        _strict_mode = self.preferences.strict_video_format and allow_strict_mode
+
         for fmt in formats:
             w, h = fmt.resolution().width(), fmt.resolution().height()
             res_key = (w, h)
 
             # if strict mode, only proceed if given format is the default video format
             fmt_name = str(fmt.pixelFormat()).upper()
-            if self.preferences.strict_video_format and allow_strict_mode:
-                if self.preferences.preferred_video_format.upper() not in fmt_name:
-                    continue
 
-            if res_key not in seen_resolutions:
-                # Mark as seen
-                seen_resolutions.add(res_key)
+            if (_strict_mode and self.preferences.preferred_video_format.upper() in fmt_name) or not _strict_mode:
 
-                # 4. Add to Combo
-                # We construct a clean label
-                fps = fmt.maxFrameRate()
-                # Clean up pixel format name (e.g., "Format_MJPEG" -> "MJPEG")
-                pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+                # only add if not seen yet
+                if res_key not in seen_resolutions:
+                    # Mark as seen
+                    seen_resolutions.add(res_key)
 
-                label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+                    # 4. Add to Combo
+                    # We construct a clean label
+                    fps = fmt.maxFrameRate()
+                    # Clean up pixel format name (e.g., "Format_MJPEG" -> "MJPEG")
+                    pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
 
-                # KEY CHANGE: Store the actual 'fmt' object in the combo box item
-                self.combo_resolutions.addItem(label, userData=fmt)
+                    label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+
+                    # KEY CHANGE: Store the actual 'fmt' object in the combo box item
+                    self.combo_resolutions.addItem(label, userData=fmt)
+
+        # find preferred resolution. If not set it
+        self.combo_resolutions.blockSignals(False)
 
         # check if any resolutions found. else use strict mode if not already on.
         if len(seen_resolutions) > 0:
-            # find preferred resolution. If not set it
-            self.combo_resolutions.blockSignals(False)
-            if not self.preferences.resolution:
-                self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+            if not self.preferences.resolution or not _strict_mode:
+                # if only single resolution, no need to change it to something in the middle;
+                # just run the on resolution changed routine since it only trigger when the idx changes.
+                if len(seen_resolutions) // 2 != self.combo_resolutions.currentIndex():
+                    self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
+                else:
+                    self.on_resolution_changed(self.combo_resolutions.currentIndex())
 
             else:
                 for i in range(self.combo_resolutions.count()):
@@ -440,10 +447,10 @@ class CameraControlWidget(QWidget):
                 f"<b>{self.preferences.selected_camera}</b>.<br><br>"
                 f"Will ignore strict mode request for <b>{self.preferences.selected_camera}</b> ..."
             )
+            logger.warning(warning_message)
 
-            # Mute this warning for IR cameras (common to lack preferred formats).
+            # Mute this warning dialog for IR cameras (common to lack preferred formats).
             if not self._is_ir_camera_name(self.preferences.selected_camera):
-                logger.warning(warning_message)
                 warning(None, warning_message)
 
             self.populate_resolutions(allow_strict_mode=False)
