@@ -206,36 +206,15 @@ class ProtocolRunnerController(QObject):
                 logger.info(f"Step {step_id}: Sent capture image request.")
 
             ############################# Media Capture logic ##############################################
-            # We want captures in the beginning and end of the video capturing if simultaneously requested.
 
             if _record_enabled_changed:  # video recording state has changed
-                if record_enabled: # video start requested
-                    if capture_enabled: # Capture image in this case since its starting of recording block
-                        logger.debug(f"Step {step_id}: Image Capture enabled at video start. First capturing image, then starting video recording.")
-                        _capture_image()
+                _start_recording() if record_enabled else _stop_recording()
 
-                    else:
-                        logger.debug(f"Step {step_id}: Starting video recording.")
-
-                    # send the video start request
-                    _start_recording()
-
-                else: # video stop requested
-                    _stop_recording()
-
-                    if capture_enabled:
-                        logger.debug(f"Step {step_id}: Video recording stop with image capture at end.")
-                        _capture_image()
-                    else:
-                        logger.debug(f"Step {step_id}: Video recording start with image capture at end.")
-
-            else: # video recording state has not changed
-                if not record_enabled:
-                    if capture_enabled:
-                        logger.info(f"Step {step_id}: Capturing image")
-                        _capture_image()
-                else:
-                    logger.warning(f"Step {step_id}: In the middle of video recording. Image will not be captured.")
+            if capture_enabled:
+                logger.debug(f"Step {step_id}: Video recording stop with image capture at end.")
+                _capture_image()
+            else:
+                logger.debug(f"Step {step_id}: Video recording start with image capture at end.")
 
         except Exception as e:
             logger.error(f"Error handling camera controls: {e}")
