@@ -65,16 +65,15 @@ def get_transformed_frame(src_image: QImage,
 
 class SaveSignals(QObject):
     # Signal sends the (media_type, save_path)
-    save_complete = Signal(str, str)
+    save_complete = Signal(str)
 
 
 class ImageSaver(QRunnable):
-    def __init__(self, image, save_path, name):
+    def __init__(self, image, save_path):
         super().__init__()
         # Copy image to ensure it doesn't change while we save
         self.image = image.copy()
         self.save_path = save_path
-        self.name = name
         self.signals = SaveSignals()
 
     def run(self):
@@ -84,7 +83,7 @@ class ImageSaver(QRunnable):
             logger.info(f"Saved image to: {self.save_path}")
 
             # 2. Tell the UI we are done
-            self.signals.save_complete.emit(self.name, self.save_path)
+            self.signals.save_complete.emit(self.save_path)
 
         except Exception as e:
             logger.error(f"Failed to save image: {e}")

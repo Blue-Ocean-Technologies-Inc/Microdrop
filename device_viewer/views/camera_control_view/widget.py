@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QComboBox,
     QLabel,
-    QGraphicsScene,
     QSizePolicy,
     QApplication,
 )
@@ -26,19 +25,51 @@ from apptools.preferences.api import Preferences
 from microdrop_application.dialogs.pyface_wrapper import error, warning, success
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
-from logger.logger_service import get_logger
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
+from ..electrode_view.electrode_scene import ElectrodeScene
+
 from ...utils.camera import (
     VideoRecorder,
     get_transformed_frame,
     ImageSaver,
 )
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ...models.media_capture_model import MediaCaptureMessageModel, MediaType
 from protocol_grid.consts import DEVICE_VIEWER_MEDIA_CAPTURED
 
+from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+
+
+def _show_media_capture_dialog(
+    name: MediaType, save_path: str, show_media_capture_dialog: bool
+):
+    if name.lower() not in MediaType.get_media_types():
+        raise ValueError(f"Invalid media type: {name}")
+
+    file_url = QUrl.fromLocalFile(save_path).toString()
+    formatted_message = f"File saved to:<br><a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
+
+    media_capture_message = MediaCaptureMessageModel(
+        path=Path(save_path), type=name.lower()
+    )
+    publish_message(
+        topic=DEVICE_VIEWER_MEDIA_CAPTURED,
+        message=media_capture_message.model_dump_json(),
+    )
+
+    if show_media_capture_dialog:
+        # Create a non-modal popup (doesn't block the rest of the UI)
+        success(
+            None, formatted_message, title=f"{name} Captured", modal=False, timeout=5000
+        )
+
+    logger.critical(f"Saved {name} media to {save_path}.")
+
+    return True
+
 
 class CameraControlWidget(QWidget):
 
@@ -48,11 +79,11 @@ class CameraControlWidget(QWidget):
     screen_recording_signal = Signal(object)
 
     def __init__(
-            self,
-            model,
-            video_item: QGraphicsVideoItem,
-            scene: QGraphicsScene,
-            preferences: Preferences,
+        self,
+        model,
+        video_item: QGraphicsVideoItem,
+        scene: ElectrodeScene,
+        preferences: Preferences,
     ):
         super().__init__()
         self.model = model
@@ -71,7 +102,7 @@ class CameraControlWidget(QWidget):
         self.camera = None
         self.available_cameras = None
         self.available_formats = None
-        self.show_media_capture_dialog = True
+        self.show_media_capture_dialog_for_video = True
 
         self.scene.addItem(self.video_item)
         self.session.setVideoOutput(self.video_item)
@@ -128,12 +159,16 @@ class CameraControlWidget(QWidget):
         # Rotate camera option
         self.rotate_camera_button = QPushButton("cameraswitch")
         self.rotate_camera_button.setToolTip("Rotate Camera")
-        self.rotate_camera_button.clicked.connect(lambda: self.scene.interaction_service.handle_rotate_camera())
+        self.rotate_camera_button.clicked.connect(
+            lambda: self.scene.interaction_service.handle_rotate_camera()
+        )
 
         # Rotate device option
         self.rotate_device_button = QPushButton("rotate_90_degrees_cw")
         self.rotate_device_button.setToolTip("Rotate Device")
-        self.rotate_device_button.clicked.connect(lambda: self.scene.interaction_service.handle_rotate_device())
+        self.rotate_device_button.clicked.connect(
+            lambda: self.scene.interaction_service.handle_rotate_device()
+        )
 
         # Camera toggle
         self.camera_toggle_button = QPushButton("videocam_off")
@@ -162,10 +197,12 @@ class CameraControlWidget(QWidget):
         main_layout.addLayout(bottom_layout)
         self.setLayout(main_layout)
 
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self.sync_buttons_and_label()
-        QApplication.styleHints().colorSchemeChanged.connect(self.sync_buttons_and_label)
+        QApplication.styleHints().colorSchemeChanged.connect(
+            self.sync_buttons_and_label
+        )
 
         # Connections
         self.camera_toggle_button.clicked.connect(self.toggle_camera)
@@ -186,7 +223,9 @@ class CameraControlWidget(QWidget):
 
     def _preferred_video_format_change(self, event):
         strict_flag = "strictly" if self.preferences.strict_video_format else ""
-        logger.critical(f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}")
+        logger.critical(
+            f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}"
+        )
         self.populate_resolutions()
 
     def turn_on_camera(self):
@@ -212,8 +251,27 @@ class CameraControlWidget(QWidget):
     def toggle_camera(self):
         self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
 
+    def restore_camera_state(self):
+        """
+        Turn off camera if its last state was off.
+        """
+        if not self.last_camera_state:
+            self.turn_off_camera()
+
+    def check_initial_camera_state(self):
+        if self.camera and self.camera.isActive():
+            self.camera_toggle_button.setText("videocam")
+            self.camera_toggle_button.setToolTip("Camera On")
+            self.camera_toggle_button.setChecked(True)
+        else:
+            self.camera_toggle_button.setText("videocam_off")
+            self.camera_toggle_button.setToolTip("Camera Off")
+            self.camera_toggle_button.setChecked(False)
+
     def toggle_align_camera_mode(self):
-        if self.model.mode == "camera-edit" or (self.model.mode != "camera-edit" and self.can_enter_edit_mode()):
+        if self.model.mode == "camera-edit" or (
+            self.model.mode != "camera-edit" and self.can_enter_edit_mode()
+        ):
             self.model.flip_mode_activation("camera-edit")
         else:
             self.model.flip_mode_activation("camera-place")
@@ -234,13 +292,17 @@ class CameraControlWidget(QWidget):
     def sync_buttons_and_label(self):
         if self.model.mode == "camera-place":
             self.button_align.setChecked(True)
-            self.button_align.setStyleSheet(get_complete_stylesheet("dark" if is_dark_mode() else "light"))
+            self.button_align.setStyleSheet(
+                get_complete_stylesheet("dark" if is_dark_mode() else "light")
+            )
         elif self.model.mode == "camera-edit":
             self.button_align.setChecked(True)
             self.button_align.setStyleSheet("background-color: green;")
         else:
             self.button_align.setChecked(False)
-            self.button_align.setStyleSheet(get_complete_stylesheet("dark" if is_dark_mode() else "light"))
+            self.button_align.setStyleSheet(
+                get_complete_stylesheet("dark" if is_dark_mode() else "light")
+            )
 
     def reset(self):
         self.model.camera_perspective.reset()
@@ -249,7 +311,11 @@ class CameraControlWidget(QWidget):
 
     def initialize_camera_list(self):
         preferences_camera = self.preferences.selected_camera
-        old_camera_name = preferences_camera if preferences_camera else self.combo_cameras.currentText()
+        old_camera_name = (
+            preferences_camera
+            if preferences_camera
+            else self.combo_cameras.currentText()
+        )
 
         self.available_cameras = QMediaDevices.videoInputs()
         self.combo_cameras.clear()
@@ -257,7 +323,9 @@ class CameraControlWidget(QWidget):
 
         self.combo_cameras.blockSignals(True)
         for camera in self.available_cameras:
-            self.combo_cameras.addItem(camera.description() if camera else "<No Camera>")
+            self.combo_cameras.addItem(
+                camera.description() if camera else "<No Camera>"
+            )
         self.combo_cameras.blockSignals(False)
 
         self.combo_cameras.setCurrentIndex(-1)
@@ -269,8 +337,10 @@ class CameraControlWidget(QWidget):
         self.combo_cameras.setCurrentIndex(0)
 
     def on_camera_changed(self, index):
-        if index < 0 or index >= len(self.available_cameras): return
-        elif not self.available_cameras[index]: return
+        if index < 0 or index >= len(self.available_cameras):
+            return
+        elif not self.available_cameras[index]:
+            return
 
         was_running = False
         if self.camera and self.camera.isActive():
@@ -282,7 +352,8 @@ class CameraControlWidget(QWidget):
         self.session.setCamera(self.camera)
         self.preferences.selected_camera = self.available_cameras[index].description()
         self.populate_resolutions()
-        if was_running: self.camera.start()
+        if was_running:
+            self.camera.start()
 
     def populate_resolutions(self, allow_strict_mode=True):
         self.combo_resolutions.blockSignals(True)
@@ -292,7 +363,12 @@ class CameraControlWidget(QWidget):
         def format_sort_key(fmt):
             res = fmt.resolution()
             fmt_name = str(fmt.pixelFormat()).upper()
-            return (res.width(), res.height(), self.preferences.preferred_video_format.upper() in fmt_name, fmt.maxFrameRate())
+            return (
+                res.width(),
+                res.height(),
+                self.preferences.preferred_video_format.upper() in fmt_name,
+                fmt.maxFrameRate(),
+            )
 
         formats.sort(key=format_sort_key, reverse=True)
         seen_resolutions = set()
@@ -303,11 +379,16 @@ class CameraControlWidget(QWidget):
             res_key = (w, h)
             fmt_name = str(fmt.pixelFormat()).upper()
 
-            if (_strict_mode and self.preferences.preferred_video_format.upper() in fmt_name) or not _strict_mode:
+            if (
+                _strict_mode
+                and self.preferences.preferred_video_format.upper() in fmt_name
+            ) or not _strict_mode:
                 if res_key not in seen_resolutions:
                     seen_resolutions.add(res_key)
                     fps = fmt.maxFrameRate()
-                    pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+                    pix_name = (
+                        str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+                    )
                     label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
                     self.combo_resolutions.addItem(label, userData=fmt)
 
@@ -320,7 +401,9 @@ class CameraControlWidget(QWidget):
                     self.on_resolution_changed(self.combo_resolutions.currentIndex())
             else:
                 for i in range(self.combo_resolutions.count()):
-                    if self.preferences.resolution == self.combo_resolutions.itemText(i):
+                    if self.preferences.resolution == self.combo_resolutions.itemText(
+                        i
+                    ):
                         self.combo_resolutions.setCurrentIndex(i)
         elif self.preferences.strict_video_format:
             warning_message = f"Preferred format {self.preferences.preferred_video_format} not supported."
@@ -330,7 +413,8 @@ class CameraControlWidget(QWidget):
             self.populate_resolutions(allow_strict_mode=False)
 
     def on_resolution_changed(self, index):
-        if self.combo_resolutions.count() == 0 or index < 0: return
+        if self.combo_resolutions.count() == 0 or index < 0:
+            return
         resolution = self.combo_resolutions.itemData(index)
         was_running = self.camera.isActive()
 
@@ -340,7 +424,10 @@ class CameraControlWidget(QWidget):
 
         self.camera.setCameraFormat(resolution)
         self.preferences.resolution = self.combo_resolutions.itemText(index)
-        self.model.camera_perspective.camera_resolution = (resolution.resolution().width(), resolution.resolution().height())
+        self.model.camera_perspective.camera_resolution = (
+            resolution.resolution().width(),
+            resolution.resolution().height(),
+        )
 
         if was_running:
             self.camera.start()
@@ -348,6 +435,7 @@ class CameraControlWidget(QWidget):
     def _capture_image_routine(self, capture_data=None):
         # 3. Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
+
         if not image or image.isNull():
             return
 
@@ -364,17 +452,15 @@ class CameraControlWidget(QWidget):
             save_path = Path(directory) / "captures" / filename
             save_path.parent.mkdir(parents=True, exist_ok=True)
         else:
-            save_path = Path(QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)) / filename
+            save_path = (
+                Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation))
+                / filename
+            )
 
-        # 5. The Threaded Strategy
-        # We pass the copy of the image to the worker so the UI thread is free immediately
-        worker = ImageSaver(image.copy(), str(save_path), "Image")
+        worker = ImageSaver(image.copy(), str(save_path))
 
-        # This signal is the key. It 'decouples' the saving from the UI.
-        # The background thread emits this, and the UI thread picks it up
-        # as a separate event later.
         worker.signals.save_complete.connect(
-            lambda name, path: self._show_media_capture_dialog(name, path, show_media_capture_dialog=show_dialog)
+            lambda path: _show_media_capture_dialog(MediaType.IMAGE, path, show_dialog)
         )
 
         # FIXME: this could be run in a separate thread for more performance if needed. Its a QRunnable...
@@ -394,27 +480,14 @@ class CameraControlWidget(QWidget):
             self.toggle_camera()
             QTimer.singleShot(1000, lambda: self._capture_image_routine(capture_data))
 
-    def restore_camera_state(self):
-        """
-        Turn off camera if its last state was off.
-        """
-        if not self.last_camera_state:
-            self.turn_off_camera()
-
-    def check_initial_camera_state(self):
-        if self.camera and self.camera.isActive():
-            self.camera_toggle_button.setText("videocam")
-            self.camera_toggle_button.setToolTip("Camera On")
-            self.camera_toggle_button.setChecked(True)
-        else:
-            self.camera_toggle_button.setText("videocam_off")
-            self.camera_toggle_button.setToolTip("Camera Off")
-            self.camera_toggle_button.setChecked(False)
-
-    def _generate_media_filename(self, step_description=None, step_id=None, file_extension=".png"):
+    def _generate_media_filename(
+        self, step_description=None, step_id=None, file_extension=".png"
+    ):
         timestamp = get_current_utc_datetime()
         if step_description and step_id:
-            clean_desc = "".join(c for c in step_description if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            clean_desc = "".join(
+                c for c in step_description if c.isalnum() or c in (" ", "-", "_")
+            ).rstrip()
             clean_desc = clean_desc.replace(" ", "_")
             return f"{clean_desc}_{step_id}_{timestamp}{file_extension}"
         elif step_id:
@@ -436,7 +509,7 @@ class CameraControlWidget(QWidget):
                     recording_data.get("directory"),
                     recording_data.get("step_description"),
                     recording_data.get("step_id"),
-                    recording_data.get("show_dialog", True)
+                    recording_data.get("show_dialog", True),
                 )
             elif action == "stop":
                 self.video_record_stop()
@@ -464,7 +537,10 @@ class CameraControlWidget(QWidget):
         transform = self.video_item.transform()
 
         target_resolution_size = self.combo_resolutions.currentData().resolution()
-        target_resolution_w, target_resolution_h = target_resolution_size.width(), target_resolution_size.height()
+        target_resolution_w, target_resolution_h = (
+            target_resolution_size.width(),
+            target_resolution_size.height(),
+        )
 
         return get_transformed_frame(
             source_image,
@@ -484,7 +560,9 @@ class CameraControlWidget(QWidget):
             self.video_record_start()
 
     @Slot()
-    def video_record_start(self, directory=None, step_description=None, step_id=None, show_dialog=True):
+    def video_record_start(
+        self, directory=None, step_description=None, step_id=None, show_dialog=True
+    ):
         logger.info("Starting video recorder...")
         if not self.camera.isActive():
             self.toggle_camera()
@@ -495,14 +573,22 @@ class CameraControlWidget(QWidget):
             path.parent.mkdir(parents=True, exist_ok=True)
             _recording_file_path = str(path)
         else:
-            _recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
+            _recording_file_path = str(
+                Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.MoviesLocation))
+                / filename
+            )
 
-        self.show_media_capture_dialog = show_dialog
+        self.show_media_capture_dialog_for_video = show_dialog
 
         _current_fmt = self.combo_resolutions.currentData()
-        _resolution = (_current_fmt.resolution().width(), _current_fmt.resolution().height())
+        _resolution = (
+            _current_fmt.resolution().width(),
+            _current_fmt.resolution().height(),
+        )
 
-        self.recorder.start(_recording_file_path, _resolution, _current_fmt.maxFrameRate())
+        self.recorder.start(
+            _recording_file_path, _resolution, _current_fmt.maxFrameRate()
+        )
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")
@@ -525,26 +611,6 @@ class CameraControlWidget(QWidget):
 
         # Show Result
         if recording_output_path:
-            self._show_media_capture_dialog("Video", recording_output_path)
-
-
-    def _show_media_capture_dialog(self, name: str, save_path: str, show_media_capture_dialog=None):
-        if name.lower() not in MediaType.get_media_types():
-            raise ValueError(f"Invalid media type: {name}")
-
-        file_url = QUrl.fromLocalFile(save_path).toString()
-        formatted_message = f"File saved to:<br><a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
-
-        media_capture_message = MediaCaptureMessageModel(path=Path(save_path), type=name.lower())
-        publish_message(topic=DEVICE_VIEWER_MEDIA_CAPTURED, message=media_capture_message.model_dump_json())
-
-        if show_media_capture_dialog is None:
-            show_media_capture_dialog = self.show_media_capture_dialog
-
-        if show_media_capture_dialog:
-            # Create a non-modal popup (doesn't block the rest of the UI)
-            success(None, formatted_message, title=f"{name} Captured", modal=False, timeout=5000)
-
-        logger.critical(f"Saved {name} media to {save_path}.")
-
-        return True
+            _show_media_capture_dialog(
+                MediaType.VIDEO, recording_output_path, self.show_media_capture_dialog_for_video
+            )
