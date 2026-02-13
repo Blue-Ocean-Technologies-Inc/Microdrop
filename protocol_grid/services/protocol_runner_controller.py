@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from protocol_grid.services.camera_prewarm_scheduler import CameraPrewarmScheduler
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.hardware_setter_services import VoltageFrequencyService, MagnetService
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
@@ -196,6 +197,15 @@ class ProtocolRunnerController(QObject):
         self._recording_active = False
         self._video_enabled_for_protocol = False
 
+        # Camera pre-warm scheduler
+        self._camera_scheduler = CameraPrewarmScheduler(
+            prewarm_seconds=10.0,
+            on_camera_on=lambda: self._set_camera_video(True),
+            on_camera_off=lambda: self._set_camera_video(False),
+            calculate_step_time=PathExecutionService.calculate_step_execution_time,
+            get_empty_device_state=PathExecutionService.get_empty_device_state,
+        )
+
     # --------- camera controls ----------
 
     def _handle_camera_controls(self, step_info):
@@ -222,15 +232,16 @@ class ProtocolRunnerController(QObject):
             last_record_enabled = _is_checkbox_checked(last_step.parameters.get("Record", "")) if last_step else False
             _record_enabled_changed = record_enabled != last_record_enabled
 
-            if (video_enabled or capture_enabled or record_enabled):
-                if not self._video_enabled_for_protocol:
-                    logger.info(f"Step {step_id}: Requesting to turn video on for protocol.")
-                    _publish_camera_video_control("true")
-                    self._video_enabled_for_protocol = True
+            # NOTE: Video feed on/off is managed by the pre-compiled camera scheduler.
+            # We only log the current state here for debugging.
+            if video_enabled or capture_enabled or record_enabled:
+                logger.debug(
+                    f"Step {step_id}: Camera video should be ON (managed by scheduler)."
+                )
             else:
-                logger.info(f"Step {step_id}: Requesting to turn video off for protocol.")
-                _publish_camera_video_control("false")
-                self._video_enabled_for_protocol = False
+                logger.debug(
+                    f"Step {step_id}: Camera video should be OFF (managed by scheduler)."
+                )
 
             ################################ Media capture helpers ###############################
             def _start_recording():
@@ -665,6 +676,10 @@ class ProtocolRunnerController(QObject):
             self.signals.protocol_finished.emit()
             return
 
+        # Compile and start the pre-compiled camera video schedule
+        if not self._preview_mode:
+            self._camera_scheduler.compile_and_start(self._run_order)
+
         # Start executing the protocol
         self._execute_next_step()
 
@@ -694,6 +709,7 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
+        self._camera_scheduler.pause()
 
         # store elapsed times at the moment of pause
         if self._start_time:
@@ -759,6 +775,8 @@ class ProtocolRunnerController(QObject):
                 self._step_start_time += pause_duration
             if self._phase_start_time:
                 self._phase_start_time += pause_duration
+
+            self._camera_scheduler.resume(pause_duration)
 
         if self._droplet_check_failed:
             self._droplet_check_failed = False
@@ -970,6 +988,7 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
+        self._camera_scheduler.shutdown()
 
         self.current_index = 0
         self._run_order = []
@@ -1653,6 +1672,7 @@ class ProtocolRunnerController(QObject):
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
+        self._camera_scheduler.shutdown()
 
         # if self._should_show_completion_dialog():
         #     self._show_experiment_complete_dialog()
@@ -2063,3 +2083,8 @@ class ProtocolRunnerController(QObject):
             logger.info(f"Updated voltage/frequency for upcoming step: {new_voltage}V, {new_frequency}Hz")
 
         return True
+
+    def _set_camera_video(self, on: bool) -> None:
+        """Callback used by the camera pre-warm scheduler."""
+        _publish_camera_video_control("true" if on else "false")
+        self._video_enabled_for_protocol = on
