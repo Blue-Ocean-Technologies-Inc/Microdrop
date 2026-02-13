@@ -434,7 +434,7 @@ class CameraControlWidget(QWidget):
         elif step_id:
             return f"step_{step_id}_{timestamp}{file_extension}"
         else:
-            return f"captured_image_{timestamp}{file_extension}"
+            return f"captured_media_{timestamp}{file_extension}"
 
     def _generate_capture_filename(self, step_description=None, step_id=None):
         return self._generate_media_filename(step_description, step_id, ".png")
