@@ -20,13 +20,15 @@ from PySide6.QtMultimedia import (
     QMediaDevices,
 )
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
-from PySide6.QtCore import Qt, QSizeF, Slot
+from PySide6.QtCore import Qt, QSizeF, Slot, QUrl
 from PySide6.QtGui import QBrush
 
 from device_viewer.utils.camera import VideoRecorder
 
 # --- Logging Setup ---
 from logger.logger_service import get_logger, init_logger
+from microdrop_application.dialogs.pyface_wrapper import success
+
 logger = get_logger(__name__)
 
 # ==========================================
@@ -126,7 +128,7 @@ class CameraRunner(QMainWindow):
             # CRITICAL: Use the Camera's ACTUAL resolution, not the UI size
             # This ensures 1:1 pixel mapping
             if self.recorder.start(
-                save_path, self.cam_width, self.cam_height, self.fps
+                save_path, (self.cam_width, self.cam_height), self.fps
             ):
                 self.is_recording = True
 
@@ -155,7 +157,13 @@ class CameraRunner(QMainWindow):
             self.recorder.stop()
             self.record_btn.setText("Start HD Recording")
             self.record_btn.setStyleSheet("background-color: #2ecc71; color: white;")
-            self.status_label.setText(f"Saved: {Path(self._output_path).name}")
+
+            file_url = QUrl.fromLocalFile(self._output_path).toString()
+
+            self.status_label.setText(f"Saved: {self._output_path}")
+            formatted_message = f"File saved to: <a href={file_url} style='color: #0078d7;'>{self._output_path}</a><br><br>"
+
+            success(title="Recording Saved.", message=formatted_message)
 
     @Slot()
     def process_frame(self, frame):
@@ -184,7 +192,7 @@ class CameraRunner(QMainWindow):
 
 if __name__ == "__main__":
     init_logger()
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     window = CameraRunner()
     window.show()
     sys.exit(app.exec())
