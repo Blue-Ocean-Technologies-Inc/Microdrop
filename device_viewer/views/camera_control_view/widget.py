@@ -46,6 +46,7 @@ logger = get_logger(__name__)
 def _show_media_capture_dialog(
     name: MediaType, save_path: str, show_media_capture_dialog: bool
 ):
+
     if name.lower() not in MediaType.get_media_types():
         raise ValueError(f"Invalid media type: {name}")
 
@@ -63,7 +64,7 @@ def _show_media_capture_dialog(
     if show_media_capture_dialog:
         # Create a non-modal popup (doesn't block the rest of the UI)
         success(
-            None, formatted_message, title=f"{name} Captured", modal=False, timeout=5000
+            None, formatted_message, title=f"{name.name.title()} Captured", modal=False, timeout=5000
         )
 
     logger.critical(f"Saved {name} media to {save_path}.")
@@ -100,6 +101,7 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
+        self.last_camera_state = False
         self.available_cameras = None
         self.available_formats = None
         self.show_media_capture_dialog_for_video = True
@@ -112,6 +114,7 @@ class CameraControlWidget(QWidget):
         self.recorder.error_occurred.connect(self.handle_recording_error)
         self.recorder.recording_stopped.connect(self.handle_recording_stopped)
         self.recording_file_path = None
+        self._camera_state_pre_recording = None
 
         # Signal connectors
         self.camera_active_signal.connect(self.on_camera_active)
@@ -174,7 +177,6 @@ class CameraControlWidget(QWidget):
         self.camera_toggle_button = QPushButton("videocam_off")
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setCheckable(True)
-        self.last_camera_state = False
 
         # Layouts
         top_layout = QHBoxLayout()
@@ -236,7 +238,6 @@ class CameraControlWidget(QWidget):
             self.camera_toggle_button.setToolTip("Camera On")
             self.camera_toggle_button.setChecked(True)
             self.preferences.camera_state = True
-            self.last_camera_state = False
 
     def turn_off_camera(self):
         logger.info("Turning camera off")
@@ -246,17 +247,9 @@ class CameraControlWidget(QWidget):
             self.camera_toggle_button.setToolTip("Camera Off")
             self.camera_toggle_button.setChecked(False)
             self.preferences.camera_state = False
-            self.last_camera_state = True
 
     def toggle_camera(self):
         self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
-
-    def restore_camera_state(self):
-        """
-        Turn off camera if its last state was off.
-        """
-        if not self.last_camera_state:
-            self.turn_off_camera()
 
     def check_initial_camera_state(self):
         if self.camera and self.camera.isActive():
@@ -466,9 +459,9 @@ class CameraControlWidget(QWidget):
         # FIXME: this could be run in a separate thread for more performance if needed. Its a QRunnable...
         worker.run()
 
-        # 6. Immediate cleanup so recording/UI flow isn't interrupted
-        if not self.recorder.is_recording:
-            self.restore_camera_state()
+    def _capture_image_and_close(self, capture_data):
+        self._capture_image_routine(capture_data)
+        self.toggle_camera()
 
     @Slot()
     def capture_button_handler(self, capture_data=None):
@@ -478,7 +471,7 @@ class CameraControlWidget(QWidget):
 
         else:
             self.toggle_camera()
-            QTimer.singleShot(1000, lambda: self._capture_image_routine(capture_data))
+            QTimer.singleShot(1000, lambda: self._capture_image_and_close(capture_data))
 
     def _generate_media_filename(
         self, step_description=None, step_id=None, file_extension=".png"
@@ -566,6 +559,10 @@ class CameraControlWidget(QWidget):
         logger.info("Starting video recorder...")
         if not self.camera.isActive():
             self.toggle_camera()
+            self._camera_state_pre_recording = False ## Flag only used for video recording management
+
+        else:
+            self._camera_state_pre_recording = True
 
         filename = self._generate_recording_filename(step_description, step_id)
         if directory:
@@ -607,7 +604,8 @@ class CameraControlWidget(QWidget):
 
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
-        self.restore_camera_state()
+        if not self._camera_state_pre_recording:
+            self.toggle_camera()
 
         # Show Result
         if recording_output_path:
