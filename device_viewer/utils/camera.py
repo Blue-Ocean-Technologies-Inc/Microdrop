@@ -8,7 +8,6 @@ from PySide6.QtCore import QPointF, QRectF, Signal, QObject, QRunnable
 from PySide6.QtGui import QImage, QTransform, Qt, QPainter
 
 from logger.logger_service import get_logger
-from microdrop_application.dialogs.pyface_wrapper import success
 
 logger = get_logger(__name__)
 

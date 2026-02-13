@@ -66,6 +66,7 @@ class CameraControlWidget(QWidget):
             preferences: Preferences,
     ):
         super().__init__()
+        self.camera_was_off_before_action = None
         self.model = model
         self.video_item = video_item
         self.scene = scene
@@ -366,7 +367,7 @@ class CameraControlWidget(QWidget):
             show_dialog = capture_data.get("show_dialog", True)
 
         # 2. Camera Management
-        was_camera_off = not self.ensure_camera_on()
+        self.ensure_camera_on()
 
         # 3. Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
@@ -396,15 +397,13 @@ class CameraControlWidget(QWidget):
         worker.run()
 
         # 6. Immediate cleanup so recording/UI flow isn't interrupted
-        if not self._is_recording and was_camera_off:
+        if not self._is_recording and self.camera_was_off_before_action:
             self.restore_camera_state()
 
     def ensure_camera_on(self):
         if not self.is_camera_on:
             self.camera_was_off_before_action = True
             self.turn_on_camera()
-            return False
-        return True
 
     def restore_camera_state(self):
         if self.camera_was_off_before_action:
