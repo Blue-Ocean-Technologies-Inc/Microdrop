@@ -1,20 +1,14 @@
-import shutil
 from pathlib import Path
 
 from PySide6.QtCore import (
-    Qt,
-    QRectF,
-    QObject,
-    QThread,
     Signal,
     Slot,
     QTimer,
     QStandardPaths,
     QUrl,
-    QThreadPool,
 )
-from PySide6.QtGui import QImage, QPainter, QTransform
-from PySide6.QtMultimedia import QVideoFrame, QMediaCaptureSession, QCamera, QMediaDevices
+from PySide6.QtGui import QImage
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -24,7 +18,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QGraphicsScene,
-    QStyleOptionGraphicsItem,
     QSizePolicy,
     QApplication,
 )
@@ -38,7 +31,6 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from ...utils.camera import (
     VideoRecorder,
-    VideoRecorderWorker,
     get_transformed_frame,
     ImageSaver,
 )
@@ -54,9 +46,6 @@ class CameraControlWidget(QWidget):
     camera_active_signal = Signal(bool)
     screen_capture_signal = Signal(object)
     screen_recording_signal = Signal(object)
-
-    # Signal to send data to the background worker thread
-    send_frame_to_worker = Signal(object, QRectF, QRectF, QTransform)
 
     def __init__(
             self,
@@ -88,14 +77,11 @@ class CameraControlWidget(QWidget):
         self.scene.addItem(self.video_item)
         self.session.setVideoOutput(self.video_item)
 
-        self.recording_timer = QTimer()
+        # 1. Initialize Recorder
+        self.recorder = VideoRecorder(self.video_item)
+        self.recorder.error_occurred.connect(self.handle_recording_error)
+        self.recorder.recording_stopped.connect(self.handle_recording_stopped)
         self.recording_file_path = None
-        self._is_recording = False
-        self.recorder = VideoRecorder()
-
-        # Threading components
-        self.thread = None
-        self.worker = None
 
         # Signal connectors
         self.camera_active_signal.connect(self.on_camera_active)
@@ -348,13 +334,17 @@ class CameraControlWidget(QWidget):
         if self.combo_resolutions.count() == 0 or index < 0: return
         resolution = self.combo_resolutions.itemData(index)
         was_running = self.camera.isActive()
+
         if was_running:
             self.camera.stop()
             QApplication.processEvents()
+
         self.camera.setCameraFormat(resolution)
         self.preferences.resolution = self.combo_resolutions.itemText(index)
         self.model.camera_perspective.camera_resolution = (resolution.resolution().width(), resolution.resolution().height())
-        if was_running: self.camera.start()
+
+        if was_running:
+            self.camera.start()
 
     def _capture_image_routine(self, capture_data=None):
         # 3. Capture Pixels (Must happen on UI thread)
@@ -392,7 +382,7 @@ class CameraControlWidget(QWidget):
         worker.run()
 
         # 6. Immediate cleanup so recording/UI flow isn't interrupted
-        if not self._is_recording and self.camera_was_off_before_action:
+        if not self.recorder.is_recording and self.camera_was_off_before_action:
             self.restore_camera_state()
 
     @Slot()
@@ -460,7 +450,7 @@ class CameraControlWidget(QWidget):
     # --- Transformation Logic (For Single Screenshots - Main Thread) ---
     def get_screen_shot(self):
 
-        if self._is_recording:
+        if self.recorder.is_recording:
             if self.recorder.current_image:
                 return self.recorder.current_image
 
@@ -492,74 +482,34 @@ class CameraControlWidget(QWidget):
 
     @Slot()
     def toggle_recording(self):
-        if self._is_recording:
+        if self.recorder.is_recording:
             self.video_record_stop()
         else:
             self.video_record_start()
 
     @Slot()
     def video_record_start(self, directory=None, step_description=None, step_id=None, show_dialog=True):
-        if self._is_recording:
-            return
-
-        if not shutil.which("ffmpeg"):
-            logger.error("FFmpeg not found.")
-            error(self, "Error: Cannot start to record video", informative="FFmpeg not found.")
-            return
-
+        logger.info("Starting video recorder...")
         self.ensure_camera_on()
 
         filename = self._generate_recording_filename(step_description, step_id)
         if directory:
             path = Path(directory) / "recordings" / filename
             path.parent.mkdir(parents=True, exist_ok=True)
-            self.recording_file_path = str(path)
+            _recording_file_path = str(path)
         else:
-            self.recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
+            _recording_file_path = str(Path(QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)) / filename)
 
         self.show_media_capture_dialog = show_dialog
 
-        current_fmt = self.combo_resolutions.currentData()
-        resolution = (current_fmt.resolution().width(), current_fmt.resolution().height())
+        _current_fmt = self.combo_resolutions.currentData()
+        _resolution = (_current_fmt.resolution().width(), _current_fmt.resolution().height())
 
-        if self.recorder.start(self.recording_file_path, resolution, current_fmt.maxFrameRate()):
+        self.recorder.start(_recording_file_path, _resolution, _current_fmt.maxFrameRate())
 
-            # --- Initialize Worker Thread ---
-            self.thread = QThread()
-            self.worker = VideoRecorderWorker(
-                self.recorder,
-            )
-
-            self.worker.moveToThread(self.thread)
-            self.thread.finished.connect(self.worker.deleteLater)
-
-            # Connect Signals
-            self.send_frame_to_worker.connect(self.worker.process_frame)
-            self.worker.error_occurred.connect(self.handle_recording_error)
-
-            self.thread.start()
-            self._is_recording = True
-
-            # some settling time then start recording
-            QTimer.singleShot(0, lambda: self.video_item.videoSink().videoFrameChanged.connect(self.video_record_frame_handler))
-
-
-    @Slot()
-    def video_record_frame_handler(self, frame=None):
-        """
-        LIGHTWEIGHT: Only captures state and emits signal to Worker.
-        """
-        if not self._is_recording:
-            return
-        # 1. Convert to Image (Main Thread - Fast)
-        source_image = frame
-        # Send to worker
-        self.send_frame_to_worker.emit(
-            source_image,
-            self.video_item.sceneBoundingRect(),
-            self.video_item.boundingRect(),
-            self.video_item.transform(),
-        )
+    def video_record_stop(self):
+        logger.info("Stopping video recorder...")
+        self.recorder.stop()
 
     @Slot(str)
     def handle_recording_error(self, error_msg):
@@ -572,30 +522,11 @@ class CameraControlWidget(QWidget):
         )
         self.video_record_stop()
 
-    @Slot()
-    def video_record_stop(self):
-        # 1. Stop feeding frames
-        try:
-            self.video_item.videoSink().videoFrameChanged.disconnect(self.video_record_frame_handler)
-        except Exception:
-            pass # Disconnect might fail if not connected
-
-        # 3. Stop Recorder
-        self.recorder.stop()
-        self.worker.stop()
-
-        # 4. UI Cleanup
-        self.restore_camera_state()
-        self._is_recording = False
-
-        self.thread.quit()
-        self.thread.terminate()
-
-        self.record_toggle_button.setChecked(False)
-
-        # 5. Show Result
+    @Slot(str)
+    def handle_recording_stopped(self, recording_output_path):
+        # Show Result
         if self.recording_file_path:
-            self._show_media_capture_dialog("Video", self.recording_file_path)
+            self._show_media_capture_dialog("Video", recording_output_path)
 
     def _show_media_capture_dialog(self, name: str, save_path: str, show_media_capture_dialog=None):
         if name.lower() not in MediaType.get_media_types():

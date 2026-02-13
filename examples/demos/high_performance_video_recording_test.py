@@ -1,5 +1,4 @@
 import sys
-import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -39,8 +38,6 @@ class CameraRunner(QMainWindow):
         super().__init__()
         self.setWindowTitle("PySide6 HD Recorder")
         self.resize(1000, 700)
-
-        self.recorder = VideoRecorder()
         self._output_path = None
         self.is_recording = False
         self.fps = 30
@@ -70,6 +67,8 @@ class CameraRunner(QMainWindow):
             "background-color: #2ecc71; color: white; font-size: 16px; font-weight: bold;"
         )
         layout.addWidget(self.record_btn)
+
+        self.recorder = VideoRecorder(self.video_item)
 
         self.init_camera()
 
@@ -121,22 +120,13 @@ class CameraRunner(QMainWindow):
 
     @Slot()
     def toggle_recording(self):
-        if not self.is_recording:
+        if not self.recorder.is_recording:
             # --- START ---
             filename = f"hd_rec_{datetime.now().strftime('%H%M%S')}.mp4"
             self._output_path = save_path = str(Path.cwd() / filename)
             # CRITICAL: Use the Camera's ACTUAL resolution, not the UI size
             # This ensures 1:1 pixel mapping
-            if self.recorder.start(
-                save_path, (self.cam_width, self.cam_height), self.fps
-            ):
-                self.is_recording = True
-
-                # Connect Signal
-                self.video_item.videoSink().videoFrameChanged.connect(
-                    self.process_frame
-                )
-
+            if self.recorder.start(save_path, (self.cam_width, self.cam_height), self.fps):
                 self.record_btn.setText("Stop Recording")
                 self.record_btn.setStyleSheet(
                     "background-color: #e74c3c; color: white;"
@@ -145,15 +135,6 @@ class CameraRunner(QMainWindow):
                     f"Recording... {self.cam_width}x{self.cam_height} (High Quality)"
                 )
         else:
-            # --- STOP ---
-            self.is_recording = False
-            try:
-                self.video_item.videoSink().videoFrameChanged.disconnect(
-                    self.process_frame
-                )
-            except:
-                pass
-
             self.recorder.stop()
             self.record_btn.setText("Start HD Recording")
             self.record_btn.setStyleSheet("background-color: #2ecc71; color: white;")
@@ -164,18 +145,6 @@ class CameraRunner(QMainWindow):
             formatted_message = f"File saved to: <a href={file_url} style='color: #0078d7;'>{self._output_path}</a><br><br>"
 
             success(title="Recording Saved.", message=formatted_message)
-
-    @Slot()
-    def process_frame(self, frame):
-        """Receives native QVideoFrame from sink."""
-        if not self.is_recording:
-            return
-
-        # .toImage() converts the frame to QImage on the CPU
-        # This preserves the full resolution of the source frame
-        image = frame.toImage()
-
-        self.recorder.write_frame(image)
 
     def resizeEvent(self, event):
         # Keep video centered and fitted when window resizes
