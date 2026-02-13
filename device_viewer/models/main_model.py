@@ -3,6 +3,7 @@ from pyface.undo.api import UndoManager
 
 from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.perspective import PerspectiveModel
+from microdrop_utils.decorators import debounce
 from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
@@ -156,6 +157,7 @@ class DeviceViewMainModel(HasTraits):
         # If not found, add a new alpha value
         self.alpha_map.append(AlphaValue(key=key, alpha=alpha))
 
+    @debounce(0.2)
     def set_visible(self, key: str, visible: bool):
         """Set the visibility of a given alpha value."""
         for alpha_value in self.alpha_map:
