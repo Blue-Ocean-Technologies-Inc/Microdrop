@@ -72,10 +72,10 @@ class MessageListener(HasTraits):
                 self.signal_emitter.zstage_position_updated.emit(float(message))
 
             elif topic == DEVICE_VIEWER_MEDIA_CAPTURED:
-                logger.info(f"Received media captured message: {message}")
 
                 try:
                     loaded_message = MediaCaptureMessageModel.model_validate_json(message)
+                    logger.info(f"Received {loaded_message.type.name.lower()} captured message: Path: {loaded_message.path}")
 
                 except Exception as e:
                     logger.error(f"Failed to validate message: {message}\nError: {e}", exc_info=True)
