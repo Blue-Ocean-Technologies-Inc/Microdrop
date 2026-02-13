@@ -381,5 +381,5 @@ class VideoRecorder(QObject):
         self._stop_ffmpeg()
 
         self.recording_stopped.emit(self._output_path)
-        logger.info("Recording stopped")
+        logger.info(f"Recording stopped: {self._output_path}")
         self._output_path = None
