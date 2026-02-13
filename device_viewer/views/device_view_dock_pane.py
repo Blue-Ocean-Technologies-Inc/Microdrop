@@ -6,7 +6,14 @@ from pathlib import Path
 import dramatiq
 from PySide6.QtGui import QColor, QBrush
 
-from microdrop_application.dialogs.pyface_wrapper import NO, OK, YES, FileDialog, confirm, error
+from microdrop_application.dialogs.pyface_wrapper import (
+    NO,
+    OK,
+    YES,
+    FileDialog,
+    confirm,
+    error,
+)
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -605,6 +612,11 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.app_preferences,
         )
 
+        # keep the camera toggled button in sync with the alpha map.
+        self.camera_control_widget.camera_toggle_button.toggled.connect(
+            lambda checked: self.model.set_visible(video_key, checked)
+        )
+
         # calibration_view code
         self.calibration_view = CalibrationWidget()
         self.calibration_controller = CalibrationController(
@@ -729,7 +741,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             # but other elements like tooltips do need updating
             self.device_view.setStyleSheet(get_tooltip_style(theme_name))
 
-            bg_color = BLACK # if is_dark_mode() else "#263238" #TODO: figure out light mode color
+            bg_color = BLACK  # if is_dark_mode() else "#263238" #TODO: figure out light mode color
             self.device_view.setBackgroundBrush(QBrush(QColor(bg_color)))
 
             # reveal requires the narrow button type specified

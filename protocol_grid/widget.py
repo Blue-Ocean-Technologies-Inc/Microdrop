@@ -6,18 +6,15 @@ from dropbot_controller.consts import SET_REALTIME_MODE
 from dropbot_controller.preferences import DropbotPreferences
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
 from PySide6.QtWidgets import (
-    QTreeView,
-    QVBoxLayout,
     QWidget,
     QFileDialog,
     QMessageBox,
     QApplication,
     QMainWindow,
-    QDialog,
     QToolButton, QHBoxLayout,
 )
-from PySide6.QtCore import Qt, QItemSelectionModel, QTimer, Signal, QUrl
-from PySide6.QtGui import QStandardItemModel, QKeySequence, QShortcut, QBrush, QColor
+from PySide6.QtCore import QItemSelectionModel, QTimer, Signal, QUrl
+from PySide6.QtGui import QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style, get_tooltip_style

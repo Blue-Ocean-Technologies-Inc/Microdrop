@@ -19,6 +19,7 @@ Usage:
 
 from typing import Optional
 
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 # Re-export Pyface constants for compatibility
@@ -54,6 +55,7 @@ def _prepare_dialog(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     detail_collapsible: Optional[bool] = True,
+    modal: Optional[bool] =True,
     **kwargs
 ) -> BaseMessageDialog:
     """
@@ -70,6 +72,9 @@ def _prepare_dialog(
 
     # Create the dialog
     dialog = dialog_factory(parent=parent, title=title, message=main_message, disable_main_scrolling=disable_main_scrolling, **kwargs)
+
+    if not modal:
+        dialog.setWindowModality(Qt.NonModal)
 
     # Set message as HTML if informative was provided
     if is_html:
@@ -141,6 +146,7 @@ def information(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     detail_collapsible: Optional[bool] = True,
+    timeout: Optional[int] = 0,
     **kwargs
 ) -> int:
     """
@@ -154,10 +160,14 @@ def information(
 
     result = dialog.exec()
 
-    # Map to Pyface OK constant
-    if result == BaseMessageDialog.RESULT_OK:
-        return OK
-    return CANCEL
+    if timeout: # temp message
+        QTimer.singleShot(timeout, dialog.close)
+
+    else:
+        if result == BaseMessageDialog.RESULT_OK:
+            return OK
+
+        return CANCEL
 
 
 def success(
@@ -169,8 +179,9 @@ def success(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
+    timeout: Optional[int] = 0,
     **kwargs
-) -> int:
+):
     """
     Pyface-compatible success dialog using styled BaseMessageDialog.
     """
@@ -180,10 +191,16 @@ def success(
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
 
-    result = dialog.exec()
-    if result == BaseMessageDialog.RESULT_OK:
-        return OK
-    return CANCEL
+    if timeout: # temp message
+        dialog.show()
+        QTimer.singleShot(timeout, dialog.close)
+
+    else:
+        result = dialog.exec()
+        if result == BaseMessageDialog.RESULT_OK:
+            return OK
+
+        return CANCEL
 
 
 def warning(
