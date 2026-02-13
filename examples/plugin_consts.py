@@ -29,13 +29,13 @@ FRONTEND_PLUGINS = [
     TasksPlugin,
     LoggerUIPlugin,
     # DropbotStatusPlotPlugin,
-    # DropbotToolsMenuPlugin,
-    # DropbotStatusPlugin,
-    # ManualControlsPlugin,
+    DropbotToolsMenuPlugin,
+    DropbotStatusPlugin,
+    ManualControlsPlugin,
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
-    # PeripheralUiPlugin,
-    # DropbotPreferencesPlugin
+    PeripheralUiPlugin,
+    DropbotPreferencesPlugin
 ]
 
 BACKEND_PLUGINS = [
