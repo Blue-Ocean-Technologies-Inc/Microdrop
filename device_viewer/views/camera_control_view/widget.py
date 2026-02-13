@@ -356,23 +356,18 @@ class CameraControlWidget(QWidget):
         self.model.camera_perspective.camera_resolution = (resolution.resolution().width(), resolution.resolution().height())
         if was_running: self.camera.start()
 
-    @Slot()
-    def capture_button_handler(self, capture_data=None):
-        # 1. Parse Data
+    def _capture_image_routine(self, capture_data=None):
+        # 3. Capture Pixels (Must happen on UI thread)
+        image = self.get_screen_shot()
+        if not image or image.isNull():
+            return
+
         directory, step_description, step_id, show_dialog = None, None, None, True
         if isinstance(capture_data, dict):
             directory = capture_data.get("directory")
             step_description = capture_data.get("step_description")
             step_id = capture_data.get("step_id")
             show_dialog = capture_data.get("show_dialog", True)
-
-        # 2. Camera Management
-        self.ensure_camera_on()
-
-        # 3. Capture Pixels (Must happen on UI thread)
-        image = self.get_screen_shot()
-        if not image or image.isNull():
-            return
 
         # 4. Generate Path
         filename = self._generate_capture_filename(step_description, step_id)
@@ -399,6 +394,14 @@ class CameraControlWidget(QWidget):
         # 6. Immediate cleanup so recording/UI flow isn't interrupted
         if not self._is_recording and self.camera_was_off_before_action:
             self.restore_camera_state()
+
+    @Slot()
+    def capture_button_handler(self, capture_data=None):
+        self.ensure_camera_on()
+        if self.camera_was_off_before_action:
+            QTimer.singleShot(1000, lambda: self._capture_image_routine(capture_data))
+        else:
+            self._capture_image_routine(capture_data)
 
     def ensure_camera_on(self):
         if not self.is_camera_on:
