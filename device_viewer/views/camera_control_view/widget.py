@@ -55,7 +55,6 @@ class CameraControlWidget(QWidget):
             preferences: Preferences,
     ):
         super().__init__()
-        self.camera_was_off_before_action = None
         self.model = model
         self.video_item = video_item
         self.scene = scene
@@ -140,8 +139,7 @@ class CameraControlWidget(QWidget):
         self.camera_toggle_button = QPushButton("videocam_off")
         self.camera_toggle_button.setToolTip("Camera Off")
         self.camera_toggle_button.setCheckable(True)
-        self.is_camera_on = False
-        self.camera_was_off_before_action = False
+        self.last_camera_state = False
 
         # Layouts
         top_layout = QHBoxLayout()
@@ -193,26 +191,26 @@ class CameraControlWidget(QWidget):
 
     def turn_on_camera(self):
         logger.info("Turning camera on")
-        if self.camera:
+        if not self.camera.isActive():
             self.camera.start()
             self.camera_toggle_button.setText("videocam")
             self.camera_toggle_button.setToolTip("Camera On")
             self.camera_toggle_button.setChecked(True)
-            self.is_camera_on = True
             self.preferences.camera_state = True
+            self.last_camera_state = False
 
     def turn_off_camera(self):
         logger.info("Turning camera off")
-        if self.camera:
+        if self.camera.isActive():
             self.camera.stop()
             self.camera_toggle_button.setText("videocam_off")
             self.camera_toggle_button.setToolTip("Camera Off")
             self.camera_toggle_button.setChecked(False)
-            self.is_camera_on = False
             self.preferences.camera_state = False
+            self.last_camera_state = True
 
     def toggle_camera(self):
-        self.turn_off_camera() if self.is_camera_on else self.turn_on_camera()
+        self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
 
     def toggle_align_camera_mode(self):
         if self.model.mode == "camera-edit" or (self.model.mode != "camera-edit" and self.can_enter_edit_mode()):
@@ -227,7 +225,8 @@ class CameraControlWidget(QWidget):
     def on_camera_active(self, active):
         if active:
             self.turn_on_camera()
-        else: self.turn_off_camera()
+        else:
+            self.turn_off_camera()
 
     def on_mode_changed(self, event):
         self.sync_buttons_and_label()
@@ -382,35 +381,32 @@ class CameraControlWidget(QWidget):
         worker.run()
 
         # 6. Immediate cleanup so recording/UI flow isn't interrupted
-        if not self.recorder.is_recording and self.camera_was_off_before_action:
+        if not self.recorder.is_recording:
             self.restore_camera_state()
 
     @Slot()
     def capture_button_handler(self, capture_data=None):
-        self.ensure_camera_on()
-        if self.camera_was_off_before_action:
-            QTimer.singleShot(1000, lambda: self._capture_image_routine(capture_data))
-        else:
+
+        if self.camera.isActive():
             self._capture_image_routine(capture_data)
 
-    def ensure_camera_on(self):
-        if not self.is_camera_on:
-            self.camera_was_off_before_action = True
-            self.turn_on_camera()
+        else:
+            self.toggle_camera()
+            QTimer.singleShot(1000, lambda: self._capture_image_routine(capture_data))
 
     def restore_camera_state(self):
-        if self.camera_was_off_before_action:
+        """
+        Turn off camera if its last state was off.
+        """
+        if not self.last_camera_state:
             self.turn_off_camera()
-            self.camera_was_off_before_action = False
 
     def check_initial_camera_state(self):
         if self.camera and self.camera.isActive():
-            self.is_camera_on = True
             self.camera_toggle_button.setText("videocam")
             self.camera_toggle_button.setToolTip("Camera On")
             self.camera_toggle_button.setChecked(True)
         else:
-            self.is_camera_on = False
             self.camera_toggle_button.setText("videocam_off")
             self.camera_toggle_button.setToolTip("Camera Off")
             self.camera_toggle_button.setChecked(False)
@@ -490,7 +486,8 @@ class CameraControlWidget(QWidget):
     @Slot()
     def video_record_start(self, directory=None, step_description=None, step_id=None, show_dialog=True):
         logger.info("Starting video recorder...")
-        self.ensure_camera_on()
+        if not self.camera.isActive():
+            self.toggle_camera()
 
         filename = self._generate_recording_filename(step_description, step_id)
         if directory:
@@ -524,9 +521,12 @@ class CameraControlWidget(QWidget):
 
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
+        self.restore_camera_state()
+
         # Show Result
-        if self.recording_file_path:
+        if recording_output_path:
             self._show_media_capture_dialog("Video", recording_output_path)
+
 
     def _show_media_capture_dialog(self, name: str, save_path: str, show_media_capture_dialog=None):
         if name.lower() not in MediaType.get_media_types():
