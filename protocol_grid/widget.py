@@ -240,11 +240,12 @@ class PGCWidget(QWidget):
         self.application = dock_pane.task.window.application
         self.dock_pane = dock_pane
 
-        self.protocol_runner = ProtocolRunnerController(
-            self.state,
-            flatten_protocol_for_run,
-            preferences=self.application.preferences,
+        self.experiment_manager = ExperimentManager(
+            self.application.current_experiment_directory
         )
+
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
+                                                        preferences=self.application.preferences)
 
         _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
 
@@ -265,15 +266,8 @@ class PGCWidget(QWidget):
         self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)
         self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
 
-        self.experiment_manager = ExperimentManager(
-            self.application.current_experiment_directory
-        )
-
         self.protocol_data_logger = ProtocolDataLogger(self)
         self.protocol_runner.set_data_logger(self.protocol_data_logger)
-
-        self.protocol_runner.experiment_manager = self.experiment_manager
-
         self.protocol_state_tracker = ProtocolStateTracker(dock_pane=dock_pane)
 
         self.tree = QTreeView()
