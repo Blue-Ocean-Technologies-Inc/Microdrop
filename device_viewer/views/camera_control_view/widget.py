@@ -475,8 +475,10 @@ class CameraControlWidget(QWidget):
                     recording_data.get("step_id"),
                     recording_data.get("show_dialog", True),
                 )
+                self.record_toggle_button.setChecked(True)
             elif action == "stop":
                 self.video_record_stop()
+                self.record_toggle_button.setChecked(False)
         else:
             logger.error(f"Invalid recording data: {recording_data}")
 
