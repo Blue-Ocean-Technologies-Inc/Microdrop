@@ -825,7 +825,7 @@ class PGCWidget(QWidget):
 
                 if saved_path:
                     # update protocol state tracker to reflect the auto-saved protocol
-                    logger.critical(f"Protocol saved as: {saved_path}")
+                    logger.info(f"Protocol saved as: {saved_path}")
                     saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
                     self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
 
