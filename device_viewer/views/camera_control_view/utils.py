@@ -27,7 +27,7 @@ def _cache_media_capture(name: MediaType, save_path: str):
     else:
         app_globals["media_captures"] += [message]
 
-    logger.critical(app_globals["media_captures"])
+    logger.info(app_globals["media_captures"])
 
 def _show_media_capture_dialog(
     name: MediaType, save_path: str
@@ -44,5 +44,5 @@ def _show_media_capture_dialog(
         None, formatted_message, title=f"{name.name.title()} Captured", modal=False, timeout=5000
     )
 
-    logger.critical(f"Saved {name} media to {save_path}.")
+    logger.info(f"Saved {name} media to {save_path}.")
     return True

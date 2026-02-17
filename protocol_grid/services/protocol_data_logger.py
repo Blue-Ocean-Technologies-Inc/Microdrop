@@ -641,7 +641,7 @@ class ProtocolDataLogger:
         media_captures = app_globals.get("media_captures")
 
         for media_capture in media_captures:
-            logger.critical(f"Media Captured: {media_capture}")
+            logger.info(f"Media Captured: {media_capture}")
             msg = MediaCaptureMessageModel.model_validate_json(media_capture)
             self.log_media_capture(msg, force=True)
 

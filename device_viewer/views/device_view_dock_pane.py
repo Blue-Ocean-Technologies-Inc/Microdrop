@@ -249,7 +249,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         Handle screen recording events from the device viewer.
         """
-        logger.critical(f"Screen recording triggered: {message}")
+        logger.info(f"Screen recording triggered: {message}")
 
         recording_data = json.loads(message)
         self.camera_control_widget.screen_recording_signal.emit(recording_data)
