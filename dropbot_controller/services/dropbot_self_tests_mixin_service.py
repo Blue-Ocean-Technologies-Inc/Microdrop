@@ -2,11 +2,12 @@ import json
 from pathlib import Path
 from functools import wraps
 from tqdm import tqdm
-
+# ******************************** DO NOT remove unused imports here **************************************
 from dropbot.hardware_test import (ALL_TESTS, system_info, test_system_metrics,
                                    test_i2c, test_voltage, test_shorts,
                                    test_on_board_feedback_calibration,
                                    test_channels)
+# **********************************************************************************************************
 
 from dropbot.self_test import (generate_report, plot_test_voltage_results, 
                                plot_test_on_board_feedback_calibration_results, 
@@ -19,7 +20,7 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import SHORTS_DETECTED
 
-from ..consts import SELF_TESTS_PROGRESS
+from ..consts import SELF_TESTS_PROGRESS, TestEvent, create_test_progress_message
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
@@ -44,6 +45,41 @@ def get_timestamped_results_path(test_name: str, path: [str, Path]) -> Path:
 
     return path.joinpath(f'{test_name}_results-{timestamp}')
 
+
+class TestSession:
+    def __init__(self, total_tests, report_path=None, tests=None):
+        self.total_tests = total_tests
+        self.report_path = report_path
+        self.tests = tests
+
+    def __enter__(self):
+        # Notify UI to Open Dialog IMMEDIATELY
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.SESSION_START,
+                total_tests=self.total_tests,
+                report_path=self.report_path,
+                tests=self.tests
+            ),
+        )
+        return self
+
+    def update(self, test_name, test_index):
+        # Notify UI of Progress
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.PROGRESS, test_name=test_name, test_index=test_index
+            ),
+        )
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Automatically runs when the loop finishes OR crashes
+        status = "cancelled" if exc_type is KeyboardInterrupt else "completed"
+        publish_message(
+            topic=SELF_TESTS_PROGRESS, message=create_test_progress_message(TestEvent.SESSION_END, status=status)
+        )
 
 @provides(IDropbotControlMixinService)
 class DropbotSelfTestsMixinService(HasTraits):
@@ -73,11 +109,11 @@ class DropbotSelfTestsMixinService(HasTraits):
             """
             # find the required test name based on the dropbot function name see dropbot.hardware_test
             test_name = "_".join(func.__name__.split('_')[1:-1])
-            
+
             # set the report file name in the needed dir based on tests run
             report_path = get_timestamped_results_path(test_name, report_generation_directory).with_suffix('.html')
             report_path = str(report_path.absolute())
-            
+
             # the tests arg should be None for self test if all tests need to be run
             if test_name == "run_all_tests":
                 tests = None
@@ -89,7 +125,7 @@ class DropbotSelfTestsMixinService(HasTraits):
             self._self_test_cancelled = False
             with self.proxy.signals.signal('shorts-detected').muted():
                 result = self._self_test(self.proxy, tests=tests, report_path=report_path)
-      
+
             if report_path is not None:
                 logger.info(f"Report generating in the file {report_path}")
                 generate_report(result, report_path, force=True)
@@ -107,9 +143,9 @@ class DropbotSelfTestsMixinService(HasTraits):
                 elif test_name == "test_channels":
                     plot_data = plot_test_channels_results(result[test_name], 
                                                         return_fig=True)
-                            
+
                 if plot_data is not None:
-                    # Pull up the report in a window 
+                    # Pull up the report in a window
                     def show_results_dialog():
                         self.results_dialog = ResultsDialogAction()
                         test_name_display = test_name.replace("_", " ").capitalize() + " Results"
@@ -125,7 +161,7 @@ class DropbotSelfTestsMixinService(HasTraits):
             # do whatever else is defined in func
             func(self, report_generation_directory)  
         return _execute_test
-    
+
     def _self_test(self, proxy, tests=None, report_path=None):
         """
         .. versionadded:: 1.28
@@ -150,42 +186,39 @@ class DropbotSelfTestsMixinService(HasTraits):
 
         if tests is None:
             tests = ALL_TESTS
+
         results = {}
 
-        structured_message = {"active_state": True, "current_test_name": None, 
-                            "current_test_id": 0, "total_tests": len(tests), 
-                            "report_path": report_path }
+        # The 'with' block handles Open/Close of the UI automatically
+        with TestSession(len(tests), report_path, tests) as session:
 
-        for i, test_name_i in enumerate(pbar := tqdm(tests)):
-            if self._self_test_cancelled:
-                logger.info("Self-test cancelled by user.")
-                break
-            # description of test that will be processed
-            structured_message["current_test_name"] = test_name_i
-            structured_message["current_test_id"] = i
-            pbar.set_description(test_name_i)
-            
-            # publish the job
-            publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(structured_message))
-            
-            if len(tests) == 1 and test_name_i == "test_shorts":
-                import time
-                time.sleep(0.3)
+            # Safe function lookup (No eval!)
+            test_funcs = [
+                (name, globals().get(name)) for name in tests if globals().get(name)
+            ]
 
-            # do the job
-            test_func_i = eval(test_name_i)
-            results[test_name_i] = test_func_i(proxy)
+            for i, (name, func) in enumerate(pbar := tqdm(test_funcs)):
+                if self._self_test_cancelled:
+                    logger.warning("Self-test sequence cancelled by user.")
+                    break
 
-            duration_i = results[test_name_i]['duration']
-            logger.debug('%s: %.1f s', test_name_i, duration_i)
-            total_time += duration_i
+                try:
+                    # 1. Log START of test
+                    logger.info(f"Running test [{i+1}/{len(test_funcs)}]: {name}")
 
-        structured_message["active_state"] = False
-        structured_message["current_test_name"] = None
-        structured_message["cancelled"] = self._self_test_cancelled
-        publish_message(topic=SELF_TESTS_PROGRESS, message=json.dumps(structured_message))
+                    session.update(name, i)  # Send Progress
+                    pbar.set_description(name)
 
-        logger.info('**Total time: %.1f s**', total_time)
+                    # Run the test function
+                    result = func(proxy)
+                    results[name] = result
+
+                    # 2. Log RESULT of test
+                    logger.info(f"Test '{name}' completed. Result: {result}")
+
+                except Exception as e:
+                    logger.error(f"Test '{name}' failed with exception: {e}", exc_info=True)
+                    results[name] = "ERROR"
 
         return results
 

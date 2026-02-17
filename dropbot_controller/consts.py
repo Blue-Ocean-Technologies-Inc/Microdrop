@@ -44,6 +44,18 @@ SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
 DETECT_DROPLETS = "dropbot/requests/detect_droplets"
 CHANGE_SETTINGS = "dropbot/requests/change_settings"
 
+import json
+
+class TestEvent:
+    SESSION_START = "SESSION_START"
+    PROGRESS = "PROGRESS"
+    SESSION_END = "SESSION_END"
+    ERROR = "ERROR"
+
+def create_test_progress_message(event_type, **kwargs):
+    """Helper to ensure consistent message structure"""
+    return json.dumps({"type": event_type, "payload": kwargs})
+
 # Dropbot Error Topics
 DROPBOT_ERROR = 'dropbot/error'
 
