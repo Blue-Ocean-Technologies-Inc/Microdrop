@@ -1,7 +1,7 @@
 # system imports.
 import json
 import dramatiq
-
+from PySide6.QtCore import QTimer
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
@@ -11,13 +11,13 @@ from traits.api import Instance, provides
 
 # Local imports.
 from .consts import PKG
+from dropbot_controller.consts import TestEvent
 
 from microdrop_utils.pyface_helpers import StatusBarManager
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
                                                       basic_listener_actor_routine)
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
-from microdrop_utils.status_bar_utils import set_status_bar_message
 
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
@@ -36,9 +36,9 @@ class MicrodropTask(Task):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     listener_name = f"{PKG}_listener"
-    
+
     #### 'MicrodropTask' interface #########################
-    
+
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
 
@@ -100,7 +100,6 @@ class MicrodropTask(Task):
 
         self.window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 
-
     ###########################################################################
     # Protected interface.
     ###########################################################################
@@ -135,55 +134,69 @@ class MicrodropTask(Task):
     # Including below function permanently this class, so no need to dynamically attach it in dropbot_tools_menu/plugin.py
     # This callback is registered in ACTOR_TOPIC_DICT of dropbot_tools_menu and does nothing if that plugin is not loaded
     # The relevant code has to be here since the dialogs need to be manipulated from the main task
-    ##########################################################
+    ###########################################################
 
-    def _on_self_tests_progress_triggered(self, current_message):
-        '''
-        Method adds on to the device viewer task to listen to the self tests topic and react accordingly
-        '''
-        message = json.loads(current_message)
-        active_state = message.get('active_state')
-        current_test_name = message.get('current_test_name')
-        current_test_id = message.get('current_test_id')
-        total_tests = message.get('total_tests')
-        report_path = message.get('report_path')
-        cancelled = message.get('cancelled', False)
-        
-        def show_dialog():
+    def _on_self_tests_progress_triggered(self, raw_message):
+        try:
+            data = json.loads(raw_message)
+            event_type = data.get("type")
+            payload = data.get("payload", {})
+        except ValueError:
+            return
+
+        # 1. Dispatch based on Explicit Event Type
+        if event_type == TestEvent.SESSION_START:
+            self._handle_session_start(payload)
+
+        elif event_type == TestEvent.PROGRESS:
+            self._handle_progress(payload)
+
+        elif event_type == TestEvent.SESSION_END:
+            self._handle_session_end(payload)
+
+    # --- Separated Logic Handlers ---
+
+    def _handle_session_start(self, payload):
+        self._total_tests = total = payload.get("total_tests", 0)
+
+        def _show():
             self.wait_for_test_dialog = WaitForTestDialogAction()
-            if total_tests == 1:
-                test_name = current_test_name.replace("_", " ").capitalize()
-                self.wait_for_test_dialog.perform(self, 
-                                                  test_name=test_name)
-            else:
-                test_name = 'All Tests'
-                self.wait_for_test_dialog.perform(self, 
-                                                  test_name=test_name, 
-                                                  mode="progress_bar")
-            
-        if current_test_id == 0 and current_test_name is not None:
-            # Start child window here when current_test_id == 0
-            # Force the dialog to be shown in the next event loop iteration
-            GUI.invoke_later(show_dialog)
-            
-        logger.info(f"Handler called. test_name = {current_test_name}, Running test = {current_test_id} / {total_tests}")
+            mode = "progress_bar" if total > 1 else "spinner"
 
-        # Update the progress bar if in progress mode.
-        if total_tests > 1:
-            if not active_state:
-                percentage = 100
+            if total == 1:
+                test = payload.get("tests")[0].replace("_", " ").title()
+                test_name = f"Running Dropbot Self Test: {test}"
             else:
-                percentage = int((current_test_id / total_tests) * 100)
-                
-            logger.debug(f"Progress: {percentage}")
-            GUI.invoke_later(self.wait_for_test_dialog.set_progress, 
-                             percentage, 
-                             current_test_name)
+                test_name = "Running All Dropbot Self Tests..."
 
-        # Close the dialog when the test is done
-        if not active_state:
-            GUI.invoke_later(self.wait_for_test_dialog.close)
-            if cancelled:
-                GUI.invoke_later(set_status_bar_message, "Self test cancelled.", self.window)
-            else:
-                GUI.invoke_later(set_status_bar_message, "Self test completed.", self.window)
+            self.wait_for_test_dialog.perform(
+                self, test_name=test_name, mode=mode
+            )
+
+        GUI.invoke_later(_show)
+
+    def _handle_progress(self, payload):
+        # message sent right before test is run
+        # So the last test was completed.
+        name = payload.get("test_name", "")
+        idx = int(payload.get("test_index", 0))
+        def _update():
+            if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
+                # You might need to pass 'total' in payload or store it in self
+                # For now assuming percentage is calculated here or passed
+                self.wait_for_test_dialog.set_progress(int(idx * 100 / self._total_tests), name)
+
+        GUI.invoke_later(_update)
+
+    def _handle_session_end(self, payload):
+
+        def _cleanup_reference():
+            if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
+                self.wait_for_test_dialog.close()
+                self.wait_for_test_dialog = None  # Cleanup reference
+
+        def _close():
+                self.wait_for_test_dialog.set_progress_end("Dropbot Self Test(s) are Complete! \n\nReport will be opened shortly...")
+                QTimer.singleShot(1200, _cleanup_reference)
+
+        GUI.invoke_later(_close)
