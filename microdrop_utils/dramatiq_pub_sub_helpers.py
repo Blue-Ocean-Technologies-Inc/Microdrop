@@ -11,8 +11,8 @@ logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
 
-
-def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default", 
+@dramatiq.actor
+def _dramatiq_publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default",
                     message_kwargs=None, message_options=None):
     """
     Publish a message to a given actor with a certain topic
@@ -36,6 +36,15 @@ def publish_message(message: str, topic: str, actor_to_send: str = "message_rout
     )
 
     broker.enqueue(message)
+
+
+
+def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default",
+                    message_kwargs=None, message_options=None):
+    """
+    Publish a message to a given actor with a certain topic
+    """
+    _dramatiq_publish_message.send(message, topic, actor_to_send, queue_name, message_kwargs, message_options)
 
 
 class MQTTMatcher:
