@@ -2,7 +2,6 @@ import time
 import json
 from typing import Optional, Dict
 
-import dramatiq
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
 
@@ -10,10 +9,10 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.services.camera_prewarm_scheduler import CameraPrewarmScheduler
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.hardware_setter_services import VoltageFrequencyService, MagnetService
+from protocol_grid.services.utils import _publish_camera_capture_control, _start_step_recording, _stop_step_recording
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
-from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_CAMERA_ACTIVE,
-                                  DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_SCREEN_RECORDING)
+from protocol_grid.consts import (PROTOCOL_GRID_DISPLAY_STATE)
 from dropbot_controller.consts import (ELECTRODES_STATE_CHANGE, DETECT_DROPLETS,
                                        SET_REALTIME_MODE)
 
@@ -31,54 +30,6 @@ class ProtocolRunnerSignals(QObject):
     protocol_paused = Signal()
     protocol_error = Signal(str)
     select_step = Signal(str)  # step_uid
-
-
-@dramatiq.actor
-def _publish_camera_video_control(active):
-    """Publish camera video control message."""
-    try:
-        if active == "true":
-            publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="true")
-        else:
-            publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="false")
-        logger.info(f"Published camera video control: active={active}")
-    except Exception as e:
-        logger.error(f"Error publishing camera video control: {e}")
-
-@dramatiq.actor
-def _publish_camera_capture_control(step_id, step_description, experiment_dir):
-    """Publish camera capture control message."""
-    try:
-        message_data = {
-            "directory": experiment_dir,
-            "step_description": step_description,
-            "step_id": step_id,
-            "show_dialog": False
-        }
-        publish_message(topic=DEVICE_VIEWER_SCREEN_CAPTURE, message=json.dumps(message_data))
-        logger.info(f"Published camera capture control for step {step_id}")
-    except Exception as e:
-        logger.error(f"Error publishing camera capture control: {e}")
-
-@dramatiq.actor
-def _start_step_recording(step_id, step_description, experiment_dir):
-    """Start step recording."""
-    message_data = {
-        "action": "start",
-        "directory": experiment_dir,
-        "step_description": step_description,
-        "step_id": step_id,
-        "show_dialog": False
-    }
-    publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
-    logger.info(f"Started recording for step {step_id}")
-
-@dramatiq.actor
-def _stop_step_recording():
-    """Stop step recording."""
-    message_data = {"action": "stop"}
-    publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
-    logger.info("Stopped recording for step")
 
 
 def _is_checkbox_checked(item_or_value):
@@ -202,14 +153,9 @@ class ProtocolRunnerController(QObject):
         self._current_phase_volume_threshold = 0.0
         self._current_phase_target_capacitance = None
 
-        # media controls
-        self._video_enabled_for_protocol = False
-
         # Camera pre-warm scheduler
         self._camera_scheduler = CameraPrewarmScheduler(
             prewarm_seconds=10.0,
-            on_camera_on=lambda: self._set_camera_video(True),
-            on_camera_off=lambda: self._set_camera_video(False),
             calculate_step_time=PathExecutionService.calculate_step_execution_time,
             get_empty_device_state=PathExecutionService.get_empty_device_state,
         )
@@ -1604,9 +1550,6 @@ class ProtocolRunnerController(QObject):
 
         _stop_step_recording()
 
-        if self._video_enabled_for_protocol:
-            _publish_camera_video_control.send("false")
-
         # message with last executed step
         if self.current_index > 0 and self.current_index <= len(self._run_order):
             last_step_info = self._run_order[self.current_index - 1]
@@ -2056,8 +1999,3 @@ class ProtocolRunnerController(QObject):
             logger.info(f"Updated voltage/frequency for upcoming step: {new_voltage}V, {new_frequency}Hz")
 
         return True
-
-    def _set_camera_video(self, on: bool) -> None:
-        """Callback used by the camera pre-warm scheduler."""
-        _publish_camera_video_control.send("true" if on else "false")
-        self._video_enabled_for_protocol = on

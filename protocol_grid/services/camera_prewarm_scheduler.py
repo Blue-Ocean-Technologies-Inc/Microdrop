@@ -31,6 +31,7 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED
 
 from logger.logger_service import get_logger
+from protocol_grid.services.utils import _publish_camera_video_control
 
 logger = get_logger(__name__)
 
@@ -79,14 +80,10 @@ class CameraPrewarmScheduler:
         self,
         *,
         prewarm_seconds: float = 10.0,
-        on_camera_on: Callable,
-        on_camera_off: Callable,
         calculate_step_time: Callable,
         get_empty_device_state: Callable,
     ):
         self._prewarm_seconds = prewarm_seconds
-        self._on_camera_on = on_camera_on
-        self._on_camera_off = on_camera_off
         self._calculate_step_time = calculate_step_time
         self._get_empty_device_state = get_empty_device_state
 
@@ -148,19 +145,16 @@ class CameraPrewarmScheduler:
             cumulative_time += duration
 
         # 2. Identify OFF→ON and ON→OFF transition edges
-        _camera_state = "off"
         _camera_on_end_time = 0.0
         for start_time, needs_camera, _duration in step_timeline:
 
-            if needs_camera and _camera_state == "off":
+            if needs_camera:
                 on_time = max(0.0, start_time - self._prewarm_seconds)
-                self._schedule.append((on_time, "on"))
-                _camera_state = "on"
+                self._schedule.append((on_time, True))
                 _camera_on_end_time = start_time + _duration
 
-            elif _camera_state == "on" and (start_time - _camera_on_end_time) > self._prewarm_seconds:
-                        self._schedule.append((start_time, "off"))
-                        _camera_state = "off"
+            elif (start_time - _camera_on_end_time) > self._prewarm_seconds:
+                        self._schedule.append((_camera_on_end_time + 0.5, False))
 
         # If the protocol ends with camera still on, _on_protocol_finished in
         # the controller will handle the final OFF.
@@ -172,6 +166,8 @@ class CameraPrewarmScheduler:
         # 3. Create scheduler and submit jobs
         self._start_time = datetime.now()
         self._scheduler = BackgroundScheduler()
+
+        print(self._schedule)
 
         for idx, (offset_s, action) in enumerate(self._schedule):
             self._add_job(idx, offset_s, action, suffix="")
@@ -217,14 +213,9 @@ class CameraPrewarmScheduler:
 
                 delay = offset_s - elapsed
                 run_date = datetime.now() + timedelta(seconds=delay)
-                callback = self._on_camera_on if action == "on" else self._on_camera_off
-                self._scheduler.add_job(
-                    func=callback,
-                    trigger=DateTrigger(run_date=run_date),
-                    id=f"camera_{action}_{idx}_resumed",
-                    replace_existing=True,
-                    misfire_grace_time=None,
-                )
+
+                self._add_job(idx, offset_s, action, run_date=run_date, suffix="resumed")
+
                 jobs_added += 1
                 logger.debug(
                     f"Camera schedule resumed: {action.upper()} in {delay:.1f}s"
@@ -259,19 +250,19 @@ class CameraPrewarmScheduler:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _add_job(self, idx: int, offset_s: float, action: str, suffix: str) -> None:
+    def _add_job(self, idx: int, offset_s: float, action: bool, suffix: str, run_date=None) -> None:
         """Add a single DateTrigger job to the scheduler."""
-        run_date = self._start_time + timedelta(seconds=offset_s)
-        callback = self._on_camera_on if action == "on" else self._on_camera_off
+
+        if not run_date:
+            run_date = self._start_time + timedelta(seconds=offset_s)
 
         self._scheduler.add_job(
-            func=callback,
+            func=_publish_camera_video_control.send,
+            args=[str(action).lower()],
             trigger=DateTrigger(run_date=run_date),
-            id=f"camera_{action}_{idx}{suffix}",
-            replace_existing=True,
-            misfire_grace_time=None,  # always fire even if late
+            id=f"camera_{action}_{idx}_{suffix}",
         )
-        logger.info(
+        logger.critical(
             f"Camera schedule: {action.upper()} at T+{offset_s:.1f}s "
             f"(abs: {run_date.strftime('%H:%M:%S.%f')})"
         )
