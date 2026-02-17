@@ -31,7 +31,7 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_PAUSED
 
 from logger.logger_service import get_logger
-from protocol_grid.services.utils import _publish_camera_video_control
+from protocol_grid.services.utils import _publish_camera_video_control, determine_run_schedule
 
 logger = get_logger(__name__)
 
@@ -116,13 +116,13 @@ class CameraPrewarmScheduler:
             ``.device_state``.
         """
         self.shutdown()  # clean up any previous run
-
         self._schedule = []
+
         self._total_pause_duration = 0.0
 
         # 1. Build a timeline: (cumulative_start, needs_camera, duration)
         cumulative_time = 0.0
-        step_timeline: List[Tuple[float, bool, float]] = []
+        step_timeline: list[dict] = []
 
         for entry in run_order:
             step = entry["step"]
@@ -141,23 +141,13 @@ class CameraPrewarmScheduler:
             record = _is_checkbox_checked(step.parameters.get("Record", ""))
             needs_camera = video or capture or record
 
-            step_timeline.append((cumulative_time, needs_camera, duration))
+            step_timeline.append({"start_time": cumulative_time, "duration": duration, "needs_state": needs_camera})
             cumulative_time += duration
 
         # 2. Identify OFF→ON and ON→OFF transition edges
-        _camera_on_end_time = 0.0
-        for start_time, needs_camera, _duration in step_timeline:
-
-            if needs_camera:
-                on_time = max(0.0, start_time - self._prewarm_seconds)
-                self._schedule.append((on_time, True))
-                _camera_on_end_time = start_time + _duration
-
-            elif (start_time - _camera_on_end_time) > self._prewarm_seconds:
-                        self._schedule.append((_camera_on_end_time + 0.5, False))
-
-        # If the protocol ends with camera still on, _on_protocol_finished in
-        # the controller will handle the final OFF.
+        _camera_on_end_times = determine_run_schedule(step_timeline)
+        for start_time, end_time in step_timeline:
+            self._schedule.extend([(start_time, True), (end_time, False)])
 
         if not self._schedule:
             logger.info("Camera schedule: no camera events needed for this protocol.")
