@@ -148,15 +148,20 @@ class CameraPrewarmScheduler:
             cumulative_time += duration
 
         # 2. Identify OFF→ON and ON→OFF transition edges
-        camera_on = False
+        _camera_state = "off"
+        _camera_on_end_time = 0.0
         for start_time, needs_camera, _duration in step_timeline:
-            if needs_camera and not camera_on:
+
+            if needs_camera and _camera_state == "off":
                 on_time = max(0.0, start_time - self._prewarm_seconds)
                 self._schedule.append((on_time, "on"))
-                camera_on = True
-            elif not needs_camera and camera_on:
-                self._schedule.append((start_time, "off"))
-                camera_on = False
+                _camera_state = "on"
+                _camera_on_end_time = start_time + _duration
+
+            elif _camera_state == "on" and (start_time - _camera_on_end_time) > self._prewarm_seconds:
+                        self._schedule.append((start_time, "off"))
+                        _camera_state = "off"
+
         # If the protocol ends with camera still on, _on_protocol_finished in
         # the controller will handle the final OFF.
 
