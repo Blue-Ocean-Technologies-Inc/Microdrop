@@ -382,7 +382,7 @@ class VideoRecorder(QObject):
         self._stop_ffmpeg()
 
         ## Save path to cache
-        _cache_media_capture(MediaType.VIDEO, self._output_path)
+        _cache_media_capture.send(MediaType.VIDEO, self._output_path)
 
         # update UI for any dialogs.
         self.recording_stopped.emit(self._output_path)

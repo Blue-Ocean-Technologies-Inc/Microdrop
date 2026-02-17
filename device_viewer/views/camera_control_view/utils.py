@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import dramatiq
 from PySide6.QtCore import QUrl
 
 from device_viewer.models.media_capture_model import MediaType, MediaCaptureMessageModel
@@ -11,6 +13,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
+@dramatiq.actor
 def _cache_media_capture(name: MediaType, save_path: str):
     media_capture_message = MediaCaptureMessageModel(
         path=Path(save_path), type=name.lower()
@@ -25,7 +28,6 @@ def _cache_media_capture(name: MediaType, save_path: str):
         app_globals["media_captures"] += [message]
 
     logger.critical(app_globals["media_captures"])
-
 
 def _show_media_capture_dialog(
     name: MediaType, save_path: str
