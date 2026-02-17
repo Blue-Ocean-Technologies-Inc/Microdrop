@@ -2,6 +2,7 @@ import time
 import json
 from typing import Optional, Dict
 
+import dramatiq
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
 
@@ -32,6 +33,7 @@ class ProtocolRunnerSignals(QObject):
     select_step = Signal(str)  # step_uid
 
 
+@dramatiq.actor
 def _publish_camera_video_control(active):
     """Publish camera video control message."""
     try:
@@ -43,7 +45,7 @@ def _publish_camera_video_control(active):
     except Exception as e:
         logger.error(f"Error publishing camera video control: {e}")
 
-
+@dramatiq.actor
 def _publish_camera_capture_control(step_id, step_description, experiment_dir):
     """Publish camera capture control message."""
     try:
@@ -58,7 +60,7 @@ def _publish_camera_capture_control(step_id, step_description, experiment_dir):
     except Exception as e:
         logger.error(f"Error publishing camera capture control: {e}")
 
-
+@dramatiq.actor
 def _start_step_recording(step_id, step_description, experiment_dir):
     """Start step recording."""
     message_data = {
@@ -69,7 +71,14 @@ def _start_step_recording(step_id, step_description, experiment_dir):
         "show_dialog": False
     }
     publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
-    logger.critical(f"Started recording for step {step_id}")
+    logger.info(f"Started recording for step {step_id}")
+
+@dramatiq.actor
+def _stop_step_recording():
+    """Stop step recording."""
+    message_data = {"action": "stop"}
+    publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+    logger.info("Stopped recording for step")
 
 
 def _is_checkbox_checked(item_or_value):
@@ -194,7 +203,6 @@ class ProtocolRunnerController(QObject):
         self._current_phase_target_capacitance = None
 
         # media controls
-        self._recording_active = False
         self._video_enabled_for_protocol = False
 
         # Camera pre-warm scheduler
@@ -232,54 +240,21 @@ class ProtocolRunnerController(QObject):
             last_record_enabled = _is_checkbox_checked(last_step.parameters.get("Record", "")) if last_step else False
             _record_enabled_changed = record_enabled != last_record_enabled
 
-            # NOTE: Video feed on/off is managed by the pre-compiled camera scheduler.
-            # We only log the current state here for debugging.
-            if video_enabled or capture_enabled or record_enabled:
-                logger.debug(
-                    f"Step {step_id}: Camera video should be ON (managed by scheduler)."
-                )
-            else:
-                logger.debug(
-                    f"Step {step_id}: Camera video should be OFF (managed by scheduler)."
-                )
-
-            ################################ Media capture helpers ###############################
-            def _start_recording():
-                _start_step_recording(step_id, step_description, experiment_dir)
-                self._recording_active = True
-                logger.info(f"Step {step_id}: Sent capture video capture request.")
-
-            def _stop_recording():
-                self._stop_step_recording()
-                self._recording_active=False
-                logger.info(f"Step {step_id}: Sent stop video capture request.")
-
-            def _capture_image():
-                _publish_camera_capture_control(
-                    step_id, step_description, experiment_dir
-                )
-                logger.info(f"Step {step_id}: Sent capture image request.")
+            logger.info(f"Step: {step_id}; record_enabled: {record_enabled}; capture_enabled: {capture_enabled}; video_enabled: {video_enabled}")
 
             ############################# Media Capture logic ##############################################
 
             if _record_enabled_changed:  # video recording state has changed
-                _start_recording() if record_enabled else _stop_recording()
+                _start_step_recording.send(step_id, step_description, experiment_dir) if record_enabled else _stop_step_recording.send()
 
             if capture_enabled:
                 logger.debug(f"Step {step_id}: Video recording stop with image capture at end.")
-                _capture_image()
-            else:
-                logger.debug(f"Step {step_id}: Video recording start with image capture at end.")
+                _publish_camera_capture_control.send(
+                    step_id, step_description, experiment_dir
+                )
 
         except Exception as e:
             logger.error(f"Error handling camera controls: {e}")
-
-    def _stop_step_recording(self):
-        """Stop step recording."""
-        message_data = {"action": "stop"}
-        publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
-        self._step_recording_active = False
-        logger.critical("Stopped recording for step")
 
     # --------- data logging ----------
     def set_data_logger(self, data_logger):
@@ -643,7 +618,6 @@ class ProtocolRunnerController(QObject):
         if self._is_running:
             return
         self._is_running = True
-        self._recording_active = False
         self._is_paused = False
         self._status_timer.start()
         self.current_index = 0
@@ -1628,11 +1602,10 @@ class ProtocolRunnerController(QObject):
     def _on_protocol_finished(self):
         publish_message(topic=SET_REALTIME_MODE, message=str(False))
 
-        if self._recording_active:
-            self._stop_step_recording()
+        _stop_step_recording()
 
         if self._video_enabled_for_protocol:
-            _publish_camera_video_control("false")
+            _publish_camera_video_control.send("false")
 
         # message with last executed step
         if self.current_index > 0 and self.current_index <= len(self._run_order):
@@ -2086,5 +2059,5 @@ class ProtocolRunnerController(QObject):
 
     def _set_camera_video(self, on: bool) -> None:
         """Callback used by the camera pre-warm scheduler."""
-        _publish_camera_video_control("true" if on else "false")
+        _publish_camera_video_control.send("true" if on else "false")
         self._video_enabled_for_protocol = on
