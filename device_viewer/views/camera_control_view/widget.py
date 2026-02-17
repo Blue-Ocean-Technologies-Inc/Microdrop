@@ -5,7 +5,6 @@ from PySide6.QtCore import (
     Slot,
     QTimer,
     QStandardPaths,
-    QUrl,
 )
 from PySide6.QtGui import QImage
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
@@ -23,12 +22,12 @@ from PySide6.QtWidgets import (
 
 from apptools.preferences.api import Preferences
 
-from microdrop_application.dialogs.pyface_wrapper import error, warning, success
+from microdrop_application.dialogs.pyface_wrapper import error, warning
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
+from .utils import _cache_media_capture, _show_media_capture_dialog
 from ..electrode_view.electrode_scene import ElectrodeScene
 
 from ...utils.camera import (
@@ -36,52 +35,10 @@ from ...utils.camera import (
     get_transformed_frame,
     ImageSaver,
 )
-from ...models.media_capture_model import MediaCaptureMessageModel, MediaType
+from ...models.media_capture_model import MediaType
 
 from logger.logger_service import get_logger
-
 logger = get_logger(__name__)
-
-app_globals = get_microdrop_redis_globals_manager()
-
-def _show_media_capture_dialog(
-    name: MediaType, save_path: str, show_media_capture_dialog: bool
-):
-
-    if name.lower() not in MediaType.get_media_types():
-        raise ValueError(f"Invalid media type: {name}")
-
-    file_url = QUrl.fromLocalFile(save_path).toString()
-    formatted_message = f"File saved to:<br><a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
-
-    media_capture_message = MediaCaptureMessageModel(
-        path=Path(save_path), type=name.lower()
-    )
-
-    message=media_capture_message.model_dump_json()
-
-    # publish_message(
-    #     topic=DEVICE_VIEWER_MEDIA_CAPTURED,
-    #     message=media_capture_message.model_dump_json(),
-    # )
-
-    if not app_globals.get("media_captures"):
-        app_globals["media_captures"] = [message]
-
-    else:
-        app_globals["media_captures"] += [message]
-
-    logger.critical(app_globals["media_captures"])
-
-    if show_media_capture_dialog:
-        # Create a non-modal popup (doesn't block the rest of the UI)
-        success(
-            None, formatted_message, title=f"{name.name.title()} Captured", modal=False, timeout=5000
-        )
-
-    logger.critical(f"Saved {name} media to {save_path}.")
-    return True
-
 
 class CameraControlWidget(QWidget):
 
@@ -463,9 +420,12 @@ class CameraControlWidget(QWidget):
 
         worker = ImageSaver(image.copy(), str(save_path))
 
-        worker.signals.save_complete.connect(
-            lambda path: _show_media_capture_dialog(MediaType.IMAGE, path, show_dialog)
-        )
+        def _post_image_capture():
+            _cache_media_capture(MediaType.IMAGE, str(save_path))
+            if show_dialog:
+                _show_media_capture_dialog(MediaType.IMAGE, str(save_path))
+
+        worker.signals.save_complete.connect(_post_image_capture)
 
         # FIXME: this could be run in a separate thread for more performance if needed. Its a QRunnable...
         worker.run()
@@ -619,7 +579,7 @@ class CameraControlWidget(QWidget):
             self.toggle_camera()
 
         # Show Result
-        if recording_output_path:
+        if recording_output_path and self.show_media_capture_dialog_for_video:
             _show_media_capture_dialog(
-                MediaType.VIDEO, recording_output_path, self.show_media_capture_dialog_for_video
+                MediaType.VIDEO, recording_output_path
             )
