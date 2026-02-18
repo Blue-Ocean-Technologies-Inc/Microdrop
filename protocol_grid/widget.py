@@ -637,6 +637,7 @@ class PGCWidget(QWidget):
                 )  # apply new device states to selected step
 
                 self.model_to_state()
+                self.load_from_state()
 
                 self._last_selected_step_id = current_step_id
                 self._last_published_step_id = current_published_id
@@ -2567,15 +2568,15 @@ class PGCWidget(QWidget):
         self, device_state, repetitions, duration, trail_length, trail_overlay
     ):
         if not device_state.has_paths():
-            return 0.0
+            return 1.0
 
         has_loops = any(
             len(path) >= 2 and path[0] == path[-1] for path in device_state.paths
         )
         if not has_loops:
-            return 0.0
+            return 1.0
 
-        max_loop_duration = 0.0
+        max_loop_duration = 1.0
 
         for path in device_state.paths:
             is_loop = len(path) >= 2 and path[0] == path[-1]
