@@ -322,6 +322,11 @@ class PausableTimer(QTimer):
         super().__init__(parent)
         self._paused_time = 0
 
+        def _clear_paused_state():
+            self._paused_time = 0
+
+        self.timeout.connect(_clear_paused_state)
+
     def start(self, msec=None):
         # Standard start: Clears any paused state
         self._paused_time = 0
@@ -345,6 +350,11 @@ class PausableTimer(QTimer):
             # We do NOT reset _paused_time to 0 yet,
             # because we might need to query it immediately for UI updates.
             # But effectively, the timer is now running.
+
+    def stop(self):
+        # Manual stop must wipe the paused state so resume() becomes invalid
+        self._paused_time = 0
+        super().stop()
 
     def remainingTime(self):
         # If running, ask QTimer. If paused, return stored value.

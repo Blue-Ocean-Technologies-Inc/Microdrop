@@ -41,14 +41,18 @@ class TimerTestWindow(QWidget):
         self.btn_start = QPushButton("Start")
         self.btn_pause = QPushButton("Pause")
         self.btn_resume = QPushButton("Resume")
+        self.btn_stop = QPushButton("Stop")
 
         self.btn_start.clicked.connect(self.do_start)
         self.btn_pause.clicked.connect(self.do_pause)
         self.btn_resume.clicked.connect(self.do_resume)
+        self.btn_stop.clicked.connect(self.do_stop)
 
         btn_layout.addWidget(self.btn_start)
         btn_layout.addWidget(self.btn_pause)
         btn_layout.addWidget(self.btn_resume)
+        btn_layout.addWidget(self.btn_stop)
+
         layout.addLayout(btn_layout)
         self.setLayout(layout)
 
@@ -66,10 +70,15 @@ class TimerTestWindow(QWidget):
         self.timer.resume()
         self.update_ui()
 
+    def do_stop(self):
+        self.timer.stop()
+        self.update_ui()
+
     def on_finished(self):
         self.ui_timer.stop()
         self.lbl_time.setText("Done!")
         self.progress.setValue(0)
+        print("Finished!")
 
     def update_ui(self):
         # 1. Get how much time is left (whether running or paused)
