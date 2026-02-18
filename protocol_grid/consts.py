@@ -81,7 +81,7 @@ step_defaults = {
     "Voltage": f"{float(DropbotPreferences().default_voltage)}",
     "Frequency": f"{float(DropbotPreferences().default_frequency)}",
     "Message": "",
-    "Repeat Duration": "0.0",
+    "Repeat Duration": "1.0",
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Video": "0",
