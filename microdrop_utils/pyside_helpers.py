@@ -315,3 +315,39 @@ def with_loading_screen(message: str = "Processing..."):
 
         return wrapper
     return decorator
+
+
+class PausableTimer(QTimer):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._paused_time = 0
+
+    def start(self, msec=None):
+        # Standard start: Clears any paused state
+        self._paused_time = 0
+
+        if msec is not None:
+            super().start(msec)
+        else:
+            # If start() is called without args, use default interval
+            super().start()
+
+    def pause(self):
+        if self.isActive():
+            # CRITICAL: Save time BEFORE stopping
+            self._paused_time = self.remainingTime()
+            self.stop()
+
+    def resume(self):
+        if self._paused_time > 0:
+            # Resume only for the remaining amount
+            super().start(self._paused_time)
+            # We do NOT reset _paused_time to 0 yet,
+            # because we might need to query it immediately for UI updates.
+            # But effectively, the timer is now running.
+
+    def remainingTime(self):
+        # If running, ask QTimer. If paused, return stored value.
+        if self.isActive():
+            return super().remainingTime()
+        return self._paused_time
