@@ -1108,13 +1108,13 @@ class PGCWidget(QWidget):
 
         self.protocol_runner.set_preview_mode(preview_mode)
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
-        self.protocol_runner.set_run_order(run_order)
+        # self.protocol_runner.set_run_order(run_order)
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
 
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start()
+        self.protocol_runner.start(run_order)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1251,7 +1251,7 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_preview_mode(preview_mode)
 
         self.protocol_runner.set_repeat_protocol_n(1)
-        self.protocol_runner.set_run_order(run_order)
+        # self.protocol_runner.set_run_order(run_order)
 
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
 
@@ -1262,7 +1262,6 @@ class PGCWidget(QWidget):
             f"Running Step (path={target_step_path})\nParams={parameters}\nDevice_state={device_state.to_dict()}"
         )
 
-        self.protocol_runner.start()
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1272,6 +1271,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
+        self.protocol_runner.start(run_order)
 
     def stop_protocol(self):
 

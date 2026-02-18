@@ -558,8 +558,10 @@ class ProtocolRunnerController(QObject):
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
-    def start(self):
+    def start(self, run_order):
         publish_message(topic=SET_REALTIME_MODE, message=str(True))
+
+        self._run_order = run_order
 
         if self._is_running:
             return
@@ -962,8 +964,8 @@ class ProtocolRunnerController(QObject):
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
 
-    def set_run_order(self, run_order):
-        self._run_order = run_order
+    # def set_run_order(self, run_order):
+    #     self._run_order = run_order
 
     def _execute_next_step(self):
         if self._is_paused or not self._is_running:
