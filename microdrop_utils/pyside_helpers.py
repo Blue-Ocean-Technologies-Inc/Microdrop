@@ -322,10 +322,7 @@ class PausableTimer(QTimer):
         super().__init__(parent)
         self._paused_time = 0
 
-        def _clear_paused_state():
-            self._paused_time = 0
-
-        self.timeout.connect(_clear_paused_state)
+        self.timeout.connect(self.stop)
 
     def start(self, msec=None):
         # Standard start: Clears any paused state
@@ -339,9 +336,9 @@ class PausableTimer(QTimer):
 
     def pause(self):
         if self.isActive():
-            # CRITICAL: Save time BEFORE stopping
+            # Save time BEFORE stopping
             self._paused_time = self.remainingTime()
-            self.stop()
+            super().stop()
 
     def resume(self):
         if self._paused_time > 0:
