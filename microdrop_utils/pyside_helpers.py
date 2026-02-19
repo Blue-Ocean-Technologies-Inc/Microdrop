@@ -7,7 +7,7 @@ with consistent styling and behavior across the application.
 import functools
 from typing import Union, List, Optional
 
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -16,8 +16,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QApplication,
     QProgressDialog,
+    QProgressBar,
 )
 from PySide6.QtCore import Qt, QTimer, QThread, QEventLoop
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
@@ -338,11 +342,15 @@ class PausableTimer(QTimer):
         if self.isActive():
             # Save time BEFORE stopping
             self._paused_time = self.remainingTime()
+            logger.info(
+                f"Paused with {self._paused_time/1000:.2f}s left for paused Timer"
+            )
             super().stop()
 
     def resume(self):
         if self._paused_time > 0:
             # Resume only for the remaining amount
+            logger.info(f"Resuming with {self._paused_time/1000:.2f}s left for paused Timer)")
             super().start(self._paused_time)
             # We do NOT reset _paused_time to 0 yet,
             # because we might need to query it immediately for UI updates.
@@ -358,3 +366,122 @@ class PausableTimer(QTimer):
         if self.isActive():
             return super().remainingTime()
         return self._paused_time
+
+class LoadingOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Make background transparent for mouse events so it blocks clicks
+        self.auto_stop = None
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.hide()
+
+        # Layout to center everything
+        self.layout = QVBoxLayout(self)
+        self.layout.setAlignment(Qt.AlignCenter)
+        self.layout.setSpacing(20)
+
+        # 1. Loading Text / Spinner
+        self.lbl_message = QLabel("Processing...")
+        self.lbl_message.setAlignment(Qt.AlignCenter)
+        self.lbl_message.setStyleSheet("font-size: 24px; font-weight: bold; color: white;")
+        self.layout.addWidget(self.lbl_message)
+
+        # 2. Progress Bar (Hidden by default)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(300)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid white;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #333;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #05B8CC; 
+            }
+        """)
+        self.progress_bar.hide()
+        self.layout.addWidget(self.progress_bar)
+
+        # 3. Countdown Label (Hidden by default)
+        self.lbl_timer = QLabel("")
+        self.lbl_timer.setAlignment(Qt.AlignCenter)
+        self.lbl_timer.setStyleSheet("font-size: 16px; color: #EEE;")
+        self.lbl_timer.hide()
+        self.layout.addWidget(self.lbl_timer)
+
+        # Internal Timer for updating the progress
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(50) # Update every 50ms for smooth animation
+        self.update_timer.timeout.connect(self._update_progress)
+
+        # State variables
+        self._total_duration_ms = 0
+        self._elapsed_ms = 0
+
+    def paintEvent(self, event):
+        """Draws the semi-transparent black background."""
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 180)) # Darker opacity (180/255)
+
+    def show_loading(self, message="Loading...", duration_ms=None, auto_stop=False):
+        """
+        Shows the overlay.
+        :param message: Text to display.
+        :param duration_ms: Optional integer (milliseconds).
+                            If provided, shows progress bar and countdown.
+        """
+        self.lbl_message.setText(message)
+        self.resize(self.parent().size())
+        self.raise_() # CRITICAL: Bring to front
+        self.show()
+
+        self.auto_stop = auto_stop
+
+        if duration_ms:
+            # DETERMINATE MODE
+            self._total_duration_ms = duration_ms
+            self._elapsed_ms = 0
+
+            # Setup UI
+            self.progress_bar.setRange(0, 1000) # Higher resolution for smoothness
+            self.progress_bar.setValue(0)
+            self.progress_bar.show()
+            self.lbl_timer.show()
+
+            # Start Animation
+            self.update_timer.start()
+            self._update_progress() # Initial update
+        else:
+            # INDETERMINATE MODE
+            self.progress_bar.hide()
+            self.lbl_timer.hide()
+            self.update_timer.stop()
+
+        # Force UI repaint immediately (Fixes "Not Showing" issues)
+        QApplication.processEvents()
+
+    def stop_loading(self):
+        self.update_timer.stop()
+        self.hide()
+        QApplication.processEvents()
+
+    def _update_progress(self):
+        """Called every 50ms to update bar and label."""
+        self._elapsed_ms += 50
+
+        # 1. Update Progress Bar
+        if self._total_duration_ms > 0:
+            progress = (self._elapsed_ms / self._total_duration_ms) * 1000
+            self.progress_bar.setValue(min(int(progress), 1000))
+
+        # 2. Update Countdown Label
+        remaining_ms = max(0, self._total_duration_ms - self._elapsed_ms)
+        seconds = remaining_ms / 1000.0
+        self.lbl_timer.setText(f"Estimated time remaining: {seconds:.1f}s")
+
+        if remaining_ms == 0 and self.auto_stop:
+            self.stop_loading()
