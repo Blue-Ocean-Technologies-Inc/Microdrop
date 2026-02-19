@@ -19,8 +19,7 @@ from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style, get_tooltip_style
 from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
-from microdrop_utils.decorators import debounce
-from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
+from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen, LoadingOverlay
 from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.protocol_grid_helpers import (
     make_row,
@@ -396,6 +395,20 @@ class PGCWidget(QWidget):
         )
 
         self.application.observe(self.save_column_settings, "application_exiting")
+
+        self.loading_screen = LoadingOverlay(self)
+
+    #### Loading screen logic #####
+
+    def start_loading_screen(self, duration_ms, auto_stop):
+        logger.critical('Setting up protocol run')
+        self.loading_screen.show_loading(duration_ms=duration_ms, auto_stop=auto_stop)
+
+    def stop_loading_screen(self):
+        logger.critical('protocol run starting...')
+        self.loading_screen.stop_loading()
+
+    ################################
 
     def create_new_note(self):
 
@@ -1115,7 +1128,7 @@ class PGCWidget(QWidget):
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start(run_order)
+        self.protocol_runner.start(run_order, prewarm_seconds=10.0)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1262,7 +1275,6 @@ class PGCWidget(QWidget):
         logger.critical(
             f"Running Step (path={target_step_path})\nParams={parameters}\nDevice_state={device_state.to_dict()}"
         )
-
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1679,7 +1691,6 @@ class PGCWidget(QWidget):
         # clear last published UID
         self._set_last_published_step_uid(None)
 
-    @debounce(0.1)
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return None
