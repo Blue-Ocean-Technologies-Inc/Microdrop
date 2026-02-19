@@ -1,12 +1,13 @@
 import time
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import PausableTimer
+from protocol_grid.preferences import ProtocolPreferences
 from protocol_grid.services.camera_prewarm_scheduler import compile_camera_schedule
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.hardware_setter_services import (
@@ -83,6 +84,7 @@ class ProtocolRunnerController(QObject):
         self.preferences = preferences
 
         self.zstage_preferences = PeripheralPreferences(preferences=self.preferences)
+        self.protocol_preferences = ProtocolPreferences(preferences=self.preferences)
 
         self.protocol_state = protocol_state
         self.flatten_func = flatten_func
@@ -661,20 +663,76 @@ class ProtocolRunnerController(QObject):
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
-    def start(self, run_order, prewarm_seconds):
+    def start(self, run_order: list[Dict[str, Any]], prewarm_seconds: float) -> None:
+        """
+        Initializes and starts the protocol execution.
+
+        Validates the run order, resets internal state, computes camera scheduling
+        (including prewarm offsets), sets hardware modes, and schedules the first
+        step execution after accommodating necessary delays.
+
+        Args:
+            run_order: A list of dictionaries defining the steps to execute.
+            prewarm_seconds: The duration (in seconds) required to prewarm the camera.
+        """
         if self._is_running:
-            logger.warning("Protocol already running")
+            logger.warning("Protocol already running. Ignoring start request.")
             return
 
         if not run_order:
-            logger.warning("No run order!.. Stopping protocol.")
+            logger.warning("No run order provided. Stopping protocol.")
             self.signals.protocol_finished.emit()
             return
 
         self._run_order = run_order
+
+        # Reset internal timing and execution state
+        # Explicitly set active states
         self._is_running = True
         self._is_paused = False
+
+        # Safely zero out the trackers
+        self._reset_timing_and_phase_trackers()
+
         self._status_timer.start()
+
+        # 2. Compile the camera schedule and inject it into the run order
+        video_on_mask, offset_seconds_arr = self._prepare_camera_schedule(
+            prewarm_seconds
+        )
+
+        # 3. Calculate the delay required before firing the first step
+        is_video_on_first_step = (
+            bool(video_on_mask[0]) if len(video_on_mask) > 0 else False
+        )
+        first_step_offset = (
+            float(offset_seconds_arr[0]) if len(offset_seconds_arr) > 0 else 0.0
+        )
+
+        start_delay_ms = self._calculate_start_delay_ms(
+            is_video_on_first_step, first_step_offset
+        )
+
+        # 4. Define the callback that physically starts the run
+        def _execute_initial_step():
+            self.parent().stop_loading_screen()
+            self._execute_next_step()
+
+        # 5. Initialize hardware states
+        publish_message(topic=SET_REALTIME_MODE, message=str(True))
+        if is_video_on_first_step:
+            _publish_camera_video_control("true")
+
+        # 6. Trigger the UI loading screen and schedule the actual start
+        self.parent().start_loading_screen(start_delay_ms, auto_stop=False)
+        QTimer.singleShot(start_delay_ms, _execute_initial_step)
+
+    # ==========================================
+    # HELPER METHODS
+    # ==========================================
+
+    def _reset_timing_and_phase_trackers(self) -> None:
+        """Zeroes out all elapsed times, phase tracking, and step indices."""
         self.current_index = 0
         self._current_protocol_repeat = 1
 
@@ -688,45 +746,69 @@ class ProtocolRunnerController(QObject):
         self._phase_elapsed_time = 0.0
         self._remaining_phase_time = 0.0
         self._remaining_step_time = 0.0
+
         self._was_in_phase = False
         self._paused_phase_index = 0
         self._total_step_phases_completed = 0
         self._step_phase_start_time = None
 
-        # if not self._preview_mode:
+    def _prepare_camera_schedule(
+        self, prewarm_seconds: float
+    ) -> tuple[list[bool], list[float]]:
+        """
+        Compiles the camera prewarm schedule and injects video states and offsets
+        directly into the current run order. Updates the unique step count.
+
+        Args:
+            prewarm_seconds: Prewarm requirement in seconds.
+
+        Returns:
+            A tuple containing the generated (video_on_mask, offset_seconds_arr).
+        """
+        # (Relies on the get_prewarm_step_mask logic we discussed previously!)
         video_on_mask, offset_seconds_arr = compile_camera_schedule(
             self._run_order, prewarm_seconds=prewarm_seconds
         )
 
-        logger.debug(f"video_on_mask: {video_on_mask}; offset_seconds_arr: {offset_seconds_arr}")
+        logger.debug(
+            f"video_on_mask: {video_on_mask}; offset_seconds_arr: {offset_seconds_arr}"
+        )
 
-        total_steps = 0
+        total_unique_steps = 0
         for i, entry in enumerate(self._run_order):
-            if entry["rep_idx"] == 1:
-                total_steps += 1
+            # Count unique steps. Assume rep_idx == 1 indicates the first instance of a step.
+            if entry.get("rep_idx") == 1:
+                total_unique_steps += 1
 
+            # Inject the schedule data into the active run order dictionaries
             entry["video_on"] = video_on_mask[i]
             entry["offset_seconds"] = offset_seconds_arr[i]
 
-        self._unique_step_count = int(total_steps)
+        self._unique_step_count = total_unique_steps
 
-        publish_message(topic=SET_REALTIME_MODE, message=str(True))
+        return video_on_mask, offset_seconds_arr
 
-        start_delay = 1000 # baseline of 1 second to allow realtime mode to settle
-        # offset negative if required for the very first step
-        if video_on_mask[0]:
+    def _calculate_start_delay_ms(
+        self, is_video_on: bool, offset_seconds: float
+    ) -> int:
+        """
+        Calculates the initial startup delay (in milliseconds) required before
+        executing the first step.
 
-            if offset_seconds_arr[0] < 0:
-                start_delay += abs(int(offset_seconds_arr[0])) * 1000 # convert negative seconds to absolute ms
+        Accounts for:
+        1. Base hardware settling time for realtime mode.
+        2. Any required negative offset time if the camera must prewarm before time 0.0.
+        """
+        # Base delay to allow realtime mode to settle
+        delay_ms = int(self.protocol_preferences.realtime_mode_settling_time_s * 1000)
 
-            _publish_camera_video_control("true")
-            self.parent().start_loading_screen(start_delay, auto_stop=False)
+        # If the first step has a negative offset, we need to wait that amount of
+        # absolute time *before* technically starting "Step 0"
+        if is_video_on and offset_seconds < 0:
+            negative_offset_ms = int(abs(offset_seconds) * 1000)
+            delay_ms += negative_offset_ms
 
-        def _start():
-            self.parent().stop_loading_screen()
-            self._execute_next_step()
-
-        QTimer.singleShot(start_delay, _start)
+        return delay_ms
 
     def _qt_debounce_pause_resume(self, action_func):
         # store the action
@@ -997,12 +1079,46 @@ class ProtocolRunnerController(QObject):
     def resume(self, advanced_mode=False, preview_mode=False):
         self._qt_debounce_pause_resume(self._internal_resume)
 
-    def stop(self):
+    def stop(self) -> None:
+        """
+        Safely halts the active protocol, cleanly shuts down hardware/UI states,
+        broadcasts the halted state to the UI, and resets all internal trackers.
+        """
+        # 1. Shut down hardware modes and active sub-services
+        self._shutdown_hardware_and_services()
 
-        self._waiting_for_magnet = False
+        # 2. Clean up any active user prompts or message dialogs
+        self._cleanup_active_dialogs()
+
+        # 3. Publish the final state of the halted step to the UI & Hardware
+        self._broadcast_step_state(self.current_index)
+
+        # 4. Halt all active execution timers
+        self._stop_all_timers()
+
+        # 5. Completely clear all internal state, tracking, and feature flags
+        self._clear_all_execution_state()
+
+    # ==========================================
+    # TEARDOWN HELPER METHODS
+    # ==========================================
+
+    def _shutdown_hardware_and_services(self) -> None:
+        """Disables realtime hardware control and stops monitoring services."""
 
         publish_message(topic=SET_REALTIME_MODE, message=str(False))
 
+        # Cleanup camera recordings
+        _stop_step_recording()
+        _publish_camera_video_control("false")
+
+        self._volume_threshold_service.stop_monitoring()
+        self._volume_threshold_mode_active = False
+        self._current_phase_volume_threshold = 0.0
+        self._current_phase_target_capacitance = None
+
+    def _cleanup_active_dialogs(self) -> None:
+        """Closes popup dialogs and resets related UI pause flags."""
         if hasattr(self, "_current_message_dialog"):
             self._current_message_dialog.close()
             delattr(self, "_current_message_dialog")
@@ -1011,127 +1127,130 @@ class ProtocolRunnerController(QObject):
             self._current_completion_dialog.close()
             delattr(self, "_current_completion_dialog")
 
-        self._pause_for_message_display = False
-        self._message_waiting_for_response = False
-        self._message_rejected_pause = False
         if hasattr(self, "_message_dialog_step_info"):
             delattr(self, "_message_dialog_step_info")
 
+        self._pause_for_message_display = False
+        self._message_waiting_for_response = False
+        self._message_rejected_pause = False
+
+        # Call the existing message timing cleanup method
         self._cleanup_message_dialog_timing()
 
-        # clear advanced mode editability state
-        self._advanced_mode_editable_state = False
+    def _broadcast_step_state(self, index: int) -> None:
+        """
+        Extracts the state of the device for a specific step index and publishes
+        it to the Grid UI and Hardware to ensure a safe, known resting state.
+        """
+        if not self._run_order or index < 0 or index >= len(self._run_order):
+            return
 
-        self._was_advanced_hardware_mode = False
+        target_step_info = self._run_order[index]
+        target_step = target_step_info["step"]
 
-        # send final message of the step that was being executed before stopped
-        if self._is_running and self.current_index < len(self._run_order):
-            current_step_info = self._run_order[self.current_index]
-            current_step = current_step_info["step"]
+        device_state = getattr(target_step, "device_state", None)
+        if not device_state:
+            device_state = PathExecutionService.get_empty_device_state()
 
-            device_state = (
-                current_step.device_state
-                if hasattr(current_step, "device_state") and current_step.device_state
-                else None
+        step_uid = target_step.parameters.get("UID", "")
+        step_description = target_step.parameters.get("Description", "Step")
+        step_id = target_step.parameters.get("ID", "")
+
+        msg_model = PathExecutionService.create_dynamic_device_state_message(
+            device_state,
+            device_state.activated_electrodes,
+            step_uid,
+            step_description,
+            step_id,
+        )
+        msg_model.editable = True
+
+        # Note: Using model_dump_json() as requested in your finish snippet
+        # (if using Pydantic V2). If older models use .serialize(), use that.
+        publish_message(
+            topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.model_dump_json()
+        )
+
+        if not self._preview_mode:
+            deactivated_hardware_message = (
+                PathExecutionService.create_deactivated_hardware_electrode_message(
+                    device_state
+                )
             )
-            if not device_state:
-                device_state = PathExecutionService.get_empty_device_state()
-
-            step_uid = current_step.parameters.get("UID", "")
-            step_description = current_step.parameters.get("Description", "Step")
-            step_id = current_step.parameters.get("ID", "")
-
-            msg_model = PathExecutionService.create_dynamic_device_state_message(
-                device_state,
-                device_state.activated_electrodes,
-                step_uid,
-                step_description,
-                step_id,
-            )
-
-            msg_model.editable = True
-
             publish_message(
-                topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()
+                topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message
             )
 
-            if not self._preview_mode:
-                deactivated_hardware_message = (
-                    PathExecutionService.create_deactivated_hardware_electrode_message(
-                        device_state
-                    )
-                )
+        if step_uid:
+            self.signals.select_step.emit(step_uid)
 
-                publish_message(
-                    topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message
-                )
-
-            # select the current step that was being executed
-            if step_uid:
-                self.signals.select_step.emit(step_uid)
-
-        # VoltageFrequencyService.publish_default_voltage_frequency(self._preview_mode)
-
-        self._is_running = False
-        self._is_paused = False
+    def _stop_all_timers(self) -> None:
+        """Halts all QTimers related to execution and status checking."""
         self._status_timer.stop()
         self._timer.stop()
         self._phase_timer.stop()
 
-        self.current_index = 0
+    def _clear_all_execution_state(self) -> None:
+        """
+        Resets all protocol trackers, time counters, phase navigation markers,
+        and feature flags back to their default resting states.
+        """
+        # 1. Clear core tracking & timing variables using the shared helper
+        self._reset_timing_and_phase_trackers()
+
+        # 2. Top-level execution state (Stop-specific)
+        self._is_running = False
+        self._is_paused = False
         self._run_order = []
-        self._start_time = None
-        self._step_start_time = None
-        self._elapsed_time = 0.0
-        self._step_elapsed_time = 0.0
+
+        # 3. Remaining Execution/Phase state
         self._current_step_timer = None
         self._current_execution_plan = []
         self._current_phase_index = 0
         self._step_repetition_info = {}
-
-        self._pause_time = None
-        self._phase_start_time = None
-        self._phase_elapsed_time = 0.0
-        self._remaining_phase_time = 0.0
-        self._remaining_step_time = 0.0
-        self._was_in_phase = False
-        self._paused_phase_index = 0
-        self._total_step_phases_completed = 0
-        self._step_phase_start_time = None
         self._unique_step_count = 0
 
-        # clear advanced mode state
+        # 4. Advanced Mode state
+        self._advanced_mode_editable_state = False
+        self._was_advanced_hardware_mode = False
         self._is_advanced_hardware_control = False
         self._paused_original_electrodes = {}
 
-        # clear phase navigation state
+        # 5. Phase Navigation state
         self._phase_navigation_mode = False
         self._original_pause_phase_index = 0
         self._navigated_phase_index = 0
         self._phase_navigation_step_elapsed = 0.0
         self._original_step_time_remaining = 0.0
 
-        # clear droplet detection state
+        # 6. Droplet Detection & Magnet state
+        self._waiting_for_magnet = False
         self._droplet_check_enabled = False
         self._waiting_for_droplet_check = False
         self._droplet_check_failed = False
         self._expected_electrodes_for_check = []
-
-        # clear droplet detection tracking
         self._droplet_check_attempted_for_step = {}
         self._droplet_check_skipped_until_phase_nav = False
 
-        # stop volume threshold monitoring
-        self._volume_threshold_service.stop_monitoring()
-        self._volume_threshold_mode_active = False
-        self._current_phase_volume_threshold = 0.0
-        self._current_phase_target_capacitance = None
+    def _on_protocol_finished(self):
+        """Handles final cleanup and UI state broadcasting when a protocol naturally ends."""
+
+        # 1. Shut down hardware modes and services (reusing helper from stop)
+        self._shutdown_hardware_and_services()
+
+        # 3. Publish the final state of the *last executed* step
+        if 0 < self.current_index <= len(self._run_order):
+            self._broadcast_step_state(self.current_index - 1)
+
+        # 4. Halt all active execution timers (reusing helper from stop)
+        self._stop_all_timers()
+
+        # 5. Set final state and emit completion
+        self._is_running = False
+        self.signals.protocol_finished.emit()
 
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
-
-    # def set_run_order(self, run_order):
-    #     self._run_order = run_order
 
     def _execute_next_step(self):
         if self._is_paused or not self._is_running:
@@ -1805,66 +1924,6 @@ class ProtocolRunnerController(QObject):
             self._execute_next_phase()
         else:
             self._on_step_completed_by_phases()
-
-    def _on_protocol_finished(self):
-        publish_message(topic=SET_REALTIME_MODE, message=str(False))
-
-        ## Cleanup_camera
-        _stop_step_recording()
-        _publish_camera_video_control("false")
-
-        # message with last executed step
-        if self.current_index > 0 and self.current_index <= len(self._run_order):
-            last_step_info = self._run_order[self.current_index - 1]
-            last_step = last_step_info["step"]
-
-            device_state = (
-                last_step.device_state
-                if hasattr(last_step, "device_state") and last_step.device_state
-                else None
-            )
-            if not device_state:
-                device_state = PathExecutionService.get_empty_device_state()
-
-            step_uid = last_step.parameters.get("UID", "")
-            step_description = last_step.parameters.get("Description", "Step")
-            step_id = last_step.parameters.get("ID", "")
-
-            msg_model = PathExecutionService.create_dynamic_device_state_message(
-                device_state,
-                device_state.activated_electrodes,
-                step_uid,
-                step_description,
-                step_id,
-            )
-
-            msg_model.editable = True
-
-            publish_message(
-                topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.model_dump_json()
-            )
-
-            if not self._preview_mode:
-                deactivated_hardware_message = (
-                    PathExecutionService.create_deactivated_hardware_electrode_message(
-                        device_state
-                    )
-                )
-
-                publish_message(
-                    topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message
-                )
-
-            # select the last executed step
-            if step_uid:
-                self.signals.select_step.emit(step_uid)
-
-        self._is_running = False
-        self._status_timer.stop()
-        self._timer.stop()
-        self._phase_timer.stop()
-
-        self.signals.protocol_finished.emit()
 
     def _emit_status_update(self):
         if not self._is_running or not self._run_order:

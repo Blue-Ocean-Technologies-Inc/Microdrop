@@ -1,4 +1,5 @@
 # enthought imports
+from envisage.ids import PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str, Bool, Event
 from envisage.api import Plugin, TASK_EXTENSIONS
@@ -33,13 +34,15 @@ class ProtocolGridControllerUIPlugin(Plugin):
 
     #### Contributions to extension points made by this plugin ################
 
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
-
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    ### State tracking traits:
 
     dropbot_connected = Bool(False)
 
-    # advanced mode state tracking
     _advanced_mode = Bool(False)
     advanced_mode_changed = Event()
 
@@ -53,6 +56,15 @@ class ProtocolGridControllerUIPlugin(Plugin):
         self._setup_listener()
 
     #### Trait initializers ###################################################
+
+    def _preferences_panes_default(self):
+        from .preferences import ProtocolPreferencesPane
+
+        return [ProtocolPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import protocol_grid_tab
+        return [protocol_grid_tab]
 
     def _contributed_task_extensions_default(self):
         from .dock_pane import PGCDockPane

@@ -1,14 +1,16 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Dict, Property, Range
+from traits.api import Dict, Property
 from pyface.api import warning
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-from .consts import DEFAULT_UP_HEIGHT_MM, DEFAULT_DOWN_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM
-
-
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
+from microdrop_utils.pyface_helpers import RangeWithViewHints
+
+from .consts import DEFAULT_UP_HEIGHT_MM, DEFAULT_DOWN_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM
 
 z_stage_preferences_names = [
             'down_height_mm', 'up_height_mm'
@@ -19,33 +21,6 @@ z_stage_trait_name_mapping = {
     'up_height_mm': 'zstage_up_position',
 }
 
-app_globals = get_microdrop_redis_globals_manager()
-
-class RangeWithViewHints(Range):
-    def create_editor(self):
-        """ Returns the default UI editor for the trait.
-        """
-        # fixme: Needs to support a dynamic range editor.
-
-        auto_set = self.auto_set
-        if auto_set is None:
-            auto_set = True
-
-        from traitsui.api import RangeEditor
-
-        return RangeEditor(
-            self,
-            mode=self.mode or "auto",
-            cols=self.cols or 3,
-            auto_set=auto_set,
-            enter_set=self.enter_set or False,
-            low_label=self.low or "",
-            high_label=self.high or "",
-            low_name=self._low_name,
-            high_name=self._high_name,
-            format_str='%.2f',
-            is_float=True
-        )
 
 class PeripheralPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.

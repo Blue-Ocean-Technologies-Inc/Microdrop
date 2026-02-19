@@ -139,4 +139,6 @@ ALLOWED_group_fields = {
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4
 
-LOGS_STOP_SETTLING_TIME_MS = 2000 # milliseconds to wait before blocking logs input for after protocol run ends.
+DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
+DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
+DEFAULT_LOGS_SETTLING_SECONDS = 3.0

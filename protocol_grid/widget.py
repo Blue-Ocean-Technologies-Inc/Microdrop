@@ -21,6 +21,7 @@ from microdrop_style.button_styles import get_button_style, get_tooltip_style
 from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
 from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen, LoadingOverlay
 from microdrop_utils.sticky_notes import StickyWindowManager
+from protocol_grid.preferences import ProtocolPreferences
 from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
@@ -48,7 +49,6 @@ from protocol_grid.consts import (
     protocol_grid_fields,
     protocol_grid_column_widths,
     copy_fields_for_new_step,
-    LOGS_STOP_SETTLING_TIME_MS,
     CHECKBOX_COLS,
     ALLOWED_group_fields,
 )
@@ -248,6 +248,8 @@ class PGCWidget(QWidget):
 
         _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
 
+        self.preferences = ProtocolPreferences(preferences=self.application.preferences)
+
         step_defaults.update({
         "Voltage": f"{float(_dropbot_preferences.default_voltage)}",
         "Frequency": f"{float(_dropbot_preferences.default_frequency)}",
@@ -396,7 +398,7 @@ class PGCWidget(QWidget):
 
         self.application.observe(self.save_column_settings, "application_exiting")
 
-        self.loading_screen = LoadingOverlay(self)
+        self.loading_screen = LoadingOverlay(self.tree)
 
     #### Loading screen logic #####
 
@@ -819,6 +821,7 @@ class PGCWidget(QWidget):
 
     def on_protocol_finished(self, completed_steps=None):
         self.clear_highlight()
+        self.stop_loading_screen()
         self._protocol_running = False
         self._disable_phase_navigation()
 
@@ -843,7 +846,7 @@ class PGCWidget(QWidget):
                     saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
                     self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
 
-                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=LOGS_STOP_SETTLING_TIME_MS)
+                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=int(self.preferences.logs_settling_time_s) * 1000)
 
                 ### In case of force stops, check if report needs to be generated.
                 _generate_report = True
@@ -1128,7 +1131,7 @@ class PGCWidget(QWidget):
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start(run_order, prewarm_seconds=10.0)
+        self.protocol_runner.start(run_order, prewarm_seconds=self.preferences.camera_prewarm_seconds)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")

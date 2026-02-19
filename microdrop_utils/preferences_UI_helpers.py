@@ -1,3 +1,4 @@
+import collections
 from typing import Tuple, Dict, Any, List
 from traits.api import HasTraits, Str, Int, Bool
 from traitsui.api import Group, Item, Label, View
@@ -118,28 +119,36 @@ def create_grid_group(items: List[str], **kwargs: Any) -> Group:
         **kwargs: Keyword arguments for the parent `Group` and the child
                   `Item`/`Label` pairs.
                   - `group_*`: Passed to the parent `Group` (e.g., `group_label`).
-                  - `item_*`, `label_*`, etc.: Passed to each child pair.
+                  - Rest Passed to each child pair. (Expected to be iterables
+                    matching the length of 'items').
 
     Returns:
         A TraitsUI Group object configured as a grid.
     """
     group_kwargs: Dict[str, Any] = {}
-    child_kwargs: Dict[str, Any] = {}
+
+    # Use defaultdict and correct the type hint
+    child_kwargs: Dict[int, Dict[str, Any]] = collections.defaultdict(dict)
 
     # Separate kwargs for the parent Group from those for the children.
     for key, value in kwargs.items():
         if key.startswith("group_"):
-            group_kwargs[key[len("group_"):]] = value
+            group_kwargs[key[len("group_") :]] = value
+
         else:
-            child_kwargs[key] = value
+            # Assumes 'value' is a list/iterable matching the length of 'items'
+            for i, val in enumerate(value):
+                child_kwargs[i][key] = val
 
     grid_contents = []
-    for item_name in items:
-        pair = create_item_label_pair(item_name, **child_kwargs)
+    for i, item_name in enumerate(items):
+
+        #Use .get() to provide an empty dict if no kwargs exist for 'i'
+        pair = create_item_label_pair(item_name, **child_kwargs.get(i, {}))
         grid_contents.extend(pair)
 
     # Sensible defaults for a grid layout.
-    grid_defaults = {'columns': 2, 'show_labels': False}
+    grid_defaults = {"columns": 2, "show_labels": False}
     final_group_kwargs = {**grid_defaults, **group_kwargs}
 
     return Group(*grid_contents, **final_group_kwargs)
@@ -240,4 +249,3 @@ if __name__ == "__main__":
     print("Launching the main grid view demo...")
     grid_view_demo.configure_traits()
     print("Grid view demo closed.")
-
