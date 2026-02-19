@@ -245,7 +245,7 @@ class PGCWidget(QWidget):
         )
 
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
-                                                        preferences=self.application.preferences)
+                                                        preferences=self.application.preferences, parent=self)
 
         _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
 
