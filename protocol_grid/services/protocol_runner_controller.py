@@ -698,6 +698,8 @@ class ProtocolRunnerController(QObject):
             self._run_order, prewarm_seconds=prewarm_seconds
         )
 
+        logger.debug(f"video_on_mask: {video_on_mask}; offset_seconds_arr: {offset_seconds_arr}")
+
         total_steps = 0
         for i, entry in enumerate(self._run_order):
             if entry["rep_idx"] == 1:
@@ -710,13 +712,14 @@ class ProtocolRunnerController(QObject):
 
         publish_message(topic=SET_REALTIME_MODE, message=str(True))
 
-        # approximate 2ms for each element in the run
-        start_delay = 0
+        start_delay = 1000 # baseline of 1 second to allow realtime mode to settle
+        # offset negative if required for the very first step
+        if video_on_mask[0]:
 
-        if video_on_mask[0] and not offset_seconds_arr[0]:
+            if offset_seconds_arr[0] < 0:
+                start_delay += abs(int(offset_seconds_arr[0])) * 1000 # convert negative seconds to absolute ms
+
             _publish_camera_video_control("true")
-            start_delay += int(prewarm_seconds * 1000)
-
             self.parent().start_loading_screen(start_delay, auto_stop=False)
 
         def _start():
@@ -2119,12 +2122,9 @@ class ProtocolRunnerController(QObject):
 
             message, step_info = self._message_dialog_step_info
 
-            # set the main widget as parent
-            parent_widget = self.parent()
-
             # create dialog with YES/NO buttons and connect to response method
             self._current_message_dialog = StepMessageDialog(
-                message, step_info, parent_widget
+                message, step_info, self.parent()
             )
             self._current_message_dialog.finished.connect(
                 self._on_message_dialog_response
