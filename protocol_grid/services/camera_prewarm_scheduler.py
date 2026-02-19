@@ -35,10 +35,12 @@ def compile_camera_schedule(run_order: list, prewarm_seconds: float) -> tuple | 
         user_set_video_mask, video_needed_mask = _get_video_on_array(run_order)
         prewarm_step_mask, offset_seconds = get_prewarm_step_mask(video_needed_mask, prewarm_seconds)
 
-        not_user_set_video_mask = ~user_set_video_mask
+        # camera is on if user requests or if its needed for recording or capture (with prewarm).
+        video_flip_needed_mask = user_set_video_mask  | prewarm_step_mask
 
-        video_flip_needed_mask = not_user_set_video_mask  & prewarm_step_mask
-        offset_seconds = offset_seconds * not_user_set_video_mask.astype(int)
+        # Non-Zero offsets only needed when its not a step where user already requested video and a prewarm is needed.
+        # Except the first step since a prewarm would be negative
+        offset_seconds[1:] = ~user_set_video_mask[1:] * offset_seconds[1:]
 
         return video_flip_needed_mask, offset_seconds
 
@@ -68,4 +70,3 @@ def _get_video_on_array(sequence: list) -> tuple[ndarray, ndarray] | None:
         user_set_video_arr.append(user_set_video_on)
 
     return np.array(user_set_video_arr, dtype=bool), np.array(video_needed_arr)
-
