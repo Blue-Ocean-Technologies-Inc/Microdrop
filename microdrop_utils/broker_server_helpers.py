@@ -2,6 +2,8 @@ import subprocess
 import time
 from contextlib import contextmanager
 import os
+from typing import Optional
+import socket
 
 from dramatiq import get_broker, Worker
 from dramatiq.middleware import CurrentMessage
@@ -10,41 +12,72 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-def is_redis_running():
-    """Check if Redis is running by attempting to connect to it."""
-    import redis
-    try:
-        client = redis.StrictRedis(host='localhost', port=6379)
-        client.ping()
-        return True
-    except redis.exceptions.ConnectionError:
-        return False
+def is_redis_running(host='127.0.0.1', port=6379) -> bool:
+    """Instantly checks if the Redis port is open and accepting connections."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        # 10 millisecond timeout for instant feedback
+        s.settimeout(0.01)
+        try:
+            s.connect((host, port))
+            return True
+        except OSError:
+            # Catch ConnectionRefusedError or TimeoutError
+            return False
 
 
-def start_redis_server(retries=5, wait=3):
-    """Start the Redis server."""
-    process = None
-    if not is_redis_running():
-        process = subprocess.Popen(["redis-server", f"{os.path.dirname(__file__)}{os.sep}redis.conf"])
-        for _ in range(retries):  # Retry up to 5 times
-            if is_redis_running():
-                print("Redis server is running.")
-                return process
-            else:
-                print("Waiting for Redis server to start...")
-                time.sleep(wait)
-        print("Failed to start Redis server.")
-        process.terminate()
+def start_redis_server(timeout: float = 3.0) -> Optional[subprocess.Popen]:
+    """
+    Starts the Redis server using the local redis.conf file.
 
-    else:
+    Args:
+        timeout: Maximum time in seconds to wait for the server to start.
+
+    Returns:
+        The subprocess.Popen instance if a new server was started,
+        or None if it was already running or failed to start.
+    """
+    if is_redis_running():
         print("Redis server is already running.")
+        return None
+
+    # 1. Robust path construction
+    conf_path = os.path.join(os.path.dirname(__file__), "redis.conf")
+
+    # 2. Handle missing executable gracefully
+    try:
+        print("Trying to start redis server process")
+        process = subprocess.Popen(["redis-server", conf_path])
+    except FileNotFoundError:
+        print("FAILURE: Failed to start: 'redis-server' executable not found in PATH.")
+        return None
+
+    print("Waiting for Redis server to start...")
+
+    # 3. Accurate time tracking using monotonic clock
+    start_time = time.monotonic()
+
+    while not is_redis_running():
+        # 4. Fail fast if the process crashed immediately (e.g., bad config)
+        if process.poll() is not None:
+            print(f"Redis server process terminated unexpectedly with code {process.returncode}.")
+            return process
+
+        # Check against actual elapsed time
+        if time.monotonic() - start_time > timeout:
+            print(f"Timeout after {timeout} seconds waiting for redis server start.")
+            process.terminate()
+            return process
+
+        time.sleep(0.01)
+
+    print("Redis server is running.")
     return process
 
 
 def stop_redis_server(process):
     """Stop the Redis server."""
     if process is None:
-        print("Redis server is not running, so no need to stop it.")
+        print("Redis server is not running, or was not started by this process, cannot stop it.")
         return
     else:
         try:
@@ -74,7 +107,7 @@ def start_workers(**kwargs) -> 'dramatiq.worker.Worker':
     
     # Flush any old messages, start the worker, then run your app logic
     BROKER.flush_all()
-    worker = Worker(broker=BROKER, **kwargs)
+    worker = Worker(broker=BROKER, worker_threads=16, **kwargs)
     worker.start()
 
     return worker
