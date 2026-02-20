@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from dropbot_controller.preferences import DropbotPreferences
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -826,9 +826,16 @@ class PGCWidget(QWidget):
         else:
             self.status_bar.lbl_repeat_protocol_status.setText("1/")
 
-    def on_protocol_finished(self, completed_steps=None):
+    def _reset_ui(self):
+        self.stop_loading_screen() # clear loading screen in case protocol stopped before start
+
+        # clear step states. Free mode on.
+        self._clear_electrode_states_for_free_mode()
         self.clear_highlight()
-        self.stop_loading_screen()
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+
         self._protocol_running = False
         self._disable_phase_navigation()
 
@@ -838,7 +845,9 @@ class PGCWidget(QWidget):
 
         self._update_navigation_buttons_state()
         self._update_ui_enabled_state()
+        self.reset_status_bar()
 
+    def on_protocol_finished(self, completed_steps=None):
         if not self.navigation_bar.is_preview_mode():
             try:
                 # auto-save current protocol with smart filename
@@ -916,12 +925,14 @@ class PGCWidget(QWidget):
             logger.info(f"Started new experiment: {new_experiment_dir.stem}")
 
     def _cleanup_after_protocol_operation(self):
+        self._reset_ui()
         if not getattr(self, "_programmatic_change", False):
             self._programmatic_change = True
             try:
                 self._clean_group_parameters_recursive(self.state.sequence)
 
                 self.load_from_state()
+
             finally:
                 self._programmatic_change = False
 
@@ -948,21 +959,10 @@ class PGCWidget(QWidget):
             self._disable_phase_navigation()
 
     def on_protocol_error(self, error_message):
-        logger.info(f"Protocol execution error: {error_message}")
-        self.clear_highlight()
-        self.reset_status_bar()
-        self._protocol_running = False
-
-        self.navigation_bar.btn_play.setText(ICON_PLAY)
-        self.navigation_bar.btn_play.setToolTip("Play Protocol")
-
-        self._update_navigation_buttons_state()
-        self._update_ui_enabled_state()
-
-        # clear selection on error
-        self.tree.clearSelection()
-        self._last_selected_step_id = None
-        self._last_published_step_id = None
+        error(message=error_message, title="Protocol Error", modal=False)
+        logger.error(f"Protocol execution error: {error_message}")
+        self._force_stop = True
+        self.on_protocol_finished(self.protocol_runner.current_index)
 
     def select_step_by_uid(self, step_uid):
         """select step by when protocol finishes/stops."""
@@ -1306,12 +1306,9 @@ class PGCWidget(QWidget):
         )
 
         if user_choice == YES:
-            completed_steps = self.protocol_runner.current_index
-
             self.protocol_runner.stop()
             self.reset_status_bar()
-
-            self.on_protocol_finished(completed_steps)
+            self.on_protocol_finished(self.protocol_runner.current_index)
 
         self._force_stop = False
 
@@ -1679,12 +1676,12 @@ class PGCWidget(QWidget):
                             break
 
             if not published_something:
-                self._send_empty_device_state_message()
+                self._clear_electrode_states_for_free_mode()
                 self._last_selected_step_id = None
                 self._last_published_step_id = None
                 self._set_last_published_step_uid(None)
 
-    def _send_empty_device_state_message(self):
+    def _clear_electrode_states_for_free_mode(self):
         empty_msg = DeviceViewerMessageModel(
             channels_activated={},
             routes=[],
@@ -1692,6 +1689,8 @@ class PGCWidget(QWidget):
             step_info={"step_id": None, "step_label": None, "free_mode": True},
             editable=True,
         )
+
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps({}))
         publish_message(
             topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize()
         )
@@ -1905,8 +1904,7 @@ class PGCWidget(QWidget):
 
         # check if transitioned from a step selected to NO step selected
         if self._last_selected_step_id and not current_step_id and not self._navigating:
-            self._send_empty_device_state_message()
-            self._last_published_step_id = None
+            self._clear_electrode_states_for_free_mode()
 
         self._last_selected_step_id = current_step_id
 

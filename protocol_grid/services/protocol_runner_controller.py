@@ -1196,10 +1196,9 @@ class ProtocolRunnerController(QObject):
             return
 
         # update data logger context
-        if hasattr(self, "_data_logger") and self._data_logger:
-            context = self._get_current_logging_context()
-            if context:
-                self._data_logger.set_protocol_context(context)
+        context = self._get_current_logging_context()
+        if context:
+            self._data_logger.set_protocol_context(context)
 
         try:
             step_info = self._run_order[self.current_index]
