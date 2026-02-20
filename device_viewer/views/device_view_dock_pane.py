@@ -46,6 +46,7 @@ from microdrop_style.helpers import (
     is_dark_mode,
 )
 from microdrop_utils.datetime_helpers import TimestampedMessage
+from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
@@ -132,7 +133,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
     video_item = None  # The video item for the camera feed
-    debounce_timer = None  # Timer to debounce state messages
 
     ###################################################################################
     # ------------- IDramatiqControllerBase Interface -------------------- #
@@ -208,22 +208,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
-        if self.model and self.device_view:
-            self.device_view.display_state_signal.emit(message_model_serial)
+        self.device_view.display_state_signal.emit(message_model_serial)
 
     def _on_protocol_running_triggered(self, message: TimestampedMessage):
 
         logger.debug(f"Protocol running is {message}")
         if self.model:
             self.model.protocol_running = True if message.lower() == "true" else False
-
-    def _on_state_changed_triggered(self, message: TimestampedMessage):
-        """
-        Handle state changes from the device viewer.
-        """
-        logger.debug(f"Device viewer state changed: {message}")
-        if self.model and self.device_view:
-            self.device_view.display_state_signal.emit(message)
 
     def _on_capacitance_updated_triggered(self, message):
         """
@@ -355,19 +346,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(
             f"Publishing message for updated viewer state {self.message_buffer}"
         )
-        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
+        publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def publish_electrode_update(self):
-        message_obj = {}
-        for (
-            channel
-        ) in (
-            self.model.electrodes.channels_electrode_ids_map
-        ):  # Make sure all channels are explicitly included
-            message_obj[channel] = self.model.electrodes.channels_states_map.get(
-                channel, False
-            )
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(message_obj))
+        logger.info("DEVICE VIEWER: publishing electrodes state change")
+        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.electrodes.channels_states_map_trues))
 
     def publish_calibration_message(self):
         """
@@ -571,10 +554,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################### Determine Size for video #####################
         self.configure_camera_to_scene_size()
 
-        ###################### Create debounce timer #############################################
-        self.debounce_timer = QTimer()
-        self.debounce_timer.setSingleShot(True)
-        self.debounce_timer.timeout.connect(self.publish_model_message)
+        self.publish_model_message()
 
         # Layout init for device view and its property editor right-side bar
         # left side will house device viewer; right side a collapsible scrollable stack of collapsible widgets
@@ -945,21 +925,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         Handle changes to the model and send a message to the device viewer state change topic.
         """
         self.model_change_handler_with_timeout(event)
-        if not self._disable_state_messages and self.debounce_timer:
+        if not self._disable_state_messages:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(
                 f"Buffering message for device viewer state change: {self.message_buffer}"
             )
-            self.debounce_timer.start(1)  # Start timeout for sending message
+            self.publish_model_message()
 
     @observe(
         "model.electrodes.channels_states_map.items"
     )  # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        if not self.model.protocol_running: # Only send electrode updates if protocol not running
-            logger.info("Sending electrode update")
+        if not self.model.protocol_running and self.model.free_mode: # Only send electrode updates if protocol not running and free mode
             self.publish_electrode_update()
-            logger.info("Electrode update sent")
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
