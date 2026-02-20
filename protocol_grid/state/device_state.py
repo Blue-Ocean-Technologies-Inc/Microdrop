@@ -1,5 +1,4 @@
 from typing import List, Dict, Optional
-import json
 
 from device_viewer.models.messages import DeviceViewerMessageModel
 from logger.logger_service import get_logger
@@ -28,7 +27,7 @@ class DeviceState:
         return len(self.paths) > 0
 
     def calculated_duration(self, step_duration: float, repetitions: int, 
-                            repeat_duration: float, trail_length: int = 1, trail_overlay: int = 0):
+                            repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0):
         if not self.has_paths():
             calculated_time = step_duration * repetitions
         else:

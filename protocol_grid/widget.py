@@ -2,9 +2,9 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.consts import SET_REALTIME_MODE
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from dropbot_controller.preferences import DropbotPreferences
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -20,8 +20,9 @@ from traits.has_traits import HasTraits
 from microdrop_style.button_styles import get_button_style, get_tooltip_style
 from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
 from microdrop_utils.decorators import debounce
-from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen
+from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen, LoadingOverlay
 from microdrop_utils.sticky_notes import StickyWindowManager
+from protocol_grid.preferences import ProtocolPreferences
 from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
@@ -49,7 +50,6 @@ from protocol_grid.consts import (
     protocol_grid_fields,
     protocol_grid_column_widths,
     copy_fields_for_new_step,
-    LOGS_STOP_SETTLING_TIME_MS,
     CHECKBOX_COLS,
     ALLOWED_group_fields,
 )
@@ -66,7 +66,7 @@ from protocol_grid.extra_ui_elements import (
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
-from protocol_grid.services.hardware_setter_services import VoltageFrequencyService
+from protocol_grid.services.hardware_setter_services import publish_voltage_frequency
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
 
@@ -240,13 +240,16 @@ class PGCWidget(QWidget):
         self.application = dock_pane.task.window.application
         self.dock_pane = dock_pane
 
-        self.protocol_runner = ProtocolRunnerController(
-            self.state,
-            flatten_protocol_for_run,
-            preferences=self.application.preferences,
+        self.experiment_manager = ExperimentManager(
+            self.application.current_experiment_directory
         )
 
+        self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
+                                                        preferences=self.application.preferences, parent=self)
+
         _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
+
+        self.preferences = ProtocolPreferences(preferences=self.application.preferences)
 
         step_defaults.update({
         "Voltage": f"{float(_dropbot_preferences.default_voltage)}",
@@ -263,17 +266,10 @@ class PGCWidget(QWidget):
         )
         self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)
         self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)
-        self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
-
-        self.experiment_manager = ExperimentManager(
-            self.application.current_experiment_directory
-        )
+        # self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
 
         self.protocol_data_logger = ProtocolDataLogger(self)
         self.protocol_runner.set_data_logger(self.protocol_data_logger)
-
-        self.protocol_runner.experiment_manager = self.experiment_manager
-
         self.protocol_state_tracker = ProtocolStateTracker(dock_pane=dock_pane)
 
         self.tree = QTreeView()
@@ -402,6 +398,20 @@ class PGCWidget(QWidget):
         )
 
         self.application.observe(self.save_column_settings, "application_exiting")
+
+        self.loading_screen = LoadingOverlay(self.tree)
+
+    #### Loading screen logic #####
+
+    def start_loading_screen(self, duration_ms, auto_stop):
+        logger.critical('Setting up protocol run')
+        self.loading_screen.show_loading(duration_ms=duration_ms, auto_stop=auto_stop)
+
+    def stop_loading_screen(self):
+        logger.critical('protocol run starting...')
+        self.loading_screen.stop_loading()
+
+    ################################
 
     def create_new_note(self):
 
@@ -607,6 +617,7 @@ class PGCWidget(QWidget):
 
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
+
                 logger.info(f"Updated tracked active electrodes: {active_electrodes}")
 
             if dv_msg.svg_file != self._active_device_svg_file:
@@ -615,6 +626,11 @@ class PGCWidget(QWidget):
             if dv_msg.step_id:
                 self._processing_device_viewer_message = True
                 self._programmatic_change = True
+
+                publish_message.send(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(dv_msg.channels_activated),
+                )
 
                 scroll_pos = self.save_scroll_positions()
                 saved_selection = self.save_selection()
@@ -643,6 +659,7 @@ class PGCWidget(QWidget):
                 )  # apply new device states to selected step
 
                 self.model_to_state()
+                self.load_from_state()
 
                 self._last_selected_step_id = current_step_id
                 self._last_published_step_id = current_published_id
@@ -811,6 +828,7 @@ class PGCWidget(QWidget):
 
     def on_protocol_finished(self, completed_steps=None):
         self.clear_highlight()
+        self.stop_loading_screen()
         self._protocol_running = False
         self._disable_phase_navigation()
 
@@ -831,11 +849,11 @@ class PGCWidget(QWidget):
 
                 if saved_path:
                     # update protocol state tracker to reflect the auto-saved protocol
-                    logger.critical(f"Protocol saved as: {saved_path}")
+                    logger.info(f"Protocol saved as: {saved_path}")
                     saved_path=f'<a href="file:///{saved_path}">{saved_path.name}</a>'
                     self.protocol_data_logger.log_metadata({"Protocol Path": saved_path})
 
-                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=LOGS_STOP_SETTLING_TIME_MS)
+                self.protocol_data_logger.stop_logging(completed_steps=completed_steps, settling_time_ms=int(self.preferences.logs_settling_time_s) * 1000)
 
                 ### In case of force stops, check if report needs to be generated.
                 _generate_report = True
@@ -1114,13 +1132,13 @@ class PGCWidget(QWidget):
 
         self.protocol_runner.set_preview_mode(preview_mode)
         self.protocol_runner.set_repeat_protocol_n(repeat_n)
-        self.protocol_runner.set_run_order(run_order)
+        # self.protocol_runner.set_run_order(run_order)
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
 
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start()
+        self.protocol_runner.start(run_order, prewarm_seconds=self.preferences.camera_prewarm_seconds)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1228,8 +1246,6 @@ class PGCWidget(QWidget):
         if not target_step_item:
             return
 
-        publish_message(topic=SET_REALTIME_MODE, message=str(True))
-
         parameters = {}
         step_params = self.state.get_element_by_path(target_step_path).parameters
 
@@ -1257,7 +1273,7 @@ class PGCWidget(QWidget):
         self.protocol_runner.set_preview_mode(preview_mode)
 
         self.protocol_runner.set_repeat_protocol_n(1)
-        self.protocol_runner.set_run_order(run_order)
+        # self.protocol_runner.set_run_order(run_order)
 
         self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
 
@@ -1268,8 +1284,6 @@ class PGCWidget(QWidget):
             f"Running Step (path={target_step_path})\nParams={parameters}\nDevice_state={device_state.to_dict()}"
         )
 
-        self.protocol_runner.start()
-
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
 
@@ -1278,6 +1292,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
+        self.protocol_runner.start(run_order, prewarm_seconds=0)
 
     def stop_protocol(self):
 
@@ -1684,7 +1699,6 @@ class PGCWidget(QWidget):
         # clear last published UID
         self._set_last_published_step_uid(None)
 
-    @debounce(0.1)
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return None
@@ -1707,16 +1721,15 @@ class PGCWidget(QWidget):
         msg_model = device_state_to_device_viewer_message(
             device_state, step_uid, step_description, step_id, editable
         )
-        logger.info(f"Sending step info: {msg_model.serialize()}")
-        publish_message(
-            topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()
-        )
+        publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
+        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(msg_model.channels_activated))
 
         step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
         voltage = step_data.parameters["Voltage"]
         frequency = step_data.parameters["Frequency"]
-        VoltageFrequencyService.publish_immediate_voltage_frequency(
+        publish_voltage_frequency.send(
             voltage, frequency, preview_mode=self.navigation_bar.is_preview_mode()
         )
 
@@ -1844,7 +1857,9 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
-    def on_selection_changed(self):
+    @debounce(0.05)
+    def on_selection_changed(self, selected, deselected):
+
         if (
             hasattr(self, "_processing_device_viewer_message")
             and self._processing_device_viewer_message
@@ -1861,11 +1876,17 @@ class PGCWidget(QWidget):
         has_selection = len(selected_paths) > 0
 
         current_step_id = None
-        current_step_uid = None
-
         if has_selection:
             path = selected_paths[0]
-            item = self.get_item_by_path(path)
+            new_indexes = selected.indexes()
+
+            if new_indexes:
+                index = new_indexes[0]
+                item = self.model.itemFromIndex(index)
+
+            else:
+                item = None
+
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                 parent = item.parent() or self.model.invisibleRootItem()
                 # step info
@@ -1873,7 +1894,6 @@ class PGCWidget(QWidget):
                 id_col = protocol_grid_fields.index("ID")
                 id_item = parent.child(row, id_col)
                 current_step_id = id_item.text() if id_item else ""
-                current_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
 
                 # publish only if this is a different step
                 if current_step_id != self._last_published_step_id:
@@ -2480,18 +2500,14 @@ class PGCWidget(QWidget):
         voltage_str = voltage_item.text() if voltage_item else "100.0"
         frequency_str = frequency_item.text() if frequency_item else "10000"
 
-        # validate values
-        voltage = VoltageFrequencyService.validate_voltage(voltage_str)
-        frequency = VoltageFrequencyService.validate_frequency(frequency_str)
-
         # update the protocol runner execution plan and publish if needed
         preview_mode = self.navigation_bar.is_preview_mode()
         success = self.protocol_runner.update_step_voltage_frequency_in_plan(
-            step_uid, voltage, frequency
+            step_uid, voltage_str, frequency_str
         )
         if success:
             logger.info(
-                f"Advanced mode edit: Updated step {step_uid} to {voltage}V, {frequency}Hz"
+                f"Advanced mode edit: Updated step {step_uid} to {voltage_str}V, {frequency_str}Hz"
             )
 
     def _set_field_for_group(self, group_item, field, value):
@@ -2573,15 +2589,15 @@ class PGCWidget(QWidget):
         self, device_state, repetitions, duration, trail_length, trail_overlay
     ):
         if not device_state.has_paths():
-            return 0.0
+            return 1.0
 
         has_loops = any(
             len(path) >= 2 and path[0] == path[-1] for path in device_state.paths
         )
         if not has_loops:
-            return 0.0
+            return 1.0
 
-        max_loop_duration = 0.0
+        max_loop_duration = 1.0
 
         for path in device_state.paths:
             is_loop = len(path) >= 2 and path[0] == path[-1]

@@ -13,7 +13,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
-                     REALTIME_MODE_UPDATED, ELECTRODES_STATE_CHANGE, SET_REALTIME_MODE)
+                     ELECTRODES_STATE_CHANGE, SET_REALTIME_MODE)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 

@@ -3,6 +3,8 @@ from pyface.action.api import StatusBarManager as _StatusBarManager
 from pyface.qt.QtWidgets import QApplication,QStatusBar
 from pyface.qt.QtCore import Qt
 from pyface.tasks.dock_pane import DockPane
+from traits.trait_types import Range
+
 from logger.logger_service import get_logger
 from microdrop_style.helpers import QT_THEME_NAMES, is_dark_mode
 from microdrop_style.label_style import get_label_style
@@ -107,3 +109,28 @@ class StatusBarManager(_StatusBarManager):
         self.persistent_label.setText("\t".join(self.messages))
 
 
+class RangeWithViewHints(Range):
+    def create_editor(self):
+        """ Returns the default UI editor for the trait.
+        """
+        # fixme: Needs to support a dynamic range editor.
+
+        auto_set = self.auto_set
+        if auto_set is None:
+            auto_set = True
+
+        from traitsui.api import RangeEditor
+
+        return RangeEditor(
+            self,
+            mode=self.mode or "auto",
+            cols=self.cols or 3,
+            auto_set=auto_set,
+            enter_set=self.enter_set or False,
+            low_label=self.low or "",
+            high_label=self.high or "",
+            low_name=self._low_name,
+            high_name=self._high_name,
+            format_str='%.2f',
+            is_float=True
+        )

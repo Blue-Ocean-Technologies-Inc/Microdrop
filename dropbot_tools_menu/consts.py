@@ -1,4 +1,4 @@
-from dropbot_controller.consts import SELF_TESTS_PROGRESS, ELECTRODES_STATE_CHANGE, CHIP_INSERTED, DROPBOT_DISCONNECTED
+from dropbot_controller.consts import SELF_TESTS_PROGRESS, CHIP_INSERTED, DROPBOT_DISCONNECTED
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")

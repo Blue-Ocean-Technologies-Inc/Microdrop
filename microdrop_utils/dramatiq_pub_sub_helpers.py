@@ -11,8 +11,8 @@ logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
 
-
-def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default", 
+@dramatiq.actor
+def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default",
                     message_kwargs=None, message_options=None):
     """
     Publish a message to a given actor with a certain topic

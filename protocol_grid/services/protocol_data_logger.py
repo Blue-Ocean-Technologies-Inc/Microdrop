@@ -19,6 +19,9 @@ from microdrop_utils.sticky_notes import StickyWindowManager
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
 from functools import wraps
 
 def require_active_logging(func):
@@ -73,6 +76,7 @@ class ProtocolDataLogger:
         self._video_captures.clear()
         self._image_captures.clear()
         self._other_media_captures.clear()
+        app_globals["media_captures"] = []
 
         # set flags
         self._is_logging_active = True
@@ -129,8 +133,8 @@ class ProtocolDataLogger:
         self._latest_capacitance_per_unit_area = c_unit_area
         logger.debug(f"Updated capacitance per unit area: {c_unit_area}")
 
-    def log_media_capture(self, message: MediaCaptureMessageModel):
-        if not self._is_logging_active:
+    def log_media_capture(self, message: MediaCaptureMessageModel, force=False):
+        if not self._is_logging_active and not force:
             logger.warning("Logger not active")
             return
 
@@ -633,6 +637,16 @@ class ProtocolDataLogger:
         # save data files
         self.generate_data_files()
 
+        ### Consume media files ####
+        media_captures = app_globals.get("media_captures")
+
+        for media_capture in media_captures:
+            logger.info(f"Media Captured: {media_capture}")
+            msg = MediaCaptureMessageModel.model_validate_json(media_capture)
+            self.log_media_capture(msg, force=True)
+
+        #############################
+
         report = self._generate_report_html()
 
         if not report_path:
@@ -656,9 +670,14 @@ class ProtocolDataLogger:
 
     def generate_data_files(self):
         data_file_path = self.save_data_file()
-        csv_file_path = self.save_dataframe_as_csv(output_path=data_file_path.with_suffix(".csv"))
+        self._data_files = [data_file_path]
 
-        self._data_files = [data_file_path, csv_file_path]
+        if data_file_path:
+            csv_file_path = self.save_dataframe_as_csv(output_path=data_file_path.with_suffix(".csv"))
+
+        for el in [data_file_path, csv_file_path]:
+            if el:
+                self._data_files.append(el)
 
         return data_file_path, csv_file_path
 

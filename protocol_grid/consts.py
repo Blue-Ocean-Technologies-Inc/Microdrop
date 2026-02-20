@@ -28,6 +28,8 @@ DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
+PROTOCOL_RUNNING = "microdrop/protocol_running"
+
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,
@@ -81,7 +83,7 @@ step_defaults = {
     "Voltage": f"{float(DropbotPreferences().default_voltage)}",
     "Frequency": f"{float(DropbotPreferences().default_frequency)}",
     "Message": "",
-    "Repeat Duration": "0.0",
+    "Repeat Duration": "1.0",
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Video": "0",
@@ -139,4 +141,6 @@ ALLOWED_group_fields = {
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4
 
-LOGS_STOP_SETTLING_TIME_MS = 2000 # milliseconds to wait before blocking logs input for after protocol run ends.
+DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
+DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
+DEFAULT_LOGS_SETTLING_SECONDS = 3.0

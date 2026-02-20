@@ -42,14 +42,10 @@ class DropbotStatesSettingMixinService(HasTraits):
                 logger.error("Proxy not available for voltage setting")
                 return
 
-            with self.proxy.transaction_lock:
-                if self.realtime_mode:
-                    self.proxy.update_state(voltage=self.voltage)
-                else:
-                    self.proxy.update_state(
-                        hv_output_enabled=False,
-                        voltage=self.voltage)
-                logger.info(f"Set voltage to {self.voltage} V")
+            if self.realtime_mode:
+                with self.proxy.transaction_lock:
+                        self.proxy.update_state(voltage=self.voltage)
+                        logger.info(f"Set voltage to {self.voltage} V")
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting voltage: {e}")
@@ -72,14 +68,10 @@ class DropbotStatesSettingMixinService(HasTraits):
                 logger.error("Proxy not available for frequency setting")
                 return
 
-            with self.proxy.transaction_lock:
-                if self.realtime_mode:
-                    self.proxy.update_state(frequency=self.frequency)
-                else:
-                    self.proxy.update_state(
-                        hv_output_enabled=False,
-                        frequency=self.frequency)
-                logger.info(f"Set frequency to {self.frequency} Hz")
+            if self.realtime_mode:
+                with self.proxy.transaction_lock:
+                        self.proxy.update_state(frequency=self.frequency)
+                        logger.info(f"Set frequency to {self.frequency} Hz")
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting frequency: {e}")
@@ -101,8 +93,6 @@ class DropbotStatesSettingMixinService(HasTraits):
                     self.realtime_mode = True
                     self.proxy.update_state(hv_output_selected=True,
                                             hv_output_enabled=True,
-                                            # voltage=self.voltage,
-                                            # frequency=self.frequency
                                             )
                     publish_message(topic=REALTIME_MODE_UPDATED, message="True")
                 else:

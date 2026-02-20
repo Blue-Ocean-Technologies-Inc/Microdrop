@@ -10,6 +10,8 @@ from PySide6.QtGui import QImage, QTransform, Qt, QPainter
 from PySide6.QtMultimedia import QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 
+from device_viewer.models.media_capture_model import MediaType
+from device_viewer.views.camera_control_view.utils import _cache_media_capture
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
@@ -379,6 +381,10 @@ class VideoRecorder(QObject):
         # 3. Stop IO Thread & FFmpeg (Write remaining queue)
         self._stop_ffmpeg()
 
+        ## Save path to cache
+        _cache_media_capture.send(MediaType.VIDEO, self._output_path)
+
+        # update UI for any dialogs.
         self.recording_stopped.emit(self._output_path)
         logger.info(f"Recording stopped: {self._output_path}")
         self._output_path = None

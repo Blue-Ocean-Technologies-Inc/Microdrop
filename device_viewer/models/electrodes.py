@@ -52,6 +52,7 @@ class Electrodes(HasTraits):
 
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     channels_states_map = Dict(Int, Bool, {})
+    channels_states_map_trues = Property(Dict(Int, Bool, {}),observe='channels_states_map.items')
 
     #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
     channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['svg_model.electrode_areas_scaled', 'channels_electrode_ids_map'])
@@ -124,6 +125,10 @@ class Electrodes(HasTraits):
                 channel_electrode_areas_map[channel] = total_area_scaled
 
         return channel_electrode_areas_map
+
+    @cached_property
+    def _get_channels_states_map_trues(self):
+        return {k: v for k, v in self.channels_states_map.items() if v}
 
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
