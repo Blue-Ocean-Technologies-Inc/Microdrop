@@ -211,6 +211,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model and self.device_view:
             self.device_view.display_state_signal.emit(message_model_serial)
 
+    def _on_protocol_running_triggered(self, message: TimestampedMessage):
+
+        logger.debug(f"Protocol running is {message}")
+        if self.model:
+            self.model.protocol_running = True if message.lower() == "true" else False
+
     def _on_state_changed_triggered(self, message: TimestampedMessage):
         """
         Handle state changes from the device viewer.
@@ -307,9 +313,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             return  # Ignore messages that are from the same model
 
         # Reset the model to clear any existing routes and channels
-        self._disable_state_messages = (
-            True  # Prevent state messages from being sent while we apply the new state
-        )
+        self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
         self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
         self.model.reset()
 
@@ -344,6 +348,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._disable_state_messages = False  # Re-enable state messages after reset
         self._undoing = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
+
+        QApplication.processEvents()
 
     def publish_model_message(self):
         logger.debug(
@@ -944,16 +950,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(
                 f"Buffering message for device viewer state change: {self.message_buffer}"
             )
-            self.debounce_timer.start(200)  # Start timeout for sending message
+            self.debounce_timer.start(1)  # Start timeout for sending message
 
     @observe(
         "model.electrodes.channels_states_map.items"
     )  # When an electrode changes state
     def electrode_click_handler(self, event=None):
-        # if self.model.free_mode: # Only send electrode updates if we are in free mode (no step_id)
-        logger.info("Sending electrode update")
-        self.publish_electrode_update()
-        logger.info("Electrode update sent")
+        if not self.model.protocol_running: # Only send electrode updates if protocol not running
+            logger.info("Sending electrode update")
+            self.publish_electrode_update()
+            logger.info("Electrode update sent")
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
@@ -989,17 +995,21 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self.video_item.setOpacity(self.model.get_alpha(video_key))
 
     @observe("model.step_label")
+    @observe("model.protocol_running")
     @observe("model.free_mode")
     def step_label_change(self, event):
         _status_bar_manager = self.task.window.status_bar_manager
 
         if _status_bar_manager:
 
-            if self.model.step_label is None:
-                _status_bar_manager.message = "Free Mode"
+            if self.model.protocol_running:
+                _status_bar_manager.message = "Running Protocol..."
 
             elif self.model.step_label:
-                _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label} {'(Free Mode)' if self.model.free_mode else ''}"
+                    _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label}"
+
+            elif self.model.free_mode:
+                _status_bar_manager.message = "Free Mode"
 
     @observe("model:mode")
     def _mode_changed(self, event):

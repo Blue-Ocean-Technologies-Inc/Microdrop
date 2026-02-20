@@ -1,13 +1,13 @@
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import List
+from traits.api import List, Enum
 from traitsui.api import View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
 
 from microdrop_style.text_styles import preferences_group_style_sheet
-from microdrop_utils.preferences_UI_helpers import create_grid_group, create_item_label_group
+from microdrop_utils.preferences_UI_helpers import create_grid_group
 from microdrop_utils.pyface_helpers import RangeWithViewHints
 
 from .consts import (
@@ -52,6 +52,11 @@ class ProtocolPreferences(PreferencesHelper):
         desc="Time to allow logs post protocol end"
     )
 
+    capture_time = Enum("Step Start", "Step End", value="Step Start")
+
+    def _level_default(self):
+        return "INFO"
+
 protocol_grid_tab = PreferencesCategory(
     id="microdrop.protocol.preferences",
     name="Protocol Settings",
@@ -74,8 +79,8 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     # Create the grid group for the sidebar items.
     camera_settings_grid = create_grid_group(
-        ["camera_prewarm_seconds"],
-        label_text = ["Camera On Lead Time (s)"],
+        ["camera_prewarm_seconds", "capture_time"],
+        label_text = ["Camera On Lead Time (s)", "When to Capture Step Picture?"],
         group_label="Camera Config",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,

@@ -28,6 +28,8 @@ DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
+PROTOCOL_RUNNING = "microdrop/protocol_running"
+
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,

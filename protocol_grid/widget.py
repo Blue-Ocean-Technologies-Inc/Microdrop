@@ -2,9 +2,8 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.consts import SET_REALTIME_MODE
 from dropbot_controller.preferences import DropbotPreferences
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, information, success
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -19,6 +18,7 @@ from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style, get_tooltip_style
 from microdrop_style.helpers import is_dark_mode, get_complete_stylesheet
+from microdrop_utils.decorators import debounce
 from microdrop_utils.pyside_helpers import DebouncedToolButton, with_loading_screen, LoadingOverlay
 from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.preferences import ProtocolPreferences
@@ -65,7 +65,7 @@ from protocol_grid.extra_ui_elements import (
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
-from protocol_grid.services.hardware_setter_services import VoltageFrequencyService
+from protocol_grid.services.hardware_setter_services import publish_voltage_frequency
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
 
@@ -265,7 +265,7 @@ class PGCWidget(QWidget):
         )
         self.protocol_runner.signals.protocol_paused.connect(self.on_protocol_paused)
         self.protocol_runner.signals.protocol_error.connect(self.on_protocol_error)
-        self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
+        # self.protocol_runner.signals.select_step.connect(self.select_step_by_uid)
 
         self.protocol_data_logger = ProtocolDataLogger(self)
         self.protocol_runner.set_data_logger(self.protocol_data_logger)
@@ -1239,8 +1239,6 @@ class PGCWidget(QWidget):
         if not target_step_item:
             return
 
-        publish_message(topic=SET_REALTIME_MODE, message=str(True))
-
         parameters = {}
         step_params = self.state.get_element_by_path(target_step_path).parameters
 
@@ -1287,7 +1285,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
-        self.protocol_runner.start(run_order)
+        self.protocol_runner.start(run_order, prewarm_seconds=0)
 
     def stop_protocol(self):
 
@@ -1716,8 +1714,8 @@ class PGCWidget(QWidget):
         msg_model = device_state_to_device_viewer_message(
             device_state, step_uid, step_description, step_id, editable
         )
-        logger.info(f"Sending step info: {msg_model.serialize()}")
-        publish_message(
+        logger.critical(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
+        publish_message.send(
             topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()
         )
 
@@ -1725,7 +1723,7 @@ class PGCWidget(QWidget):
         logger.info(f"selected step data: {step_data}")
         voltage = step_data.parameters["Voltage"]
         frequency = step_data.parameters["Frequency"]
-        VoltageFrequencyService.publish_immediate_voltage_frequency(
+        publish_voltage_frequency.send(
             voltage, frequency, preview_mode=self.navigation_bar.is_preview_mode()
         )
 
@@ -1853,7 +1851,10 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
-    def on_selection_changed(self):
+    @debounce(0.1)
+    def on_selection_changed(self, selected, deselected):
+
+
         if (
             hasattr(self, "_processing_device_viewer_message")
             and self._processing_device_viewer_message
@@ -1870,11 +1871,17 @@ class PGCWidget(QWidget):
         has_selection = len(selected_paths) > 0
 
         current_step_id = None
-        current_step_uid = None
-
         if has_selection:
             path = selected_paths[0]
-            item = self.get_item_by_path(path)
+            new_indexes = selected.indexes()
+
+            if new_indexes:
+                index = new_indexes[0]
+                item = self.model.itemFromIndex(index)
+
+            else:
+                item = None
+
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                 parent = item.parent() or self.model.invisibleRootItem()
                 # step info
@@ -1882,7 +1889,6 @@ class PGCWidget(QWidget):
                 id_col = protocol_grid_fields.index("ID")
                 id_item = parent.child(row, id_col)
                 current_step_id = id_item.text() if id_item else ""
-                current_step_uid = item.data(Qt.UserRole + 1000 + hash("UID") % 1000)
 
                 # publish only if this is a different step
                 if current_step_id != self._last_published_step_id:
@@ -2489,18 +2495,14 @@ class PGCWidget(QWidget):
         voltage_str = voltage_item.text() if voltage_item else "100.0"
         frequency_str = frequency_item.text() if frequency_item else "10000"
 
-        # validate values
-        voltage = VoltageFrequencyService.validate_voltage(voltage_str)
-        frequency = VoltageFrequencyService.validate_frequency(frequency_str)
-
         # update the protocol runner execution plan and publish if needed
         preview_mode = self.navigation_bar.is_preview_mode()
         success = self.protocol_runner.update_step_voltage_frequency_in_plan(
-            step_uid, voltage, frequency
+            step_uid, voltage_str, frequency_str
         )
         if success:
             logger.info(
-                f"Advanced mode edit: Updated step {step_uid} to {voltage}V, {frequency}Hz"
+                f"Advanced mode edit: Updated step {step_uid} to {voltage_str}V, {frequency_str}Hz"
             )
 
     def _set_field_for_group(self, group_item, field, value):

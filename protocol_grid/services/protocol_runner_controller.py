@@ -11,8 +11,8 @@ from protocol_grid.preferences import ProtocolPreferences
 from protocol_grid.services.camera_prewarm_scheduler import compile_camera_schedule
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.hardware_setter_services import (
-    VoltageFrequencyService,
     MagnetService,
+    publish_voltage_frequency,
 )
 from protocol_grid.services.utils import (
     _publish_camera_capture_control,
@@ -22,7 +22,7 @@ from protocol_grid.services.utils import (
 )
 from protocol_grid.services.volume_threshold_service import VolumeThresholdService
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
-from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE
+from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from dropbot_controller.consts import (
     ELECTRODES_STATE_CHANGE,
     DETECT_DROPLETS,
@@ -33,7 +33,7 @@ from peripheral_controller.preferences import PeripheralPreferences
 
 from logger.logger_service import get_logger
 
-logger = get_logger(__name__, "DEBUG")
+logger = get_logger(__name__)
 
 
 class ProtocolRunnerSignals(QObject):
@@ -42,8 +42,6 @@ class ProtocolRunnerSignals(QObject):
     protocol_finished = Signal()
     protocol_paused = Signal()
     protocol_error = Signal(str)
-    select_step = Signal(str)  # step_uid
-
 
 def _is_checkbox_checked(item_or_value):
     if item_or_value is None:
@@ -210,7 +208,6 @@ class ProtocolRunnerController(QObject):
             )
 
             ### Step data
-
             video_on = step_info["video_on"]
             last_video_on = last_step["video_on"] if last_step else None
             _video_on_changed = video_on != last_video_on
@@ -254,9 +251,6 @@ class ProtocolRunnerController(QObject):
                 )
 
             if capture_enabled:
-                logger.debug(
-                    f"Step {step_id}: Video recording stop with image capture at end."
-                )
                 _publish_camera_capture_control.send(
                     step_id, step_description, experiment_dir
                 )
@@ -720,10 +714,12 @@ class ProtocolRunnerController(QObject):
 
         # 5. Initialize hardware states
         publish_message(topic=SET_REALTIME_MODE, message=str(True))
+
         if is_video_on_first_step:
             _publish_camera_video_control("true")
 
         # 6. Trigger the UI loading screen and schedule the actual start
+        publish_message("true", PROTOCOL_RUNNING)
         self.parent().start_loading_screen(start_delay_ms, auto_stop=False)
         QTimer.singleShot(start_delay_ms, _execute_initial_step)
 
@@ -1084,20 +1080,23 @@ class ProtocolRunnerController(QObject):
         Safely halts the active protocol, cleanly shuts down hardware/UI states,
         broadcasts the halted state to the UI, and resets all internal trackers.
         """
-        # 1. Shut down hardware modes and active sub-services
+        # Shut down hardware modes and active sub-services
         self._shutdown_hardware_and_services()
 
-        # 2. Clean up any active user prompts or message dialogs
+        # Clean up any active user prompts or message dialogs
         self._cleanup_active_dialogs()
 
-        # 3. Publish the final state of the halted step to the UI & Hardware
-        self._broadcast_step_state(self.current_index)
-
-        # 4. Halt all active execution timers
+        # Halt all active execution timers
         self._stop_all_timers()
 
-        # 5. Completely clear all internal state, tracking, and feature flags
+        # Completely clear all internal state, tracking, and feature flags
         self._clear_all_execution_state()
+
+        publish_message("false", PROTOCOL_RUNNING)
+
+    def _on_protocol_finished(self):
+        self.stop()
+        self.signals.protocol_finished.emit()
 
     # ==========================================
     # TEARDOWN HELPER METHODS
@@ -1136,53 +1135,6 @@ class ProtocolRunnerController(QObject):
 
         # Call the existing message timing cleanup method
         self._cleanup_message_dialog_timing()
-
-    def _broadcast_step_state(self, index: int) -> None:
-        """
-        Extracts the state of the device for a specific step index and publishes
-        it to the Grid UI and Hardware to ensure a safe, known resting state.
-        """
-        if not self._run_order or index < 0 or index >= len(self._run_order):
-            return
-
-        target_step_info = self._run_order[index]
-        target_step = target_step_info["step"]
-
-        device_state = getattr(target_step, "device_state", None)
-        if not device_state:
-            device_state = PathExecutionService.get_empty_device_state()
-
-        step_uid = target_step.parameters.get("UID", "")
-        step_description = target_step.parameters.get("Description", "Step")
-        step_id = target_step.parameters.get("ID", "")
-
-        msg_model = PathExecutionService.create_dynamic_device_state_message(
-            device_state,
-            device_state.activated_electrodes,
-            step_uid,
-            step_description,
-            step_id,
-        )
-        msg_model.editable = True
-
-        # Note: Using model_dump_json() as requested in your finish snippet
-        # (if using Pydantic V2). If older models use .serialize(), use that.
-        publish_message(
-            topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.model_dump_json()
-        )
-
-        if not self._preview_mode:
-            deactivated_hardware_message = (
-                PathExecutionService.create_deactivated_hardware_electrode_message(
-                    device_state
-                )
-            )
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE, message=deactivated_hardware_message
-            )
-
-        if step_uid:
-            self.signals.select_step.emit(step_uid)
 
     def _stop_all_timers(self) -> None:
         """Halts all QTimers related to execution and status checking."""
@@ -1232,23 +1184,6 @@ class ProtocolRunnerController(QObject):
         self._droplet_check_attempted_for_step = {}
         self._droplet_check_skipped_until_phase_nav = False
 
-    def _on_protocol_finished(self):
-        """Handles final cleanup and UI state broadcasting when a protocol naturally ends."""
-
-        # 1. Shut down hardware modes and services (reusing helper from stop)
-        self._shutdown_hardware_and_services()
-
-        # 3. Publish the final state of the *last executed* step
-        if 0 < self.current_index <= len(self._run_order):
-            self._broadcast_step_state(self.current_index - 1)
-
-        # 4. Halt all active execution timers (reusing helper from stop)
-        self._stop_all_timers()
-
-        # 5. Set final state and emit completion
-        self._is_running = False
-        self.signals.protocol_finished.emit()
-
     def set_repeat_protocol_n(self, n):
         self._repeat_protocol_n = max(1, int(n))
 
@@ -1271,11 +1206,6 @@ class ProtocolRunnerController(QObject):
             step = step_info["step"]
             path = step_info["path"]
             rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
-
-            # handle camera controls for Video/Capture/Record
-            if not self._preview_mode:
-                logger.debug("Handling Camera Controls")
-                self._handle_camera_controls(step_info)
 
             logger.info(
                 f"Executing step {self.current_index + 1}/{len(self._run_order)}: "
@@ -1323,10 +1253,13 @@ class ProtocolRunnerController(QObject):
 
             if self._preview_mode:
                 logger.info("In preview mode. No hardware requests will be published.")
+                return
 
-            VoltageFrequencyService.publish_step_voltage_frequency(
-                step, self._preview_mode
-            )
+            publish_voltage_frequency.send(step.parameters.get("voltage", "30.0"), step.parameters.get("frequency", "1000.0"))
+
+            # handle camera controls for Video/Capture/Record
+            logger.debug("Handling Camera Controls")
+            self._handle_camera_controls(step_info)
 
             # We assume MagnetService returns True if the magnet is moving/needs time
             # If your MagnetService is void, you will need to check step params manually here.
@@ -1444,7 +1377,6 @@ class ProtocolRunnerController(QObject):
         self._timer.start(int(step_timeout * 1000))
 
         logger.info(f"Started step timer for {step_timeout:.2f} seconds")
-
         # Check for Message parameter
         message = step.parameters.get("Message", "")
         if message and message.strip():
@@ -1453,19 +1385,7 @@ class ProtocolRunnerController(QObject):
             self._execute_next_phase()
 
     def _execute_next_phase(self):
-        if self._is_paused or not self._is_running:
-            return
-
-        if (
-            hasattr(self, "_pause_for_message_display")
-            and self._pause_for_message_display
-        ):
-            return
-
-        if (
-            hasattr(self, "_message_waiting_for_response")
-            and self._message_waiting_for_response
-        ):
+        if self._is_paused or not self._is_running or self._pause_for_message_display or self._message_waiting_for_response:
             return
 
         if self._current_phase_index >= len(self._current_execution_plan):
@@ -1473,10 +1393,9 @@ class ProtocolRunnerController(QObject):
             return
 
         # update data logger context for current phase
-        if hasattr(self, "_data_logger") and self._data_logger:
-            context = self._get_current_logging_context()
-            if context:
-                self._data_logger.set_protocol_context(context)
+        context = self._get_current_logging_context()
+        if context:
+            self._data_logger.set_protocol_context(context)
 
         try:
             plan_item = self._current_execution_plan[self._current_phase_index]
@@ -2342,9 +2261,7 @@ class ProtocolRunnerController(QObject):
             msg_model.step_info["free_mode"] = True
             msg_model.editable = True
 
-        publish_message(
-            topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()
-        )
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
 
         # hardware message if not in preview mode
         if not self._preview_mode:
@@ -2379,9 +2296,7 @@ class ProtocolRunnerController(QObject):
 
         # if its the currently running step, publish immediately
         if target_step_index == self.current_index:
-            VoltageFrequencyService.publish_immediate_voltage_frequency(
-                str(new_voltage), str(new_frequency), self._preview_mode
-            )
+            publish_voltage_frequency.send(str(new_voltage), str(new_frequency), self._preview_mode)
             logger.info(
                 f"Updated voltage/frequency for currently running step: {new_voltage}V, {new_frequency}Hz"
             )
