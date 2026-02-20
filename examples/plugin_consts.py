@@ -52,11 +52,11 @@ REQUIRED_PLUGINS = [
 
 
 REQUIRED_CONTEXT = [
-    dramatiq_workers_context
+    (dramatiq_workers_context, {"worker_threads": 4, "worker_timeout": 100}) #TODO optimize threads and timeout
 ]
 
 SERVER_CONTEXT = [
-    redis_server_context
+    (redis_server_context, {})
 ]
 
 BACKEND_APPLICATION = MicrodropBackendApplication

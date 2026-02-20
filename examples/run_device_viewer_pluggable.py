@@ -58,8 +58,8 @@ def main(plugins, contexts, application, persist):
     #### Startup application with context
 
     with contextlib.ExitStack() as stack:  # contextlib.ExitStack is a context manager that allows you to stack multiple context managers
-        for context in contexts:
-            stack.enter_context(context())
+        for context, kwargs in contexts:
+            stack.enter_context(context(**kwargs))
 
         # Instantiate application
         app = application(plugins=plugin_instances)
