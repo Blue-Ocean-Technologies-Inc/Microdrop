@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 
+from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from dropbot_controller.preferences import DropbotPreferences
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success
 from PySide6.QtWidgets import (
@@ -616,6 +617,7 @@ class PGCWidget(QWidget):
 
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
+
                 logger.info(f"Updated tracked active electrodes: {active_electrodes}")
 
             if dv_msg.svg_file != self._active_device_svg_file:
@@ -624,6 +626,11 @@ class PGCWidget(QWidget):
             if dv_msg.step_id:
                 self._processing_device_viewer_message = True
                 self._programmatic_change = True
+
+                publish_message.send(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(dv_msg.channels_activated),
+                )
 
                 scroll_pos = self.save_scroll_positions()
                 saved_selection = self.save_selection()
@@ -1714,10 +1721,9 @@ class PGCWidget(QWidget):
         msg_model = device_state_to_device_viewer_message(
             device_state, step_uid, step_description, step_id, editable
         )
-        logger.critical(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
-        publish_message.send(
-            topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()
-        )
+        publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
+        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(msg_model.channels_activated))
 
         step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
@@ -1851,9 +1857,8 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
-    @debounce(0.1)
+    @debounce(0.05)
     def on_selection_changed(self, selected, deselected):
-
 
         if (
             hasattr(self, "_processing_device_viewer_message")
