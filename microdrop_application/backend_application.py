@@ -1,4 +1,5 @@
 # sys imports
+import threading
 from pathlib import Path
 
 from .helpers import get_microdrop_redis_globals_manager
@@ -78,3 +79,31 @@ class MicrodropBackendApplication(Application):
     def traits_init(self):
         self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
         logger.info(f"Initialized microdrop application. Current experiment directory: {self.current_experiment_directory}")
+
+    #### Backend run: block until stop() is called (e.g. SIGINT) ##############
+    # Base Envisage Application.run() does start() then stop() immediately, so
+    # plugins would be stopped right after start. Override run() to block until
+    # the process is told to stop, so the hardware backend stays connected.
+
+    def run(self):
+        """Run the backend; block until stop() is called (e.g. Ctrl+C)."""
+        if self.start():
+            try:
+                self._backend_stop_event = threading.Event()
+                # Trigger device monitoring so the hardware plugin starts scanning (e.g. OpenDrop/Dropbot).
+                try:
+                    from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+                    publish_message(topic="dropbot/requests/start_device_monitoring", message="")
+                    publish_message(topic="opendrop/requests/start_device_monitoring", message="")
+                except Exception as e:
+                    logger.debug("Could not publish start_device_monitoring: %s", e)
+                logger.info("Backend running. Press Ctrl+C to stop.")
+                self._backend_stop_event.wait()
+            finally:
+                self.stop()
+
+    def stop(self):
+        """Release the run() block and stop the application."""
+        if getattr(self, "_backend_stop_event", None) is not None:
+            self._backend_stop_event.set()
+        super().stop()
