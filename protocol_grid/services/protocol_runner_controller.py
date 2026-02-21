@@ -97,7 +97,6 @@ class ProtocolRunnerController(QObject):
         self._elapsed_time = 0.0
         self._step_elapsed_time = 0.0
         self._repeat_protocol_n = 1
-        self._current_protocol_repeat = 1
         self._current_step_timer = None
         self._current_execution_plan = []
         self._current_phase_index = 0
@@ -699,9 +698,10 @@ class ProtocolRunnerController(QObject):
         is_video_on_first_step = (
             bool(video_on_mask[0]) if len(video_on_mask) > 0 else False
         )
-        first_step_offset = (
-            float(offset_seconds_arr[0]) if len(offset_seconds_arr) > 0 else 0.0
-        )
+
+        if offset_seconds_arr[0] <= 0:
+            first_step_offset = offset_seconds_arr[0]
+
 
         start_delay_ms = self._calculate_start_delay_ms(
             is_video_on_first_step, first_step_offset
@@ -730,7 +730,7 @@ class ProtocolRunnerController(QObject):
     def _reset_timing_and_phase_trackers(self) -> None:
         """Zeroes out all elapsed times, phase tracking, and step indices."""
         self.current_index = 0
-        self._current_protocol_repeat = 1
+        self._current_protocol_repeat = 0
 
         self._start_time = None
         self._elapsed_time = 0.0
@@ -781,6 +781,7 @@ class ProtocolRunnerController(QObject):
             entry["offset_seconds"] = offset_seconds_arr[i]
 
         self._unique_step_count = total_unique_steps
+        self.unit_protocol_n = self._unique_step_count / self._repeat_protocol_n
 
         return video_on_mask, offset_seconds_arr
 
@@ -1210,6 +1211,9 @@ class ProtocolRunnerController(QObject):
                 f"Executing step {self.current_index + 1}/{len(self._run_order)}: "
                 f"{step.parameters.get('Description', 'Step')} (rep {rep_idx}/{rep_total})"
             )
+
+            if (self.current_index) % self.unit_protocol_n == 0:
+                self._current_protocol_repeat += 1
 
             self.signals.highlight_step.emit(path)
 
@@ -1918,6 +1922,7 @@ class ProtocolRunnerController(QObject):
             "protocol_repeat_idx": self._current_protocol_repeat,
             "protocol_repeat_total": self._repeat_protocol_n,
         }
+
         self.signals.update_status.emit(status)
 
     def _calculate_current_repetition(self):

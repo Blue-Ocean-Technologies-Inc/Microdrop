@@ -346,7 +346,7 @@ class StatusBar(QScrollArea):
         self.lbl_repeat_protocol.setFixedWidth(140)
         self.lbl_repeat_protocol.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
-        self.lbl_repeat_protocol_status = QLabel("1/")
+        self.lbl_repeat_protocol_status = QLabel("0/")
         self.lbl_repeat_protocol_status.setFixedWidth(20)
         self.lbl_repeat_protocol_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.edit_repeat_protocol = QLineEdit("1")

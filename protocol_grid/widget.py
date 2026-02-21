@@ -1319,7 +1319,7 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_step_repetition.setText("Repetition 0/0")
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
-        self.status_bar.lbl_repeat_protocol_status.setText("1/")
+        self.status_bar.lbl_repeat_protocol_status.setText("0/")
 
     def _update_ui_enabled_state(self):
         enabled = not self._protocol_running
