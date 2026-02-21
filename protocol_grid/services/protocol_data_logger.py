@@ -17,21 +17,28 @@ from microdrop_utils.plotly_helpers import create_plotly_svg_dropbot_device_heat
 from microdrop_utils.sticky_notes import StickyWindowManager
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
 app_globals = get_microdrop_redis_globals_manager()
 
 from functools import wraps
 
+
 def require_active_logging(func):
     """Decorator to ensure logging is active before executing a method."""
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not getattr(self, "_is_logging_active", False):
-            logger.debug(f"Attempted to call '{func.__name__}', but logger is not active.")
+            logger.debug(
+                f"Attempted to call '{func.__name__}', but logger is not active."
+            )
             return None  # Early exit
         return func(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -96,7 +103,9 @@ class ProtocolDataLogger:
             }
         )
 
-        logger.info(f"Started protocol data logging to: {experiment_directory} at {self._start_timestamp}")
+        logger.info(
+            f"Started protocol data logging to: {experiment_directory} at {self._start_timestamp}"
+        )
 
     @require_active_logging
     def stop_logging(self, completed_steps=None, settling_time_ms=2000):
@@ -106,14 +115,16 @@ class ProtocolDataLogger:
         _completed_nsteps = completed_steps if completed_steps else self._total_nsteps
 
         _stop_timestamp = get_current_utc_datetime()
-        _elapsed_time = get_elapsed_time_from_utc_datetime(self._start_timestamp, _stop_timestamp)
+        _elapsed_time = get_elapsed_time_from_utc_datetime(
+            self._start_timestamp, _stop_timestamp
+        )
 
         self.log_metadata(
             {
                 "Start Time": self._start_timestamp,
                 "Stop Time": _stop_timestamp,
                 "Elapsed Time": _elapsed_time,
-                "Steps Completed": f"{_completed_nsteps} / {self._total_nsteps}"
+                "Steps Completed": f"{_completed_nsteps} / {self._total_nsteps}",
             }
         )
 
@@ -123,8 +134,10 @@ class ProtocolDataLogger:
 
         QTimer.singleShot(settling_time_ms, _block_logging)
 
-        logger.info(f"Stopped protocol data logging at {self._start_timestamp} after {_elapsed_time}.\n"
-                    f"Further logs will be allowed for {settling_time_ms} for background tasks to settle and input logs.")
+        logger.info(
+            f"Stopped protocol data logging at {self._start_timestamp} after {_elapsed_time}.\n"
+            f"Further logs will be allowed for {settling_time_ms} for background tasks to settle and input logs."
+        )
 
     def set_protocol_context(self, context: Dict):
         self._current_protocol_context = context
@@ -146,7 +159,7 @@ class ProtocolDataLogger:
             self._other_media_captures.append(message.path)
 
     @require_active_logging
-    def log_data(self, data_point:dict):
+    def log_data(self, data_point: dict):
         # Automatically add a timestamp if it's missing
         if "utc_time" not in data_point:
             data_point["utc_time"] = get_current_utc_datetime()
@@ -159,7 +172,7 @@ class ProtocolDataLogger:
                 self._columns.append(key)
 
     @require_active_logging
-    def log_metadata(self, data_point:dict):
+    def log_metadata(self, data_point: dict):
         self._metadata_entries.update(data_point)
 
     @require_active_logging
@@ -212,7 +225,9 @@ class ProtocolDataLogger:
 
             data_entry = {
                 "step_idx": step_idx,
-                "utc_time": int(reception_timestamp), # we care only about precision to the second.
+                "utc_time": int(
+                    reception_timestamp
+                ),  # we care only about precision to the second.
                 "instrument_time_us": instrument_timestamp_us,
                 "step_id": step_id,
                 "Capacitance (pF)": capacitance_value,
@@ -322,7 +337,9 @@ class ProtocolDataLogger:
 
         try:
             data_file_path = Path(
-                self._experiment_directory / "data" / f"data_{self._metadata_entries.get("Start Time", get_current_utc_datetime())}.json"
+                self._experiment_directory
+                / "data"
+                / f"data_{self._metadata_entries.get("Start Time", get_current_utc_datetime())}.json"
             )
 
             data_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -369,7 +386,9 @@ class ProtocolDataLogger:
         """get number of logged data entries."""
         return len(self._data_entries)
 
-    def save_dataframe_as_csv(self, file_path: str | Path = None, output_path: str | Path = None):
+    def save_dataframe_as_csv(
+        self, file_path: str | Path = None, output_path: str | Path = None
+    ):
         """
         Load JSON data and save as CSV file.
 
@@ -432,16 +451,26 @@ class ProtocolDataLogger:
         df = self._active_analysis_df
 
         # find number of data points recorded for each channel
-        num_data_points_per_channel = df.explode("actuated_channels")["actuated_channels"].value_counts()
+        num_data_points_per_channel = df.explode("actuated_channels")[
+            "actuated_channels"
+        ].value_counts()
 
         # find average time
         df["step_delta"] = df["corr_instrument_time_us"].diff()
 
         # insturment time is in us, convert to seconds * 1e-6
-        average_capacitance_update_interval_s = df.sort_values("corr_instrument_time_us")["corr_instrument_time_us"].diff().fillna(0).mean() * 1e-6
+        average_capacitance_update_interval_s = (
+            df.sort_values("corr_instrument_time_us")["corr_instrument_time_us"]
+            .diff()
+            .fillna(0)
+            .mean()
+            * 1e-6
+        )
 
         # multiply n hits by update time to get estimated channel actuation duration.
-        channel_duration_series = (num_data_points_per_channel * average_capacitance_update_interval_s)
+        channel_duration_series = (
+            num_data_points_per_channel * average_capacitance_update_interval_s
+        )
 
         return channel_duration_series.to_dict()
 
@@ -550,23 +579,35 @@ class ProtocolDataLogger:
 
         return summary_str
 
-    def _process_data_files_to_html_report(self):
-        # data visuals if we have any data
-        if self._data_files:
-            # Get the file list string
+    def _get_data_str(self):
+        try:
             data_str = self._get_files_summary(self._data_files, "Data Files:")
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            data_str = e
 
-            ## create overall data summary table
+        return data_str
+
+    def _get_overall_data_summary_table(self):
+        ## create overall data summary table
+        try:
             data_section = f"""
-                        <div class="table-container">
-                            {self._summarize_overall_data_to_html_table()}
-                        </div>
-                    """
+                                    <div class="table-container">
+                                        {self._summarize_overall_data_to_html_table()}
+                                    </div>
+                                """
 
-            ## Create data visuals
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            data_section = e
+
+        return data_section
+
+    def _get_data_visuals(self):
+        try:
             device_svg_heatmap_plotly_fig = create_plotly_svg_dropbot_device_heatmap(
                 svg_file=self._svg_file,
-                channel_quantity_dict=self._get_channel_duration()
+                channel_quantity_dict=self._get_channel_duration(),
             )
 
             data_visuals_section = f"""
@@ -576,12 +617,11 @@ class ProtocolDataLogger:
                                     </div>
                                 """
 
-        else:
-            data_str = ""
-            data_section = ""
-            data_visuals_section = ""
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            data_visuals_section = e
 
-        return data_str, data_section, data_visuals_section
+        return data_visuals_section
 
     def _generate_report_html(self):
 
@@ -600,7 +640,15 @@ class ProtocolDataLogger:
         for key, val in self._metadata_entries.items():
             metadata_str += f"<b>{key}:</b> {val}<br><br>"
 
-        data_str, data_section, data_viz_str = self._process_data_files_to_html_report()
+        # make data analysis sections using data files, if they exist.
+        data_str = data_section = data_visuals_section = ""
+        if self._data_files:
+            # Get the file list string
+            data_str, data_section, data_visuals_section = (
+                self._get_data_str(),
+                self._get_overall_data_summary_table(),
+                self._get_data_visuals(),
+            )
 
         report = f"""
             <h1>Run Summary</h1>
@@ -615,7 +663,7 @@ class ProtocolDataLogger:
             {data_section}
             
             <h2>Data Trends:</h2>
-            {data_viz_str}
+            {data_visuals_section}
             
             <h2>Media Captures:</h2>
             
@@ -653,7 +701,8 @@ class ProtocolDataLogger:
 
             report_path = (
                 Path(self._experiment_directory)
-                / "reports"/ f"report_{get_current_utc_datetime()}.html"
+                / "reports"
+                / f"report_{get_current_utc_datetime()}.html"
             )
 
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -669,17 +718,20 @@ class ProtocolDataLogger:
         return report
 
     def generate_data_files(self):
+        self._data_files = []
+
         data_file_path = self.save_data_file()
-        self._data_files = [data_file_path]
 
         if data_file_path:
-            csv_file_path = self.save_dataframe_as_csv(output_path=data_file_path.with_suffix(".csv"))
+            self._data_files.append(data_file_path)
 
-        for el in [data_file_path, csv_file_path]:
-            if el:
-                self._data_files.append(el)
+            csv_file_path = self.save_dataframe_as_csv(
+                output_path=data_file_path.with_suffix(".csv")
+            )
 
-        return data_file_path, csv_file_path
+            if csv_file_path:
+                self._data_files.append(csv_file_path)
+
 
 if __name__ == "__main__":
 
