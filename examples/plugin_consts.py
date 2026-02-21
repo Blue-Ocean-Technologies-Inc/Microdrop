@@ -1,3 +1,5 @@
+import os
+
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
 from logger.plugin import LoggerPlugin
 from logger_ui.plugin import LoggerUIPlugin
@@ -17,6 +19,15 @@ from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
+from opendrop_controller.plugin import OpenDropControllerPlugin
+from opendrop_status.plugin import OpenDropStatusPlugin
+
+# Hardware backend selection: set MICRODROP_HW_BACKEND=opendrop to use OpenDrop hardware.
+# Default is dropbot.
+HW_BACKEND = (os.environ.get("MICRODROP_HW_BACKEND") or "dropbot").strip().lower()
+
+# Status dock pane plugin: show OpenDrop status when using OpenDrop backend, else DropBot status.
+StatusPlugin = OpenDropStatusPlugin if HW_BACKEND == "opendrop" else DropbotStatusPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -30,7 +41,7 @@ FRONTEND_PLUGINS = [
     LoggerUIPlugin,
     # DropbotStatusPlotPlugin,
     DropbotToolsMenuPlugin,
-    DropbotStatusPlugin,
+    StatusPlugin,
     ManualControlsPlugin,
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
@@ -38,11 +49,17 @@ FRONTEND_PLUGINS = [
     DropbotPreferencesPlugin
 ]
 
-BACKEND_PLUGINS = [
-    DropbotControllerPlugin,
-    ElectrodeControllerPlugin,
-    PeripheralControllerPlugin
-]
+if HW_BACKEND == "opendrop":
+    BACKEND_PLUGINS = [
+        OpenDropControllerPlugin,
+        ElectrodeControllerPlugin,
+    ]
+else:
+    BACKEND_PLUGINS = [
+        DropbotControllerPlugin,
+        ElectrodeControllerPlugin,
+        PeripheralControllerPlugin,
+    ]
 
 REQUIRED_PLUGINS = [
     CorePlugin,

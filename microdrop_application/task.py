@@ -1,7 +1,12 @@
 # system imports.
 import json
+import os
 import dramatiq
 from PySide6.QtCore import QTimer
+
+# Hardware backend: same env as plugin_consts; determines which status dock pane to show.
+_HW_BACKEND = (os.environ.get("MICRODROP_HW_BACKEND") or "dropbot").strip().lower()
+_STATUS_DOCK_PANE_ID = "opendrop_status.dock_pane" if _HW_BACKEND == "opendrop" else "dropbot_status.dock_pane"
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
@@ -109,7 +114,7 @@ class MicrodropTask(Task):
     def _default_layout_default(self):
 
         top_right = HSplitter(
-            PaneItem("dropbot_status.dock_pane"),
+            PaneItem(_STATUS_DOCK_PANE_ID),
             PaneItem("manual_controls.dock_pane"),
         )
 
