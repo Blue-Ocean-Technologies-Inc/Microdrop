@@ -231,7 +231,7 @@ class ProtocolRunnerController(QObject):
             # Proceed if it's NOT step 0, OR if it is step 0 but has an offset.
             # Edge case where we need video immediately in first step taken care of on protocol start
             if _video_on_changed:
-                if self.current_index > 0 or step_info.get("offset_seconds"):
+                if self.current_index > 0 or step_info.get("offset_seconds") >= 0:
 
                     if video_on:
                         self._camera_bomb.start(
@@ -699,9 +699,12 @@ class ProtocolRunnerController(QObject):
             bool(video_on_mask[0]) if len(video_on_mask) > 0 else False
         )
 
-        if offset_seconds_arr[0] <= 0:
+        if len(video_on_mask) > 0 and offset_seconds_arr[0] < 0:
+            is_video_on_first_step = True
             first_step_offset = offset_seconds_arr[0]
-
+        else:
+            is_video_on_first_step = False
+            first_step_offset = 0
 
         start_delay_ms = self._calculate_start_delay_ms(
             is_video_on_first_step, first_step_offset
