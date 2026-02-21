@@ -273,7 +273,10 @@ def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict
         return
 
     for electrode in list(electrodes):
-        channel = electrode_ids_channels_map[electrode.attrib["id"]]
+        element_id = electrode.attrib.get("id")
+        if element_id not in electrode_ids_channels_map:
+            continue
+        channel = electrode_ids_channels_map[element_id]
         if channel is not None:
             electrode.attrib["data-channels"] = str(channel)
         else:

@@ -252,7 +252,11 @@ class SvgUtil(HasTraits):
 
         ### Add the channels for each electrode ###
         for electrode in list(electrodes):
-            channel = electrode_ids_channels_map[electrode.attrib["id"]]
+            element_id = electrode.attrib.get("id")
+            if element_id not in electrode_ids_channels_map:
+                # Skip non-electrode elements (e.g. nested <g> groups like "g4")
+                continue
+            channel = electrode_ids_channels_map[element_id]
             if channel is not None:
                 electrode.attrib["data-channels"] = str(channel)
             else:
