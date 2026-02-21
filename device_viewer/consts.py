@@ -30,6 +30,9 @@ DEVICE_VIEWER_SIDEBAR_WIDTH = 270
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
+# Default electrode channel count; configurable in Device Viewer preferences.
+NUMBER_OF_CHANNELS = 120
+
 ## device vew zoom sensitivity
 ZOOM_SENSITIVITY = 5
 

@@ -26,6 +26,7 @@ from .consts import (
     DEVICE_VIEWER_SIDEBAR_WIDTH,
     LAYERS_VIEW_MIN_HEIGHT,
     MASTER_SVG_FILE,
+    NUMBER_OF_CHANNELS,
     ZOOM_SENSITIVITY,
 )
 from .default_settings import default_alphas, default_visibility
@@ -57,6 +58,11 @@ class DeviceViewerPreferences(PreferencesHelper):
         value=AUTO_FIT_MARGIN_SCALE, low=1, high=100, mode="spinner"
     )
     ZOOM_SENSITIVITY = Range(value=ZOOM_SENSITIVITY, low=1, high=100, mode="spinner")
+
+    # Number of electrode channels (valid channel indices 0 to NUMBER_OF_CHANNELS - 1)
+    NUMBER_OF_CHANNELS = Range(
+        value=NUMBER_OF_CHANNELS, low=1, high=1024, mode="spinner"
+    )
 
     # getters for processed values from int set in spinner
     _auto_fit_margin_scale = Property(observe="AUTO_FIT_MARGIN_SCALE")
@@ -158,12 +164,18 @@ default_zoom_sensitivity = create_item_label_group(
     "ZOOM_SENSITIVITY",
 )
 
+default_number_of_channels = create_item_label_group(
+    "NUMBER_OF_CHANNELS",
+    label_text="Number of channels",
+)
+
 main_view_settings = (
     Group(
         [
             default_svg_setting_item,
             default_auto_fit_margin_scale_item,
             default_zoom_sensitivity,
+            default_number_of_channels,
         ],
         label="Main View",
         show_labels=False,
