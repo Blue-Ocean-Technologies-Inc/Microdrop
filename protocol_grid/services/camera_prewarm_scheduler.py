@@ -7,7 +7,7 @@ that require video, image capture, or recording.
 """
 
 import numpy as np
-from numpy import ndarray, bool
+from numpy import ndarray
 
 from logger.logger_service import get_logger
 from protocol_grid.logic.prewarm_mask import get_prewarm_step_mask
