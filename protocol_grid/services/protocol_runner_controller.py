@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QDialog, QApplication
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import PausableTimer
-from protocol_grid.preferences import ProtocolPreferences
+from protocol_grid.preferences import ProtocolPreferences, StepTime
 from protocol_grid.services.camera_prewarm_scheduler import compile_camera_schedule
 from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.services.hardware_setter_services import (
@@ -33,7 +33,7 @@ from peripheral_controller.preferences import PeripheralPreferences
 
 from logger.logger_service import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, "DEBUG")
 
 
 class ProtocolRunnerSignals(QObject):
@@ -188,7 +188,7 @@ class ProtocolRunnerController(QObject):
 
     # --------- camera controls ----------
 
-    def _handle_camera_controls(self, step_info):
+    def _handle_camera_controls(self):
         if self._preview_mode:
             logger.debug("Skipping camera controls in preview mode")
             return
@@ -196,6 +196,7 @@ class ProtocolRunnerController(QObject):
         try:
             logger.debug("Doing camera control routine")
 
+            step_info = self._run_order[self.current_index]
             step = step_info["step"]
             step_id = step.parameters.get("ID", "")
             step_description = step.parameters.get("Description", "Step")
@@ -249,10 +250,23 @@ class ProtocolRunnerController(QObject):
                     else _stop_step_recording.send()
                 )
 
-            if capture_enabled:
-                _publish_camera_capture_control.send(
-                    step_id, step_description, experiment_dir
-                )
+            if self.protocol_preferences.capture_time == StepTime.START and capture_enabled:
+                if self.protocol_preferences.capture_time == StepTime.START:
+                    logger.info(f"{step_id}: Photo capture at step start")
+                    _publish_camera_capture_control.send(
+                        step_id, step_description, experiment_dir
+                    )
+
+            elif self.protocol_preferences.capture_time == StepTime.END and last_step:
+                step = last_step["step"]
+                if _is_checkbox_checked(step.parameters.get("Capture", "0")):
+                    step_id = step.parameters.get("ID", "")
+                    step_description = step.parameters.get("Description", "Step")
+
+                    logger.info(f"{step_id}: Photo capture at step end")
+                    _publish_camera_capture_control.send(
+                        step_id, step_description, experiment_dir
+                    )
 
         except Exception as e:
             logger.error(f"Error handling camera controls: {e}", exc_info=True)
@@ -689,37 +703,13 @@ class ProtocolRunnerController(QObject):
 
         self._status_timer.start()
 
-        # 2. Compile the camera schedule and inject it into the run order
-        video_on_mask, offset_seconds_arr = self._prepare_camera_schedule(
-            prewarm_seconds
-        )
-
-        # 3. Calculate the delay required before firing the first step
-        is_video_on_first_step = (
-            bool(video_on_mask[0]) if len(video_on_mask) > 0 else False
-        )
-
-        if len(video_on_mask) > 0 and offset_seconds_arr[0] < 0:
-            is_video_on_first_step = True
-            first_step_offset = offset_seconds_arr[0]
-        else:
-            is_video_on_first_step = False
-            first_step_offset = 0
-
-        start_delay_ms = self._calculate_start_delay_ms(
-            is_video_on_first_step, first_step_offset
-        )
+        # 2. Compile the camera schedule and inject it into the run order, along with any other prep
+        start_delay_ms = self._prepare_for_protocol_run()
 
         # 4. Define the callback that physically starts the run
         def _execute_initial_step():
             self.parent().stop_loading_screen()
             self._execute_next_step()
-
-        # 5. Initialize hardware states
-        publish_message(topic=SET_REALTIME_MODE, message=str(True))
-
-        if is_video_on_first_step:
-            _publish_camera_video_control("true")
 
         # 6. Trigger the UI loading screen and schedule the actual start
         publish_message("true", PROTOCOL_RUNNING)
@@ -751,9 +741,7 @@ class ProtocolRunnerController(QObject):
         self._total_step_phases_completed = 0
         self._step_phase_start_time = None
 
-    def _prepare_camera_schedule(
-        self, prewarm_seconds: float
-    ) -> tuple[list[bool], list[float]]:
+    def _prepare_camera_schedule(self):
         """
         Compiles the camera prewarm schedule and injects video states and offsets
         directly into the current run order. Updates the unique step count.
@@ -764,29 +752,65 @@ class ProtocolRunnerController(QObject):
         Returns:
             A tuple containing the generated (video_on_mask, offset_seconds_arr).
         """
-        # (Relies on the get_prewarm_step_mask logic we discussed previously!)
         video_on_mask, offset_seconds_arr = compile_camera_schedule(
-            self._run_order, prewarm_seconds=prewarm_seconds
+            self._run_order, self.protocol_preferences.camera_prewarm_seconds, self.protocol_preferences.capture_time
         )
-
         logger.debug(
             f"video_on_mask: {video_on_mask}; offset_seconds_arr: {offset_seconds_arr}"
         )
 
+        return video_on_mask, offset_seconds_arr
+
+    def _prepare_for_protocol_run(self):
+        """
+        Prepare for protocol run by setting hardware states, preparing the camera
+        schedule (handling START/END capture timing), and computing the start delay.
+        """
+        # 1. Initialize hardware states
+        publish_message(topic=SET_REALTIME_MODE, message=str(True))
+
+        # Get the fully calculated camera schedule
+        video_on_mask, offset_seconds_arr = self._prepare_camera_schedule()
+
+        # Inject schedule data and compute protocol repetition metrics
         total_unique_steps = 0
         for i, entry in enumerate(self._run_order):
             # Count unique steps. Assume rep_idx == 1 indicates the first instance of a step.
             if entry.get("rep_idx") == 1:
                 total_unique_steps += 1
 
-            # Inject the schedule data into the active run order dictionaries
-            entry["video_on"] = video_on_mask[i]
-            entry["offset_seconds"] = offset_seconds_arr[i]
+            # Inject the pre-calculated schedule data directly into the run order
+            entry["video_on"] = (
+                bool(video_on_mask[i]) if len(video_on_mask) > i else False
+            )
+            entry["offset_seconds"] = (
+                float(offset_seconds_arr[i]) if len(offset_seconds_arr) > i else 0.0
+            )
 
         self._unique_step_count = total_unique_steps
-        self.unit_protocol_n = self._unique_step_count / self._repeat_protocol_n
 
-        return video_on_mask, offset_seconds_arr
+        # Safe division for unit steps
+        repeat_n = getattr(self, "_repeat_protocol_n", 1)
+        self.unit_protocol_n = (
+            (self._unique_step_count / repeat_n)
+            if repeat_n > 0
+            else self._unique_step_count
+        )
+
+        # 5. Safely determine first-step delay requirements
+        first_step_offset = float(offset_seconds_arr[0])
+        is_video_on_before_first_step = True if video_on_mask[0] and first_step_offset < 0 else False
+
+        start_delay_ms = self._calculate_start_delay_ms(
+            is_video_on_before_first_step, first_step_offset
+        )
+
+        # 6. Trigger hardware if needed for Step 0
+        if is_video_on_before_first_step:
+            logger.debug("Camera required immediately for step 1. Publishing on request")
+            _publish_camera_video_control("true")
+
+        return start_delay_ms
 
     def _calculate_start_delay_ms(
         self, is_video_on: bool, offset_seconds: float
@@ -1098,8 +1122,28 @@ class ProtocolRunnerController(QObject):
 
         publish_message("false", PROTOCOL_RUNNING)
 
+    def _on_protocol_about_to_quit(self):
+        # Check if any last step routines need to be executed
+        if self.protocol_preferences.capture_time == StepTime.END:
+            last_step = (
+                self._run_order[self.current_index-1]
+                if self.current_index > 0
+                else None
+            )
+            step = last_step["step"]
+            experiment_dir = str(self.experiment_manager.get_experiment_directory())
+            if _is_checkbox_checked(step.parameters.get("Capture", "0")):
+                step_id = step.parameters.get("ID", "")
+                step_description = step.parameters.get("Description", "Step")
+
+                logger.info(f"{step_id}: Photo capture at step end")
+                _publish_camera_capture_control.send(
+                    step_id, step_description, experiment_dir
+                )
+
     def _on_protocol_finished(self):
-        self.stop()
+        self._on_protocol_about_to_quit()
+        QTimer.singleShot(100, self.stop) # short delay to allow for about to quit routine to settle.
         self.signals.protocol_finished.emit()
 
     # ==========================================
@@ -1265,7 +1309,7 @@ class ProtocolRunnerController(QObject):
 
             # handle camera controls for Video/Capture/Record
             logger.debug("Handling Camera Controls")
-            self._handle_camera_controls(step_info)
+            self._handle_camera_controls()
 
             # We assume MagnetService returns True if the magnet is moving/needs time
             # If your MagnetService is void, you will need to check step params manually here.
@@ -1853,9 +1897,6 @@ class ProtocolRunnerController(QObject):
     def _emit_status_update(self):
         if not self._is_running or not self._run_order:
             return
-        step_info = self._run_order[self.current_index]
-        step = step_info["step"]
-        rep_idx, rep_total = step_info["rep_idx"], step_info["rep_total"]
 
         current_step_position = 0
         for i, entry in enumerate(self._run_order):
