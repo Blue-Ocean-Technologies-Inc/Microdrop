@@ -1,3 +1,4 @@
+import sys
 import time
 from threading import RLock
 
@@ -50,6 +51,8 @@ class OpenDropSerialProxy:
             return False
         try:
             self.serial_port.reset_input_buffer()
+            if sys.platform == 'win32':
+                self.serial_port.read(1)
             return True
         except (OSError, serial.SerialException):
             return False
