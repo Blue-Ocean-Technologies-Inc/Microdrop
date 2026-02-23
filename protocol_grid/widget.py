@@ -1697,6 +1697,7 @@ class PGCWidget(QWidget):
 
         # clear last published UID
         self._set_last_published_step_uid(None)
+        self._last_published_step_id = None
 
     def _publish_step_message(self, step_item, step_path, editable=True):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
@@ -1857,8 +1858,7 @@ class PGCWidget(QWidget):
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
     @debounce(0.05)
-    def on_selection_changed(self, selected, deselected):
-
+    def on_selection_changed(self, *args, **kwargs):
         if (
             hasattr(self, "_processing_device_viewer_message")
             and self._processing_device_viewer_message
@@ -1875,17 +1875,10 @@ class PGCWidget(QWidget):
         has_selection = len(selected_paths) > 0
 
         current_step_id = None
+
         if has_selection:
             path = selected_paths[0]
-            new_indexes = selected.indexes()
-
-            if new_indexes:
-                index = new_indexes[0]
-                item = self.model.itemFromIndex(index)
-
-            else:
-                item = None
-
+            item = self.get_item_by_path(path)
             if item and item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                 parent = item.parent() or self.model.invisibleRootItem()
                 # step info
