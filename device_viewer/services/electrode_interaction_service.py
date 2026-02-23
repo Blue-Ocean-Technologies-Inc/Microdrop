@@ -24,7 +24,7 @@ from device_viewer.models.route import Route, RouteLayer
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, \
     ElectrodeEndpointItem
-from device_viewer.default_settings import AUTOROUTE_COLOR, NUMBER_OF_CHANNELS, electrode_outline_key, \
+from device_viewer.default_settings import AUTOROUTE_COLOR, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..preferences import DeviceViewerPreferences
@@ -1233,16 +1233,18 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_digit_input(self, digit: str):
         if self.model.mode == "channel-edit":
+            n_channels = self.device_viewer_preferences.NUMBER_OF_CHANNELS
             new_channel = add_digit(self.model.electrodes.electrode_editing.channel, digit)
-            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+            if new_channel == None or 0 <= new_channel < n_channels:
                 self.model.electrodes.electrode_editing.channel = new_channel
 
             self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
 
     def handle_backspace(self):
         if self.model.mode == "channel-edit":
+            n_channels = self.device_viewer_preferences.NUMBER_OF_CHANNELS
             new_channel = remove_last_digit(self.model.electrodes.electrode_editing.channel)
-            if new_channel == None or 0 <= new_channel < NUMBER_OF_CHANNELS:
+            if new_channel == None or 0 <= new_channel < n_channels:
                 self.model.electrodes.electrode_editing.channel = new_channel
 
             self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
