@@ -1261,7 +1261,7 @@ class ProtocolRunnerController(QObject):
                 logger.info("In preview mode. No hardware requests will be published.")
                 return
 
-            publish_voltage_frequency.send(step.parameters.get("voltage", "30.0"), step.parameters.get("frequency", "1000.0"))
+            publish_voltage_frequency.send(step.parameters.get("Voltage", "30.0"), step.parameters.get("Frequency", "1000.0"))
 
             # handle camera controls for Video/Capture/Record
             logger.debug("Handling Camera Controls")
