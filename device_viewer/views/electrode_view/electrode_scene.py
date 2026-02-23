@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QGraphicsScene, QGraphicsSceneContextMenuEvent
 from logger.logger_service import get_logger
 from ...services.electrode_interaction_service import ElectrodeInteractionControllerService
 
-logger = get_logger(__name__, level='DEBUG')
+logger = get_logger(__name__)
 
 class ElectrodeScene(QGraphicsScene):
     """
