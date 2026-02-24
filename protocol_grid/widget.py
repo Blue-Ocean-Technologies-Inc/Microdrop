@@ -2150,6 +2150,9 @@ class PGCWidget(QWidget):
 
         for key_seq, slot in shortcuts:
             shortcut = QShortcut(key_seq, self)
+
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+
             shortcut.activated.connect(self._only_call_when_no_protocol_run(slot))
 
     def _only_call_when_no_protocol_run(self, func):
