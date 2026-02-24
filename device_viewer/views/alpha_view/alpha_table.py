@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QMainWindow
 from traits.api import Instance, observe
-from traitsui.api import View, Item, Group, Action, Handler, Menu, TableEditor
+from traitsui.api import View, Item, Group, Action, Menu, TableEditor
 
 from device_viewer.default_settings import default_alphas, default_visibility
 from microdrop_style.helpers import style_app
@@ -54,7 +54,7 @@ alpha_table_view = View(
 )
 
 if __name__ == '__main__':
-    from traits.api import HasTraits, List, Str, Float, Bool, Range
+    from traits.api import HasTraits, List, Str, Bool, Range
     import sys
 
     class AlphaValue(HasTraits):
