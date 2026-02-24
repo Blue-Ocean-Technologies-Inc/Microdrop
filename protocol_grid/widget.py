@@ -2110,19 +2110,26 @@ class PGCWidget(QWidget):
                 func()
 
         shortcuts = [
+            # --- Standard Edit Operations (OS-Agnostic) ---
             (QKeySequence.Delete, self.delete_selected),
-            (QKeySequence("Ctrl+C"), self.copy_selected),
-            (QKeySequence("Ctrl+X"), self.cut_selected),
-            (QKeySequence("Ctrl+V"), self.paste_selected),
-            (QKeySequence("Ctrl+Z"), self.undo_last),
-            (QKeySequence("Ctrl+Y"), self.redo_last),
-            (QKeySequence("Ctrl+Shift+Y"), self.redo_last),
-            (QKeySequence("Ctrl+A"), self.select_all),
-            (QKeySequence("Ctrl+D"), self.deselect_rows),
+            (QKeySequence.Copy, self.copy_selected),        # Automatically handles Ctrl+C / Cmd+C
+            (QKeySequence.Cut, self.cut_selected),          # Automatically handles Ctrl+X / Cmd+X
+            (QKeySequence.Paste, self.paste_selected),      # Automatically handles Ctrl+V / Cmd+V
+            (QKeySequence.Undo, self.undo_last),            # Automatically handles Ctrl+Z / Cmd+Z
+            (QKeySequence.Redo, self.redo_last),            # Automatically handles Ctrl+Y / Cmd+Shift+Z
+            (QKeySequence("Ctrl+Shift+Y"), self.redo_last), # Keep your custom alternate redo
+            (QKeySequence.SelectAll, self.select_all),      # Automatically handles Ctrl+A / Cmd+A
+            (QKeySequence.Cancel, self.deselect_rows),      # Maps natively to Escape
+
+            # --- Custom Selection & Insertion ---
             (QKeySequence("Ctrl+I"), self.invert_row_selection),
             (QKeySequence("Insert"), self.insert_step),
             (QKeySequence("Ctrl+Insert"), self.insert_group),
             (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+
+            # --- Navigation & Quick Actions ---
+            # NOTE: Ensure these single-character shortcuts have their context
+            # set to Qt.WidgetShortcut so they don't hijack global text typing!
             (QKeySequence("A"), self.navigate_to_first_step),
             (QKeySequence("S"), self.navigate_to_previous_step),
             (QKeySequence("D"), self.navigate_to_next_step),
