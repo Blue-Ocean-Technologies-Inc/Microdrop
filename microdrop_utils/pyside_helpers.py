@@ -17,8 +17,16 @@ from PySide6.QtWidgets import (
     QApplication,
     QProgressDialog,
     QProgressBar,
+    QGraphicsOpacityEffect,
 )
-from PySide6.QtCore import Qt, QTimer, QThread, QEventLoop
+from PySide6.QtCore import (
+    Qt,
+    QTimer,
+    QThread,
+    QEventLoop,
+    QEasingCurve,
+    QPropertyAnimation,
+)
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -485,3 +493,56 @@ class LoadingOverlay(QWidget):
 
         if remaining_ms == 0 and self.auto_stop:
             self.stop_loading()
+
+
+class PulsingLabel(QLabel):
+    """
+    A QLabel that pulses its opacity automatically.
+    """
+    def __init__(self, icon_str: str, stylesheet: str = "", tooltip: str = "", **kwargs):
+        super().__init__(icon_str)
+
+        # 1. Apply basic styling
+        if stylesheet:
+            self.setStyleSheet(stylesheet)
+        if tooltip:
+            self.setToolTip(tooltip)
+
+        # 2. Extract animation parameters (with our previous hardcoded values as defaults)
+        duration = kwargs.get("duration", 1200)
+        loop_count = kwargs.get("loop_count", -1)
+        easing_curve = kwargs.get("easing_curve", QEasingCurve.InOutSine)
+        start_opacity = kwargs.get("start_opacity", 1.0)
+        mid_opacity = kwargs.get("mid_opacity", 0.2)
+        end_opacity = kwargs.get("end_opacity", 1.0)
+
+        # 3. Setup the Opacity Effect
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._opacity_effect)
+
+        # 4. Setup the Animation
+        self._animation = QPropertyAnimation(self._opacity_effect, b"opacity")
+        self._animation.setDuration(duration)
+        self._animation.setKeyValueAt(0.0, start_opacity)
+        self._animation.setKeyValueAt(0.5, mid_opacity)
+        self._animation.setKeyValueAt(1.0, end_opacity)
+        self._animation.setLoopCount(loop_count)
+        self._animation.setEasingCurve(easing_curve)
+
+    def start(self):
+        """Shows the widget and begins the pulsing animation."""
+        self.show()
+        self._animation.start()
+
+    def stop(self):
+        """Stops the animation, resets opacity, and hides the widget."""
+        self._animation.stop()
+        self._opacity_effect.setOpacity(1.0)  # Reset so it isn't stuck semi-transparent
+        self.hide()
+
+    def set_enabled(self, enabled: bool):
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
