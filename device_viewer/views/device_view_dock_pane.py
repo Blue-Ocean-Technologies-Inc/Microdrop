@@ -2,9 +2,10 @@
 import json
 import traceback
 from pathlib import Path
-
 import dramatiq
-from PySide6.QtGui import QColor, QBrush
+
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 
 from microdrop_application.dialogs.pyface_wrapper import (
     NO,
@@ -15,7 +16,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
 )
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
-from pyface.qt.QtGui import QGraphicsScene
+from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -46,7 +47,6 @@ from microdrop_style.helpers import (
     is_dark_mode,
 )
 from microdrop_utils.datetime_helpers import TimestampedMessage
-from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
@@ -57,7 +57,11 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
-from microdrop_utils.pyside_helpers import CollapsibleVStackBox
+from microdrop_utils.pyside_helpers import (
+    CollapsibleVStackBox,
+    horizontal_spacer_widget,
+    PulsingLabel,
+)
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 
 from ..consts import (
@@ -101,6 +105,9 @@ from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 logger = get_logger(__name__)
 
 _dock_pane_name = f"{PKG_name} Dock Pane"
+
+# Debounce delay (ms) so arrow-key navigation publishes once after movement stops
+ELECTRODE_PUBLISH_DEBOUNCE_MS = 150
 
 
 @provides(IDramatiqControllerBase)
@@ -925,16 +932,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         Handle changes to the model and send a message to the device viewer state change topic.
         """
-        self.model_change_handler_with_timeout(event)
-        if not self._disable_state_messages:
-            self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            logger.info(
-                f"Buffering message for device viewer state change: {self.message_buffer}"
-            )
-            self.publish_model_message()
+        logger.info(f"Model change event received: {event}")
 
-    # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-    ELECTRODE_PUBLISH_DEBOUNCE_MS = 150
+        try:
+            self.model_change_handler_with_timeout(event)
+            if not self._disable_state_messages:
+                self.message_buffer = gui_models_to_message_model(self.model).serialize()
+                logger.info(
+                    f"Buffering message for device viewer state change: {self.message_buffer}"
+                )
+                self.publish_model_message()
+
+        except Exception as e:
+            logger.error(e, exc_info=True)
 
     @observe(
         "model.electrodes.channels_states_map.items"
@@ -947,7 +957,9 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self._electrode_publish_timer.timeout.connect(
                     self.publish_electrode_update
                 )
-            self._electrode_publish_timer.start(self.ELECTRODE_PUBLISH_DEBOUNCE_MS)
+
+            # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
+            self._electrode_publish_timer.start(ELECTRODE_PUBLISH_DEBOUNCE_MS)
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
@@ -994,7 +1006,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 _status_bar_manager.message = "Running Protocol..."
 
             elif self.model.step_label:
-                    _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label}"
+                _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label}"
 
             elif self.model.free_mode:
                 _status_bar_manager.message = "Free Mode"
@@ -1020,3 +1032,27 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
         self.device_view.auto_fit_margin_scale = event.new
+
+    @observe("task:window:status_bar_manager")
+    def _setup_app_statusbar(self, event):
+
+        # --- 1. Initialize our new custom widget ---
+        self.recording_icon = PulsingLabel(
+            icon_str="album",
+            stylesheet="color: red;",
+            tooltip="Recording in progress...",
+        )
+
+        # Apply your specific font settings
+        _font = QFont(ICON_FONT_FAMILY)
+        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
+        self.recording_icon.setFont(_font)
+
+        # --- Add to Status Bar ---
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.recording_icon)
+
+        # Hide it initially so it waits for a trigger
+        self.recording_icon.hide()
+
+        self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
