@@ -6,7 +6,7 @@ from ..utils.dmf_utils import SvgUtil
 from logger.logger_service import get_logger
 
 # enthought
-from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe
+from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe, Set
 
 logger = get_logger(__name__)
 
@@ -51,8 +51,7 @@ class Electrodes(HasTraits):
     channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrode_ids_channels_map')
 
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
-    channels_states_map = Dict(Int, Bool, {})
-    channels_states_map_trues = Property(Dict(Int, Bool, {}),observe='channels_states_map.items')
+    actuated_channels = Set(Int, desc="actuated channel ids.")
 
     #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
     channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['svg_model.electrode_areas_scaled', 'channels_electrode_ids_map'])
@@ -126,10 +125,6 @@ class Electrodes(HasTraits):
 
         return channel_electrode_areas_map
 
-    @cached_property
-    def _get_channels_states_map_trues(self):
-        return {k: v for k, v in self.channels_states_map.items() if v}
-
     # -------------------Trait change handlers --------------------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
         logger.debug(f"Setting new electrode models based on new svg model {new_model}")
@@ -155,7 +150,7 @@ class Electrodes(HasTraits):
         logger.debug(f"Setting electrodes from SVG file: {svg_file}")
 
     def clear_electrode_states(self):
-        self.channels_states_map.clear()
+        self.actuated_channels.clear()
         self.electrode_editing = None
 
     def any_electrode_on(self) -> bool:
@@ -163,7 +158,7 @@ class Electrodes(HasTraits):
         Check if any electrode is on
         :return: True if any electrode is on, False otherwise
         """
-        return any(self.channels_states_map.values())
+        return len(self.actuated_channels) > 0
 
     def get_activated_electrode_area_mm2(self) -> float:
         """
@@ -172,8 +167,10 @@ class Electrodes(HasTraits):
         """
         if self.svg_model is not None:
             total_area = 0.0
-            for electrode_id, channel in self.electrode_ids_channels_map.items():
-                if self.channels_states_map.get(channel, False):
+            for channel in self.actuated_channels:
+                electrodes = self.channels_electrode_ids_map[channel]
+
+                for electrode_id in electrodes:
                     total_area += self.svg_model.electrode_areas_scaled.get(electrode_id, 0)
 
             return total_area

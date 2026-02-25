@@ -278,43 +278,63 @@ class CameraControlWidget(QWidget):
             else self.combo_cameras.currentText()
         )
 
-        self.available_cameras = QMediaDevices.videoInputs()
+        _available_cameras = QMediaDevices.videoInputs()
         self.combo_cameras.clear()
-        self.available_cameras.append(None)
-
         self.combo_cameras.blockSignals(True)
-        for camera in self.available_cameras:
-            self.combo_cameras.addItem(
-                camera.description() if camera else "<No Camera>"
-            )
+
+        for camera in _available_cameras:
+            self.combo_cameras.addItem(camera.description(), userData=camera)
+
+        # account for no camera
+        _available_cameras.append(None)
+        self.combo_cameras.addItem("<No Camera>", userData=None)
+
         self.combo_cameras.blockSignals(False)
 
         self.combo_cameras.setCurrentIndex(-1)
+
         if old_camera_name:
-            for i, camera in enumerate(self.available_cameras):
-                if camera and camera.description() == old_camera_name:
-                    self.combo_cameras.setCurrentIndex(i)
-                    return
+            for i, camera in enumerate(_available_cameras):
+                if camera:
+                    if camera.description() == old_camera_name:
+                        self.combo_cameras.setCurrentIndex(i)
+                        return
+
         self.combo_cameras.setCurrentIndex(0)
 
+    def _disable_camera_buttons(self, disable):
+        self.camera_toggle_button.setDisabled(disable)
+        self.record_toggle_button.setDisabled(disable)
+        self.capture_image_button.setDisabled(disable)
+        self.rotate_camera_button.setDisabled(disable)
+
     def on_camera_changed(self, index):
-        if index < 0 or index >= len(self.available_cameras):
+
+        if self.combo_cameras.count() == 0 or index < 0:
+            self._disable_camera_buttons(True)
             return
-        elif not self.available_cameras[index]:
-            return
+
+        camera = self.combo_cameras.itemData(index)
 
         was_running = False
         if self.camera and self.camera.isActive():
-            self.camera.stop()
+            self.turn_off_camera()
             was_running = True
 
-        self.video_item.setVisible(True)
-        self.camera = QCamera(self.available_cameras[index])
-        self.session.setCamera(self.camera)
-        self.preferences.selected_camera = self.available_cameras[index].description()
+        if camera:
+            self.camera = QCamera(camera)
+            self.session.setCamera(self.camera)
+            self.preferences.selected_camera = camera.description()
+            self.video_item.setVisible(True)
+            self._disable_camera_buttons(False)
+
+        else:
+            self._disable_camera_buttons(True)
+
         self.populate_resolutions()
-        if was_running:
-            self.camera.start()
+
+        if was_running and camera:
+            self.turn_on_camera()
 
     def populate_resolutions(self, allow_strict_mode=True):
         self.combo_resolutions.blockSignals(True)

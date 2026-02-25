@@ -27,7 +27,7 @@ class VolumeThresholdService(QObject):
         self._threshold_check_timer.timeout.connect(self._check_threshold)
         
     def calculate_target_capacitance(self, volume_threshold: float, 
-                                   actuated_electrodes: Dict[str, bool],
+                                   actuated_electrodes: list[str],
                                    protocol_state) -> Optional[float]:
         """calculate target capacitance for current phase."""
         try:
@@ -39,14 +39,11 @@ class VolumeThresholdService(QObject):
                 return None
             
             calibration_data = protocol_state.get_calibration_data()
-            active_electrodes_from_calibration = protocol_state.get_active_electrodes_from_calibration()
             
             # calculate capacitance per unit area
             c_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
                 calibration_data['liquid_capacitance'],
                 calibration_data['filler_capacitance'],
-                active_electrodes_from_calibration,
-                calibration_data['electrode_areas']
             )
             
             if c_unit_area is None:
@@ -55,8 +52,8 @@ class VolumeThresholdService(QObject):
             
             # calculate actuated area for current phase
             actuated_area = 0.0
-            for electrode_id, is_active in actuated_electrodes.items():
-                if is_active and electrode_id in calibration_data['electrode_areas']:
+            for electrode_id in actuated_electrodes:
+                if electrode_id in calibration_data['electrode_areas']:
                     actuated_area += calibration_data['electrode_areas'][electrode_id]
             
             if actuated_area <= 0:

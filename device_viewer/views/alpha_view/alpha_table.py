@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QMainWindow
 from traits.api import Instance, observe
-from traitsui.api import View, Item, Group, Action, Handler, Menu, TableEditor
+from traitsui.api import View, Item, Group, Action, Menu, TableEditor
 
 from device_viewer.default_settings import default_alphas, default_visibility
 from microdrop_style.helpers import style_app
+from microdrop_utils.pyface_helpers import SafeCancelTableHandler
 from microdrop_utils.traitsui_qt_helpers import VisibleColumn, RangeColumn, ObjectColumn
 
 alpha_table_editor = TableEditor(
@@ -34,7 +35,8 @@ alpha_table_editor = TableEditor(
 )
 
 
-class AlphaHandler(Handler):
+class AlphaTableHandler(SafeCancelTableHandler):
+
     def reset_defaults(self, info, object):
         model = info.object
         for alpha_value in model.alpha_map:
@@ -47,12 +49,12 @@ alpha_table_view = View(
         label='Alpha Settings',
         show_border=True,
     ),
-    handler=AlphaHandler()
+    handler=AlphaTableHandler()
 
 )
 
 if __name__ == '__main__':
-    from traits.api import HasTraits, List, Str, Float, Bool, Range
+    from traits.api import HasTraits, List, Str, Bool, Range
     import sys
 
     class AlphaValue(HasTraits):

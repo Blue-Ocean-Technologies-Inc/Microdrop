@@ -7,7 +7,7 @@ from protocol_grid.consts import DEVICE_VIEWER_CAMERA_ACTIVE, DEVICE_VIEWER_SCRE
     DEVICE_VIEWER_SCREEN_RECORDING
 
 from logger.logger_service import get_logger
-logger = get_logger(__name__)
+logger = get_logger(__name__, 'DEBUG')
 
 
 @dramatiq.actor

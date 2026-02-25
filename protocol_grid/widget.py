@@ -2,8 +2,8 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from dropbot_controller.preferences import DropbotPreferences
+from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error
 from PySide6.QtWidgets import (
     QWidget,
@@ -604,16 +604,12 @@ class PGCWidget(QWidget):
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
             active_electrodes = []
-            for channel_str, is_active in dv_msg.channels_activated.items():
-                if is_active:
-                    # convert channel to electrode ID (if possible)
-                    for electrode_id, channel in dv_msg.id_to_channel.items():
-                        if channel == int(channel_str):
-                            active_electrodes.append(electrode_id)
-                            break
-                    else:
-                        # Use channel directly if no electrode ID mapping found
-                        active_electrodes.append(f"electrode{channel_str.zfill(3)}")
+            for channel_active in dv_msg.channels_activated:
+                # convert channel to electrode ID (if possible)
+                for electrode_id, channel in dv_msg.id_to_channel.items():
+                    if int(channel_active) == channel:
+                        active_electrodes.append(electrode_id)
+                        break
 
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
@@ -627,10 +623,7 @@ class PGCWidget(QWidget):
                 self._processing_device_viewer_message = True
                 self._programmatic_change = True
 
-                publish_message.send(
-                    topic=ELECTRODES_STATE_CHANGE,
-                    message=json.dumps(dv_msg.channels_activated),
-                )
+                electrode_state_change_publisher.publish(dv_msg.channels_activated)
 
                 scroll_pos = self.save_scroll_positions()
                 saved_selection = self.save_selection()
@@ -672,7 +665,7 @@ class PGCWidget(QWidget):
                     self._restoring_selection = False
 
         except Exception as e:
-            logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
+            logger.error(f"Failed to update DeviceState from device_viewer message: {e}", exc_info=True)
         finally:
             self._processing_device_viewer_message = False
             self._programmatic_change = False
@@ -1683,14 +1676,14 @@ class PGCWidget(QWidget):
 
     def _clear_electrode_states_for_free_mode(self):
         empty_msg = DeviceViewerMessageModel(
-            channels_activated={},
+            channels_activated=set(),
             routes=[],
             id_to_channel={},
             step_info={"step_id": None, "step_label": None, "free_mode": True},
             editable=True,
         )
 
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps({}))
+        electrode_state_change_publisher.publish(set())
         publish_message(
             topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize()
         )
@@ -1723,7 +1716,8 @@ class PGCWidget(QWidget):
         )
         publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
-        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(msg_model.channels_activated))
+
+        electrode_state_change_publisher.publish(msg_model.channels_activated)
 
         step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
@@ -1759,7 +1753,7 @@ class PGCWidget(QWidget):
                         item.setData(current_device_state, Qt.UserRole + 100)
                     else:
                         new_device_state = DeviceState(
-                            activated_electrodes={},
+                            activated_electrodes=[],
                             paths=[],
                             id_to_channel=new_id_to_channel_mapping.copy(),
                             route_colors=(
@@ -2103,26 +2097,43 @@ class PGCWidget(QWidget):
             self.update_all_group_aggregations()
 
     def setup_shortcuts(self):
-
-        # protected wrapper methods for keyboard shortcuts
-        def _protected_wrapper(func):
-            if not self._protocol_running:
-                func()
-
         shortcuts = [
+            # --- Standard Edit Operations (OS-Agnostic) ---
             (QKeySequence.Delete, self.delete_selected),
-            (QKeySequence("Ctrl+C"), self.copy_selected),
-            (QKeySequence("Ctrl+X"), self.cut_selected),
-            (QKeySequence("Ctrl+V"), self.paste_selected),
-            (QKeySequence("Ctrl+Z"), self.undo_last),
-            (QKeySequence("Ctrl+Y"), self.redo_last),
-            (QKeySequence("Ctrl+Shift+Y"), self.redo_last),
-            (QKeySequence("Ctrl+A"), self.select_all),
-            (QKeySequence("Ctrl+D"), self.deselect_rows),
+            (
+                QKeySequence.Copy,
+                self.copy_selected,
+            ),  # Automatically handles Ctrl+C / Cmd+C
+            (
+                QKeySequence.Cut,
+                self.cut_selected,
+            ),  # Automatically handles Ctrl+X / Cmd+X
+            (
+                QKeySequence.Paste,
+                self.paste_selected,
+            ),  # Automatically handles Ctrl+V / Cmd+V
+            (QKeySequence.Undo, self.undo_last),  # Automatically handles Ctrl+Z / Cmd+Z
+            (
+                QKeySequence.Redo,
+                self.redo_last,
+            ),  # Automatically handles Ctrl+Y / Cmd+Shift+Z
+            (
+                QKeySequence("Ctrl+Shift+Y"),
+                self.redo_last,
+            ),  # Keep your custom alternate redo
+            (
+                QKeySequence.SelectAll,
+                self.select_all,
+            ),  # Automatically handles Ctrl+A / Cmd+A
+            (QKeySequence.Cancel, self.deselect_rows),  # Maps natively to Escape
+            # --- Custom Selection & Insertion ---
             (QKeySequence("Ctrl+I"), self.invert_row_selection),
             (QKeySequence("Insert"), self.insert_step),
             (QKeySequence("Ctrl+Insert"), self.insert_group),
             (QKeySequence("Ctrl+Shift+V"), self.paste_into),
+            # --- Navigation & Quick Actions ---
+            # NOTE: Ensure these single-character shortcuts have their context
+            # set to Qt.WidgetShortcut so they don't hijack global text typing!
             (QKeySequence("A"), self.navigate_to_first_step),
             (QKeySequence("S"), self.navigate_to_previous_step),
             (QKeySequence("D"), self.navigate_to_next_step),
@@ -2133,6 +2144,9 @@ class PGCWidget(QWidget):
 
         for key_seq, slot in shortcuts:
             shortcut = QShortcut(key_seq, self)
+
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+
             shortcut.activated.connect(self._only_call_when_no_protocol_run(slot))
 
     def _only_call_when_no_protocol_run(self, func):

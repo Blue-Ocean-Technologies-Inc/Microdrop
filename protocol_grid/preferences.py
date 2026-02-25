@@ -19,6 +19,9 @@ from .consts import (
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
+class StepTime(str, Enum):
+    END = "Step End"
+    START = "Step Start"
 
 class ProtocolPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.
@@ -52,7 +55,7 @@ class ProtocolPreferences(PreferencesHelper):
         desc="Time to allow logs post protocol end"
     )
 
-    capture_time = Enum("Step Start", "Step End", value="Step Start")
+    capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
 
     def _level_default(self):
         return "INFO"

@@ -1,4 +1,5 @@
-from traits.api import HasTraits, Dict, Str, Instance
+from pydantic import BaseModel
+from traits.api import HasTraits, Dict, Str, Instance, Type
 import dramatiq
 
 from microdrop_utils.dramatiq_controller_base import DramatiqControllerBase
@@ -10,6 +11,59 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
+
+class ValidatedTopicPublisher(HasTraits):
+    topic = Str
+    validator_class = Type(BaseModel)
+    default_actor = Str("message_router_actor")
+    default_queue = "default"
+
+    def publish(
+        self,
+        payload,
+        dramatiq_send: bool = False,
+        validation_context = None,
+        actor_to_send = None,
+        queue_name = None,
+        message_kwargs = None,
+        message_options = None,
+    ):
+        """
+        Validates the payload, converts it to JSON, and publishes it to the topic.
+        Raises a pydantic.ValidationError if the payload is invalid.
+        """
+        # 1. Validate the raw payload using the bound Pydantic class
+        # We pass the context here so dynamic validators (like max_channels) work
+        validated_model = self.validator_class.model_validate(
+            payload, context=validation_context
+        )
+
+        # 2. Serialize the validated model to a JSON string.
+        # model_dump_json() is crucial here because it automatically converts
+        # Python sets (like your set[StrictInt]) back into JSON arrays safely.
+        json_message = validated_model.model_dump_json()
+
+        # 3. Call your Dramatiq actor utility
+        # (Using the overrides if provided, otherwise using class defaults)
+        target_actor = actor_to_send or self.default_actor
+        target_queue = queue_name or self.default_queue
+
+        if dramatiq_send:
+            publish_func = publish_message.send
+        else:
+            publish_func = publish_message
+
+        publish_func(
+            message=json_message,
+            topic=self.topic,
+            actor_to_send=target_actor,
+            queue_name=target_queue,
+            message_kwargs=message_kwargs,
+            message_options=message_options,
+        )
+
+        logger.debug(f"Successfully validated and published to topic: {self.topic}")
+
 
 @dramatiq.actor
 def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default",
