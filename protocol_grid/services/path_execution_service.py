@@ -308,7 +308,7 @@ class PathExecutionService:
         
         for phase_idx in range(total_phases):
             # individually activated electrodes always active
-            phase_electrodes = copy.deepcopy(device_state.activated_electrodes)
+            phase_electrodes = set(copy.deepcopy(device_state.activated_electrodes))
                         
             for path_idx, path_data in enumerate(path_info):
                 path = path_data["path"]
@@ -327,12 +327,10 @@ class PathExecutionService:
                         # Determine which repetition and phase within that repetition
                         if phase_idx < (effective_repetitions - 1) * cycle_length:
                             # Intermediate repetitions (no return phase)
-                            current_repetition = phase_idx // cycle_length
                             phase_in_cycle = phase_idx % cycle_length
                             is_return_phase = False
                         else:
                             # Last repetition (with return phase)
-                            current_repetition = effective_repetitions - 1
                             phase_in_last_rep = phase_idx - (effective_repetitions - 1) * cycle_length
                             if phase_in_last_rep < cycle_length:
                                 phase_in_cycle = phase_in_last_rep
@@ -342,11 +340,9 @@ class PathExecutionService:
                                 is_return_phase = True
                     else:
                         if phase_idx < cycle_length:
-                            current_repetition = 0
                             phase_in_cycle = phase_idx
                             is_return_phase = False
                         else:
-                            current_repetition = 0
                             phase_in_cycle = 0
                             is_return_phase = True
                     
@@ -357,7 +353,7 @@ class PathExecutionService:
                             for electrode_idx in electrode_indices:
                                 if electrode_idx < len(path) - 1: # exclude duplicate
                                     electrode_id = path[electrode_idx]
-                                    phase_electrodes[electrode_id] = True
+                                    phase_electrodes.add(electrode_id)
                     else:
                         # Regular phase
                         if phase_in_cycle < len(cycle_phases):
@@ -365,7 +361,7 @@ class PathExecutionService:
                             for electrode_idx in electrode_indices:
                                 if electrode_idx < len(path) - 1: # exclude duplicate
                                     electrode_id = path[electrode_idx]
-                                    phase_electrodes[electrode_id] = True
+                                    phase_electrodes.add(electrode_id)
                 else:
                     if phase_idx < cycle_length:
                         if phase_idx < len(cycle_phases):
@@ -373,12 +369,12 @@ class PathExecutionService:
                             for electrode_idx in electrode_indices:
                                 if electrode_idx < len(path):
                                     electrode_id = path[electrode_idx]
-                                    phase_electrodes[electrode_id] = True            
+                                    phase_electrodes.add(electrode_id)
             
             execution_plan.append({
                 "time": phase_idx * duration,
                 "duration": duration,
-                "activated_electrodes": phase_electrodes,
+                "activated_electrodes": list(phase_electrodes),
                 "step_uid": step_uid,
                 "step_id": step_id,
                 "step_description": step_description
@@ -388,31 +384,18 @@ class PathExecutionService:
     
     @staticmethod
     def create_dynamic_device_state_message(original_device_state: DeviceState, 
-                                          active_electrodes: Dict[str, bool], 
+                                          active_electrodes: list[str],
                                           step_uid: str,
                                           step_description: str = "Step",
                                           step_id: str = "") -> DeviceViewerMessageModel:
         """create a dynamic message combining individual + path electrodes."""        
         # electrode IDs to channels
-        channels_activated = {}
-        for electrode_id, activated in active_electrodes.items():
-            if activated:
+        channels_activated = set()
+        for electrode_id in active_electrodes:
                 #  try direct electrode_id lookup
                 if electrode_id in original_device_state.id_to_channel:
                     channel = original_device_state.id_to_channel[electrode_id]
-                    channels_activated[str(channel)] = True
-                else:
-                    # try finding electrode by channel number
-                    # convert electrode_id to channel if it's a number
-                    try:
-                        channel_num = int(electrode_id)
-                        # find electrode that maps to this channel
-                        for elec_id, elec_channel in original_device_state.id_to_channel.items():
-                            if elec_channel == channel_num:
-                                channels_activated[str(channel_num)] = True
-                                break
-                    except ValueError:
-                        logger.warning(f"Could not convert electrode_id {electrode_id} to channel")
+                    channels_activated.add(channel)
             
         # keep original routes and colors
         routes = []
@@ -442,60 +425,16 @@ class PathExecutionService:
     @staticmethod
     def get_empty_device_state() -> DeviceState:
         return DeviceState()
-    
 
     @staticmethod
-    def create_hardware_electrode_message(device_state: DeviceState, active_electrodes: Dict[str, bool]) -> str:
+    def get_active_channels(device_state: DeviceState, active_electrodes: list[str]) -> set:
         """Create a hardware electrode message for the ELECTRODES_STATE_CHANGE topic."""
-        message_obj = {}
-        
-        # get all available channels from device state
-        all_channels = set()
-        for electrode_id, channel in device_state.id_to_channel.items():
-            all_channels.add(channel)
-        
         # collect channels that should be active
         active_channels = set()
+        for electrode_id in active_electrodes:
+            # try direct electrode_id lookup first
+            if electrode_id in device_state.id_to_channel:
+                channel = device_state.id_to_channel[electrode_id]
+                active_channels.add(channel)
         
-        for electrode_id, activated in active_electrodes.items():
-            if activated:
-                # try direct electrode_id lookup first
-                if electrode_id in device_state.id_to_channel:
-                    channel = device_state.id_to_channel[electrode_id]
-                    active_channels.add(channel)
-                else:
-                    # find electrode by channel number
-                    try:
-                        channel_num = int(electrode_id)
-                        for elec_id, elec_channel in device_state.id_to_channel.items():
-                            if elec_channel == channel_num:
-                                active_channels.add(channel_num)
-                                break
-                    except ValueError:
-                        logger.warning(f"Could not convert electrode_id {electrode_id} to channel for hardware message")
-        
-        # optimization: only include channels that are True, unless all are False
-        if active_channels:
-            for channel in active_channels:
-                message_obj[str(channel)] = True
-            logger.debug(f"Optimized electrode message: {len(message_obj)} active channels out of {len(all_channels)} total")
-        else:
-            for channel in all_channels:
-                message_obj[str(channel)] = False
-            logger.debug(f"All electrodes False: sending full dict with {len(message_obj)} channels")
-        
-        return json.dumps(message_obj)
-
-    @staticmethod
-    def create_deactivated_hardware_electrode_message(device_state: DeviceState) -> str:
-        message_obj = {}
-        
-        # get all available channels from device state
-        all_channels = set()
-        for electrode_id, channel in device_state.id_to_channel.items():
-            all_channels.add(channel)
-        
-        for channel in all_channels:
-            message_obj[str(channel)] = False
-        
-        return json.dumps(message_obj)
+        return active_channels

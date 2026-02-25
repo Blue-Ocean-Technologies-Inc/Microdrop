@@ -2,8 +2,8 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from dropbot_controller.preferences import DropbotPreferences
+from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error
 from PySide6.QtWidgets import (
     QWidget,
@@ -604,16 +604,12 @@ class PGCWidget(QWidget):
             dv_msg = DeviceViewerMessageModel.deserialize(message)
             logger.info(f"dv_msg.step_id: {dv_msg.step_id}")
             active_electrodes = []
-            for channel_str, is_active in dv_msg.channels_activated.items():
-                if is_active:
-                    # convert channel to electrode ID (if possible)
-                    for electrode_id, channel in dv_msg.id_to_channel.items():
-                        if channel == int(channel_str):
-                            active_electrodes.append(electrode_id)
-                            break
-                    else:
-                        # Use channel directly if no electrode ID mapping found
-                        active_electrodes.append(f"electrode{channel_str.zfill(3)}")
+            for channel_active in dv_msg.channels_activated:
+                # convert channel to electrode ID (if possible)
+                for electrode_id, channel in dv_msg.id_to_channel.items():
+                    if int(channel_active) == channel:
+                        active_electrodes.append(electrode_id)
+                        break
 
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
@@ -627,10 +623,7 @@ class PGCWidget(QWidget):
                 self._processing_device_viewer_message = True
                 self._programmatic_change = True
 
-                publish_message.send(
-                    topic=ELECTRODES_STATE_CHANGE,
-                    message=json.dumps(dv_msg.channels_activated),
-                )
+                electrode_state_change_publisher.publish(dv_msg.channels_activated)
 
                 scroll_pos = self.save_scroll_positions()
                 saved_selection = self.save_selection()
@@ -672,7 +665,7 @@ class PGCWidget(QWidget):
                     self._restoring_selection = False
 
         except Exception as e:
-            logger.info(f"Failed to update DeviceState from device_viewer message: {e}")
+            logger.error(f"Failed to update DeviceState from device_viewer message: {e}", exc_info=True)
         finally:
             self._processing_device_viewer_message = False
             self._programmatic_change = False
@@ -1683,14 +1676,14 @@ class PGCWidget(QWidget):
 
     def _clear_electrode_states_for_free_mode(self):
         empty_msg = DeviceViewerMessageModel(
-            channels_activated={},
+            channels_activated=set(),
             routes=[],
             id_to_channel={},
             step_info={"step_id": None, "step_label": None, "free_mode": True},
             editable=True,
         )
 
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=json.dumps({}))
+        electrode_state_change_publisher.publish(set())
         publish_message(
             topic=PROTOCOL_GRID_DISPLAY_STATE, message=empty_msg.serialize()
         )
@@ -1723,7 +1716,8 @@ class PGCWidget(QWidget):
         )
         publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
-        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(msg_model.channels_activated))
+
+        electrode_state_change_publisher.publish(msg_model.channels_activated)
 
         step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
@@ -1759,7 +1753,7 @@ class PGCWidget(QWidget):
                         item.setData(current_device_state, Qt.UserRole + 100)
                     else:
                         new_device_state = DeviceState(
-                            activated_electrodes={},
+                            activated_electrodes=[],
                             paths=[],
                             id_to_channel=new_id_to_channel_mapping.copy(),
                             route_colors=(

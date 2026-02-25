@@ -522,15 +522,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         """
         active_ids: set[str] = set()
         channels_map = self.model.electrodes.channels_electrode_ids_map or {}
-        for ch, is_on in (self.model.electrodes.channels_states_map or {}).items():
-            if is_on:
-                for electrode_id in channels_map.get(ch, []):
-                    active_ids.add(electrode_id)
+        for ch in self.model.electrodes.actuated_channels:
+            for electrode_id in channels_map.get(ch, []):
+                active_ids.add(electrode_id)
         return active_ids
 
     def _apply_active_electrode_ids(self, desired_electrode_ids: set[str]) -> None:
         """
-        Apply desired electrode IDs by mapping to channels and setting channels_states_map.
+        Apply desired electrode IDs by mapping to channels and setting actuated_channels.
         """
         electrode_to_channel = self.model.electrodes.electrode_ids_channels_map or {}
 
@@ -538,17 +537,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         for electrode_id in desired_electrode_ids:
             ch = electrode_to_channel.get(electrode_id, None)
             if ch is not None:
-                desired_channels.add(ch)
+                desired_channels.add(int(ch))
 
-        # Turn off channels not desired
-        current_map = self.model.electrodes.channels_states_map
-        for ch in list(current_map.keys()):
-            if ch not in desired_channels:
-                current_map.pop(ch, None)
-
-        # Turn on desired channels
-        for ch in desired_channels:
-            current_map[ch] = True
+        self.model.electrodes.actuated_channels = desired_channels
 
     def _direction_vec(self, direction: str) -> tuple[float, float]:
         # SVG coordinate system typically has +y downward.
@@ -1152,11 +1143,15 @@ class ElectrodeInteractionControllerService(HasTraits):
         """Handle an electrode click event."""
         if self.model.mode == "channel-edit":
             self.model.electrode_editing = self.model.electrodes[electrode_id]
+
         elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model.electrodes[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
-                self.model.electrodes.channels_states_map[clicked_electrode_channel] = \
-                    not self.model.electrodes.channels_states_map.get(clicked_electrode_channel, False)
+
+                if clicked_electrode_channel in self.model.electrodes.actuated_channels:
+                    self.model.electrodes.actuated_channels.remove(clicked_electrode_channel)
+                else:
+                    self.model.electrodes.actuated_channels.add(clicked_electrode_channel)
 
     def handle_toggle_electrode_tooltips(self, checked):
         """Handle toggle electrode tooltip."""
@@ -1514,7 +1509,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
-    @observe("model.electrodes.channels_states_map.items")
+    @observe("model.electrodes.actuated_channels.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
     @observe("electrode_hovered")

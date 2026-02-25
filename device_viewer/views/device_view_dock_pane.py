@@ -3,6 +3,9 @@ import json
 import traceback
 from pathlib import Path
 import dramatiq
+from traits.observation._set_change_event import SetChangeEvent
+
+from electrode_controller.consts import electrode_state_change_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -37,7 +40,6 @@ from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitCha
 from traitsui.view import View
 
 # ext consts
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from logger.logger_service import get_logger
 from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.colors import BLACK
@@ -62,6 +64,7 @@ from microdrop_utils.pyside_helpers import (
     horizontal_spacer_widget,
     PulsingLabel,
 )
+from microdrop_utils.trait_change_commands import SetChangeCommand
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 
 from ..consts import (
@@ -274,11 +277,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         detected_channels = message_obj.get("detected_channels", None)
 
-        if detected_channels:
-            detected_channels = {channel: True for channel in detected_channels}
-
-            # Apply electrode on/off states
-            self.model.electrodes.channels_states_map.update(detected_channels)
+        # Apply electrode on/off states
+        self.model.electrodes.actuated_channels.update(detected_channels)
 
     ################################################################################################
     # ------- Device View class methods -------------------------
@@ -291,6 +291,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             command = ListChangeCommand(event=event)
         elif isinstance(event, DictChangeEvent):
             command = DictChangeCommand(event=event)
+        elif isinstance(event, SetChangeEvent):
+            command = SetChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
 
     def undo(self):
@@ -335,7 +337,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
 
         # Apply electrode on/off states
-        self.model.electrodes.channels_states_map.update(
+        self.model.electrodes.actuated_channels.update(
             message_model.channels_activated
         )
 
@@ -357,8 +359,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def publish_electrode_update(self):
-        logger.info("DEVICE VIEWER: publishing electrodes state change")
-        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.electrodes.channels_states_map_trues))
+        logger.info(f"DEVICE VIEWER: publishing electrodes state change to activate {self.model.electrodes.actuated_channels}")
+        electrode_state_change_publisher.publish(self.model.electrodes.actuated_channels)
 
     def publish_calibration_message(self):
         """
@@ -925,14 +927,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         "model.electrodes.electrodes.items.channel"
     )  # When a electrode's channel is modified (i.e. using channel-edit mode)
     @observe(
-        "model.electrodes.channels_states_map.items"
+        "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
         Handle changes to the model and send a message to the device viewer state change topic.
         """
-        logger.info(f"Model change event received: {event}")
+        logger.debug(f"Model change event received: {event}")
 
         try:
             self.model_change_handler_with_timeout(event)
@@ -947,7 +949,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error(e, exc_info=True)
 
     @observe(
-        "model.electrodes.channels_states_map.items"
+        "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
     def electrode_click_handler(self, event=None):
         if not self.model.protocol_running and self.model.free_mode:

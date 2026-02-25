@@ -6,6 +6,7 @@ from dropbot.proxy import I2cAddressNotSet
 from traits.api import Instance, Dict
 import dramatiq
 
+from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 # unit handling
 
 from microdrop_utils.ureg_helpers import ureg
@@ -13,7 +14,7 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
-                     ELECTRODES_STATE_CHANGE, SET_REALTIME_MODE)
+                     SET_REALTIME_MODE)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -95,7 +96,7 @@ class DropbotControllerBase(HasTraits):
         # device or disconnect the device.
 
         # 1. Check if it is a dropbot related topic
-        if head_topic == 'dropbot':
+        if head_topic in ['dropbot', 'hardware']:
 
             # Handle the connected / disconnected signals
             if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:

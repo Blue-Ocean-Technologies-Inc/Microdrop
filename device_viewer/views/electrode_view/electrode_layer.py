@@ -191,7 +191,7 @@ class ElectrodeLayer():
 
             # check if electrode is on to see if additional color_layer needed:
             on_color = None
-            if model.electrodes.channels_states_map.get(electrode_view.electrode.channel, False):
+            if electrode_view.electrode.channel in model.electrodes.actuated_channels:
                 on_color = QColor(ELECTRODE_ON)
                 on_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
 
