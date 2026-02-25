@@ -110,7 +110,7 @@ logger = get_logger(__name__)
 _dock_pane_name = f"{PKG_name} Dock Pane"
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-ELECTRODE_PUBLISH_DEBOUNCE_MS = 150
+ELECTRODE_PUBLISH_DEBOUNCE_MS = 50
 
 
 @provides(IDramatiqControllerBase)
@@ -359,7 +359,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def publish_electrode_update(self):
-        logger.info(f"DEVICE VIEWER: publishing electrodes state change to activate {self.model.electrodes.actuated_channels}")
+        logger.info(f"DEVICE VIEWER: publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} channels: {self.model.electrodes.actuated_channels}")
         electrode_state_change_publisher.publish(self.model.electrodes.actuated_channels)
 
     def publish_calibration_message(self):

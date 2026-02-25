@@ -204,7 +204,7 @@ class DropbotControllerBase(HasTraits):
                 self.proxy.update_state(chip_load_range_margin=-1)
 
             # reset to last known state
-            self.on_refresh_channels_request()
+            self.proxy.turn_off_all_channels()
             
             logger.info("Enhanced proxy connection setup completed successfully")
 
