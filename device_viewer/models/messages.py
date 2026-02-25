@@ -5,7 +5,7 @@ from pydantic import BaseModel, computed_field, UUID4
 class DeviceViewerMessageModel(BaseModel):
     # A map from channel number to activation status
     # Pydantic handles the int/str key conversion automatically during JSON loading
-    channels_activated: dict[int, bool]
+    channels_activated: set[int]
 
     # List of (electrode_ids, color_string)
     routes: list[tuple[list[str], str]]
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     test_step_info = {"step_id": "1", "step_label": "Test Step 1", "free_mode": False}
     test = DeviceViewerMessageModel(
-        channels_activated={1: True},
+        channels_activated=[1,5,5],
         routes=[(["a", "a"], "red")],
         id_to_channel={"a": 1},
         step_info=test_step_info,

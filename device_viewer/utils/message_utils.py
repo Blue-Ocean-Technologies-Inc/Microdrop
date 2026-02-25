@@ -9,7 +9,7 @@ def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessa
         id_to_channel[electrode_id] = electrode.channel
 
     return DeviceViewerMessageModel(
-        channels_activated=model.electrodes.channels_states_map,
+        channels_activated=model.electrodes.actuated_channels,
         routes=[(layer.route.route, layer.color) for layer in model.routes.layers],
         id_to_channel=id_to_channel,
         step_info={"step_id": model.step_id, "step_label": model.step_label},

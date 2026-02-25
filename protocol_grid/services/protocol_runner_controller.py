@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QDialog, QApplication
 
+from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import PausableTimer
 from protocol_grid.preferences import ProtocolPreferences, StepTime
@@ -24,7 +25,6 @@ from protocol_grid.services.volume_threshold_service import VolumeThresholdServi
 from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from dropbot_controller.consts import (
-    ELECTRODES_STATE_CHANGE,
     DETECT_DROPLETS,
     SET_REALTIME_MODE,
 )
@@ -301,16 +301,16 @@ class ProtocolRunnerController(QObject):
             phase_electrodes = self._get_current_phase_electrodes()
 
             # convert electrode IDs to channel numbers
-            actuated_channels = []
-            for electrode_id, is_active in phase_electrodes.items():
-                if is_active and electrode_id in device_state.id_to_channel:
+            actuated_channels = set()
+            for electrode_id in phase_electrodes:
+                if electrode_id in device_state.id_to_channel:
                     channel = device_state.id_to_channel[electrode_id]
-                    actuated_channels.append(channel)
+                    actuated_channels.add(channel)
 
             return {
                 "step_id": step.parameters.get("ID", ""),
                 "step_idx": self.current_index,
-                "actuated_channels": sorted(actuated_channels),
+                "actuated_channels": sorted(list(actuated_channels)),
                 "actuated_area": step.device_state.activated_electrodes_area_mm2,
             }
 
@@ -384,7 +384,7 @@ class ProtocolRunnerController(QObject):
             return False
 
         # check if step has any electrodes to check
-        has_individual_electrodes = any(device_state.activated_electrodes.values())
+        has_individual_electrodes = len(device_state.activated_electrodes) > 0
         has_paths = device_state.has_paths()
 
         should_check = has_individual_electrodes or has_paths
@@ -1076,12 +1076,9 @@ class ProtocolRunnerController(QObject):
         if not device_state:
             device_state = PathExecutionService.get_empty_device_state()
 
-        # hardware correction message to restore expected electrode state
-        hardware_message = PathExecutionService.create_hardware_electrode_message(
+        electrode_state_change_publisher.publish(PathExecutionService.get_active_channels(
             device_state, self._paused_original_electrodes
-        )
-
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+        ))
 
     def pause(self, advanced_mode=False, preview_mode=False):
 
@@ -1491,13 +1488,11 @@ class ProtocolRunnerController(QObject):
             )
 
             if not self._preview_mode:
-                hardware_message = (
-                    PathExecutionService.create_hardware_electrode_message(
+                electrode_state_change_publisher.publish(
+                    PathExecutionService.get_active_channels(
                         device_state, plan_item["activated_electrodes"]
                     )
                 )
-
-                publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
 
             # track phase timing
             current_time = time.time()
@@ -1682,8 +1677,6 @@ class ProtocolRunnerController(QObject):
                 PathExecutionService.calculate_step_execution_plan(step, device_state)
             )
 
-        current_phase_electrodes = {}
-
         if self._current_phase_index > 0 and self._current_phase_index <= len(
             self._current_execution_plan
         ):
@@ -1717,37 +1710,32 @@ class ProtocolRunnerController(QObject):
 
         return target_electrodes
 
-    def _get_expected_droplet_channels(self, step, device_state):
+    def _get_expected_droplet_channels(self, step, device_state) -> list[int]:
         """Get the channels where droplets are expected to be detected."""
         expected_channels = set()
 
         # individually activated electrodes
-        for electrode_id, activated in device_state.activated_electrodes.items():
-            if activated and electrode_id in device_state.id_to_channel:
+        for electrode_id in device_state.activated_electrodes:
+            if electrode_id in device_state.id_to_channel:
                 channel = device_state.id_to_channel[electrode_id]
                 expected_channels.add(channel)
 
         # include electrodes from the final phase of all paths/loops
         if device_state.has_paths() and self._current_execution_plan:
-            from protocol_grid.services.path_execution_service import (
-                PathExecutionService,
-            )
 
             # channels from the final overall phase
             if self._current_execution_plan:
                 final_phase = self._current_execution_plan[-1]
-                final_phase_electrodes = final_phase.get("activated_electrodes", {})
+                final_phase_electrodes = set(final_phase.get("activated_electrodes", []))
 
-                for electrode_id, activated in final_phase_electrodes.items():
-                    if activated and electrode_id in device_state.id_to_channel:
+                for electrode_id in final_phase_electrodes:
+                    if  electrode_id in device_state.id_to_channel:
                         channel = device_state.id_to_channel[electrode_id]
                         expected_channels.add(channel)
 
             # also include electrodes from the last phase of each individual path/loop
             # in case some paths finished earlier than others
-            last_phase_electrodes = self._get_individual_path_last_phase_electrodes(
-                step, device_state
-            )
+            last_phase_electrodes = self._get_individual_path_last_phase_electrodes(step, device_state)
 
             for electrode_id in last_phase_electrodes:
                 if electrode_id in device_state.id_to_channel:
@@ -2041,10 +2029,9 @@ class ProtocolRunnerController(QObject):
         )
 
         if not self._preview_mode:
-            hardware_message = PathExecutionService.create_hardware_electrode_message(
+            electrode_state_change_publisher.publish(PathExecutionService.get_active_channels(
                 device_state, device_state.activated_electrodes
-            )
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
+            ))
 
         self._pause_for_message_display = True
         self._message_waiting_for_response = True
@@ -2313,10 +2300,11 @@ class ProtocolRunnerController(QObject):
 
         # hardware message if not in preview mode
         if not self._preview_mode:
-            hardware_message = PathExecutionService.create_hardware_electrode_message(
-                device_state, plan_item["activated_electrodes"]
+            electrode_state_change_publisher.publish(
+                PathExecutionService.get_active_channels(
+                    device_state, plan_item["activated_electrodes"]
+                )
             )
-            publish_message(topic=ELECTRODES_STATE_CHANGE, message=hardware_message)
 
     def set_advanced_hardware_mode(self, advanced_mode, preview_mode):
         self._was_advanced_hardware_mode = advanced_mode and not preview_mode

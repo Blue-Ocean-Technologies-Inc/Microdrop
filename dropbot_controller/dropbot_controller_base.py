@@ -6,14 +6,15 @@ from dropbot.proxy import I2cAddressNotSet
 from traits.api import Instance, Dict
 import dramatiq
 
-# unit handling
+from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
+# unit handling
 from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
-                     ELECTRODES_STATE_CHANGE, SET_REALTIME_MODE)
+                     SET_REALTIME_MODE)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -95,7 +96,7 @@ class DropbotControllerBase(HasTraits):
         # device or disconnect the device.
 
         # 1. Check if it is a dropbot related topic
-        if head_topic == 'dropbot':
+        if head_topic in ['dropbot', 'hardware']:
 
             # Handle the connected / disconnected signals
             if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
@@ -202,8 +203,8 @@ class DropbotControllerBase(HasTraits):
             if self.proxy.config.C16 < 0.3e-6:
                 self.proxy.update_state(chip_load_range_margin=-1)
 
-            # Turn off all channels
-            self.proxy.turn_off_all_channels()
+            # reset to last known state
+            self.on_refresh_channels_request()
             
             logger.info("Enhanced proxy connection setup completed successfully")
 
@@ -299,12 +300,11 @@ class DropbotControllerBase(HasTraits):
                 logger.info(f"Detected shorts: {shorts_dict}")
                 publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
 
-
     def on_halt_request(self, message):
         message = json.loads(message)
         name = message.get('name')
         # XXX Refresh channels since channels were disabled.
-        self._refresh_channels()
+        self.on_refresh_channels_request()
         # Disable real-time mode.
         publish_message(topic=SET_REALTIME_MODE, message="False")
         logger.error("Halted DropBot: Disconnect everything and reconnect")
@@ -313,15 +313,13 @@ class DropbotControllerBase(HasTraits):
         if name == "chip-load-saturated":
             self.proxy.disabled_channels_mask *= 0
 
-    def _refresh_channels(self):
+    def on_refresh_channels_request(self):
         # XXX Reassign channel states to trigger a `channels-updated`
         # message since actuated channel states may have changed based
         # on the channels that were disabled.
         self.proxy.turn_off_all_channels()
 
-        last_channels_states = app_globals["last_channel_states_requested"]
-
-        publish_message(topic=ELECTRODES_STATE_CHANGE, message=last_channels_states)
+        publish_message(topic=ELECTRODES_STATE_CHANGE, message=app_globals.get("last_channels_requested", []))
 
     ########################################################################################################
 

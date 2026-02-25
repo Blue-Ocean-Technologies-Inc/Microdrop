@@ -7,12 +7,12 @@ logger = get_logger(__name__)
 
 #TODO: Convert to pydantic
 class DeviceState:
-    def __init__(self, activated_electrodes: Optional[Dict[str, bool]] = None,
+    def __init__(self, activated_electrodes: list[int] = None,
                  paths: Optional[List[List[str]]] = None,
                  id_to_channel: Optional[Dict[str, int]] = None,
                  route_colors: Optional[List[str]] = None,
                  activated_electrodes_area_mm2: Optional[float] = 0):
-        self.activated_electrodes = activated_electrodes or {}
+        self.activated_electrodes = activated_electrodes or []
         self.paths = paths or []
         self.id_to_channel = id_to_channel or {}
         self.route_colors = route_colors or []
@@ -135,15 +135,11 @@ class DeviceState:
         }
     
     def from_dict(self, data: Dict):
-        self.activated_electrodes = data.get('activated_electrodes', {})
+        self.activated_electrodes = data.get('activated_electrodes', [])
         self.activated_electrodes_area_mm2 = data.get('activated_electrodes_area_mm2', 0)
         self.paths = data.get('paths', [])
         self.route_colors = data.get('route_colors', [])
         self.id_to_channel = data.get('id_to_channel', {})
-
-    def get_activated_electrode_ids(self):
-        return [electrode_id for electrode_id, activated in 
-                self.activated_electrodes.items() if activated]
     
     def update_id_to_channel_mapping(self, new_id_to_channel, new_route_colors=None):        
         old_mapping = self.id_to_channel.copy()
@@ -155,22 +151,20 @@ class DeviceState:
             self.route_colors = new_route_colors.copy()
         
         # update activated_electrodes to use new mapping
-        updated_activated_electrodes = {}
-        for electrode_id, is_active in self.activated_electrodes.items():
+        updated_activated_electrodes = set()
+        for electrode_id in self.activated_electrodes:
             if electrode_id in new_id_to_channel:
-                updated_activated_electrodes[electrode_id] = is_active
+                updated_activated_electrodes.add(electrode_id)
             else:
                 # find the electrode in the old mapping and map it according to new mapping
                 if electrode_id in old_mapping:
                     old_channel = old_mapping[electrode_id]
                     for new_electrode_id, new_channel in new_id_to_channel.items():
                         if new_channel == old_channel:
-                            updated_activated_electrodes[new_electrode_id] = is_active
+                            updated_activated_electrodes.add(new_electrode_id)
                             break
-                else: # keep it as is
-                    updated_activated_electrodes[electrode_id] = is_active
         
-        self.activated_electrodes = updated_activated_electrodes
+        self.activated_electrodes = list(updated_activated_electrodes)
         
         # update paths to use new electrode IDs
         updated_paths = []
@@ -195,7 +189,7 @@ class DeviceState:
         self.paths = updated_paths
             
     def __str__(self):
-        active_count = len(self.get_activated_electrode_ids())
+        active_count = len(self.activated_electrodes)
         return (f"DeviceState(active_electrodes={active_count}, activated_area_mm2={self.activated_electrodes_area_mm2}"
                 f"paths={len(self.paths)}, longest_path={self.longest_path_length()})")
     
@@ -204,7 +198,7 @@ class DeviceState:
     
 def device_state_from_device_viewer_message(dv_msg):
     # convert channel numbers to electrode IDs
-    activated_electrodes = {}
+    activated_electrodes = set()
     
     # build reverse mapping from channel to electrode_id
     channel_to_electrode = {}
@@ -212,20 +206,20 @@ def device_state_from_device_viewer_message(dv_msg):
         channel_to_electrode[channel] = electrode_id
     
     # channels_activated to electrode IDs
-    for channel_str, activated in dv_msg.channels_activated.items():
+    for channel_str in dv_msg.channels_activated:
         channel = int(channel_str)
         if channel in channel_to_electrode:
             electrode_id = channel_to_electrode[channel]
-            activated_electrodes[electrode_id] = activated
+            activated_electrodes.add(electrode_id)
         else:
             # use channel number directly, if no electrode ID found
-            activated_electrodes[channel_str] = activated
+            activated_electrodes.add(channel_str)
     
     paths = [route[0] for route in dv_msg.routes]
     route_colors = [route[1] for route in dv_msg.routes]
     id_to_channel = dv_msg.id_to_channel
     return DeviceState(
-        activated_electrodes=activated_electrodes,
+        activated_electrodes=list(activated_electrodes),
         paths=paths,
         id_to_channel=id_to_channel,
         route_colors=route_colors,
@@ -236,20 +230,12 @@ def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: s
                                           step_description: str=None, step_id: str=None, 
                                           editable: bool=True) -> DeviceViewerMessageModel:
     # electrode IDs to channels for activated electrodes
-    channels_activated = {}
-    for electrode_id, activated in device_state.activated_electrodes.items():
-        if activated:
+    channels_activated = set()
+    for electrode_id in device_state.activated_electrodes:
             if electrode_id in device_state.id_to_channel:
                 channel = device_state.id_to_channel[electrode_id]
-                channels_activated[str(channel)] = True
-            else:
-                # Try to use electrode_id directly if it's a channel number
-                try:
-                    channel = int(electrode_id)
-                    channels_activated[str(channel)] = True
-                except ValueError:
-                    pass
-    
+                channels_activated.add(channel)
+
     routes = []
     for i, path in enumerate(device_state.paths):
         color = device_state.route_colors[i] if i < len(device_state.route_colors) else "#000000"
