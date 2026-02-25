@@ -110,7 +110,7 @@ logger = get_logger(__name__)
 _dock_pane_name = f"{PKG_name} Dock Pane"
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-ELECTRODE_PUBLISH_DEBOUNCE_MS = 50
+# ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
 
 
 @provides(IDramatiqControllerBase)
@@ -953,15 +953,17 @@ class DeviceViewerDockPane(TraitsDockPane):
     )  # When an electrode changes state
     def electrode_click_handler(self, event=None):
         if not self.model.protocol_running and self.model.free_mode:
-            if self._electrode_publish_timer is None:
-                self._electrode_publish_timer = QTimer()
-                self._electrode_publish_timer.setSingleShot(True)
-                self._electrode_publish_timer.timeout.connect(
-                    self.publish_electrode_update
-                )
+            # if self._electrode_publish_timer is None:
+            #     self._electrode_publish_timer = QTimer()
+            #     self._electrode_publish_timer.setSingleShot(True)
+            #     self._electrode_publish_timer.timeout.connect(
+            #         self.publish_electrode_update
+            #     )
+            #
+            # # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
+            # self._electrode_publish_timer.start(ELECTRODE_PUBLISH_DEBOUNCE_MS)
 
-            # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-            self._electrode_publish_timer.start(ELECTRODE_PUBLISH_DEBOUNCE_MS)
+            self.publish_electrode_update()
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
