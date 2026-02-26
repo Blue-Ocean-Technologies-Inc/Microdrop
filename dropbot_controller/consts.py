@@ -1,4 +1,6 @@
 # This module's package.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
@@ -39,7 +41,6 @@ TEST_ON_BOARD_FEEDBACK_CALIBRATION = "dropbot/requests/test_on_board_feedback_ca
 TEST_SHORTS = "dropbot/requests/test_shorts"
 TEST_CHANNELS = "dropbot/requests/test_channels"
 CHIP_CHECK = "dropbot/requests/chip_check"
-ELECTRODES_STATE_CHANGE = 'dropbot/requests/electrodes_state_change'
 SELF_TEST_CANCEL = "dropbot/requests/self_test_cancel"
 DETECT_DROPLETS = "dropbot/requests/detect_droplets"
 CHANGE_SETTINGS = "dropbot/requests/change_settings"
@@ -63,6 +64,7 @@ DROPBOT_ERROR = 'dropbot/error'
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "dropbot/requests/#",
+        "hardware/requests/#",
         DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
         SELF_TEST_CANCEL

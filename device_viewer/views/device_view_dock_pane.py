@@ -3,6 +3,9 @@ import json
 import traceback
 from pathlib import Path
 import dramatiq
+from traits.observation._set_change_event import SetChangeEvent
+
+from electrode_controller.consts import electrode_state_change_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -37,7 +40,6 @@ from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitCha
 from traitsui.view import View
 
 # ext consts
-from dropbot_controller.consts import ELECTRODES_STATE_CHANGE
 from logger.logger_service import get_logger
 from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.colors import BLACK
@@ -62,6 +64,7 @@ from microdrop_utils.pyside_helpers import (
     horizontal_spacer_widget,
     PulsingLabel,
 )
+from microdrop_utils.trait_change_commands import SetChangeCommand
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
 
 from ..consts import (
@@ -107,7 +110,7 @@ logger = get_logger(__name__)
 _dock_pane_name = f"{PKG_name} Dock Pane"
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-ELECTRODE_PUBLISH_DEBOUNCE_MS = 150
+# ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
 
 
 @provides(IDramatiqControllerBase)
@@ -209,9 +212,23 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
 
     def _on_chip_inserted_triggered(self, message):
-        if message == "True" and self.model:
+        if message.lower() == "true" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             self.publish_model_message()
+
+    def _on_realtime_mode_updated_triggered(self, message):
+        if self.model:
+            self.model.realtime_mode = message.lower() == "true"
+
+
+    def _on_disconnected_triggered(self, message):
+        logger.debug("Disconnected from dropbot")
+        self.model.realtime_mode = False
+        self.model.connected = False
+
+    def _on_connected_triggered(self, message):
+        logger.debug("Connected from dropbot")
+        self.model.connected = True
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
@@ -274,11 +291,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         detected_channels = message_obj.get("detected_channels", None)
 
-        if detected_channels:
-            detected_channels = {channel: True for channel in detected_channels}
-
-            # Apply electrode on/off states
-            self.model.electrodes.channels_states_map.update(detected_channels)
+        # Apply electrode on/off states
+        self.model.electrodes.actuated_channels.update(detected_channels)
 
     ################################################################################################
     # ------- Device View class methods -------------------------
@@ -291,6 +305,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             command = ListChangeCommand(event=event)
         elif isinstance(event, DictChangeEvent):
             command = DictChangeCommand(event=event)
+        elif isinstance(event, SetChangeEvent):
+            command = SetChangeCommand(event=event)
         self.undo_manager.active_stack.push(command)
 
     def undo(self):
@@ -335,7 +351,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
 
         # Apply electrode on/off states
-        self.model.electrodes.channels_states_map.update(
+        self.model.electrodes.actuated_channels.update(
             message_model.channels_activated
         )
 
@@ -356,9 +372,43 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
-    def publish_electrode_update(self):
-        logger.info("DEVICE VIEWER: publishing electrodes state change")
-        publish_message.send(topic=ELECTRODES_STATE_CHANGE, message=json.dumps(self.model.electrodes.channels_states_map_trues))
+    @observe("model.electrodes.actuated_channels.items")
+    @observe("model.realtime_mode")
+    @observe("model.connected")
+    def publish_electrode_update(self, event=None):
+        if (
+            not self.model.protocol_running
+            and self.model.free_mode
+            and self.model.realtime_mode
+            and self.model.connected
+        ):
+            logger.info(
+                f"DEVICE VIEWER: "
+                f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
+                f"channels: {self.model.electrodes.actuated_channels}"
+            )
+            electrode_state_change_publisher.publish(
+                self.model.electrodes.actuated_channels
+            )
+
+            return
+
+        reason = ""
+        if self.model.protocol_running:
+            reason += "Protocol running; "
+
+        if not self.model.free_mode:
+            reason += "Not in free mode; "
+
+        if not self.model.realtime_mode:
+            reason += "Realtime mode; "
+
+        if not self.model.connected:
+            reason += "Device Not connected; "
+
+        logger.warning(
+            f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
+        )
 
     def publish_calibration_message(self):
         """
@@ -925,14 +975,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         "model.electrodes.electrodes.items.channel"
     )  # When a electrode's channel is modified (i.e. using channel-edit mode)
     @observe(
-        "model.electrodes.channels_states_map.items"
+        "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
         Handle changes to the model and send a message to the device viewer state change topic.
         """
-        logger.info(f"Model change event received: {event}")
+        logger.debug(f"Model change event received: {event}")
 
         try:
             self.model_change_handler_with_timeout(event)
@@ -945,21 +995,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         except Exception as e:
             logger.error(e, exc_info=True)
-
-    @observe(
-        "model.electrodes.channels_states_map.items"
-    )  # When an electrode changes state
-    def electrode_click_handler(self, event=None):
-        if not self.model.protocol_running and self.model.free_mode:
-            if self._electrode_publish_timer is None:
-                self._electrode_publish_timer = QTimer()
-                self._electrode_publish_timer.setSingleShot(True)
-                self._electrode_publish_timer.timeout.connect(
-                    self.publish_electrode_update
-                )
-
-            # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-            self._electrode_publish_timer.start(ELECTRODE_PUBLISH_DEBOUNCE_MS)
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"

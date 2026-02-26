@@ -83,7 +83,7 @@ class DropbotMonitorMixinService(HasTraits):
                     logger.error(f"{str(e)}")
                     self._error_shown = True
                 return None
-        
+
         scheduler = BackgroundScheduler()
         scheduler.add_job(
             func=check_devices_with_error_handling,
@@ -102,7 +102,7 @@ class DropbotMonitorMixinService(HasTraits):
             return
         logger.info("Attempting to retry connecting with a dropbot")
         self.monitor_scheduler.resume()
-    
+
     ############################################################
     # Connect / Disconnect signal handlers
     ############################################################
@@ -141,7 +141,7 @@ class DropbotMonitorMixinService(HasTraits):
         # if check_devices returned nothing => still disconnected
         if not event.retval:
             return
-        
+
         logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
         logger.debug("Paused DropBot monitor")
