@@ -57,7 +57,8 @@ class DeviceViewMainModel(HasTraits):
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
     protocol_running = Bool(False)  # is protocol running
-    realtime_mode = Bool(False) 
+    realtime_mode = Bool(False)
+    connected = Bool(False) # is dropbot connected
 
     uuid = UUID(desc="The uuid of the model. Used to figure out if a state message is from this model or not.")
 

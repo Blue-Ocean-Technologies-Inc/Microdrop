@@ -220,6 +220,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model:
             self.model.realtime_mode = message.lower() == "true"
 
+
+    def _on_disconnected_triggered(self, message):
+        logger.debug("Disconnected from dropbot")
+        self.model.realtime_mode = False
+        self.model.connected = False
+
+    def _on_connected_triggered(self, message):
+        logger.debug("Connected from dropbot")
+        self.model.connected = True
+
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
@@ -364,11 +374,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.realtime_mode")
+    @observe("model.connected")
     def publish_electrode_update(self, event=None):
         if (
             not self.model.protocol_running
             and self.model.free_mode
             and self.model.realtime_mode
+            and self.model.connected
         ):
             logger.info(
                 f"DEVICE VIEWER: "
@@ -389,7 +401,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             reason += "Not in free mode; "
 
         if not self.model.realtime_mode:
-            reason += "Realtime mode"
+            reason += "Realtime mode; "
+
+        if not self.model.connected:
+            reason += "Device Not connected; "
 
         logger.warning(
             f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
