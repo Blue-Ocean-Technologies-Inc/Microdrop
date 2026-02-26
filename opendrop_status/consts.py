@@ -15,8 +15,6 @@ OPENDROP_DISCONNECTED_IMAGE = OPENDROP_IMAGE
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "opendrop/signals/#",
-        # Compatibility topics emitted by OpenDrop controller for existing DropBot UIs.
-        "dropbot/signals/connected",
-        "dropbot/signals/disconnected",
+        "hardware/signals/#",
     ]
 }

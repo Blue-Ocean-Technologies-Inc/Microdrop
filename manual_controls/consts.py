@@ -1,6 +1,7 @@
 # This module's package.
 import os
 from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED, DROPBOT_CONNECTED
+from opendrop_controller.consts import OPENDROP_CONNECTED
 
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -13,6 +14,6 @@ ACTOR_TOPIC_DICT = {
     listener_name: [
         REALTIME_MODE_UPDATED,
         DROPBOT_DISCONNECTED,
-        DROPBOT_CONNECTED
+        DROPBOT_CONNECTED,
     ]
 }

@@ -23,8 +23,8 @@ SHORTS_DETECTED = 'dropbot/signals/shorts_detected'
 CAPACITANCE_UPDATED = 'dropbot/signals/capacitance_updated'
 SELF_TESTS_PROGRESS = 'dropbot/signals/self_tests_progress'
 REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
-DROPBOT_CONNECTED = 'dropbot/signals/connected'
-DROPBOT_DISCONNECTED = 'dropbot/signals/disconnected'
+DROPBOT_CONNECTED = 'hardware/signals/connected'
+DROPBOT_DISCONNECTED = 'hardware/signals/disconnected'
 DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package

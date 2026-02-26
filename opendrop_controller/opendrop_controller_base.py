@@ -4,6 +4,7 @@ from datetime import datetime
 import dramatiq
 from traits.api import Bool, HasTraits, Instance, Int, List, Str, provides
 
+from dropbot_controller.consts import START_DEVICE_MONITORING
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     TimestampedMessage,
@@ -14,11 +15,6 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from .consts import (
     CHANGE_SETTINGS,
-    DROPBOT_CONNECTED,
-    DROPBOT_DISCONNECTED,
-    DROPBOT_RETRY_CONNECTION,
-    DROPBOT_START_DEVICE_MONITORING,
-    DROPBOT_REALTIME_MODE_UPDATED,
     OPENDROP_BOARD_INFO,
     OPENDROP_CONNECTED,
     OPENDROP_DISCONNECTED,
@@ -27,7 +23,6 @@ from .consts import (
     PKG,
     REALTIME_MODE_UPDATED,
     RETRY_CONNECTION,
-    START_DEVICE_MONITORING,
 )
 from .interfaces.i_opendrop_controller_base import IOpenDropControllerBase
 from .opendrop_serial_proxy import OpenDropSerialProxy
@@ -44,7 +39,7 @@ logger = get_logger(__name__, level="INFO")
 @provides(IOpenDropControllerBase)
 class OpenDropControllerBase(HasTraits):
     proxy = Instance(OpenDropSerialProxy)
-    dropbot_connection_active = Bool(False)
+    opendrop_connection_active = Bool(False)
     preferences = Instance(OpenDropPreferences)
     board_id = Int(-1)
     realtime_mode = Bool(False)  # Match frontend default; no electrode push until user enables realtime
@@ -65,37 +60,34 @@ class OpenDropControllerBase(HasTraits):
             except Exception as exc:
                 logger.warning(f"Error closing OpenDrop proxy during cleanup: {exc}")
         self.proxy = None
-        self.dropbot_connection_active = False
+        self.opendrop_connection_active = False
 
     def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         topics_tree = topic.split("/")
         if len(topics_tree) < 3:
             return
 
-        head_topic = topics_tree[0]
         primary_sub_topic = topics_tree[1]
         specific_sub_topic = topics_tree[-1]
         requested_method = None
 
-        if head_topic not in {"opendrop", "dropbot"}:
-            return
+        if topic == OPENDROP_CONNECTED:
+            self.opendrop_connection_active = True
+            requested_method = f"on_{specific_sub_topic}_signal"
 
-        if topic in {OPENDROP_CONNECTED, DROPBOT_CONNECTED}:
-            self.dropbot_connection_active = True
+        elif topic == OPENDROP_DISCONNECTED:
+            self.opendrop_connection_active = False
             requested_method = f"on_{specific_sub_topic}_signal"
-        elif topic in {OPENDROP_DISCONNECTED, DROPBOT_DISCONNECTED}:
-            self.dropbot_connection_active = False
-            requested_method = f"on_{specific_sub_topic}_signal"
+
         elif topic in {
             START_DEVICE_MONITORING,
             RETRY_CONNECTION,
-            CHANGE_SETTINGS,
-            DROPBOT_START_DEVICE_MONITORING,
-            DROPBOT_RETRY_CONNECTION,
+            CHANGE_SETTINGS
         }:
             requested_method = f"on_{specific_sub_topic}_request"
+
         elif primary_sub_topic == "requests":
-            if self.dropbot_connection_active:
+            if self.opendrop_connection_active:
                 requested_method = f"on_{specific_sub_topic}_request"
             else:
                 logger.warning(
@@ -126,16 +118,13 @@ class OpenDropControllerBase(HasTraits):
 
     def _publish_connected(self):
         publish_message(topic=OPENDROP_CONNECTED, message="True")
-        publish_message(topic=DROPBOT_CONNECTED, message="True")
 
     def _publish_disconnected(self):
         publish_message(topic=OPENDROP_DISCONNECTED, message="True")
-        publish_message(topic=DROPBOT_DISCONNECTED, message="True")
 
     def _publish_realtime_mode(self):
         value = "True" if self.realtime_mode else "False"
         publish_message(topic=REALTIME_MODE_UPDATED, message=value)
-        publish_message(topic=DROPBOT_REALTIME_MODE_UPDATED, message=value)
 
     def _publish_telemetry(self, telemetry: dict):
         temperatures = {
@@ -197,11 +186,11 @@ class OpenDropControllerBase(HasTraits):
         return telemetry
 
     def on_connected_signal(self, message):
-        if not self.dropbot_connection_active:
-            self.dropbot_connection_active = True
+        if not self.opendrop_connection_active:
+            self.opendrop_connection_active = True
 
     def on_disconnected_signal(self, message):
-        self.dropbot_connection_active = False
+        self.opendrop_connection_active = False
         if self.proxy is not None:
             try:
                 self.proxy.close()
