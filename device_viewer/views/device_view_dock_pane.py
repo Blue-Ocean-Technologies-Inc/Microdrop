@@ -212,9 +212,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
 
     def _on_chip_inserted_triggered(self, message):
-        if message == "True" and self.model:
+        if message.lower() == "true" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             self.publish_model_message()
+
+    def _on_realtime_mode_updated_triggered(self, message):
+        if self.model:
+            self.model.realtime_mode = message.lower() == "true"
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
@@ -358,9 +362,38 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
-    def publish_electrode_update(self):
-        logger.info(f"DEVICE VIEWER: publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} channels: {self.model.electrodes.actuated_channels}")
-        electrode_state_change_publisher.publish(self.model.electrodes.actuated_channels)
+    @observe("model.electrodes.actuated_channels.items")
+    @observe("model.realtime_mode")
+    def publish_electrode_update(self, event=None):
+        if (
+            not self.model.protocol_running
+            and self.model.free_mode
+            and self.model.realtime_mode
+        ):
+            logger.info(
+                f"DEVICE VIEWER: "
+                f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
+                f"channels: {self.model.electrodes.actuated_channels}"
+            )
+            electrode_state_change_publisher.publish(
+                self.model.electrodes.actuated_channels
+            )
+
+            return
+
+        reason = ""
+        if self.model.protocol_running:
+            reason += "Protocol running; "
+
+        if not self.model.free_mode:
+            reason += "Not in free mode; "
+
+        if not self.model.realtime_mode:
+            reason += "Realtime mode"
+
+        logger.warning(
+            f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
+        )
 
     def publish_calibration_message(self):
         """
@@ -947,23 +980,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         except Exception as e:
             logger.error(e, exc_info=True)
-
-    @observe(
-        "model.electrodes.actuated_channels.items"
-    )  # When an electrode changes state
-    def electrode_click_handler(self, event=None):
-        if not self.model.protocol_running and self.model.free_mode:
-            # if self._electrode_publish_timer is None:
-            #     self._electrode_publish_timer = QTimer()
-            #     self._electrode_publish_timer.setSingleShot(True)
-            #     self._electrode_publish_timer.timeout.connect(
-            #         self.publish_electrode_update
-            #     )
-            #
-            # # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
-            # self._electrode_publish_timer.start(ELECTRODE_PUBLISH_DEBOUNCE_MS)
-
-            self.publish_electrode_update()
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
