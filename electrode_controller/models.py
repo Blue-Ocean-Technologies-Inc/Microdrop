@@ -1,8 +1,5 @@
 from pydantic import BaseModel, StrictInt, field_validator
 from pydantic_core.core_schema import ValidationInfo
-
-from traits.api import Instance
-
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 
@@ -46,5 +43,4 @@ class ElectrodeStateChangePublisher(ValidatedTopicPublisher):
         """
         Construct payload for publisher using the actuated channels set.
         """
-
         super().publish({"actuated_channels": actuated_channels}, *args, **kwargs)
