@@ -41,6 +41,10 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 logger.error("Proxy not available for electrode state change")
                 return
 
+            elif not self.realtime_mode:
+                logger.warning("Cannot process actuations since realtime mode is disabled. Will process message when realtime mode on")
+                return
+
             # Use safe proxy access for electrode state changes
             with self.proxy.transaction_lock:
 
