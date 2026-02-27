@@ -2,12 +2,13 @@ from traits.api import HasTraits, Range, Bool, Str, observe
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
-from microdrop_utils.ureg_helpers import trim_to_n_digits
+from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
     disconnected_color, connected_no_device_color, connected_color,
 )
+from .view_helpers import RangeWithStepViewHints
 
 logger = get_logger(__name__)
 
@@ -22,8 +23,8 @@ class DropbotStatusAndControlsModel(HasTraits):
         30, 150, value=DropbotPreferences().default_voltage,
         desc="the voltage to set on the dropbot device (V)"
     )
-    frequency = Range(
-        100, 20000, value=DropbotPreferences().default_frequency,
+    frequency = RangeWithStepViewHints(
+        100, 20000, value=DropbotPreferences().default_frequency, step=100,
         desc="the frequency to set on the dropbot device (Hz)"
     )
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
@@ -47,15 +48,9 @@ class DropbotStatusAndControlsModel(HasTraits):
     # Formatted sensor readings for display
     capacitance_display = Str("-")
     voltage_readback_display = Str("-")
+    frequency_display = Str("-")
     pressure_display = Str("-")
     force_display = Str("-")
-
-    def reset_readings(self):
-        """Reset sensor reading displays."""
-        self.capacitance = "-"
-        self.voltage_readback = "-"
-        self.pressure = "-"
-        self.force = "-"
 
     def _update_icon_color(self):
         if self.connected:
@@ -77,6 +72,16 @@ class DropbotStatusAndControlsModel(HasTraits):
         self.icon_path = DROPBOT_CHIP_INSERTED_IMAGE if self.chip_inserted else DROPBOT_IMAGE
         self._update_icon_color()
 
+    @observe("realtime_mode")
+    def reset_readings(self, event):
+        """Reset sensor reading displays when realtime mode off."""
+        if not self.realtime_mode:
+            self.capacitance = "-"
+            self.voltage_readback = "-"
+            self.frequency_display = "-"
+            self.pressure = "-"
+            self.force = "-"
+
     @observe("capacitance")
     def _update_capacitance_display(self, event):
         self.capacitance_display = self._format_reading(event.new)
@@ -84,6 +89,21 @@ class DropbotStatusAndControlsModel(HasTraits):
     @observe("voltage_readback")
     def _update_voltage_readback_display(self, event):
         self.voltage_readback_display = self._format_reading(event.new)
+
+    @observe("frequency")
+    @observe("realtime_mode")
+    def _update_frequency_display(self, event):
+        if self.realtime_mode:
+
+            formatted_freq_measurement = (
+                ureg.Quantity(self.frequency, "Hz")
+            )
+            if formatted_freq_measurement != "-":
+                self.frequency_display = (
+                    f"{formatted_freq_measurement.to_compact():.5g~P}"
+                )
+            else:
+                self.frequency_display = "-"
 
     @observe("pressure")
     def _update_pressure_display(self, event):

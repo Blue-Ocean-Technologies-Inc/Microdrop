@@ -1,7 +1,7 @@
 from dropbot_status_and_controls.view_helpers import StatusIconEditorFactory
 from manual_controls.MVC import ToggleEditorFactory
 
-from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid, HSplit
+from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid
 
 # 1. Add label, id, and dock='tab' to the left group
 left = HGroup(
@@ -33,7 +33,7 @@ left = HGroup(
 grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
     UItem("voltage", label="Voltage"),
-    Item("frequency", label="Frequency", style="readonly"),
+    Item("frequency_display", label="Frequency", style="readonly"),
     UItem("frequency", label="Frequency"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),

@@ -125,8 +125,6 @@ class DropbotStatusAndControlsMessageHandler(HasTraits):
         realtime = body == 'True'
         logger.debug(f"Realtime mode updated to {realtime}")
         self.model.realtime_mode = realtime
-        if not realtime:
-            self.model.reset_readings()
 
     @timestamped_value('chip_inserted_message')
     def _on_chip_inserted_triggered(self, body):

@@ -1,7 +1,10 @@
 from PySide6.QtGui import QPixmap, Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy
+from pyface.qt import QtWidgets
 from traitsui.basic_editor_factory import BasicEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
+from traitsui.api import Item, View
+from traits.api import Int, Property, Float, HasTraits, Range
 
 from dropbot_status_and_controls.consts import BORDER_RADIUS
 
@@ -90,4 +93,87 @@ class StatusIconEditor(QtEditor):
 class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
-    # ─── Unified View ──────────────────────────────────────────────────────────────
+# ---------------------------------------------------------
+# 1. The Qt Backend Editor
+# ---------------------------------------------------------
+class _SteppedSpinEditor(QtEditor):
+    """The actual Qt implementation of the spin box."""
+
+    def init(self, parent):
+        """Initializes the editor by creating the underlying toolkit widget."""
+        # Use QDoubleSpinBox for floats. (Use QSpinBox for ints).
+        self.control = QtWidgets.QSpinBox()
+
+        # Configure range bounds from the factory
+        self.control.setMinimum(self.factory.low)
+        self.control.setMaximum(self.factory.high)
+
+        # Set the custom step size!
+        self.control.setSingleStep(self.factory.step)
+
+        # Connect the Qt signal to update the Trait value
+        self.control.valueChanged.connect(self.update_object)
+
+    def update_object(self, value):
+        """Handles the user changing the value in the GUI."""
+        self.value = value
+
+    def update_editor(self):
+        """Updates the GUI when the Trait changes externally."""
+        if self.control is not None:
+            # Block signals temporarily to prevent an infinite update loop
+            self.control.blockSignals(True)
+            self.control.setValue(self.value)
+            self.control.blockSignals(False)
+
+
+class SteppedSpinEditor(BasicEditorFactory):
+    """The factory class passed into the Item's editor parameter."""
+
+    klass = Property
+
+    # Expose custom parameters to the TraitsUI Item
+    step = Int(1)
+    low = Int(-1000000)  # Default arbitrary low bound
+    high = Int(1000000)  # Default arbitrary high bound
+
+    def _get_klass(self):
+        return _SteppedSpinEditor
+
+class RangeWithStepViewHints(Range):
+    def create_editor(self):
+        """ Returns the default UI editor for the trait.
+        """
+        return SteppedSpinEditor(
+            low=self._low,
+            high=self._high,
+            step=self._metadata.get("step", 1),
+        )
+
+
+if __name__ == "__main__":
+    # ---------------------------------------------------------
+    # Example Usage
+    # ---------------------------------------------------------
+    class MyDeviceController(HasTraits):
+        fine_voltage = RangeWithStepViewHints(10, 1000000, step=1)
+        coarse_voltage = RangeWithStepViewHints(10, 1000000, step=10000)
+
+        traits_view = View(
+            Item(
+                "fine_voltage",
+                label="Fine Tune (1 step)",
+                # Use our custom editor with a 0.01 step
+            ),
+            Item(
+                "coarse_voltage",
+                label="Coarse Tune (5 step)",
+                # Use our custom editor with a 0.5 step
+            ),
+            title="Custom Spinbox Step Example",
+            width=300,
+            resizable=True,
+        )
+
+    controller = MyDeviceController()
+    controller.configure_traits()
