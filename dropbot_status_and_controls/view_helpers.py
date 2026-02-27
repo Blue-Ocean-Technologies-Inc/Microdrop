@@ -1,0 +1,93 @@
+from PySide6.QtGui import QPixmap, Qt
+from PySide6.QtWidgets import QLabel, QSizePolicy
+from traitsui.basic_editor_factory import BasicEditorFactory
+from traitsui.qt.editor import Editor as QtEditor
+
+from dropbot_status_and_controls.consts import BORDER_RADIUS
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
+
+class _ScalingPixmapLabel(QLabel):
+    """QLabel that auto-scales its pixmap to fill available space on resize.
+
+    Uses ``Ignored`` vertical policy so the grid sibling drives the
+    HGroup height.  On every resize the max-width is clamped to the
+    current height, keeping the icon square.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._source_pixmap = QPixmap()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Ignored vertically → the grid determines the row height.
+        # Preferred horizontally → width is governed by maxWidth set in resizeEvent.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
+        self.setMinimumSize(120, 120)
+        self.setStyleSheet("padding: 10px;")
+    def set_source_pixmap(self, pixmap):
+        self._source_pixmap = pixmap
+        self._rescale()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Keep the icon square: max width tracks the actual height
+        h = self.height()
+        self.setMaximumWidth(h)
+        self._rescale()
+
+    def _rescale(self):
+        if not self._source_pixmap.isNull():
+            scaled = self._source_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.setPixmap(scaled)
+
+
+class StatusIconEditor(QtEditor):
+    """Custom TraitsUI editor that displays a DropBot icon with colored background.
+
+    The editor value is bound to `icon_path` (str path to the image).
+    It also observes `icon_color` on the model to update the background color.
+    """
+
+    def init(self, parent):
+        self.control = _ScalingPixmapLabel()
+
+        # Load initial image
+        self._load_pixmap(self.value)
+
+        # Observe icon_color on the model for background color updates
+        self.object.observe(self._on_icon_color_changed, "icon_color")
+        self._apply_background_color(self.object.icon_color)
+
+    def _load_pixmap(self, path):
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            logger.error(f"Failed to load image: {path}")
+        self.control.set_source_pixmap(pixmap)
+
+    def _apply_background_color(self, color):
+        self.control.setStyleSheet(
+            f"background-color: {color}; border-radius: {BORDER_RADIUS}px;"
+        )
+
+    def _on_icon_color_changed(self, event):
+        self._apply_background_color(event.new)
+
+    def update_editor(self):
+        """Called when icon_path trait changes."""
+        self._load_pixmap(self.value)
+
+    def dispose(self):
+        self.object.observe(self._on_icon_color_changed, "icon_color", remove=True)
+        super().dispose()
+
+
+class StatusIconEditorFactory(BasicEditorFactory):
+    klass = StatusIconEditor
+
+    # ─── Unified View ──────────────────────────────────────────────────────────────

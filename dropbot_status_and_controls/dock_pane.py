@@ -1,6 +1,6 @@
 from traits.api import HasTraits, HTML, observe
 from traitsui.api import UItem, View, HTMLEditor
-from pyface.tasks.dock_pane import DockPane
+from pyface.tasks.api import TraitsDockPane
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QApplication
@@ -12,13 +12,17 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_DROP_EC
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 
-from .consts import (
-    PKG, PKG_name, listener_name,
-    disconnected_color, connected_no_device_color, connected_color,
-)
+from dropbot_status_and_controls.consts import PKG, PKG_name, listener_name, disconnected_color, \
+    connected_no_device_color, connected_color
+
+from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
+from dropbot_status_and_controls.controller import ControlsController
+from dropbot_status_and_controls.view import UnifiedView
+from dropbot_status_and_controls.message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
+from dropbot_status_and_controls.dialog_views import DialogView
 
 
-class DropbotStatusAndControlsDockPane(DockPane):
+class DropbotStatusAndControlsDockPane(TraitsDockPane):
     """
     A unified dock pane combining DropBot status display and manual controls.
     """
@@ -26,22 +30,17 @@ class DropbotStatusAndControlsDockPane(DockPane):
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
 
-    def create_contents(self, parent):
-        from .model import DropbotStatusAndControlsModel
-        from .message_handler import (
-            DialogSignals,
-            DropbotStatusAndControlsMessageHandler
-        )
-        from .dialog_views import DialogView
-        from .controls import UnifiedView, ControlsController
+    # 1. Shared model
+    model = DropbotStatusAndControlsModel()
+    view = UnifiedView
+    controller = ControlsController(model)
+    view.handler = controller
 
-        # 1. Shared model
-        model = DropbotStatusAndControlsModel()
-
-        # 2. Message handler (Dramatiq listener)
+    def traits_init(self):
+        # Message handler (Dramatiq listener)
         dialog_signals = DialogSignals()
         self.message_handler = DropbotStatusAndControlsMessageHandler(
-            model=model,
+            model=self.model,
             dialog_signals=dialog_signals,
             name=listener_name
         )
@@ -49,19 +48,6 @@ class DropbotStatusAndControlsDockPane(DockPane):
             dialog_signals=dialog_signals,
             message_handler=self.message_handler
         )
-
-        # 3. Single unified TraitsUI view
-        controls_controller = ControlsController(model)
-        ui = model.edit_traits(
-            view=UnifiedView,
-            handler=controls_controller,
-            kind='subpanel'
-        )
-
-        # Store model reference for statusbar icon color observation
-        self._model = model
-
-        return ui.control
 
     def show_help(self):
         sample_text = (
@@ -105,7 +91,7 @@ class DropbotStatusAndControlsDockPane(DockPane):
         def set_status_color(event):
             dropbot_status.setStyleSheet(f"color: {event.new}")
 
-        self._model.observe(set_status_color, "icon_color")
+        self.model.observe(set_status_color, "icon_color")
 
         self.status_bar_icon = dropbot_status
 
@@ -134,3 +120,28 @@ def get_status_icon_tooltip_themed():
     """
 
     return dropbot_status_icon_tooltip_html
+
+if __name__ == '__main__':
+    from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
+    from dropbot_status_and_controls.message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
+    from dropbot_status_and_controls.dialog_views import DialogView
+    from dropbot_status_and_controls.controller import ControlsController
+    from dropbot_status_and_controls.view import UnifiedView
+
+    # 1. Shared model
+    model = DropbotStatusAndControlsModel()
+
+    # 2. Message handler (Dramatiq listener)
+    dialog_signals = DialogSignals()
+    message_handler = DropbotStatusAndControlsMessageHandler(
+        model=model, dialog_signals=dialog_signals, name=listener_name
+    )
+    dialog_view = DialogView(
+        dialog_signals=dialog_signals, message_handler=message_handler
+    )
+
+    # 3. Single unified TraitsUI view
+    controls_controller = ControlsController(model)
+    ui = model.configure_traits(
+        view=UnifiedView, handler=controls_controller
+    )

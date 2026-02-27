@@ -57,6 +57,15 @@ class DropbotStatusAndControlsModel(HasTraits):
         self.pressure = "-"
         self.force = "-"
 
+    def _update_icon_color(self):
+        if self.connected:
+            if self.chip_inserted:
+                self.icon_color = connected_color
+            else:
+                self.icon_color = connected_no_device_color
+        else:
+            self.icon_color = disconnected_color
+
     @observe("connected")
     def _update_connection_display(self, event):
         self.connection_status_text = "Active" if self.connected else "Inactive"
@@ -67,15 +76,6 @@ class DropbotStatusAndControlsModel(HasTraits):
         self.chip_status_text = "Inserted" if self.chip_inserted else "Not Inserted"
         self.icon_path = DROPBOT_CHIP_INSERTED_IMAGE if self.chip_inserted else DROPBOT_IMAGE
         self._update_icon_color()
-
-    def _update_icon_color(self):
-        if self.connected:
-            if self.chip_inserted:
-                self.icon_color = connected_color
-            else:
-                self.icon_color = connected_no_device_color
-        else:
-            self.icon_color = disconnected_color
 
     @observe("capacitance")
     def _update_capacitance_display(self, event):
