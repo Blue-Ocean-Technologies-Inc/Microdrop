@@ -1,11 +1,14 @@
+import os
+
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
+from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from logger.plugin import LoggerPlugin
 from logger_ui.plugin import LoggerUIPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
+from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from protocol_grid.plugin import ProtocolGridControllerUIPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
@@ -16,6 +19,7 @@ from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
+from opendrop_controller.plugin import OpenDropControllerPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -27,22 +31,33 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     LoggerUIPlugin,
-
-    DropbotPreferencesPlugin,
-    DropbotToolsMenuPlugin,
-
-    DeviceViewerPlugin,
     ProtocolGridControllerUIPlugin,
-
-    DropbotStatusAndControlsPlugin,
-
+    DeviceViewerPlugin,
     PeripheralUiPlugin,
 ]
 
+DROPBOT_FRONTEND_PLUGINS = [
+    DropbotPreferencesPlugin,
+    DropbotStatusAndControlsPlugin,
+    DropbotToolsMenuPlugin,
+]
+
+OPENDROP_FRONTEND_PLUGINS = [
+    OpendropStatusAndControlsPlugin
+]
+
+
 BACKEND_PLUGINS = [
-    DropbotControllerPlugin,
     ElectrodeControllerPlugin,
-    PeripheralControllerPlugin
+]
+
+OPENDROP_BACKEND_PLUGINS = [
+    OpenDropControllerPlugin,
+]
+
+DROPBOT_BACKEND_PLUGINS = [
+    PeripheralControllerPlugin,
+    DropbotControllerPlugin
 ]
 
 REQUIRED_PLUGINS = [
@@ -50,7 +65,6 @@ REQUIRED_PLUGINS = [
     MessageRouterPlugin,
     LoggerPlugin
 ]
-
 
 REQUIRED_CONTEXT = [
     (dramatiq_workers_context, {"worker_threads": 4, "worker_timeout": 100}) #TODO optimize threads and timeout
