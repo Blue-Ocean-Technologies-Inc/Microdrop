@@ -25,8 +25,8 @@ left = HGroup(
             enabled_when="connected",
         ),
     ),
-    label="Controls",    # Gives the dock pane a title
-    id="left_controls",  # Unique identifier for layout saving
+    label="Status Controls",    # Gives the dock pane a title
+    id="status_controls",  # Unique identifier for layout saving
 )
 
 # 2. Add label, id, and dock='tab' to the grid group
@@ -42,7 +42,7 @@ grid = VGrid(
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
     label="Data Grid",   # Gives the dock pane a title
-    id="grid_data",      # Unique identifier for layout saving
+    id="data_grid",      # Unique identifier for layout saving
 )
 
 # 3. Wrap in a split layout and set a View ID
