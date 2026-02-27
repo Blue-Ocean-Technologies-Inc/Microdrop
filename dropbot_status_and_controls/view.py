@@ -1,4 +1,3 @@
-from dropbot_status_and_controls.consts import PKG_name
 from dropbot_status_and_controls.view_helpers import StatusIconEditorFactory
 from manual_controls.MVC import ToggleEditorFactory
 
