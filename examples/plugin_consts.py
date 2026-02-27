@@ -5,8 +5,7 @@ from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-from dropbot_status.plugin import DropbotStatusPlugin
-from manual_controls.plugin import ManualControlsPlugin
+from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from protocol_grid.plugin import ProtocolGridControllerUIPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
@@ -35,8 +34,7 @@ FRONTEND_PLUGINS = [
     DeviceViewerPlugin,
     ProtocolGridControllerUIPlugin,
 
-    DropbotStatusPlugin,
-    ManualControlsPlugin,
+    DropbotStatusAndControlsPlugin,
 
     PeripheralUiPlugin,
 ]
