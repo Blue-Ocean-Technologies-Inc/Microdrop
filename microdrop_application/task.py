@@ -108,14 +108,9 @@ class MicrodropTask(Task):
 
     def _default_layout_default(self):
 
-        top_right = HSplitter(
-            PaneItem("dropbot_status.dock_pane"),
-            PaneItem("manual_controls.dock_pane"),
-        )
-
         right = VSplitter(
-            top_right,
-            PaneItem("protocol_grid.dock_pane", height=1000), # we want this to take up as much space as it can
+            PaneItem("dropbot_status_and_controls.dock_pane"),
+            PaneItem("protocol_grid.dock_pane"), # we want this to take up as much space as it can
         )
 
         return TaskLayout(
