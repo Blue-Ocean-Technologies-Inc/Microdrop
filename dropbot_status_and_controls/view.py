@@ -12,20 +12,20 @@ left = HGroup(
     ),
     Spring("8"),
     VGroup(
-        Spring("8"),
+        Spring("12"),
         VGroup(
             Item("connection_status_text", style="readonly", label="Connection"),
             Item("chip_status_text", style="readonly", label="Chip Status"),
         ),
-        Spring("25"),
+        Spring("22"),
         UItem(
             "realtime_mode",
             style="custom",
             editor=ToggleEditorFactory(),
             enabled_when="connected",
         ),
+        Spring("10"),
     ),
-    label="Status Controls",    # Gives the dock pane a title
     id="status_controls",  # Unique identifier for layout saving
 )
 
@@ -35,20 +35,17 @@ grid = VGrid(
     UItem("voltage", label="Voltage"),
     Item("frequency", label="Frequency", style="readonly"),
     UItem("frequency", label="Frequency"),
-    Item("capacitance_display", style="readonly", label="  Capacitance"),
+    Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("pressure_display", style="readonly", label="c_device"),
     UItem(""),
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
-    label="Data Grid",   # Gives the dock pane a title
-    id="data_grid",      # Unique identifier for layout saving
+    id="data_grid",  # Unique identifier for layout saving
 )
 
 # 3. Wrap in a split layout and set a View ID
 UnifiedView = View(
-    HSplit(
-        left,
-        grid,),
+    HGroup(left, "15", grid,),
     resizable=True,
 )
