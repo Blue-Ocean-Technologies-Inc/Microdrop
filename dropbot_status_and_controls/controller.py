@@ -21,36 +21,6 @@ class ControlsController(Controller):
     # Use a dict to store the *latest* task for each topic
     message_dict = Dict()
 
-    # def init(self, info):
-    #     info.ui.control.setStyleSheet(
-    #         """
-    #                         QSplitter::handle:horizontal {
-    #                             /* 1. Add more spacing (Total distance between panes) */
-    #                             width: 5px;
-    #
-    #                             /* 2. Transparent color (Red, Green, Blue, Alpha/Opacity)
-    #                                   0 opacity = completely invisible.
-    #                                   40 opacity = very faint/transparent grey. */
-    #                             background-color: rgba(150, 150, 150, 40);
-    #
-    #                             /* 3. Make it very thin by squishing the visible area
-    #                                   40px total - 19px left - 19px right = 2px thin line */
-    #                             margin-left: 200px;
-    #                             margin-right: 200px;
-    #                         }
-    #
-    #                         QSplitter::handle:horizontal:hover {
-    #                             /* Slightly more opaque blue when the user hovers over the gap */
-    #                             background-color: rgba(52, 152, 219, 100);
-    #                         }
-    #
-    #                         QSplitter::handle:horizontal:pressed {
-    #                             background-color: rgba(28, 89, 128, 180);
-    #                         }
-    #                     """
-    #     )
-    #     return True
-
     def _publish_message_if_realtime(self, topic: str, message: str) -> bool:
         if self.model.realtime_mode:
             publish_message(topic=topic, message=message)
