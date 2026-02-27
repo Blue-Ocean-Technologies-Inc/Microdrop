@@ -113,10 +113,10 @@ class ToggleEditor(QtEditor):
         '''
         if self.value:
             self.control.setChecked(True)
-            self.control.setText("On")
+            self.control.setText("Realtime On")
         else:
             self.control.setChecked(False)
-            self.control.setText("Off")
+            self.control.setText("Realtime Off")
         
         # Update styling after changing the state
         self._apply_toggle_styling()
