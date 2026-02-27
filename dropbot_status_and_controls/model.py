@@ -1,4 +1,4 @@
-from traits.api import HasTraits, Range, Bool, Str, observe
+from traits.api import HasTraits, Bool, Str, observe
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
@@ -8,7 +8,7 @@ from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
     disconnected_color, connected_no_device_color, connected_color,
 )
-from .view_helpers import RangeWithStepViewHints
+from .view_helpers import RangeWithCustomViewHints
 
 logger = get_logger(__name__)
 
@@ -19,12 +19,12 @@ class DropbotStatusAndControlsModel(HasTraits):
     """Unified model for DropBot status display and manual controls."""
 
     # Controls (user-writable via TraitsUI)
-    voltage = Range(
-        30, 150, value=DropbotPreferences().default_voltage,
+    voltage = RangeWithCustomViewHints(
+        30, 150, value=DropbotPreferences().default_voltage, suffix=" V",
         desc="the voltage to set on the dropbot device (V)"
     )
-    frequency = RangeWithStepViewHints(
-        100, 20000, value=DropbotPreferences().default_frequency, step=100,
+    frequency = RangeWithCustomViewHints(
+        100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
         desc="the frequency to set on the dropbot device (Hz)"
     )
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
@@ -94,16 +94,7 @@ class DropbotStatusAndControlsModel(HasTraits):
     @observe("realtime_mode")
     def _update_frequency_display(self, event):
         if self.realtime_mode:
-
-            formatted_freq_measurement = (
-                ureg.Quantity(self.frequency, "Hz")
-            )
-            if formatted_freq_measurement != "-":
-                self.frequency_display = (
-                    f"{formatted_freq_measurement.to_compact():.5g~P}"
-                )
-            else:
-                self.frequency_display = "-"
+            self.frequency_display = self._format_reading(f"{self.frequency} Hz")
 
     @observe("pressure")
     def _update_pressure_display(self, event):
@@ -116,7 +107,7 @@ class DropbotStatusAndControlsModel(HasTraits):
     @staticmethod
     def _format_reading(value):
         try:
-            return trim_to_n_digits(value, N_DISPLAY_DIGITS)
+            return trim_to_n_digits(ureg.Quantity(value).to_compact(), N_DISPLAY_DIGITS)
         except AssertionError:
             if value == "-":
                 return value

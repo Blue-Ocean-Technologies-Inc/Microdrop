@@ -4,7 +4,7 @@ from pyface.qt import QtWidgets
 from traitsui.basic_editor_factory import BasicEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.api import Item, View
-from traits.api import Int, Property, Float, HasTraits, Range
+from traits.api import Int, Property, HasTraits, Range, Str
 
 from dropbot_status_and_controls.consts import BORDER_RADIUS
 
@@ -28,7 +28,7 @@ class _ScalingPixmapLabel(QLabel):
         # Preferred horizontally → width is governed by maxWidth set in resizeEvent.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
         self.setMinimumSize(120, 120)
-        self.setStyleSheet("padding: 10px;")
+        self.setStyleSheet("padding: 5px;")
     def set_source_pixmap(self, pixmap):
         self._source_pixmap = pixmap
         self._rescale()
@@ -108,7 +108,9 @@ class _SteppedSpinEditor(QtEditor):
         self.control.setMinimum(self.factory.low)
         self.control.setMaximum(self.factory.high)
 
-        # Set the custom step size!
+        if self.factory.suffix:
+            self.control.setSuffix(self.factory.suffix)
+
         self.control.setSingleStep(self.factory.step)
 
         # Connect the Qt signal to update the Trait value
@@ -134,13 +136,14 @@ class SteppedSpinEditor(BasicEditorFactory):
 
     # Expose custom parameters to the TraitsUI Item
     step = Int(1)
+    suffix = Str("")
     low = Int(-1000000)  # Default arbitrary low bound
     high = Int(1000000)  # Default arbitrary high bound
 
     def _get_klass(self):
         return _SteppedSpinEditor
 
-class RangeWithStepViewHints(Range):
+class RangeWithCustomViewHints(Range):
     def create_editor(self):
         """ Returns the default UI editor for the trait.
         """
@@ -148,6 +151,7 @@ class RangeWithStepViewHints(Range):
             low=self._low,
             high=self._high,
             step=self._metadata.get("step", 1),
+            suffix=self._metadata.get("suffix", ""),
         )
 
 
@@ -156,8 +160,8 @@ if __name__ == "__main__":
     # Example Usage
     # ---------------------------------------------------------
     class MyDeviceController(HasTraits):
-        fine_voltage = RangeWithStepViewHints(10, 1000000, step=1)
-        coarse_voltage = RangeWithStepViewHints(10, 1000000, step=10000)
+        fine_voltage = RangeWithCustomViewHints(10, 1000000, step=1)
+        coarse_voltage = RangeWithCustomViewHints(10, 1000000, step=10000, suffix=" V")
 
         traits_view = View(
             Item(
