@@ -220,7 +220,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model:
             self.model.realtime_mode = message.lower() == "true"
 
-
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
         self.model.realtime_mode = False
@@ -376,22 +375,19 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.realtime_mode")
     @observe("model.connected")
     def publish_electrode_update(self, event=None):
-        if (
-            not self.model.protocol_running
-            and self.model.free_mode
-            and self.model.realtime_mode
-            and self.model.connected
-        ):
-            logger.info(
-                f"DEVICE VIEWER: "
-                f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
-                f"channels: {self.model.electrodes.actuated_channels}"
-            )
-            electrode_state_change_publisher.publish(
-                self.model.electrodes.actuated_channels
-            )
+        if self.model.realtime_mode and self.model.connected:
 
-            return
+            if (not self.model.protocol_running and self.model.free_mode) or (self.model.protocol_running and self.model.editable):
+                logger.info(
+                    f"DEVICE VIEWER: "
+                    f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
+                    f"channels: {self.model.electrodes.actuated_channels}"
+                )
+                electrode_state_change_publisher.publish(
+                    self.model.electrodes.actuated_channels
+                )
+
+                return
 
         reason = ""
         if self.model.protocol_running:
@@ -1030,18 +1026,21 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self.video_item.setOpacity(self.model.get_alpha(video_key))
 
     @observe("model.step_label")
-    @observe("model.protocol_running")
     @observe("model.free_mode")
+    @observe("model.editable")
     def step_label_change(self, event):
         _status_bar_manager = self.task.window.status_bar_manager
 
         if _status_bar_manager:
 
             if self.model.protocol_running:
-                _status_bar_manager.message = "Running Protocol..."
+                _status = "Running Protocol"
+                if self.model.editable:
+                    _status += " (Editable)"
+                _status_bar_manager.message = f"{_status}: {self.model.step_label}"
 
             elif self.model.step_label:
-                _status_bar_manager.message = f"{'Editing' if self.model.editable else 'Displaying'}: {self.model.step_label}"
+                _status_bar_manager.message = f"Editing: {self.model.step_label}"
 
             elif self.model.free_mode:
                 _status_bar_manager.message = "Free Mode"

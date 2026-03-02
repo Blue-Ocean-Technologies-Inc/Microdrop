@@ -4,6 +4,7 @@ from traits.api import HasTraits, Str, Instance
 from PySide6.QtCore import Signal, QObject
 
 from device_viewer.models.media_capture_model import MediaCaptureMessageModel
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
 from logger.logger_service import get_logger
@@ -25,6 +26,7 @@ class MessageListenerSignalEmitter(QObject):
     capacitance_updated = Signal(TimestampedMessage) # capacitance updated signal -> CAPACITANCE_UPDATED message
     zstage_position_updated = Signal(float)
     media_captured = Signal(MediaCaptureMessageModel)
+    advanced_mode_changed = Signal(bool)
 
 
 class MessageListener(HasTraits):
@@ -82,6 +84,9 @@ class MessageListener(HasTraits):
                     return
 
                 self.signal_emitter.media_captured.emit(loaded_message)
+
+            elif topic == ADVANCED_MODE_CHANGE:
+                self.signal_emitter.advanced_mode_changed.emit(message.casefold() == "true")
                 
             else:
                 logger.info(f"Unhandled message topic: {topic}")

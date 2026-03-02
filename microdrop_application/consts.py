@@ -12,6 +12,10 @@ PKG_name = PKG.title().replace("_", " ")
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {}
 
+# Topics published
+ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
+
+
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 application_home_directory = Path.home() / "Documents"/ "MicroDropNextGen"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"

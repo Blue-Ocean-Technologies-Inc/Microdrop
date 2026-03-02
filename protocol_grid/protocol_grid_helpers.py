@@ -6,10 +6,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QDoubleSpinBox,
     QAbstractItemView,
-    QStyleOptionViewItem,
-    QStyle,
-    QApplication,
 )
+
 from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
@@ -57,7 +55,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         # prevent editing during protocol execution
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
             # during protocol execution, only allow editing in advanced mode for specific fields
-            if hasattr(self.parent_widget, 'navigation_bar') and self.parent_widget.navigation_bar.is_advanced_user_mode():
+            if getattr(self.parent_widget, '_advanced_user_mode', False):
                 field = protocol_grid_fields[index.column()]
                 if field in ("Voltage", "Frequency"):
                     pass
@@ -183,8 +181,7 @@ class ProtocolGridDelegate(QStyledItemDelegate):
 
         # --- 1. Guard Clauses (Execution Mode) ---
         if hasattr(self.parent_widget, 'is_protocol_running') and self.parent_widget.is_protocol_running():
-            is_advanced = hasattr(self.parent_widget, 'navigation_bar') and \
-                          self.parent_widget.navigation_bar.is_advanced_user_mode()
+            is_advanced = getattr(self.parent_widget, '_advanced_user_mode', False)
 
             if not is_advanced or field not in ("Voltage", "Frequency"):
                 return
