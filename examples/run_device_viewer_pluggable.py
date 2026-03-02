@@ -13,6 +13,10 @@ from pyface.qt.QtWidgets import QApplication
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
+    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, DEFAULT_APPLICATION, SERVER_CONTEXT, \
+    REQUIRED_CONTEXT
+
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
@@ -77,10 +81,29 @@ def main(plugins, contexts, application, persist):
 
 
 if __name__ == "__main__":
-    from plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, REQUIRED_CONTEXT, SERVER_CONTEXT, DEFAULT_APPLICATION
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the frontend device viewer plugins.")
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        choices=["dropbot", "opendrop"],
+        default="dropbot", # Sets a default if the user doesn't provide the flag
+        help="Specify the device to use: 'dropbot' or 'opendrop'"
+    )
+
+    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS
+
+    args = parser.parse_args()
+
+    if args.device == "dropbot":
+        plugins += DROPBOT_FRONTEND_PLUGINS + DROPBOT_BACKEND_PLUGINS
+    elif args.device == "opendrop":
+        plugins += OPENDROP_FRONTEND_PLUGINS + OPENDROP_BACKEND_PLUGINS
 
     main(
-        plugins=REQUIRED_PLUGINS + FRONTEND_PLUGINS + BACKEND_PLUGINS,
+        plugins=plugins,
         contexts=SERVER_CONTEXT + REQUIRED_CONTEXT,
         application=DEFAULT_APPLICATION,
         persist=False # UI so no

@@ -22,9 +22,9 @@ CHIP_INSERTED = 'dropbot/signals/chip_inserted'
 SHORTS_DETECTED = 'dropbot/signals/shorts_detected'
 CAPACITANCE_UPDATED = 'dropbot/signals/capacitance_updated'
 SELF_TESTS_PROGRESS = 'dropbot/signals/self_tests_progress'
-REALTIME_MODE_UPDATED = 'dropbot/signals/realtime_mode_updated'
-DROPBOT_CONNECTED = 'dropbot/signals/connected'
-DROPBOT_DISCONNECTED = 'dropbot/signals/disconnected'
+REALTIME_MODE_UPDATED = 'hardware/signals/realtime_mode_updated'
+DROPBOT_CONNECTED = 'hardware/signals/connected'
+DROPBOT_DISCONNECTED = 'hardware/signals/disconnected'
 DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
@@ -34,7 +34,7 @@ RETRY_CONNECTION = "dropbot/requests/retry_connection"
 HALT = "dropbot/requests/halt"
 SET_VOLTAGE = "dropbot/requests/set_voltage"
 SET_FREQUENCY = "dropbot/requests/set_frequency"
-SET_REALTIME_MODE = "dropbot/requests/set_realtime_mode"
+SET_REALTIME_MODE = "hardware/requests/set_realtime_mode"
 RUN_ALL_TESTS = "dropbot/requests/run_all_tests"
 TEST_VOLTAGE = "dropbot/requests/test_voltage"
 TEST_ON_BOARD_FEEDBACK_CALIBRATION = "dropbot/requests/test_on_board_feedback_calibration"

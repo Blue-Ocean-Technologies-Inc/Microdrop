@@ -13,7 +13,7 @@ listener_name = f"{PKG}_listener"
 
 # Single listener subscribing to all dropbot signals + calibration data
 ACTOR_TOPIC_DICT = {
-    listener_name: ["dropbot/signals/#", "ui/calibration_data"]
+    listener_name: ["dropbot/signals/#", "hardware/signals/#", "ui/calibration_data"]
 }
 
 # Image paths
