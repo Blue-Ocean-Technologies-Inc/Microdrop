@@ -22,6 +22,8 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
+from .menus import AdvancedModeAction
+
 logger = get_logger(__name__)
 
 
@@ -69,7 +71,7 @@ class MicrodropTask(Task):
 
         SMenu(id="File", name="&File"),
 
-        SMenu(id="Edit", name="&Edit"),
+        SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
         SMenu(id="Tools", name="&Tools"),
 

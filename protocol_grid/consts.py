@@ -6,6 +6,7 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
 from dropbot_controller.preferences import DropbotPreferences
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
 
 from microdrop_style.button_styles import get_button_dimensions
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
@@ -41,6 +42,7 @@ ACTOR_TOPIC_DICT = {
         CAPACITANCE_UPDATED,
         ZSTAGE_POSITION_UPDATED,
         DEVICE_VIEWER_MEDIA_CAPTURED,
+        ADVANCED_MODE_CHANGE
     ]
 }
 

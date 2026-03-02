@@ -19,17 +19,7 @@ from microdrop_style.icons.icons import (ICON_FIRST, ICON_PREVIOUS, ICON_PLAY,
                                          ICON_LAST, ICON_PREVIOUS_PHASE,
                                          ICON_NEXT_PHASE, ICON_RESUME)
 from microdrop_style.colors import (WHITE, BLACK)
-from microdrop_style.button_styles import (
-    get_button_dimensions, BUTTON_SPACING, get_button_style
-)
-
-LABEL_FONT_FAMILY = "Inter"
-
-# Button styling constants (now imported from button_styles)
-BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("navigation")
-BUTTON_MAX_WIDTH = 60
-BUTTON_BORDER_RADIUS = 8
-BUTTON_PADDING = 8
+from microdrop_style.button_styles import BUTTON_SPACING, get_button_style
 
 
 class ExperimentLabel(QLabel):
@@ -230,16 +220,9 @@ class NavigationBar(QWidget):
         msg = "Send no hardware messages on protocol run and do not trigger errors."
         self.preview_mode_checkbox.setToolTip(f"<div style='width: 150px;'>{msg}</div>")
 
-        self.advanced_user_mode_checkbox = QCheckBox("Advanced User Mode")
-        self.advanced_user_mode_checkbox.setToolTip(
-            "When checked, navigation buttons remain enabled during protocol execution for advanced users"
-        )
-        self.advanced_user_mode_checkbox.setVisible(False)
-
         # Add Checkboxes to Right Slot Layout
         self.right_slot_layout.addWidget(self.preview_mode_checkbox)
         self.right_slot_layout.addWidget(self.droplet_check_checkbox)
-        # self.right_slot_layout.addWidget(self.advanced_user_mode_checkbox)
 
         # --- Assemble Bottom Bar ---
         bottom_layout.addWidget(self.left_slot_container)
@@ -259,18 +242,12 @@ class NavigationBar(QWidget):
     def is_preview_mode(self):
         return self.preview_mode_checkbox.isChecked()
 
-    def is_advanced_user_mode(self):
-        return self.advanced_user_mode_checkbox.isChecked()
-    
     def set_droplet_check_enabled(self, enabled):
         self.droplet_check_checkbox.setEnabled(enabled)
 
     def set_preview_mode_enabled(self, enabled):
         self.preview_mode_checkbox.setEnabled(enabled)
 
-    def set_advanced_user_mode_enabled(self, enabled):
-        self.advanced_user_mode_checkbox.setEnabled(enabled)
-    
     def split_play_button_to_phase_controls(self):
         if self._phase_navigation_active:
             return

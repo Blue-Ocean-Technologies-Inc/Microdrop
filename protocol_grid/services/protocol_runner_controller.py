@@ -322,22 +322,20 @@ class ProtocolRunnerController(QObject):
 
     def connect_droplet_detection_listener(self, message_listener):
         """Connect to droplet detection response signals."""
-        if message_listener and hasattr(message_listener, "signal_emitter"):
-            message_listener.signal_emitter.droplets_detected.connect(
-                self._on_droplets_detected_response
-            )
-            message_listener.signal_emitter.capacitance_updated.connect(
-                self._volume_threshold_service.update_capacitance
-            )
-            logger.info("Connected to droplet detection signals")
+        message_listener.signal_emitter.droplets_detected.connect(
+            self._on_droplets_detected_response
+        )
+        message_listener.signal_emitter.capacitance_updated.connect(
+            self._volume_threshold_service.update_capacitance
+        )
+        logger.info("Connected to droplet detection signals")
 
     def connect_zstage_position_listener(self, message_listener):
         """Connect to zstage height change response signals."""
-        if message_listener and hasattr(message_listener, "signal_emitter"):
-            message_listener.signal_emitter.zstage_position_updated.connect(
-                self._on_zstage_position_updated_response
-            )
-            logger.info("Connected to zstage position change signals")
+        message_listener.signal_emitter.zstage_position_updated.connect(
+            self._on_zstage_position_updated_response
+        )
+        logger.info("Connected to zstage position change signals")
 
     def set_droplet_check_enabled(self, enabled):
         self._droplet_check_enabled = enabled
@@ -1300,6 +1298,7 @@ class ProtocolRunnerController(QObject):
 
             if self._preview_mode:
                 logger.info("In preview mode. No hardware requests will be published.")
+                self._start_step_timers_and_logic()
                 return
 
             publish_voltage_frequency.send(step.parameters.get("Voltage", "30.0"), step.parameters.get("Frequency", "1000.0"))
@@ -1479,9 +1478,8 @@ class ProtocolRunnerController(QObject):
                 plan_item["step_id"],
             )
 
-            if self._advanced_mode_editable_state:
-                msg_model.step_info["free_mode"] = True
-                msg_model.editable = True
+            msg_model.step_info["free_mode"] = bool(self._advanced_mode_editable_state)
+            msg_model.editable = bool(self._advanced_mode_editable_state)
 
             publish_message(
                 topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize()

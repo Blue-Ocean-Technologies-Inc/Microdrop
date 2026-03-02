@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QToolButton, QHBoxLayout,
 )
-from PySide6.QtCore import QItemSelectionModel, QTimer, Signal, QUrl
+from PySide6.QtCore import QItemSelectionModel, QTimer, Signal, QUrl, Slot
 from PySide6.QtGui import QKeySequence, QShortcut, QBrush, QColor
 from traits.has_traits import HasTraits
 
@@ -32,6 +32,7 @@ from protocol_grid.quick_action_bar import (
     QuickProtocolActions,
     QuickProtocolActionsController,
 )
+from protocol_grid.services.message_listener import MessageListenerSignalEmitter
 from protocol_grid.state.protocol_state import (
     ProtocolState,
     ProtocolStep,
@@ -84,7 +85,7 @@ from microdrop_style.icons.icons import ICON_PLAY, ICON_PAUSE, ICON_RESUME
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 from logger.logger_service import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, "DEBUG")
 
 
 from functools import wraps
@@ -234,7 +235,7 @@ class PGCWidget(QWidget):
 
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
-        self._protocol_grid_plugin = None
+        self._dropbot_connected = False
 
         self.state = state or ProtocolState()
         self.application = dock_pane.task.window.application
@@ -282,6 +283,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
         self._protocol_running = False
+        self._advanced_user_mode = False
         self._force_stop = False
         self._processing_palette_change = False
         self._last_published_step_id = None
@@ -398,8 +400,10 @@ class PGCWidget(QWidget):
         )
 
         self.application.observe(self.save_column_settings, "application_exiting")
+        self.connect_listener(dock_pane.dramatiq_message_listener)
 
         self.loading_screen = LoadingOverlay(self.tree)
+
 
     #### Loading screen logic #####
 
@@ -473,15 +477,11 @@ class PGCWidget(QWidget):
                     logger.debug(f"Error updating theme for dialog {dialog}: {e}")
 
     # ---------- DropBot connection ----------
-    def _is_dropbot_connected(self):
-        if self._protocol_grid_plugin and hasattr(
-            self._protocol_grid_plugin, "dropbot_connected"
-        ):
-            return self._protocol_grid_plugin.dropbot_connected
+    def _on_dropbot_connection_changed(self, connected: bool):
+        self._dropbot_connected = connected
 
-        # fallback
-        logger.info("Cannot determine dropbot connection status, assuming disconnected")
-        return False
+    def _is_dropbot_connected(self):
+        return self._dropbot_connected
 
     def _check_dropbot_connection_and_show_dialog(self):
         preview_mode = self.navigation_bar.is_preview_mode()
@@ -512,93 +512,36 @@ class PGCWidget(QWidget):
     # -----------------------------------------
 
     # ---------- Message Handling ----------
-    def _setup_listener(self):
-        try:
-            # find the protocol grid plugin and get its listener
-            if self._protocol_grid_plugin and hasattr(
-                self._protocol_grid_plugin, "get_listener"
-            ):
-                message_listener = self._protocol_grid_plugin.get_listener()
-                if message_listener and hasattr(message_listener, "signal_emitter"):
+    def connect_listener(self, listener):
+        """Connect the shared MessageListener's Qt signals to widget handlers."""
+        sig: MessageListenerSignalEmitter = listener.signal_emitter
 
-                    # connect media capture data logging\
-                    message_listener.signal_emitter.media_captured.connect(
-                        self.protocol_data_logger.log_media_capture
-                    )
+        # DropBot connection state
+        sig.dropbot_connection_changed.connect(self._on_dropbot_connection_changed)
 
-                    # connect to device viewer messages
-                    message_listener.signal_emitter.device_viewer_message_received.connect(
-                        self.on_device_viewer_message
-                    )
-                    # connect protocol runner to droplet detection responses
-                    self.protocol_runner.connect_droplet_detection_listener(
-                        message_listener
-                    )
+        # Device viewer electrode state updates
+        sig.device_viewer_message_received.connect(self.on_device_viewer_message)
 
-                    self.protocol_runner.connect_zstage_position_listener(
-                        message_listener
-                    )
+        # Droplet detection and z-stage (delegated to protocol runner)
+        self.protocol_runner.connect_droplet_detection_listener(listener)
+        self.protocol_runner.connect_zstage_position_listener(listener)
 
-                    # connect to calibration_data messages
-                    message_listener.signal_emitter.calibration_data_received.connect(
-                        self.on_calibration_message
-                    )
+        # Calibration data and capacitance logging
+        sig.calibration_data_received.connect(self.on_calibration_message)
+        sig.capacitance_updated.connect(self.protocol_data_logger.log_capacitance_data)
 
-                    message_listener.signal_emitter.capacitance_updated.connect(
-                        self.protocol_data_logger.log_capacitance_data
-                    )
+        # Media capture logging
+        sig.media_captured.connect(self.protocol_data_logger.log_media_capture)
 
-                    self._setup_advanced_mode_sync()
+        # advanced_mode_change
+        sig.advanced_mode_changed.connect(self.toggle_advanced_user_mode)
 
-                    logger.info("connected to message listener successfully")
-                    return
-                else:
-                    logger.info(
-                        "message listener not available OR missing signal emitter"
-                    )
-            else:
-                logger.info(
-                    "protocol grid not available or missing get_listener_method"
-                )
-
-            logger.info("could not connect to message listener")
-
-        except Exception as e:
-            logger.info(f"Error setting up message listener: {e}")
-
-    def _setup_advanced_mode_sync(self):
-        """Set up synchronization between menu and NavigationBar for advanced mode."""
-        try:
-            if self._protocol_grid_plugin:
-                self._protocol_grid_plugin.set_widget_reference(self)
-
-                self.navigation_bar.advanced_user_mode_checkbox.stateChanged.connect(
-                    self._on_advanced_mode_checkbox_changed
-                )
-
-                logger.info("Advanced mode synchronization set up")
-        except Exception as e:
-            logger.error(f"Error setting up advanced mode sync: {e}")
-
-    def _on_advanced_mode_checkbox_changed(self, state):
-        try:
-            if self._protocol_grid_plugin:
-                checked = state == 2  # Qt.Checked
-                current_plugin_state = (
-                    self._protocol_grid_plugin.get_advanced_mode_state()
-                )
-
-                # only update if state actually changed to avoid infinite loops
-                if checked != current_plugin_state:
-                    self._protocol_grid_plugin.set_advanced_mode_state(checked)
-                    logger.debug(f"Advanced mode updated from checkbox: {checked}")
-        except Exception as e:
-            logger.error(f"Error handling advanced mode checkbox change: {e}")
+        logger.info("Widget connected to message listener")
 
     def on_device_viewer_message(self, message, topic):
         if topic != DEVICE_VIEWER_STATE_CHANGED:
             return
-        if self._protocol_running:
+        if self._protocol_running and not self._advanced_user_mode:
             return
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(message)
@@ -987,7 +930,7 @@ class PGCWidget(QWidget):
 
         target_path = all_step_paths[0]
 
-        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+        if self._protocol_running and self._advanced_user_mode:
             self._navigate_during_protocol(target_path)
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
@@ -999,7 +942,7 @@ class PGCWidget(QWidget):
         if not all_step_paths:
             return
 
-        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+        if self._protocol_running and self._advanced_user_mode:
             current_path = self.protocol_runner.get_current_step_path()
             if current_path:
                 try:
@@ -1024,7 +967,7 @@ class PGCWidget(QWidget):
         if not all_step_paths:
             return
 
-        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+        if self._protocol_running and self._advanced_user_mode:
             current_path = self.protocol_runner.get_current_step_path()
             if current_path:
                 try:
@@ -1053,7 +996,7 @@ class PGCWidget(QWidget):
 
         target_path = all_step_paths[-1]
 
-        if self._protocol_running and self.navigation_bar.is_advanced_user_mode():
+        if self._protocol_running and self._advanced_user_mode:
             self._navigate_during_protocol(target_path)
         elif not self._protocol_running:
             self._select_step_by_path(target_path)
@@ -1113,7 +1056,7 @@ class PGCWidget(QWidget):
 
         droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        advanced_mode = self._advanced_user_mode
 
         # start data logging
         self.protocol_data_logger.start_logging(
@@ -1146,7 +1089,7 @@ class PGCWidget(QWidget):
         self._last_published_step_id = None
 
     def _play_pause_pause_protocol(self):
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        advanced_mode = self._advanced_user_mode
         preview_mode = self.navigation_bar.is_preview_mode()
         self.protocol_runner.pause(
             advanced_mode=advanced_mode, preview_mode=preview_mode
@@ -1160,7 +1103,7 @@ class PGCWidget(QWidget):
     def _play_pause_resume_protocol(self):
         # self.sync_to_state()
         droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
+        advanced_mode = self._advanced_user_mode
         preview_mode = self.navigation_bar.is_preview_mode()
 
         self._disable_phase_navigation()
@@ -1261,14 +1204,13 @@ class PGCWidget(QWidget):
 
         droplet_check_enabled = self.navigation_bar.is_droplet_check_enabled()
         preview_mode = self.navigation_bar.is_preview_mode()
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
 
         self.protocol_runner.set_preview_mode(preview_mode)
 
         self.protocol_runner.set_repeat_protocol_n(1)
         # self.protocol_runner.set_run_order(run_order)
 
-        self.protocol_runner.set_advanced_hardware_mode(advanced_mode, preview_mode)
+        self.protocol_runner.set_advanced_hardware_mode(self._advanced_user_mode, preview_mode)
 
         # set droplet check mode for single step execution
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
@@ -1329,13 +1271,18 @@ class PGCWidget(QWidget):
 
         self.quick_action_controller._update_ui_enabled_state(enabled)
 
+    @Slot(bool)
+    def toggle_advanced_user_mode(self, advanced_mode_state):
+        logger.debug(f"Toggling advanced user mode: {advanced_mode_state}")
+        self._advanced_user_mode = advanced_mode_state
+        self._update_navigation_buttons_state()
+
     def _update_navigation_buttons_state(self):
         # Enable navigation buttons if:
         # 1. Protocol is not running, OR
         # 2. Protocol is running/paused AND advanced user mode is enabled
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
         enabled = not self._protocol_running or (
-            self._protocol_running and advanced_mode
+            self._protocol_running and self._advanced_user_mode
         )
 
         self.navigation_bar.btn_first.setEnabled(enabled)
@@ -1346,15 +1293,13 @@ class PGCWidget(QWidget):
         checkbox_enabled = not self._protocol_running
         self.navigation_bar.set_droplet_check_enabled(checkbox_enabled)
         self.navigation_bar.set_preview_mode_enabled(checkbox_enabled)
-        self.navigation_bar.set_advanced_user_mode_enabled(checkbox_enabled)
 
     def _navigate_during_protocol(self, target_step_path):
         """navigation during protocol execution in advanced user mode."""
         if not self._protocol_running:
             return False
 
-        advanced_mode = self.navigation_bar.is_advanced_user_mode()
-        if not advanced_mode:
+        if not  self._advanced_user_mode:
             return False
 
         success = self.protocol_runner.jump_to_step_by_path(target_step_path)
@@ -1692,7 +1637,7 @@ class PGCWidget(QWidget):
         self._set_last_published_step_uid(None)
         self._last_published_step_id = None
 
-    def _publish_step_message(self, step_item, step_path, editable=True):
+    def _publish_step_message(self, step_item, step_path, editable=False):
         if not step_item or step_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return None
 
@@ -2185,7 +2130,7 @@ class PGCWidget(QWidget):
         if not self._programmatic_change:
             # dont sync during protocol running
             if self._protocol_running:
-                if not self.navigation_bar.is_advanced_user_mode():
+                if not self._advanced_user_mode:
                     return
 
             self.model_to_state()
@@ -2198,7 +2143,7 @@ class PGCWidget(QWidget):
                 self._mark_protocol_modified()
 
     def model_to_state(self):
-        if self._protocol_running and not self.navigation_bar.is_advanced_user_mode():
+        if self._protocol_running and not self._advanced_user_mode:
             return
 
         self.state.sequence.clear()
@@ -2395,7 +2340,7 @@ class PGCWidget(QWidget):
         if self._programmatic_change:
             return
         if self._protocol_running:
-            if self.navigation_bar.is_advanced_user_mode():
+            if self._advanced_user_mode:
                 parent = item.parent() or self.model.invisibleRootItem()
                 col = item.column()
                 if col < len(protocol_grid_fields):
@@ -2443,7 +2388,7 @@ class PGCWidget(QWidget):
             self._handle_checkbox_change(parent, row, field)
             if not self._protocol_running or (
                 self._protocol_running
-                and self.navigation_bar.is_advanced_user_mode()
+                and self._advanced_user_mode
                 and self._is_advanced_mode_field_editable(field)
             ):
                 self.sync_to_state()
@@ -2472,7 +2417,7 @@ class PGCWidget(QWidget):
 
         if not self._protocol_running or (
             self._protocol_running
-            and self.navigation_bar.is_advanced_user_mode()
+            and self._advanced_user_mode
             and self._is_advanced_mode_field_editable(field)
         ):
             self.sync_to_state()
@@ -2482,7 +2427,7 @@ class PGCWidget(QWidget):
         """Handle voltage/frequency edits in advanced mode during protocol execution."""
         if (
             not self._protocol_running
-            or not self.navigation_bar.is_advanced_user_mode()
+            or not self._advanced_user_mode
         ):
             return
 
@@ -3207,7 +3152,6 @@ class PGCWidget(QWidget):
                 element.parameters["UID"] = str(self.state.get_next_uid())
             elif isinstance(element, ProtocolGroup):
                 self._assign_new_uids_to_all_elements(element.elements)
-
 
 if __name__ == "__main__":
     import sys

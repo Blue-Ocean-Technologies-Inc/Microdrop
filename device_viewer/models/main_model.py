@@ -52,7 +52,7 @@ class DeviceViewMainModel(HasTraits):
 
     electrode_scale = Property(Float, observe='electrodes.svg_model.area_scale')
 
-    # message model properties
+    # mode properties
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
@@ -266,3 +266,12 @@ class DeviceViewMainModel(HasTraits):
     def _camera_perspective_changed(self, event=None):
         self.preferences.preferences.set("camera.reference_rect", qpointf_list_serialize(self.camera_perspective.reference_rect))
         self.preferences.preferences.set("camera.transformed_reference_rect", qpointf_list_serialize(self.camera_perspective.transformed_reference_rect))
+
+    @observe("protocol_running")
+    def _protocol_running_changed(self, event=None):
+        """
+        First time protocol running toggled on, set model editable mode to false
+        """
+        if event.new:
+            logger.info("Protocol running. Model is not not editable.")
+            self.editable = False
