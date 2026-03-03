@@ -11,7 +11,7 @@ def menu_factory():
         DockPaneAction(
             id=PKG + ".help_menu",
             dock_pane_id=PKG + ".dock_pane",
-            name=f"{PKG_name} Help",
+            name=f"{PKG_name} &Help",
             method="show_help"
         ),
         id="example_help")
