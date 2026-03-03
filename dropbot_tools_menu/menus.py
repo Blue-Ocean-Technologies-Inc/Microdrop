@@ -61,16 +61,16 @@ def dropbot_tools_menu_factory(plugin=None):
 
     # create new groups with all the possible dropbot self-test options as actions
     test_actions = [
-        RunTests(name="Test high voltage", topic=TEST_VOLTAGE,  plugin=plugin),
-        RunTests(name='On-board feedback calibration', topic=TEST_ON_BOARD_FEEDBACK_CALIBRATION, plugin=plugin),
-        RunTests(name='Detect shorted channels', topic=TEST_SHORTS,  plugin=plugin),
-        RunTests(name="Scan test board", topic=TEST_CHANNELS, plugin=plugin),
+        RunTests(name="Test &high voltage", topic=TEST_VOLTAGE,  plugin=plugin),
+        RunTests(name='On-board &feedback calibration', topic=TEST_ON_BOARD_FEEDBACK_CALIBRATION, plugin=plugin),
+        RunTests(name='&Detect shorted channels', topic=TEST_SHORTS,  plugin=plugin),
+        RunTests(name="Scan &test board", topic=TEST_CHANNELS, plugin=plugin),
     ]
 
-    test_options_menu = SMenu(items=test_actions, id="dropbot_on_board_self_tests", name="On-board self-tests", )
+    test_options_menu = SMenu(items=test_actions, id="dropbot_on_board_self_tests", name="&On-board self-tests", )
 
     # create an action to run all the test options at once
-    run_all_tests = RunTests(name="Run all on-board self-tests", topic=RUN_ALL_TESTS, num_tests=len(ALL_TESTS), plugin=plugin)
+    run_all_tests = RunTests(name="&Run all on-board self-tests", topic=RUN_ALL_TESTS, num_tests=len(ALL_TESTS), plugin=plugin)
 
     '''
     (from hardware_test.py)
@@ -80,9 +80,9 @@ def dropbot_tools_menu_factory(plugin=None):
     '''
 
     # create an action to restart dropbot search
-    dropbot_search = DramatiqMessagePublishAction(name="Search for Dropbot Connection", topic=START_DEVICE_MONITORING)
+    dropbot_search = DramatiqMessagePublishAction(name="&Search for Dropbot Connection", topic=START_DEVICE_MONITORING)
 
     # return an SMenu object compiling each object made and put into Dropbot menu under Tools menu.
-    return SMenu(items=[run_all_tests, test_options_menu, dropbot_search], id="dropbot_tools", name="Dropbot")
+    return SMenu(items=[run_all_tests, test_options_menu, dropbot_search], id="dropbot_tools", name="Drop&bot")
 
 
