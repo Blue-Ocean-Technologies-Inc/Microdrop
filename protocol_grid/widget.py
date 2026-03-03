@@ -393,6 +393,8 @@ class PGCWidget(QWidget):
 
         # calibration data tracking
         self._last_free_mode_active_electrodes = []
+        self._last_free_mode_routes = []
+        self._last_free_mode_id_to_channel = {}
 
         # apply style and update when global theme change
         self._on_application_palette_changed()
@@ -555,10 +557,16 @@ class PGCWidget(QWidget):
                         active_electrodes.append(electrode_id)
                         break
 
-            if active_electrodes:
+            if dv_msg.free_mode:
+                if active_electrodes:
+                    self._last_free_mode_active_electrodes = active_electrodes
+                if dv_msg.routes:
+                    self._last_free_mode_routes = dv_msg.routes
+                self._last_free_mode_id_to_channel = dv_msg.id_to_channel
+            elif active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
 
-                logger.info(f"Updated tracked active electrodes: {active_electrodes}")
+            logger.info(f"Updated tracked active electrodes: {active_electrodes}")
 
             if dv_msg.svg_file != self._active_device_svg_file:
                 self._active_device_svg_file = dv_msg.svg_file
@@ -1797,6 +1805,57 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
+    def _has_free_mode_unsaved_changes(self) -> bool:
+        """Check if there are unsaved electrode actuations or routes from free mode."""
+        return bool(self._last_free_mode_active_electrodes) or bool(self._last_free_mode_routes)
+
+    def _handle_free_mode_unsaved_changes(self):
+        """Show dialog for unsaved free mode changes. Returns True if step selection should proceed."""
+        if not self._has_free_mode_unsaved_changes():
+            return True
+
+        result = confirm(
+            self,
+            "You have unsaved changes from free mode.",
+            title="Unsaved Free Mode Changes",
+            informative="There are electrode actuations or paths from free mode "
+                        "that have not been saved to a protocol step.<br><br>"
+                        "Would you like to insert them as a new step?",
+            yes_label="Insert as New Step",
+            no_label="Discard Changes",
+        )
+        if result == YES:
+            self._insert_free_mode_state_as_new_step()
+        self._clear_free_mode_tracked_state()
+        return True
+
+    def _insert_free_mode_state_as_new_step(self):
+        """Create a new protocol step populated with the tracked free mode device state."""
+        device_state = DeviceState(
+            activated_electrodes=list(self._last_free_mode_active_electrodes),
+            paths=[route[0] for route in self._last_free_mode_routes],
+            id_to_channel=dict(self._last_free_mode_id_to_channel),
+            route_colors=[route[1] for route in self._last_free_mode_routes],
+        )
+
+        self.state.snapshot_for_undo()
+        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
+        if hasattr(self.state, "assign_uid_to_step"):
+            self.state.assign_uid_to_step(new_step)
+        new_step.device_state = device_state
+
+        # Insert at end of the protocol sequence
+        self.state.sequence.append(new_step)
+        self.reassign_ids()
+        self.load_from_state()
+        self._mark_protocol_modified()
+
+    def _clear_free_mode_tracked_state(self):
+        """Clear the tracked free mode state after handling."""
+        self._last_free_mode_active_electrodes = []
+        self._last_free_mode_routes = []
+        self._last_free_mode_id_to_channel = {}
+
     @debounce(0.05)
     def on_selection_changed(self, *args, **kwargs):
         if (
@@ -1826,6 +1885,10 @@ class PGCWidget(QWidget):
                 id_col = protocol_grid_fields.index("ID")
                 id_item = parent.child(row, id_col)
                 current_step_id = id_item.text() if id_item else ""
+
+                # Transitioning from free mode to step selection — check for unsaved changes
+                if not self._last_selected_step_id and current_step_id:
+                    self._handle_free_mode_unsaved_changes()
 
                 # publish only if this is a different step
                 if current_step_id != self._last_published_step_id:
