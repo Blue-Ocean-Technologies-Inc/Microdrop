@@ -98,6 +98,7 @@ from PySide6.QtWidgets import (
     QTreeView,
     QHeaderView,
     QAbstractItemView,
+    QCheckBox,
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt
@@ -152,7 +153,12 @@ class BulkSetDialog(QDialog):
 
         self.layout.addWidget(self.tree)
 
-        # 4. Buttons
+        # 4. Nested groups checkbox
+        self.nested_checkbox = QCheckBox("Apply to all nested groups")
+        self.nested_checkbox.setChecked(False)
+        self.layout.addWidget(self.nested_checkbox)
+
+        # 5. Buttons
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -187,6 +193,10 @@ class BulkSetDialog(QDialog):
                 updates[col] = val
 
         return updates
+
+    @property
+    def apply_nested(self):
+        return self.nested_checkbox.isChecked()
 
 
 def ensure_protocol_saved(func):
