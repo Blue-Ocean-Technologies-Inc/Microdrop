@@ -102,7 +102,7 @@ class SelfTestIntroDialog(QDialog):
 
 
 class ShowSelfTestIntroDialogAction(Action):
-    name = Str("Self Test Intro Dialog")
+    name = Str("&Self Test Intro Dialog")
 
     def perform(self, event):
         # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
@@ -361,7 +361,7 @@ class ResultsDialog(QDialog):
 
 
 class ResultsDialogAction(Action):
-    name = Str("Results Dialog")
+    name = Str("&Results Dialog")
 
     def perform(self, parent=None, title="Test Results", plot_data=None):
         # The dialong is a child window of non UI class
@@ -416,7 +416,7 @@ class DropbotDisconnectedDialog(QDialog):
 
 
 class DropbotDisconnectedDialogAction(Action):
-    name = Str("Dropbot Disconnected Dialog")
+    name = Str("Dropbot &Disconnected Dialog")
 
     def perform(self, event):
         # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
