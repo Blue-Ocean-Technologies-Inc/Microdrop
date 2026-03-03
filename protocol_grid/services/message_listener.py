@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 class MessageListenerSignalEmitter(QObject):
-    device_viewer_message_received = Signal(str, str)  # message, topic
+    device_viewer_message_received = Signal(str)  # message, topic
     dropbot_connection_changed = Signal(bool)  # dropbot connection status
     droplets_detected = Signal(str)  # droplet detection response
     calibration_data_received = Signal(str, str)  # message, topic
@@ -46,7 +46,7 @@ class MessageListener(HasTraits):
         try:
             if topic == DEVICE_VIEWER_STATE_CHANGED:
                 logger.debug(f"Received device viewer message on topic: {topic}, message: {message}")
-                self.signal_emitter.device_viewer_message_received.emit(message, topic)
+                self.signal_emitter.device_viewer_message_received.emit(message)
                 
             elif topic in [CHIP_INSERTED, DROPBOT_CONNECTED]:
                 logger.info(f"Received dropbot connected signal: {topic}")
