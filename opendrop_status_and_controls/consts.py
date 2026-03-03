@@ -1,5 +1,7 @@
 import os
 
+from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -16,5 +18,7 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "opendrop/signals/#",
         "hardware/signals/#",
+        PROTOCOL_RUNNING,
+        PROTOCOL_GRID_DISPLAY_STATE
     ]
 }

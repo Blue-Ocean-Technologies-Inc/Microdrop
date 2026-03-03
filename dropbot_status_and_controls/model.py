@@ -1,8 +1,10 @@
-from traits.api import HasTraits, Bool, Str, observe
+from traits.api import Bool, Str, observe
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
+
+from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
@@ -15,67 +17,61 @@ logger = get_logger(__name__)
 N_DISPLAY_DIGITS = 3
 
 
-class DropbotStatusAndControlsModel(HasTraits):
-    """Unified model for DropBot status display and manual controls."""
+class DropbotStatusAndControlsModel(BaseStatusModel):
+    """Model for DropBot status display and controls.
 
-    # Controls (user-writable via TraitsUI)
+    Extends BaseStatusModel with DropBot-specific controls and sensor readings.
+    Connection/mode/icon traits and their observers are inherited.
+    """
+
+    # ---- Class-level constants ----------------------------------------
+    DEFAULT_ICON_PATH = DROPBOT_IMAGE
+    CHIP_INSERTED_ICON_PATH = DROPBOT_CHIP_INSERTED_IMAGE
+    DISCONNECTED_COLOR = disconnected_color
+    CONNECTED_NO_DEVICE_COLOR = connected_no_device_color
+    CONNECTED_COLOR = connected_color
+
+    # ---- Hardware controls (user-writable via UI) ----------------------
     voltage = RangeWithCustomViewHints(
         30, 150, value=DropbotPreferences().default_voltage, suffix=" V",
-        desc="the voltage to set on the dropbot device (V)"
+        desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
         100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
-        desc="the frequency to set on the dropbot device (Hz)"
+        desc="Frequency to set on the DropBot device (Hz)",
     )
-    realtime_mode = Bool(False, desc="Enable or disable realtime mode")
 
-    # Status (read-only, updated by message handler)
-    connected = Bool(False, desc="True if the DropBot is connected")
-    chip_inserted = Bool(False, desc="True if a chip is inserted")
-
-    # Sensor readings (display strings)
-    capacitance = Str("-", desc="Raw capacitance in pF")
-    voltage_readback = Str("-", desc="Voltage readback from device in V")
-    pressure = Str("-", desc="Pressure reading in pF/mm^2")
-    force = Str("-", desc="Calculated force in N")
-
-    # Computed display traits (derived from connected / chip_inserted / readings)
-    connection_status_text = Str("Inactive")
+    # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")
-    icon_path = Str(DROPBOT_IMAGE)
-    icon_color = Str(disconnected_color)
 
-    # Formatted sensor readings for display
+    # ---- Sensor readings (raw values set by message handler) -----------
+    capacitance = Str("-", desc="Raw capacitance in pF")
+    voltage_readback = Str("-", desc="Voltage readback from device (V)")
+    pressure = Str("-", desc="Pressure reading (pF/mm²)")
+    force = Str("-", desc="Calculated force (N)")
+
+    # ---- Formatted sensor readings for display -------------------------
     capacitance_display = Str("-")
     voltage_readback_display = Str("-")
     frequency_display = Str("-")
     pressure_display = Str("-")
     force_display = Str("-")
 
-    def _update_icon_color(self):
-        if self.connected:
-            if self.chip_inserted:
-                self.icon_color = connected_color
-            else:
-                self.icon_color = connected_no_device_color
-        else:
-            self.icon_color = disconnected_color
+    # ------------------------------------------------------------------ #
+    # BaseStatusModel hook                                                 #
+    # ------------------------------------------------------------------ #
 
-    @observe("connected")
-    def _update_connection_display(self, event):
-        self.connection_status_text = "Active" if self.connected else "Inactive"
-        self._update_icon_color()
+    def _update_chip_display(self, inserted: bool) -> None:
+        self.chip_status_text = "Inserted" if inserted else "Not Inserted"
 
-    @observe("chip_inserted")
-    def _update_chip_display(self, event):
-        self.chip_status_text = "Inserted" if self.chip_inserted else "Not Inserted"
-        self.icon_path = DROPBOT_CHIP_INSERTED_IMAGE if self.chip_inserted else DROPBOT_IMAGE
-        self._update_icon_color()
+    # ------------------------------------------------------------------ #
+    # Observers                                                            #
+    # ------------------------------------------------------------------ #
 
     @observe("realtime_mode")
-    def reset_readings(self, event):
-        """Reset sensor reading displays when realtime mode off."""
-        if not self.realtime_mode:
+    def _reset_readings_on_realtime_off(self, event):
+        """Clear sensor displays when realtime mode is disabled."""
+        if not event.new:
             self.capacitance = "-"
             self.voltage_readback = "-"
             self.frequency_display = "-"
@@ -90,8 +86,7 @@ class DropbotStatusAndControlsModel(HasTraits):
     def _update_voltage_readback_display(self, event):
         self.voltage_readback_display = self._format_reading(event.new)
 
-    @observe("frequency")
-    @observe("realtime_mode")
+    @observe("frequency,realtime_mode")
     def _update_frequency_display(self, event):
         if self.realtime_mode:
             self.frequency_display = self._format_reading(f"{self.frequency} Hz")
@@ -104,6 +99,10 @@ class DropbotStatusAndControlsModel(HasTraits):
     def _update_force_display(self, event):
         self.force_display = self._format_reading(event.new)
 
+    # ------------------------------------------------------------------ #
+    # Helpers                                                              #
+    # ------------------------------------------------------------------ #
+
     @staticmethod
     def _format_reading(value):
         try:
@@ -111,6 +110,5 @@ class DropbotStatusAndControlsModel(HasTraits):
         except AssertionError:
             if value == "-":
                 return value
-            else:
-                logger.warning(f"Cannot parse reading: '{value}'. Expected format: '[quantity] [units]'")
-                return "-"
+            logger.warning(f"Cannot parse reading: '{value}'. Expected '[quantity] [units]'")
+            return "-"

@@ -32,9 +32,9 @@ left = HGroup(
 # 2. Add label, id, and dock='tab' to the grid group
 grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
-    UItem("voltage", label="Voltage"),
+    UItem("voltage", label="Voltage", enabled_when="free_mode and not protocol_running"),
     Item("frequency_display", label="Frequency", style="readonly"),
-    UItem("frequency", label="Frequency"),
+    UItem("frequency", label="Frequency", enabled_when="free_mode and not protocol_running"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("pressure_display", style="readonly", label="c_device"),

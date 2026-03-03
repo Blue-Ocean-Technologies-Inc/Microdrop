@@ -1,6 +1,4 @@
-from traits.api import HasTraits, HTML, observe
-from traitsui.api import UItem, View, HTMLEditor
-from pyface.tasks.api import TraitsDockPane
+from traits.api import observe
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QApplication
@@ -12,103 +10,104 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_DROP_EC
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 
-from dropbot_status_and_controls.consts import PKG, PKG_name, listener_name, disconnected_color, \
-    connected_no_device_color, connected_color
+from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
-from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
-from dropbot_status_and_controls.controller import ControlsController
-from dropbot_status_and_controls.view import UnifiedView
-from dropbot_status_and_controls.message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
-from dropbot_status_and_controls.dialog_views import DialogView
+from .consts import PKG, PKG_name, listener_name, disconnected_color, connected_no_device_color, connected_color
+from .model import DropbotStatusAndControlsModel
+from .controller import ControlsController
+from .view import UnifiedView
+from .message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
+from .dialog_views import DialogView
 
 
-class DropbotStatusAndControlsDockPane(TraitsDockPane):
-    """
-    A unified dock pane combining DropBot status display and manual controls.
-    """
+class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
+    """Dock pane for DropBot status display and controls."""
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
 
-    # 1. Shared model
+    # TraitsDockPane wires these together; view.handler must be set at class level.
     model = DropbotStatusAndControlsModel()
     view = UnifiedView
     controller = ControlsController(model)
     view.handler = controller
 
-    def traits_init(self):
-        # Message handler (Dramatiq listener)
-        dialog_signals = DialogSignals()
-        self.message_handler = DropbotStatusAndControlsMessageHandler(
+    # ------------------------------------------------------------------ #
+    # BaseStatusDockPane factories                                          #
+    # ------------------------------------------------------------------ #
+
+    def _create_message_handler(self) -> DropbotStatusAndControlsMessageHandler:
+        self._dialog_signals = DialogSignals()
+        return DropbotStatusAndControlsMessageHandler(
             model=self.model,
-            dialog_signals=dialog_signals,
-            name=listener_name
+            dialog_signals=self._dialog_signals,
+            name=listener_name,
         )
+
+    def _setup_extras(self):
+        """Wire up dialog popups and the status-bar icon."""
         self.dialog_view = DialogView(
-            dialog_signals=dialog_signals,
-            message_handler=self.message_handler
+            dialog_signals=self._dialog_signals,
+            message_handler=self.message_handler,
         )
+        # Status-bar icon is set up lazily via the observer below.
 
-    def show_help(self):
-        sample_text = (
-            """
-            <html><body><h1>Dropbot Status And Controls Help Page</h1>
-            """
-            + self.__doc__
-        )
-
-        class HTMLEditorDemo(HasTraits):
-            """Defines the main HTMLEditor demo class."""
-            my_html_trait = HTML(sample_text)
-
-            traits_view = View(
-                UItem(
-                    'my_html_trait',
-                    editor=HTMLEditor(format_text=False),
-                ),
-                title='HTMLEditor',
-                buttons=['OK'],
-                width=800,
-                height=600,
-                resizable=True,
-            )
-
-        demo = HTMLEditorDemo()
-        demo.configure_traits()
+    # ------------------------------------------------------------------ #
+    # Status-bar icon                                                       #
+    # ------------------------------------------------------------------ #
 
     @observe("task:window:status_bar_manager")
-    def _setup_app_statusbar_with_dropbot_status_icon(self, event):
-        dropbot_status = QLabel(ICON_DROP_EC)
+    def _setup_statusbar_icon(self, event):
+        icon = QLabel(ICON_DROP_EC)
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
+        icon.setFont(font)
+        icon.setStyleSheet(f"color: {disconnected_color}")
 
-        _font = QFont(ICON_FONT_FAMILY)
-        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
-        dropbot_status.setFont(_font)
-        dropbot_status.setStyleSheet(f"color: {disconnected_color}")
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(
+            horizontal_spacer_widget(10)
+        )
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(icon)
 
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(dropbot_status)
+        # Keep the icon color in sync with the model's connection state.
+        self.model.observe(lambda e: icon.setStyleSheet(f"color: {e.new}"), "icon_color")
 
-        def set_status_color(event):
-            dropbot_status.setStyleSheet(f"color: {event.new}")
+        self.status_bar_icon = icon
 
-        self.model.observe(set_status_color, "icon_color")
+        def _apply_tooltip():
+            icon.setToolTip(_build_status_icon_tooltip())
 
-        self.status_bar_icon = dropbot_status
+        _apply_tooltip()
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_tooltip)
 
-        def _apply_theme_style():
-            self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+    # ------------------------------------------------------------------ #
+    # Help                                                                  #
+    # ------------------------------------------------------------------ #
 
-        _apply_theme_style()
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
+    def show_help(self):
+        from traits.api import HasTraits, HTML
+        from traitsui.api import View, UItem, HTMLEditor
+
+        class _HelpPage(HasTraits):
+            content = HTML(
+                "<html><body><h1>DropBot Status And Controls</h1>"
+                + (self.__doc__ or "")
+            )
+            traits_view = View(
+                UItem("content", editor=HTMLEditor(format_text=False)),
+                title="Help", buttons=["OK"], width=800, height=600, resizable=True,
+            )
+
+        _HelpPage().configure_traits()
 
 
-def get_status_icon_tooltip_themed():
-    if is_dark_mode():
-        title_color = WHITE
-    else:
-        title_color = GREY['dark']
+# ------------------------------------------------------------------ #
+# Module-level helper                                                  #
+# ------------------------------------------------------------------ #
 
-    dropbot_status_icon_tooltip_html = f"""
+def _build_status_icon_tooltip() -> str:
+    title_color = WHITE if is_dark_mode() else GREY["dark"]
+    return f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
       <strong style="font-size: 1.1em; color: {title_color}">Dropbot Status:</strong>
       <ul style="margin-top: 1px; margin-bottom: 1px; padding-left: 20px;">
@@ -119,29 +118,13 @@ def get_status_icon_tooltip_themed():
     </div>
     """
 
-    return dropbot_status_icon_tooltip_html
 
-if __name__ == '__main__':
-    from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
-    from dropbot_status_and_controls.message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
-    from dropbot_status_and_controls.dialog_views import DialogView
-    from dropbot_status_and_controls.controller import ControlsController
-    from dropbot_status_and_controls.view import UnifiedView
-
-    # 1. Shared model
+if __name__ == "__main__":
     model = DropbotStatusAndControlsModel()
-
-    # 2. Message handler (Dramatiq listener)
     dialog_signals = DialogSignals()
     message_handler = DropbotStatusAndControlsMessageHandler(
         model=model, dialog_signals=dialog_signals, name=listener_name
     )
-    dialog_view = DialogView(
-        dialog_signals=dialog_signals, message_handler=message_handler
-    )
-
-    # 3. Single unified TraitsUI view
-    controls_controller = ControlsController(model)
-    ui = model.configure_traits(
-        view=UnifiedView, handler=controls_controller
-    )
+    dialog_view = DialogView(dialog_signals=dialog_signals, message_handler=message_handler)
+    controller = ControlsController(model)
+    model.configure_traits(view=UnifiedView, handler=controller)
