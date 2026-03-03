@@ -1926,11 +1926,28 @@ class PGCWidget(QWidget):
         global_pos = self.tree.mapToGlobal(pos)
         menu.exec(global_pos)
 
+    @staticmethod
+    def _collect_steps_from_group(group_item, recursive=False):
+        """Collect step items from a group, optionally recursing into nested sub-groups."""
+        steps = []
+        for row in range(group_item.rowCount()):
+            child = group_item.child(row, 0)
+            if not child:
+                continue
+            child_type = child.data(ROW_TYPE_ROLE)
+            if child_type == STEP_TYPE:
+                steps.append(child)
+            elif child_type == GROUP_TYPE and recursive:
+                steps.extend(PGCWidget._collect_steps_from_group(child, recursive=True))
+        return steps
+
     def bulk_set_values(self):
         """
         Opens a dialog to set specific values for columns.
         - If a Step is selected, it updates that step.
-        - If a Group is selected, it updates all DIRECT child steps (non-recursive).
+        - If a Group is selected, it updates child steps. If "Apply to all nested
+          groups" is checked, it recurses into sub-groups; otherwise only direct
+          child steps are affected.
         """
         if self._protocol_running:
             return
@@ -1948,6 +1965,8 @@ class PGCWidget(QWidget):
         updates = dialog.get_row_data()
         if not updates:
             return
+
+        apply_nested = dialog.apply_nested
 
         self.state.snapshot_for_undo()
         self._programmatic_change = True
@@ -1977,11 +1996,9 @@ class PGCWidget(QWidget):
 
                     elif item_type == GROUP_TYPE:
                         # Case 2: User selected a Group
-                        # Iterate DIRECT children only (No recursion into subgroups)
-                        for row in range(selected_item.rowCount()):
-                            child = selected_item.child(row, 0)
-                            if child and child.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                                target_step_items.append(child)
+                        target_step_items = self._collect_steps_from_group(
+                            selected_item, recursive=apply_nested
+                        )
 
                     # --- APPLY TO IDENTIFIED STEPS ---
                     for step_item in target_step_items:
