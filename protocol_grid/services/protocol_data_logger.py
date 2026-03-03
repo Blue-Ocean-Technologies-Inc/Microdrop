@@ -54,6 +54,7 @@ class ProtocolDataLogger:
         self._image_captures = []
         self._other_media_captures = []
         self.last_saved_summary_path = None
+        self.all_report_paths = []
 
         self._is_logging_active = False
         self._latest_capacitance_per_unit_area = None
@@ -711,6 +712,7 @@ class ProtocolDataLogger:
             f.write(report)
             logger.critical(f"Run summary report saved to: {report_path}")
             self.last_saved_summary_path = report_path
+            self.all_report_paths.append(str(report_path))
 
         # cleanup:
         del self._active_analysis_df

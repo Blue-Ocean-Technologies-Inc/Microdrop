@@ -62,6 +62,7 @@ from protocol_grid.extra_ui_elements import (
     make_separator,
     ExperimentLabel,
     DropbotDisconnectedBeforeRunDialogAction,
+    ReportBrowserDialog,
 )
 
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
@@ -2085,6 +2086,7 @@ class PGCWidget(QWidget):
             (QKeySequence("F"), self.navigate_to_last_step),
             (QKeySequence("E"), self.add_step),
             (QKeySequence("W"), self.add_group),
+            (QKeySequence("R"), self.show_report_browser_dialog),
         ]
 
         for key_seq, slot in shortcuts:
@@ -2113,6 +2115,15 @@ class PGCWidget(QWidget):
 
     def show_column_toggle_dialog(self):
         dialog = ColumnToggleDialog(self)
+        dialog.exec()
+
+    def show_report_browser_dialog(self):
+        report_paths = self.protocol_data_logger.all_report_paths
+        if not report_paths:
+            from microdrop_application.dialogs.pyface_wrapper import information
+            information(None, "No reports have been generated during this session.", title="No Reports")
+            return
+        dialog = ReportBrowserDialog(report_paths, parent=self)
         dialog.exec()
 
     def _delayed_sync(self):

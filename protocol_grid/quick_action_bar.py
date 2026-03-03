@@ -36,6 +36,7 @@ quick_protocol_actions = [
     ("open_protocol", "file_open", "Open Protocol"),
     ("save_protocol", "save", "Save Protocol"),
     ("new_protocol", "new_window", "New protocol"),
+    ("browse_reports", "summarize", "Browse session reports (R)"),
 ]
 
 
@@ -61,6 +62,7 @@ class QuickProtocolActions:
             ("open_protocol", "file_open", "Open Protocol"),
             ("save_protocol", "save", "Save Protocol"),
             ("new_protocol", "new_window", "New protocol"),
+            ("browse_reports", "summarize", "Browse session reports (R)"),
         ]:
 
             _add_button(id, text, tooltip)
@@ -91,6 +93,9 @@ class QuickProtocolActionsController:
         )
         self.view.actions["new_protocol"].clicked.connect(
             self.protocol_grid.new_protocol
+        )
+        self.view.actions["browse_reports"].clicked.connect(
+            self.protocol_grid.show_report_browser_dialog
         )
 
     def on_selection_changed(self):
