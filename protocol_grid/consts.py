@@ -30,6 +30,7 @@ DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
 PROTOCOL_RUNNING = "microdrop/protocol_running"
+DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
@@ -42,7 +43,8 @@ ACTOR_TOPIC_DICT = {
         CAPACITANCE_UPDATED,
         ZSTAGE_POSITION_UPDATED,
         DEVICE_VIEWER_MEDIA_CAPTURED,
-        ADVANCED_MODE_CHANGE
+        ADVANCED_MODE_CHANGE,
+        DEVICE_VIEWER_RECORDING_STATE,
     ]
 }
 

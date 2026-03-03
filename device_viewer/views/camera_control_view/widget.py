@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
 from apptools.preferences.api import Preferences
 
 from microdrop_application.dialogs.pyface_wrapper import error, warning
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
@@ -579,6 +581,7 @@ class CameraControlWidget(QWidget):
         self.recorder.start(
             _recording_file_path, _resolution, _current_fmt.maxFrameRate()
         )
+        publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="true")
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")
@@ -587,6 +590,7 @@ class CameraControlWidget(QWidget):
     @Slot(str)
     def handle_recording_error(self, error_msg):
         logger.error(f"Recording Error: {error_msg}")
+        publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="false")
         error(
             self,
             "Error: Cannot continue to record video",
@@ -597,6 +601,7 @@ class CameraControlWidget(QWidget):
 
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
+        publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="false")
         if not self._camera_state_pre_recording:
             self.toggle_camera()
 
