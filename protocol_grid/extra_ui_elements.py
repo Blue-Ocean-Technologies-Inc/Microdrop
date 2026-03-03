@@ -524,7 +524,7 @@ class EditContextMenu(QMenu):
         self.addAction(run_step_action)
 
 class ShowEditContextMenuAction(Action):
-    name = "Show Edit Context Menu"
+    name = "Show &Edit Context Menu"
     def __init__(self, widget, **kwargs):
         super().__init__(**kwargs)
         self.widget = widget
@@ -619,7 +619,7 @@ class ColumnToggleDialog(QDialog):
 
 
 class ShowColumnToggleDialogAction(Action):
-    name = "Show Column Toggle Dialog"
+    name = "Show &Column Toggle Dialog"
     def __init__(self, widget, **kwargs):
         super().__init__(**kwargs)
         self.widget = widget
@@ -764,7 +764,7 @@ class DropbotDisconnectedBeforeRunDialog(QDialog):
 
 
 class DropbotDisconnectedBeforeRunDialogAction(Action):
-    name = Str("Dropbot Disconnected Before Run Dialog")
+    name = Str("Dropbot Disconnected &Before Run Dialog")
     
     def perform(self, parent_widget):
         dialog_parent = None
@@ -900,7 +900,7 @@ class DropletDetectionFailureDialog(QDialog):
 
 
 class DropletDetectionFailureDialogAction(Action):
-    name = Str("Droplet Detection Failure Dialog")
+    name = Str("Droplet Detection &Failure Dialog")
     
     def perform(self, expected_electrodes, detected_electrodes, missing_electrodes, parent_widget):
         dialog_parent = None
