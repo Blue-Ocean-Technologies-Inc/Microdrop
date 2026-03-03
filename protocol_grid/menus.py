@@ -10,7 +10,7 @@ def load_dialog_menu_factory():
     return DockPaneAction(
         id=PKG + ".load_protocol_dialog",
         dock_pane_id=PKG + ".dock_pane",
-        name="Load",
+        name="&Load",
         method="load_protocol_dialog",
     )
 
@@ -23,7 +23,7 @@ def save_dialogue_menu_factory():
     return DockPaneAction(
         id=PKG + ".save_protocol_dialogue",
         dock_pane_id=PKG + ".dock_pane",
-        name="Save",
+        name="&Save",
         method="save_protocol_dialog",
     )
 
@@ -36,7 +36,7 @@ def save_as_dialogue_menu_factory():
     return DockPaneAction(
         id=PKG + ".save_as_protocol_dialogue",
         dock_pane_id=PKG + ".dock_pane",
-        name="Save as",
+        name="Save &as",
         method="save_as_protocol_dialog",
     )
 
@@ -49,7 +49,7 @@ def new_experiment_factory():
     return DockPaneAction(
         id=PKG + ".create_new_experiment",
         dock_pane_id=PKG + ".dock_pane",
-        name="New Experiment",
+        name="New &Experiment",
         method="setup_new_experiment",
     )
 
@@ -61,7 +61,7 @@ def new_protocol_menu_factory():
     return DockPaneAction(
         id=PKG + ".new_protocol_dialogue",
         dock_pane_id=PKG + ".dock_pane",
-        name="Create New",
+        name="&Create New",
         method="new_protocol",
     )
 
@@ -73,5 +73,5 @@ def tools_menu_factory():
         save_dialogue_menu_factory(),
         save_as_dialogue_menu_factory(),
         id="protocol_tools",
-        name="Protocol",
+        name="&Protocol",
     )
