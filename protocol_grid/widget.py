@@ -237,7 +237,10 @@ class PGCWidget(QWidget):
 
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
+
+        self.last_device_view_free_mode_msg_with_unsaved_changes = None
         self._dropbot_connected = False
+        self.free_mode = True
 
         self.state = state or ProtocolState()
         self.application = dock_pane.task.window.application
@@ -394,8 +397,6 @@ class PGCWidget(QWidget):
 
         # calibration data tracking
         self._last_free_mode_active_electrodes = []
-        self._last_free_mode_routes = []
-        self._last_free_mode_id_to_channel = {}
         self.free_mode_unsaved_changes.connect(self._handle_free_mode_unsaved_changes)
 
         # apply style and update when global theme change
@@ -543,9 +544,7 @@ class PGCWidget(QWidget):
 
         logger.info("Widget connected to message listener")
 
-    def on_device_viewer_message(self, message, topic):
-        if topic != DEVICE_VIEWER_STATE_CHANGED:
-            return
+    def on_device_viewer_message(self, message):
         if self._protocol_running and not self._advanced_user_mode:
             return
         try:
@@ -559,14 +558,14 @@ class PGCWidget(QWidget):
                         active_electrodes.append(electrode_id)
                         break
 
-            if dv_msg.free_mode:
-                if active_electrodes:
-                    self._last_free_mode_active_electrodes = active_electrodes
-                if dv_msg.routes:
-                    self._last_free_mode_routes = dv_msg.routes
-                self._last_free_mode_id_to_channel = dv_msg.id_to_channel
-            elif active_electrodes:
+            if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
+
+            # check if we need to store this message in case user has unsaved changes
+            if active_electrodes or dv_msg.routes:
+                self.last_device_view_free_mode_msg_with_unsaved_changes = dv_msg
+            else:
+                self.last_device_view_free_mode_msg_with_unsaved_changes = None
 
             logger.info(f"Updated tracked active electrodes: {active_electrodes}")
 
@@ -1631,11 +1630,12 @@ class PGCWidget(QWidget):
                 self._set_last_published_step_uid(None)
 
     def _clear_electrode_states_for_free_mode(self):
+        self.free_mode = True
         empty_msg = DeviceViewerMessageModel(
             channels_activated=set(),
             routes=[],
             id_to_channel={},
-            step_info={"step_id": None, "step_label": None, "free_mode": True},
+            step_info={"step_id": None, "step_label": None, "free_mode": self.free_mode},
             editable=True,
         )
 
@@ -1807,15 +1807,8 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
-    def _has_free_mode_unsaved_changes(self) -> bool:
-        """Check if there are unsaved electrode actuations or routes from free mode."""
-        return bool(self._last_free_mode_active_electrodes) or bool(self._last_free_mode_routes)
-
     def _handle_free_mode_unsaved_changes(self):
         """Show dialog for unsaved free mode changes. Returns True if step selection should proceed."""
-        if not self._has_free_mode_unsaved_changes():
-            return True
-
         result = confirm(
             self,
             "You have unsaved changes from free mode.",
@@ -1834,30 +1827,25 @@ class PGCWidget(QWidget):
 
     def _insert_free_mode_state_as_new_step(self):
         """Create a new protocol step populated with the tracked free mode device state."""
-        device_state = DeviceState(
-            activated_electrodes=list(self._last_free_mode_active_electrodes),
-            paths=[route[0] for route in self._last_free_mode_routes],
-            id_to_channel=dict(self._last_free_mode_id_to_channel),
-            route_colors=[route[1] for route in self._last_free_mode_routes],
-        )
+        device_state = device_state_from_device_viewer_message(self.last_device_view_free_mode_msg_with_unsaved_changes)
 
+        scroll_pos = self.save_scroll_positions()
         self.state.snapshot_for_undo()
         new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
-        if hasattr(self.state, "assign_uid_to_step"):
-            self.state.assign_uid_to_step(new_step)
-        new_step.device_state = device_state
 
-        # Insert at end of the protocol sequence
+        new_step.device_state.from_dict(device_state.to_dict())
+
+        self.state.assign_uid_to_step(new_step)
         self.state.sequence.append(new_step)
         self.reassign_ids()
         self.load_from_state()
+
+        self.restore_scroll_positions(scroll_pos)
         self._mark_protocol_modified()
 
     def _clear_free_mode_tracked_state(self):
         """Clear the tracked free mode state after handling."""
-        self._last_free_mode_active_electrodes = []
-        self._last_free_mode_routes = []
-        self._last_free_mode_id_to_channel = {}
+        self.last_device_view_free_mode_msg_with_unsaved_changes = None
 
     @debounce(0.05)
     def on_selection_changed(self, *args, **kwargs):
@@ -1897,15 +1885,18 @@ class PGCWidget(QWidget):
                     if published_step_id:
                         self._last_published_step_id = published_step_id
 
+                # switch off free mode and check unsaved changes
+                if self.free_mode:
+                    self.free_mode = False
+                    if self.last_device_view_free_mode_msg_with_unsaved_changes:
+                        self.free_mode_unsaved_changes.emit()
+
         # check if transitioned from a step selected to NO step selected
         if self._last_selected_step_id and not current_step_id and not self._navigating:
             self._clear_electrode_states_for_free_mode()
 
-        # Transitioning from free mode to step selection — check for unsaved changes
-        if not self._last_selected_step_id and current_step_id:
-            self.free_mode_unsaved_changes.emit()
-
         self._last_selected_step_id = current_step_id
+        self._last_selected_paths = selected_paths
 
     def save_column_settings(self, *args, **kwargs):
         _column_visibility = json.loads(
