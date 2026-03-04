@@ -69,6 +69,7 @@ from protocol_grid.services.protocol_runner_controller import ProtocolRunnerCont
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
 from protocol_grid.services.hardware_setter_services import publish_voltage_frequency
+from protocol_grid.services.utils import _stop_step_recording
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
 
@@ -250,6 +251,7 @@ class PGCWidget(QWidget):
 
         self.last_device_view_free_mode_msg_with_unsaved_changes = None
         self._dropbot_connected = False
+        self._video_recording_active = False
         self.free_mode = True
 
         self.state = state or ProtocolState()
@@ -525,6 +527,32 @@ class PGCWidget(QWidget):
             logger.info(f"Error showing dropbot disconnection dialog: {e}")
             return False
 
+    # ---------- Video Recording State ----------
+    def _on_video_recording_state_changed(self, is_recording: bool):
+        self._video_recording_active = is_recording
+
+    def _check_video_recording_and_show_dialog(self) -> bool:
+        """Check if video recording is active and show warning dialog.
+
+        Returns True if protocol should proceed, False to cancel.
+        """
+        if not self._video_recording_active:
+            return True
+
+        result = confirm(
+            self,
+            "A video recording session is currently active.",
+            title="Video Recording In Progress",
+            informative="Starting the protocol will terminate the current recording session "
+                        "and new sessions will be created as dictated by the protocol steps.<br><br>"
+                        "Do you want to continue?",
+            yes_label="Continue",
+            no_label="Cancel",
+        )
+        if result == YES:
+            _stop_step_recording.send()
+            return True
+        return False
     # -----------------------------------------
 
     # ---------- Message Handling ----------
@@ -537,6 +565,9 @@ class PGCWidget(QWidget):
 
         # Device viewer electrode state updates
         sig.device_viewer_message_received.connect(self.on_device_viewer_message)
+
+        # Video recording state
+        sig.video_recording_state_changed.connect(self._on_video_recording_state_changed)
 
         # Droplet detection and z-stage (delegated to protocol runner)
         self.protocol_runner.connect_droplet_detection_listener(listener)
@@ -1154,6 +1185,8 @@ class PGCWidget(QWidget):
         ):
             if not self._check_dropbot_connection_and_show_dialog():
                 return
+            if not self._check_video_recording_and_show_dialog():
+                return
 
         if self.protocol_runner.is_running():
             self.navigation_bar.btn_play.setText(ICON_RESUME)
@@ -1178,6 +1211,9 @@ class PGCWidget(QWidget):
             return
 
         if not self._check_dropbot_connection_and_show_dialog():
+            return
+
+        if not self._check_video_recording_and_show_dialog():
             return
 
         selected_paths = self.get_selected_paths()
