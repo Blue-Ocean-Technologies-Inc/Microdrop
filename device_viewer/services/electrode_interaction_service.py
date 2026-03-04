@@ -1480,6 +1480,21 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addSeparator()
 
                 if self.model.electrodes.electrode_right_clicked is not None:
+                    right_clicked = self.model.electrodes.electrode_right_clicked
+                    channel = right_clicked.channel
+
+                    # Disable/Enable electrode toggle
+                    if channel is not None:
+                        is_disabled = channel in self.model.electrodes.disabled_channels
+                        label = "Enable Electrode" if is_disabled else "Disable Electrode"
+
+                        def toggle_disable(ch=channel, currently_disabled=is_disabled):
+                            if currently_disabled:
+                                self.model.electrodes.disabled_channels.discard(ch)
+                            else:
+                                self.model.electrodes.disabled_channels.add(ch)
+
+                        context_menu.addAction(label, toggle_disable)
 
                     scale_edit_view_controller = ScaleEditViewController(model=self.model)
 
