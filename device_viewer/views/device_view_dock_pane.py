@@ -66,7 +66,7 @@ from microdrop_utils.pyside_helpers import (
     PulsingLabel,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
+from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED, EXECUTE_PATH_FROM_DEVICE_VIEWER
 
 from ..consts import (
     PKG,
@@ -1039,6 +1039,53 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         self.publish_calibration_message()
         logger.info("Calibration message published")
+
+    @observe("model.routes.execute_path_requested")
+    def _on_execute_path_requested(self, event):
+        """Handle request to execute a single path from the device viewer."""
+        layer = event.new
+        if layer is None:
+            return
+
+        if self.model.protocol_running:
+            logger.warning("Cannot execute path while protocol is running.")
+            return
+
+        # Build the execution payload from the route layer and current device state
+        id_to_channel = {}
+        for electrode_id, electrode in self.model.electrodes.electrodes.items():
+            id_to_channel[electrode_id] = electrode.channel
+
+        # Collect all routes and colors for the device state
+        all_routes = []
+        all_colors = []
+        for l in self.model.routes.layers:
+            all_routes.append(l.route.route)
+            all_colors.append(l.color)
+
+        # Get activated electrodes (individually activated, not part of paths)
+        activated_electrodes = list(self.model.electrodes.actuated_channels)
+
+        payload = {
+            "path": layer.route.route,
+            "color": layer.color,
+            "duration": layer.duration,
+            "trail_length": layer.trail_length,
+            "trail_overlay": layer.trail_overlay,
+            "repetitions": layer.repetitions,
+            "all_routes": all_routes,
+            "all_colors": all_colors,
+            "activated_electrodes": activated_electrodes,
+            "id_to_channel": id_to_channel,
+        }
+
+        logger.info(f"Publishing execute path request: path={layer.route.route}, "
+                     f"duration={layer.duration}, trail_length={layer.trail_length}, "
+                     f"trail_overlay={layer.trail_overlay}, repetitions={layer.repetitions}")
+        publish_message.send(
+            topic=EXECUTE_PATH_FROM_DEVICE_VIEWER,
+            message=json.dumps(payload),
+        )
 
     @observe("model.camera_perspective.transformation")
     @observe("model.camera_perspective.camera_resolution")
