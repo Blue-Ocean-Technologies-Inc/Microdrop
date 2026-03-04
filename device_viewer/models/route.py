@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Float, Int
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Float, Int, Event
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -194,6 +194,10 @@ class RouteLayerManager(HasTraits):
     message = Str
 
     mode = Enum("draw", "edit", "merge")
+
+    # Event fired when user requests to execute a path from right-click menu.
+    # The value is the RouteLayer to execute.
+    execute_path_requested = Event(Instance(RouteLayer))
     # --------------------------- Model Helpers --------------------------
 
     def get_available_color(self, exclude=()):
