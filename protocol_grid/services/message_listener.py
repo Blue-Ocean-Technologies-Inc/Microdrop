@@ -14,7 +14,8 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
                                   CALIBRATION_DATA, DEVICE_VIEWER_MEDIA_CAPTURED,
-                                  DEVICE_VIEWER_RECORDING_STATE)
+                                  DEVICE_VIEWER_RECORDING_STATE,
+                                  EXECUTE_PATH_FROM_DEVICE_VIEWER)
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ class MessageListenerSignalEmitter(QObject):
     media_captured = Signal(MediaCaptureMessageModel)
     advanced_mode_changed = Signal(bool)
     video_recording_state_changed = Signal(bool)  # True when recording active
+    execute_path_requested = Signal(str)  # JSON payload with path execution data
 
 
 class MessageListener(HasTraits):
@@ -94,6 +96,10 @@ class MessageListener(HasTraits):
                 is_recording = message.casefold() == "true"
                 logger.info(f"Video recording state changed: {is_recording}")
                 self.signal_emitter.video_recording_state_changed.emit(is_recording)
+
+            elif topic == EXECUTE_PATH_FROM_DEVICE_VIEWER:
+                logger.info(f"Received execute path request from device viewer")
+                self.signal_emitter.execute_path_requested.emit(message)
 
             else:
                 logger.info(f"Unhandled message topic: {topic}")

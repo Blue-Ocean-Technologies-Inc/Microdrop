@@ -14,6 +14,10 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
     # For these handlers, info is as usual, and rows is a list of rows that the action is acting on
     # In the case of the right click menu, always a list of size 1 with the affected row
 
+    def execute_path(self, info: UIInfo, rows: list[RouteLayer]):
+        """Request execution of the selected path via the RouteLayerManager event."""
+        info.object.execute_path_requested = rows[0]
+
     def invert_layer(self, info: UIInfo, rows: list[RouteLayer]):
         rows[0].route.invert()
 
@@ -56,7 +60,7 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
 
 layer_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="", resize_mode="stretch", editable=False),
+        ObjectColumn(name="name", label="Path", resize_mode="stretch", editable=False),
         VisibleColumn(
             name="visible",
             label="",
@@ -64,13 +68,41 @@ layer_table_editor = TableEditor(
             horizontal_alignment="center",
             width=16,
         ),
+        ObjectColumn(
+            name="trail_overlay",
+            label="Overlay",
+            editable=True,
+            horizontal_alignment="center",
+            width=55,
+        ),
+        ObjectColumn(
+            name="trail_length",
+            label="Trail",
+            editable=True,
+            horizontal_alignment="center",
+            width=45,
+        ),
+        ObjectColumn(
+            name="duration",
+            label="Duration",
+            editable=True,
+            horizontal_alignment="center",
+            width=60,
+        ),
+        ObjectColumn(
+            name="repetitions",
+            label="Repeats",
+            editable=True,
+            horizontal_alignment="center",
+            width=55,
+        ),
     ],
     menu=RouteLayerMenu,
     show_lines=False,
     selected="selected_layer",
     sortable=False,
     reorderable=True,
-    show_column_labels=False,
+    show_column_labels=True,
     show_row_labels=True,
 )
 
