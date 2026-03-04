@@ -156,8 +156,7 @@ class ElectrodeView(QGraphicsPathItem):
     def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, default_alphas, parent=None):
         super().__init__(parent)
 
-        self.color_stack = None # only supports two right now: base, and actuation layer color
-        self._disabled = False  # Whether this electrode is disabled (draw red X)
+        self.color_stack = None # only supports two right now: base, and actuation/disabled layer color
         self.state_map = { # Maps electrode states to colors
             None: ELECTRODE_OFF,
             False: ELECTRODE_OFF,
@@ -264,13 +263,6 @@ class ElectrodeView(QGraphicsPathItem):
     ##################################################################################
     # Public electrode view update methods
     ##################################################################################
-    def set_disabled(self, disabled: bool):
-        """
-        Set whether this electrode is disabled (draws a red X overlay).
-        """
-        self._disabled = disabled
-        self.update()
-
     def update_color(self, colors: List[QColor]):
         """
         Method to update the color of the electrode based on the state
@@ -290,14 +282,6 @@ class ElectrodeView(QGraphicsPathItem):
 
         # take care of the outline color
         painter.strokePath(self.path, self.pen())
-
-        # Draw red X over disabled electrodes
-        if self._disabled:
-            rect = self.path.boundingRect()
-            pen = QPen(QColor("red"), 2)
-            painter.setPen(pen)
-            painter.drawLine(rect.topLeft(), rect.bottomRight())
-            painter.drawLine(rect.topRight(), rect.bottomLeft())
 
     def update_label(self, alpha: float = 1.0):
         self._fit_text_in_path(alpha)
