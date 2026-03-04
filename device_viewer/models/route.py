@@ -164,6 +164,7 @@ class RouteLayer(HasTraits):
     # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
     is_selected = Bool(False) # Needed to show selectedness in the TableEditor
     merge_in_progress = Bool(False)
+    execution_disabled = Bool(False)  # True when protocol/step mode is running; disables Execute Path menu
 
     # Needs to be passed
     route = Instance(Route, Route()) # Actual route model
