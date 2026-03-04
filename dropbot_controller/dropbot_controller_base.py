@@ -206,7 +206,10 @@ class DropbotControllerBase(HasTraits):
 
             # reset to last known state
             self.proxy.turn_off_all_channels()
-            
+
+            # Publish disabled channels state so the device viewer syncs with the (now reset) hardware
+            self._publish_disabled_channels_from_mask()
+
             logger.info("Enhanced proxy connection setup completed successfully")
 
             return True
