@@ -3,6 +3,7 @@ from pathlib import Path
 from dropbot_controller.consts import (
     CHIP_INSERTED,
     CAPACITANCE_UPDATED,
+    DISABLED_CHANNELS_CHANGED,
     DROPLETS_DETECTED,
     REALTIME_MODE_UPDATED,
     DROPBOT_DISCONNECTED,
@@ -33,6 +34,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_RUNNING,
         DROPBOT_DISCONNECTED,
         DROPBOT_CONNECTED,
+        DISABLED_CHANNELS_CHANGED,
     ]
 }
 

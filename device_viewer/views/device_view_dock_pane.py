@@ -139,6 +139,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Variables
     _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
+    _updating_disabled_from_hardware = False  # Guard to prevent re-publishing disable requests when updating from hardware
     message_buffer = (
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
@@ -228,6 +229,23 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_connected_triggered(self, message):
         logger.debug("Connected from dropbot")
         self.model.connected = True
+
+    def _on_disabled_channels_changed_triggered(self, message):
+        """
+        Handle hardware-reported disabled channels changes (e.g., after halted events
+        or actuation discrepancies). Update the electrodes model so the UI reflects
+        which channels the hardware has disabled.
+        """
+        try:
+            data = json.loads(message)
+            disabled_set = set(data.get("channels", []))
+            logger.info(f"DEVICE VIEWER: Received disabled channels change: {len(disabled_set)} channels disabled")
+            self._updating_disabled_from_hardware = True
+            self.model.electrodes.disabled_channels = disabled_set
+        except Exception as e:
+            logger.error(f"Error handling disabled channels change: {e}", exc_info=True)
+        finally:
+            self._updating_disabled_from_hardware = False
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
@@ -408,6 +426,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("model.electrodes.disabled_channels.items")
     def publish_disabled_channels_update(self, event=None):
+        # Skip re-publishing when the change came from the hardware (avoid feedback loop)
+        if self._updating_disabled_from_hardware:
+            return
+
         if self.model.connected:
             logger.info(
                 f"DEVICE VIEWER: "
