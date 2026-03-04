@@ -14,6 +14,10 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
     # For these handlers, info is as usual, and rows is a list of rows that the action is acting on
     # In the case of the right click menu, always a list of size 1 with the affected row
 
+    def execute_path(self, info: UIInfo, rows: list[RouteLayer]):
+        """Request execution of the selected path via the RouteLayerManager event."""
+        info.object.execute_path_requested = rows[0]
+
     def invert_layer(self, info: UIInfo, rows: list[RouteLayer]):
         rows[0].route.invert()
 
