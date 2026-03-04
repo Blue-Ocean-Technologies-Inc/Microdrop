@@ -56,7 +56,7 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
 
 layer_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="", resize_mode="stretch", editable=False),
+        ObjectColumn(name="name", label="Path", resize_mode="stretch", editable=False),
         VisibleColumn(
             name="visible",
             label="",
@@ -64,13 +64,41 @@ layer_table_editor = TableEditor(
             horizontal_alignment="center",
             width=16,
         ),
+        ObjectColumn(
+            name="trail_overlay",
+            label="Overlay",
+            editable=True,
+            horizontal_alignment="center",
+            width=55,
+        ),
+        ObjectColumn(
+            name="trail_length",
+            label="Trail",
+            editable=True,
+            horizontal_alignment="center",
+            width=45,
+        ),
+        ObjectColumn(
+            name="duration",
+            label="Duration",
+            editable=True,
+            horizontal_alignment="center",
+            width=60,
+        ),
+        ObjectColumn(
+            name="repetitions",
+            label="Repeats",
+            editable=True,
+            horizontal_alignment="center",
+            width=55,
+        ),
     ],
     menu=RouteLayerMenu,
     show_lines=False,
     selected="selected_layer",
     sortable=False,
     reorderable=True,
-    show_column_labels=False,
+    show_column_labels=True,
     show_row_labels=True,
 )
 
