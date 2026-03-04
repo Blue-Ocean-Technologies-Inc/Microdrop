@@ -1,4 +1,5 @@
 # library imports
+import numpy as np
 from traits.api import provides, HasTraits, Str, Int, Dict
 
 # interface imports from microdrop plugins
@@ -7,6 +8,7 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 from dropbot.threshold import actuate_channels
 
 from .models import ElectrodeChannelsRequest
+from .consts import disabled_channels_changed_publisher
 # microdrop utils imports
 from logger.logger_service import get_logger
 
@@ -64,6 +66,16 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated: {actuated_channels}")
                 logger.debug(f"{self.proxy.state_of_channels}")
+
+                # If requested vs actuated channel counts differ, some channels were disabled by the hardware
+                if len(model.channels) != len(actuated_channels):
+                    logger.warning(
+                        f"Actuation discrepancy: requested {len(model.channels)} channels, "
+                        f"but only {len(actuated_channels)} were actuated. Checking disabled channels mask."
+                    )
+                    mask = np.array(self.proxy.disabled_channels_mask)
+                    disabled_indices = set(int(i) for i in np.where(mask != 0)[0])
+                    disabled_channels_changed_publisher.publish(disabled_indices)
 
         except TimeoutError:
             logger.error("Timeout waiting for proxy access for electrode state change", exc_info=True)
