@@ -256,8 +256,8 @@ class DropbotControllerBase(HasTraits):
 
             message = '''
                             All channels have been disabled and high voltage has been
-                            turned off until the DropBot is restarted (e.g., unplug all 
-                            cables and plug back in).'''.strip()
+                            turned off. It is recommended to restart the DropBot (e.g., unplug all 
+                            cables and plug back in.).'''.strip()
 
         elif signal['error']['name'] == 'chip-load-saturated':
             reason = 'because chip load feedback exceeded allowable range'
