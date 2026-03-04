@@ -58,3 +58,18 @@ class ElectrodeDisableRequestPublisher(ValidatedTopicPublisher):
         Construct payload for publisher using the disabled channels set.
         """
         super().publish({"channels": disabled_channels}, *args, **kwargs)
+
+
+class DisabledChannelsChangedPublisher(ValidatedTopicPublisher):
+    """
+    Publisher for notifying that the hardware's disabled channels have changed.
+    Sent by the backend when the proxy's disabled_channels_mask changes
+    (e.g., after a halted event or actuation discrepancy).
+    """
+    validator_class = ElectrodeChannelsRequest
+
+    def publish(self, disabled_channels: set[int], *args, **kwargs):
+        """
+        Construct payload for publisher using the disabled channels set.
+        """
+        super().publish({"channels": disabled_channels}, *args, **kwargs)
