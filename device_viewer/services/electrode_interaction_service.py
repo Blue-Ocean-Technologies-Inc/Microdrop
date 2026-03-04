@@ -1147,6 +1147,8 @@ class ElectrodeInteractionControllerService(HasTraits):
         elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model.electrodes[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
+                if clicked_electrode_channel in self.model.electrodes.disabled_channels:
+                    return  # Disabled electrodes cannot be actuated
 
                 if clicked_electrode_channel in self.model.electrodes.actuated_channels:
                     self.model.electrodes.actuated_channels.remove(clicked_electrode_channel)
