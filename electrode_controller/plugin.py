@@ -8,6 +8,7 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 from .consts import PKG, PKG_name
 
 from .electrode_state_change_service import ElectrodeStateChangeMixinService
+from .electrode_disable_service import ElectrodeDisableMixinService
 
 # Initialize logger
 from logger.logger_service import get_logger
@@ -24,9 +25,14 @@ class ElectrodeControllerPlugin(Plugin):
     def _service_offers_default(self):
         """Return the service offers."""
         return [
-            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_service),
+            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_electrode_state_change_service),
+            ServiceOffer(protocol=IDropbotControlMixinService, factory=self._create_electrode_disable_service),
         ]
 
-    def _create_service(self, *args, **kwargs):
-        """Create an analysis service."""
+    def _create_electrode_state_change_service(self, *args, **kwargs):
+        """Create the electrode state change mixin service."""
         return ElectrodeStateChangeMixinService
+
+    def _create_electrode_disable_service(self, *args, **kwargs):
+        """Create the electrode disable mixin service."""
+        return ElectrodeDisableMixinService
