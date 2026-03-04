@@ -30,6 +30,7 @@ DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 
 PROTOCOL_RUNNING = "microdrop/protocol_running"
+EXECUTE_PATH_FROM_DEVICE_VIEWER = "ui/device_viewer/execute_path"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 
 ACTOR_TOPIC_DICT = {
@@ -45,6 +46,7 @@ ACTOR_TOPIC_DICT = {
         DEVICE_VIEWER_MEDIA_CAPTURED,
         ADVANCED_MODE_CHANGE,
         DEVICE_VIEWER_RECORDING_STATE,
+        EXECUTE_PATH_FROM_DEVICE_VIEWER,
     ]
 }
 
