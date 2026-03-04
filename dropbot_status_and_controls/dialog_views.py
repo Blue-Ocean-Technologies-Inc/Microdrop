@@ -4,6 +4,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser, QWidget
 
 from logger.logger_service import get_logger
+from microdrop_application.dialogs.pyface_wrapper import error
 
 logger = get_logger(__name__)
 
@@ -28,9 +29,18 @@ class DialogView(QWidget):
         dialog_signals.close_no_power_dialog.connect(self.on_close_no_power)
         dialog_signals.show_shorts_popup.connect(self.on_show_shorts_popup)
 
-    @Slot(str)
-    def on_show_halted_popup(self, text):
-        QMessageBox.critical(self, "ERROR: DropBot Halted", text)
+    @Slot(dict)
+    def on_show_halted_popup(self, data):
+        reason = data.get('reason', '')
+        message = data.get('message', '')
+        title = data.get('title', 'DropBot Halted')
+
+        body = f"DropBot has halted {reason}." if reason else "DropBot has halted."
+        error(
+            parent=None,
+            title=title,
+            message=body + "<br><br>" + message,
+        )
 
     @Slot(dict)
     def on_show_shorts_popup(self, data):
