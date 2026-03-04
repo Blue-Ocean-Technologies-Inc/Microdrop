@@ -5,7 +5,7 @@ from pathlib import Path
 import dramatiq
 from traits.observation._set_change_event import SetChangeEvent
 
-from electrode_controller.consts import electrode_state_change_publisher
+from electrode_controller.consts import electrode_state_change_publisher, electrode_disable_request_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -405,6 +405,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.warning(
             f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
         )
+
+    @observe("model.electrodes.disabled_channels.items")
+    def publish_disabled_channels_update(self, event=None):
+        if self.model.connected:
+            logger.info(
+                f"DEVICE VIEWER: "
+                f"publishing electrode disable request for {len(self.model.electrodes.disabled_channels)} "
+                f"channels: {self.model.electrodes.disabled_channels}"
+            )
+            electrode_disable_request_publisher.publish(
+                self.model.electrodes.disabled_channels
+            )
+        else:
+            logger.warning(
+                "DEVICE VIEWER: Cannot publish electrode disable request; device not connected"
+            )
 
     def publish_calibration_message(self):
         """
@@ -973,6 +989,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe(
         "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
+    @observe(
+        "model.electrodes.disabled_channels.items"
+    )  # When an electrode is disabled/enabled
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
