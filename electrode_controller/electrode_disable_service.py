@@ -50,7 +50,7 @@ class ElectrodeDisableMixinService(HasTraits):
                     context=self.message_context,
                 )
 
-                disabled_channels = list(model.actuated_channels)
+                disabled_channels = list(model.channels)
 
                 # Build the disabled channels mask as a numpy array matching the proxy's channel count
                 num_channels = self.proxy.number_of_channels

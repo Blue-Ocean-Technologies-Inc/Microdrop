@@ -57,7 +57,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     context=self.message_context,
                 )
 
-                actuated_channels = actuate_channels(self.proxy, list(model.actuated_channels), timeout=5, allow_disabled=True)
+                actuated_channels = actuate_channels(self.proxy, list(model.channels), timeout=5, allow_disabled=True)
 
                 app_globals["last_channels_requested"] = message
 

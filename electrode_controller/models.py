@@ -12,17 +12,17 @@ class ElectrodeChannelsRequest(BaseModel):
     valid range [0, max_channels], where max_channels is provided via context.
 
     Examples:
-        >>> data = {"actuated_channels": [1, 2, 3]}
+        >>> data = {"channels": [1, 2, 3]}
         >>> request = ElectrodeChannelsRequest.model_validate(
         ...     data, context={'max_channels': 5}
         ... )
-        >>> request.actuated_channels
+        >>> request.channels
         {1, 2, 3}
     """
     # Using StrictInt ensures it strictly accepts a 1D array of integers
-    actuated_channels: set[StrictInt]
+    channels: set[StrictInt]
 
-    @field_validator("actuated_channels")
+    @field_validator("channels")
     @classmethod
     def validate_channel_bounds(cls, values: set[int], info: ValidationInfo):
         if info.context and "max_channels" in info.context:
@@ -43,7 +43,7 @@ class ElectrodeStateChangePublisher(ValidatedTopicPublisher):
         """
         Construct payload for publisher using the actuated channels set.
         """
-        super().publish({"actuated_channels": actuated_channels}, *args, **kwargs)
+        super().publish({"channels": actuated_channels}, *args, **kwargs)
 
 
 class ElectrodeDisableRequestPublisher(ValidatedTopicPublisher):
@@ -57,4 +57,4 @@ class ElectrodeDisableRequestPublisher(ValidatedTopicPublisher):
         """
         Construct payload for publisher using the disabled channels set.
         """
-        super().publish({"actuated_channels": disabled_channels}, *args, **kwargs)
+        super().publish({"channels": disabled_channels}, *args, **kwargs)
