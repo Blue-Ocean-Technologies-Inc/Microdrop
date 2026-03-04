@@ -26,7 +26,7 @@ class ShowSshKeyUploaderAction(Action):
     A Pyface action that creates and shows the SshKeyUploaderApp window.
     """
     # Define how the action appears in menus/toolbars
-    name = "SSH Key Portal..."
+    name = "SSH &Key Portal..."
     accelerator = "Ctrl+Shift+S"
     tooltip = "Launch the SSH Key Uploader application."
     style = "window" # Hint for where it might appear

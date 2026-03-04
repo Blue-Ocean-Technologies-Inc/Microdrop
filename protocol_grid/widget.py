@@ -99,6 +99,7 @@ from PySide6.QtWidgets import (
     QTreeView,
     QHeaderView,
     QAbstractItemView,
+    QCheckBox,
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt
@@ -153,7 +154,12 @@ class BulkSetDialog(QDialog):
 
         self.layout.addWidget(self.tree)
 
-        # 4. Buttons
+        # 4. Nested groups checkbox
+        self.nested_checkbox = QCheckBox("Apply to all nested groups")
+        self.nested_checkbox.setChecked(False)
+        self.layout.addWidget(self.nested_checkbox)
+
+        # 5. Buttons
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -188,6 +194,10 @@ class BulkSetDialog(QDialog):
                 updates[col] = val
 
         return updates
+
+    @property
+    def apply_nested(self):
+        return self.nested_checkbox.isChecked()
 
 
 def ensure_protocol_saved(func):
@@ -234,11 +244,15 @@ def ensure_protocol_saved(func):
 class PGCWidget(QWidget):
 
     protocolChanged = Signal()
+    free_mode_unsaved_changes = Signal()
 
     def __init__(self, dock_pane, parent=None, state=None):
         super().__init__(parent)
+
+        self.last_device_view_free_mode_msg_with_unsaved_changes = None
         self._dropbot_connected = False
         self._video_recording_active = False
+        self.free_mode = True
 
         self.state = state or ProtocolState()
         self.application = dock_pane.task.window.application
@@ -395,6 +409,7 @@ class PGCWidget(QWidget):
 
         # calibration data tracking
         self._last_free_mode_active_electrodes = []
+        self.free_mode_unsaved_changes.connect(self._handle_free_mode_unsaved_changes)
 
         # apply style and update when global theme change
         self._on_application_palette_changed()
@@ -570,9 +585,7 @@ class PGCWidget(QWidget):
 
         logger.info("Widget connected to message listener")
 
-    def on_device_viewer_message(self, message, topic):
-        if topic != DEVICE_VIEWER_STATE_CHANGED:
-            return
+    def on_device_viewer_message(self, message):
         if self._protocol_running and not self._advanced_user_mode:
             return
         try:
@@ -589,7 +602,13 @@ class PGCWidget(QWidget):
             if active_electrodes:
                 self._last_free_mode_active_electrodes = active_electrodes
 
-                logger.info(f"Updated tracked active electrodes: {active_electrodes}")
+            # check if we need to store this message in case user has unsaved changes
+            if active_electrodes or dv_msg.routes:
+                self.last_device_view_free_mode_msg_with_unsaved_changes = dv_msg
+            else:
+                self.last_device_view_free_mode_msg_with_unsaved_changes = None
+
+            logger.info(f"Updated tracked active electrodes: {active_electrodes}")
 
             if dv_msg.svg_file != self._active_device_svg_file:
                 self._active_device_svg_file = dv_msg.svg_file
@@ -838,22 +857,22 @@ class PGCWidget(QWidget):
                     msg = "Protocol was stopped before completion."
 
                     if confirm(
-                                None,
-                                title="Generate Run Summary?",
-                                message=msg + "<br><br>Press <b>YES</b> to create run summary.",
-                                cancel=False,
+                            None,
+                            title="Generate Run Summary?",
+                            message=msg + "<br><br>Press <b>YES</b> to create run summary.",
+                            cancel=False,
                     ) == NO:
                         _generate_report = False
 
                 else:
                     # initialize new experiment if user wants
                     if (
-                        confirm(
-                            None,
-                            title="Create New Experiment?",
-                            cancel=False,
-                        )
-                        == YES
+                            confirm(
+                                None,
+                                title="Create New Experiment?",
+                                cancel=False,
+                            )
+                            == YES
                     ):
                         self.setup_new_experiment()
 
@@ -1064,8 +1083,8 @@ class PGCWidget(QWidget):
         if selected_paths:
             first_selected_item = self.get_item_by_path(selected_paths[0])
             if (
-                first_selected_item
-                and first_selected_item.data(ROW_TYPE_ROLE) == STEP_TYPE
+                    first_selected_item
+                    and first_selected_item.data(ROW_TYPE_ROLE) == STEP_TYPE
             ):
                 start_step_path = selected_paths[0]
 
@@ -1161,8 +1180,8 @@ class PGCWidget(QWidget):
     def toggle_play_pause(self):
         # check dropbot connection before any protocol operation
         if (
-            not self.protocol_runner.is_running()
-            and not self.protocol_runner.is_paused()
+                not self.protocol_runner.is_running()
+                and not self.protocol_runner.is_paused()
         ):
             if not self._check_dropbot_connection_and_show_dialog():
                 return
@@ -1319,7 +1338,7 @@ class PGCWidget(QWidget):
         # 1. Protocol is not running, OR
         # 2. Protocol is running/paused AND advanced user mode is enabled
         enabled = not self._protocol_running or (
-            self._protocol_running and self._advanced_user_mode
+                self._protocol_running and self._advanced_user_mode
         )
 
         self.navigation_bar.btn_first.setEnabled(enabled)
@@ -1657,11 +1676,12 @@ class PGCWidget(QWidget):
                 self._set_last_published_step_uid(None)
 
     def _clear_electrode_states_for_free_mode(self):
+        self.free_mode = True
         empty_msg = DeviceViewerMessageModel(
             channels_activated=set(),
             routes=[],
             id_to_channel={},
-            step_info={"step_id": None, "step_label": None, "free_mode": True},
+            step_info={"step_id": None, "step_label": None, "free_mode": self.free_mode},
             editable=True,
         )
 
@@ -1715,7 +1735,7 @@ class PGCWidget(QWidget):
         return step_id
 
     def _apply_id_to_channel_mapping_to_all_steps(
-        self, new_id_to_channel_mapping, new_route_colors
+            self, new_id_to_channel_mapping, new_route_colors
     ):
 
         def update_steps_recursive(parent_item):
@@ -1770,7 +1790,7 @@ class PGCWidget(QWidget):
             return item_or_value
         if isinstance(item_or_value, int):
             return (
-                item_or_value == 1 or item_or_value == 2 or item_or_value == Qt.Checked
+                    item_or_value == 1 or item_or_value == 2 or item_or_value == Qt.Checked
             )
         if isinstance(item_or_value, str):
             return item_or_value.strip().lower() in ("1", "true", "yes", "on")
@@ -1833,11 +1853,51 @@ class PGCWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_column_toggle_dialog)
 
+    def _handle_free_mode_unsaved_changes(self):
+        """Show dialog for unsaved free mode changes. Returns True if step selection should proceed."""
+        result = confirm(
+            self,
+            "You have unsaved changes from free mode.",
+            title="Unsaved Free Mode Changes",
+            informative="There are electrode actuations or paths from free mode "
+                        "that have not been saved to a protocol step.<br><br>"
+                        "Would you like to insert them as a new step?",
+            yes_label="Insert as New Step",
+            no_label="Discard Changes",
+            modal=False
+        )
+        if result == YES:
+            self._insert_free_mode_state_as_new_step()
+        self._clear_free_mode_tracked_state()
+        return True
+
+    def _insert_free_mode_state_as_new_step(self):
+        """Create a new protocol step populated with the tracked free mode device state."""
+        device_state = device_state_from_device_viewer_message(self.last_device_view_free_mode_msg_with_unsaved_changes)
+
+        scroll_pos = self.save_scroll_positions()
+        self.state.snapshot_for_undo()
+        new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
+
+        new_step.device_state.from_dict(device_state.to_dict())
+
+        self.state.assign_uid_to_step(new_step)
+        self.state.sequence.append(new_step)
+        self.reassign_ids()
+        self.load_from_state()
+
+        self.restore_scroll_positions(scroll_pos)
+        self._mark_protocol_modified()
+
+    def _clear_free_mode_tracked_state(self):
+        """Clear the tracked free mode state after handling."""
+        self.last_device_view_free_mode_msg_with_unsaved_changes = None
+
     @debounce(0.05)
     def on_selection_changed(self, *args, **kwargs):
         if (
-            hasattr(self, "_processing_device_viewer_message")
-            and self._processing_device_viewer_message
+                hasattr(self, "_processing_device_viewer_message")
+                and self._processing_device_viewer_message
         ):
             return
         if self._programmatic_change:
@@ -1871,11 +1931,18 @@ class PGCWidget(QWidget):
                     if published_step_id:
                         self._last_published_step_id = published_step_id
 
+                # switch off free mode and check unsaved changes
+                if self.free_mode:
+                    self.free_mode = False
+                    if self.last_device_view_free_mode_msg_with_unsaved_changes:
+                        self.free_mode_unsaved_changes.emit()
+
         # check if transitioned from a step selected to NO step selected
         if self._last_selected_step_id and not current_step_id and not self._navigating:
             self._clear_electrode_states_for_free_mode()
 
         self._last_selected_step_id = current_step_id
+        self._last_selected_paths = selected_paths
 
     def save_column_settings(self, *args, **kwargs):
         _column_visibility = json.loads(
@@ -1952,11 +2019,28 @@ class PGCWidget(QWidget):
         global_pos = self.tree.mapToGlobal(pos)
         menu.exec(global_pos)
 
+    @staticmethod
+    def _collect_steps_from_group(group_item, recursive=False):
+        """Collect step items from a group, optionally recursing into nested sub-groups."""
+        steps = []
+        for row in range(group_item.rowCount()):
+            child = group_item.child(row, 0)
+            if not child:
+                continue
+            child_type = child.data(ROW_TYPE_ROLE)
+            if child_type == STEP_TYPE:
+                steps.append(child)
+            elif child_type == GROUP_TYPE and recursive:
+                steps.extend(PGCWidget._collect_steps_from_group(child, recursive=True))
+        return steps
+
     def bulk_set_values(self):
         """
         Opens a dialog to set specific values for columns.
         - If a Step is selected, it updates that step.
-        - If a Group is selected, it updates all DIRECT child steps (non-recursive).
+        - If a Group is selected, it updates child steps. If "Apply to all nested
+          groups" is checked, it recurses into sub-groups; otherwise only direct
+          child steps are affected.
         """
         if self._protocol_running:
             return
@@ -1974,6 +2058,8 @@ class PGCWidget(QWidget):
         updates = dialog.get_row_data()
         if not updates:
             return
+
+        apply_nested = dialog.apply_nested
 
         self.state.snapshot_for_undo()
         self._programmatic_change = True
@@ -2003,11 +2089,9 @@ class PGCWidget(QWidget):
 
                     elif item_type == GROUP_TYPE:
                         # Case 2: User selected a Group
-                        # Iterate DIRECT children only (No recursion into subgroups)
-                        for row in range(selected_item.rowCount()):
-                            child = selected_item.child(row, 0)
-                            if child and child.data(ROW_TYPE_ROLE) == STEP_TYPE:
-                                target_step_items.append(child)
+                        target_step_items = self._collect_steps_from_group(
+                            selected_item, recursive=apply_nested
+                        )
 
                     # --- APPLY TO IDENTIFIED STEPS ---
                     for step_item in target_step_items:
@@ -2045,11 +2129,11 @@ class PGCWidget(QWidget):
 
                             # Validations
                             if target_col_name in (
-                                "Duration",
-                                "Repeat Duration",
-                                "Volume Threshold",
-                                "Voltage",
-                                "Frequency",
+                                    "Duration",
+                                    "Repeat Duration",
+                                    "Volume Threshold",
+                                    "Voltage",
+                                    "Frequency",
                             ):
                                 self._validate_numeric_field(
                                     target_item, target_col_name
@@ -2170,8 +2254,8 @@ class PGCWidget(QWidget):
     def sync_to_state(self):
         """Immediately sync model to state."""
         if (
-            hasattr(self, "_processing_device_viewer_message")
-            and self._processing_device_viewer_message
+                hasattr(self, "_processing_device_viewer_message")
+                and self._processing_device_viewer_message
         ):
             return
         if not self._programmatic_change:
@@ -2184,8 +2268,8 @@ class PGCWidget(QWidget):
             self.protocolChanged.emit()
 
             if (
-                not getattr(self, "_loading_from_file", False)
-                and not self._protocol_running
+                    not getattr(self, "_loading_from_file", False)
+                    and not self._protocol_running
             ):
                 self._mark_protocol_modified()
 
@@ -2434,9 +2518,9 @@ class PGCWidget(QWidget):
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
             if not self._protocol_running or (
-                self._protocol_running
-                and self._advanced_user_mode
-                and self._is_advanced_mode_field_editable(field)
+                    self._protocol_running
+                    and self._advanced_user_mode
+                    and self._is_advanced_mode_field_editable(field)
             ):
                 self.sync_to_state()
             QTimer.singleShot(0, self._reset_undo_snapshotted)
@@ -2463,9 +2547,9 @@ class PGCWidget(QWidget):
             self._handle_trail_fields(parent, row)
 
         if not self._protocol_running or (
-            self._protocol_running
-            and self._advanced_user_mode
-            and self._is_advanced_mode_field_editable(field)
+                self._protocol_running
+                and self._advanced_user_mode
+                and self._is_advanced_mode_field_editable(field)
         ):
             self.sync_to_state()
         QTimer.singleShot(0, self._reset_undo_snapshotted)
@@ -2473,8 +2557,8 @@ class PGCWidget(QWidget):
     def _handle_advanced_mode_voltage_frequency_edit(self, item, parent, field):
         """Handle voltage/frequency edits in advanced mode during protocol execution."""
         if (
-            not self._protocol_running
-            or not self._advanced_user_mode
+                not self._protocol_running
+                or not self._advanced_user_mode
         ):
             return
 
@@ -2583,7 +2667,7 @@ class PGCWidget(QWidget):
             current = current.parent()
 
     def _calculate_estimated_repeat_duration(
-        self, device_state, repetitions, duration, trail_length, trail_overlay
+            self, device_state, repetitions, duration, trail_length, trail_overlay
     ):
         if not device_state.has_paths():
             return 1.0
@@ -2620,9 +2704,9 @@ class PGCWidget(QWidget):
 
             if repetitions > 1:
                 loop_duration = (
-                    (repetitions - 1) * single_cycle_duration
-                    + single_cycle_duration
-                    + duration
+                        (repetitions - 1) * single_cycle_duration
+                        + single_cycle_duration
+                        + duration
                 )  # +1 for return phase
             else:
                 loop_duration = single_cycle_duration + duration
@@ -2656,15 +2740,15 @@ class PGCWidget(QWidget):
             run_time_item = parent.child(row, run_time_col)
 
             if not all(
-                [
-                    repetitions_item,
-                    duration_item,
-                    repeat_duration_item,
-                    trail_length_item,
-                    trail_overlay_item,
-                    max_path_item,
-                    run_time_item,
-                ]
+                    [
+                        repetitions_item,
+                        duration_item,
+                        repeat_duration_item,
+                        trail_length_item,
+                        trail_overlay_item,
+                        max_path_item,
+                        run_time_item,
+                    ]
             ):
                 return
 
@@ -2684,7 +2768,7 @@ class PGCWidget(QWidget):
             )
 
             should_update_repeat_duration = (
-                changed_field != "Repeat Duration" and self._protocol_running == False
+                    changed_field != "Repeat Duration" and self._protocol_running == False
             )
 
             if should_update_repeat_duration:
