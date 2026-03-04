@@ -20,6 +20,10 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
+from portable_dropbot_controller.plugin import PortDropbotControllerPlugin
+from portable_dropbot_status_and_controls.plugin import PortableDropbotStatusAndControlsPlugin
+from portable_manual_controls.plugin import PortableManualControlsPlugin
+from portable_motor_control.plugin import MotorControlsPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -58,6 +62,16 @@ OPENDROP_BACKEND_PLUGINS = [
 DROPBOT_BACKEND_PLUGINS = [
     PeripheralControllerPlugin,
     DropbotControllerPlugin
+]
+
+PORTABLE_DROPBOT_FRONTEND_PLUGINS = [
+    PortableDropbotStatusAndControlsPlugin,
+    PortableManualControlsPlugin,
+    MotorControlsPlugin,
+]
+
+PORTABLE_DROPBOT_BACKEND_PLUGINS = [
+    PortDropbotControllerPlugin,
 ]
 
 REQUIRED_PLUGINS = [
