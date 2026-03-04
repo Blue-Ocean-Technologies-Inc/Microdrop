@@ -1040,6 +1040,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.publish_calibration_message()
         logger.info("Calibration message published")
 
+    @observe("model.protocol_running")
+    def _on_protocol_running_changed_for_paths(self, event):
+        """Sync execution_disabled on all route layers when protocol running state changes."""
+        disabled = event.new
+        for layer in self.model.routes.layers:
+            layer.execution_disabled = disabled
+
     @observe("model.routes.execute_path_requested")
     def _on_execute_path_requested(self, event):
         """Handle request to execute a single path from the device viewer."""
