@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Float, Int
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -160,7 +160,7 @@ class Route(HasTraits):
 
 class RouteLayer(HasTraits):
     visible = Bool(True)
-    
+
     # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
     is_selected = Bool(False) # Needed to show selectedness in the TableEditor
     merge_in_progress = Bool(False)
@@ -171,6 +171,12 @@ class RouteLayer(HasTraits):
 
     # set name based on channels for electrodes if needed for UI
     name = Str("")
+
+    # Per-path execution properties (mirror protocol grid step defaults)
+    duration = Float(1.0)
+    trail_length = Int(1)
+    trail_overlay = Int(0)
+    repetitions = Int(1)
 
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
