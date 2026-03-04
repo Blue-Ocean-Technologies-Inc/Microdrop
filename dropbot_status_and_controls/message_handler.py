@@ -25,7 +25,7 @@ class DialogSignals(QObject):
     show_shorts_popup = Signal(dict)
     show_no_power_dialog = Signal()
     close_no_power_dialog = Signal()
-    show_halted_popup = Signal(str)
+    show_halted_popup = Signal(dict)
 
 logger = get_logger(__name__)
 
@@ -176,8 +176,13 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
-        text = f"DropBot has halted {data.get('reason')}.\n\n{data.get('message')}"
-        self.dialog_signals.show_halted_popup.emit(text)
+        reason = data.get('reason', '')
+        message = data.get('message', '')
+        self.dialog_signals.show_halted_popup.emit({
+            'title': 'DropBot Halted',
+            'reason': reason,
+            'message': message,
+        })
 
     # ------------------------------------------------------------------ #
     # Private helpers                                                       #
