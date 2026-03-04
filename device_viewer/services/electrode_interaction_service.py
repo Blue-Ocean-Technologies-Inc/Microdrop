@@ -1527,6 +1527,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
     @observe("model.electrodes.actuated_channels.items")
+    @observe("model.electrodes.disabled_channels.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
     @observe("electrode_hovered")
