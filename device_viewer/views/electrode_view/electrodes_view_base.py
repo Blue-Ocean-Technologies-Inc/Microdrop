@@ -157,6 +157,7 @@ class ElectrodeView(QGraphicsPathItem):
         super().__init__(parent)
 
         self.color_stack = None # only supports two right now: base, and actuation/disabled layer color
+        self._disabled = False  # Whether this electrode's channel is disabled
         self.state_map = { # Maps electrode states to colors
             None: ELECTRODE_OFF,
             False: ELECTRODE_OFF,
@@ -215,6 +216,8 @@ class ElectrodeView(QGraphicsPathItem):
         _tooltip_text = f"Electrode ID: {self.id}\n" \
                         f"Channel: {self.electrode.channel}\n" \
                         f"Area (mm²): {self.electrode.area_scaled:.2f}"
+        if self._disabled:
+            _tooltip_text += "\n[DISABLED]"
 
         return _tooltip_text
 

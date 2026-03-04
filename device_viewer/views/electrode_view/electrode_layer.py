@@ -191,8 +191,11 @@ class ElectrodeLayer():
 
             # Determine inner color: disabled (red) takes priority over actuation
             channel = electrode_view.electrode.channel
+            is_disabled = channel in model.electrodes.disabled_channels
+            electrode_view._disabled = is_disabled
+            electrode_view.update_tooltip()
             inner_color = None
-            if channel in model.electrodes.disabled_channels:
+            if is_disabled:
                 inner_color = QColor(ELECTRODE_DISABLED)
                 inner_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
             elif channel in model.electrodes.actuated_channels:
