@@ -1481,6 +1481,21 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addAction("Find Liquid", self.detect_droplet)
                 context_menu.addSeparator()
 
+                # Bulk enable/disable all electrodes
+                has_disabled = len(self.model.electrodes.disabled_channels) > 0
+
+                def enable_all_electrodes():
+                    self.model.electrodes.disabled_channels.clear()
+
+                def disable_all_electrodes():
+                    all_channels = set(self.model.electrodes.channels_electrode_ids_map.keys())
+                    self.model.electrodes.disabled_channels = all_channels
+
+                if has_disabled:
+                    context_menu.addAction("Enable All Electrodes", enable_all_electrodes)
+                context_menu.addAction("Disable All Electrodes", disable_all_electrodes)
+                context_menu.addSeparator()
+
                 if self.model.electrodes.electrode_right_clicked is not None:
                     right_clicked = self.model.electrodes.electrode_right_clicked
                     channel = right_clicked.channel
