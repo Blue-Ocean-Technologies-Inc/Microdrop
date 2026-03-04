@@ -44,3 +44,17 @@ class ElectrodeStateChangePublisher(ValidatedTopicPublisher):
         Construct payload for publisher using the actuated channels set.
         """
         super().publish({"actuated_channels": actuated_channels}, *args, **kwargs)
+
+
+class ElectrodeDisableRequestPublisher(ValidatedTopicPublisher):
+    """
+    Publisher for electrode disable requests.
+    Reuses ElectrodeChannelsRequest since disabled channels are also a set of channel integers.
+    """
+    validator_class = ElectrodeChannelsRequest
+
+    def publish(self, disabled_channels: set[int], *args, **kwargs):
+        """
+        Construct payload for publisher using the disabled channels set.
+        """
+        super().publish({"actuated_channels": disabled_channels}, *args, **kwargs)
