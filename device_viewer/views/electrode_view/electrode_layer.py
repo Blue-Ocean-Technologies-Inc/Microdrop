@@ -170,7 +170,7 @@ class ElectrodeLayer():
             electrode_view.update_line_alpha(alpha)
 
     def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView):
-        
+
         for electrode_id, electrode_view in self.electrode_views.items():
             # initialize color stack
             color_stack = []
@@ -208,6 +208,10 @@ class ElectrodeLayer():
                 color_stack.append(on_color)
 
             electrode_view.update_color(color_stack)
+
+            # Update disabled state (red X overlay)
+            is_disabled = electrode_view.electrode.channel in model.electrodes.disabled_channels
+            electrode_view.set_disabled(is_disabled)
 
     def redraw_electrode_labels(self, model: DeviceViewMainModel):
         alpha = model.get_alpha(electrode_text_key)
