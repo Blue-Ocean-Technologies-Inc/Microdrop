@@ -10,6 +10,7 @@ left = HGroup(
         "icon_path",
         editor=ClickableStatusIconEditorFactory(),
         show_label=False,
+        # enabled_when="connected",
     ),
     Spring("8"),
     VGroup(
@@ -23,7 +24,7 @@ left = HGroup(
             "realtime_mode",
             style="custom",
             editor=ToggleEditorFactory(),
-            enabled_when="connected",
+            # enabled_when="connected",
         ),
         Spring("10"),
     ),

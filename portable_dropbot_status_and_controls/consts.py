@@ -4,7 +4,6 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
     CHIP_INSERTED,
-    TRAY_TOGGLE_FAILED,
 )
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from portable_dropbot_controller.consts import PORT_DROPBOT_STATUS_UPDATE
@@ -35,7 +34,6 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
         CHIP_INSERTED,
-        TRAY_TOGGLE_FAILED,
         ZSTAGE_POSITION_UPDATED,
     ]
 }

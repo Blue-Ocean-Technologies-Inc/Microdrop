@@ -5,7 +5,6 @@ from traits.api import HasTraits, Range, Bool, Button, provides, Instance, obser
 from traitsui.api import View, Group, Item, UItem, HGroup, VGroup, Controller
 
 from logger.logger_service import get_logger
-from manual_controls.MVC import ToggleEditorFactory
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase,
     basic_listener_actor_routine,
@@ -16,7 +15,6 @@ from microdrop_utils.decorators import debounce
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
-from dropbot_controller.consts import SET_REALTIME_MODE
 from portable_dropbot_controller.consts import (
     SET_CHIP_LOCK,
     SET_LIGHT_INTENSITY,
@@ -54,16 +52,6 @@ PortableManualControlView = View(
         HGroup(
             UItem("chip_lock", resizable=True, enabled_when="connected"),
             UItem("tray_toggle", resizable=True, enabled_when="connected"),
-        ),
-        VGroup(
-            Item(
-                name="realtime_mode",
-                label="Realtime Mode",
-                style="custom",
-                resizable=True,
-                editor=ToggleEditorFactory(),
-                enabled_when="connected",
-            ),
         ),
         show_border=True,
         padding=10,
@@ -158,7 +146,6 @@ class PortableManualControlControl(Controller):
 
     @observe("model:realtime_mode")
     def _realtime_mode_changed(self, event):
-        publish_message(topic=SET_REALTIME_MODE, message=str(event.new))
         if event.new:
             self.publish_queued_messages()
 

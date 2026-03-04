@@ -38,8 +38,9 @@ class ClickableStatusIconEditor(StatusIconEditor):
         self.object.observe(self._on_re_enable_trigger, "chip_inserted")
         self.object.observe(self._on_re_enable_trigger, "tray_operation_failed")
 
-    def _on_icon_clicked(self, event):
+    def _on_icon_clicked(self, event=None):
         if not self.object.connected:
+            logger.warning("Cannot process icon click since device is not connected.")
             return
         logger.info("Toggling portable dropbot tray")
         publish_message(topic=TOGGLE_DROPBOT_LOADING, message="")
