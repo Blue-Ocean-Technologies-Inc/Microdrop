@@ -596,8 +596,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
             error(
                 self.control,
-                f"Could not create electrodes from SVG file: {svg_file}",
-                informative=f"Reason: {e}",
+                f"Could not create electrodes from SVG file: {svg_file} <br><br> Reason: {e}",
                 detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
                 title="Error: Cannot Load Device SVG",
             )
