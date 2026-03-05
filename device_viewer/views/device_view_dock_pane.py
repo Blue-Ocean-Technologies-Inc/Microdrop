@@ -230,23 +230,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug("Connected from dropbot")
         self.model.connected = True
 
-    def _on_shorts_detected_triggered(self, message):
-        """
-        Handle shorts-detected messages. Parse the shorted channels and emit
-        a Qt signal so the UI thread can show a confirmation dialog.
-        """
-        try:
-            data = json.loads(message)
-            shorts = data.get("Shorts_detected", [])
-            if shorts:
-                logger.info(f"DEVICE VIEWER: Shorts detected on channels: {shorts}")
-            else:
-                logger.info(f"DEVICE VIEWER: No Shorts detected")
-            self.device_view.shorts_detected_signal.emit(shorts)
-
-        except Exception as e:
-            logger.error(f"Error handling shorts detected: {e}", exc_info=True)
-
     def _on_disabled_channels_changed_triggered(self, message):
         """
         Handle hardware-reported disabled channels changes (e.g., after halted events
@@ -460,28 +443,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.warning(
                 "DEVICE VIEWER: Cannot publish electrode disable request; device not connected"
             )
-
-    def _on_shorts_detected_dialog(self, shorted_channels: list):
-        """Offer the user the option to disable shorted channels (runs in UI thread)."""
-
-        if shorted_channels:
-            channels_str = ", ".join(str(ch) for ch in shorted_channels)
-            result = confirm(
-                parent=None,
-                title="Shorts Detected",
-                message=(
-                    f"Shorts detected on channels: [{channels_str}].<br><br>"
-                    "Would you like to disable these channels?"
-                ),
-            )
-            if result == YES:
-                logger.info(f"DEVICE VIEWER: User chose to disable shorted channels: {shorted_channels}")
-                self.model.electrodes.disabled_channels.update(set(shorted_channels))
-            else:
-                logger.info("DEVICE VIEWER: User declined to disable shorted channels")
-
-        else:
-            information(parent=None, title="No Shorts Detected")
 
     def publish_calibration_message(self):
         """
@@ -706,7 +667,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # device_view code
         self.device_view.display_state_signal.connect(self.apply_message_model)
-        self.device_view.shorts_detected_signal.connect(self._on_shorts_detected_dialog)
 
         #### Side Bar widgets init #####
 
