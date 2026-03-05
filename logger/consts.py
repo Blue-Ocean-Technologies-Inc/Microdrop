@@ -8,7 +8,7 @@ PKG_name = PKG.title().replace("_", " ")
 MIN_APP_LOGLEVEL = 'WARNING'
 ROOT_LOGLEVEL = 'WARNING'
 
-DEV_MODE = True
+DEV_MODE = False
 
 # ANSI color codes
 COLORS = {

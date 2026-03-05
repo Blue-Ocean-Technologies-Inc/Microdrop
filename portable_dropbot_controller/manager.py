@@ -10,6 +10,9 @@ from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED, STATE_PAUSED
 from apscheduler.triggers.date import DateTrigger
+
+from electrode_controller.models import ElectrodeChannelsRequest
+
 from peripheral_controller.preferences import PeripheralPreferences
 
 from dropbot_controller.preferences import DropbotPreferences
@@ -18,16 +21,9 @@ from traits.api import HasTraits, Bool, Instance, provides, Array, Range, observ
 from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
-    CHIP_INSERTED,
-    TRAY_TOGGLE_FAILED,
-    CHIP_LOCK_FAILED,
-    VOLTAGE_LIM,
-    FREQUENCY_LIM,
+    CHIP_INSERTED
 )
 from dropbot_controller.dropbot_controller_base import app_globals
-from dropbot_controller.models.dropbot_channels_properties_model import (
-    DropbotChannelsPropertiesModelFromJSON,
-)
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
     basic_listener_actor_routine,
@@ -35,7 +31,7 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
-from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG
+from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG, VOLTAGE_LIM, FREQUENCY_LIM, TRAY_TOGGLE_FAILED, CHIP_LOCK_FAILED
 from .utils import (
     decode_login_response,
     decode_status_data,
@@ -244,6 +240,9 @@ class ConnectionManager(HasTraits):
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     name = f"{PKG}_listener"
+
+    def traits_init(self):
+        self.message_context = None
 
     def _handle_driver_error(self, err_code, cmd_str):
         """Handle UART driver errors (e.g. serial disconnect). Attempt reconnect only when UART breaks."""
@@ -519,24 +518,21 @@ class ConnectionManager(HasTraits):
     def _on_electrodes_state_change_request(self, message):
         # 1. Validation (Safe to do inside lock for simplicity)
         try:
-            content = str(message) if message is not None else "{}"
-            channel_states_map_model = DropbotChannelsPropertiesModelFromJSON(
-                num_available_channels=120,
-                property_dtype=bool,
-                channels_properties_json=content,
-            ).model
+            if not self.message_context:
+                self.message_context = {"max_channels": 120}
 
-            if len(channel_states_map_model.channels_properties_array) != 120:
-                logger.error("Boolean mask size mismatch: expected 120")
-                return
+            # Validate message
+            model = ElectrodeChannelsRequest.model_validate_json(
+                message,
+                context=self.message_context,
+            )
 
-            if not np.array_equal(
-                    channel_states_map_model.channels_properties_array,
-                    self.channel_states_arr,
-            ):
-                self.channel_states_arr = (
-                    channel_states_map_model.channels_properties_array
-                )
+            actuated_ch_arr = np.zeros(120)
+
+            if len(model.actuated_channels) > 0:
+                actuated_ch_arr[list(model.active_channels)] = 1
+
+            self.channel_states_arr = actuated_ch_arr
 
         except Exception as e:
             logger.error(f"Error validating electrode message: {e}")

@@ -1,5 +1,6 @@
 from traits.api import Bool, Str, observe
 
+from dropbot_controller.consts import VOLTAGE_LIM, FREQUENCY_LIM
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
@@ -33,12 +34,20 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     # ---- Hardware controls (user-writable via UI) ----------------------
     voltage = RangeWithCustomViewHints(
-        30, 150, value=DropbotPreferences().default_voltage, suffix=" V",
-        desc="Voltage to set on the DropBot device (V)",
+        VOLTAGE_LIM[0],
+        VOLTAGE_LIM[1],
+        step=5,
+        suffix=" V",
+        value=DropbotPreferences().default_voltage,  # TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
-        desc="Frequency to set on the DropBot device (Hz)",
+        FREQUENCY_LIM[0],
+        FREQUENCY_LIM[1],
+        step=100,
+        suffix=" Hz",
+        value=DropbotPreferences().default_frequency,  # TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)",
     )
 
     # ---- Device-specific status ----------------------------------------

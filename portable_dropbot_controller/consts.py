@@ -14,6 +14,9 @@ SET_MOTOR_ABSOLUTE_MOVE = "dropbot/requests/motor_absolute_move"
 SET_MOTOR_HOME = "dropbot/requests/motor_home"
 SET_TOGGLE_MOTOR = "dropbot/requests/toggle_motor"
 
+TRAY_TOGGLE_FAILED = 'dropbot/signals/tray_toggle_failed'
+CHIP_LOCK_FAILED = 'dropbot/signals/chip_lock_failed'
+
 from peripheral_controller.consts import GO_HOME, SET_POSITION, MOVE_UP, MOVE_DOWN
 
 # Topics actor declared by plugin subscribes to
@@ -23,3 +26,8 @@ ACTOR_TOPIC_DICT = {
 SET_TOGGLE_MOTOR, SET_MOTOR_HOME, SET_MOTOR_RELATIVE_MOVE, SET_MOTOR_ABSOLUTE_MOVE,
         GO_HOME, MOVE_UP, MOVE_DOWN, SET_POSITION
     ]}
+
+DEFAULT_VOLTAGE = 100
+DEFAULT_FREQUENCY = 10_000
+VOLTAGE_LIM = (30, 200)
+FREQUENCY_LIM = (50, 60_000)
