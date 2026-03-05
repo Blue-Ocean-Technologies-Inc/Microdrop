@@ -1,18 +1,16 @@
 # library imports
 import numpy as np
 from traits.api import provides, HasTraits, Str, Int, Dict
+from pydantic import ValidationError
 
-# interface imports from microdrop plugins
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from .models import ElectrodeChannelsRequest
+from ..models import ElectrodeChannelsRequest
+from ..consts import disabled_channels_changed_publisher
 
 # microdrop utils imports
 from logger.logger_service import get_logger
-
 logger = get_logger(__name__)
-
-from pydantic import ValidationError
 
 
 @provides(IDropbotControlMixinService)

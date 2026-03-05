@@ -7,8 +7,8 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 
 from dropbot.threshold import actuate_channels
 
-from .models import ElectrodeChannelsRequest
-from .consts import disabled_channels_changed_publisher
+from ..models import ElectrodeChannelsRequest
+from ..consts import disabled_channels_changed_publisher
 # microdrop utils imports
 from logger.logger_service import get_logger
 

@@ -7,8 +7,8 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 # local package imports
 from .consts import PKG, PKG_name
 
-from .electrode_state_change_service import ElectrodeStateChangeMixinService
-from .electrode_disable_service import ElectrodeDisableMixinService
+from .services.electrode_state_change_service import ElectrodeStateChangeMixinService
+from .services.electrode_disable_service import ElectrodeDisableMixinService
 
 # Initialize logger
 from logger.logger_service import get_logger
