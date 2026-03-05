@@ -22,6 +22,8 @@ from dropbot_controller.consts import (
     SET_VOLTAGE,
     SET_FREQUENCY,
     SET_REALTIME_MODE,
+    VOLTAGE_LIM,
+    FREQUENCY_LIM,
 )
 from microdrop_style.colors import GREY, SUCCESS_COLOR
 
@@ -129,12 +131,16 @@ class ToggleEditorFactory(BasicEditorFactory):
 
 class ManualControlModel(HasTraits):
     voltage = Range(
-        30, 150, value=DropbotPreferences().default_voltage, #TODO: May need to give as input application preferences.
-        desc="the voltage to set on the dropbot device (V)"
+        VOLTAGE_LIM[0],
+        VOLTAGE_LIM[1],
+        value=DropbotPreferences().default_voltage,  # TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)",
     )
     frequency = Range(
-        100, 20000, value=DropbotPreferences().default_frequency, #TODO: May need to give as input application preferences.
-        desc="the frequency to set on the dropbot device (Hz)"
+        FREQUENCY_LIM[0],
+        FREQUENCY_LIM[1],
+        value=DropbotPreferences().default_frequency,  # TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)",
     )
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
     connected = Bool(False, desc="Connected to dropbot?")

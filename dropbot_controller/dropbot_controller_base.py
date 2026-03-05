@@ -95,37 +95,31 @@ class DropbotControllerBase(HasTraits):
         # we need to check if we have a dropbot available or not. Unless it is a request to start looking for a
         # device or disconnect the device.
 
-        # 1. Check if it is a dropbot related topic
-        if head_topic in ['dropbot', 'hardware']:
-
-            # Handle the connected / disconnected signals
-            if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
-                if topic == DROPBOT_CONNECTED:
-                    self.dropbot_connection_active = True
-                else:
-                    self.dropbot_connection_active = False
-                requested_method = f"on_{specific_sub_topic}_signal"
-            # Chip inserted means device connected. This message can only come
-            # from the self.proxy, likely from another thread. Update this thread and return.
-            elif topic == CHIP_INSERTED and timestamped_message == 'True':
+        # Handle the connected / disconnected signals
+        if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
+            if topic == DROPBOT_CONNECTED:
                 self.dropbot_connection_active = True
-                return
+            else:
+                self.dropbot_connection_active = False
+            requested_method = f"on_{specific_sub_topic}_signal"
+        # Chip inserted means device connected. This message can only come
+        # from the self.proxy, likely from another thread. Update this thread and return.
+        elif topic == CHIP_INSERTED and timestamped_message == 'True':
+            self.dropbot_connection_active = True
+            return
 
-            # 3. Handle exceptions:
-            # specific dropbot requests that would change dropbot connectivity
-            # dropbot settings change (user preference)
-            elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
+        # 3. Handle exceptions:
+        # specific dropbot requests that would change dropbot connectivity
+        # dropbot settings change (user preference)
+        elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
+            requested_method = f"on_{specific_sub_topic}_request"
+
+        # Handle all other requests only if dropbot connected
+        elif primary_sub_topic == 'requests':
+            if self.dropbot_connection_active:
                 requested_method = f"on_{specific_sub_topic}_request"
-            
-            # Handle all other requests only if dropbot connected
-            elif primary_sub_topic == 'requests':
-                if self.dropbot_connection_active:
-                    requested_method = f"on_{specific_sub_topic}_request"
-                else:
-                    logger.warning(f"Request for {specific_sub_topic} denied: Dropbot is disconnected.")
-
-        else:
-            logger.debug(f"Ignored request from topic '{topic}': Not a Dropbot-related request.")
+            else:
+                logger.warning(f"Request for {specific_sub_topic} denied: Dropbot is disconnected.")
 
         if requested_method:
             if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
@@ -203,7 +197,7 @@ class DropbotControllerBase(HasTraits):
             if self.proxy.config.C16 < 0.3e-6:
                 self.proxy.update_state(chip_load_range_margin=-1)
 
-            # reset to last known state
+            # Turn off all channels
             self.proxy.turn_off_all_channels()
             
             logger.info("Enhanced proxy connection setup completed successfully")

@@ -1,0 +1,33 @@
+# This module's package.
+PKG = '.'.join(__name__.split('.')[:-1])
+PKG_name = PKG.title().replace("_", " ")
+
+
+PORT_DROPBOT_STATUS_UPDATE = "portable_dropbot/signals/board_status_update"
+TOGGLE_DROPBOT_LOADING = "dropbot/requests/toggle_tray"
+# Define topics for new controls
+SET_CHIP_LOCK = "dropbot/requests/lock_chip"
+SET_LIGHT_INTENSITY = "dropbot/requests/set_light_intensity"
+
+SET_MOTOR_RELATIVE_MOVE = "dropbot/requests/motor_relative_move"
+SET_MOTOR_ABSOLUTE_MOVE = "dropbot/requests/motor_absolute_move"
+SET_MOTOR_HOME = "dropbot/requests/motor_home"
+SET_TOGGLE_MOTOR = "dropbot/requests/toggle_motor"
+
+TRAY_TOGGLE_FAILED = 'dropbot/signals/tray_toggle_failed'
+CHIP_LOCK_FAILED = 'dropbot/signals/chip_lock_failed'
+
+from peripheral_controller.consts import GO_HOME, SET_POSITION, MOVE_UP, MOVE_DOWN
+
+# Topics actor declared by plugin subscribes to
+ACTOR_TOPIC_DICT = {
+    f"{PKG}_listener": [
+        "dropbot/requests/#",
+SET_TOGGLE_MOTOR, SET_MOTOR_HOME, SET_MOTOR_RELATIVE_MOVE, SET_MOTOR_ABSOLUTE_MOVE,
+        GO_HOME, MOVE_UP, MOVE_DOWN, SET_POSITION
+    ]}
+
+DEFAULT_VOLTAGE = 100
+DEFAULT_FREQUENCY = 10_000
+VOLTAGE_LIM = (30, 200)
+FREQUENCY_LIM = (50, 60_000)

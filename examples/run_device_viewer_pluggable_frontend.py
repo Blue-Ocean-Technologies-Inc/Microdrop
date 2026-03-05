@@ -7,7 +7,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, REQUIRED_CONTEXT, FRONTEND_APPLICATION, \
-    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS
+    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, PORTABLE_DROPBOT_FRONTEND_PLUGINS
 
 
 def main(args):
@@ -22,6 +22,8 @@ def main(args):
         plugins += DROPBOT_FRONTEND_PLUGINS
     elif args.device == "opendrop":
         plugins += OPENDROP_FRONTEND_PLUGINS
+    elif args.device == "portable_dropbot":
+        plugins += PORTABLE_DROPBOT_FRONTEND_PLUGINS
 
     run_device_viewer_pluggable(
         plugins=plugins,
@@ -39,8 +41,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        choices=["dropbot", "opendrop"],
+        choices=["dropbot", "opendrop", "portable_dropbot"],
         default="dropbot", # Sets a default if the user doesn't provide the flag
-        help="Specify the device to use: 'dropbot' or 'opendrop'"
+        help="Specify the device to use: 'dropbot', 'opendrop', or 'portable_dropbot'"
     )
     main(parser.parse_args())
