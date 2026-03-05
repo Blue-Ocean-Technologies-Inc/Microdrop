@@ -4,11 +4,12 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Dict, Directory, File, Property, Range
+from traits.api import Dict, Directory, File, Property, Range, Bool
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, Item, View
 
 from logger.logger_service import get_logger
+from microdrop_application.preferences import microdrop_tab
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.preferences_UI_helpers import (
     create_grid_group,
