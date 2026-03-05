@@ -14,6 +14,7 @@ class AutoFitGraphicsView(QGraphicsView):
     A QGraphicsView with a method to fit to scene size.
     """
     display_state_signal = Signal(str)
+    shorts_detected_signal = Signal(list)
 
     def __init__(self, *args, **kwargs):
 
