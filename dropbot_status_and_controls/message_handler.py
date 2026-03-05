@@ -147,26 +147,26 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             self.model.pressure = "-"
             self.model.force = "-"
 
-    def _on_shorts_detected_triggered(self, shorts_dict):
-        data = json.loads(shorts_dict)
-        shorts = data.get("Shorts_detected", [])
-        show_window = data.get("Show_window", False)
-
-        if not shorts and not show_window:
-            logger.info("No shorts detected")
-            return
-
-        if shorts:
-            title = "Shorts Detected"
-            text = (
-                f"Shorts detected on channels: [{', '.join(str(s) for s in shorts)}]\n\n"
-                "The affected channels are disabled until the DropBot is restarted."
-            )
-        else:
-            title = "No Shorts Detected"
-            text = "No shorts were detected on any channels."
-
-        self.dialog_signals.show_shorts_popup.emit({"title": title, "text": text})
+    # def _on_shorts_detected_triggered(self, shorts_dict):
+    #     data = json.loads(shorts_dict)
+    #     shorts = data.get("Shorts_detected", [])
+    #     show_window = data.get("Show_window", False)
+    #
+    #     if not shorts and not show_window:
+    #         logger.info("No shorts detected")
+    #         return
+    #
+    #     if shorts:
+    #         title = "Shorts Detected"
+    #         text = (
+    #             f"Shorts detected on channels: [{', '.join(str(s) for s in shorts)}]\n\n"
+    #             "You can disable the affected channels from the Device Viewer."
+    #         )
+    #     else:
+    #         title = "No Shorts Detected"
+    #         text = "No shorts were detected on any channels."
+    #
+    #     self.dialog_signals.show_shorts_popup.emit({"title": title, "text": text})
 
     def _on_no_power_triggered(self, body):
         if self._no_power:
