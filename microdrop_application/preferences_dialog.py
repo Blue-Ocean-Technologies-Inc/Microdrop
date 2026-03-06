@@ -10,17 +10,88 @@ advanced_mode_tab = PreferencesCategory(
 )
 
 class PreferencesDialog(_PreferencesDialog):
+    """A dialog for editing preferences."""
+
+    #### 'PreferencesDialog' interface ########################################
+
     # Should the Apply button be shown?
     show_apply = Bool(True)
+
+    #### Private interface ####################################################
     _tabs_filtered =  List(PreferencesTab)
 
-    @observe("categories")
-    def _category_changed(self, event=None):
-        self.categories.append(advanced_mode_tab)
+    ###########################################################################
+    # Public interface
+    ###########################################################################
 
-    @observe("_tabs")
-    def _tabs_changed(self, event=None):
-        self._tabs_filtered = self._tabs[:-1]
+    def select_pane(self, pane_id):
+        """
+        Find and activate the notebook tab that contains the given pane id.
+        """
+        for tab in self.get_tabs():
+            for pane in tab.panes:
+                if pane.id == pane_id:
+                    self._selected = tab
+                    return
+
+    def get_tabs(self):
+        if is_advanced_mode():
+            _tabs = self._tabs
+        else:
+            _tabs = self._tabs_filtered
+
+        return _tabs
+
+    ###########################################################################
+    # 'HasTraits' interface.
+    ###########################################################################
+
+    def traits_view(self):
+        """Build the dynamic dialog view."""
+        buttons = ["Apply", "Revert", "OK", "Cancel"]
+
+        # Only show advanced mode tab if in advanced mode
+        if is_advanced_mode():
+            tab_id = "_tabs"
+            # Only show the tab bar if there is more than one category.
+            tabs_style = "custom" if len(self._tabs) > 1 else "readonly"
+        else:
+            tab_id = "_tabs_filtered"
+            # Only show the tab bar if there is more than one category.
+            tabs_style = "custom" if len(self._tabs_filtered) > 1 else "readonly"
+
+        return View(
+            Item(
+                tab_id,
+                editor=ListEditor(
+                    page_name=".name",
+                    style="custom",
+                    use_notebook=True,
+                    selected="_selected",
+                ),
+                show_label=False,
+                style=tabs_style,
+            ),
+            buttons=buttons,
+            kind="livemodal",
+            resizable=True,
+            title="Preferences",
+        )
+
+    ###########################################################################
+    # 'Handler' interface.
+    ###########################################################################
+
+    def init(self, info):
+        info.ui.history.undoable = True
+        return super().init(info)
+
+    def apply(self, info=None):
+        """Handles the Apply button being clicked."""
+
+        for tab in self.get_tabs():
+            for pane in tab.panes:
+                pane.apply()
 
     def _apply_clicked(self, info=None):
         """
@@ -56,37 +127,14 @@ class PreferencesDialog(_PreferencesDialog):
 
         return
 
-    def traits_view(self):
-        """Build the dynamic dialog view."""
-        buttons = ["Apply", "Revert", "OK", "Cancel"]
+    ###########################################################################
+    # Protected interface.
+    ###########################################################################
 
-        # Only show the tab bar if there is more than one category.
-        tabs_style = "custom" if len(self._tabs) > 1 else "readonly"
+    @observe("categories")
+    def _category_changed(self, event=None):
+        self.categories.append(advanced_mode_tab)
 
-        # Only show advanced mode tab if in advanced mode
-        if is_advanced_mode():
-            tab_id = "_tabs"
-        else:
-            tab_id = "_tabs_filtered"
-
-        return View(
-            Item(
-                tab_id,
-                editor=ListEditor(
-                    page_name=".name",
-                    style="custom",
-                    use_notebook=True,
-                    selected="_selected",
-                ),
-                show_label=False,
-                style=tabs_style,
-            ),
-            buttons=buttons,
-            kind="livemodal",
-            resizable=True,
-            title="Preferences",
-        )
-
-    def init(self, info):
-        info.ui.history.undoable = True
-        return super().init(info)
+    @observe("_tabs")
+    def _tabs_changed(self, event=None):
+        self._tabs_filtered = self._tabs[:-1]
