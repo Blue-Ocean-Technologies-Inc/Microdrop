@@ -86,7 +86,7 @@ from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel
 from ..models.route import Route
-from ..preferences import DeviceViewerPreferences, sidebar_settings_grid
+from ..preferences import DeviceViewerPreferences, sidebar_settings_grid, DeviceViewerAdvancedPreferences
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
@@ -176,6 +176,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             preferences=self.app_preferences
         )
 
+        self.device_viewer_advanced_preferences = DeviceViewerAdvancedPreferences(
+            preferences=self.app_preferences
+        )
+
         ################ Load undo manager ###################################################
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
@@ -241,7 +245,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         or actuation discrepancies). Update the electrodes model so the UI reflects
         which channels the hardware has disabled.
         """
-        if self.device_viewer_preferences.allow_hardware_disables:
+        if self.device_viewer_advanced_preferences.allow_hardware_disables:
             data = json.loads(message)
             disabled_set = set(data.get("channels", []))
             logger.info(f"DEVICE VIEWER: Received disabled channels change: {len(disabled_set)} channels disabled")

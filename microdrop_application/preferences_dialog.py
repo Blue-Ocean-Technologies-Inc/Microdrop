@@ -1,11 +1,26 @@
 # Enthought library imports.
-from traits.api import Bool
+from microdrop_application.menus import is_advanced_mode
+from traits.api import Bool, List, observe
 from traitsui.api import Item, ListEditor, View
-from envisage.ui.tasks.api import PreferencesDialog as _PreferencesDialog
+from envisage.ui.tasks.api import PreferencesDialog as _PreferencesDialog, PreferencesTab, PreferencesCategory
+
+advanced_mode_tab = PreferencesCategory(
+    id="microdrop.advanced_mode.preferences",
+    name="Advanced Mode",
+)
 
 class PreferencesDialog(_PreferencesDialog):
     # Should the Apply button be shown?
     show_apply = Bool(True)
+    _tabs_filtered =  List(PreferencesTab)
+
+    @observe("categories")
+    def _category_changed(self, event=None):
+        self.categories.append(advanced_mode_tab)
+
+    @observe("_tabs")
+    def _tabs_changed(self, event=None):
+        self._tabs_filtered = self._tabs[:-1]
 
     def _apply_clicked(self, info=None):
         """
@@ -48,9 +63,15 @@ class PreferencesDialog(_PreferencesDialog):
         # Only show the tab bar if there is more than one category.
         tabs_style = "custom" if len(self._tabs) > 1 else "readonly"
 
+        # Only show advanced mode tab if in advanced mode
+        if is_advanced_mode():
+            tab_id = "_tabs"
+        else:
+            tab_id = "_tabs_filtered"
+
         return View(
             Item(
-                "_tabs",
+                tab_id,
                 editor=ListEditor(
                     page_name=".name",
                     style="custom",

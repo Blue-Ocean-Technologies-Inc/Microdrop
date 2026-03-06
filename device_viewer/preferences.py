@@ -4,12 +4,12 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
+from microdrop_application.preferences_dialog import advanced_mode_tab
 from traits.api import Dict, Directory, File, Property, Range, Bool
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, Item, View
 
 from logger.logger_service import get_logger
-from microdrop_application.preferences import microdrop_tab
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.preferences_UI_helpers import (
     create_grid_group,
@@ -185,7 +185,6 @@ main_view_settings = (
     ),
 )
 
-
 class DeviceViewerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
 
@@ -203,6 +202,53 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         main_view_settings,
         Item("_"),  # Separator
         sidebar_settings_grid,
+        Item("_"),
+        resizable=True,
+    )
+
+#### Advanced Mode preferences (shown only when Advanced Mode is enabled)
+
+class DeviceViewerAdvancedPreferences(PreferencesHelper):
+    """The preferences helper, inspired by envisage one for the Attractors application.
+    The underlying preference object is the global default since we do not pass a
+    Preference object. See source code for PreferencesHelper for more details."""
+
+    #### 'PreferencesHelper' interface ########################################
+
+    # The path to the preference node that contains the preferences.
+    preferences_path = "microdrop.device_viewer.advanced"
+
+    #### Preferences ##########################################################
+    allow_hardware_disables = Bool(True)
+
+
+class DeviceViewerAdvancedPreferencesPane(PreferencesPane):
+    """Advanced mode preferences pane. Only visible when Advanced Mode is toggled on."""
+
+    model_factory = DeviceViewerAdvancedPreferences
+
+    category = advanced_mode_tab.id
+
+    view = View(
         Item("_"),  # Separator
+            Group(
+                Item(
+                    "allow_hardware_disables",
+                    tooltip=(
+                        "When enabled, the device viewer will visually reflect channels that the hardware "
+                        "has reported as disabled (e.g., due to detected shorts or actuation faults). "
+                        "Disabled channels will appear greyed out and non-interactive in the device view.\n\n"
+                        "When disabled, hardware-reported channel disables are ignored by the device viewer "
+                        "and all channels remain visually active regardless of hardware state.\n\n"
+                        "WARNING: Disabling this setting means you will NOT see visual feedback when the "
+                        "hardware disables channels for safety reasons. Only change this if you understand "
+                        "the implications for your experiment."
+                    ),
+                ),
+                label="Device Viewer",
+                show_border=True,
+                style_sheet=preferences_group_style_sheet,
+            ),
+        Item("_"),
         resizable=True,
     )
