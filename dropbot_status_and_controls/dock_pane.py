@@ -12,7 +12,7 @@ from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
-from .consts import PKG, PKG_name, listener_name, disconnected_color, connected_no_device_color, connected_color
+from .consts import PKG, PKG_name, listener_name, disconnected_color, connected_no_device_color, connected_color, halted_color
 from .model import DropbotStatusAndControlsModel
 from .controller import ControlsController
 from .view import UnifiedView
@@ -114,6 +114,7 @@ def _build_status_icon_tooltip() -> str:
         <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
         <li><strong style="color: {connected_no_device_color};">Connected (No Chip)</strong></li>
         <li><strong style="color: {connected_color};">Connected (Chip Detected)</strong></li>
+        <li><strong style="color: {halted_color};">Halted (Device Fault)</strong></li>
       </ul>
     </div>
     """
