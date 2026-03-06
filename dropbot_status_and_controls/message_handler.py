@@ -177,7 +177,8 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
         text = f"DropBot has halted {data.get('reason')}.\n\n{data.get('message')}"
-        self.model.halted = True
+        if data.get('name') == 'output-current-exceeded':
+            self.model.halted = True
         self.dialog_signals.show_halted_popup.emit(text)
 
     # ------------------------------------------------------------------ #
