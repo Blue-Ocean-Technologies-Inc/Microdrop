@@ -261,7 +261,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error("Output current exceeded Device viewer blocked till reconnection.")
             GUI.invoke_later(
                 lambda: error(None, title='DropBot Halted',
-                              message="Device viewer: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
+                              message="<b>Device viewer</b>: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
             )
             self.device_view.setInteractive(False)
 
