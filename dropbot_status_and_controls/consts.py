@@ -1,7 +1,7 @@
 import os
 
 from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED, DROPBOT_CONNECTED
-from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
+from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
 from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
 
 # This module's package.
@@ -28,4 +28,5 @@ NUM_CAPACITANCE_READINGS_AVERAGED = 5
 disconnected_color = GREY["lighter"]
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
+halted_color = ERROR_COLOR
 BORDER_RADIUS = 4
