@@ -20,7 +20,7 @@ Design notes:
 
 from traits.api import HasTraits, Bool, Str, observe, provides
 
-from microdrop_style.colors import SUCCESS_COLOR, WARNING_COLOR, GREY
+from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
 
 from .interfaces import IStatusModel
 
@@ -54,6 +54,9 @@ class BaseStatusModel(HasTraits):
     #: Status icon color: device connected and chip / sample detected.
     CONNECTED_COLOR: str = SUCCESS_COLOR
 
+    #: Status icon color: device has halted (highest priority state).
+    HALTED_COLOR: str = ERROR_COLOR
+
     # ------------------------------------------------------------------ #
     # Mode flags (user-controllable, synced with hardware)                 #
     # ------------------------------------------------------------------ #
@@ -68,6 +71,7 @@ class BaseStatusModel(HasTraits):
 
     connected = Bool(False, desc="True when the device is connected")
     chip_inserted = Bool(False, desc="True when a chip or sample is present")
+    halted = Bool(False, desc="True when the device has halted due to a fault")
 
     # ------------------------------------------------------------------ #
     # Derived display traits (updated automatically by observers below)   #
@@ -93,7 +97,9 @@ class BaseStatusModel(HasTraits):
 
     def _update_icon_color(self):
         """Recompute icon_color from the current connection / chip state."""
-        if self.connected:
+        if self.halted:
+            self.icon_color = self.HALTED_COLOR
+        elif self.connected:
             self.icon_color = (
                 self.CONNECTED_COLOR if self.chip_inserted
                 else self.CONNECTED_NO_DEVICE_COLOR
@@ -105,9 +111,15 @@ class BaseStatusModel(HasTraits):
     # Observers                                                             #
     # ------------------------------------------------------------------ #
 
+    @observe("halted")
+    def _on_halted_changed(self, event):
+        self._update_icon_color()
+
     @observe("connected")
     def _on_connected_changed(self, event):
         self.connection_status_text = "Active" if event.new else "Inactive"
+        if event.new:
+            self.halted = False
         self._update_icon_color()
 
     @observe("chip_inserted")
