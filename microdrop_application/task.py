@@ -234,7 +234,7 @@ class MicrodropTask(Task):
                 ),
             )
 
-        else:k
+        else:
             if not self.microdrop_preferences.suppress_no_shorts_information:
                 _, checked = information(None, title="No Shorts Detected", message="No shorts were detected.",
                                          checkbox_text="Do not show again (can be undone from preferences)")

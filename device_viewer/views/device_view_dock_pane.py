@@ -34,6 +34,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
+from pyface.api import GUI
 
 from traits.api import Instance, Str, observe, provides
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
@@ -108,6 +109,7 @@ from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 logger = get_logger(__name__)
 
 _dock_pane_name = f"{PKG_name} Dock Pane"
+
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
 # ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
@@ -230,6 +232,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug("Connected from dropbot")
         self.model.connected = True
 
+        # make interactive in case device view was disabled from a halt
+        if not self.device_view.isInteractive():
+            self.device_view.setInteractive(True)
+
     def _on_disabled_channels_changed_triggered(self, message):
         """
         Handle hardware-reported disabled channels changes (e.g., after halted events
@@ -246,6 +252,19 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error(f"Error handling disabled channels change: {e}", exc_info=True)
         finally:
             self._updating_disabled_from_hardware = False
+
+    def _on_halted_triggered(self, message_str):
+        data = json.loads(message_str)
+        name = data.get("name", "")
+        title = data.get('title', 'DropBot Halted')
+
+        if name == 'output-current-exceeded':
+            logger.error("Output current exceeded Device viewer blocked till reconnection.")
+            GUI.invoke_later(
+                lambda: error(None, title=title,
+                              message="Device viewer: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
+            )
+            self.device_view.setInteractive(False)
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
@@ -395,7 +414,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     def publish_electrode_update(self, event=None):
         if self.model.realtime_mode and self.model.connected:
 
-            if (not self.model.protocol_running and self.model.free_mode) or (self.model.protocol_running and self.model.editable):
+            if (not self.model.protocol_running and self.model.free_mode) or (
+                    self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
                     f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
@@ -611,7 +631,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _set_device_view_layout_width(self, event=None):
 
         if self.scroll_area and self.scroll_content:
-
             self.scroll_area.setMaximumWidth(
                 self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
             )
@@ -909,7 +928,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             confirm_overwrite = confirm(
                 parent=None,
                 message=f"A file named '{dst_file.name}' already exists in "
-                "the repository. What would you like to do?",
+                        "the repository. What would you like to do?",
                 title="Warning: File Already Exists",
                 cancel=True,
                 yes_label="Overwrite",
