@@ -2,6 +2,7 @@
 import json
 import dramatiq
 from PySide6.QtCore import QTimer
+from apptools.preferences.preferences_helper import PreferencesHelper
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
@@ -25,6 +26,7 @@ from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
 from .menus import AdvancedModeAction
+from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
 
@@ -38,10 +40,14 @@ class MicrodropTask(Task):
     # Child window should be an instance of Dialog Action
     wait_for_test_dialog = Instance(WaitForTestDialogAction)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
+    microdrop_preferences = Instance(MicrodropPreferences)
 
     listener_name = f"{PKG}_listener"
 
     #### 'MicrodropTask' interface #########################
+
+    def _microdrop_preferences_default(self):
+        return MicrodropPreferences(preferences=self.window.application.preferences)
 
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
@@ -214,8 +220,7 @@ class MicrodropTask(Task):
 
         GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(self._on_shorts_detected_dialog(shorts), shorts))
 
-    @staticmethod
-    def _on_shorts_detected_dialog(shorted_channels: list) -> int:
+    def _on_shorts_detected_dialog(self, shorted_channels: list):
         """Offer the user the option to disable shorted channels (runs in UI thread)."""
 
         if shorted_channels:
@@ -229,8 +234,14 @@ class MicrodropTask(Task):
                 ),
             )
 
-        else:
-            return information(parent=None, title="No Shorts Detected", message="No shorts were detected.")
+        else:k
+            if not self.microdrop_preferences.suppress_no_shorts_information:
+                _, checked = information(None, title="No Shorts Detected", message="No shorts were detected.",
+                                         checkbox_text="Do not show again (can be undone from preferences)")
+
+                self.microdrop_preferences.suppress_no_shorts_information = checked
+
+            return None
 
     @staticmethod
     def _handle_shorts_detected_dialog_user_input(result, shorts):
