@@ -87,6 +87,13 @@ def _prepare_dialog(
     return dialog
 
 
+def _with_checkbox(dialog, result):
+    """If *dialog* has a checkbox, return ``(result, checked)``; otherwise just *result*."""
+    if dialog.checkbox is not None:
+        return result, dialog.checkbox.isChecked()
+    return result
+
+
 def confirm(
     parent: Optional[QWidget] = None,
     message: str = "",
@@ -100,9 +107,14 @@ def confirm(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     **kwargs
-) -> int:
+):
     """
     Pyface-compatible confirm dialog using styled BaseMessageDialog.
+
+    If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
     """
     # Build buttons for a styled question dialog
     dialog_ref = [None]  # Use list for mutable closure reference
@@ -130,10 +142,13 @@ def confirm(
 
     # Map QDialog results to Pyface constants
     if result in (BaseMessageDialog.RESULT_OK, BaseMessageDialog.RESULT_YES):
-        return YES
-    if result == BaseMessageDialog.RESULT_NO:
-        return NO
-    return CANCEL
+        mapped = YES
+    elif result == BaseMessageDialog.RESULT_NO:
+        mapped = NO
+    else:
+        mapped = CANCEL
+
+    return _with_checkbox(dialog, mapped)
 
 
 def information(
@@ -148,7 +163,7 @@ def information(
     detail_collapsible: Optional[bool] = True,
     timeout: Optional[int] = 0,
     **kwargs
-) -> int:
+):
     """
     Pyface-compatible information dialog using styled BaseMessageDialog.
     """
@@ -164,10 +179,8 @@ def information(
         QTimer.singleShot(timeout, dialog.close)
 
     else:
-        if result == BaseMessageDialog.RESULT_OK:
-            return OK
-
-        return CANCEL
+        mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
+        return _with_checkbox(dialog, mapped)
 
 
 def success(
@@ -197,10 +210,8 @@ def success(
 
     else:
         result = dialog.exec()
-        if result == BaseMessageDialog.RESULT_OK:
-            return OK
-
-        return CANCEL
+        mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
+        return _with_checkbox(dialog, mapped)
 
 
 def warning(
@@ -213,7 +224,7 @@ def warning(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     **kwargs
-) -> int:
+):
     """
     Pyface-compatible warning dialog using styled BaseMessageDialog.
     """
@@ -229,10 +240,8 @@ def warning(
 
     result = dialog.exec()
 
-    # Map to Pyface OK constant
-    if result == BaseMessageDialog.RESULT_OK:
-        return OK
-    return CANCEL
+    mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
+    return _with_checkbox(dialog, mapped)
 
 
 def error(
@@ -244,7 +253,7 @@ def error(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     **kwargs
-) -> int:
+):
     """
     Pyface-compatible error dialog using styled BaseMessageDialog.
     """
@@ -259,10 +268,8 @@ def error(
 
     result = dialog.exec()
 
-    # Map to Pyface OK constant
-    if result == BaseMessageDialog.RESULT_OK:
-        return OK
-    return CANCEL
+    mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
+    return _with_checkbox(dialog, mapped)
 
 
 # Optional: FileDialog wrapper if needed

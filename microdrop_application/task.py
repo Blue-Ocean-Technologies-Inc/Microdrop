@@ -2,6 +2,7 @@
 import json
 import dramatiq
 from PySide6.QtCore import QTimer
+from apptools.preferences.preferences_helper import PreferencesHelper
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
@@ -9,6 +10,7 @@ from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
 from pyface.api import GUI
 from traits.api import Instance, provides
 
+from electrode_controller.consts import electrode_disable_request_publisher, disabled_channels_changed_publisher
 # Local imports.
 from .consts import PKG
 from dropbot_controller.consts import TestEvent
@@ -22,7 +24,9 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
+from .dialogs.pyface_wrapper import information, confirm, YES
 from .menus import AdvancedModeAction
+from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
 
@@ -36,10 +40,14 @@ class MicrodropTask(Task):
     # Child window should be an instance of Dialog Action
     wait_for_test_dialog = Instance(WaitForTestDialogAction)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
+    microdrop_preferences = Instance(MicrodropPreferences)
 
     listener_name = f"{PKG}_listener"
 
     #### 'MicrodropTask' interface #########################
+
+    def _microdrop_preferences_default(self):
+        return MicrodropPreferences(preferences=self.window.application.preferences)
 
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
@@ -197,3 +205,50 @@ class MicrodropTask(Task):
                 QTimer.singleShot(1200, _cleanup_reference)
 
         GUI.invoke_later(_close)
+
+    def _on_shorts_detected_triggered(self, message):
+        """
+        Handle shorts-detected messages. Parse the shorted channels and emit
+        a Qt signal so the UI thread can show a confirmation dialog.
+        """
+        data = json.loads(message)
+        shorts = data.get("Shorts_detected", [])
+        if shorts:
+            logger.info(f"Shorts detected on channels: {shorts}")
+        else:
+            logger.info(f"No Shorts detected")
+
+        GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(self._on_shorts_detected_dialog(shorts), shorts))
+
+    def _on_shorts_detected_dialog(self, shorted_channels: list):
+        """Offer the user the option to disable shorted channels (runs in UI thread)."""
+
+        if shorted_channels:
+            channels_str = ", ".join(str(ch) for ch in shorted_channels)
+            return confirm(
+                parent=None,
+                title="Shorts Detected",
+                message=(
+                    f"Shorts detected on channels: [{channels_str}].<br><br>"
+                    "<b>[RISKY]</b> Would you like keep these channels enabled?"
+                ),
+            )
+
+        else:
+            if not self.microdrop_preferences.suppress_no_shorts_information:
+                _, checked = information(None, title="No Shorts Detected", message="No shorts were detected.",
+                                         checkbox_text="Do not show again (can be undone from preferences)")
+
+                self.microdrop_preferences.suppress_no_shorts_information = checked
+
+            return None
+
+    @staticmethod
+    def _handle_shorts_detected_dialog_user_input(result, shorts):
+        if result == YES:
+            # do nothing, user wants to keep shorted channels enabled
+            logger.info(f"User chose to enable shorted channels: {shorts}")
+        else:
+            logger.info("User declined to enable shorted channels")
+            # frontend disable
+            disabled_channels_changed_publisher.publish(disabled_channels=shorts)

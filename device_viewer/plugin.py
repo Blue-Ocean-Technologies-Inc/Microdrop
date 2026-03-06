@@ -1,9 +1,5 @@
 # Standard library imports.
-from pathlib import Path
-
-from pyface.action.schema.schema import SMenu
 from traits.api import List, Str
-from device_viewer.menus import load_svg_dialog_menu_factory, save_svg_dialogue_menu_factory
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
@@ -46,10 +42,10 @@ class DeviceViewerPlugin(Plugin):
     ###########################################################################
 
     def _preferences_panes_default(self):
-        from .preferences import DeviceViewerPreferencesPane
+        from .preferences import DeviceViewerPreferencesPane,DeviceViewerAdvancedPreferencesPane
         from .views.camera_control_view.preferences import CameraPreferencesPane
 
-        return [DeviceViewerPreferencesPane, CameraPreferencesPane]
+        return [DeviceViewerPreferencesPane, CameraPreferencesPane, DeviceViewerAdvancedPreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import device_viewer_tab

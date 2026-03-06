@@ -5,7 +5,7 @@ from pathlib import Path
 import dramatiq
 from traits.observation._set_change_event import SetChangeEvent
 
-from electrode_controller.consts import electrode_state_change_publisher
+from electrode_controller.consts import electrode_state_change_publisher, electrode_disable_request_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -16,7 +16,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     YES,
     FileDialog,
     confirm,
-    error,
+    error, information,
 )
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
@@ -34,6 +34,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
+from pyface.api import GUI
 
 from traits.api import Instance, Str, observe, provides
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
@@ -85,7 +86,7 @@ from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel
 from ..models.route import Route
-from ..preferences import DeviceViewerPreferences, sidebar_settings_grid
+from ..preferences import DeviceViewerPreferences, sidebar_settings_grid, DeviceViewerAdvancedPreferences
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
@@ -108,6 +109,7 @@ from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 logger = get_logger(__name__)
 
 _dock_pane_name = f"{PKG_name} Dock Pane"
+
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
 # ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
@@ -174,6 +176,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             preferences=self.app_preferences
         )
 
+        self.device_viewer_advanced_preferences = DeviceViewerAdvancedPreferences(
+            preferences=self.app_preferences
+        )
+
         ################ Load undo manager ###################################################
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
@@ -225,9 +231,39 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.realtime_mode = False
         self.model.connected = False
 
+        # make interactive in case device view was disabled from a halt
+        if not self.device_view.isInteractive():
+            self.device_view.setInteractive(True)
+
     def _on_connected_triggered(self, message):
         logger.debug("Connected from dropbot")
         self.model.connected = True
+
+    def _on_disabled_channels_changed_triggered(self, message):
+        """
+        Handle hardware-reported disabled channels changes (e.g., after halted events
+        or actuation discrepancies). Update the electrodes model so the UI reflects
+        which channels the hardware has disabled.
+        """
+        if self.device_viewer_advanced_preferences.allow_hardware_disables:
+            data = json.loads(message)
+            disabled_set = set(data.get("channels", []))
+            logger.info(f"DEVICE VIEWER: Received disabled channels change: {len(disabled_set)} channels disabled")
+            self.model.electrodes.disabled_channels = disabled_set
+        else:
+            logger.warning(f"Hardware disabled channels ({message}) not applied to view. Change behaviour in preferences/advanced settings.")
+
+    def _on_halted_triggered(self, message_str):
+        data = json.loads(message_str)
+        name = data.get("name", "")
+
+        if name == 'output-current-exceeded':
+            logger.error("Output current exceeded Device viewer blocked till reconnection.")
+            GUI.invoke_later(
+                lambda: error(None, title='DropBot Halted',
+                              message="<b>Device viewer</b>: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
+            )
+            self.device_view.setInteractive(False)
 
     def _on_display_state_triggered(self, message_model_serial: str):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
@@ -377,7 +413,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     def publish_electrode_update(self, event=None):
         if self.model.realtime_mode and self.model.connected:
 
-            if (not self.model.protocol_running and self.model.free_mode) or (self.model.protocol_running and self.model.editable):
+            if (not self.model.protocol_running and self.model.free_mode) or (
+                    self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
                     f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
@@ -558,8 +595,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
             error(
                 self.control,
-                f"Could not create electrodes from SVG file: {svg_file}",
-                informative=f"Reason: {e}",
+                f"Could not create electrodes from SVG file: {svg_file} <br><br> Reason: {e}",
                 detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
                 title="Error: Cannot Load Device SVG",
             )
@@ -574,7 +610,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _set_device_view_layout_width(self, event=None):
 
         if self.scroll_area and self.scroll_content:
-
             self.scroll_area.setMaximumWidth(
                 self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
             )
@@ -872,7 +907,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             confirm_overwrite = confirm(
                 parent=None,
                 message=f"A file named '{dst_file.name}' already exists in "
-                "the repository. What would you like to do?",
+                        "the repository. What would you like to do?",
                 title="Warning: File Already Exists",
                 cancel=True,
                 yes_label="Overwrite",
@@ -973,6 +1008,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe(
         "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
+    @observe(
+        "model.electrodes.disabled_channels.items"
+    )  # When an electrode is disabled/enabled
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """

@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from dropbot_controller.consts import SHORTS_DETECTED
 from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
                                          ICON_HEADSET_MIC, ICON_INFO,
                                          ICON_TROUBLESHOOT, ICON_EXTENSION,
@@ -10,7 +12,9 @@ PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 # Topics actor declared by plugin subscribes to
-ACTOR_TOPIC_DICT = {}
+ACTOR_TOPIC_DICT = {
+    f"{PKG}_listener": [ SHORTS_DETECTED ]
+}
 
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"

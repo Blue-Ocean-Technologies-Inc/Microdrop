@@ -25,7 +25,7 @@ class DialogSignals(QObject):
     show_shorts_popup = Signal(dict)
     show_no_power_dialog = Signal()
     close_no_power_dialog = Signal()
-    show_halted_popup = Signal(str)
+    show_halted_popup = Signal(dict)
 
 logger = get_logger(__name__)
 
@@ -147,26 +147,26 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             self.model.pressure = "-"
             self.model.force = "-"
 
-    def _on_shorts_detected_triggered(self, shorts_dict):
-        data = json.loads(shorts_dict)
-        shorts = data.get("Shorts_detected", [])
-        show_window = data.get("Show_window", False)
-
-        if not shorts and not show_window:
-            logger.info("No shorts detected")
-            return
-
-        if shorts:
-            title = "Shorts Detected"
-            text = (
-                f"Shorts detected on channels: [{', '.join(str(s) for s in shorts)}]\n\n"
-                "The affected channels are disabled until the DropBot is restarted."
-            )
-        else:
-            title = "No Shorts Detected"
-            text = "No shorts were detected on any channels."
-
-        self.dialog_signals.show_shorts_popup.emit({"title": title, "text": text})
+    # def _on_shorts_detected_triggered(self, shorts_dict):
+    #     data = json.loads(shorts_dict)
+    #     shorts = data.get("Shorts_detected", [])
+    #     show_window = data.get("Show_window", False)
+    #
+    #     if not shorts and not show_window:
+    #         logger.info("No shorts detected")
+    #         return
+    #
+    #     if shorts:
+    #         title = "Shorts Detected"
+    #         text = (
+    #             f"Shorts detected on channels: [{', '.join(str(s) for s in shorts)}]\n\n"
+    #             "You can disable the affected channels from the Device Viewer."
+    #         )
+    #     else:
+    #         title = "No Shorts Detected"
+    #         text = "No shorts were detected on any channels."
+    #
+    #     self.dialog_signals.show_shorts_popup.emit({"title": title, "text": text})
 
     def _on_no_power_triggered(self, body):
         if self._no_power:
@@ -176,8 +176,13 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
-        text = f"DropBot has halted {data.get('reason')}.\n\n{data.get('message')}"
-        self.dialog_signals.show_halted_popup.emit(text)
+        reason = data.get('reason', '')
+        message = data.get('message', '')
+        self.dialog_signals.show_halted_popup.emit({
+            'title': 'DropBot Halted',
+            'reason': reason,
+            'message': message,
+        })
 
     # ------------------------------------------------------------------ #
     # Private helpers                                                       #

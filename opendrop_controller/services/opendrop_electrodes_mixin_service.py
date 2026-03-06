@@ -33,7 +33,7 @@ class OpenDropElectrodesMixinService(HasTraits):
             context=self.message_context,
         )
 
-        channels_to_actuate = list(model.actuated_channels)
+        channels_to_actuate = list(model.channels)
         channel_mask = np.zeros(NUM_ELECTRODES, dtype=bool)
         if channels_to_actuate is not None:
             channel_mask[channels_to_actuate] = True

@@ -29,6 +29,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QFrame,
     QGraphicsDropShadowEffect,
@@ -245,6 +246,8 @@ class BaseMessageDialog(QDialog):
         resizable: bool = False,
         size: Optional[tuple] = None,
         disable_main_scrolling: bool = False,
+        checkbox_text: Optional[str] = None,
+        checked_default: Optional[bool] = False,
     ):
         """
         Initialize the base message dialog.
@@ -261,6 +264,12 @@ class BaseMessageDialog(QDialog):
             modal: Whether dialog should be modal
             resizable: Whether dialog can be resized
             size: Optional (width, height) tuple for fixed size
+            checkbox_text: Optional text for a checkbox added to the content
+                           area.  When set, callers can read
+                           ``self.checkbox.isChecked()`` after the dialog
+                           closes.
+            checked_default: Optional flag for a checkbox added to the content
+                           area.  When true, checkbox added using checkbox_text, is checked in dialog.
         """
         super().__init__(parent)
 
@@ -270,6 +279,9 @@ class BaseMessageDialog(QDialog):
         self.icon_path = icon_path
         self.button_configs = buttons or self._get_default_buttons()
         self.disable_main_scrolling = disable_main_scrolling
+        self._checkbox_text = checkbox_text
+        self._checked_default = checked_default
+        self.checkbox: Optional[QCheckBox] = None
 
         # Check if HTML contains images - if so, make dialog resizable
         has_images = self._contains_html_image(self.message_text)
@@ -306,6 +318,11 @@ class BaseMessageDialog(QDialog):
         # Setup UI
         self._setup_fonts()
         self._setup_ui()
+
+        # Add optional checkbox after UI is built so it appears in the content area
+        if self._checkbox_text:
+            self.checkbox = self.add_checkbox(self._checkbox_text, checked=self._checked_default)
+
         self._apply_styling()
         self._connect_signals()
         QTimer.singleShot(0, self._adjust_min_size_to_message)
@@ -806,6 +823,7 @@ class BaseMessageDialog(QDialog):
                 font-size: 11px;
                 color: {self.TEXT_COLOR};
             }}
+
         """)
 
         # Add subtle drop shadow effect
@@ -946,6 +964,23 @@ class BaseMessageDialog(QDialog):
         """Add additional widget to content area."""
         if hasattr(self, "additional_content_layout"):
             self.additional_content_layout.addWidget(widget)
+
+    def add_checkbox(self, text: str, checked: bool = False) -> QCheckBox:
+        """Add a checkbox to the dialog content area.
+
+        Args:
+            text: Label text displayed next to the checkbox.
+            checked: Initial checked state.
+
+        Returns:
+            The QCheckBox instance so callers can query ``isChecked()`` after
+            the dialog closes.
+        """
+        checkbox = QCheckBox(text)
+        checkbox.setChecked(checked)
+        checkbox.setStyleSheet(f"color: {self.TEXT_COLOR};")
+        self.add_content_widget(checkbox)
+        return checkbox
 
     def _create_details_header(self, details_label: str, collapsible: bool) -> QHBoxLayout:
         """Create the header for the details section."""
