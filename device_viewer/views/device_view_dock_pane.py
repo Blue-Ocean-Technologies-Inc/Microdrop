@@ -141,7 +141,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Variables
     _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
-    _updating_disabled_from_hardware = False  # Guard to prevent re-publishing disable requests when updating from hardware
     message_buffer = (
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
@@ -228,13 +227,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.realtime_mode = False
         self.model.connected = False
 
-    def _on_connected_triggered(self, message):
-        logger.debug("Connected from dropbot")
-        self.model.connected = True
-
         # make interactive in case device view was disabled from a halt
         if not self.device_view.isInteractive():
             self.device_view.setInteractive(True)
+
+    def _on_connected_triggered(self, message):
+        logger.debug("Connected from dropbot")
+        self.model.connected = True
 
     def _on_disabled_channels_changed_triggered(self, message):
         """
@@ -242,26 +241,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         or actuation discrepancies). Update the electrodes model so the UI reflects
         which channels the hardware has disabled.
         """
-        try:
+        if self.device_viewer_preferences.allow_hardware_disables:
             data = json.loads(message)
             disabled_set = set(data.get("channels", []))
             logger.info(f"DEVICE VIEWER: Received disabled channels change: {len(disabled_set)} channels disabled")
-            self._updating_disabled_from_hardware = True
             self.model.electrodes.disabled_channels = disabled_set
-        except Exception as e:
-            logger.error(f"Error handling disabled channels change: {e}", exc_info=True)
-        finally:
-            self._updating_disabled_from_hardware = False
+        else:
+            logger.warning(f"Hardware disabled channels ({message}) not applied to view. Change behaviour in preferences/advanced settings.")
 
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
         name = data.get("name", "")
-        title = data.get('title', 'DropBot Halted')
 
         if name == 'output-current-exceeded':
             logger.error("Output current exceeded Device viewer blocked till reconnection.")
             GUI.invoke_later(
-                lambda: error(None, title=title,
+                lambda: error(None, title='DropBot Halted',
                               message="Device viewer: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
             )
             self.device_view.setInteractive(False)
@@ -443,26 +438,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.warning(
             f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
         )
-
-    @observe("model.electrodes.disabled_channels.items")
-    def publish_disabled_channels_update(self, event=None):
-        # Skip re-publishing when the change came from the hardware (avoid feedback loop)
-        if self._updating_disabled_from_hardware:
-            return
-
-        if self.model.connected:
-            logger.info(
-                f"DEVICE VIEWER: "
-                f"publishing electrode disable request for {len(self.model.electrodes.disabled_channels)} "
-                f"channels: {self.model.electrodes.disabled_channels}"
-            )
-            electrode_disable_request_publisher.publish(
-                self.model.electrodes.disabled_channels
-            )
-        else:
-            logger.warning(
-                "DEVICE VIEWER: Cannot publish electrode disable request; device not connected"
-            )
 
     def publish_calibration_message(self):
         """

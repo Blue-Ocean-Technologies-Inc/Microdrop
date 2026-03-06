@@ -214,9 +214,9 @@ class MicrodropTask(Task):
         data = json.loads(message)
         shorts = data.get("Shorts_detected", [])
         if shorts:
-            logger.info(f"DEVICE VIEWER: Shorts detected on channels: {shorts}")
+            logger.info(f"Shorts detected on channels: {shorts}")
         else:
-            logger.info(f"DEVICE VIEWER: No Shorts detected")
+            logger.info(f"No Shorts detected")
 
         GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(self._on_shorts_detected_dialog(shorts), shorts))
 
@@ -250,9 +250,5 @@ class MicrodropTask(Task):
             logger.info(f"User chose to enable shorted channels: {shorts}")
         else:
             logger.info("User declined to enable shorted channels")
-            # backend disable. The backend should automatically do this already.
-            # but just to be safe, published again...
-            electrode_disable_request_publisher.publish(disabled_channels=shorts)
-
             # frontend disable
             disabled_channels_changed_publisher.publish(disabled_channels=shorts)
