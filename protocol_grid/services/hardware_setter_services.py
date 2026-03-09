@@ -5,6 +5,7 @@ import dramatiq
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
+from opendrop_controller.consts import SET_TEMPERATURE_1, SET_TEMPERATURE_2
 from peripheral_controller.consts import MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM, SET_POSITION, MOVE_UP, MOVE_DOWN, \
     GO_HOME
 
@@ -21,6 +22,17 @@ def publish_voltage_frequency(voltage, frequency, preview_mode=False):
     logger.info(f"Trying to Publish voltage and frequency for step: {voltage}V and frequency: {frequency}Hz")
     publish_message(topic=SET_VOLTAGE, message=str(voltage))
     publish_message(topic=SET_FREQUENCY, message=str(frequency))
+
+@dramatiq.actor
+def publish_temperatures(t1, t2, preview_mode=False):
+
+    if preview_mode:
+        logger.info("Skipping temperature publishing in preview mode")
+        return
+
+    logger.info(f"Trying to Publish temperatures for step: {t1}°C {t2}°C")
+    publish_message(topic=SET_TEMPERATURE_1, message=str(t1))
+    publish_message(topic=SET_TEMPERATURE_2, message=str(t2))
 
 
 class MagnetService:

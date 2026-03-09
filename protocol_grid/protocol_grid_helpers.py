@@ -12,6 +12,7 @@ from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from opendrop_controller.consts import SET_TEMPERATURE_1, SET_TEMPERATURE_2
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
 from protocol_grid.consts import (
     GROUP_TYPE,
@@ -117,7 +118,17 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setMaximum(150.0)
             editor.setDecimals(1)
             editor.setSingleStep(0.5)
-            return editor        
+            return editor
+
+        elif field in ["Temperature-1", "Temperature-2"]:
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(25.0)
+            editor.setMaximum(110.0)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.5)
+            editor.setSuffix("°C")
+            return editor
+
         elif field == "Volume Threshold":
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.00)
@@ -208,6 +219,12 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             elif field == "Frequency":
                 publish_message(str(value), SET_FREQUENCY)
 
+            if field == 'Temperature-1':
+                publish_message(str(value), SET_TEMPERATURE_1)
+
+            if field == 'Temperature-2':
+                publish_message(str(value), SET_TEMPERATURE_2)
+
             # B. Saving Data
             if field == "Magnet Height (mm)":
                 # Check if we are at the "Magic Number" for Default
@@ -293,7 +310,7 @@ def make_row(defaults, overrides=None, row_type=STEP_TYPE, children=None):
         elif row_type == STEP_TYPE and field in ("Max. Path Length", "Run Time"):
             item.setEditable(False)
         elif row_type == GROUP_TYPE:
-            if field in ("Description", "Voltage", "Frequency", "Trail Length", "Repetitions"):
+            if field in ("Description", "Voltage", "Frequency", "Temperature-1", "Temperature-2", "Trail Length", "Repetitions"):
                 item.setEditable(True)
             elif field in ("Duration", "Run Time", "ID"):
                 item.setEditable(False)

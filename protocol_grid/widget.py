@@ -68,7 +68,10 @@ from protocol_grid.extra_ui_elements import (
 from protocol_grid.services.protocol_runner_controller import ProtocolRunnerController
 from protocol_grid.services.experiment_manager import ExperimentManager
 from protocol_grid.services.protocol_state_tracker import ProtocolStateTracker
-from protocol_grid.services.hardware_setter_services import publish_voltage_frequency
+from protocol_grid.services.hardware_setter_services import (
+    publish_voltage_frequency,
+    publish_temperatures,
+)
 from protocol_grid.services.utils import _stop_step_recording
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 from protocol_grid.services.protocol_data_logger import ProtocolDataLogger
@@ -1728,6 +1731,7 @@ class PGCWidget(QWidget):
         publish_voltage_frequency.send(
             voltage, frequency, preview_mode=self.navigation_bar.is_preview_mode()
         )
+        publish_temperatures.send(step_data.parameters.get("Temperature-1", "25.0"), step_data.parameters.get("Temperature-2", "25.0"))
 
         # update last published UID
         self._set_last_published_step_uid(step_uid)
@@ -2582,7 +2586,6 @@ class PGCWidget(QWidget):
         frequency_str = frequency_item.text() if frequency_item else "10000"
 
         # update the protocol runner execution plan and publish if needed
-        preview_mode = self.navigation_bar.is_preview_mode()
         success = self.protocol_runner.update_step_voltage_frequency_in_plan(
             step_uid, voltage_str, frequency_str
         )

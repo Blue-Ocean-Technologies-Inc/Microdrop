@@ -59,7 +59,7 @@ protocol_grid_fields = [
     "Trail Length", "Trail Overlay",
     "Video", "Capture", "Record",
     "Volume Threshold", "Magnet", "Magnet Height (mm)",
-    "Max. Path Length", "Run Time"
+    "Max. Path Length", "Run Time", "Temperature-1", "Temperature-2"
 ]
 protocol_grid_column_widths = [
     120, 70, 80, 70, 70, 70, 90, 80, 130, 100, 100, 50, 140, 70, 110, 140, 90
@@ -71,7 +71,7 @@ field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
                 "Repeat Duration", "Repetitions", 
                 "Trail Length", "Video", "Capture", "Record", "Volume Threshold", 
-                "Magnet", "Magnet Height (mm)", "Trail Overlay"
+                "Magnet", "Magnet Height (mm)", "Trail Overlay", "Temperature-1", "Temperature-2"
             ] and f not in fixed_fields]),
             ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length", 
                                 "Trail Overlay", "Video", "Capture", "Record"]),
@@ -98,7 +98,9 @@ step_defaults = {
     "Magnet Height (mm)": "Default",
     "Max. Path Length": "0",
     "Run Time": "0.0",
-    "UID": ""
+    "UID": "",
+    "Temperature-1": "25.0",
+    "Temperature-2": "25.0",
 }
 
 group_defaults = {
@@ -129,7 +131,8 @@ copy_fields_for_new_step = [
     "Magnet",
     "Magnet Height (mm)",
     "Max. Path Length",
-    "Run Time"
+    "Run Time",
+    "Temperature-1", "Temperature-2"
 ]
 
 CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet")
