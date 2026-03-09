@@ -1,6 +1,9 @@
 import functools
 
 import dramatiq
+
+from dropbot_status_and_controls.view_helpers import RangeWithCustomViewHints
+from microdrop_utils.pyface_helpers import RangeWithViewHints
 from traits.api import HasTraits, Range, Bool, Button, provides, Instance, observe, Dict
 from traitsui.api import View, Group, Item, UItem, HGroup, VGroup, Controller
 
@@ -28,9 +31,9 @@ logger = get_logger(__name__)
 
 
 class PortableManualControlModel(HasTraits):
-    light_intensity = Range(
-        0, 100, value=0,
-        desc="Light intensity percentage (0-100%)",
+    light_intensity = RangeWithCustomViewHints(
+        0, 100, value=0, suffix="%",
+        desc="Light intensity",
     )
     realtime_mode = Bool(False, desc="Enable or disable realtime mode")
     connected = Bool(False, desc="Connected to portable dropbot?")
@@ -45,7 +48,6 @@ PortableManualControlView = View(
         VGroup(
             Item(
                 name="light_intensity",
-                label="Light Intensity (%)",
                 resizable=True,
             ),
         ),

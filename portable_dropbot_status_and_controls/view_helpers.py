@@ -51,7 +51,7 @@ class ClickableStatusIconEditor(StatusIconEditor):
         self._timeout_timer.stop()
         self.control.setEnabled(True)
         # Reset the flag if it was a tray failure
-        if event.trait.name == "tray_operation_failed" and event.new:
+        if event.name == "tray_operation_failed" and event.new:
             self.object.tray_operation_failed = False
 
     def _on_timeout(self):
