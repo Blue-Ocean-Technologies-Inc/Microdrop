@@ -13,6 +13,9 @@ from ..port_discovery import find_opendrop_port
 logger = get_logger(__name__)
 
 
+TELEMETRY_POLL_INTERVAL_S = 2
+
+
 @provides(IOpenDropControlMixinService)
 class OpenDropMonitorMixinService(HasTraits):
     id = Str("opendrop_monitor_mixin_service")
@@ -20,6 +23,10 @@ class OpenDropMonitorMixinService(HasTraits):
     monitor_scheduler = Instance(
         BackgroundScheduler,
         desc="APScheduler job that periodically scans serial ports for OpenDrop.",
+    )
+    telemetry_scheduler = Instance(
+        BackgroundScheduler,
+        desc="APScheduler job that periodically polls telemetry (temperatures) from a connected OpenDrop.",
     )
     _error_shown = Bool(False)
     opendrop_connection_active = Bool(False)
@@ -104,6 +111,7 @@ class OpenDropMonitorMixinService(HasTraits):
             self.opendrop_connection_active = True
             self._push_state_to_device(force=True)
             self._publish_connected()
+            self._start_telemetry_polling()
             logger.info(f"Connected to OpenDrop on {port_name}")
             self._error_shown = False
             return True
@@ -121,6 +129,7 @@ class OpenDropMonitorMixinService(HasTraits):
         self.opendrop_connection_active = True
 
     def on_disconnected_signal(self, message):
+        self._stop_telemetry_polling()
         if self.proxy is not None:
             self.proxy.close()
             self.proxy = None
@@ -133,4 +142,37 @@ class OpenDropMonitorMixinService(HasTraits):
                 self.monitor_scheduler.resume()
             elif self.monitor_scheduler.state == STATE_STOPPED:
                 self.monitor_scheduler.start()
+
+    # ---- Telemetry polling ----
+
+    def _start_telemetry_polling(self):
+        """Start a background job that polls temperatures from the device."""
+        self._stop_telemetry_polling()
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            func=self._poll_telemetry,
+            trigger=IntervalTrigger(seconds=TELEMETRY_POLL_INTERVAL_S),
+        )
+        self.telemetry_scheduler = scheduler
+        self.telemetry_scheduler.start()
+        logger.info(
+            "Telemetry polling started (every %ss).", TELEMETRY_POLL_INTERVAL_S
+        )
+
+    def _stop_telemetry_polling(self):
+        """Shut down the telemetry polling scheduler if it is running."""
+        if self.telemetry_scheduler is not None:
+            try:
+                if self.telemetry_scheduler.state in (STATE_RUNNING, STATE_PAUSED):
+                    self.telemetry_scheduler.shutdown(wait=False)
+            except Exception:
+                pass
+            self.telemetry_scheduler = None
+            logger.info("Telemetry polling stopped.")
+
+    def _poll_telemetry(self):
+        """Called periodically to read temperatures from the device."""
+        if not self.opendrop_connection_active or self.proxy is None:
+            return
+        self._push_state_to_device(force=True)
 
