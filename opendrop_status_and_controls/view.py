@@ -1,7 +1,7 @@
 from dropbot_status_and_controls.view_helpers import StatusIconEditorFactory
 from manual_controls.MVC import ToggleEditorFactory
 
-from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, Label, Readonly
+from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, Label, Readonly, VGrid
 
 # 1. Add label, id, and dock='tab' to the left group
 left = HGroup(
@@ -37,10 +37,10 @@ Label("Capacitance: N/A", enabled_when="False"),
     id="data_grid",  # Unique identifier for layout saving
 )
 
-grid = VGroup(
-    Readonly("temperature_1"),
-    Readonly("temperature_2"),
-    Readonly("temperature_3"),
+grid = VGrid(
+    Readonly("temperature_1"), UItem("set_temperature_1"),
+    Readonly("temperature_2"), UItem("set_temperature_2"),
+    Readonly("temperature_3"), UItem("set_temperature_3"),
     VGroup(Readonly("feedback_active_channels"),)
 )
 

@@ -60,10 +60,13 @@ class OpenDropStatesSettingMixinService(HasTraits):
         logger.info(f"OpenDrop settings changed: {sorted(payload.keys())}")
 
     def on_set_temperature_1_request(self, message):
+        logger.info(f"OpenDrop temperature 1 requested: {self.set_temperatures[0]}")
         self.on_set_temperatures_request(json.dumps({"t1": int(message)}))
 
     def on_set_temperature_2_request(self, message):
+        logger.info(f"OpenDrop temperature 2 requested: {self.set_temperatures[1]}")
         self.on_set_temperatures_request(json.dumps({"t2": int(message)}))
 
     def on_set_temperature_3_request(self, message):
+        logger.info(f"OpenDrop temperature 3 requested: {self.set_temperatures[2]}")
         self.on_set_temperatures_request(json.dumps({"t3": int(message)}))

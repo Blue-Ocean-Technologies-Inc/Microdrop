@@ -1,5 +1,6 @@
 from traits.api import Str
 
+from dropbot_status_and_controls.view_helpers import RangeWithCustomViewHints
 from opendrop_status.consts import OPENDROP_IMAGE
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -25,3 +26,14 @@ class OpendropStatusAndControlsModel(BaseStatusModel):
     temperature_2 = Str("-", desc="Temperature channel 2 (°C)")
     temperature_3 = Str("-", desc="Temperature channel 3 (°C)")
     feedback_active_channels = Str("-", desc="Number of active feedback channels")
+
+    # ---- Hardware controls (user-writable via UI) ----------------------
+    set_temperature_1 = RangeWithCustomViewHints(
+        25, 110, suffix=" °C",
+    )
+    set_temperature_2 = RangeWithCustomViewHints(
+        25, 110, suffix=" °C",
+    )
+    set_temperature_3 = RangeWithCustomViewHints(
+        25, 110, suffix=" °C",
+    )
