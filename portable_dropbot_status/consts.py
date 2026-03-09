@@ -4,9 +4,10 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
     CHIP_INSERTED,
+    TRAY_TOGGLE_FAILED,
 )
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
-from portable_dropbot_controller.consts import PORT_DROPBOT_STATUS_UPDATE, TRAY_TOGGLE_FAILED
+from portable_dropbot_controller.consts import PORT_DROPBOT_STATUS_UPDATE
 
 # # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])

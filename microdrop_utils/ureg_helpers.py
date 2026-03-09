@@ -2,6 +2,9 @@
 # ureg = UnitRegistry()
 from nadamq import ureg
 
+# handle degree celcius offset unit
+ureg.autoconvert_offset_to_baseunit = True
+
 def ureg_quant_percent_change(old, new):
     old = get_ureg_magnitude(old)
     new = get_ureg_magnitude(new)
@@ -23,4 +26,4 @@ def get_ureg_magnitude(text):
 def trim_to_n_digits(text, n_digits):
     quantity = round(ureg.Quantity(text), n_digits)
 
-    return f'{quantity:.{n_digits}g~H}'
+    return f'{quantity:.{n_digits}g~H}'.replace("degree_Celsius", "°C") # replace degree celsius

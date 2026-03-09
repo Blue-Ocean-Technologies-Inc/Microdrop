@@ -1,9 +1,8 @@
+from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
 from traits.api import Bool, Str, observe
 
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits
-
-from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
 
@@ -12,7 +11,7 @@ logger = get_logger(__name__)
 N_DISPLAY_DIGITS = 3
 
 
-class PortableDropbotStatusAndControlsModel(BaseStatusModel):
+class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
     """Model for Portable DropBot status display.
 
     Extends BaseStatusModel with portable-specific sensor readings.
@@ -34,8 +33,6 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     voltage = Str("-", desc="Voltage set to device in V")
     frequency = Str("-", desc="Frequency of chip in Hz")
     zstage_position = Str("-", desc="Zstage height in mm")
-    chip_temp = Str("-", desc="Chip temperature in C")
-    device_temp = Str("-", desc="Device temperature in C")
     device_humidity = Str("-", desc="Humidity in %")
 
     # ---- Formatted display traits --------------------------------------
@@ -43,8 +40,6 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     voltage_display = Str("-")
     frequency_display = Str("-")
     zstage_position_display = Str("-")
-    chip_temp_display = Str("-")
-    device_temp_display = Str("-")
     device_humidity_display = Str("-")
 
     # ---- BaseStatusModel hook ------------------------------------------
@@ -61,8 +56,6 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
             self.capacitance = "-"
             self.voltage = "-"
             self.frequency = "-"
-            self.chip_temp = "-"
-            self.device_temp = "-"
             self.device_humidity = "-"
 
     @observe("capacitance")
