@@ -1303,7 +1303,7 @@ class ProtocolRunnerController(QObject):
                 return
 
             publish_voltage_frequency.send(step.parameters.get("Voltage", "30.0"), step.parameters.get("Frequency", "1000.0"))
-            publish_temperatures.send(step.parameters.get("Temperature-1", "25.0"), step.parameters.get("Temperature-2", "25.0"))
+            publish_temperatures.send(step.parameters.get("Temperature-1", "25"), step.parameters.get("Temperature-2", "25"))
 
             # handle camera controls for Video/Capture/Record
             logger.debug("Handling Camera Controls")
