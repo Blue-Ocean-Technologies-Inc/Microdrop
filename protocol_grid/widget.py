@@ -1731,7 +1731,7 @@ class PGCWidget(QWidget):
         publish_voltage_frequency.send(
             voltage, frequency, preview_mode=self.navigation_bar.is_preview_mode()
         )
-        publish_temperatures.send(step_data.parameters.get("Temperature-1", "25.0"), step_data.parameters.get("Temperature-2", "25.0"))
+        publish_temperatures.send(step_data.parameters.get("Temperature-1", "25"), step_data.parameters.get("Temperature-2", "25"))
 
         # update last published UID
         self._set_last_published_step_uid(step_uid)

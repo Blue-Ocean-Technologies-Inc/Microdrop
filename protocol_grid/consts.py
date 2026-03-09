@@ -99,8 +99,8 @@ step_defaults = {
     "Max. Path Length": "0",
     "Run Time": "0.0",
     "UID": "",
-    "Temperature-1": "25.0",
-    "Temperature-2": "25.0",
+    "Temperature-1": "25",
+    "Temperature-2": "25",
 }
 
 group_defaults = {
