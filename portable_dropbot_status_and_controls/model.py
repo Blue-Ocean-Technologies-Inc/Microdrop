@@ -41,6 +41,8 @@ class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
     frequency_display = Str("-")
     zstage_position_display = Str("-")
     device_humidity_display = Str("-")
+    chip_temp = Str("-", desc="Chip temperature in C")
+    device_temp = Str("-", desc="Device temperature in C")
 
     # ---- BaseStatusModel hook ------------------------------------------
 
