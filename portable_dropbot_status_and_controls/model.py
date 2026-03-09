@@ -34,6 +34,8 @@ class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
     frequency = Str("-", desc="Frequency of chip in Hz")
     zstage_position = Str("-", desc="Zstage height in mm")
     device_humidity = Str("-", desc="Humidity in %")
+    chip_temp = Str("-", desc="Chip temperature in C")
+    device_temp = Str("-", desc="Device temperature in C")
 
     # ---- Formatted display traits --------------------------------------
     capacitance_display = Str("-")
@@ -41,6 +43,8 @@ class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
     frequency_display = Str("-")
     zstage_position_display = Str("-")
     device_humidity_display = Str("-")
+    device_temp_display = Str("-")
+    chip_temp_display = Str("-")
 
     # ---- BaseStatusModel hook ------------------------------------------
 
