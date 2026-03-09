@@ -121,11 +121,9 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             return editor
 
         elif field in ["Temperature-1", "Temperature-2"]:
-            editor = QDoubleSpinBox(parent)
-            editor.setMinimum(25.0)
-            editor.setMaximum(110.0)
-            editor.setDecimals(1)
-            editor.setSingleStep(0.5)
+            editor = QSpinBox(parent)
+            editor.setMinimum(25)
+            editor.setMaximum(110)
             editor.setSuffix("°C")
             return editor
 

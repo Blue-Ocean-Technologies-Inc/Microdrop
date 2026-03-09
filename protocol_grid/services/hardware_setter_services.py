@@ -31,8 +31,8 @@ def publish_temperatures(t1, t2, preview_mode=False):
         return
 
     logger.info(f"Trying to Publish temperatures for step: {t1}°C {t2}°C")
-    publish_message(topic=SET_TEMPERATURE_1, message=str(t1))
-    publish_message(topic=SET_TEMPERATURE_2, message=str(t2))
+    publish_message(topic=SET_TEMPERATURE_1, message=str(int(float(t1))))
+    publish_message(topic=SET_TEMPERATURE_2, message=str(int(float(t2))))
 
 
 class MagnetService:
