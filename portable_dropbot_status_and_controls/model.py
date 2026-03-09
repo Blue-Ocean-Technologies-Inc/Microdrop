@@ -1,10 +1,16 @@
 from dropbot_status_and_controls.model import DropbotStatusAndControlsModel
 from traits.api import Bool, Str, observe
 
+from dropbot_status_and_controls.view_helpers import RangeWithCustomViewHints
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits
 
-from .consts import DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE
+from .consts import (
+    DROPBOT_IMAGE,
+    DROPBOT_CHIP_INSERTED_IMAGE,
+    VOLTAGE_LIM,
+    FREQUENCY_LIM,
+)
 
 logger = get_logger(__name__)
 
@@ -28,28 +34,39 @@ class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
         False, desc="True when tray toggle failed, triggers icon re-enable"
     )
 
+    # ---- Hardware controls (user-writable via UI) Change limits for Portable----------------------
+    voltage = RangeWithCustomViewHints(
+        VOLTAGE_LIM[0],
+        VOLTAGE_LIM[1],
+        step=5,
+        suffix=" V",
+        # value=DropbotPreferences().default_voltage,  # TODO: May need to give as input application preferences.
+        desc="the voltage to set on the dropbot device (V)",
+    )
+    frequency = RangeWithCustomViewHints(
+        FREQUENCY_LIM[0],
+        FREQUENCY_LIM[1],
+        step=100,
+        suffix=" Hz",
+        # value=DropbotPreferences().default_frequency,  # TODO: May need to give as input application preferences.
+        desc="the frequency to set on the dropbot device (Hz)",
+    )
+
+    ########################################################################
+    # Extra Portable Specific
+    ########################################################################
+
     # ---- Sensor readings (set by message handler) ----------------------
-    capacitance = Str("-", desc="Raw capacitance in pF")
-    voltage = Str("-", desc="Voltage set to device in V")
-    frequency = Str("-", desc="Frequency of chip in Hz")
     zstage_position = Str("-", desc="Zstage height in mm")
     device_humidity = Str("-", desc="Humidity in %")
     chip_temp = Str("-", desc="Chip temperature in C")
     device_temp = Str("-", desc="Device temperature in C")
 
     # ---- Formatted display traits --------------------------------------
-    capacitance_display = Str("-")
-    voltage_display = Str("-")
-    frequency_display = Str("-")
     zstage_position_display = Str("-")
     device_humidity_display = Str("-")
     device_temp_display = Str("-")
     chip_temp_display = Str("-")
-
-    # ---- BaseStatusModel hook ------------------------------------------
-
-    def _update_chip_display(self, inserted: bool) -> None:
-        self.chip_status_text = "Inserted" if inserted else "Not Inserted"
 
     # ---- Observers -----------------------------------------------------
 
@@ -57,22 +74,7 @@ class PortableDropbotStatusAndControlsModel(DropbotStatusAndControlsModel):
     def _reset_readings_on_realtime_off(self, event):
         """Clear sensor displays when realtime mode is disabled."""
         if not event.new:
-            self.capacitance = "-"
-            self.voltage = "-"
-            self.frequency = "-"
-            self.device_humidity = "-"
-
-    @observe("capacitance")
-    def _update_capacitance_display(self, event):
-        self.capacitance_display = self._format_reading(event.new)
-
-    @observe("voltage")
-    def _update_voltage_display(self, event):
-        self.voltage_display = self._format_reading(event.new)
-
-    @observe("frequency")
-    def _update_frequency_display(self, event):
-        self.frequency_display = self._format_reading(event.new)
+            self.capacitance = self.voltage = self.frequency = self.chip_temp = self.device_temp = self.zstage_position = self.device_humidity = "-"
 
     @observe("zstage_position")
     def _update_zstage_position_display(self, event):

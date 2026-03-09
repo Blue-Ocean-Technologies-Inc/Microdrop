@@ -113,9 +113,9 @@ class PortableDropbotMessageHandler(BaseMessageHandler):
         voltage = msg.get("hv_vol", "-")
         new_voltage = f"{voltage * ureg.volt:.3g~P}" if voltage != "-" else "-"
         if new_voltage != "-" and _change_is_significant(
-            self.model.voltage, new_voltage, threshold=1, threshold_type="absolute_diff"
+            self.model.voltage_readback, new_voltage, threshold=1, threshold_type="absolute_diff"
         ):
-            self.model.voltage = new_voltage
+            self.model.voltage_readback = new_voltage
 
         # -- Frequency --
         def _get_formatted(key, unit):

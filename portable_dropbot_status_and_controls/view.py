@@ -33,10 +33,10 @@ left = HGroup(
 
 # Right panel: readonly sensor readings grid
 grid = VGrid(
-    Item("voltage_display", style="readonly", label="Voltage"),
-    UItem(""),
-    Item("frequency_display", style="readonly", label="Frequency"),
-    UItem(""),
+    Item("voltage_readback_display", style="readonly", label="Voltage"),
+    UItem("voltage", label="Voltage", enabled_when="free_mode and not protocol_running"),
+    Item("frequency_display", label="Frequency", style="readonly"),
+    UItem("frequency", label="Frequency", enabled_when="free_mode and not protocol_running"),
     Item("zstage_position_display", style="readonly", label="Magnet Height"),
     UItem(""),
     Item("device_temp_display", style="readonly", label="Device Temp"),
