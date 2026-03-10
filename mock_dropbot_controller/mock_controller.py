@@ -1,6 +1,5 @@
 import json
 import random
-import time
 from datetime import datetime, UTC
 
 import dramatiq
@@ -18,7 +17,7 @@ from logger.logger_service import get_logger
 from .consts import (
     PKG, CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, SHORTS_DETECTED,
     DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, DROPLETS_DETECTED,
-    REALTIME_MODE_UPDATED, SELF_TESTS_PROGRESS, ELECTRODES_STATE_CHANGE,
+    REALTIME_MODE_UPDATED, SELF_TESTS_PROGRESS,
     START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS,
     SET_REALTIME_MODE, HALT,
     TestEvent, create_test_progress_message,
