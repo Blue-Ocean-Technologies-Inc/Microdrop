@@ -593,8 +593,7 @@ class CameraControlWidget(QWidget):
         publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="false")
         error(
             self,
-            "Error: Cannot continue to record video",
-            informative="Exception raised while recording video.",
+            "<b>Error</b>: Cannot continue to record video<br><br>Exception raised while recording video.",
             detail=error_msg,
         )
         self.video_record_stop()

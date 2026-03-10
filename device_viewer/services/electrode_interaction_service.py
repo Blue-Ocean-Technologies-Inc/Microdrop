@@ -1147,6 +1147,8 @@ class ElectrodeInteractionControllerService(HasTraits):
         elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model.electrodes[electrode_id].channel
             if clicked_electrode_channel != None: # The channel can be unassigned!
+                if clicked_electrode_channel in self.model.electrodes.disabled_channels:
+                    return  # Disabled electrodes cannot be actuated
 
                 if clicked_electrode_channel in self.model.electrodes.actuated_channels:
                     self.model.electrodes.actuated_channels.remove(clicked_electrode_channel)
@@ -1362,7 +1364,12 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         elif button == Qt.RightButton:
             self._right_mouse_pressed = True
-            self.model.electrodes.electrode_right_clicked = electrode_view.electrode
+            if electrode_view:
+                self.model.electrodes.electrode_right_clicked = electrode_view.electrode
+            else:
+                self.model.electrodes.electrode_left_clicked = None
+
+
 
     def handle_mouse_move_event(self, event):
         """Handle the dragging motion."""
@@ -1479,7 +1486,37 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addAction("Find Liquid", self.detect_droplet)
                 context_menu.addSeparator()
 
+                # Bulk enable/disable all electrodes
+                has_disabled = len(self.model.electrodes.disabled_channels) > 0
+
+                def enable_all_electrodes():
+                    self.model.electrodes.disabled_channels.clear()
+
+                def disable_all_electrodes():
+                    all_channels = set(self.model.electrodes.channels_electrode_ids_map.keys())
+                    self.model.electrodes.disabled_channels = all_channels
+
+                if has_disabled:
+                    context_menu.addAction("Enable All Electrodes", enable_all_electrodes)
+                context_menu.addAction("Disable All Electrodes", disable_all_electrodes)
+                context_menu.addSeparator()
+
                 if self.model.electrodes.electrode_right_clicked is not None:
+                    right_clicked = self.model.electrodes.electrode_right_clicked
+                    channel = right_clicked.channel
+
+                    # Disable/Enable electrode toggle
+                    if channel is not None:
+                        is_disabled = channel in self.model.electrodes.disabled_channels
+                        label = "Enable Electrode" if is_disabled else "Disable Electrode"
+
+                        def toggle_disable(ch=channel, currently_disabled=is_disabled):
+                            if currently_disabled:
+                                self.model.electrodes.disabled_channels.discard(ch)
+                            else:
+                                self.model.electrodes.disabled_channels.add(ch)
+
+                        context_menu.addAction(label, toggle_disable)
 
                     scale_edit_view_controller = ScaleEditViewController(model=self.model)
 
@@ -1510,6 +1547,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
     @observe("model.electrodes.actuated_channels.items")
+    @observe("model.electrodes.disabled_channels.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
     @observe("electrode_hovered")

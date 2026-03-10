@@ -53,6 +53,9 @@ class Electrodes(HasTraits):
     #: Map of the unique channels and their states, True means actuated, anything else means not actuated
     actuated_channels = Set(Int, desc="actuated channel ids.")
 
+    #: Set of disabled channel ids. Disabled channels are marked as bad and should not be actuated.
+    disabled_channels = Set(Int, desc="disabled channel ids.")
+
     #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
     channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['svg_model.electrode_areas_scaled', 'channels_electrode_ids_map'])
 

@@ -26,6 +26,7 @@ REALTIME_MODE_UPDATED = 'hardware/signals/realtime_mode_updated'
 DROPBOT_CONNECTED = 'hardware/signals/connected'
 DROPBOT_DISCONNECTED = 'hardware/signals/disconnected'
 DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
+DISABLED_CHANNELS_CHANGED = 'hardware/signals/disabled_channels_changed'
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor mixin in this package
 START_DEVICE_MONITORING = "dropbot/requests/start_device_monitoring"

@@ -3,7 +3,7 @@ from pathlib import Path
 from apptools.preferences.api import PreferencesHelper
 from traits.etsconfig.api import ETSConfig
 from traits.api import Bool, Str, Directory
-from traitsui.api import VGroup, View, Item
+from traitsui.api import VGroup, View, Item, Group
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -34,6 +34,9 @@ class MicrodropPreferences(PreferencesHelper):
     always_use_default_layout = Bool
 
     EXPERIMENTS_DIR = Directory()
+
+    # dialogs:
+    suppress_no_shorts_information = Bool(False)
 
     def _EXPERIMENTS_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Experiments"
@@ -76,5 +79,30 @@ class MicrodropPreferencesPane(PreferencesPane):
 
         Item("_"),  # ensure other contributed pane groups are spaced out from this pane's group.
 
+        resizable=True,
+    )
+
+
+class MicrodropDialogsPreferencesPane(PreferencesPane):
+    """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
+
+    #### 'PreferencesPane' interface ##########################################
+
+    # The factory to use for creating the preferences model object.
+    model_factory = MicrodropPreferences
+
+    category = microdrop_tab.id
+
+    ########################################################################################
+
+    view = View(
+        Item("_"),  # Separator
+        Group(
+            Item("suppress_no_shorts_information"),
+            label="Dialog Settings",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
+        Item("_"),  # Separator
         resizable=True,
     )

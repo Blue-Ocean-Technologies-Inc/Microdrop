@@ -1,12 +1,13 @@
 import json
 from datetime import datetime, UTC
 
+import numpy as np
 from dropbot import EVENT_CHANNELS_UPDATED, EVENT_SHORTS_DETECTED, EVENT_ENABLE, EVENT_DROPS_DETECTED, EVENT_ACTUATED_CHANNEL_CAPACITANCES
 from dropbot.proxy import I2cAddressNotSet
 from traits.api import Instance, Dict
 import dramatiq
 
-from electrode_controller.consts import ELECTRODES_STATE_CHANGE
+from electrode_controller.consts import ELECTRODES_STATE_CHANGE, disabled_channels_changed_publisher
 
 # unit handling
 from microdrop_utils.ureg_helpers import ureg
@@ -205,7 +206,10 @@ class DropbotControllerBase(HasTraits):
 
             # reset to last known state
             self.proxy.turn_off_all_channels()
-            
+
+            # Publish disabled channels state so the device viewer syncs with the (now reset) hardware
+            self._publish_disabled_channels_from_mask()
+
             logger.info("Enhanced proxy connection setup completed successfully")
 
             return True
@@ -252,8 +256,8 @@ class DropbotControllerBase(HasTraits):
 
             message = '''
                             All channels have been disabled and high voltage has been
-                            turned off until the DropBot is restarted (e.g., unplug all 
-                            cables and plug back in).'''.strip()
+                            turned off. It is recommended to restart the DropBot (e.g., unplug all 
+                            cables and plug back in.).'''.strip()
 
         elif signal['error']['name'] == 'chip-load-saturated':
             reason = 'because chip load feedback exceeded allowable range'
@@ -312,6 +316,19 @@ class DropbotControllerBase(HasTraits):
         # if chip has too much liquid, continue to allow actuation.
         if name == "chip-load-saturated":
             self.proxy.disabled_channels_mask *= 0
+
+        # Publish the current disabled channels so the device viewer can update
+        self._publish_disabled_channels_from_mask()
+
+    def _publish_disabled_channels_from_mask(self):
+        """Read the proxy's disabled_channels_mask and publish the indices of disabled channels."""
+        try:
+            mask = np.array(self.proxy.disabled_channels_mask)
+            disabled_indices = set(int(i) for i in np.where(mask != 0)[0])
+            logger.info(f"Publishing disabled channels change: {len(disabled_indices)} channels disabled")
+            disabled_channels_changed_publisher.publish(disabled_indices)
+        except Exception as e:
+            logger.error(f"Error publishing disabled channels from mask: {e}", exc_info=True)
 
     def on_refresh_channels_request(self):
         # XXX Reassign channel states to trigger a `channels-updated`

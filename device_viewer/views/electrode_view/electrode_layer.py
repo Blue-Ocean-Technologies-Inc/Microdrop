@@ -7,9 +7,9 @@ from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_facto
 from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, ElectrodeEndpointItem
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \
-    ELECTRODE_ON, ELECTRODE_NO_CHANNEL, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING, electrode_outline_key, \
-    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, hovered_actuation_key, \
-    hovered_electrode_key
+    ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_DISABLED, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING, \
+    electrode_outline_key, electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, \
+    hovered_actuation_key, hovered_electrode_key
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 
@@ -170,7 +170,7 @@ class ElectrodeLayer():
             electrode_view.update_line_alpha(alpha)
 
     def redraw_electrode_colors(self, model: DeviceViewMainModel, electrode_hovered: ElectrodeView):
-        
+
         for electrode_id, electrode_view in self.electrode_views.items():
             # initialize color stack
             color_stack = []
@@ -189,23 +189,30 @@ class ElectrodeLayer():
             base_color = QColor(base_color)
             base_color.setAlphaF(model.get_alpha(electrode_fill_key))
 
-            # check if electrode is on to see if additional color_layer needed:
-            on_color = None
-            if electrode_view.electrode.channel in model.electrodes.actuated_channels:
-                on_color = QColor(ELECTRODE_ON)
-                on_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
+            # Determine inner color: disabled (red) takes priority over actuation
+            channel = electrode_view.electrode.channel
+            is_disabled = channel in model.electrodes.disabled_channels
+            electrode_view._disabled = is_disabled
+            electrode_view.update_tooltip()
+            inner_color = None
+            if is_disabled:
+                inner_color = QColor(ELECTRODE_DISABLED)
+                inner_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
+            elif channel in model.electrodes.actuated_channels:
+                inner_color = QColor(ELECTRODE_ON)
+                inner_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
 
             # check if fills need editing if they are hovered:
             if electrode_hovered == electrode_view:
                 lighter_percent = get_qcolor_lighter_percent_from_factor(base_color, model.get_alpha(hovered_electrode_key))
                 base_color = base_color.lighter(lighter_percent)
-                if on_color:
-                    lighter_percent = get_qcolor_lighter_percent_from_factor(on_color, model.get_alpha(hovered_actuation_key))
-                    on_color = on_color.lighter(lighter_percent)
+                if inner_color:
+                    lighter_percent = get_qcolor_lighter_percent_from_factor(inner_color, model.get_alpha(hovered_actuation_key))
+                    inner_color = inner_color.lighter(lighter_percent)
 
             color_stack.append(base_color)
-            if on_color:
-                color_stack.append(on_color)
+            if inner_color:
+                color_stack.append(inner_color)
 
             electrode_view.update_color(color_stack)
 
