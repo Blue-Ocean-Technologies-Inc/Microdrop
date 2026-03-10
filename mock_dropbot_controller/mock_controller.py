@@ -1,5 +1,6 @@
 import json
 import random
+import threading
 from datetime import datetime, UTC
 
 import dramatiq
@@ -59,7 +60,8 @@ class MockDropbotController(HasTraits):
     # ---- Stream control ----
     stream_active = Bool(False)
     stream_interval_ms = Int(DEFAULT_STREAM_INTERVAL_MS)
-    _stream_timer = Instance('PySide6.QtCore.QTimer')
+    _stream_stop_event = Instance(threading.Event)
+    _stream_thread = Instance(threading.Thread)
 
     # ---- Lifecycle ----
 
@@ -246,8 +248,7 @@ class MockDropbotController(HasTraits):
         return base + actuated_contribution + noise
 
     def _publish_capacitance(self):
-        if not self.realtime_mode:
-            return
+        # if not self.realtime_mo
         cap_pf = self._compute_mock_capacitance()
         utc_timestamp = datetime.now(UTC).timestamp()
         publish_message(
@@ -260,20 +261,29 @@ class MockDropbotController(HasTraits):
             }),
         )
 
+    def _stream_loop(self):
+        """Background thread loop that publishes capacitance at the configured interval."""
+        while not self._stream_stop_event.is_set():
+            self._publish_capacitance()
+            self._stream_stop_event.wait(self.stream_interval_ms / 1000.0)
+
     def start_stream(self):
-        if self._stream_timer is not None:
-            self._stream_timer.stop()
-        from PySide6.QtCore import QTimer
-        self._stream_timer = QTimer()
-        self._stream_timer.timeout.connect(self._publish_capacitance)
-        self._stream_timer.start(self.stream_interval_ms)
+        self.stop_stream()
+        self._stream_stop_event = threading.Event()
+        self._stream_thread = threading.Thread(
+            target=self._stream_loop, daemon=True, name="mock-capacitance-stream"
+        )
+        self._stream_thread.start()
         self.stream_active = True
         logger.info(f"Mock: Capacitance stream started ({self.stream_interval_ms}ms interval)")
 
     def stop_stream(self):
-        if self._stream_timer is not None:
-            self._stream_timer.stop()
-            self._stream_timer = None
+        if self._stream_stop_event is not None:
+            self._stream_stop_event.set()
+        if self._stream_thread is not None:
+            self._stream_thread.join(timeout=2)
+            self._stream_thread = None
+        self._stream_stop_event = None
         self.stream_active = False
         logger.info("Mock: Capacitance stream stopped")
 
