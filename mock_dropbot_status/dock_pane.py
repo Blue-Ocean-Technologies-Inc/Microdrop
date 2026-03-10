@@ -12,7 +12,11 @@ logger = get_logger(__name__)
 
 
 class MockDropbotStatusDockPane(BaseStatusDockPane):
-    """Dock pane for MockDropBot interactive controls."""
+    """Dock pane for MockDropBot interactive controls.
+
+    Communicates with the mock backend exclusively via pub/sub topics.
+    No direct object references to the backend controller.
+    """
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
@@ -27,24 +31,3 @@ class MockDropbotStatusDockPane(BaseStatusDockPane):
             model=self.model,
             name=listener_name,
         )
-
-    def set_mock_controller(self, mock_controller):
-        """Wire the dock pane controller to the mock backend controller."""
-        self.controller.mock_controller = mock_controller
-        self.model.base_capacitance_pf = mock_controller.base_capacitance_pf
-        self.model.capacitance_delta_pf = mock_controller.capacitance_delta_pf
-        self.model.capacitance_noise_pf = mock_controller.capacitance_noise_pf
-        self.model.stream_interval_ms = mock_controller.stream_interval_ms
-
-        mock_controller.observe(self._on_actuated_channels_changed, "actuated_channels")
-        mock_controller.observe(self._on_stream_active_changed, "stream_active")
-
-    def _on_actuated_channels_changed(self, event):
-        channels = event.new
-        if channels:
-            self.model.actuated_channels_text = str(sorted(channels))
-        else:
-            self.model.actuated_channels_text = "None"
-
-    def _on_stream_active_changed(self, event):
-        self.model.stream_active = event.new

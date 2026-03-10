@@ -25,6 +25,9 @@ from .consts import (
     DEFAULT_BASE_CAPACITANCE_PF, DEFAULT_CAPACITANCE_DELTA_PF,
     DEFAULT_CAPACITANCE_NOISE_PF, DEFAULT_STREAM_INTERVAL_MS,
     DEFAULT_VOLTAGE, DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
+    MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
+    MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
+    MOCK_ACTUATED_CHANNELS_UPDATED, MOCK_STREAM_STATUS_UPDATED,
 )
 
 logger = get_logger(__name__, level="INFO")
@@ -88,7 +91,10 @@ class MockDropbotController(HasTraits):
 
         requested_method = None
 
-        if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
+        if head_topic == 'mock_dropbot' and primary_sub_topic == 'requests':
+            # Mock-specific requests are always accepted (no connection required)
+            requested_method = f"on_{specific_sub_topic}_request"
+        elif topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
             requested_method = f"on_{specific_sub_topic}_signal"
         elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
             requested_method = f"on_{specific_sub_topic}_request"
@@ -173,6 +179,10 @@ class MockDropbotController(HasTraits):
                 logger.error(f"Mock: Invalid channel indices: {invalid}")
                 return
             self.actuated_channels = channels
+            publish_message(
+                topic=MOCK_ACTUATED_CHANNELS_UPDATED,
+                message=json.dumps(sorted(channels)),
+            )
             logger.info(f"Mock: {len(channels)} channels actuated: {sorted(channels)}")
         except (json.JSONDecodeError, TypeError) as e:
             logger.error(f"Mock: Invalid electrode state message: {e}")
@@ -239,6 +249,32 @@ class MockDropbotController(HasTraits):
     def on_change_settings_request(self, message):
         logger.info(f"Mock: Settings change request received: {message}")
 
+    # ---- Mock-specific request handlers (from dock pane UI via pub/sub) ----
+
+    def on_change_simulation_settings_request(self, message):
+        """Update capacitance simulation parameters from the dock pane."""
+        data = json.loads(message)
+        if "base_capacitance_pf" in data:
+            self.base_capacitance_pf = float(data["base_capacitance_pf"])
+        if "capacitance_delta_pf" in data:
+            self.capacitance_delta_pf = float(data["capacitance_delta_pf"])
+        if "capacitance_noise_pf" in data:
+            self.capacitance_noise_pf = float(data["capacitance_noise_pf"])
+        if "stream_interval_ms" in data:
+            self.stream_interval_ms = int(data["stream_interval_ms"])
+            self.restart_stream()
+        logger.info(f"Mock: Simulation settings updated: {data}")
+
+    def on_simulate_chip_insert_request(self, message):
+        self.simulate_chip_insert(message == "True")
+
+    def on_simulate_shorts_request(self, message):
+        channels = json.loads(message)
+        self.simulate_shorts(channels)
+
+    def on_simulate_halt_request(self, message):
+        self.simulate_halt(error_name=message)
+
     # ---- Capacitance stream ----
 
     def _compute_mock_capacitance(self) -> float:
@@ -275,6 +311,7 @@ class MockDropbotController(HasTraits):
         )
         self._stream_thread.start()
         self.stream_active = True
+        publish_message(topic=MOCK_STREAM_STATUS_UPDATED, message="True")
         logger.info(f"Mock: Capacitance stream started ({self.stream_interval_ms}ms interval)")
 
     def stop_stream(self):
@@ -285,6 +322,7 @@ class MockDropbotController(HasTraits):
             self._stream_thread = None
         self._stream_stop_event = None
         self.stream_active = False
+        publish_message(topic=MOCK_STREAM_STATUS_UPDATED, message="False")
         logger.info("Mock: Capacitance stream stopped")
 
     def restart_stream(self):

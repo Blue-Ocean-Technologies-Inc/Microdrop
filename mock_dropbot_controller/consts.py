@@ -15,11 +15,22 @@ from dropbot_controller.consts import (
     create_test_progress_message,
 )
 
-# Topics this mock actor subscribes to (same as real dropbot)
+# Mock-specific request topics (frontend → backend via pub/sub)
+MOCK_CHANGE_SIM_SETTINGS = "mock_dropbot/requests/change_simulation_settings"
+MOCK_SIMULATE_CHIP_INSERT = "mock_dropbot/requests/simulate_chip_insert"
+MOCK_SIMULATE_SHORTS = "mock_dropbot/requests/simulate_shorts"
+MOCK_SIMULATE_HALT = "mock_dropbot/requests/simulate_halt"
+
+# Mock-specific signal topics (backend → frontend via pub/sub)
+MOCK_ACTUATED_CHANNELS_UPDATED = "mock_dropbot/signals/actuated_channels_updated"
+MOCK_STREAM_STATUS_UPDATED = "mock_dropbot/signals/stream_status_updated"
+
+# Topics this mock actor subscribes to (same as real dropbot + mock requests)
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "dropbot/requests/#",
         "hardware/requests/#",
+        "mock_dropbot/requests/#",
         DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
         SELF_TEST_CANCEL,

@@ -8,14 +8,17 @@ from microdrop_utils.decorators import timestamped_value
 
 from template_status_and_controls.base_message_handler import BaseMessageHandler
 
-from .consts import listener_name
 from .model import MockDropbotStatusModel
 
 logger = get_logger(__name__)
 
 
 class MockDropbotMessageHandler(BaseMessageHandler):
-    """Dramatiq message handler for the MockDropBot status dock pane."""
+    """Dramatiq message handler for the MockDropBot status dock pane.
+
+    Inherits connected/disconnected/realtime_mode_updated from BaseMessageHandler.
+    Adds handlers for capacitance, chip insertion, halted, and mock-specific signals.
+    """
 
     model = Instance(MockDropbotStatusModel)
     chip_inserted_message = Instance(TimestampedMessage)
@@ -50,3 +53,15 @@ class MockDropbotMessageHandler(BaseMessageHandler):
         data = json.loads(body)
         shorts = data.get("Shorts_detected", [])
         logger.info(f"Mock status: Shorts on channels {shorts}")
+
+    # ---- Mock-specific signal handlers (from backend via pub/sub) ----
+
+    def _on_actuated_channels_updated_triggered(self, body):
+        channels = json.loads(body)
+        if channels:
+            self.model.actuated_channels_text = str(channels)
+        else:
+            self.model.actuated_channels_text = "None"
+
+    def _on_stream_status_updated_triggered(self, body):
+        self.model.stream_active = body == "True"
