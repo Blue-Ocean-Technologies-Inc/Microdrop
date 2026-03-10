@@ -108,6 +108,7 @@ class BaseStatusModel(HasTraits):
             self.icon_color = self.CONNECTED_NO_DEVICE_COLOR
         else:
             self.icon_color = self.DISCONNECTED_COLOR
+            self.chip_inserted = False
 
     @observe("chip_inserted")
     def _on_chip_inserted_changed(self, event):
@@ -116,7 +117,7 @@ class BaseStatusModel(HasTraits):
         # Let the subclass update any device-specific chip status traits.
         self._update_chip_display(event.new)
 
-        if not self.halted:
+        if not self.halted and self.connected:
             self.icon_color = self.CONNECTED_COLOR if event.new else self.CONNECTED_NO_DEVICE_COLOR
 
     # ------------------------------------------------------------------ #
