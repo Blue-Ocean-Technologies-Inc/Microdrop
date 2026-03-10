@@ -2,7 +2,7 @@ from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
 from .consts import PKG, PKG_name, listener_name
 from .model import MockDropbotStatusModel
-from .controller import MockDropbotController as MockDockPaneController
+from .controller import MockDropbotDockPaneController
 from .message_handler import MockDropbotMessageHandler
 from .view import MockDropbotView
 
@@ -19,7 +19,7 @@ class MockDropbotStatusDockPane(BaseStatusDockPane):
 
     model = MockDropbotStatusModel()
     view = MockDropbotView
-    controller = MockDockPaneController(model)
+    controller = MockDropbotDockPaneController(model)
     view.handler = controller
 
     def _create_message_handler(self) -> MockDropbotMessageHandler:
@@ -27,9 +27,6 @@ class MockDropbotStatusDockPane(BaseStatusDockPane):
             model=self.model,
             name=listener_name,
         )
-
-    def _setup_extras(self):
-        pass
 
     def set_mock_controller(self, mock_controller):
         """Wire the dock pane controller to the mock backend controller."""

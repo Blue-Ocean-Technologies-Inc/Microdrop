@@ -1,5 +1,3 @@
-from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
-
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
@@ -16,8 +14,6 @@ from dropbot_controller.consts import (
     DEFAULT_VOLTAGE, DEFAULT_FREQUENCY, TestEvent,
     create_test_progress_message,
 )
-
-from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
 # Topics this mock actor subscribes to (same as real dropbot)
 ACTOR_TOPIC_DICT = {

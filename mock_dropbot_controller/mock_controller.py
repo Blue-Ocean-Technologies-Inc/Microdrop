@@ -86,16 +86,15 @@ class MockDropbotController(HasTraits):
 
         requested_method = None
 
-        if head_topic in ['dropbot', 'hardware']:
-            if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
-                requested_method = f"on_{specific_sub_topic}_signal"
-            elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
+        if topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
+            requested_method = f"on_{specific_sub_topic}_signal"
+        elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
+            requested_method = f"on_{specific_sub_topic}_request"
+        elif primary_sub_topic == 'requests':
+            if self.connected:
                 requested_method = f"on_{specific_sub_topic}_request"
-            elif primary_sub_topic == 'requests':
-                if self.connected:
-                    requested_method = f"on_{specific_sub_topic}_request"
-                else:
-                    logger.warning(f"Mock: Request for {specific_sub_topic} denied: not connected.")
+            else:
+                logger.warning(f"Mock: Request for {specific_sub_topic} denied: not connected.")
 
         if requested_method:
             if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
@@ -161,9 +160,12 @@ class MockDropbotController(HasTraits):
         logger.info(f"Mock: Realtime mode set to {self.realtime_mode}")
 
     def on_electrodes_state_change_request(self, message: str):
+        if not self.realtime_mode:
+            logger.warning("Mock: Cannot process actuations since realtime mode is disabled.")
+            return
         try:
             data = json.loads(message)
-            channels = set(data.get("actuated_channels", []))
+            channels = set(data.get("channels", []))
             invalid = {ch for ch in channels if ch < 0 or ch >= self.num_channels}
             if invalid:
                 logger.error(f"Mock: Invalid channel indices: {invalid}")
@@ -176,7 +178,7 @@ class MockDropbotController(HasTraits):
     def on_detect_shorts_request(self, message):
         publish_message(
             topic=SHORTS_DETECTED,
-            message=json.dumps({"Shorts_detected": [], "Show_window": True}),
+            message=json.dumps({"Shorts_detected": []}),
         )
         logger.info("Mock: No shorts detected (mock)")
 
@@ -186,7 +188,7 @@ class MockDropbotController(HasTraits):
             message=json.dumps({
                 "success": True,
                 "detected_channels": sorted(self.actuated_channels),
-                "error_message": "",
+                "error": "",
             }),
         )
 

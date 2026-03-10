@@ -1,8 +1,5 @@
 from traits.api import observe, Instance
-from traitsui.api import Controller
 
-from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY, SET_REALTIME_MODE
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.decorators import debounce
 
 from template_status_and_controls.base_controller import BaseStatusController
@@ -12,7 +9,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class MockDropbotController(BaseStatusController):
+class MockDropbotDockPaneController(BaseStatusController):
     """Controller for the MockDropBot dock pane."""
 
     mock_controller = Instance("mock_dropbot_controller.mock_controller.MockDropbotController")
