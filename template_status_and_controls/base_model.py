@@ -98,6 +98,8 @@ class BaseStatusModel(HasTraits):
         if event.new:
             self.icon_color = self.HALTED_COLOR
 
+        self.realtime_mode = False
+
     @observe("connected")
     def _on_connected_changed(self, event):
         self.connection_status_text = "Active" if event.new else "Inactive"
