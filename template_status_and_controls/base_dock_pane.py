@@ -19,8 +19,16 @@ Design notes:
   - Subclasses that need a status-bar icon or dialog popups override
     _setup_extras(); this keeps the base class free of device-specific code.
 """
-
+from dropbot_status_and_controls.consts import connected_no_device_color, halted_color
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.colors import WHITE, GREY
+from microdrop_style.helpers import is_dark_mode
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
+from microdrop_style.icons.icons import ICON_DROP_EC
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from pyface.tasks.api import TraitsDockPane
+from pyface.qt.QtGui import QApplication, QLabel, QFont
+from traits.api import observe
 
 from logger.logger_service import get_logger
 
@@ -97,3 +105,54 @@ class BaseStatusDockPane(TraitsDockPane):
 
         Default: no-op.
         """
+
+    # ------------------------------------------------------------------ #
+    # Status-bar icon                                                       #
+    # ------------------------------------------------------------------ #
+    @observe("task:window:status_bar_manager")
+    def _setup_statusbar_icon(self, event):
+        icon = QLabel(ICON_DROP_EC)
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
+        icon.setFont(font)
+        icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
+
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(
+            horizontal_spacer_widget(10)
+        )
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(icon)
+
+        # Keep the icon color in sync with the model's connection state.
+        self.model.observe(lambda e: icon.setStyleSheet(f"color: {e.new}"), "icon_color")
+
+        self.status_bar_icon = icon
+
+        def _apply_tooltip():
+            self.status_bar_icon.setToolTip(_build_status_icon_tooltip(
+                self.model.DISCONNECTED_COLOR,
+                self.model.CONNECTED_COLOR,
+                self.model.CONNECTED_NO_DEVICE_COLOR,
+                self.model.HALTED_COLOR)
+            )
+
+        _apply_tooltip()
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_tooltip)
+
+
+def _build_status_icon_tooltip(
+        disconnected_color,
+        connected_color,
+        connected_no_device_color,
+        halted_color) -> str:
+    title_color = WHITE if is_dark_mode() else GREY["dark"]
+    return f"""
+    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
+      <strong style="font-size: 1.1em; color: {title_color}">Device Status:</strong>
+      <ul style="margin-top: 1px; margin-bottom: 1px; padding-left: 20px;">
+        <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
+        <li><strong style="color: {connected_no_device_color};">Connected (No Chip)</strong></li>
+        <li><strong style="color: {connected_color};">Connected (Chip Detected)</strong></li>
+        <li><strong style="color: {halted_color};">Halted (Device Fault)</strong></li>
+      </ul>
+    </div>
+    """

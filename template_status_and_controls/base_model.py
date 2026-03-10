@@ -90,37 +90,22 @@ class BaseStatusModel(HasTraits):
 
     def _icon_color_default(self):
         return self.DISCONNECTED_COLOR
-
     # ------------------------------------------------------------------ #
-    # Internal helpers                                                      #
+    # Observers
     # ------------------------------------------------------------------ #
-
-    def _update_icon_color(self):
-        """Recompute icon_color from the current connection / chip state."""
-        if self.halted:
-            self.icon_color = self.HALTED_COLOR
-        elif self.connected:
-            self.icon_color = (
-                self.CONNECTED_COLOR if self.chip_inserted
-                else self.CONNECTED_NO_DEVICE_COLOR
-            )
-        else:
-            self.icon_color = self.DISCONNECTED_COLOR
-
-    # ------------------------------------------------------------------ #
-    # Observers                                                             #
-    # ------------------------------------------------------------------ #
-
     @observe("halted")
     def _on_halted_changed(self, event):
-        self._update_icon_color()
+        if event.new:
+            self.icon_color = self.HALTED_COLOR
 
     @observe("connected")
     def _on_connected_changed(self, event):
         self.connection_status_text = "Active" if event.new else "Inactive"
-        if event.new:
-            self.halted = False
-        self._update_icon_color()
+        self.halted = False
+        if self.connected:
+            self.icon_color = self.CONNECTED_NO_DEVICE_COLOR
+        else:
+            self.icon_color = self.DISCONNECTED_COLOR
 
     @observe("chip_inserted")
     def _on_chip_inserted_changed(self, event):
@@ -128,7 +113,9 @@ class BaseStatusModel(HasTraits):
         self.icon_path = self._select_icon_for_chip_state(event.new)
         # Let the subclass update any device-specific chip status traits.
         self._update_chip_display(event.new)
-        self._update_icon_color()
+
+        if not self.halted:
+            self.icon_color = self.CONNECTED_COLOR if event.new else self.CONNECTED_NO_DEVICE_COLOR
 
     # ------------------------------------------------------------------ #
     # Template-method hooks                                                 #
