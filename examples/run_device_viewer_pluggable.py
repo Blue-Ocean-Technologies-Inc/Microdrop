@@ -15,7 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
     DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, DEFAULT_APPLICATION, SERVER_CONTEXT, \
-    REQUIRED_CONTEXT
+    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        choices=["dropbot", "opendrop"],
+        choices=["dropbot", "opendrop", "mock"],
         default="dropbot", # Sets a default if the user doesn't provide the flag
         help="Specify the device to use: 'dropbot' or 'opendrop'"
     )
@@ -101,6 +101,9 @@ if __name__ == "__main__":
         plugins += DROPBOT_FRONTEND_PLUGINS + DROPBOT_BACKEND_PLUGINS
     elif args.device == "opendrop":
         plugins += OPENDROP_FRONTEND_PLUGINS + OPENDROP_BACKEND_PLUGINS
+
+    elif args.device == "mock":
+        plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + MOCK_DROPBOT_BACKEND_PLUGINS
 
     main(
         plugins=plugins,
