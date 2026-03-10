@@ -34,7 +34,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     # ---- Hardware controls (user-writable via UI) ----------------------
     voltage = RangeWithCustomViewHints(
-        30, 150, value=DropbotPreferences().default_voltage, suffix=" V",
+        30, 140, value=DropbotPreferences().default_voltage, suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
