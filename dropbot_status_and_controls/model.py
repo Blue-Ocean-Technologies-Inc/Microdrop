@@ -8,7 +8,7 @@ from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
-    disconnected_color, connected_no_device_color, connected_color,
+    disconnected_color, connected_no_device_color, connected_color, halted_color,
 )
 from .view_helpers import RangeWithCustomViewHints
 
@@ -30,10 +30,11 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     DISCONNECTED_COLOR = disconnected_color
     CONNECTED_NO_DEVICE_COLOR = connected_no_device_color
     CONNECTED_COLOR = connected_color
+    HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
     voltage = RangeWithCustomViewHints(
-        30, 150, value=DropbotPreferences().default_voltage, suffix=" V",
+        30, 140, value=DropbotPreferences().default_voltage, suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(

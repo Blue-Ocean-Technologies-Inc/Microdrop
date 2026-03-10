@@ -20,6 +20,8 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
+from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
+from mock_dropbot_status.plugin import MockDropbotStatusPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -58,6 +60,16 @@ OPENDROP_BACKEND_PLUGINS = [
 DROPBOT_BACKEND_PLUGINS = [
     PeripheralControllerPlugin,
     DropbotControllerPlugin
+]
+
+# Mock DropBot plugins — swap these in place of DROPBOT_BACKEND_PLUGINS
+# and DROPBOT_FRONTEND_PLUGINS to use the mock controller (no hardware needed).
+MOCK_DROPBOT_BACKEND_PLUGINS = [
+    MockDropbotControllerPlugin,
+]
+
+MOCK_DROPBOT_FRONTEND_PLUGINS = [
+    MockDropbotStatusPlugin,
 ]
 
 REQUIRED_PLUGINS = [

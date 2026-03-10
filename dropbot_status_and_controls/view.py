@@ -22,7 +22,7 @@ left = HGroup(
             "realtime_mode",
             style="custom",
             editor=ToggleEditorFactory(),
-            enabled_when="connected",
+            enabled_when="connected and not halted",
         ),
         Spring("10"),
     ),
@@ -32,9 +32,9 @@ left = HGroup(
 # 2. Add label, id, and dock='tab' to the grid group
 grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
-    UItem("voltage", label="Voltage", enabled_when="free_mode and not protocol_running"),
+    UItem("voltage", label="Voltage", enabled_when="free_mode and not protocol_running and not halted"),
     Item("frequency_display", label="Frequency", style="readonly"),
-    UItem("frequency", label="Frequency", enabled_when="free_mode and not protocol_running"),
+    UItem("frequency", label="Frequency", enabled_when="free_mode and not protocol_running and not halted"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("pressure_display", style="readonly", label="c_device"),
