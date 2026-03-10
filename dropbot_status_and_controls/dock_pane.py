@@ -1,18 +1,6 @@
-from traits.api import observe
-
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QLabel, QApplication
-
-from microdrop_style.helpers import is_dark_mode
-from microdrop_style.colors import WHITE, GREY
-from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
-from microdrop_style.icons.icons import ICON_DROP_EC
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
-
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
-from .consts import PKG, PKG_name, listener_name, disconnected_color, connected_no_device_color, connected_color, halted_color
+from .consts import PKG, PKG_name, listener_name
 from .model import DropbotStatusAndControlsModel
 from .controller import ControlsController
 from .view import UnifiedView
