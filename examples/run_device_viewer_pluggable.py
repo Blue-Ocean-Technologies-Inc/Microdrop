@@ -103,7 +103,7 @@ if __name__ == "__main__":
         plugins += OPENDROP_FRONTEND_PLUGINS + OPENDROP_BACKEND_PLUGINS
 
     elif args.device == "mock":
-        plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + MOCK_DROPBOT_BACKEND_PLUGINS
+        plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + MOCK_DROPBOT_BACKEND_PLUGINS + DROPBOT_FRONTEND_PLUGINS
 
     main(
         plugins=plugins,

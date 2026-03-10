@@ -41,6 +41,8 @@ class MockDropbotStatusModel(BaseStatusModel):
     halt_error_type = Str("output-current-exceeded")
     simulate_halt_button = Button("Simulate Halt")
     simulate_chip_toggle = Button("Toggle Chip Insert")
+    simulate_connect_button = Button("Connect")
+    simulate_disconnect_button = Button("Disconnect")
 
     actuated_channels_text = Str("None")
 

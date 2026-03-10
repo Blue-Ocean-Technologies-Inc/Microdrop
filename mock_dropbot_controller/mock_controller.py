@@ -25,6 +25,7 @@ from .consts import (
     DEFAULT_BASE_CAPACITANCE_PF, DEFAULT_CAPACITANCE_DELTA_PF,
     DEFAULT_CAPACITANCE_NOISE_PF, DEFAULT_STREAM_INTERVAL_MS,
     DEFAULT_VOLTAGE, DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
+    MOCK_SIMULATE_CONNECT, MOCK_SIMULATE_DISCONNECT,
     MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
     MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
     MOCK_ACTUATED_CHANNELS_UPDATED, MOCK_STREAM_STATUS_UPDATED,
@@ -264,6 +265,20 @@ class MockDropbotController(HasTraits):
             self.stream_interval_ms = int(data["stream_interval_ms"])
             self.restart_stream()
         logger.info(f"Mock: Simulation settings updated: {data}")
+
+    def on_simulate_connect_request(self, message):
+        """Simulate device connection."""
+        self.connected = True
+        publish_message(topic=DROPBOT_CONNECTED, message="mock_dropbot")
+        logger.info("Mock: Simulated device connect")
+
+    def on_simulate_disconnect_request(self, message):
+        """Simulate device disconnection."""
+        self.connected = False
+        self.realtime_mode = False
+        self.stop_stream()
+        publish_message(topic=DROPBOT_DISCONNECTED, message="mock_dropbot")
+        logger.info("Mock: Simulated device disconnect")
 
     def on_simulate_chip_insert_request(self, message):
         self.simulate_chip_insert(message == "True")

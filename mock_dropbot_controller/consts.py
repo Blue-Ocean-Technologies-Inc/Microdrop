@@ -17,6 +17,8 @@ from dropbot_controller.consts import (
 
 # Mock-specific request topics (frontend → backend via pub/sub)
 MOCK_CHANGE_SIM_SETTINGS = "mock_dropbot/requests/change_simulation_settings"
+MOCK_SIMULATE_CONNECT = "mock_dropbot/requests/simulate_connect"
+MOCK_SIMULATE_DISCONNECT = "mock_dropbot/requests/simulate_disconnect"
 MOCK_SIMULATE_CHIP_INSERT = "mock_dropbot/requests/simulate_chip_insert"
 MOCK_SIMULATE_SHORTS = "mock_dropbot/requests/simulate_shorts"
 MOCK_SIMULATE_HALT = "mock_dropbot/requests/simulate_halt"

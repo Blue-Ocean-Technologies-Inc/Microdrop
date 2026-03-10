@@ -10,6 +10,7 @@ from template_status_and_controls.base_controller import BaseStatusController
 from .consts import (
     MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
     MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
+    MOCK_SIMULATE_CONNECT, MOCK_SIMULATE_DISCONNECT,
 )
 
 from logger.logger_service import get_logger
@@ -95,3 +96,13 @@ class MockDropbotDockPaneController(BaseStatusController):
         currently_inserted = self.model.chip_inserted
         publish_message(topic=MOCK_SIMULATE_CHIP_INSERT, message=str(not currently_inserted))
         logger.info(f"Published simulate chip: {not currently_inserted}")
+
+    @observe("model:simulate_connect_button")
+    def _on_simulate_connect(self, event):
+        publish_message(topic=MOCK_SIMULATE_CONNECT, message="")
+        logger.info("Published simulate connect")
+
+    @observe("model:simulate_disconnect_button")
+    def _on_simulate_disconnect(self, event):
+        publish_message(topic=MOCK_SIMULATE_DISCONNECT, message="")
+        logger.info("Published simulate disconnect")

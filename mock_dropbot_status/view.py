@@ -33,6 +33,10 @@ mock_controls = VGroup(
         show_border=True,
     ),
     VGroup(
+        HGroup(
+            UItem("simulate_connect_button"),
+            UItem("simulate_disconnect_button"),
+        ),
         UItem("simulate_chip_toggle"),
         HGroup(
             Item("shorts_channels_text", label="Channels"),
