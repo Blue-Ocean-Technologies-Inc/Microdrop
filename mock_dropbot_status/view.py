@@ -33,9 +33,16 @@ mock_controls = VGroup(
         show_border=True,
     ),
     VGroup(
-        Item("shorts_channels_text", label="Channels"),
-        Item("halt_error_type", label="Error Type",
-             editor=EnumEditor(values=["output-current-exceeded", "chip-load-saturated"])),
+        UItem("simulate_chip_toggle"),
+        HGroup(
+            Item("shorts_channels_text", label="Channels"),
+            UItem("simulate_shorts_button"),
+        ),
+        HGroup(
+            Item("halt_error_type", label="Error Type",
+                 editor=EnumEditor(values=["output-current-exceeded", "chip-load-saturated"])),
+            UItem("simulate_halt_button"),
+        ),
         label="Event Simulation",
         show_border=True,
     ),

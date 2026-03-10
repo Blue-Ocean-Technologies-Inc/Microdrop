@@ -1,4 +1,4 @@
-from traits.api import Bool, Str, Float, Int, observe, Range
+from traits.api import Bool, Str, Float, Int, observe, Range, Button
 
 from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_style.colors import GREY, SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR
@@ -37,7 +37,10 @@ class MockDropbotStatusModel(BaseStatusModel):
     num_channels = Int(DEFAULT_NUM_CHANNELS)
 
     shorts_channels_text = Str("5, 12, 18", desc="Comma-separated channel indices for simulated shorts")
+    simulate_shorts_button = Button("Simulate Shorts")
     halt_error_type = Str("output-current-exceeded")
+    simulate_halt_button = Button("Simulate Halt")
+    simulate_chip_toggle = Button("Toggle Chip Insert")
 
     actuated_channels_text = Str("None")
 

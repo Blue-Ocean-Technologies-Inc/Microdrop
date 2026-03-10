@@ -70,3 +70,28 @@ class MockDropbotDockPaneController(BaseStatusController):
             topic=MOCK_CHANGE_SIM_SETTINGS,
             message=json.dumps({"stream_interval_ms": event.new}),
         )
+
+    # ---- Button handlers: publish simulation events to backend ----
+
+    @observe("model:simulate_shorts_button")
+    def _on_simulate_shorts(self, event):
+        text = self.model.shorts_channels_text.strip()
+        try:
+            channels = [int(ch.strip()) for ch in text.split(",") if ch.strip()]
+        except ValueError:
+            logger.error(f"Invalid shorts channels: '{text}'. Use comma-separated integers.")
+            return
+        publish_message(topic=MOCK_SIMULATE_SHORTS, message=json.dumps(channels))
+        logger.info(f"Published simulate shorts: {channels}")
+
+    @observe("model:simulate_halt_button")
+    def _on_simulate_halt(self, event):
+        publish_message(topic=MOCK_SIMULATE_HALT, message=self.model.halt_error_type)
+        logger.info(f"Published simulate halt: {self.model.halt_error_type}")
+
+    @observe("model:simulate_chip_toggle")
+    def _on_simulate_chip_toggle(self, event):
+        # Toggle: if currently inserted, remove; otherwise insert
+        currently_inserted = self.model.chip_inserted
+        publish_message(topic=MOCK_SIMULATE_CHIP_INSERT, message=str(not currently_inserted))
+        logger.info(f"Published simulate chip: {not currently_inserted}")
