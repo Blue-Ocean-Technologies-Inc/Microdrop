@@ -1,7 +1,10 @@
+from pathlib import Path
+
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import List, Enum
+from traits.api import List, Enum, Directory
+from traits.etsconfig.api import ETSConfig
 from traitsui.api import View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
@@ -56,6 +59,17 @@ class ProtocolPreferences(PreferencesHelper):
     )
 
     capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
+
+    PROTOCOL_REPO_DIR = Directory()
+
+    def _PROTOCOL_REPO_DIR_default(self) -> Path:
+        default_dir = Path(ETSConfig.user_data) / "Protocols"
+
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Default repo directory is: {default_dir}")
+
+        return default_dir
 
     def _level_default(self):
         return "INFO"

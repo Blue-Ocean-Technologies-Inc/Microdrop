@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID
 from pyface.undo.api import UndoManager
 
@@ -15,6 +17,9 @@ from logger.logger_service import get_logger
 from ..utils.camera import qpointf_list_serialize, qpointf_list_deserialize
 
 logger = get_logger(__name__)
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class DeviceViewMainModel(HasTraits):
@@ -232,14 +237,10 @@ class DeviceViewMainModel(HasTraits):
                     layer.name = "Null route"
 
 
-    # @observe("electrodes.channel_electrode_areas_scaled_map")
-    # def push_globals(self, event):
-    #
-    #     if event.new != event.old:
-    #         logger.info(f"push_globals: {event.name}: {event.new}")
-    #         app_globals = get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
-    #         if event.name == "channel_electrode_areas_scaled_map":
-    #             app_globals["channel_electrode_areas"] = event.new
+    @observe("electrodes.svg_model.filename")
+    def push_globals(self, event):
+        print(f"push_globals: {event.name}: {event.new}")
+        app_globals["microdrop.device_svg.name"] = Path(self.electrodes.svg_model.filename).stem
 
     @observe('electrode_scale')
     def update_stored_capacitances_on_area_scale_change(self, event):
