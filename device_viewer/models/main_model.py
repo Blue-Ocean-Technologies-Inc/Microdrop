@@ -239,7 +239,7 @@ class DeviceViewMainModel(HasTraits):
 
     @observe("electrodes.svg_model.filename")
     def push_globals(self, event):
-        print(f"push_globals: {event.name}: {event.new}")
+        logger.debug(f"push_globals: {event.name}: {event.new}")
         app_globals["microdrop.device_svg.name"] = Path(self.electrodes.svg_model.filename).stem
 
     @observe('electrode_scale')
