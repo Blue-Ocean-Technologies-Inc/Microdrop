@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QItemSelectionModel, QTimer, Signal, QUrl, Slot
 from PySide6.QtGui import QKeySequence, QShortcut, QBrush, QColor
+from microdrop_application.menus import is_advanced_mode
 from traits.has_traits import HasTraits
 
 from microdrop_style.button_styles import get_button_style, get_tooltip_style
@@ -303,7 +304,6 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
         self._protocol_running = False
-        self._advanced_user_mode = False
         self._force_stop = False
         self._processing_palette_change = False
         self._last_published_step_id = None
@@ -424,6 +424,10 @@ class PGCWidget(QWidget):
         self.connect_listener(dock_pane.dramatiq_message_listener)
 
         self.loading_screen = LoadingOverlay(self.tree)
+
+    @property
+    def _advanced_user_mode(self):
+        return is_advanced_mode()
 
 
     #### Loading screen logic #####
