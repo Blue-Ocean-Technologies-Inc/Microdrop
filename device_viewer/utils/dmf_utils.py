@@ -24,6 +24,9 @@ NS_INKSCAPE = "http://www.inkscape.org/namespaces/inkscape"
 class SvgUtil(HasTraits):
     filename = File(desc='Filename of SVG file with electrodes data')
 
+    svg_error_paths = List(desc='Paths from file that could not be loaded into electrodes')
+    svg_exceptions_caught = List(desc='Exceptions caught on SVG loading')
+
     area_scale = Float(1.0)
     electrode_areas_scaled = Property(Dict(Str, Float), observe='[area_scale, electrode_areas.items]', desc='Area of electrodes scaled by area scale in mm2')
 
@@ -115,10 +118,25 @@ class SvgUtil(HasTraits):
         self.auto_found_connections = True
 
     def get_electrode_polygons(self) -> dict[str, Polygon]:
-        """
-        Get the polygons of the electrodes
-        """
-        return {k: Polygon(v.path.reshape(-1, 2)) for k, v in self.electrodes.items()}
+        polygons = {}
+        errors_found = []
+        exceptions = set()
+
+        for k, v in list(self.electrodes.items()):
+            try:
+                coords = v.path.reshape(-1, 2)
+                polygons[k] = Polygon(coords)
+            except Exception as e:
+                logger.error(f"Failed to create polygon for '{k}': {e}")
+                errors_found.append(k)
+                exceptions.add(e)
+                del self.electrodes[k]
+
+        if errors_found:
+            self.svg_error_paths = errors_found
+            self.svg_exceptions_caught = list(exceptions)
+
+        return polygons
 
     def find_electrode_areas(self) -> dict[str, float]:
         """

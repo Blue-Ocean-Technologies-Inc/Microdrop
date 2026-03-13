@@ -16,7 +16,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     YES,
     FileDialog,
     confirm,
-    error, information,
+    error, information, warning,
 )
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
@@ -985,6 +985,17 @@ class DeviceViewerDockPane(TraitsDockPane):
         if "modified" not in self.name:
             logger.info("Svg data changed")
             self.name += device_modified_tag
+
+    @observe("model:electrodes:svg_model.svg_error_paths")
+    def _svg_errors_found(self, event):
+        if self.model.electrodes.svg_model.svg_error_paths:
+            warning(
+                None,
+                modal=False,
+                message=f"Could not load all electrodes from {self.model.electrodes.svg_model.filename}:<br><br>"
+                        f"Error Paths: {self.model.electrodes.svg_model.svg_error_paths}<br><br>"
+                        f"Errors: {self.model.electrodes.svg_model.svg_exceptions_caught}",
+            )
 
     @observe(
         "model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items"

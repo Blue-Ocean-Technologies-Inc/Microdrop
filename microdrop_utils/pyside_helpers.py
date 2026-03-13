@@ -545,4 +545,3 @@ class PulsingLabel(QLabel):
             self.start()
         else:
             self.stop()
-
