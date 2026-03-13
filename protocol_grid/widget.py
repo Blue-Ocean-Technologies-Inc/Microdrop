@@ -89,6 +89,9 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__, "DEBUG")
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
 
 from functools import wraps
 
@@ -3157,12 +3160,13 @@ class PGCWidget(QWidget):
             return
 
         # use experiment directory as default save location
-        default_dir = str(self.experiment_manager.get_experiment_directory())
+        default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / app_globals.get("microdrop.device_svg.name", "Null")
+        default_dir.mkdir(parents=True, exist_ok=True)
 
         if not file_name:
 
             user_selected_file_name, _ = QFileDialog.getSaveFileName(
-                self, "Export Protocol to JSON", default_dir, "JSON Files (*.json)"
+                self, "Export Protocol to JSON", str(default_dir), "JSON Files (*.json)"
             )
 
             if user_selected_file_name:
