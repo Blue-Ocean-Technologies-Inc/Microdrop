@@ -954,7 +954,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
-        dialog = FileDialog(action="save as", wildcard="SVG Files (*.svg)|*.svg")
+        dialog = FileDialog(action="save as",
+                            default_directory=str(self.device_viewer_preferences.DEVICE_REPO_DIR),
+                            wildcard="SVG Files (*.svg)|*.svg")
+
         if dialog.open() == OK:
             new_filename = (
                 dialog.path
