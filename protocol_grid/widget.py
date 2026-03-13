@@ -586,6 +586,9 @@ class PGCWidget(QWidget):
         # advanced_mode_change
         sig.advanced_mode_changed.connect(self.toggle_advanced_user_mode)
 
+        # Execute path from device viewer
+        sig.execute_path_requested.connect(self._on_execute_path_from_device_viewer)
+
         logger.info("Widget connected to message listener")
 
     def on_device_viewer_message(self, message):
@@ -1282,6 +1285,82 @@ class PGCWidget(QWidget):
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
 
         self._update_navigation_buttons_state()
+
+        self.tree.clearSelection()
+        self._last_selected_step_id = None
+        self._last_published_step_id = None
+        self.protocol_runner.start(run_order, prewarm_seconds=0)
+
+    def _on_execute_path_from_device_viewer(self, message_json: str):
+        """Handle path execution request from device viewer right-click menu."""
+        if self._protocol_running:
+            logger.warning("Cannot execute path: protocol is already running.")
+            return
+
+        try:
+            import json as _json
+            payload = _json.loads(message_json)
+        except Exception as e:
+            logger.error(f"Failed to parse execute path payload: {e}")
+            return
+
+        path = payload.get("path", [])
+        if not path:
+            logger.warning("Cannot execute path: empty path.")
+            return
+
+        duration = float(payload.get("duration", 1.0))
+        trail_length = int(payload.get("trail_length", 1))
+        trail_overlay = int(payload.get("trail_overlay", 0))
+        repetitions = int(payload.get("repetitions", 1))
+        all_routes = payload.get("all_routes", [])
+        all_colors = payload.get("all_colors", [])
+        activated_electrodes = payload.get("activated_electrodes", [])
+        id_to_channel = payload.get("id_to_channel", {})
+
+        # Build a ProtocolStep with the path's properties
+        parameters = dict(step_defaults)
+        parameters["Duration"] = str(duration)
+        parameters["Trail Length"] = str(trail_length)
+        parameters["Trail Overlay"] = str(trail_overlay)
+        parameters["Repetitions"] = str(repetitions)
+        parameters["Repeat Duration"] = str(duration)  # Match duration for single path
+        parameters["Description"] = "Path Execution"
+
+        temp_step = ProtocolStep(parameters=parameters, name="Path Execution")
+
+        # Build device state with the selected path
+        device_state = DeviceState(
+            activated_electrodes=activated_electrodes,
+            paths=[path],
+            id_to_channel=id_to_channel,
+            route_colors=[all_colors[all_routes.index(path)]] if path in all_routes and all_colors else ["#000000"],
+        )
+        temp_step.device_state = device_state
+
+        run_order = [
+            {"step": temp_step, "path": [0], "rep_idx": 1, "rep_total": 1}
+        ]
+
+        self._protocol_running = True
+
+        preview_mode = self.navigation_bar.is_preview_mode()
+        self.protocol_runner.set_preview_mode(preview_mode)
+        self.protocol_runner.set_repeat_protocol_n(1)
+        self.protocol_runner.set_advanced_hardware_mode(self._advanced_user_mode, preview_mode)
+
+        logger.info(
+            f"Executing path from device viewer: path={path}, "
+            f"duration={duration}, trail_length={trail_length}, "
+            f"trail_overlay={trail_overlay}, repetitions={repetitions}"
+        )
+
+        self.navigation_bar.btn_play.setText(ICON_PAUSE)
+        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+        self.navigation_bar.btn_stop.setEnabled(True)
+
+        self._update_navigation_buttons_state()
+        self._update_ui_enabled_state()
 
         self.tree.clearSelection()
         self._last_selected_step_id = None

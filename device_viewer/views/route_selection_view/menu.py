@@ -1,6 +1,7 @@
 from traitsui.menu import Menu, Action
- 
+
 RouteLayerMenu = Menu(
+    Action(name="&Execute Path", action="execute_path", enabled_when="not object.execution_disabled"),
     Action(name="&Invert", action="invert_layer"),
     Action(name="&Delete", action="delete_layer"),
     Action(name="&Start Merge", action="start_merge_layer", visible_when="not object.merge_in_progress"), # Note that object in this case refers to the RouteLayer clicked on! No easy way to access main model
