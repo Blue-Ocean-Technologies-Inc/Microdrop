@@ -13,6 +13,13 @@ def clean_svg():
         shutil.copy(f"{TEST_PATH}{os.sep}device_svg_files{os.sep}90_pin_array.svg", tmpdir)
         yield Path(tmpdir) / '90_pin_array.svg'
 
+@pytest.fixture
+def dirty_svg():
+    from .common import TEST_PATH
+    with tempfile.TemporaryDirectory() as tmpdir:
+        shutil.copy(f"{TEST_PATH}{os.sep}device_svg_files{os.sep}dirty_device.svg", tmpdir)
+        yield Path(tmpdir) / 'dirty_device.svg'
+
 
 @pytest.fixture
 def svg_root(clean_svg):
@@ -43,12 +50,13 @@ def test_svg_util(clean_svg, SvgUtil):
 
     SvgUtil(filename=clean_svg)
 
+def test_svg_util_dirty_device(dirty_svg, SvgUtil):
+    SvgUtil(filename=dirty_svg)
 
 def test_filename(clean_svg, SvgUtil):
 
-    svg = SvgUtil()
-    svg.filename = clean_svg
-    assert svg.filename == clean_svg
+    svg = SvgUtil(filename=clean_svg)
+    assert Path(svg.filename) == Path(clean_svg)
 
 
 def test_set_fill_black(svg_electrode_layer, SvgUtil):
