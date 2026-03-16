@@ -2,6 +2,9 @@ from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
 # Abstract pathing object class
 class Route(HasTraits):
     # Note that route should be able to be edited directly (i.e. layer.route = [1,2,3])
@@ -160,10 +163,11 @@ class Route(HasTraits):
 
 class RouteLayer(HasTraits):
     visible = Bool(True)
-    
+
     # These traits are direct derivatives from a RouteLayerManager traits. Do not modify from the Layer itself, only read
     is_selected = Bool(False) # Needed to show selectedness in the TableEditor
     merge_in_progress = Bool(False)
+    execution_disabled = Bool(False)  # True when protocol/step mode is running; disables Execute Path menu
 
     # Needs to be passed
     route = Instance(Route, Route()) # Actual route model
@@ -171,6 +175,8 @@ class RouteLayer(HasTraits):
 
     # set name based on channels for electrodes if needed for UI
     name = Str("")
+
+    selected_for_run = Bool(False)
 
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
@@ -188,6 +194,20 @@ class RouteLayerManager(HasTraits):
     message = Str
 
     mode = Enum("draw", "edit", "merge")
+
+    # Event fired when user requests to execute a path from right-click menu.
+    # The value is the RouteLayer to execute.
+    execute_path_requested = Event(List(Instance(RouteLayer)))
+
+    # button for running all routes where Run column is checked
+    run_routes = Button("play_circle")
+
+    # path execution properties (mirror protocol grid step defaults)
+    duration = Float(1.0)
+    trail_length = Int(1)
+    trail_overlay = Int(0)
+    repetitions = Int(1)
+
     # --------------------------- Model Helpers --------------------------
 
     def get_available_color(self, exclude=()):
@@ -291,3 +311,12 @@ class RouteLayerManager(HasTraits):
                 self.message = f"Route merging: {event.new.name}"
         elif event.name == "name": # event.new is the new name
             self.message = f"Route merging: {event.new}"
+
+    def _run_routes_fired(self, event):
+        logger.info("Processing request to run all routes with Run column checked")
+        routes_to_run = []
+        for i, el in enumerate(self.layers):
+            if el.selected_for_run:
+                routes_to_run.append(el)
+
+        self.execute_path_requested = routes_to_run

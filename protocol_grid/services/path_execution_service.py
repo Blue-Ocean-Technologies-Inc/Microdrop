@@ -160,9 +160,7 @@ class PathExecutionService:
         
         if not device_state.has_paths():
             return duration
-        
-        has_loops = PathExecutionService.has_any_loops(device_state)
-                
+
         max_open_path_length = 0
         max_loop_total_phases = 0
         
@@ -257,9 +255,7 @@ class PathExecutionService:
                 "step_description": step_description
             })
             return execution_plan
-        
-        has_loops = PathExecutionService.has_any_loops(device_state)
-                
+
         # calculate effective repetitions for each path
         path_repetitions = {}
         path_info = []

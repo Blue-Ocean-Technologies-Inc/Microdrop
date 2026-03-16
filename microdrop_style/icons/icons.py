@@ -12,6 +12,8 @@ ICON_EDIT            = "\ue3c9"  # edit
 ICON_AUTOMATION      = "\uf421"  # automation
 ICON_VISIBILITY      = "\ue8f4"  # eye open
 ICON_VISIBILITY_OFF  = "\ue8f5"  # eye closed
+ICON_DESELECT        = "\uebb6"  # deselect
+ICON_SELECT_All      = "\ue162"  # select all
 
 # DEVICE VIEWER ICONS
 ICON_VIEW_3D         = "\ue8b4"  # view_in_ar (3D view)
