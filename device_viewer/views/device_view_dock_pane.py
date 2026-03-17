@@ -3,6 +3,7 @@ import json
 import traceback
 from pathlib import Path
 import dramatiq
+from dropbot_controller.consts import SET_REALTIME_MODE
 from traits.observation._set_change_event import SetChangeEvent
 
 from electrode_controller.consts import electrode_state_change_publisher, electrode_disable_request_publisher
@@ -43,7 +44,7 @@ from traitsui.view import View
 # ext consts
 from logger.logger_service import get_logger
 from microdrop_style.button_styles import get_tooltip_style
-from microdrop_style.colors import BLACK
+from microdrop_style.colors import BLACK, SUCCESS_COLOR, GREY
 from microdrop_style.helpers import (
     QT_THEME_NAMES,
     get_complete_stylesheet,
@@ -63,7 +64,7 @@ from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     CollapsibleVStackBox,
     horizontal_spacer_widget,
-    PulsingLabel,
+    PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
 from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
@@ -1126,23 +1127,38 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
 
-        # --- 1. Initialize our new custom widget ---
+        # --- Initialize widgets ---
         self.recording_icon = PulsingLabel(
             icon_str="album",
             stylesheet="color: red;",
             tooltip="Recording in progress...",
         )
 
-        # Apply your specific font settings
+        # Use the new custom clickable icon
+        active_inactive_styles = (
+             f"""QLabel {{color: {SUCCESS_COLOR};}}""",
+             f"""QLabel {{color: {GREY["lighter"]};}}""",
+        )
+        active_active_tooltips = (
+            "Click to <b>disable</b> realtime mode",
+            "Click to <b>enable</b> realtime mode",
+        )
+        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_styles, active_active_tooltips)
+        self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
+
+        # Apply font settings
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         self.recording_icon.setFont(_font)
+        self.realtime_mode_icon.setFont(_font)
 
         # --- Add to Status Bar ---
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.recording_icon)
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.realtime_mode_icon)
 
-        # Hide it initially so it waits for a trigger
+        # Hide recording icon initially so it waits for a trigger
         self.recording_icon.hide()
 
         self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
