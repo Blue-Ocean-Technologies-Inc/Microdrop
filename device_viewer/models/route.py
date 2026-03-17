@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Event
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Event, Property
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -201,6 +201,18 @@ class RouteLayerManager(HasTraits):
 
     # button for running all routes where Run column is checked
     run_routes = Button("play_circle")
+
+    # Execution control buttons
+    pause_btn = Button("pause")
+    stop_btn = Button("stop")
+    resume_btn = Button("play_arrow")
+    prev_phase_btn = Button("skip_previous")
+    next_phase_btn = Button("skip_next")
+
+    # Execution state (driven by RouteExecutionService)
+    is_executing = Bool(False)
+    is_paused = Bool(False)
+    phase_label = Str("")
 
     # path execution properties (mirror protocol grid step defaults)
     duration = Float(1.0)
