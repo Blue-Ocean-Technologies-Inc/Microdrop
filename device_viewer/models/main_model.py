@@ -35,6 +35,8 @@ class DeviceViewMainModel(HasTraits):
 
     # add services
     route_execution_service = Instance(IRouteExecutionService)
+    route_execution_service_executing = Bool(False)
+    route_execution_service_paused = Bool(False)
 
     # ---------------- Device View Traits -----------------------
 

@@ -28,7 +28,7 @@ class Route(HasTraits):
         if len(self.route) == 0:
             return []
         else:
-            return [self.route[0], self.route[-1]]        
+            return [self.route[0], self.route[-1]]
 
     def is_loop(self) -> bool:
         '''Return True if the path is a loop'''
@@ -55,29 +55,29 @@ class Route(HasTraits):
     def is_segment(from_a, to_a, from_b, to_b) -> bool:
         '''Returns if segment a is equivalent to segment b (equal or equal reversed)'''
         return (from_a == from_b and to_a == to_b) or (from_a == to_b and to_a == from_b)
-    
+
     def has_segment(self, from_id, to_id):
         '''Checks if the route has a particular segment'''
         for i in range(len(self.route)-1):
             if Route.is_segment(from_id, to_id, self.route[i], self.route[i+1]):
                 return True
         return False
-    
+
     def can_add_segment(self, from_id, to_id) -> bool:
         '''Returns if this path can accept a given segment'''
         # We can currently only add to the ends of routes
         if len(self.route) == 0:
             return True
-        
+
         endpoints = self.get_endpoints()
         return to_id == endpoints[0] or from_id in self.route
-    
+
     def can_merge(self, other: "Route") -> bool:
         '''Returns if other can be merged with the current route'''
         self_endpoints = self.get_endpoints()
         other_endpoints = other.get_endpoints()
         return self_endpoints[0] == other_endpoints[1] or self_endpoints[1] == other_endpoints[0]
-    
+
     def merge(self, other: "Route") -> list:
         '''Merge with other route. Does this in place and does not modify the other route. Prioritizes putting other at end in ambigous cases. Assumes can_merge returns True'''
         if self.route[-1] == other.route[0]:
@@ -109,7 +109,7 @@ class Route(HasTraits):
                 if electrode_id == from_id:
                     new_route.append(to_id)
                     new_route.append(from_id)
-            
+
             self.route = new_route
 
     def can_remove(self, from_id, to_id) -> bool:
@@ -120,7 +120,7 @@ class Route(HasTraits):
         '''Returns a list of new routes (in no particular order) that result from removing a segment from a given path (and merging pieces). Object should be dereferenced afterwards'''
         if len(self.route) == 0:
             return [[]]
-        
+
         new_routes = [[]] # Where route pieces are stored
 
         # First, we partition the route into the deleted segment and routes in between
@@ -152,12 +152,12 @@ class Route(HasTraits):
                         new_routes[j] = [] # We cant delete anything since it would break our loops
                         merge_flag = True
                         break
-            
+
         return list(filter(lambda route: len(route) > 1, new_routes)) # Remove empty/singular routes
 
     def invert(self):
         self.route.reverse()
-    
+
     def __repr__(self) -> str:
         return f"<Route path={self.route}>"
 
@@ -199,15 +199,13 @@ class RouteLayerManager(HasTraits):
     # The value is the RouteLayer to execute.
     execute_path_requested = Event(List(Instance(RouteLayer)))
 
-    # button for running all routes where Run column is checked
-    run_routes = Button("play_circle")
-
     # Execution control buttons
+    run_routes = Button("play_circle")  # button for running all routes where Run column is checked
     pause_btn = Button("pause")
+    resume_btn = Button("resume")
     stop_btn = Button("stop")
-    resume_btn = Button("play_arrow")
-    prev_phase_btn = Button("skip_previous")
-    next_phase_btn = Button("skip_next")
+    prev_phase_btn = Button("chevron_left")
+    next_phase_btn = Button("chevron_right")
 
     # Execution state (driven by RouteExecutionService)
     is_executing = Bool(False)
@@ -231,7 +229,7 @@ class RouteLayerManager(HasTraits):
             if layer.color in color_counts.keys():
                 color_counts[layer.color] += 1
         return Counter(color_counts).most_common()[-1][0] # Return least common color
-    
+
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)
 
@@ -247,7 +245,7 @@ class RouteLayerManager(HasTraits):
 
         if index < len(self.layers):
             self.selected_layer = self.layers[index]
-    
+
         return index
 
     def delete_layer(self, layer: RouteLayer):

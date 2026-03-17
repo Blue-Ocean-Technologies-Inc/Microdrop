@@ -76,34 +76,6 @@ layer_table_editor = TableEditor(
             horizontal_alignment="center",
             width=16,
         ),
-        # ObjectColumn(
-        #     name="trail_overlay",
-        #     label="Overlay",
-        #     editable=True,
-        #     horizontal_alignment="center",
-        #     width=55,
-        # ),
-        # ObjectColumn(
-        #     name="trail_length",
-        #     label="Trail",
-        #     editable=True,
-        #     horizontal_alignment="center",
-        #     width=45,
-        # ),
-        # ObjectColumn(
-        #     name="duration",
-        #     label="Duration",
-        #     editable=True,
-        #     horizontal_alignment="center",
-        #     width=60,
-        # ),
-        # ObjectColumn(
-        #     name="repetitions",
-        #     label="Repeats",
-        #     editable=True,
-        #     horizontal_alignment="center",
-        #     width=55,
-        # ),
     ],
     menu=RouteLayerMenu,
     show_lines=False,
@@ -133,26 +105,70 @@ Label("Reps", tooltip="Times to repeat path executions"),
 protocol_execution_settings_group = HGroup(
     VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
     VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
-VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
-VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+    VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
+    VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+    enabled_when='free_mode'
+)
 
-enabled_when='free_mode'
+# --- Execution control button groups (mutually exclusive via visible_when) ---
+# pause / executing trait names from main model
+paused = "object.route_execution_service_paused"
+executing = "object.route_execution_service_executing"
+
+run_controls = HGroup(
+    UItem(
+        "object.routes.run_routes",
+        tooltip="Run selected routes",
+        visible_when=f"not {executing}",
+        springy=True,
+    ),  # run
+
+    UItem(
+        "object.routes.prev_phase_btn",
+        tooltip="Previous phase",
+        visible_when=paused,
+springy=True,
+    ),  # previous phase
+    UItem(
+        "object.routes.resume_btn",
+        tooltip="Resume execution",
+        visible_when=f"{executing} and {paused}",
+springy=True,
+    ),  # resume
+    UItem(
+        "object.routes.pause_btn",
+        tooltip="Pause execution",
+        visible_when=f"{executing} and not {paused}",
+springy=True,
+    ),  # pause
+    UItem(
+        "object.routes.next_phase_btn",
+        tooltip="Next phase",
+        visible_when=paused,
+springy=True,
+    ),  # next phase
+
+    UItem(
+        "object.routes.stop_btn",
+        tooltip="Stop execution",
+        visible_when=executing,
+springy=True,
+    ),  # stop
 )
 
 RouteLayerView = View(
     VGroup(
-protocol_execution_settings_group,
-        UItem('object.routes.run_routes', tooltip="Run selected routes as protocol step", enabled_when='free_mode'),
-            Item('object.routes.layers', editor=layer_table_editor, show_label=False)
-
+        protocol_execution_settings_group,
+        run_controls,
+        Item('object.routes.layers', editor=layer_table_editor, show_label=False),
     ),
-        resizable=True,
-        title="Route Layer Selector",
-        handler=RouteLayerTableHandler,
-        key_bindings=KeyBindings(
-            KeyBinding(
-                binding1='Delete',
-                method_name='handle_delete_key'
-            ),
+    resizable=True,
+    title="Route Layer Selector",
+    handler=RouteLayerTableHandler,
+    key_bindings=KeyBindings(
+        KeyBinding(
+            binding1='Delete',
+            method_name='handle_delete_key'
+        ),
     )
 )
