@@ -1,9 +1,10 @@
-from traits.api import observe, HasTraits, Instance, Any, Int, provides
+from traits.api import observe, HasTraits, Instance, Any, Int, Bool, provides
 
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 from electrode_controller.consts import electrode_state_change_publisher
 from protocol_grid.services.path_execution_service import PathExecutionService
+from PySide6.QtCore import QTimer
 from microdrop_utils.pyside_helpers import PausableTimer
 
 from logger.logger_service import get_logger
@@ -20,11 +21,23 @@ class RouteExecutionService(HasTraits):
     _last_set_channels = Any()  # set: channels we programmatically set last phase (for diffing)
 
     _phase_timer = Any()  # PausableTimer instance
+    _display_timer = Any()  # QTimer for updating status display
+    _navigated_while_paused = Bool(False)
+
+    _total_reps = Int(1)
+    _total_phases = Int(0)
+    _phases_per_rep = Int(1)
+    _displayed_phase = Int(0)
 
     def __phase_timer_default(self):
         timer = PausableTimer()
         timer.setSingleShot(True)
         timer.timeout.connect(self._execute_next_phase)
+        return timer
+
+    def __display_timer_default(self):
+        timer = QTimer()
+        timer.timeout.connect(self._update_status_display)
         return timer
 
     # ---------------------- User-toggle diff helper -------------------------
@@ -85,6 +98,22 @@ class RouteExecutionService(HasTraits):
         self.model.route_execution_service_executing = True
         self.model.route_execution_service_paused = False
 
+        # Compute phases-per-rep by running a single-rep plan
+        single_rep_plan = PathExecutionService.calculate_execution_plan_from_params(
+            duration=self.model.routes.duration,
+            repetitions=1,
+            repeat_duration=0.0,
+            trail_length=self.model.routes.trail_length,
+            trail_overlay=self.model.routes.trail_overlay,
+            paths=paths,
+            activated_electrodes=activated_electrode_ids,
+        )
+        self._phases_per_rep = max(len(single_rep_plan), 1)
+        self._total_reps = max(len(plan) // self._phases_per_rep, 1)
+
+        # Initialize status display
+        self._total_phases = len(plan)
+
         # Snapshot currently activated channels as the user's baseline selections
         self._user_toggled_channels = set(self.model.electrodes.actuated_channels)
         self._last_set_channels = set(self.model.electrodes.actuated_channels)
@@ -93,6 +122,7 @@ class RouteExecutionService(HasTraits):
         for layer in self.model.routes.layers:
             layer.execution_disabled = True
 
+        self._display_timer.start(100)
         self._execute_next_phase()
 
     @observe("model:routes:stop_btn")
@@ -136,6 +166,7 @@ class RouteExecutionService(HasTraits):
         )
 
         self._apply_phase(plan_item)
+        self._update_phase_rep_status(self._current_phase_index)
 
         self._current_phase_index += 1
 
@@ -164,6 +195,31 @@ class RouteExecutionService(HasTraits):
         # Send to hardware
         electrode_state_change_publisher.publish(merged_channels)
 
+    # ----------------------------- Status display ----------------------------
+
+    def _update_status_display(self):
+        """Called by _display_timer every 100ms to update the execution status string."""
+        remaining_s = self._phase_timer.remainingTime() / 1000
+
+        phase = self._displayed_phase
+        total = self._total_phases
+        current_rep = min((phase - 1) // self._phases_per_rep + 1, self._total_reps)
+
+        self.model.execution_status = (
+            f"Phase: {phase}/{total}    "
+            f"Rep: {current_rep}/{self._total_reps}    "
+            f"{remaining_s:.1f}s"
+        )
+
+    def _update_phase_rep_status(self, displayed_phase_index):
+        """Record displayed phase (0-based) and trigger an immediate status refresh."""
+        self._displayed_phase = displayed_phase_index + 1
+        self._update_status_display()
+
+    def _clear_status_display(self):
+        self._display_timer.stop()
+        self.model.execution_status = ""
+
     # ----------------------------- Completion / stop ------------------------
 
     def _on_execution_complete(self):
@@ -180,6 +236,7 @@ class RouteExecutionService(HasTraits):
     def _cleanup(self):
         """Shared teardown for completion and stop."""
         self._capture_user_changes()
+        self._clear_status_display()
 
         self.model.route_execution_service_executing = False
         self.model.route_execution_service_paused = False
@@ -209,18 +266,31 @@ class RouteExecutionService(HasTraits):
         self.model.route_execution_service_paused = True
 
     def resume_execution(self):
-        """Resume a paused route execution."""
+        """Resume a paused route execution.
+
+        If the user navigated phases while paused, replay the current phase
+        from scratch. Otherwise keep the remaining timer balance.
+        """
         if not self.model.route_execution_service_executing or not self.model.route_execution_service_paused:
             return
 
         logger.info("Resuming route execution")
         self.model.route_execution_service_paused = False
 
-        timer = self._phase_timer
-        if timer.remainingTime() > 0:
-            timer.resume()
-        else:
+        if self._navigated_while_paused:
+            # User changed phase via prev/next — replay current phase from scratch
+            self._navigated_while_paused = False
+            if self._current_phase_index > 0:
+                self._current_phase_index -= 1
+            self._phase_timer.stop()
             self._execute_next_phase()
+        else:
+            # Plain pause/resume — continue with remaining time
+            timer = self._phase_timer
+            if timer.remainingTime() > 0:
+                timer.resume()
+            else:
+                self._execute_next_phase()
 
     # ----------------------------- Phase navigation -------------------------
 
@@ -229,6 +299,7 @@ class RouteExecutionService(HasTraits):
         if not self.model.route_execution_service_paused:
             return
 
+        self._navigated_while_paused = True
         self._capture_user_changes()
 
         # _current_phase_index points to the NEXT phase to execute,
@@ -241,6 +312,7 @@ class RouteExecutionService(HasTraits):
         self._current_phase_index = target
         plan_item = self._execution_plan[self._current_phase_index]
         self._apply_phase(plan_item)
+        self._update_phase_rep_status(self._current_phase_index)
         self._current_phase_index += 1  # advance past the displayed phase
         self._phase_timer.stop()  # clear any remaining time from interrupted phase
 
@@ -249,6 +321,7 @@ class RouteExecutionService(HasTraits):
         if not self.model.route_execution_service_paused:
             return
 
+        self._navigated_while_paused = True
         self._capture_user_changes()
 
         if self._current_phase_index >= len(self._execution_plan):
@@ -256,5 +329,6 @@ class RouteExecutionService(HasTraits):
 
         plan_item = self._execution_plan[self._current_phase_index]
         self._apply_phase(plan_item)
+        self._update_phase_rep_status(self._current_phase_index)
         self._current_phase_index += 1
         self._phase_timer.stop()  # clear any remaining time from interrupted phase

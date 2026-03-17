@@ -38,6 +38,9 @@ class DeviceViewMainModel(HasTraits):
     route_execution_service_executing = Bool(False)
     route_execution_service_paused = Bool(False)
 
+    # route Execution status display
+    execution_status = Str("")
+
     # ---------------- Device View Traits -----------------------
 
     undo_manager = Instance(UndoManager)  # Undo manager

@@ -156,10 +156,17 @@ springy=True,
     ),  # stop
 )
 
+execution_status_bar = HGroup(
+    Item('execution_status', style='readonly', show_label=False),
+    visible_when=executing,
+    # style_sheet='* { font-size: 15px; }',
+)
+
 RouteLayerView = View(
     VGroup(
         protocol_execution_settings_group,
         run_controls,
+        execution_status_bar,
         Item('object.routes.layers', editor=layer_table_editor, show_label=False),
     ),
     resizable=True,
