@@ -1,4 +1,3 @@
-from pywin.framework.toolmenu import tools
 from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label
 from traitsui.key_bindings import KeyBindings, KeyBinding
 
