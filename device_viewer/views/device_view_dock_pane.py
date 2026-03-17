@@ -1032,14 +1032,18 @@ class DeviceViewerDockPane(TraitsDockPane):
         """
         logger.debug(f"Model change event received: {event}")
 
+        if self._disable_state_messages:
+            logger.warning("Not processing device view model state change since state messages are disabled.")
+            return
+
         try:
+            logger.info("Processing device view model state change...")
             self.model_change_handler_with_timeout(event)
-            if not self._disable_state_messages:
-                self.message_buffer = gui_models_to_message_model(self.model).serialize()
-                logger.info(
-                    f"Buffering message for device viewer state change: {self.message_buffer}"
-                )
-                self.publish_model_message()
+            self.message_buffer = gui_models_to_message_model(self.model).serialize()
+            logger.info(
+                f"Buffering message for device viewer state change: {self.message_buffer}"
+            )
+            self.publish_model_message()
 
         except Exception as e:
             logger.error(e, exc_info=True)
