@@ -1,27 +1,30 @@
 from pathlib import Path
+from microdrop_utils.decorators import debounce
 
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID, provides
 from pyface.undo.api import UndoManager
 
-from device_viewer.models.alpha import AlphaValue
-from device_viewer.models.perspective import PerspectiveModel
-from microdrop_utils.decorators import debounce
+from .alpha import AlphaValue
+from .perspective import PerspectiveModel
 from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
+from ..interfaces.i_main_model import IDeviceViewMainModel
+from ..interfaces.i_route_execution_service import IRouteExecutionService
 
 from ..preferences import DeviceViewerPreferences
+from ..services.route_execution_service import RouteExecutionService
 
-from logger.logger_service import get_logger
 from ..utils.camera import qpointf_list_serialize, qpointf_list_deserialize
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
-
+@provides(IDeviceViewMainModel)
 class DeviceViewMainModel(HasTraits):
 
     # Compose device view model using components
@@ -29,6 +32,10 @@ class DeviceViewMainModel(HasTraits):
     electrodes = Instance(Electrodes)
     preferences = Instance(DeviceViewerPreferences)
     calibration = Instance(CalibrationModel)
+
+    # add services
+    route_execution_service = Instance(IRouteExecutionService)
+
     # ---------------- Device View Traits -----------------------
 
     undo_manager = Instance(UndoManager)  # Undo manager
@@ -95,8 +102,10 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         self.calibration = CalibrationModel(electrodes=self.electrodes)
-        # Initialize the alpha map with default values
 
+        self.route_execution_service = RouteExecutionService(model=self)
+
+        # Initialize the alpha map with default values
         if self.preferences:
             self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
                                          visible=self.preferences.default_visibility[key])
@@ -235,7 +244,6 @@ class DeviceViewMainModel(HasTraits):
                     layer.name = layer.route.get_name(self.electrodes.channels_electrode_ids_map)
                 else:
                     layer.name = "Null route"
-
 
     @observe("electrodes.svg_model.filename")
     def push_globals(self, event):
