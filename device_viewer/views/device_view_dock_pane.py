@@ -1028,13 +1028,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
-        Handle changes to the model and send a message to the device viewer state change topic if free mode.
+        Handle changes to the model and send a message to the device viewer state change topic.
         """
         logger.debug(f"Model change event received: {event}")
-
-        if not self.model.free_mode:
-            logger.debug("Not publishing device viewer model change, since not in free mode.")
-            return
 
         try:
             self.model_change_handler_with_timeout(event)
