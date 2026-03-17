@@ -3,7 +3,9 @@ from traits.api import observe, HasTraits, Instance, Any, Int, Bool, provides
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 from electrode_controller.consts import electrode_state_change_publisher
+from protocol_grid.consts import ROUTES_EXECUTING
 from protocol_grid.services.path_execution_service import PathExecutionService
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from PySide6.QtCore import QTimer
 from microdrop_utils.pyside_helpers import PausableTimer
 
@@ -97,6 +99,7 @@ class RouteExecutionService(HasTraits):
         self._current_phase_index = 0
         self.model.route_execution_service_executing = True
         self.model.route_execution_service_paused = False
+        publish_message(topic=ROUTES_EXECUTING, message="true")
 
         # Compute phases-per-rep by running a single-rep plan
         single_rep_plan = PathExecutionService.calculate_execution_plan_from_params(
@@ -240,6 +243,7 @@ class RouteExecutionService(HasTraits):
 
         self.model.route_execution_service_executing = False
         self.model.route_execution_service_paused = False
+        publish_message(topic=ROUTES_EXECUTING, message="false")
         self._execution_plan = []
         self._current_phase_index = 0
 

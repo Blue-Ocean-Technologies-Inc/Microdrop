@@ -304,6 +304,7 @@ class PGCWidget(QWidget):
         self.tree.setSelectionMode(QTreeView.ExtendedSelection)
 
         self._protocol_running = False
+        self._routes_executing = False
         self._force_stop = False
         self._processing_palette_change = False
         self._last_published_step_id = None
@@ -538,6 +539,23 @@ class PGCWidget(QWidget):
     def _on_video_recording_state_changed(self, is_recording: bool):
         self._video_recording_active = is_recording
 
+    @Slot(bool)
+    def _on_routes_executing_changed(self, is_executing: bool):
+        """Disable/enable the protocol grid when device viewer routes are executing."""
+        self._routes_executing = is_executing
+
+        # Disable tree, and nav bar buttons. Leave rest interactive.
+        self.tree.setEnabled(not is_executing)
+        self.navigation_bar.btn_play.setEnabled(not is_executing)
+        self.navigation_bar.btn_stop.setEnabled(not is_executing)
+        self.navigation_bar.btn_first.setEnabled(not is_executing)
+        self.navigation_bar.btn_prev.setEnabled(not is_executing)
+        self.navigation_bar.btn_next.setEnabled(not is_executing)
+        self.navigation_bar.btn_last.setEnabled(not is_executing)
+
+        _tooltip = "Protocol grid blocked; Routes are being run on device view!" if is_executing else ""
+        self.tree.setToolTip(_tooltip)
+
     def _check_video_recording_and_show_dialog(self) -> bool:
         """Check if video recording is active and show warning dialog.
 
@@ -589,6 +607,9 @@ class PGCWidget(QWidget):
 
         # advanced_mode_change
         sig.advanced_mode_changed.connect(self.toggle_advanced_user_mode)
+
+        # Routes executing state from device viewer
+        sig.routes_executing_changed.connect(self._on_routes_executing_changed)
 
         logger.info("Widget connected to message listener")
 
