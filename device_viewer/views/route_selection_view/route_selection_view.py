@@ -122,38 +122,37 @@ run_controls = HGroup(
         visible_when=f"not {executing}",
         springy=True,
     ),  # run
-
     UItem(
         "object.routes.prev_phase_btn",
         tooltip="Previous phase",
         visible_when=paused,
-springy=True,
+        springy=True,
     ),  # previous phase
     UItem(
         "object.routes.resume_btn",
         tooltip="Resume execution",
         visible_when=f"{executing} and {paused}",
-springy=True,
+        springy=True,
     ),  # resume
     UItem(
         "object.routes.pause_btn",
         tooltip="Pause execution",
         visible_when=f"{executing} and not {paused}",
-springy=True,
+        springy=True,
     ),  # pause
     UItem(
         "object.routes.next_phase_btn",
         tooltip="Next phase",
         visible_when=paused,
-springy=True,
+        springy=True,
     ),  # next phase
-
     UItem(
         "object.routes.stop_btn",
         tooltip="Stop execution",
         visible_when=executing,
-springy=True,
+        springy=True,
     ),  # stop
+    enabled_when="not object.protocol_running",
 )
 
 execution_status_bar = HGroup(
