@@ -11,7 +11,7 @@ import logger
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK
 from microdrop_style.helpers import is_dark_mode
-from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF
+from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
 
 
 class TableColumn(TableColumn_):
@@ -63,17 +63,23 @@ class ColorColumn(ObjectColumn):
         self.renderer = ColorRenderer()
 
 
-class VisibleColumn(ObjectColumn):
+class CustomCheckboxColumn(ObjectColumn):
     def __init__(self, **traits: Any):
         super().__init__(**traits)
         self.format_func = self.formatter
         self.text_font = QFont(ICON_FONT_FAMILY, 15)
 
     def formatter(self, value):  # No self since were just passing it as a function
-        return ICON_VISIBILITY if value else ICON_VISIBILITY_OFF
+        return ICON_SELECT_All if value else ICON_DESELECT
 
     def on_click(self, object):
-        object.visible = not object.visible
+        current_val = object.trait_get(self.name)[self.name]
+        object.trait_set(**{self.name: not current_val})
+
+
+class VisibleColumn(CustomCheckboxColumn):
+    def formatter(self, value):
+        return ICON_VISIBILITY if value else ICON_VISIBILITY_OFF
 
 
 ######## We have to define a new range column to properly handle range traits with spin boxes ########

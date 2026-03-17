@@ -21,11 +21,8 @@ except ImportError:
 def if_editable(func):
     """Decorator to check if the model is editable before executing the function."""
     def wrapper(self, *args, **kwargs):
-        if not self.model.editable:
-            # Ensure buttons and label are in sync with the model state
-            self.sync_buttons_and_label()
-            return
-        return func(self, *args, **kwargs)
+        if self.model.editable:
+            return func(self, *args, **kwargs)
     return wrapper
 
 
@@ -69,7 +66,6 @@ class ModePickerViewModel(HasTraits):
         return self.model.editable
 
     # -- Actions --
-    @if_editable
     def set_mode(self, mode):
         self.model.flip_mode_activation(mode)
 

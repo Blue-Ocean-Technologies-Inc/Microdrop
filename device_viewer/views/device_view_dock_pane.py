@@ -673,7 +673,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # layer_view code
         layer_view = RouteLayerView
-        self.layer_ui = self.model.routes.edit_traits(view=layer_view)
+        self.layer_ui = self.model.edit_traits(view=layer_view)
 
         # mode_picker_view code
         _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
@@ -1084,6 +1084,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.step_label")
     @observe("model.free_mode")
     @observe("model.editable")
+    @observe("model.protocol_running")
     def step_label_change(self, event):
         _status_bar_manager = self.task.window.status_bar_manager
 
