@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -197,7 +197,7 @@ class RouteLayerManager(HasTraits):
 
     # Event fired when user requests to execute a path from right-click menu.
     # The value is the RouteLayer to execute.
-    execute_path_requested = Event(List(Instance(RouteLayer)))
+    execute_path_requested = List(Instance(RouteLayer))
 
     # button for running all routes where Run column is checked
     run_routes = Button("play_circle")
