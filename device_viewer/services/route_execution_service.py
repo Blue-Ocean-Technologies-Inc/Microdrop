@@ -18,6 +18,8 @@ class RouteExecutionService(HasTraits):
     _is_executing = Bool(False)
     _execution_plan = Any()  # List of execution plan dicts
     _current_phase_index = Int(0)
+    _user_toggled_channels = Any()  # set: channels the user manually toggled during execution
+    _last_set_channels = Any()  # set: channels we programmatically set last phase (for diffing)
 
     @observe("model:routes:execute_path_requested")
     def _execute_path_requested_change(self, event):
@@ -65,6 +67,9 @@ class RouteExecutionService(HasTraits):
         self._execution_plan = plan
         self._current_phase_index = 0
         self._is_executing = True
+        # Snapshot currently activated channels as the user's baseline selections
+        self._user_toggled_channels = set(self.model.electrodes.actuated_channels)
+        self._last_set_channels = set(self.model.electrodes.actuated_channels)
 
         # Disable route editing during execution
         for layer in self.model.routes.layers:
@@ -80,6 +85,12 @@ class RouteExecutionService(HasTraits):
             self._on_execution_complete()
             return
 
+        # Detect user channel changes since the last phase was set
+        current = set(self.model.electrodes.actuated_channels)
+        user_added = current - self._last_set_channels
+        user_removed_from_toggled = self._user_toggled_channels - current
+        self._user_toggled_channels = (self._user_toggled_channels | user_added) - user_removed_from_toggled
+
         plan_item = self._execution_plan[self._current_phase_index]
         active_electrodes = plan_item["activated_electrodes"]
 
@@ -88,17 +99,21 @@ class RouteExecutionService(HasTraits):
             f"{active_electrodes}"
         )
 
-        # Map electrode IDs to channels
+        # Map electrode IDs to channels for this phase
         id_to_channel = self.model.electrodes.electrode_ids_channels_map
-        active_channels = PathExecutionService.get_active_channels_from_map(
+        phase_channels = PathExecutionService.get_active_channels_from_map(
             id_to_channel, active_electrodes
         )
 
-        # Update display
-        self.model.electrodes.actuated_channels = active_channels
+        # Merge path-phase channels with user-toggled channels
+        merged_channels = phase_channels | self._user_toggled_channels
+
+        # Update display and track what we set
+        self.model.electrodes.actuated_channels = merged_channels
+        self._last_set_channels = set(merged_channels)
 
         # Send to hardware
-        electrode_state_change_publisher.publish(active_channels)
+        electrode_state_change_publisher.publish(merged_channels)
 
         self._current_phase_index += 1
         duration_ms = int(plan_item["duration"] * 1000)
@@ -109,13 +124,23 @@ class RouteExecutionService(HasTraits):
 
     def _on_execution_complete(self):
         logger.info("Route execution complete")
+
+        # Capture final user changes before clearing execution state
+        current = set(self.model.electrodes.actuated_channels)
+        user_added = current - self._last_set_channels
+        user_removed_from_toggled = self._user_toggled_channels - current
+        self._user_toggled_channels = (self._user_toggled_channels | user_added) - user_removed_from_toggled
+
         self._is_executing = False
         self._execution_plan = []
         self._current_phase_index = 0
 
-        # Clear actuated channels and hardware
-        self.model.electrodes.actuated_channels = set()
-        electrode_state_change_publisher.publish(set())
+        # Keep only user-toggled channels; clear path-driven ones
+        self.model.electrodes.actuated_channels = self._user_toggled_channels
+        electrode_state_change_publisher.publish(self._user_toggled_channels)
+
+        self._last_set_channels = set()
+        self._user_toggled_channels = set()
 
         # Re-enable route editing
         for layer in self.model.routes.layers:
@@ -125,13 +150,23 @@ class RouteExecutionService(HasTraits):
         """Stop a running route execution."""
         if self._is_executing:
             logger.info("Stopping route execution")
+
+            # Capture final user changes
+            current = set(self.model.electrodes.actuated_channels)
+            user_added = current - self._last_set_channels
+            user_removed_from_toggled = self._user_toggled_channels - current
+            self._user_toggled_channels = (self._user_toggled_channels | user_added) - user_removed_from_toggled
+
             self._is_executing = False
             self._execution_plan = []
             self._current_phase_index = 0
 
-            # Clear actuated channels and hardware
-            self.model.electrodes.actuated_channels = set()
-            electrode_state_change_publisher.publish(set())
+            # Keep only user-toggled channels; clear path-driven ones
+            self.model.electrodes.actuated_channels = self._user_toggled_channels
+            electrode_state_change_publisher.publish(self._user_toggled_channels)
+
+            self._last_set_channels = set()
+            self._user_toggled_channels = set()
 
             # Re-enable route editing
             for layer in self.model.routes.layers:
