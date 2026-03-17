@@ -377,9 +377,50 @@ class PathExecutionService:
             })
         
         return execution_plan
-    
+
     @staticmethod
-    def create_dynamic_device_state_message(original_device_state: DeviceState, 
+    def calculate_execution_plan_from_params(
+        duration: float,
+        repetitions: int,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+        paths: List[List[str]],
+        activated_electrodes: List[str] = None,
+        step_uid: str = "",
+        step_id: str = "",
+        step_description: str = "Step",
+    ) -> List[Dict[str, Any]]:
+        """Calculate execution plan from raw parameters without needing ProtocolStep or DeviceState."""
+        step = ProtocolStep(parameters={
+            "Duration": str(duration),
+            "Repetitions": str(repetitions),
+            "Repeat Duration": str(repeat_duration),
+            "Trail Length": str(trail_length),
+            "Trail Overlay": str(trail_overlay),
+            "UID": step_uid,
+            "ID": step_id,
+            "Description": step_description,
+        })
+        device_state = DeviceState(
+            activated_electrodes=list(activated_electrodes or []),
+            paths=paths,
+        )
+        return PathExecutionService.calculate_step_execution_plan(step, device_state)
+
+    @staticmethod
+    def get_active_channels_from_map(id_to_channel: Dict[str, int], active_electrodes: list[str]) -> set:
+        """Get active channels from a direct id_to_channel mapping without needing DeviceState."""
+        active_channels = set()
+        for electrode_id in active_electrodes:
+            if electrode_id in id_to_channel:
+                channel = id_to_channel[electrode_id]
+                if channel is not None:
+                    active_channels.add(channel)
+        return active_channels
+
+    @staticmethod
+    def create_dynamic_device_state_message(original_device_state: DeviceState,
                                           active_electrodes: list[str],
                                           step_uid: str,
                                           step_description: str = "Step",
