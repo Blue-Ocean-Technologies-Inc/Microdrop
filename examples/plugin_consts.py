@@ -4,6 +4,7 @@ from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from logger.plugin import LoggerPlugin
 from logger_ui.plugin import LoggerUIPlugin
+from manual_controls.plugin import ManualControlsPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
@@ -22,6 +23,7 @@ from peripherals_ui.plugin import PeripheralUiPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
+from send_feedback.plugin import SendFeedbackPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -36,6 +38,7 @@ FRONTEND_PLUGINS = [
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
     PeripheralUiPlugin,
+    SendFeedbackPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
