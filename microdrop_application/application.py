@@ -41,6 +41,19 @@ ETSConfig.user_data = str(Path.home() / "Documents" / ETSConfig.company / "Micro
 ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
 
 
+def _show_beta_disclaimer():
+    """Read the Disclaimer section from README.md and show it at startup."""
+    from microdrop_application.dialogs.pyface_wrapper import disclaimer, warning
+
+    disclaimer_text = """
+    <b>Microdrop</b> is an open-source <b>beta</b> provided for testing and evaluation.<br><br> 
+    It may contain bugs or unexpected behaviour.<br><br> 
+    Please validate results in your own workflows and ensure your data is properly backed up.<br><br> 
+    Provided under <b>AGPLv3</b> without warranty. Use at your own risk."""
+
+    dialog = disclaimer(None, message=disclaimer_text)
+
+
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
 
@@ -165,8 +178,8 @@ class MicrodropApplication(TasksApplication):
     @observe('application_initialized')
     def _on_application_initialized(self, event):
         logger.critical("Application Initialized")
+        _show_beta_disclaimer()
         publish_message(message="", topic=START_DEVICE_MONITORING)
-
 
     ############################# Initialization ############################################################
     def traits_init(self):
