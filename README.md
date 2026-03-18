@@ -6,6 +6,13 @@
 
 *MicroDrop* is a graphical user interface designed for the DropBot Digital Microfluidics control system. The original *MicroDrop* application suffered from a lack of regular maintenance, resulting in poor portability and limited accessibility for developers. To address these issues, we introduce **MicroDrop-Next-Gen**, a modern application for running the DropBot Digital Microfluidics control system. This new version leverages updated technologies and is built with future development in mind. This document provides an overview of the design considerations, code documentation, current technology requirements, and installation instructions for **MicroDrop-Next-Gen**.
 
+## **Disclaimer**
+
+*Microdrop* is an open-source software platform currently in beta and is provided for testing and evaluation purposes. It is under active development and may contain bugs, errors, or unexpected behaviour.
+
+Users are responsible for validating the software in their own workflows and for maintaining appropriate data backups before, during, and after use.
+
+This software is provided under the GNU Affero General Public License (AGPLv3), without any warranty. Use at your own risk.
 
 ## **Research Pre-Development**
 $$
