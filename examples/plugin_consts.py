@@ -23,7 +23,7 @@ from peripherals_ui.plugin import PeripheralUiPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
-from send_feedback.plugin import SendFeedbackPlugin
+from user_help_plugin.plugin import UserHelpPlugin
 
 # The order of plugins matters. This determines whose start routine will be run first,
 # and whose contributions will be prioritized
@@ -38,7 +38,7 @@ FRONTEND_PLUGINS = [
     ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
     PeripheralUiPlugin,
-    SendFeedbackPlugin,
+    UserHelpPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
