@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MicroDrop Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Lato:wght@300;400;700;900&family=JetBrains+Mono:wght@400;500;700&family=Varela+Round&display=swap" rel="stylesheet">
+<style>
+/* ===========================================
+   VIEWPORT FITTING: MANDATORY BASE STYLES
+   =========================================== */
+html, body {
+    height: 100%;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+}
+html {
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+}
+.slide {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.slide-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-height: 100%;
+    overflow: hidden;
+    padding: var(--slide-padding);
+}
+:root {
+    --title-size: clamp(1.5rem, 5vw, 4rem);
+    --h2-size: clamp(1.15rem, 3vw, 2.2rem);
+    --h3-size: clamp(0.9rem, 2.2vw, 1.5rem);
+    --body-size: clamp(0.7rem, 1.3vw, 1.05rem);
+    --small-size: clamp(0.6rem, 0.95vw, 0.82rem);
+    --code-size: clamp(0.58rem, 0.85vw, 0.78rem);
+    --slide-padding: clamp(1rem, 4vw, 4rem);
+    --content-gap: clamp(0.5rem, 2vw, 2rem);
+    --element-gap: clamp(0.25rem, 1vw, 1rem);
+
+    /* Sci-Bots Brand Colors */
+    --bg-primary: #080c12;
+    --bg-secondary: #0d1420;
+    --bg-card: #121d2d;
+    --bg-card-hover: #162336;
+    --green-primary: #2F9A4A;
+    --green-bright: #059748;
+    --green-light: #A0CFA5;
+    --green-pale: #90cd97;
+    --carbon: #575757;
+    --alto: #D1D1D1;
+    --text-primary: #f0f4f0;
+    --text-secondary: #a8b8a8;
+    --text-muted: #6b7f6b;
+    --border: rgba(47, 154, 74, 0.2);
+    --glow: rgba(47, 154, 74, 0.3);
+    --accent: var(--green-primary);
+    --accent-bright: var(--green-bright);
+    --accent-light: var(--green-light);
+}
+.card, .container, .content-box {
+    max-width: min(92vw, 1050px);
+    max-height: min(80vh, 700px);
+}
+.feature-list, .bullet-list {
+    gap: clamp(0.4rem, 1vh, 1rem);
+}
+.feature-list li, .bullet-list li {
+    font-size: var(--body-size);
+    line-height: 1.4;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: clamp(0.5rem, 1.5vw, 1rem);
+}
+@media (max-height: 700px) {
+    :root {
+        --slide-padding: clamp(0.75rem, 3vw, 2rem);
+        --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+        --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+        --h2-size: clamp(1rem, 2.5vw, 1.6rem);
+    }
+}
+@media (max-height: 600px) {
+    :root {
+        --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+        --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+        --title-size: clamp(1.1rem, 4vw, 2rem);
+        --body-size: clamp(0.65rem, 1.1vw, 0.9rem);
+    }
+    .nav-dots, .keyboard-hint, .decorative {
+        display: none;
+    }
+}
+@media (max-height: 500px) {
+    :root {
+        --slide-padding: clamp(0.4rem, 2vw, 1rem);
+        --title-size: clamp(1rem, 3.5vw, 1.5rem);
+        --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+        --body-size: clamp(0.6rem, 0.9vw, 0.8rem);
+    }
+}
+@media (max-width: 600px) {
+    :root {
+        --title-size: clamp(1.25rem, 7vw, 2.5rem);
+    }
+    .grid {
+        grid-template-columns: 1fr;
+    }
+    .plugin-grid, .design-grid, .api-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* ===========================================
+   THEME STYLES
+   =========================================== */
+body {
+    font-family: 'Lato', system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+h1, h2, h3, .section-label {
+    font-family: 'Orbitron', 'Lato', system-ui, sans-serif;
+}
+code, .mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Grid background */
+.slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(47, 154, 74, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(47, 154, 74, 0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+}
+.slide-content {
+    position: relative;
+    z-index: 1;
+}
+
+/* Reveal animations */
+.reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.16s; }
+.reveal-delay-3 { transition-delay: 0.24s; }
+.reveal-delay-4 { transition-delay: 0.32s; }
+.reveal-delay-5 { transition-delay: 0.4s; }
+.reveal-delay-6 { transition-delay: 0.48s; }
+
+/* Slide number */
+.slide-number {
+    position: absolute;
+    bottom: clamp(0.4rem, 1.5vw, 1.2rem);
+    right: clamp(0.5rem, 2vw, 1.5rem);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--small-size);
+    color: var(--text-muted);
+    z-index: 2;
+}
+
+/* Sci-Bots footer logo */
+.slide-footer-link {
+    position: absolute;
+    bottom: clamp(0.4rem, 1.5vw, 1.2rem);
+    left: clamp(0.5rem, 2vw, 1.5rem);
+    z-index: 2;
+    line-height: 0;
+}
+.slide-footer-logo {
+    height: clamp(22px, 3.5vw, 36px);
+    width: auto;
+    opacity: 0.35;
+    transition: opacity 0.2s;
+}
+.slide-footer-link:hover .slide-footer-logo {
+    opacity: 0.6;
+}
+
+/* Section label */
+.section-label {
+    font-size: var(--small-size);
+    color: var(--green-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+    margin-bottom: clamp(0.2rem, 0.7vw, 0.5rem);
+}
+
+/* Headings */
+h1 {
+    font-size: var(--title-size);
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0;
+}
+h2 {
+    font-size: var(--h2-size);
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0 0 var(--content-gap) 0;
+}
+h3 {
+    font-size: var(--h3-size);
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0;
+}
+p {
+    font-size: var(--body-size);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Accent line */
+.accent-line {
+    width: clamp(40px, 8vw, 80px);
+    height: 3px;
+    background: linear-gradient(90deg, var(--green-bright), var(--green-light));
+    border-radius: 2px;
+    margin-top: clamp(0.3rem, 1vw, 0.75rem);
+}
+
+/* Tag */
+.tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--small-size);
+    padding: clamp(0.12rem, 0.4vw, 0.2rem) clamp(0.35rem, 0.8vw, 0.6rem);
+    border-radius: 4px;
+    background: rgba(47, 154, 74, 0.1);
+    color: var(--green-light);
+    border: 1px solid var(--border);
+}
+
+/* ===========================================
+   SLIDE 1: TITLE
+   =========================================== */
+.title-slide .slide-content {
+    align-items: center;
+    text-align: center;
+    justify-content: flex-end;
+    gap: 0;
+}
+.title-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(0.4rem, 1.5vw, 1rem);
+}
+.title-slide h1 {
+    font-size: clamp(1.8rem, 5.5vw, 4.5rem);
+    background: linear-gradient(135deg, var(--green-bright), var(--green-light), #fff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.title-slide .subtitle {
+    font-size: var(--h3-size);
+    color: #fff;
+    font-weight: 300;
+    font-family: 'Lato', sans-serif;
+}
+.title-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: clamp(300px, 50vw, 600px);
+    height: clamp(300px, 50vw, 600px);
+    background: radial-gradient(circle, rgba(47, 154, 74, 0.07), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+.microdrop-icon {
+    height: clamp(120px, 3vw, 230px);
+    width: auto;
+    object-fit: contain; 
+    opacity: 1;
+}
+.microdrop-icon:hover {
+    opacity: 0.7;
+}
+.scibots-title-link {
+    margin-top: auto;
+    align-self: center;
+    padding-bottom: clamp(0.3rem, 1vw, 0.5rem);
+    line-height: 0;
+}
+.scibots-title-logo {
+    height: clamp(20px, 3vw, 36px);
+    width: auto;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+.scibots-title-logo:hover {
+    opacity: 0.7;
+}
+
+/* ===========================================
+   SLIDE 2-3: SYSTEM OVERVIEW & FRONTEND
+   =========================================== */
+.three-layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 1.2vw, 0.8rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+    margin: 0 auto;
+}
+.layer-box {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.6rem, 1.5vw, 1.2rem);
+    padding: clamp(0.6rem, 1.5vw, 1.1rem) clamp(0.8rem, 2vw, 1.3rem);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.layer-box:hover {
+    border-color: rgba(47, 154, 74, 0.35);
+    box-shadow: 0 0 20px rgba(47, 154, 74, 0.06);
+}
+.layer-icon {
+    width: clamp(32px, 4.5vw, 48px);
+    height: clamp(32px, 4.5vw, 48px);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: clamp(0.9rem, 1.8vw, 1.3rem);
+}
+.layer-icon.frontend { background: rgba(47, 154, 74, 0.15); color: var(--green-primary); }
+.layer-icon.message { background: rgba(160, 207, 165, 0.12); color: var(--green-light); }
+.layer-icon.hardware { background: rgba(5, 151, 72, 0.15); color: var(--green-bright); }
+.layer-icon.server { background: rgba(209, 209, 209, 0.1); color: var(--alto); }
+.layer-info h3 {
+    font-size: clamp(0.82rem, 1.7vw, 1.1rem);
+    margin-bottom: 2px;
+}
+.layer-info p {
+    font-size: var(--small-size);
+    color: var(--text-muted);
+}
+.layer-arrow {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: clamp(0.7rem, 1.2vw, 0.9rem);
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+    margin: clamp(-0.2rem, -0.4vw, -0.05rem) 0;
+}
+
+/* ===========================================
+   PLUGIN / CARD GRIDS
+   =========================================== */
+.plugin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: clamp(0.4rem, 1.2vw, 0.8rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+}
+.plugin-card {
+    padding: clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    transition: border-color 0.3s, background 0.3s;
+}
+.plugin-card:hover {
+    border-color: rgba(47, 154, 74, 0.35);
+    background: var(--bg-card-hover);
+}
+.plugin-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.3rem, 0.8vw, 0.6rem);
+    margin-bottom: clamp(0.2rem, 0.5vw, 0.35rem);
+}
+.plugin-card .card-icon {
+    width: clamp(22px, 3vw, 30px);
+    height: clamp(22px, 3vw, 30px);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--body-size);
+    flex-shrink: 0;
+}
+.plugin-card h3 {
+    font-size: clamp(0.78rem, 1.5vw, 1rem);
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+}
+.plugin-card p {
+    font-size: var(--small-size);
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+.framework-note {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.3rem, 0.8vw, 0.6rem);
+    padding: clamp(0.4rem, 1vw, 0.6rem) clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 8px;
+    border: 1px solid rgba(47, 154, 74, 0.2);
+    background: rgba(47, 154, 74, 0.05);
+    margin-top: clamp(0.4rem, 1vw, 0.7rem);
+    max-width: min(92vw, 920px);
+}
+.framework-note p {
+    font-size: var(--small-size);
+    color: var(--text-secondary);
+}
+
+/* ===========================================
+   SLIDE 4: MESSAGE BUS
+   =========================================== */
+.message-flow {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.8vw, 0.6rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+    margin: 0 auto;
+}
+.flow-row {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.25rem, 0.8vw, 0.6rem);
+}
+.flow-node {
+    padding: clamp(0.35rem, 1vw, 0.6rem) clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 8px;
+    font-size: var(--small-size);
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-family: 'Lato', sans-serif;
+}
+.flow-node.frontend-node {
+    background: rgba(47, 154, 74, 0.15);
+    border: 1px solid rgba(47, 154, 74, 0.3);
+    color: var(--green-primary);
+}
+.flow-node.router-node {
+    background: rgba(160, 207, 165, 0.1);
+    border: 1px solid rgba(160, 207, 165, 0.25);
+    color: var(--green-light);
+}
+.flow-node.backend-node {
+    background: rgba(5, 151, 72, 0.12);
+    border: 1px solid rgba(5, 151, 72, 0.3);
+    color: var(--green-bright);
+}
+.flow-arrow {
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--small-size);
+    flex-shrink: 0;
+}
+.flow-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--code-size);
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.topic-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.25rem, 0.6vw, 0.4rem);
+    margin-top: clamp(0.3rem, 0.8vw, 0.6rem);
+}
+.topic-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--code-size);
+    padding: clamp(0.1rem, 0.3vw, 0.15rem) clamp(0.25rem, 0.6vw, 0.45rem);
+    border-radius: 4px;
+    background: rgba(47, 154, 74, 0.08);
+    border: 1px solid rgba(47, 154, 74, 0.15);
+    color: var(--text-secondary);
+}
+
+/* ===========================================
+   SLIDE 5: HARDWARE STACK
+   =========================================== */
+.hw-stack {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.8vw, 0.6rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+    margin: 0 auto;
+}
+.hw-layer {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.5rem, 1.2vw, 0.9rem);
+    padding: clamp(0.5rem, 1.2vw, 0.8rem) clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+.hw-layer .hw-icon {
+    width: clamp(26px, 3.5vw, 36px);
+    height: clamp(26px, 3.5vw, 36px);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: clamp(0.75rem, 1.3vw, 1rem);
+}
+.hw-layer h3 {
+    font-size: clamp(0.78rem, 1.5vw, 1rem);
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+    margin-bottom: 1px;
+}
+.hw-layer p {
+    font-size: var(--small-size);
+    color: var(--text-muted);
+}
+.hw-connector {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: clamp(0.6rem, 1vw, 0.8rem);
+    font-family: 'JetBrains Mono', monospace;
+    margin: clamp(-0.15rem, -0.25vw, -0.05rem) 0;
+}
+.hw-connector span {
+    font-size: var(--code-size);
+}
+
+/* ===========================================
+   SLIDES 6-8: DROPBOT API
+   =========================================== */
+.api-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: clamp(0.4rem, 1vw, 0.7rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+}
+.api-card {
+    padding: clamp(0.5rem, 1.2vw, 0.9rem);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+.api-card h3 {
+    font-size: clamp(0.72rem, 1.3vw, 0.9rem);
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+    margin-bottom: clamp(0.2rem, 0.5vw, 0.35rem);
+    color: var(--green-light);
+}
+.api-item {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(0.2rem, 0.5vw, 0.4rem);
+    margin-bottom: clamp(0.1rem, 0.3vw, 0.2rem);
+}
+.api-item code {
+    font-size: var(--code-size);
+    color: var(--green-light);
+    white-space: nowrap;
+}
+.api-item span {
+    font-size: var(--code-size);
+    color: var(--text-muted);
+}
+.code-block {
+    background: #0a1018;
+    border: 1px solid rgba(47, 154, 74, 0.15);
+    border-radius: 8px;
+    padding: clamp(0.5rem, 1.5vw, 1rem);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--code-size);
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: min(92vw, 920px);
+    overflow: hidden;
+}
+.code-block .kw { color: var(--green-light); }
+.code-block .fn { color: #7dd3a0; }
+.code-block .str { color: #90cd97; }
+.code-block .cm { color: #4a6a4a; }
+.code-block .num { color: #d4a574; }
+.code-block .op { color: var(--alto); }
+
+.signal-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.2rem, 0.5vw, 0.35rem);
+}
+.signal-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--code-size);
+    padding: clamp(0.08rem, 0.25vw, 0.12rem) clamp(0.2rem, 0.5vw, 0.4rem);
+    border-radius: 3px;
+    background: rgba(47, 154, 74, 0.08);
+    border: 1px solid rgba(47, 154, 74, 0.15);
+    color: var(--text-secondary);
+}
+
+/* ===========================================
+   SLIDE 9: DATA FLOW
+   =========================================== */
+.flow-pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.2rem, 0.6vw, 0.4rem);
+    width: 100%;
+    max-width: min(92vw, 880px);
+    margin: 0 auto;
+}
+.flow-step {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 1.2vw, 0.8rem);
+    padding: clamp(0.35rem, 1vw, 0.6rem) clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 8px;
+    border-left: 3px solid transparent;
+    background: var(--bg-card);
+    transition: border-color 0.3s;
+}
+.flow-step:hover {
+    border-left-color: var(--green-primary);
+}
+.step-num {
+    font-family: 'Orbitron', monospace;
+    font-size: var(--small-size);
+    font-weight: 700;
+    width: clamp(20px, 2.5vw, 26px);
+    height: clamp(20px, 2.5vw, 26px);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.step-num.down { background: rgba(47, 154, 74, 0.2); color: var(--green-primary); }
+.step-num.mid { background: rgba(160, 207, 165, 0.15); color: var(--green-light); }
+.step-num.hw { background: rgba(5, 151, 72, 0.2); color: var(--green-bright); }
+.step-num.up { background: rgba(209, 209, 209, 0.1); color: var(--alto); }
+.flow-step .step-text {
+    font-size: var(--body-size);
+    color: var(--text-secondary);
+}
+.flow-step .step-text strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+.flow-direction {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--code-size);
+    color: var(--text-muted);
+    margin: clamp(-0.1rem, -0.2vw, -0.02rem) 0;
+    padding-left: clamp(20px, 2.5vw, 26px);
+}
+
+/* ===========================================
+   SLIDE 10: KEY DESIGN CHOICES
+   =========================================== */
+.design-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: clamp(0.4rem, 1.2vw, 0.8rem);
+    width: 100%;
+    max-width: min(92vw, 920px);
+}
+.design-card {
+    padding: clamp(0.6rem, 1.5vw, 1rem);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    transition: border-color 0.3s;
+}
+.design-card:hover {
+    border-color: rgba(47, 154, 74, 0.35);
+}
+.design-card .card-icon-sm {
+    width: clamp(24px, 3vw, 32px);
+    height: clamp(24px, 3vw, 32px);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: clamp(0.2rem, 0.6vw, 0.4rem);
+    font-size: clamp(0.8rem, 1.3vw, 1rem);
+}
+.design-card h3 {
+    font-size: clamp(0.78rem, 1.5vw, 1rem);
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+    margin-bottom: clamp(0.15rem, 0.4vw, 0.25rem);
+}
+.design-card p {
+    font-size: var(--small-size);
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* ===========================================
+   NAVIGATION
+   =========================================== */
+.nav-dots {
+    position: fixed;
+    right: clamp(0.4rem, 1.2vw, 1rem);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(5px, 0.8vh, 8px);
+    z-index: 100;
+}
+.nav-dot {
+    width: clamp(5px, 0.7vw, 7px);
+    height: clamp(5px, 0.7vw, 7px);
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.35;
+    cursor: pointer;
+    transition: opacity 0.3s, background 0.3s, transform 0.3s;
+    border: none;
+    padding: 0;
+}
+.nav-dot.active {
+    opacity: 1;
+    background: var(--green-primary);
+    transform: scale(1.4);
+}
+.keyboard-hint {
+    position: fixed;
+    bottom: clamp(0.4rem, 1.2vw, 0.8rem);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(0.5rem, 0.7vw, 0.65rem);
+    color: var(--text-muted);
+    opacity: 0.4;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* ===========================================
+   ANIMATIONS
+   =========================================== */
+@keyframes pulse-glow {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+.microdrop-icon {
+    animation: float 4s ease-in-out infinite;
+}
+
+/* Inline SVG logos */
+.inline-svg-logo {
+    display: inline-block;
+}
+.inline-svg-logo svg {
+    display: block;
+}
+
+/* DropBot logo on title slide */
+.dropbot-logo-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+.dropbot-logo-link:hover { opacity: 0.8; }
+.dropbot-logo-link svg {
+    height: clamp(32px, 5vw, 60px);
+    width: auto;
+    overflow: visible;
+}
+
+/* OpenDrop styled text logo — matches gaudi.ch/OpenDrop branding */
+.opendrop-logo-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity 0.2s;
+    font-family: 'Varela Round', sans-serif;
+    font-size: clamp(1rem, 3.5vw, 2rem);
+    font-weight: 400;
+    color: #E25A3E;
+    letter-spacing: -0.01em;
+}
+.opendrop-logo-link:hover { opacity: 0.8; }
+
+/* Hardware logos row */
+.hw-logos-row {
+    display: flex;
+    align-items: center;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    margin-top: clamp(0.2rem, 0.5vw, 0.3rem);
+}
+.hw-logos-separator {
+    width: 1px;
+    height: clamp(30px, 5vw, 55px);
+    background: rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+/* Tag links */
+a.tag-link {
+    text-decoration: none;
+    transition: background 0.2s, border-color 0.2s;
+}
+a.tag-link:hover {
+    background: rgba(47, 154, 74, 0.2);
+    border-color: rgba(47, 154, 74, 0.4);
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation dots -->
+<nav class="nav-dots" aria-label="Slide navigation">
+    <button class="nav-dot active" data-slide="0" aria-label="Slide 1"></button>
+    <button class="nav-dot" data-slide="1" aria-label="Slide 2"></button>
+    <button class="nav-dot" data-slide="2" aria-label="Slide 3"></button>
+    <button class="nav-dot" data-slide="3" aria-label="Slide 4"></button>
+    <button class="nav-dot" data-slide="4" aria-label="Slide 5"></button>
+    <button class="nav-dot" data-slide="5" aria-label="Slide 6"></button>
+    <button class="nav-dot" data-slide="6" aria-label="Slide 7"></button>
+    <button class="nav-dot" data-slide="7" aria-label="Slide 8"></button>
+    <button class="nav-dot" data-slide="8" aria-label="Slide 9"></button>
+    <button class="nav-dot" data-slide="9" aria-label="Slide 10"></button>
+</nav>
+<div class="keyboard-hint">Arrow keys or scroll to navigate</div>
+
+<!-- ===================== SLIDE 1: TITLE ===================== -->
+<section class="slide title-slide" id="slide-0">
+    <div class="title-glow"></div>
+    <div class="slide-content">
+        <div class="title-main">
+        <a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop" target="_blank" rel="noopener" style="text-decoration: none; -webkit-text-fill-color: inherit; background: inherit; -webkit-background-clip: text; background-clip: text;">
+            <svg class="microdrop-icon" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg"><g>
+                <defs>
+                    <style>
+                      .md-green { fill: #37a953; }
+                      .md-gray { fill: #4d4d4d; }
+                      .md-white { fill: #fff; }
+                      .md-pale { fill: #90cd97; }
+                    </style>
+                  </defs>
+                <g>
+                    <g>
+                      <g>
+                        <path class="md-gray" d="M184.02,209.92l-4.21-4.21-10.52,10.52-1.68-1.68,10.52-10.52-4.21-4.21-10.51,10.51-1.68-1.68,10.51-10.51-4.21-4.21-10.51,10.51-10.52-10.51-4.21,4.21,10.52,10.51-1.68,1.68-10.52-10.52-4.21,4.21,10.51,10.52-1.68,1.68-10.51-10.51-4.21,4.21,10.52,10.51-10.52,10.52,4.21,4.21,10.52-10.52,1.68,1.68-10.52,10.52,4.21,4.21,10.52-10.52,1.68,1.68-10.52,10.52,4.21,4.21,10.52-10.52,10.52,10.51,4.21-4.21-10.51-10.51,1.68-1.68,10.51,10.52,4.21-4.21-10.51-10.51,1.68-1.68,10.52,10.51,4.21-4.21-10.52-10.51,10.52-10.52ZM171.47,221.96l-12.44,12.44c-.84.84-2.2.84-3.03,0l-12.44-12.44c-.84-.84-.84-2.2,0-3.04l12.44-12.44c.84-.84,2.2-.84,3.03,0l12.44,12.44c.84.84.84,2.2,0,3.04Z"/>
+                        <path class="md-pale" d="M179.54,222.81l-19.66,19.64c-1.31,1.31-3.43,1.31-4.73,0l-19.67-19.65c-1.31-1.31-1.31-3.43,0-4.74l19.66-19.64c1.31-1.31,3.43-1.31,4.73,0l19.67,19.65c1.31,1.31,1.31,3.43,0,4.74ZM171.47,218.92l-12.44-12.44c-.84-.84-2.2-.84-3.03,0l-12.44,12.44c-.84.84-.84,2.2,0,3.04l12.44,12.44c.84.84,2.2.84,3.03,0l12.44-12.44c.84-.84.84-2.2,0-3.04Z"/>
+                      </g>
+                      <g>
+                        <path class="md-gray" d="M228.11,212.6h-4.09v-.39c0-1.04-.89-1.93-1.92-1.93h-17.17c-1.04,0-1.92.89-1.92,1.93v4.39c0,1.04.89,1.93,1.92,1.93h17.17c3.35,0,6.02,2.66,6.02,5.97v4.39c0,3.31-2.66,5.97-6.02,5.97h-17.17c-3.3,0-5.97-2.66-5.97-5.97v-.4h4.04v.4c0,1.04.89,1.93,1.92,1.93h17.17c1.04,0,1.92-.89,1.92-1.93v-4.39c0-1.04-.89-1.93-1.92-1.93h-17.17c-3.3,0-5.97-2.66-5.97-5.97v-4.39c0-3.31,2.66-5.97,5.97-5.97h17.17c3.35,0,6.02,2.66,6.02,5.97v.39Z"/>
+                        <path class="md-gray" d="M261.69,230.81v4.05h-23.18c-3.3,0-5.97-2.66-5.97-5.97v-16.68c0-3.31,2.66-5.97,5.97-5.97h23.09v4.05h-23.09c-1.04,0-1.92.89-1.92,1.93v16.68c0,1.04.89,1.93,1.92,1.93h23.18Z"/>
+                        <path class="md-gray" d="M270.32,196.86v4.05h-4.05v-4.05h4.05ZM266.28,206.24h4.05v28.62h-4.05v-28.62Z"/>
+                        <path class="md-gray" d="M294.73,222.28h-19.24v-4.05h19.24v4.05Z"/>
+                        <path class="md-gray" d="M328.88,212.21v16.68c0,3.31-2.66,5.97-5.97,5.97h-23.18v-38h4.05v9.38h19.14c3.31,0,5.97,2.66,5.97,5.97ZM324.84,212.21c0-1.04-.89-1.93-1.92-1.93h-17.17c-1.09,0-1.97.89-1.97,1.93v16.68c0,1.04.89,1.93,1.97,1.93h17.17c1.04,0,1.92-.89,1.92-1.93v-16.68Z"/>
+                        <path class="md-gray" d="M355.88,206.24c3.35,0,6.02,2.66,6.02,5.97v16.68c0,3.31-2.66,5.97-6.02,5.97h-17.17c-3.31,0-5.97-2.66-5.97-5.97v-16.68c0-3.31,2.66-5.97,5.97-5.97h17.17ZM338.72,210.28c-1.04,0-1.92.89-1.92,1.93v16.68c0,1.04.89,1.93,1.92,1.93h17.17c1.09,0,1.92-.89,1.92-1.93v-16.68c0-1.04-.84-1.93-1.92-1.93h-17.17Z"/>
+                        <path class="md-gray" d="M370.52,210.28v18.61c0,1.04.89,1.93,1.92,1.93h10.46v4.05h-10.46c-3.35,0-5.97-2.66-5.97-5.97v-32.03h4.05v9.38h12.38v4.05h-12.38Z"/>
+                        <path class="md-gray" d="M415.79,212.6h-4.09v-.39c0-1.04-.89-1.93-1.92-1.93h-17.17c-1.04,0-1.92.89-1.92,1.93v4.39c0,1.04.89,1.93,1.92,1.93h17.17c3.35,0,6.02,2.66,6.02,5.97v4.39c0,3.31-2.66,5.97-6.02,5.97h-17.17c-3.3,0-5.97-2.66-5.97-5.97v-.4h4.05v.4c0,1.04.89,1.93,1.92,1.93h17.17c1.04,0,1.92-.89,1.92-1.93v-4.39c0-1.04-.89-1.93-1.92-1.93h-17.17c-3.3,0-5.97-2.66-5.97-5.97v-4.39c0-3.31,2.66-5.97,5.97-5.97h17.17c3.35,0,6.02,2.66,6.02,5.97v.39Z"/>
+                      </g>
+                    </g>
+                    <g>
+                      <g>
+                        <path class="md-white" d="M101.03,203.92v8.54c0,2.13-1.8,3.88-4.02,3.88h-13.13v-21.62h3.81v5.33h9.32c2.21,0,4.02,1.74,4.02,3.87ZM97.22,203.92c0-.11-.09-.2-.2-.2h-9.11c-.12,0-.2.08-.2.2v8.54c0,.11.09.2.2.2h9.11c.12,0,.2-.08.2-.2v-8.54Z"/>
+                        <path class="md-white" d="M116.11,222.79h-10.33v-3.71h10.33c.09,0,.17-.06.17-.17v-2.58h-9.32c-2.21,0-4.02-1.74-4.02-3.88v-12.35h3.81v12.35c0,.11.09.2.2.2h9.14c.09,0,.17-.08.17-.2v-12.35h3.81v18.81c0,2.13-1.78,3.87-3.99,3.87Z"/>
+                      </g>
+                      <g>
+                        <path class="md-green" d="M244.73,22.24v152.82h-24.71v-14.21c-8.65,10.51-21.42,15.65-36.46,15.65-31.92,0-55.61-22.24-55.61-56.43s23.69-56.23,55.61-56.23c14.21,0,26.78,4.74,35.43,14.83V22.24h25.75ZM219.4,120.07c0-21.01-14.21-34.4-32.75-34.4s-32.75,13.39-32.75,34.4,14.21,34.4,32.75,34.4,32.75-13.39,32.75-34.4Z"/>
+                        <path class="md-green" d="M330.2,63.84v24.51c-2.27-.41-4.12-.62-5.97-.62-19.57,0-31.92,11.53-31.92,33.98v53.35h-25.75v-109.98h24.51v16.07c7.42-11.53,20.8-17.3,39.13-17.3Z"/>
+                        <path class="md-green" d="M330,120.07c0-32.95,24.71-56.23,58.49-56.23s58.7,23.27,58.7,56.23-24.51,56.43-58.7,56.43-58.49-23.48-58.49-56.43ZM421.24,120.07c0-21.01-14.01-34.4-32.75-34.4s-32.54,13.39-32.54,34.4,14.01,34.4,32.54,34.4,32.75-13.39,32.75-34.4Z"/>
+                        <path class="md-green" d="M576.74,120.07c0,34.19-23.69,56.43-55.82,56.43-14.01,0-26.36-4.74-35.22-14.83v53.35h-25.75V65.08h24.51v14.42c8.65-10.5,21.42-15.65,36.46-15.65,32.13,0,55.82,22.24,55.82,56.23ZM550.58,120.07c0-21.01-14.01-34.4-32.54-34.4s-32.75,13.39-32.75,34.4,14.21,34.4,32.75,34.4,32.54-13.39,32.54-34.4Z"/>
+                      </g>
+                      <path class="md-white" d="M0,70.87h32.72v85.38s40.9,6.63,41.58-15.86c.68-22.49,0-69.52,0-69.52h30.4v79.13c0,5.66,4.13,10.61,9.75,11.28,1.62.19,3.5.15,5.68-.22v20.81h-17.89c-8.35-.17-12.81-.72-17.79-4.13-2.28-1.56-4.37-4.52-6.01-6.98,0,0-9.21,10.3-18.92,11.21-18.5,1.73-27.09-1.88-27.09-1.88v54.54H0V70.87Z"/>
+                    </g>
+                  </g>
+            </svg> 
+        </a>
+        <p class="subtitle reveal reveal-delay-2">The Open-Source Software for <a href="https://sci-bots.com/pages/dmf" target="_blank" rel="noopener" style="color: inherit; text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.4);">Digital Microfluidics</a></p>
+        <div class="accent-line reveal reveal-delay-3"></div>
+        <div style="display: flex; gap: clamp(0.25rem, 0.6vw, 0.4rem); margin-top: clamp(0.3rem, 0.8vw, 0.5rem);" class="reveal reveal-delay-4">
+            <a href="https://doc.qt.io/qtforpython-6/" target="_blank" rel="noopener" class="tag tag-link">PySide6</a>
+            <a href="https://redis.io/" target="_blank" rel="noopener" class="tag tag-link">Redis</a>
+            <a href="https://dramatiq.io/" target="_blank" rel="noopener" class="tag tag-link">Dramatiq</a>
+            <a href="https://pyserial.readthedocs.io/" target="_blank" rel="noopener" class="tag tag-link">PySerial</a>
+        </div>
+        <div class="accent-line reveal reveal-delay-5"></div>
+        <p class="subtitle reveal reveal-delay-6"><u>Supported Hardware</u></p>
+        <div class="hw-logos-row reveal reveal-delay-6">
+            <a href="https://sci-bots.com/products/dropbot" target="_blank" rel="noopener" class="dropbot-logo-link">
+                <!-- DropBot logo SVG embedded inline -->
+                <svg viewBox="0 0 538 228" fill="#fff" xmlns="http://www.w3.org/2000/svg"><g>
+                    <path class="cls-2" d="M537.19,12.31V0H0v12.31h537.19Z"/>
+                    <path class="cls-2" d="M537.19,180.1v-12.31H0v12.31h537.19Z"/>
+                    <path class="cls-2" d="M28.02,124.03c-2.72,0-5.18-.66-7.38-1.98-2.2-1.32-3.96-3.08-5.28-5.28-1.32-2.2-1.98-4.62-1.98-7.26v-40.55c0-2.64.66-5.06,1.98-7.26,1.32-2.2,3.08-3.96,5.28-5.28,2.2-1.32,4.66-1.98,7.38-1.98h46.43v-22.8h9.84v92.39H28.02ZM28.02,114.19h41.76c1.28,0,2.38-.46,3.3-1.38.92-.92,1.38-2.02,1.38-3.3v-40.55c0-1.28-.46-2.38-1.38-3.3-.92-.92-2.02-1.38-3.3-1.38H28.02c-1.28,0-2.38.46-3.3,1.38-.92.92-1.38,2.02-1.38,3.3v40.55c0,1.28.46,2.38,1.38,3.3.92.92,2.02,1.38,3.3,1.38Z"/>
+                    <path class="cls-2" d="M96.89,124.03v-55.07c0-2.64.66-5.06,1.98-7.26,1.32-2.2,3.08-3.96,5.28-5.28,2.2-1.32,4.62-1.98,7.26-1.98h39.11v9.84h-39.11c-1.28,0-2.38.46-3.3,1.38s-1.38,2.02-1.38,3.3v55.07h-9.84Z"/>
+                    <path class="cls-2" d="M172.72,124.03c-2.64,0-5.06-.66-7.26-1.98-2.2-1.32-3.96-3.08-5.28-5.28-1.32-2.2-1.98-4.62-1.98-7.26v-40.55c0-2.64.66-5.06,1.98-7.26,1.32-2.2,3.08-3.96,5.28-5.28,2.2-1.32,4.62-1.98,7.26-1.98h41.76c2.72,0,5.18.66,7.38,1.98,2.2,1.32,3.96,3.08,5.28,5.28,1.32,2.2,1.98,4.62,1.98,7.26v40.55c0,2.64-.66,5.06-1.98,7.26-1.32,2.2-3.08,3.96-5.28,5.28-2.2,1.32-4.66,1.98-7.38,1.98h-41.76ZM172.72,114.19h41.76c1.28,0,2.38-.46,3.3-1.38.92-.92,1.38-2.02,1.38-3.3v-40.55c0-1.28-.46-2.38-1.38-3.3-.92-.92-2.02-1.38-3.3-1.38h-41.76c-1.28,0-2.38.46-3.3,1.38-.92.92-1.38,2.02-1.38,3.3v40.55c0,1.28.46,2.38,1.38,3.3.92.92,2.02,1.38,3.3,1.38Z"/>
+                    <path class="cls-2" d="M241.59,151.63V54.44h56.4c2.64,0,5.06.66,7.26,1.98,2.2,1.32,3.96,3.08,5.28,5.28,1.32,2.2,1.98,4.62,1.98,7.26v40.55c0,2.64-.66,5.06-1.98,7.26-1.32,2.2-3.08,3.96-5.28,5.28-2.2,1.32-4.62,1.98-7.26,1.98h-46.56v27.6h-9.84ZM256.23,114.19h41.76c1.28,0,2.38-.46,3.3-1.38.92-.92,1.38-2.02,1.38-3.3v-40.55c0-1.28-.46-2.38-1.38-3.3-.92-.92-2.02-1.38-3.3-1.38h-41.76c-1.28,0-2.4.46-3.36,1.38-.96.92-1.44,2.02-1.44,3.3v40.55c0,1.28.48,2.38,1.44,3.3.96.92,2.08,1.38,3.36,1.38Z"/>
+                    <path class="cls-2" d="M321.26,124.03V31.64h9.84v22.8h46.56c2.64,0,5.06.66,7.26,1.98,2.2,1.32,3.96,3.08,5.28,5.28,1.32,2.2,1.98,4.62,1.98,7.26v40.55c0,2.64-.66,5.06-1.98,7.26-1.32,2.2-3.08,3.96-5.28,5.28-2.2,1.32-4.62,1.98-7.26,1.98h-56.4ZM335.9,114.19h41.76c1.28,0,2.38-.46,3.3-1.38.92-.92,1.38-2.02,1.38-3.3v-40.55c0-1.28-.46-2.38-1.38-3.3-.92-.92-2.02-1.38-3.3-1.38h-41.76c-1.28,0-2.4.46-3.36,1.38-.96.92-1.44,2.02-1.44,3.3v40.55c0,1.28.48,2.38,1.44,3.3.96.92,2.08,1.38,3.36,1.38Z"/>
+                    <path class="cls-2" d="M415.45,124.03c-2.64,0-5.06-.66-7.26-1.98-2.2-1.32-3.96-3.08-5.28-5.28-1.32-2.2-1.98-4.62-1.98-7.26v-40.55c0-2.64.66-5.06,1.98-7.26,1.32-2.2,3.08-3.96,5.28-5.28,2.2-1.32,4.62-1.98,7.26-1.98h41.76c2.72,0,5.18.66,7.38,1.98,2.2,1.32,3.96,3.08,5.28,5.28,1.32,2.2,1.98,4.62,1.98,7.26v40.55c0,2.64-.66,5.06-1.98,7.26-1.32,2.2-3.08,3.96-5.28,5.28-2.2,1.32-4.66,1.98-7.38,1.98h-41.76ZM415.45,114.19h41.76c1.28,0,2.38-.46,3.3-1.38.92-.92,1.38-2.02,1.38-3.3v-40.55c0-1.28-.46-2.38-1.38-3.3-.92-.92-2.02-1.38-3.3-1.38h-41.76c-1.28,0-2.38.46-3.3,1.38-.92.92-1.38,2.02-1.38,3.3v40.55c0,1.28.46,2.38,1.38,3.3.92.92,2.02,1.38,3.3,1.38Z"/>
+                    <path class="cls-2" d="M498.72,124.03c-2.72,0-5.18-.66-7.38-1.98-2.2-1.32-3.94-3.08-5.22-5.28-1.28-2.2-1.92-4.62-1.92-7.26V31.64h9.84v22.8h30.12v9.84h-30.12v45.23c0,1.28.46,2.38,1.38,3.3.92.92,2.02,1.38,3.3,1.38h25.44v9.84h-25.44Z"/>
+                    <g>
+                      <g id="text5258">
+                        <path id="path5293" class="cls-2" d="M298.15,191.14c.5,0,.93.18,1.28.54.36.35.54.78.54,1.28v4.01c0,.5-.18.93-.54,1.29-.35.35-.78.53-1.28.53h-5.96v-10.16h1.73v2.51h4.23ZM298.24,196.97v-4.01c0-.06-.03-.09-.09-.09h-4.14c-.06,0-.09.03-.09.09v4.01c0,.06.03.09.09.09h4.14c.06,0,.09-.03.09-.09Z"/>
+                        <path id="path5295" class="cls-2" d="M308.65,200.01c0,.5-.18.93-.53,1.28-.35.36-.78.54-1.28.54h-4.69v-1.74h4.69c.05,0,.08-.03.08-.08v-1.21h-4.23c-.5,0-.93-.18-1.3-.53-.35-.36-.53-.79-.53-1.29v-5.81h1.73v5.81c0,.06.03.09.09.09h4.15c.05,0,.08-.03.08-.09v-5.81h1.73v8.84h0Z"/>
+                      </g>
+                      <g id="text5239">
+                        <path id="path5299" class="cls-2" d="M387.34,208.86v.31h-3.24v-.31c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47h-13.6c-.42,0-.78.16-1.09.47-.29.29-.43.64-.43,1.05v3.47c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h13.6c1.33,0,2.45.47,3.36,1.4.94.91,1.41,2.02,1.41,3.32v3.47c0,1.3-.47,2.42-1.41,3.36-.91.91-2.03,1.37-3.36,1.37h-13.6c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-.31h3.2v.31c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h13.6c.42,0,.77-.14,1.06-.43.31-.31.47-.68.47-1.09v-3.47c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47h-13.6c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-3.47c0-1.3.46-2.41,1.37-3.32.94-.94,2.06-1.4,3.36-1.4h13.6c1.33,0,2.45.47,3.36,1.4.94.91,1.41,2.02,1.41,3.32h0Z"/>
+                        <path id="path5301" class="cls-2" d="M395.12,223.57h18.37v3.2h-18.37c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-13.19c0-1.3.46-2.41,1.37-3.32.94-.94,2.06-1.4,3.36-1.4h18.29v3.2h-18.29c-.42,0-.78.16-1.09.47-.29.29-.43.64-.43,1.05v13.19c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h0Z"/>
+                        <path id="path5303" class="cls-2" d="M417.6,226.77v-22.63h3.2v22.63h-3.2ZM417.6,196.73h3.2v3.2h-3.2v-3.2Z"/>
+                        <path id="path5305" class="cls-2" d="M441.29,213.62v3.2h-15.24v-3.2h15.24Z"/>
+                        <path id="path5307" class="cls-2" d="M464.45,204.14c1.3,0,2.41.47,3.32,1.4.94.91,1.41,2.02,1.41,3.32v13.19c0,1.3-.47,2.42-1.41,3.36-.91.91-2.02,1.37-3.32,1.37h-18.37v-30.04h3.2v7.41h15.16ZM465.97,222.05v-13.19c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47h-13.6c-.42,0-.78.16-1.09.47-.31.29-.47.64-.47,1.05v13.19c0,.42.16.78.47,1.09.31.29.68.43,1.09.43h13.6c.42,0,.77-.14,1.06-.43.31-.31.47-.68.47-1.09Z"/>
+                        <path id="path5309" class="cls-2" d="M476.8,204.14h13.6c1.33,0,2.45.47,3.36,1.4.94.91,1.41,2.02,1.41,3.32v13.19c0,1.3-.47,2.42-1.41,3.36-.91.91-2.03,1.37-3.36,1.37h-13.6c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-13.19c0-1.3.46-2.41,1.37-3.32.94-.94,2.06-1.4,3.36-1.4ZM490.4,207.34h-13.6c-.42,0-.78.16-1.09.47-.29.29-.43.64-.43,1.05v13.19c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h13.6c.42,0,.77-.14,1.06-.43.31-.31.47-.68.47-1.09v-13.19c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47Z"/>
+                        <path id="path5311" class="cls-2" d="M511.27,207.34h-9.81v14.71c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h8.29v3.2h-8.29c-1.33,0-2.45-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-25.32h3.2v7.41h9.81v3.2Z"/>
+                        <path id="path5313" class="cls-2" d="M537.19,208.86v.31h-3.24v-.31c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47h-13.6c-.42,0-.78.16-1.09.47-.29.29-.43.64-.43,1.05v3.47c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h13.6c1.33,0,2.45.47,3.36,1.4.94.91,1.41,2.02,1.41,3.32v3.47c0,1.3-.47,2.42-1.41,3.36-.91.91-2.03,1.37-3.36,1.37h-13.6c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-.31h3.2v.31c0,.42.14.78.43,1.09.31.29.68.43,1.09.43h13.6c.42,0,.77-.14,1.06-.43.31-.31.47-.68.47-1.09v-3.47c0-.42-.16-.77-.47-1.05-.29-.31-.64-.47-1.06-.47h-13.6c-1.3,0-2.42-.46-3.36-1.37-.91-.94-1.37-2.05-1.37-3.36v-3.47c0-1.3.46-2.41,1.37-3.32.94-.94,2.06-1.4,3.36-1.4h13.6c1.33,0,2.45.47,3.36,1.4.94.91,1.41,2.02,1.41,3.32h0Z"/>
+                      </g>
+                      <path id="path5251" class="cls-1" d="M322.51,194.55l-3.17,3.17,1.59,1.58,3.02,3.01.41.4-1.62,1.62-.41-.4-3.02-3.01-1.59-1.59-3.17,3.17,1.59,1.59,3.02,3.01.41.4-1.63,1.62-.4-.41-3.02-3.01-1.59-1.58-3.17,3.17,1.59,1.59,3.02,3.01.41.4-1.9,1.9c-.92.91-.92,2.39,0,3.3l1.9,1.89-.4.41-3.02,3.01-1.59,1.58,3.17,3.17,1.59-1.58,3.02-3.01.4-.41,1.63,1.62-.41.4-3.02,3.01-1.59,1.59,3.17,3.16,1.59-1.58,3.02-3.01.4-.41,1.63,1.62-.41.4-3.02,3.01-1.59,1.59,3.17,3.17,1.59-1.59,3.02-3.01.4-.41,1.9,1.9c.92.91,2.39.91,3.31,0l1.9-1.9.4.41,3.02,3.01,1.59,1.59,3.17-3.17-1.59-1.59-3.02-3.01-.41-.4,1.63-1.62.4.41,3.02,3.01,1.59,1.58,3.17-3.16-1.59-1.59-3.02-3.01-.41-.4,1.63-1.62.4.41,3.02,3.01,1.59,1.58,3.17-3.17-1.59-1.58-3.02-3.01-.4-.41,1.9-1.89c.92-.91.92-2.39,0-3.3l-1.9-1.9.41-.4,3.02-3.01,1.59-1.59-3.17-3.17-1.59,1.58-3.02,3.01-.4.41-1.63-1.62.41-.4,3.02-3.01,1.59-1.59-3.17-3.17-1.59,1.59-3.02,3.01-.41.4-1.62-1.62.41-.4,3.02-3.01,1.59-1.58-3.17-3.17-1.59,1.59-3.02,3.01-.41.4-1.9-1.89c-.46-.46-1.06-.68-1.65-.68s-1.2.23-1.65.68l-1.9,1.9-.4-.41-3.02-3.01-1.59-1.59ZM331.08,204.33c.41,0,.82.16,1.13.47l9.94,9.91c.63.62.63,1.63,0,2.25l-9.94,9.91c-.63.62-1.63.62-2.26,0l-9.94-9.91c-.63-.62-.63-1.63,0-2.25l9.94-9.91c.31-.31.72-.47,1.13-.47h0Z"/>
+                    </g>
+                  </g></svg>
+            </a>
+            <div class="hw-logos-separator"></div>
+            <a href="https://www.gaudi.ch/OpenDrop/" target="_blank" rel="noopener" class="opendrop-logo-link">OpenDrop</a>
+        </div>
+        </div>
+        <!-- Sci-Bots BW elongated logo — pushed to bottom via margin-top:auto -->
+        <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="scibots-title-link reveal reveal-delay-7"><svg class="scibots-title-logo" viewBox="0 0 1351.31 330" fill="#fff" xmlns="http://www.w3.org/2000/svg"><rect width="1351.31" height="330" fill="none"/><g>
+            <g>
+              <path class="cls-1" d="M478.3,86.97h-18.72v-1.8c0-4.74-4.06-8.8-8.8-8.8h-78.48c-4.74,0-8.8,4.06-8.8,8.8v20.08c0,4.74,4.06,8.8,8.8,8.8h78.48c15.34,0,27.51,12.18,27.51,27.3v20.08c0,15.12-12.18,27.3-27.51,27.3h-78.48c-15.11,0-27.29-12.18-27.29-27.3v-1.81h18.49v1.81c0,4.74,4.06,8.8,8.8,8.8h78.48c4.74,0,8.8-4.06,8.8-8.8v-20.08c0-4.74-4.06-8.8-8.8-8.8h-78.48c-15.11,0-27.29-12.18-27.29-27.3v-20.08c0-15.12,12.18-27.3,27.29-27.3h78.48c15.34,0,27.51,12.18,27.51,27.3v1.8Z"/>
+              <path class="cls-1" d="M631.82,170.22v18.5h-105.99c-15.11,0-27.29-12.18-27.29-27.3v-76.26c0-15.12,12.18-27.3,27.29-27.3h105.54v18.5h-105.54c-4.74,0-8.8,4.06-8.8,8.8v76.26c0,4.74,4.06,8.8,8.8,8.8h105.99Z"/>
+              <path class="cls-1" d="M671.27,15v18.5h-18.49V15h18.49ZM652.78,57.87h18.49v130.86h-18.49V57.87Z"/>
+              <path class="cls-1" d="M782.86,131.19h-87.95v-18.5h87.95v18.5Z"/>
+              <path class="cls-1" d="M938.99,85.17v76.26c0,15.12-12.18,27.3-27.29,27.3h-105.99V15h18.49v42.87h87.5c15.11,0,27.29,12.18,27.29,27.3ZM920.5,85.17c0-4.74-4.06-8.8-8.79-8.8h-78.48c-4.96,0-9.02,4.06-9.02,8.8v76.26c0,4.74,4.06,8.8,9.02,8.8h78.48c4.74,0,8.79-4.06,8.79-8.8v-76.26Z"/>
+              <path class="cls-1" d="M1062.43,57.87c15.34,0,27.51,12.18,27.51,27.3v76.26c0,15.12-12.18,27.3-27.51,27.3h-78.48c-15.11,0-27.29-12.18-27.29-27.3v-76.26c0-15.12,12.18-27.3,27.29-27.3h78.48ZM983.95,76.37c-4.73,0-8.79,4.06-8.79,8.8v76.26c0,4.74,4.06,8.8,8.79,8.8h78.48c4.96,0,8.8-4.06,8.8-8.8v-76.26c0-4.74-3.84-8.8-8.8-8.8h-78.48Z"/>
+              <path class="cls-1" d="M1129.35,76.37v85.06c0,4.74,4.06,8.8,8.79,8.8h47.81v18.5h-47.81c-15.33,0-27.29-12.18-27.29-27.3V15h18.49v42.87h56.6v18.5h-56.6Z"/>
+              <path class="cls-1" d="M1336.31,86.97h-18.72v-1.8c0-4.74-4.06-8.8-8.79-8.8h-78.48c-4.73,0-8.79,4.06-8.79,8.8v20.08c0,4.74,4.06,8.8,8.79,8.8h78.48c15.33,0,27.51,12.18,27.51,27.3v20.08c0,15.12-12.18,27.3-27.51,27.3h-78.48c-15.11,0-27.29-12.18-27.29-27.3v-1.81h18.49v1.81c0,4.74,4.06,8.8,8.79,8.8h78.48c4.73,0,8.79-4.06,8.79-8.8v-20.08c0-4.74-4.06-8.8-8.79-8.8h-78.48c-15.11,0-27.29-12.18-27.29-27.3v-20.08c0-15.12,12.18-27.3,27.29-27.3h78.48c15.33,0,27.51,12.18,27.51,27.3v1.8Z"/>
+            </g>
+            <g>
+              <path class="cls-1" d="M345,234.71h11.73v44.35h21.73v11.32h-33.46v-55.67Z"/>
+              <path class="cls-1" d="M382.74,240.14c0-1.89.64-3.5,1.92-4.83,1.28-1.34,2.82-2.01,4.62-2.01s3.35.67,4.62,2.01c1.28,1.34,1.92,2.95,1.92,4.83s-.64,3.5-1.92,4.84c-1.28,1.34-2.82,2-4.62,2s-3.35-.67-4.62-2c-1.28-1.34-1.92-2.95-1.92-4.84ZM383.64,252.17h11.28v38.21h-11.28v-38.21Z"/>
+              <path class="cls-1" d="M427.93,261.61h-9.93v12.74c0,1.05.05,2.01.15,2.87s.33,1.61.68,2.24c.35.63.89,1.12,1.62,1.46.73.34,1.69.51,2.89.51.6,0,1.39-.06,2.37-.2.98-.13,1.72-.43,2.22-.9v9.83c-1.25.47-2.56.79-3.91.94-1.35.16-2.68.24-3.99.24-1.9,0-3.66-.21-5.26-.63-1.61-.42-3.01-1.09-4.21-2-1.2-.92-2.14-2.11-2.82-3.58-.68-1.47-1.01-3.25-1.01-5.35v-18.16h-7.22v-9.43h7.22v-11.32h11.28v11.32h9.93v9.43Z"/>
+              <path class="cls-1" d="M458.53,261.61h-9.93v12.74c0,1.05.05,2.01.15,2.87s.33,1.61.68,2.24c.35.63.89,1.12,1.62,1.46.73.34,1.69.51,2.89.51.6,0,1.39-.06,2.37-.2.98-.13,1.72-.43,2.22-.9v9.83c-1.25.47-2.56.79-3.91.94-1.35.16-2.68.24-3.99.24-1.9,0-3.66-.21-5.26-.63-1.61-.42-3.01-1.09-4.21-2-1.2-.92-2.14-2.11-2.82-3.58-.68-1.47-1.01-3.25-1.01-5.35v-18.16h-7.22v-9.43h7.22v-11.32h11.28v11.32h9.93v9.43Z"/>
+              <path class="cls-1" d="M464.4,230.94h11.28v59.44h-11.28v-59.44Z"/>
+              <path class="cls-1" d="M518.38,283.78c-1.8,2.41-4.09,4.27-6.84,5.58s-5.61,1.97-8.57,1.97-5.45-.47-7.93-1.42c-2.48-.94-4.64-2.29-6.47-4.05-1.83-1.76-3.27-3.87-4.32-6.33-1.05-2.46-1.58-5.21-1.58-8.26s.53-5.79,1.58-8.26c1.05-2.46,2.49-4.57,4.32-6.33,1.83-1.76,3.98-3.1,6.47-4.05,2.48-.94,5.12-1.42,7.93-1.42,2.61,0,4.97.47,7.1,1.42,2.13.94,3.93,2.29,5.41,4.05,1.48,1.76,2.62,3.87,3.42,6.33.8,2.46,1.2,5.21,1.2,8.26v3.7h-26.16c.45,2.25,1.43,4.05,2.93,5.39,1.5,1.34,3.36,2.01,5.56,2.01,1.85,0,3.42-.43,4.7-1.3,1.28-.86,2.39-1.98,3.35-3.34l7.89,6.06ZM508.83,266.95c.05-1.99-.58-3.7-1.88-5.11-1.3-1.42-2.98-2.12-5.04-2.12-1.25,0-2.36.21-3.31.63-.95.42-1.77.96-2.44,1.61-.68.65-1.2,1.42-1.58,2.28-.38.86-.59,1.77-.64,2.71h14.89Z"/>
+              <path class="cls-1" d="M587.55,290.38h-10.38v-5.03h-.15c-.45.68-1.04,1.38-1.77,2.08-.73.71-1.58,1.35-2.56,1.93-.98.58-2.05,1.05-3.23,1.42-1.18.36-2.4.55-3.65.55-2.71,0-5.16-.49-7.37-1.46-2.21-.97-4.1-2.33-5.68-4.09-1.58-1.76-2.8-3.84-3.65-6.25-.85-2.41-1.28-5.06-1.28-7.94,0-2.67.39-5.23,1.17-7.67.78-2.44,1.88-4.6,3.31-6.49,1.43-1.89,3.17-3.4,5.23-4.52,2.05-1.13,4.39-1.69,6.99-1.69,2.36,0,4.55.38,6.58,1.14,2.03.76,3.7,2.06,5,3.89h.15v-25.32h11.28v59.44ZM577.17,271.28c0-2.88-.79-5.21-2.37-7-1.58-1.78-3.8-2.67-6.66-2.67s-5.07.89-6.65,2.67-2.37,4.12-2.37,7,.79,5.21,2.37,7,3.8,2.67,6.65,2.67,5.08-.89,6.66-2.67c1.58-1.78,2.37-4.11,2.37-7Z"/>
+              <path class="cls-1" d="M596.57,252.17h11.28v6.13h.15c1.2-2.36,2.63-4.13,4.29-5.31s3.73-1.77,6.24-1.77c.65,0,1.3.03,1.95.08.65.05,1.25.16,1.8.31v10.77c-.8-.26-1.59-.46-2.37-.59s-1.59-.2-2.44-.2c-2.16,0-3.86.31-5.11.94-1.25.63-2.22,1.51-2.89,2.63-.68,1.13-1.12,2.47-1.32,4.05-.2,1.57-.3,3.3-.3,5.19v15.96h-11.28v-38.21Z"/>
+              <path class="cls-1" d="M624.46,271.28c0-3.04.53-5.79,1.58-8.26,1.05-2.46,2.49-4.57,4.32-6.33s3.98-3.1,6.47-4.05c2.48-.94,5.12-1.42,7.93-1.42s5.45.47,7.93,1.42c2.48.94,4.64,2.29,6.47,4.05,1.83,1.76,3.27,3.87,4.32,6.33,1.05,2.46,1.58,5.21,1.58,8.26s-.53,5.79-1.58,8.26c-1.05,2.46-2.49,4.57-4.32,6.33-1.83,1.76-3.98,3.1-6.47,4.05-2.48.94-5.12,1.42-7.93,1.42s-5.45-.47-7.93-1.42c-2.48-.94-4.64-2.29-6.47-4.05-1.83-1.76-3.27-3.87-4.32-6.33-1.05-2.46-1.58-5.21-1.58-8.26ZM635.74,271.28c0,2.88.79,5.21,2.37,7,1.58,1.78,3.8,2.67,6.65,2.67s5.08-.89,6.66-2.67c1.58-1.78,2.37-4.11,2.37-7s-.79-5.21-2.37-7c-1.58-1.78-3.8-2.67-6.66-2.67s-5.07.89-6.65,2.67c-1.58,1.78-2.37,4.12-2.37,7Z"/>
+              <path class="cls-1" d="M672.73,252.17h10.37v5.03h.15c.45-.68,1.04-1.38,1.77-2.08.73-.71,1.58-1.35,2.56-1.93.98-.58,2.04-1.05,3.2-1.42,1.15-.37,2.38-.55,3.68-.55,2.71,0,5.16.48,7.37,1.46,2.21.97,4.1,2.33,5.68,4.09,1.58,1.76,2.79,3.84,3.65,6.25.85,2.41,1.28,5.06,1.28,7.94,0,2.67-.39,5.23-1.17,7.67-.78,2.44-1.88,4.6-3.31,6.49-1.43,1.89-3.17,3.4-5.22,4.52-2.06,1.13-4.39,1.69-6.99,1.69-2.36,0-4.55-.38-6.58-1.14-2.03-.76-3.7-2.06-5-3.89h-.15v22.02h-11.28v-56.14ZM683.11,271.28c0,2.88.79,5.21,2.37,7,1.58,1.78,3.8,2.67,6.65,2.67s5.08-.89,6.65-2.67c1.58-1.78,2.37-4.11,2.37-7s-.79-5.21-2.37-7c-1.58-1.78-3.8-2.67-6.65-2.67s-5.07.89-6.65,2.67c-1.58,1.78-2.37,4.12-2.37,7Z"/>
+              <path class="cls-1" d="M739.72,263.42c-1.65-2.15-3.83-3.23-6.54-3.23-.95,0-1.88.24-2.78.71-.9.47-1.35,1.29-1.35,2.44,0,.94.46,1.64,1.39,2.08.93.45,2.1.84,3.53,1.18,1.43.34,2.96.7,4.59,1.1s3.16,1.01,4.59,1.85c1.43.84,2.61,1.98,3.53,3.42.93,1.44,1.39,3.37,1.39,5.78s-.51,4.5-1.54,6.1c-1.03,1.6-2.34,2.88-3.95,3.85-1.6.97-3.41,1.65-5.41,2.04s-3.98.59-5.94.59c-2.56,0-5.14-.38-7.74-1.14-2.61-.76-4.81-2.11-6.62-4.05l6.84-7.94c1.05,1.37,2.22,2.4,3.5,3.11s2.77,1.06,4.47,1.06c1.3,0,2.48-.2,3.53-.59,1.05-.39,1.58-1.11,1.58-2.16,0-.99-.46-1.74-1.39-2.24-.93-.5-2.11-.91-3.53-1.26-1.43-.34-2.96-.71-4.59-1.1-1.63-.39-3.16-.98-4.59-1.77-1.43-.79-2.61-1.9-3.53-3.34-.93-1.44-1.39-3.37-1.39-5.78,0-2.25.44-4.19,1.32-5.82.88-1.63,2.03-2.96,3.46-4.01,1.43-1.05,3.07-1.82,4.92-2.32,1.85-.5,3.73-.75,5.64-.75,2.41,0,4.84.37,7.29,1.1,2.46.73,4.54,2.04,6.24,3.93l-6.92,7.16Z"/>
+              <path class="cls-1" d="M754.08,283.62c0-1,.18-1.94.53-2.83.35-.89.84-1.67,1.47-2.32.63-.65,1.37-1.17,2.22-1.53.85-.37,1.75-.55,2.71-.55s1.85.18,2.71.55c.85.37,1.59.88,2.22,1.53.63.65,1.12,1.43,1.47,2.32.35.89.53,1.83.53,2.83s-.18,1.94-.53,2.83c-.35.89-.84,1.67-1.47,2.32-.63.66-1.37,1.17-2.22,1.53-.85.37-1.76.55-2.71.55s-1.85-.18-2.71-.55c-.85-.36-1.59-.87-2.22-1.53-.63-.65-1.12-1.43-1.47-2.32-.35-.89-.53-1.83-.53-2.83Z"/>
+              <path class="cls-1" d="M805.7,217.77h25.89c3.01,0,6.03.22,9.07.67,3.04.44,5.77,1.33,8.19,2.67,2.42,1.33,4.38,3.2,5.88,5.59,1.5,2.39,2.26,5.57,2.26,9.54s-1.1,7.51-3.29,10.2c-2.19,2.7-5.08,4.63-8.68,5.8v.21c2.29.34,4.36,1.01,6.23,2,1.87.99,3.47,2.25,4.81,3.79,1.34,1.54,2.37,3.34,3.09,5.39.72,2.05,1.08,4.24,1.08,6.56,0,3.83-.78,7.02-2.35,9.59-1.57,2.56-3.6,4.63-6.08,6.21-2.49,1.57-5.28,2.7-8.39,3.39-3.11.68-6.19,1.02-9.27,1.02h-28.44v-72.61ZM821,246.8h11.08c1.18,0,2.34-.14,3.48-.41,1.14-.27,2.17-.72,3.09-1.33.91-.62,1.65-1.44,2.21-2.46.56-1.02.83-2.25.83-3.69,0-1.51-.31-2.75-.93-3.75-.63-.99-1.43-1.76-2.41-2.31-.98-.55-2.09-.94-3.33-1.18-1.24-.24-2.45-.36-3.63-.36h-10.39v15.49ZM821,276.85h13.73c1.18,0,2.37-.14,3.58-.41,1.21-.27,2.31-.75,3.29-1.44.98-.68,1.78-1.57,2.4-2.67.62-1.09.93-2.42.93-4,0-1.71-.41-3.09-1.23-4.15-.82-1.06-1.85-1.86-3.09-2.41-1.24-.55-2.58-.92-4.02-1.13-1.44-.2-2.78-.31-4.02-.31h-11.57v16.51Z"/>
+              <path class="cls-1" d="M866.41,224.85c0-2.46.83-4.56,2.5-6.31,1.67-1.75,3.68-2.62,6.03-2.62s4.36.87,6.03,2.62c1.67,1.74,2.5,3.85,2.5,6.31s-.83,4.56-2.5,6.31c-1.67,1.74-3.68,2.62-6.03,2.62s-4.36-.87-6.03-2.62c-1.67-1.74-2.5-3.85-2.5-6.31ZM867.59,240.54h14.71v49.85h-14.71v-49.85Z"/>
+              <path class="cls-1" d="M942.9,286.18c0,9.44-2.27,16.6-6.82,21.49-4.54,4.89-11.46,7.33-20.74,7.33-4.25,0-8.44-.5-12.55-1.49-4.12-.99-7.91-2.92-11.38-5.79l8.14-12.72c2.29,1.98,4.69,3.56,7.21,4.72,2.52,1.16,5.28,1.74,8.29,1.74,4.51,0,7.83-1.15,9.96-3.44,2.12-2.29,3.19-5.21,3.19-8.77v-4.82h-.2c-1.7,2.39-3.81,4.09-6.33,5.08s-4.89,1.49-7.11,1.49c-3.53,0-6.74-.63-9.61-1.9-2.88-1.27-5.35-3.04-7.41-5.33-2.06-2.29-3.65-5.01-4.76-8.16-1.11-3.14-1.67-6.6-1.67-10.36,0-3.28.51-6.5,1.52-9.64,1.01-3.14,2.45-5.91,4.32-8.31,1.86-2.39,4.13-4.32,6.81-5.8,2.68-1.47,5.72-2.21,9.12-2.21,2.09,0,4.01.24,5.74.72,1.73.48,3.29,1.1,4.66,1.85,1.37.75,2.55,1.59,3.53,2.51.98.92,1.77,1.83,2.35,2.72h.2v-6.56h13.53v45.64ZM905.83,265.15c0,1.64.29,3.2.88,4.67.59,1.47,1.42,2.77,2.5,3.9s2.32,2.04,3.73,2.72c1.41.68,2.96,1.02,4.66,1.02s3.17-.34,4.61-1.02c1.44-.68,2.7-1.59,3.78-2.72s1.91-2.43,2.5-3.9c.59-1.47.88-3.03.88-4.67s-.29-3.2-.88-4.67c-.59-1.47-1.42-2.77-2.5-3.9s-2.34-2.03-3.78-2.72c-1.44-.68-2.98-1.03-4.61-1.03s-3.25.34-4.66,1.03-2.65,1.59-3.73,2.72-1.91,2.43-2.5,3.9c-.59,1.47-.88,3.02-.88,4.67Z"/>
+              <path class="cls-1" d="M1010.67,255.21c-2.16-2.8-5-4.2-8.53-4.2-1.24,0-2.45.31-3.63.92-1.18.61-1.76,1.68-1.76,3.18,0,1.23.6,2.14,1.81,2.72,1.21.58,2.75,1.1,4.61,1.54,1.86.45,3.86.92,5.98,1.44,2.12.51,4.12,1.32,5.98,2.41,1.86,1.1,3.4,2.58,4.61,4.46,1.21,1.88,1.81,4.39,1.81,7.54s-.67,5.87-2.01,7.95c-1.34,2.09-3.05,3.76-5.15,5.03s-4.45,2.15-7.06,2.66c-2.61.51-5.2.77-7.75.77-3.34,0-6.7-.5-10.1-1.49-3.4-.99-6.28-2.75-8.63-5.28l8.92-10.36c1.37,1.78,2.89,3.13,4.56,4.05,1.67.92,3.61,1.39,5.84,1.39,1.7,0,3.24-.26,4.61-.77,1.38-.51,2.06-1.45,2.06-2.82,0-1.3-.6-2.27-1.81-2.92-1.21-.65-2.75-1.2-4.61-1.64-1.86-.44-3.86-.92-5.98-1.44-2.12-.51-4.12-1.28-5.98-2.31-1.87-1.02-3.4-2.48-4.61-4.36-1.21-1.88-1.82-4.39-1.82-7.54,0-2.94.57-5.47,1.72-7.59,1.14-2.12,2.65-3.86,4.51-5.23,1.86-1.37,4-2.38,6.42-3.03,2.42-.65,4.87-.97,7.35-.97,3.14,0,6.31.48,9.51,1.44,3.2.96,5.92,2.66,8.14,5.13l-9.02,9.33Z"/>
+              <path class="cls-1" d="M1061.37,256.64c-.72-1.09-1.73-2-3.04-2.72s-2.71-1.08-4.22-1.08c-3.73,0-6.62,1.17-8.68,3.49s-3.09,5.37-3.09,9.13,1.03,6.8,3.09,9.13c2.06,2.33,4.95,3.49,8.68,3.49,1.64,0,3.04-.38,4.22-1.13,1.18-.75,2.19-1.64,3.04-2.67l9.71,10.67c-2.29,2.46-4.98,4.19-8.09,5.18-3.11.99-6.07,1.49-8.88,1.49-3.66,0-7.11-.62-10.35-1.85-3.24-1.23-6.05-2.99-8.43-5.28-2.39-2.29-4.27-5.04-5.64-8.26s-2.06-6.8-2.06-10.77.69-7.56,2.06-10.77c1.37-3.21,3.25-5.96,5.64-8.26,2.39-2.29,5.2-4.05,8.43-5.28,3.24-1.23,6.68-1.85,10.35-1.85,2.81,0,5.77.5,8.88,1.49,3.1.99,5.8,2.72,8.09,5.18l-9.71,10.67Z"/>
+              <path class="cls-1" d="M1075.39,224.85c0-2.46.83-4.56,2.5-6.31,1.67-1.75,3.68-2.62,6.03-2.62s4.36.87,6.03,2.62c1.67,1.74,2.5,3.85,2.5,6.31s-.83,4.56-2.5,6.31c-1.67,1.74-3.68,2.62-6.03,2.62s-4.36-.87-6.03-2.62c-1.67-1.74-2.5-3.85-2.5-6.31ZM1076.57,240.54h14.71v49.85h-14.71v-49.85Z"/>
+              <path class="cls-1" d="M1146.98,281.77c-2.35,3.14-5.33,5.57-8.92,7.28-3.6,1.71-7.32,2.56-11.18,2.56s-7.11-.62-10.35-1.85c-3.24-1.23-6.05-2.99-8.43-5.28s-4.27-5.04-5.64-8.26-2.06-6.8-2.06-10.77.69-7.56,2.06-10.77c1.37-3.21,3.25-5.96,5.64-8.26,2.39-2.29,5.2-4.05,8.43-5.28,3.24-1.23,6.68-1.85,10.35-1.85,3.4,0,6.49.62,9.27,1.85,2.78,1.23,5.13,2.99,7.06,5.28,1.93,2.29,3.42,5.04,4.46,8.26,1.04,3.22,1.57,6.81,1.57,10.77v4.82h-34.13c.59,2.94,1.87,5.28,3.83,7.02,1.96,1.74,4.38,2.62,7.26,2.62,2.42,0,4.46-.56,6.13-1.69,1.67-1.13,3.12-2.58,4.36-4.36l10.3,7.9ZM1134.53,259.82c.06-2.6-.75-4.82-2.45-6.66-1.7-1.85-3.89-2.77-6.57-2.77-1.64,0-3.07.27-4.31.82-1.25.55-2.31,1.25-3.19,2.1s-1.57,1.85-2.06,2.97-.77,2.31-.83,3.54h19.42Z"/>
+              <path class="cls-1" d="M1158.16,240.54h14.12v6.77h.2c.45-.96,1.11-1.92,1.96-2.87.85-.95,1.86-1.81,3.04-2.56,1.18-.75,2.51-1.37,4.02-1.85,1.5-.48,3.14-.72,4.9-.72,3.73,0,6.73.6,9.02,1.8,2.29,1.2,4.07,2.85,5.35,4.97,1.28,2.12,2.14,4.61,2.6,7.49.46,2.87.69,5.98.69,9.33v27.49h-14.71v-24.41c0-1.44-.05-2.92-.15-4.46-.1-1.54-.39-2.95-.88-4.26-.49-1.3-1.24-2.36-2.25-3.18-1.01-.82-2.47-1.23-4.36-1.23s-3.43.36-4.61,1.08c-1.18.72-2.08,1.68-2.7,2.87-.62,1.2-1.03,2.55-1.23,4.05-.2,1.5-.29,3.07-.29,4.72v24.82h-14.71v-49.85Z"/>
+              <path class="cls-1" d="M1246.72,256.64c-.72-1.09-1.73-2-3.04-2.72-1.31-.72-2.71-1.08-4.22-1.08-3.73,0-6.62,1.17-8.68,3.49s-3.09,5.37-3.09,9.13,1.03,6.8,3.09,9.13c2.06,2.33,4.95,3.49,8.68,3.49,1.64,0,3.04-.38,4.22-1.13,1.18-.75,2.19-1.64,3.04-2.67l9.71,10.67c-2.29,2.46-4.98,4.19-8.09,5.18-3.11.99-6.07,1.49-8.88,1.49-3.66,0-7.11-.62-10.35-1.85-3.24-1.23-6.05-2.99-8.43-5.28s-4.27-5.04-5.64-8.26-2.06-6.8-2.06-10.77.69-7.56,2.06-10.77c1.37-3.21,3.25-5.96,5.64-8.26,2.39-2.29,5.2-4.05,8.43-5.28,3.24-1.23,6.68-1.85,10.35-1.85,2.81,0,5.77.5,8.88,1.49,3.1.99,5.8,2.72,8.09,5.18l-9.71,10.67Z"/>
+              <path class="cls-1" d="M1306.83,281.77c-2.35,3.14-5.33,5.57-8.92,7.28-3.6,1.71-7.32,2.56-11.18,2.56s-7.11-.62-10.35-1.85c-3.24-1.23-6.05-2.99-8.43-5.28s-4.27-5.04-5.64-8.26-2.06-6.8-2.06-10.77.69-7.56,2.06-10.77c1.37-3.21,3.25-5.96,5.64-8.26,2.39-2.29,5.2-4.05,8.43-5.28,3.24-1.23,6.68-1.85,10.35-1.85,3.4,0,6.49.62,9.27,1.85,2.78,1.23,5.13,2.99,7.06,5.28,1.93,2.29,3.42,5.04,4.46,8.26,1.04,3.22,1.57,6.81,1.57,10.77v4.82h-34.13c.59,2.94,1.87,5.28,3.83,7.02,1.96,1.74,4.38,2.62,7.26,2.62,2.42,0,4.46-.56,6.13-1.69,1.67-1.13,3.12-2.58,4.36-4.36l10.3,7.9ZM1294.38,259.82c.06-2.6-.75-4.82-2.45-6.66-1.7-1.85-3.89-2.77-6.57-2.77-1.64,0-3.07.27-4.31.82-1.25.55-2.31,1.25-3.19,2.1-.88.85-1.57,1.85-2.06,2.97s-.77,2.31-.83,3.54h19.42Z"/>
+              <path class="cls-1" d="M1318.31,281.56c0-1.3.23-2.53.69-3.69.45-1.16,1.09-2.17,1.91-3.02s1.78-1.52,2.89-2,2.29-.72,3.53-.72,2.42.24,3.53.72,2.07,1.15,2.89,2,1.46,1.86,1.91,3.02c.46,1.17.69,2.39.69,3.69s-.23,2.53-.69,3.69-1.1,2.17-1.91,3.02c-.82.86-1.78,1.52-2.89,2s-2.29.72-3.53.72-2.42-.24-3.53-.72-2.08-1.14-2.89-2c-.82-.85-1.46-1.86-1.91-3.02-.46-1.16-.69-2.39-.69-3.69Z"/>
+            </g>
+          </g>
+          <g>
+            <path class="cls-1" d="M315,105.47l-23.81-23.81-59.53,59.53-9.52-9.52,59.53-59.53-23.82-23.81-59.52,59.52-9.52-9.52,59.52-59.52-23.81-23.81-59.52,59.52L105.47,15l-23.81,23.81,59.53,59.52-9.51,9.52-59.53-59.53-23.81,23.81,59.52,59.53-9.51,9.51-59.52-59.52-23.82,23.81,59.53,59.52-59.55,59.55,23.81,23.81,59.55-59.55,9.52,9.52-59.55,59.55,23.81,23.81,59.55-59.55,9.52,9.52-59.55,59.55,23.81,23.82,59.55-59.55,59.53,59.52,23.81-23.81-59.52-59.52,9.51-9.52,59.52,59.53,23.81-23.82-59.52-59.52,9.51-9.51,59.53,59.52,23.81-23.81-59.53-59.52,59.53-59.53ZM244,173.6l-70.42,70.41c-4.74,4.74-12.43,4.75-17.17,0l-70.42-70.42c-4.75-4.75-4.74-12.45,0-17.2l70.42-70.41c4.74-4.74,12.43-4.75,17.17,0l70.42,70.42c4.75,4.75,4.74,12.45,0,17.2Z"/>
+            <path class="cls-1" d="M289.69,178.45l-111.26,111.15c-7.4,7.4-19.4,7.39-26.8,0l-111.33-111.25c-7.41-7.4-7.41-19.42,0-26.82l111.26-111.15c7.4-7.4,19.4-7.39,26.8,0l111.33,111.25c7.41,7.4,7.41,19.42,0,26.82ZM244.01,156.4l-70.42-70.42c-4.74-4.74-12.43-4.74-17.17,0l-70.42,70.41c-4.75,4.75-4.75,12.45,0,17.2l70.42,70.42c4.74,4.74,12.43,4.74,17.17,0l70.42-70.41c4.75-4.75,4.75-12.45,0-17.2Z"/>
+          </g></svg></a>
+    </div>
+    <span class="slide-number">01 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 2: SYSTEM OVERVIEW ===================== -->
+<section class="slide" id="slide-1">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">Architecture</div>
+        <h2 class="reveal reveal-delay-1">Three-Layer System</h2>
+        <div class="three-layer-stack">
+            <div class="layer-box reveal reveal-delay-2">
+                <div class="layer-icon frontend">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                </div>
+                <div class="layer-info">
+                    <h3>Frontend &mdash; PySide6 / Qt6 GUI</h3>
+                    <p>Interactive SVG device viewer, protocol grid, plugin-based UI</p>
+                </div>
+                <a href="https://docs.enthought.com/envisage/" target="_blank" rel="noopener" class="tag" style="margin-left: auto; text-decoration: none; cursor: pointer; transition: background 0.2s;">Envisage Plugins</a>
+            </div>
+            <div class="layer-arrow reveal reveal-delay-2">&darr; publishes requests &darr;&ensp;&ensp;&uarr; receives signals &uarr;</div>
+            <div class="layer-box reveal reveal-delay-3">
+                <div class="layer-icon server">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                </div>
+                <div class="layer-info">
+                    <h3>Message Server &mdash; Redis + Dramatiq</h3>
+                    <p>Pub/sub router &mdash; can run locally, on LAN, or in the cloud</p>
+                </div>
+                <span class="tag" style="margin-left: auto;">Any Host</span>
+            </div>
+            <div class="layer-arrow reveal reveal-delay-3">&darr; routes to workers &darr;&ensp;&ensp;&uarr; publishes events &uarr;</div>
+            <div class="layer-box reveal reveal-delay-4">
+                <div class="layer-icon hardware">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                </div>
+                <div class="layer-info">
+                    <h3>Backend &mdash; <a href="https://sci-bots.com/products/dropbot" target="_blank" rel="noopener" style="color: inherit; text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.3);">DropBot</a> Hardware</h3>
+                    <p>USB serial RPC to Teensy 3.x &mdash; can be on a separate host from the frontend</p>
+                </div>
+                <span class="tag" style="margin-left: auto;">Serial RPC</span>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">02 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 3: FRONTEND LAYER ===================== -->
+<section class="slide" id="slide-2">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">Frontend</div>
+        <h2 class="reveal reveal-delay-1">Plugin-Based GUI</h2>
+        <div class="plugin-grid">
+            <div class="plugin-card reveal reveal-delay-2">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(47, 154, 74, 0.15); color: var(--green-primary);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                    </div>
+                    <h3>Device Viewer</h3>
+                </div>
+                <p>Renders the chip as an interactive SVG. Click electrodes to select and actuate them in real time.</p>
+            </div>
+            <div class="plugin-card reveal reveal-delay-3">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(160, 207, 165, 0.12); color: var(--green-light);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                    </div>
+                    <h3>Protocol Grid</h3>
+                </div>
+                <p>Define and run multi-step droplet movement sequences. Coordinates automated electrode actuation.</p>
+            </div>
+            <div class="plugin-card reveal reveal-delay-4">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(5, 151, 72, 0.12); color: var(--green-bright);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <h3>Logger UI</h3>
+                </div>
+                <p>Real-time logging for debugging hardware communication and protocol execution.</p>
+            </div>
+            <div class="plugin-card reveal reveal-delay-5">
+                <div class="card-header">
+                    <div class="card-icon" style="background: rgba(209, 209, 209, 0.1); color: var(--alto);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                    </div>
+                    <h3>Peripheral UI</h3>
+                </div>
+                <p>Hardware status, voltage controls, and self-test interface for the connected DropBot.</p>
+            </div>
+        </div>
+        <div class="framework-note reveal reveal-delay-6">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green-primary)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <p>Built on <a href="https://docs.enthought.com/envisage/" target="_blank" rel="noopener" style="color: var(--green-light); text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.4); font-weight: 700;">Envisage</a> plugin framework &mdash; each feature is an independent, swappable plugin</p>
+        </div>
+    </div>
+    <span class="slide-number">03 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 4: MESSAGE BUS ===================== -->
+<section class="slide" id="slide-3">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">Communication</div>
+        <h2 class="reveal reveal-delay-1">Message Bus &mdash; Redis + Dramatiq</h2>
+        <div class="message-flow">
+            <p class="reveal reveal-delay-2" style="font-size: var(--small-size); color: var(--green-primary); font-weight: 700; margin-bottom: 2px;">REQUEST FLOW (Frontend &rarr; Backend)</p>
+            <div class="flow-row reveal reveal-delay-2">
+                <div class="flow-node frontend-node">Frontend</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node router-node">Message Router</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node backend-node">Backend Worker</div>
+                <span class="flow-label">&ensp;hardware/requests/*</span>
+            </div>
+            <p class="reveal reveal-delay-3" style="font-size: var(--small-size); color: var(--green-bright); font-weight: 700; margin-top: clamp(0.4rem, 1vw, 0.6rem); margin-bottom: 2px;">SIGNAL FLOW (Backend &rarr; Frontend)</p>
+            <div class="flow-row reveal reveal-delay-3">
+                <div class="flow-node backend-node">Backend Worker</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node router-node">Message Router</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node frontend-node">Frontend</div>
+                <span class="flow-label">&ensp;dropbot/signals/*</span>
+            </div>
+            <div class="reveal reveal-delay-4" style="margin-top: clamp(0.4rem, 1vw, 0.6rem);">
+                <p style="font-size: var(--small-size); color: var(--text-muted); margin-bottom: clamp(0.15rem, 0.4vw, 0.25rem);">Example topics:</p>
+                <div class="topic-examples">
+                    <span class="topic-tag">hardware/requests/electrodes_state_change</span>
+                    <span class="topic-tag">dropbot/signals/capacitance_updated</span>
+                    <span class="topic-tag">hardware/signals/connected</span>
+                    <span class="topic-tag">dropbot/requests/halt</span>
+                </div>
+            </div>
+            <div style="display:flex; gap: clamp(0.3rem, 0.8vw, 0.5rem); margin-top: clamp(0.3rem, 0.8vw, 0.5rem);" class="reveal reveal-delay-5">
+                <div style="flex:1; padding: clamp(0.3rem, 0.8vw, 0.5rem) clamp(0.5rem, 1vw, 0.7rem); border-radius:6px; background: rgba(160, 207, 165, 0.06); border: 1px solid rgba(160, 207, 165, 0.12);">
+                    <p style="font-size: var(--small-size); color: var(--text-secondary);">
+                        <strong style="color: var(--green-light);">MQTT-style wildcards</strong> &mdash; <code class="mono" style="color: var(--green-light);">+</code> single level, <code class="mono" style="color: var(--green-light);">#</code> multi level
+                    </p>
+                </div>
+                <div style="flex:1; padding: clamp(0.3rem, 0.8vw, 0.5rem) clamp(0.5rem, 1vw, 0.7rem); border-radius:6px; background: rgba(209, 209, 209, 0.04); border: 1px solid rgba(209, 209, 209, 0.1);">
+                    <p style="font-size: var(--small-size); color: var(--text-secondary);">
+                        <strong style="color: var(--alto);">Redis server</strong> &mdash; can run on localhost, LAN, or cloud
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">04 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 5: BACKEND / HARDWARE ===================== -->
+<section class="slide" id="slide-4">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">Hardware</div>
+        <h2 class="reveal reveal-delay-1">Backend &rarr; <a href="https://sci-bots.com/products/dropbot" target="_blank" rel="noopener" style="color: inherit; text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.3);">DropBot</a> Communication</h2>
+        <div class="hw-stack">
+            <div class="hw-layer reveal reveal-delay-2">
+                <div class="hw-icon" style="background: rgba(160, 207, 165, 0.12); color: var(--green-light);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                </div>
+                <div>
+                    <h3>DropBot Controller Plugin</h3>
+                    <p>Dramatiq worker receives messages, dispatches to mixin services</p>
+                </div>
+            </div>
+            <div class="hw-connector reveal reveal-delay-2">&darr; <span>method dispatch via topic &rarr; handler mapping</span></div>
+            <div class="hw-layer reveal reveal-delay-3">
+                <div class="hw-icon" style="background: rgba(47, 154, 74, 0.15); color: var(--green-primary);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </div>
+                <div>
+                    <h3><a href="https://github.com/Blue-Ocean-Technologies-Inc/dropbot.py" target="_blank" rel="noopener" style="color: inherit; text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.3);">SerialProxy</a> (Python RPC Client)</h3>
+                    <p>Auto-generated from C++ firmware via <strong style="color: var(--green-primary);">arduino-rpc</strong> + protobuf (nanopb)</p>
+                </div>
+            </div>
+            <div class="hw-connector reveal reveal-delay-3">&darr; <span>USB serial &mdash; nadamq packet framing</span></div>
+            <div class="hw-layer reveal reveal-delay-4">
+                <div class="hw-icon" style="background: rgba(5, 151, 72, 0.15); color: var(--green-bright);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
+                </div>
+                <div>
+                    <h3>DropBot Firmware (Teensy 3.x)</h3>
+                    <p>Mixin-based C++ node: Config, State, I2C, SPI, EEPROM</p>
+                </div>
+            </div>
+            <div class="hw-connector reveal reveal-delay-4">&darr; <span>high voltage actuation &amp; capacitance sensing</span></div>
+            <div class="hw-layer reveal reveal-delay-5" style="border-color: rgba(5, 151, 72, 0.3);">
+                <div class="hw-icon" style="background: rgba(5, 151, 72, 0.2); color: var(--green-bright);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <div>
+                    <h3>DMF Chip &mdash; Physical Electrodes</h3>
+                    <p>Capacitance feedback, short-circuit detection, droplet sensing</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">05 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 6: DROPBOT API - CONNECTION & PROPERTIES ===================== -->
+<section class="slide" id="slide-5">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">DropBot Python API</div>
+        <h2 class="reveal reveal-delay-1">Connection &amp; Properties</h2>
+        <div class="code-block reveal reveal-delay-2" style="margin-bottom: clamp(0.4rem, 1vw, 0.7rem);">
+            <span class="kw">import</span> dropbot <span class="kw">as</span> db<br>
+            proxy <span class="op">=</span> db.<a href="https://github.com/Blue-Ocean-Technologies-Inc/dropbot.py" target="_blank" rel="noopener" style="color: #7dd3a0; text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.4);">SerialProxy</a>() &nbsp;<span class="cm"># auto-detects connected DropBot</span>
+        </div>
+        <div class="api-grid reveal reveal-delay-3">
+            <div class="api-card">
+                <h3>Read-Only Attributes</h3>
+                <div class="api-item"><code>proxy.properties</code> <span>&mdash; device info</span></div>
+                <div class="api-item"><code>proxy.state</code> <span>&mdash; current state</span></div>
+                <div class="api-item"><code>proxy.number_of_channels</code> <span>&mdash; channel count</span></div>
+                <div class="api-item"><code>proxy.state_of_channels</code> <span>&mdash; on/off array</span></div>
+                <div class="api-item"><code>proxy.voltage</code> <span>&mdash; output voltage</span></div>
+                <div class="api-item"><code>proxy.frequency</code> <span>&mdash; output freq</span></div>
+                <div class="api-item"><code>proxy.hv_output_enabled</code> <span>&mdash; HV on?</span></div>
+                <div class="api-item"><code>proxy.hv_output_selected</code> <span>&mdash; HV/3V?</span></div>
+            </div>
+            <div class="api-card">
+                <h3>Setters</h3>
+                <div class="api-item"><code>proxy.voltage = 100</code></div>
+                <div class="api-item"><code>proxy.frequency = 1e4</code></div>
+                <div class="api-item"><code>proxy.hv_output_enabled = True</code></div>
+                <div class="api-item"><code>proxy.hv_output_selected = True</code></div>
+                <div class="api-item"><code>proxy.state_of_channels = arr</code></div>
+                <div style="margin-top: clamp(0.2rem, 0.5vw, 0.35rem); padding-top: clamp(0.2rem, 0.5vw, 0.35rem); border-top: 1px solid rgba(47, 154, 74, 0.1);">
+                    <p style="font-size: var(--code-size); color: var(--text-muted);"><code class="mono" style="color: var(--green-light);">state_of_channels</code> is a 1D NumPy array (n = number_of_channels), values 0 or 1</p>
+                </div>
+            </div>
+        </div>
+        <div class="framework-note reveal reveal-delay-4" style="margin-top: clamp(0.3rem, 0.8vw, 0.5rem);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green-primary)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <p>To reconnect within a session: <code class="mono" style="color: var(--green-light);">proxy.terminate()</code> first to close the existing connection gracefully</p>
+        </div>
+    </div>
+    <span class="slide-number">06 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 7: DROPBOT API - METHODS ===================== -->
+<section class="slide" id="slide-6">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">DropBot Python API</div>
+        <h2 class="reveal reveal-delay-1">Methods &amp; Signals</h2>
+        <div class="api-grid reveal reveal-delay-2">
+            <div class="api-card">
+                <h3>Key Methods</h3>
+                <div class="api-item"><code>proxy.update_state(...)</code> <span>&mdash; set multiple params</span></div>
+                <div class="api-item"><code>proxy.measure_voltage()</code></div>
+                <div class="api-item"><code>proxy.capacitance(n)</code> <span>&mdash; n samples</span></div>
+                <div class="api-item"><code>proxy.measure_capacitance()</code></div>
+                <div class="api-item"><code>proxy.measure_temperature()</code></div>
+                <div class="api-item"><code>proxy.measure_input_current()</code></div>
+                <div class="api-item"><code>proxy.measure_output_current()</code></div>
+                <div class="api-item"><code>proxy.detect_shorts()</code> <span>&mdash; shorted channels</span></div>
+                <div class="api-item"><code>proxy.turn_off_all_channels()</code></div>
+                <div class="api-item"><code>proxy.terminate()</code> <span>&mdash; close connection</span></div>
+            </div>
+            <div class="api-card">
+                <h3>Signals (Event-Driven)</h3>
+                <p style="font-size: var(--code-size); color: var(--text-muted); margin-bottom: clamp(0.15rem, 0.4vw, 0.25rem);">Subscribe via <code style="color: var(--green-light);">proxy.signals.signal('name').connect(fn)</code></p>
+                <div class="signal-grid">
+                    <span class="signal-tag">connected</span>
+                    <span class="signal-tag">disconnected</span>
+                    <span class="signal-tag">no-power</span>
+                    <span class="signal-tag">halted</span>
+                    <span class="signal-tag">shorts-detected</span>
+                    <span class="signal-tag">capacitance-updated</span>
+                    <span class="signal-tag">capacitance-exceeded</span>
+                    <span class="signal-tag">channels-updated</span>
+                    <span class="signal-tag">drops-detected</span>
+                    <span class="signal-tag">output_enabled</span>
+                    <span class="signal-tag">output_disabled</span>
+                </div>
+                <div style="margin-top: clamp(0.2rem, 0.5vw, 0.35rem); padding-top: clamp(0.2rem, 0.5vw, 0.35rem); border-top: 1px solid rgba(47, 154, 74, 0.1);">
+                    <p style="font-size: var(--code-size); color: var(--text-muted);">Clear all: <code style="color: var(--green-light);">proxy.signals.clear()</code></p>
+                </div>
+                <div style="margin-top: clamp(0.2rem, 0.5vw, 0.35rem);">
+                    <h3 style="margin-top: clamp(0.1rem, 0.3vw, 0.2rem);">Thread Safety</h3>
+                    <p style="font-size: var(--code-size); color: var(--text-muted);">Use <code style="color: var(--green-light);">with proxy.transaction_lock:</code> for async operations</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">07 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 8: DROPBOT API - CODE EXAMPLE ===================== -->
+<section class="slide" id="slide-7">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">DropBot Python API</div>
+        <h2 class="reveal reveal-delay-1">Code Example &mdash; Turning on Channels</h2>
+        <div class="code-block reveal reveal-delay-2" style="margin-bottom: clamp(0.4rem, 1vw, 0.7rem);">
+            <span class="kw">import</span> numpy <span class="kw">as</span> np<br>
+            <span class="kw">import</span> dropbot <span class="kw">as</span> db<br>
+            <br>
+            <span class="cm"># Connect to DropBot</span><br>
+            proxy <span class="op">=</span> db.<span class="fn">SerialProxy</span>()<br>
+            <br>
+            <span class="cm"># Enable HV output and set voltage/frequency</span><br>
+            proxy.<span class="fn">update_state</span>(<span class="str">hv_output_enabled</span><span class="op">=</span><span class="kw">True</span>, <span class="str">hv_output_selected</span><span class="op">=</span><span class="kw">True</span>,<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">voltage</span><span class="op">=</span><span class="num">100</span>, <span class="str">frequency</span><span class="op">=</span><span class="num">10e3</span>)<br>
+            <br>
+            <span class="cm"># Set channel states (1 = on, 0 = off)</span><br>
+            channels <span class="op">=</span> np.<span class="fn">zeros</span>(proxy.number_of_channels, <span class="str">dtype</span><span class="op">=</span><span class="kw">int</span>)<br>
+            channels[[<span class="num">5</span>, <span class="num">12</span>, <span class="num">23</span>]] <span class="op">=</span> <span class="num">1</span> &nbsp;<span class="cm"># activate specific electrodes</span><br>
+            proxy.state_of_channels <span class="op">=</span> channels
+        </div>
+        <div style="display: flex; gap: clamp(0.3rem, 0.8vw, 0.5rem);" class="reveal reveal-delay-3">
+            <div class="api-card" style="flex:1;">
+                <h3>update_state() Full Signature</h3>
+                <div class="code-block" style="border: none; padding: clamp(0.3rem, 0.8vw, 0.5rem); background: rgba(0,0,0,0.3);">
+                    proxy.<span class="fn">update_state</span>(<br>
+                    &nbsp;&nbsp;<span class="str">hv_output_enabled</span><span class="op">=</span><span class="kw">True</span>,<br>
+                    &nbsp;&nbsp;<span class="str">hv_output_selected</span><span class="op">=</span><span class="kw">True</span>,<br>
+                    &nbsp;&nbsp;<span class="str">voltage</span><span class="op">=</span><span class="num">100</span>, <span class="str">frequency</span><span class="op">=</span><span class="num">10e3</span>,<br>
+                    &nbsp;&nbsp;<span class="str">capacitance_update_interval_ms</span><span class="op">=</span><span class="num">10</span>,<br>
+                    &nbsp;&nbsp;<span class="str">event_mask</span><span class="op">=</span>db.EVENT_SHORTS_DETECTED<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="op">|</span> db.EVENT_ENABLE<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="op">|</span> db.EVENT_CHANNELS_UPDATED)
+                </div>
+            </div>
+            <div class="api-card" style="flex:1;">
+                <h3>Listening to Signals</h3>
+                <div class="code-block" style="border: none; padding: clamp(0.3rem, 0.8vw, 0.5rem); background: rgba(0,0,0,0.3);">
+                    <span class="kw">def</span> <span class="fn">on_cap</span>(msg):<br>
+                    &nbsp;&nbsp;<span class="fn">print</span>(msg)<br>
+                    <br>
+                    proxy.signals<br>
+                    &nbsp;&nbsp;.<span class="fn">signal</span>(<span class="str">'capacitance-updated'</span>)<br>
+                    &nbsp;&nbsp;.<span class="fn">connect</span>(on_cap)
+                </div>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">08 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 9: DATA FLOW ===================== -->
+<section class="slide" id="slide-8">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">End-to-End</div>
+        <h2 class="reveal reveal-delay-1">User Click &rarr; Droplet Movement</h2>
+        <div class="flow-pipeline">
+            <div class="flow-step reveal reveal-delay-1">
+                <span class="step-num down">1</span>
+                <span class="step-text"><strong>User clicks electrode</strong> in the Device Viewer GUI</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-1">&darr;</div>
+            <div class="flow-step reveal reveal-delay-2">
+                <span class="step-num down">2</span>
+                <span class="step-text">Frontend publishes <code class="mono" style="color: var(--green-light);">electrodes_state_change</code> &mdash; toggles on/off state</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-2">&darr;</div>
+            <div class="flow-step reveal reveal-delay-3">
+                <span class="step-num mid">3</span>
+                <span class="step-text"><strong>Redis / Dramatiq</strong> routes message to DropBot Controller worker</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-3">&darr;</div>
+            <div class="flow-step reveal reveal-delay-4">
+                <span class="step-num hw">4</span>
+                <span class="step-text"><strong>Backend calls</strong> <code class="mono" style="color: var(--green-light);">proxy.state_of_channels = [...]</code> via SerialProxy</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-4">&darr;</div>
+            <div class="flow-step reveal reveal-delay-5">
+                <span class="step-num hw">5</span>
+                <span class="step-text"><strong>DropBot firmware</strong> applies high voltage to selected electrodes</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-5">&uarr; feedback</div>
+            <div class="flow-step reveal reveal-delay-6">
+                <span class="step-num up">6</span>
+                <span class="step-text"><strong>Capacitance data</strong> + electrode status sent back through the message pipeline</span>
+            </div>
+            <div class="flow-direction reveal reveal-delay-6">&uarr;</div>
+            <div class="flow-step reveal reveal-delay-6">
+                <span class="step-num up">7</span>
+                <span class="step-text"><strong>GUI updates</strong> with real-time sensor feedback and electrode status</span>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">09 / 10</span>
+</section>
+
+<!-- ===================== SLIDE 10: KEY DESIGN CHOICES ===================== -->
+<section class="slide" id="slide-9">
+    <a href="https://sci-bots.com/" target="_blank" rel="noopener" class="slide-footer-link"><svg class="slide-footer-logo" viewBox="60 10 210 230" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M274,76.22l-17.3-17.3-43.26,43.26-6.92-6.92,43.26-43.26-17.31-17.3-43.25,43.25-6.92-6.92,43.25-43.25-17.3-17.3-43.25,43.25L121.74,10.48l-17.3,17.3,43.26,43.25-6.91,6.92-43.26-43.26-17.3,17.3,43.25,43.26-6.91,6.91-43.25-43.25-17.31,17.3,43.26,43.25-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.3,43.27-43.27,6.92,6.92-43.27,43.27,17.3,17.31,43.27-43.27,43.26,43.25,17.3-17.3-43.25-43.25,6.91-6.92,43.25,43.26,17.3-17.31-43.25-43.25,6.91-6.91,43.26,43.25,17.3-17.3-43.26-43.25,43.26-43.26ZM222.41,125.72l-51.18,51.16c-3.45,3.45-9.03,3.45-12.48,0l-51.17-51.17c-3.45-3.45-3.45-9.05,0-12.5l51.18-51.16c3.45-3.45,9.03-3.45,12.48,0l51.17,51.17c3.45,3.45,3.45,9.05,0,12.5Z"/><path d="M255.61,129.25l-80.85,80.77c-5.38,5.37-14.09,5.37-19.47,0l-80.9-80.84c-5.38-5.38-5.38-14.11,0-19.49L155.24,28.92c5.38-5.37,14.09-5.37,19.47,0l80.9,80.84c5.38,5.38,5.38,14.11,0,19.49ZM222.41,113.23l-51.17-51.17c-3.45-3.44-9.03-3.44-12.48,0l-51.18,51.16c-3.45,3.45-3.45,9.05,0,12.5l51.17,51.17c3.45,3.44,9.03,3.44,12.48,0l51.18-51.16c3.45-3.45,3.45-9.05,0-12.5Z"/></svg></a>
+    <div class="slide-content">
+        <div class="section-label reveal">Design</div>
+        <h2 class="reveal reveal-delay-1">Key Design Choices</h2>
+        <div class="design-grid">
+            <div class="design-card reveal reveal-delay-2">
+                <div class="card-icon-sm" style="background: rgba(47, 154, 74, 0.15); color: var(--green-primary);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="9" height="9"/><rect x="13" y="2" width="9" height="9"/><rect x="2" y="13" width="9" height="9"/><rect x="13" y="13" width="9" height="9"/></svg>
+                </div>
+                <h3>Decoupled Frontend / Backend / Server</h3>
+                <p>All three can run on separate machines. Redis can be local, on LAN, or cloud-hosted. Frontend controls the backend over the network.</p>
+            </div>
+            <div class="design-card reveal reveal-delay-3">
+                <div class="card-icon-sm" style="background: rgba(160, 207, 165, 0.12); color: var(--green-light);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <h3>Plugin Architecture</h3>
+                <p><a href="https://docs.enthought.com/envisage/" target="_blank" rel="noopener" style="color: var(--green-light); text-decoration: none; border-bottom: 1px dashed rgba(160, 207, 165, 0.4);">Envisage</a> plugins are independent and swappable. Features added or removed without modifying core application code.</p>
+            </div>
+            <div class="design-card reveal reveal-delay-4">
+                <div class="card-icon-sm" style="background: rgba(5, 151, 72, 0.15); color: var(--green-bright);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <h3>Convention-Based Routing</h3>
+                <p>Topic names map to handler methods automatically. <code class="mono" style="font-size:0.85em; color: var(--green-bright);">electrodes_state_change</code> &rarr; <code class="mono" style="font-size:0.85em; color: var(--green-bright);">on_electrodes_state_change_request()</code></p>
+            </div>
+            <div class="design-card reveal reveal-delay-5">
+                <div class="card-icon-sm" style="background: rgba(209, 209, 209, 0.1); color: var(--alto);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                </div>
+                <h3>Thread Safety</h3>
+                <p>Proxy transaction locks, Dramatiq worker isolation, Redis for shared state. <code class="mono" style="font-size:0.85em; color:var(--alto);">with proxy.transaction_lock:</code> for safe concurrent access.</p>
+            </div>
+        </div>
+    </div>
+    <span class="slide-number">10 / 10</span>
+</section>
+
+<script>
+/* ===========================================
+   PRESENTATION CONTROLLER
+   =========================================== */
+(function() {
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.nav-dot');
+    let currentSlide = 0;
+    let isScrolling = false;
+
+    /* Reveal on intersect */
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+            }
+        });
+    }, { threshold: 0.3 });
+    slides.forEach(s => revealObserver.observe(s));
+
+    function updateDots(i) {
+        dots.forEach((d, j) => d.classList.toggle('active', j === i));
+        currentSlide = i;
+    }
+
+    function goTo(i) {
+        if (i < 0 || i >= slides.length) return;
+        slides[i].scrollIntoView({ behavior: 'smooth' });
+        updateDots(i);
+    }
+
+    /* Scroll-based detection */
+    const slideObs = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            if (e.isIntersecting && e.intersectionRatio > 0.5)
+                updateDots(Array.from(slides).indexOf(e.target));
+        });
+    }, { threshold: 0.5 });
+    slides.forEach(s => slideObs.observe(s));
+
+    /* Keyboard */
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(currentSlide + 1); }
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); goTo(currentSlide - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+        else if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+    });
+
+    /* Dots */
+    dots.forEach(d => d.addEventListener('click', () => goTo(parseInt(d.dataset.slide))));
+
+    /* Touch */
+    let touchY = 0;
+    document.addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+    document.addEventListener('touchend', e => {
+        const diff = touchY - e.changedTouches[0].clientY;
+        if (Math.abs(diff) > 50) goTo(diff > 0 ? currentSlide + 1 : currentSlide - 1);
+    }, { passive: true });
+
+    /* Wheel */
+    document.addEventListener('wheel', (e) => {
+        if (isScrolling) return;
+        isScrolling = true;
+        if (e.deltaY > 30) goTo(currentSlide + 1);
+        else if (e.deltaY < -30) goTo(currentSlide - 1);
+        setTimeout(() => { isScrolling = false; }, 800);
+    }, { passive: true });
+
+    /* Hide hint */
+    const hint = document.querySelector('.keyboard-hint');
+    const hideHint = () => { if (hint) hint.style.opacity = '0'; };
+    document.addEventListener('keydown', hideHint, { once: true });
+    document.addEventListener('wheel', hideHint, { once: true });
+})();
+</script>
+</body>
+</html>

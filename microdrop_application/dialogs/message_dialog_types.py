@@ -54,6 +54,38 @@ class WarningAlertDialog(BaseMessageDialog):
         self.reject()
 
 
+class DisclaimerDialog(BaseMessageDialog):
+    """
+    Dialog for handling warning scenarios.
+
+    Shows a warning icon and provides OK/Cancel options.
+    """
+
+    def __init__(
+        self,
+        parent=None,
+        title: str = "Disclaimer",
+        message: str = "Disclaimer text goes here.",
+        ack_button_text: str = "I Understand",
+        **kwargs,
+    ):
+        buttons = {ack_button_text: {"action": self.accept_warning}}
+
+        super().__init__(
+            parent=parent,
+            title=title,
+            message=message,
+            dialog_type=self.TYPE_WARNING,
+            buttons=buttons,
+            **kwargs,
+        )
+
+    def accept_warning(self):
+        """Handle warning acknowledgment."""
+        self.button_clicked.emit("OK")
+        self.accept()
+
+
 class ErrorAlertDialog(BaseMessageDialog):
     """
     Dialog for displaying error messages and alerts.

@@ -83,7 +83,9 @@ class MicrodropTask(Task):
 
         SMenu(id="Tools", name="&Tools"),
 
-        SMenu(TaskToggleGroup(), id="View", name="&View")
+        SMenu(TaskToggleGroup(), id="View", name="&View"),
+
+        SMenu(id="Help", name="&Help")
     )
 
     def create_central_pane(self):
