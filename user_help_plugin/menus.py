@@ -4,7 +4,7 @@ from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Str
 
-from .consts import GITHUB_ISSUES_URL, SCIBOTS_URL
+from .consts import GITHUB_ISSUES_URL, SCIBOTS_URL, SUPPORT_EMAIL, INFO_EMAIL
 
 
 class AboutMicrodropAction(Action):
@@ -57,13 +57,13 @@ def menu_factory():
     contact_submenu = SMenu(
         ContactSupportAction(
             name="&Technical Support",
-            tooltip="Email support@sci-bots.com",
-            email="support@sci-bots.com",
+            tooltip=f"Email {SUPPORT_EMAIL}",
+            email=SUPPORT_EMAIL,
         ),
         ContactSupportAction(
             name="&General Inquiries",
-            tooltip="Email info@sci-bots.com",
-            email="info@sci-bots.com",
+            tooltip=f"Email {INFO_EMAIL}",
+            email=INFO_EMAIL,
         ),
         id="contact_support_submenu",
         name="&Contact Support",
