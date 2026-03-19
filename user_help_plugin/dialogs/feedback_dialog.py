@@ -2,7 +2,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyface.qt.QtWidgets import QDialog, QVBoxLayout
 from pyface.qt.QtCore import QUrl
 
-from .consts import FEEDBACK_URL
+from ..consts import FEEDBACK_URL
 
 
 class SendFeedbackDialog(QDialog):

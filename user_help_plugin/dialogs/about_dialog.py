@@ -5,7 +5,7 @@ from pyface.qt.QtWidgets import QDialog, QVBoxLayout
 from pyface.qt.QtCore import QUrl
 
 
-ARCHITECTURE_HTML = Path(__file__).parent / "resources" / "microdrop-architecture.html"
+ARCHITECTURE_HTML = Path(__file__).parent.parent / "resources" / "microdrop-architecture.html"
 
 
 class AboutDialog(QDialog):
