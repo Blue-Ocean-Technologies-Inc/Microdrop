@@ -42,16 +42,23 @@ ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
 
 
 def _show_beta_disclaimer():
-    """Read the Disclaimer section from README.md and show it at startup."""
-    from microdrop_application.dialogs.pyface_wrapper import disclaimer, warning
+    """Show beta disclaimer once. Stores a marker file after first display."""
+    from microdrop_application.dialogs.pyface_wrapper import disclaimer
+
+    marker = Path(ETSConfig.application_home) / ".beta_disclaimer_accepted"
+    if marker.exists():
+        return
 
     disclaimer_text = """
-    <b>Microdrop</b> is an open-source <b>beta</b> provided for testing and evaluation.<br><br> 
-    It may contain bugs or unexpected behaviour.<br><br> 
-    Please validate results in your own workflows and ensure your data is properly backed up.<br><br> 
+    <b>Microdrop</b> is an open-source <b>beta</b> provided for testing and evaluation.<br><br>
+    It may contain bugs or unexpected behaviour.<br><br>
+    Please validate results in your own workflows and ensure your data is properly backed up.<br><br>
     Provided under <b>AGPLv3</b> without warranty. Use at your own risk."""
 
     dialog = disclaimer(None, message=disclaimer_text)
+
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("Beta disclaimer accepted.")
 
 
 class MicrodropApplication(TasksApplication):
