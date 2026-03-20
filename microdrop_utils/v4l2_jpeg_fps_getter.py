@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import re
 
@@ -78,27 +79,24 @@ def get_jpeg_fps(camera_name: str, width: int, height: int) -> list[float]:
     return supported_fps
 
 
-# ==========================================
-# Example Usage:
-# ==========================================
 if __name__ == "__main__":
-    # Use the name exactly as it appeared in your v4l2-ctl --list-devices output
-    cam_name = "4K USB Camera"
-    target_w = 3840
-    target_h = 2160
+    parser = argparse.ArgumentParser(
+        description="Query supported JPEG FPS for a V4L2 camera at a given resolution."
+    )
+    parser.add_argument("camera", help="Camera name (as shown by v4l2-ctl --list-devices)")
+    parser.add_argument("width", type=int, help="Resolution width (e.g. 1920)")
+    parser.add_argument("height", type=int, help="Resolution height (e.g. 1080)")
+    args = parser.parse_args()
 
-    # Or try 1080p if your camera doesn't support 4K MJPEG
-    # target_w = 1920
-    # target_h = 1080
-
-    fps_list = get_jpeg_fps(cam_name, target_w, target_h)
+    fps_list = get_jpeg_fps(args.camera, args.width, args.height)
 
     if fps_list:
-        print(f"\nSuccess! Supported FPS for {target_w}x{target_h} (JPEG):")
+        print(f"\nSupported FPS for {args.width}x{args.height} (JPEG):")
         for fps in fps_list:
             print(f" - {fps} FPS")
         print(f"\nMax FPS: {max(fps_list)}")
     else:
         print(
-            f"\nNo FPS data found. The camera might not support {target_w}x{target_h} in JPEG format."
+            f"\nNo FPS data found. The camera might not support "
+            f"{args.width}x{args.height} in JPEG format."
         )
