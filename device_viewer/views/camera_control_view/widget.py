@@ -618,7 +618,9 @@ class CameraControlWidget(QWidget):
     def handle_recording_stopped(self, recording_output_path):
         publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="false")
         if not self._camera_state_pre_recording:
-            self.toggle_camera()
+            # turn off camera if we need to
+            if self.camera.isActive():
+                self.toggle_camera()
 
         # Show Result
         if recording_output_path and self.show_media_capture_dialog_for_video:
