@@ -164,8 +164,14 @@ class BaseStatusDockPane(TraitsDockPane):
 
     @observe("model.connected")
     @observe("model.protocol_running")
-    def _enable_relatime_icon_only_when_connection_established(self, event=None):
+    def _enable_relatime_icon_based_on_modes(self, event=None):
         self.realtime_mode_icon.setEnabled(self.model.connected and not self.model.protocol_running)
+
+    # Sync icon state with model
+    @observe("model.realtime_mode")
+    def _sync_realtime_icon(self, event):
+        self.realtime_mode_icon.is_active = event.new
+        self.realtime_mode_icon.update_style()
 
 
 def _build_status_icon_tooltip(
@@ -173,7 +179,9 @@ def _build_status_icon_tooltip(
         connected_color,
         connected_no_device_color,
         halted_color) -> str:
+
     title_color = WHITE if is_dark_mode() else GREY["dark"]
+
     return f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
       <strong style="font-size: 1.1em; color: {title_color}">Device Status:</strong>
