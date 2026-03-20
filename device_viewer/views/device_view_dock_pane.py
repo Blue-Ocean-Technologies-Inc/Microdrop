@@ -1139,8 +1139,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.recording_icon.setFont(_font)
 
         # --- Add to Status Bar ---
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.recording_icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(1, self.recording_icon)
 
         # Hide recording icon initially so it waits for a trigger
         self.recording_icon.hide()

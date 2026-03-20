@@ -154,10 +154,10 @@ class BaseStatusDockPane(TraitsDockPane):
         self.realtime_mode_icon.setFont(font)
         self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
 
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.realtime_mode_icon)
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, self.realtime_mode_icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
 
         # initial check: enable / disable icon based on initial connection status
         self._enable_relatime_icon_only_when_connection_established()
