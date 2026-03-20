@@ -313,10 +313,17 @@ class CameraControlWidget(QWidget):
 
         if old_camera_name:
             for i, camera in enumerate(_available_cameras):
-                if camera:
-                    if camera.description() == old_camera_name:
-                        self.combo_cameras.setCurrentIndex(i)
-                        return
+                if camera and camera.description() == old_camera_name:
+                    self.combo_cameras.setCurrentIndex(i)
+                    return
+
+            # Preferred camera not found — clear stale resolution since it
+            # belonged to the missing camera, then fall back.
+            logger.warning(
+                f"Preferred camera '{old_camera_name}' not found. "
+                f"Falling back to first available camera."
+            )
+            self.preferences.resolution = ""
 
         self.combo_cameras.setCurrentIndex(0)
 
@@ -355,9 +362,22 @@ class CameraControlWidget(QWidget):
             self.turn_on_camera()
 
     def populate_resolutions(self, allow_strict_mode=True):
+        """Populate the resolution combo box from the current camera's formats.
+
+        Sorts formats by resolution (descending), preferred pixel format, and
+        frame rate.  In strict mode only formats matching the preferred pixel
+        format are shown; if none match, the method recurses once with strict
+        mode disabled.
+
+        After populating, tries to restore the saved resolution preference.
+        Falls back to the middle entry when the saved value is unavailable.
+        """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
+
+        # -- 1. Collect and sort available formats --------------------------------
         formats = self.camera.cameraDevice().videoFormats()
+        preferred_fmt = self.preferences.preferred_video_format.upper()
 
         def format_sort_key(fmt):
             res = fmt.resolution()
@@ -365,51 +385,73 @@ class CameraControlWidget(QWidget):
             return (
                 res.width(),
                 res.height(),
-                self.preferences.preferred_video_format.upper() in fmt_name,
+                preferred_fmt in fmt_name,
                 fmt.maxFrameRate(),
             )
 
         formats.sort(key=format_sort_key, reverse=True)
+
+        # -- 2. Build combo-box entries (one per unique resolution) ----------------
+        strict_mode = self.preferences.strict_video_format and allow_strict_mode
         seen_resolutions = set()
-        _strict_mode = self.preferences.strict_video_format and allow_strict_mode
 
         for fmt in formats:
             w, h = fmt.resolution().width(), fmt.resolution().height()
-            res_key = (w, h)
             fmt_name = str(fmt.pixelFormat()).upper()
 
-            if (
-                _strict_mode
-                and self.preferences.preferred_video_format.upper() in fmt_name
-            ) or not _strict_mode:
-                if res_key not in seen_resolutions:
-                    seen_resolutions.add(res_key)
-                    fps = fmt.maxFrameRate()
-                    pix_name = (
-                        str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
-                    )
-                    label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
-                    self.combo_resolutions.addItem(label, userData=fmt)
+            # In strict mode, skip formats that don't match the preference
+            if strict_mode and preferred_fmt not in fmt_name:
+                continue
+
+            # De-duplicate by resolution — the sort ensures the best pixel
+            # format / frame-rate combo comes first for each resolution.
+            if (w, h) in seen_resolutions:
+                continue
+            seen_resolutions.add((w, h))
+
+            fps = fmt.maxFrameRate()
+            pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+            label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+            self.combo_resolutions.addItem(label, userData=fmt)
 
         self.combo_resolutions.blockSignals(False)
-        if len(seen_resolutions) > 0:
-            if not self.preferences.resolution or not _strict_mode:
-                if len(seen_resolutions) // 2 != self.combo_resolutions.currentIndex():
-                    self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
-                else:
-                    self.on_resolution_changed(self.combo_resolutions.currentIndex())
-            else:
-                for i in range(self.combo_resolutions.count()):
-                    if self.preferences.resolution == self.combo_resolutions.itemText(
-                        i
-                    ):
-                        self.combo_resolutions.setCurrentIndex(i)
+
+        # -- 3. Select a resolution -----------------------------------------------
+        if seen_resolutions:
+            self._restore_or_fallback_resolution(seen_resolutions)
         elif self.preferences.strict_video_format:
+            # No formats survived strict filtering — retry without it
             warning_message = f"Preferred format {self.preferences.preferred_video_format} not supported."
             logger.warning(warning_message)
             if not self._is_ir_camera_name(self.preferences.selected_camera):
                 warning(None, warning_message)
             self.populate_resolutions(allow_strict_mode=False)
+            return
+
+        # Ensure the model always has a resolution set (e.g. when the combo
+        # index didn't change and on_resolution_changed was never triggered).
+        if not self.model.camera_perspective.camera_resolution:
+            self.on_resolution_changed(self.combo_resolutions.currentIndex())
+
+    def _restore_or_fallback_resolution(self, seen_resolutions):
+        """Try to select the saved resolution; fall back to the middle entry."""
+        saved_resolution = self.preferences.resolution
+
+        # Look for the saved resolution in the combo box
+        if saved_resolution:
+            for i in range(self.combo_resolutions.count()):
+                if self.combo_resolutions.itemText(i) == saved_resolution:
+                    self.combo_resolutions.setCurrentIndex(i)
+                    return
+
+            logger.warning(
+                f"Saved resolution '{saved_resolution}' not available. "
+                f"Falling back to default (middle resolution)."
+            )
+
+        # No saved preference or it wasn't found — pick the middle resolution
+        fallback_index = len(seen_resolutions) // 2
+        self.combo_resolutions.setCurrentIndex(fallback_index)
 
     def on_resolution_changed(self, index):
         if self.combo_resolutions.count() == 0 or index < 0:
