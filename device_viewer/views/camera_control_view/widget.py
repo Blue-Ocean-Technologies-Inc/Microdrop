@@ -313,10 +313,17 @@ class CameraControlWidget(QWidget):
 
         if old_camera_name:
             for i, camera in enumerate(_available_cameras):
-                if camera:
-                    if camera.description() == old_camera_name:
-                        self.combo_cameras.setCurrentIndex(i)
-                        return
+                if camera and camera.description() == old_camera_name:
+                    self.combo_cameras.setCurrentIndex(i)
+                    return
+
+            # Preferred camera not found — clear stale resolution since it
+            # belonged to the missing camera, then fall back.
+            logger.warning(
+                f"Preferred camera '{old_camera_name}' not found. "
+                f"Falling back to first available camera."
+            )
+            self.preferences.resolution = ""
 
         self.combo_cameras.setCurrentIndex(0)
 
@@ -393,17 +400,29 @@ class CameraControlWidget(QWidget):
 
         self.combo_resolutions.blockSignals(False)
         if len(seen_resolutions) > 0:
-            if not self.preferences.resolution or not _strict_mode:
-                if len(seen_resolutions) // 2 != self.combo_resolutions.currentIndex():
-                    self.combo_resolutions.setCurrentIndex(len(seen_resolutions) // 2)
-                else:
-                    self.on_resolution_changed(self.combo_resolutions.currentIndex())
-            else:
+            # Try to restore the saved resolution preference
+            saved_index = -1
+            if self.preferences.resolution:
                 for i in range(self.combo_resolutions.count()):
-                    if self.preferences.resolution == self.combo_resolutions.itemText(
-                        i
-                    ):
-                        self.combo_resolutions.setCurrentIndex(i)
+                    if self.preferences.resolution == self.combo_resolutions.itemText(i):
+                        saved_index = i
+                        break
+
+            if saved_index >= 0:
+                self.combo_resolutions.setCurrentIndex(saved_index)
+            else:
+                # Saved resolution not available — fall back to middle resolution
+                if self.preferences.resolution:
+                    logger.warning(
+                        f"Saved resolution '{self.preferences.resolution}' not available. "
+                        f"Falling back to default (middle resolution)."
+                    )
+                fallback_index = len(seen_resolutions) // 2
+                if fallback_index != self.combo_resolutions.currentIndex():
+                    self.combo_resolutions.setCurrentIndex(fallback_index)
+                else:
+                    # Already at the right index but need to apply the format
+                    self.on_resolution_changed(self.combo_resolutions.currentIndex())
         elif self.preferences.strict_video_format:
             warning_message = f"Preferred format {self.preferences.preferred_video_format} not supported."
             logger.warning(warning_message)
