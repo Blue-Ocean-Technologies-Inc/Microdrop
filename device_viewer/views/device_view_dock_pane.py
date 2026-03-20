@@ -1012,20 +1012,10 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self.undo()  # Revert changes if not editable
                 return
 
-    @observe(
-        "model"
-    )  # When the entire electrodes model is reassigned. Note that the route_manager model should never be reassigned (because of TraitsUI)
     @observe("model.routes.layers.items.route.route.items")  # When a route is modified
-    @observe("model.routes.layers.items")  # When an electrode changes state
-    @observe(
-        "model.electrodes.electrodes.items.channel"
-    )  # When a electrode's channel is modified (i.e. using channel-edit mode)
-    @observe(
-        "model.electrodes.actuated_channels.items"
-    )  # When an electrode changes state
-    @observe(
-        "model.electrodes.disabled_channels.items"
-    )  # When an electrode is disabled/enabled
+    @observe("model.electrodes.electrodes.items.channel")  # When a electrode's channel is modified (i.e. using channel-edit mode)
+    @observe("model.electrodes.actuated_channels.items")  # When an electrode changes state
+    @observe("model.electrodes.disabled_channels.items")  # When an electrode is disabled/enabled
     @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
