@@ -1126,7 +1126,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
-
         # --- Initialize widgets ---
         self.recording_icon = PulsingLabel(
             icon_str="album",
@@ -1134,41 +1133,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             tooltip="Recording in progress...",
         )
 
-        # Use the new custom clickable icon
-        active_inactive_disabled_styles = (
-             f"""QLabel {{color: {SUCCESS_COLOR};}}""",
-             f"""QLabel {{color: {GREY["lighter"]};}}""",
-             f"""QLabel {{color: {GREY["lighter"]};}}""",
-        )
-        active_inactive_disabled_tooltips = (
-            "Click to <b>disable</b> realtime mode",
-            "Click to <b>enable</b> realtime mode",
-            "Cannot enable realtime mode. No device <b>connection</b>",
-        )
-        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips)
-        self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
-
-        # initial check: enable / disable icon based on initial connection status
-        self._enable_relatime_icon_only_when_connection_established()
-
         # Apply font settings
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         self.recording_icon.setFont(_font)
-        self.realtime_mode_icon.setFont(_font)
 
         # --- Add to Status Bar ---
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.recording_icon)
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(self.realtime_mode_icon)
 
         # Hide recording icon initially so it waits for a trigger
         self.recording_icon.hide()
 
         self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
-
-    @observe("model.connected")
-    @observe("model.protocol_running")
-    def _enable_relatime_icon_only_when_connection_established(self, event=None):
-        self.realtime_mode_icon.setEnabled(self.model.connected and not self.model.protocol_running)
