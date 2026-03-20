@@ -19,13 +19,15 @@ Design notes:
   - Subclasses that need a status-bar icon or dialog popups override
     _setup_extras(); this keeps the base class free of device-specific code.
 """
+from dropbot_controller.consts import SET_REALTIME_MODE
 from dropbot_status_and_controls.consts import connected_no_device_color, halted_color
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, GREY
+from microdrop_style.colors import WHITE, GREY, SUCCESS_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_DROP_EC
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget, ClickableToggleIcon
 from pyface.tasks.api import TraitsDockPane
 from pyface.qt.QtGui import QApplication, QLabel, QFont
 from traits.api import observe
@@ -111,16 +113,15 @@ class BaseStatusDockPane(TraitsDockPane):
     # ------------------------------------------------------------------ #
     @observe("task:window:status_bar_manager")
     def _setup_statusbar_icon(self, event):
-        icon = QLabel(ICON_DROP_EC)
+
+        # add status icon
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
+
+        # status icon
+        icon = QLabel(ICON_DROP_EC)
         icon.setFont(font)
         icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
-
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(
-            horizontal_spacer_widget(10)
-        )
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(icon)
 
         # Keep the icon color in sync with the model's connection state.
         self.model.observe(lambda e: icon.setStyleSheet(f"color: {e.new}"), "icon_color")
@@ -138,13 +139,49 @@ class BaseStatusDockPane(TraitsDockPane):
         _apply_tooltip()
         QApplication.styleHints().colorSchemeChanged.connect(_apply_tooltip)
 
+        # Add realtime mode icon
+        active_inactive_disabled_styles = (
+             f"""QLabel {{color: {SUCCESS_COLOR};}}""",
+             f"""QLabel {{color: {GREY["lighter"]};}}""",
+             f"""QLabel {{color: {GREY["lighter"]};}}""",
+        )
+        active_inactive_disabled_tooltips = (
+            "Click to <b>disable</b> realtime mode",
+            "Click to <b>enable</b> realtime mode",
+            "Cannot enable realtime mode. No device <b>connection</b>",
+        )
+        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips)
+        self.realtime_mode_icon.setFont(font)
+        self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
+
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, self.realtime_mode_icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
+
+        # initial check: enable / disable icon based on initial connection status
+        self._enable_relatime_icon_only_when_connection_established()
+
+    @observe("model.connected")
+    @observe("model.protocol_running")
+    def _enable_relatime_icon_based_on_modes(self, event=None):
+        self.realtime_mode_icon.setEnabled(self.model.connected and not self.model.protocol_running)
+
+    # Sync icon state with model
+    @observe("model.realtime_mode")
+    def _sync_realtime_icon(self, event):
+        self.realtime_mode_icon.is_active = event.new
+        self.realtime_mode_icon.update_style()
+
 
 def _build_status_icon_tooltip(
         disconnected_color,
         connected_color,
         connected_no_device_color,
         halted_color) -> str:
+
     title_color = WHITE if is_dark_mode() else GREY["dark"]
+
     return f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
       <strong style="font-size: 1.1em; color: {title_color}">Device Status:</strong>

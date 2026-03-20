@@ -25,11 +25,15 @@ from PySide6.QtCore import (
     QThread,
     QEventLoop,
     QEasingCurve,
-    QPropertyAnimation,
+    QPropertyAnimation, Signal,
 )
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+from microdrop_style.button_styles import get_tooltip_style
+from microdrop_style.helpers import is_dark_mode
+
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
@@ -545,3 +549,55 @@ class PulsingLabel(QLabel):
             self.start()
         else:
             self.stop()
+
+
+class ClickableToggleIcon(QLabel):
+    """A clickable icon that toggles between active/inactive states, with an optional disabled state.
+
+    Accepts 2-tuples (active, inactive) or 3-tuples (active, inactive, disabled)
+    for both stylesheets and tooltips.
+    """
+    toggled = Signal(bool)
+
+    def __init__(self, icon_str, active_inactive_stylesheets: tuple, active_inactive_tooptips: tuple, parent=None):
+        super().__init__(icon_str, parent)
+        self.is_active = False
+
+        self._active_stylesheet = active_inactive_stylesheets[0]
+        self._inactive_stylesheet = active_inactive_stylesheets[1]
+        self._disabled_stylesheet = active_inactive_stylesheets[2] if len(active_inactive_stylesheets) > 2 else self._inactive_stylesheet
+
+        self._active_tooltip = active_inactive_tooptips[0]
+        self._inactive_tooltip = active_inactive_tooptips[1]
+        self._disabled_tooltip = active_inactive_tooptips[2] if len(active_inactive_tooptips) > 2 else self._inactive_tooltip
+
+        self.setCursor(Qt.PointingHandCursor)
+        self.update_style()
+
+        QApplication.styleHints().colorSchemeChanged.connect(self.update_style)
+
+    def setEnabled(self, enabled):
+        super().setEnabled(enabled)
+        self.setCursor(Qt.PointingHandCursor if enabled else Qt.ArrowCursor)
+        self.update_style()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self.isEnabled():
+            self.is_active = not self.is_active
+            self.update_style()
+            self.toggled.emit(self.is_active)
+        super().mousePressEvent(event)
+
+    def update_style(self):
+        _theme = "dark" if is_dark_mode() else "light"
+        _tooltip_style = get_tooltip_style(_theme)
+
+        if not self.isEnabled():
+            self.setToolTip(self._disabled_tooltip)
+            self.setStyleSheet(self._disabled_stylesheet + _tooltip_style)
+        elif self.is_active:
+            self.setToolTip(self._active_tooltip)
+            self.setStyleSheet(self._active_stylesheet + _tooltip_style)
+        else:
+            self.setToolTip(self._inactive_tooltip)
+            self.setStyleSheet(self._inactive_stylesheet + _tooltip_style)
