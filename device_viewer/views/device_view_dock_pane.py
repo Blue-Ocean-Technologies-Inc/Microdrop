@@ -1148,12 +1148,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips)
         self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
 
-        @observe("model.connected")
-        def _enable_relatime_icon_only_when_connection_established(event=None):
-            self.realtime_mode_icon.setEnabled(self.model.connected)
-
         # initial check: enable / disable icon based on initial connection status
-        _enable_relatime_icon_only_when_connection_established()
+        self._enable_relatime_icon_only_when_connection_established()
 
         # Apply font settings
         _font = QFont(ICON_FONT_FAMILY)
@@ -1171,3 +1167,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.recording_icon.hide()
 
         self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
+
+    @observe("model.connected")
+    @observe("model.protocol_running")
+    def _enable_relatime_icon_only_when_connection_established(self, event=None):
+        self.realtime_mode_icon.setEnabled(self.model.connected and not self.model.protocol_running)
