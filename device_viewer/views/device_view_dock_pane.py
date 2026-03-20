@@ -689,9 +689,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
 
         # keep the camera toggled button in sync with the alpha map.
-        self.camera_control_widget.camera_toggle_button.toggled.connect(
-            lambda checked: self.model.set_visible(video_key, checked)
-        )
+        # self.camera_control_widget.camera_toggle_button.toggled.connect(
+        #     lambda checked: self.model.set_visible(video_key, checked)
+        # )
 
         # calibration_view code
         self.calibration_view = CalibrationWidget()
