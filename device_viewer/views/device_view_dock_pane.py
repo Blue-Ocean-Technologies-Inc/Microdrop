@@ -6,7 +6,7 @@ import dramatiq
 from dropbot_controller.consts import SET_REALTIME_MODE
 from traits.observation._set_change_event import SetChangeEvent
 
-from electrode_controller.consts import electrode_state_change_publisher, electrode_disable_request_publisher
+from electrode_controller.consts import electrode_state_change_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -1135,16 +1135,25 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
 
         # Use the new custom clickable icon
-        active_inactive_styles = (
+        active_inactive_disabled_styles = (
              f"""QLabel {{color: {SUCCESS_COLOR};}}""",
              f"""QLabel {{color: {GREY["lighter"]};}}""",
+             f"""QLabel {{color: {GREY["lighter"]};}}""",
         )
-        active_active_tooltips = (
+        active_inactive_disabled_tooltips = (
             "Click to <b>disable</b> realtime mode",
             "Click to <b>enable</b> realtime mode",
+            "Cannot enable realtime mode. No device <b>connection</b>",
         )
-        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_styles, active_active_tooltips)
+        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips)
         self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
+
+        @observe("model.connected")
+        def _enable_relatime_icon_only_when_connection_established(event=None):
+            self.realtime_mode_icon.setEnabled(self.model.connected)
+
+        # initial check: enable / disable icon based on initial connection status
+        _enable_relatime_icon_only_when_connection_established()
 
         # Apply font settings
         _font = QFont(ICON_FONT_FAMILY)
