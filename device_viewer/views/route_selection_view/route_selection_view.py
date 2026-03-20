@@ -78,7 +78,7 @@ layer_table_editor = TableEditor(
     ],
     menu=RouteLayerMenu,
     show_lines=False,
-    selected="selected_layer",
+    selected="object.routes.selected_layer",
     sortable=False,
     reorderable=True,
     show_column_labels=True,
