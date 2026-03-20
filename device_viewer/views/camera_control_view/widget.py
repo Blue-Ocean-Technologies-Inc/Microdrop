@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from apptools.preferences.api import Preferences
 
-from microdrop_application.dialogs.pyface_wrapper import error, warning
+from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
 
@@ -31,6 +31,7 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from .utils import _cache_media_capture, _show_media_capture_dialog
 from ..electrode_view.electrode_scene import ElectrodeScene
+from ...default_settings import video_key
 
 from ...utils.camera import (
     VideoRecorder,
@@ -219,7 +220,22 @@ class CameraControlWidget(QWidget):
             self.preferences.camera_state = False
 
     def toggle_camera(self):
-        self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
+        choice = OK
+        if self.recorder.is_recording:
+            choice = warning(
+                None,
+                title="Recording Session Active Warning",
+                message="Are you sure you want to shut off the camera while recording?",
+            )
+
+        if choice in (OK, YES):
+            self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
+        else:
+            # Revert the button's checked state since Qt auto-toggles it on click
+            self.camera_toggle_button.setChecked(self.camera.isActive())
+
+        # keep the camera toggled button in sync with the alpha map.
+        self.model.set_visible(video_key, self.camera.isActive())
 
     def check_initial_camera_state(self):
         if self.camera and self.camera.isActive():
@@ -485,7 +501,7 @@ class CameraControlWidget(QWidget):
         return self._generate_media_filename(step_description, step_id, ".png")
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        return self._generate_media_filename(step_description, step_id, ".mp4")
+        return self._generate_media_filename(step_description, step_id, ".mkv")
 
     def on_recording_active(self, recording_data):
         if isinstance(recording_data, dict):
