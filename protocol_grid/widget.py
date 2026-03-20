@@ -2559,6 +2559,13 @@ class PGCWidget(QWidget):
         if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
             self.update_single_step_dev_fields(desc_item, changed_field=field)
 
+        if field == "Repetitions":
+            # Repetition change affects Run Time — recalculate and propagate
+            if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                self._update_parent_aggregations(desc_item)
+            else:
+                self._update_parent_aggregations(parent)
+
         if field in ("Voltage", "Frequency", "Trail Length"):
             # if desc_item and desc_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
             #     self._set_field_for_group(desc_item, field, item.text())
