@@ -160,7 +160,7 @@ class BaseStatusDockPane(TraitsDockPane):
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
 
         # initial check: enable / disable icon based on initial connection status
-        self._enable_relatime_icon_only_when_connection_established()
+        self._enable_relatime_icon_based_on_modes()
 
     @observe("model.connected")
     @observe("model.protocol_running")
