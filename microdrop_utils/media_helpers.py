@@ -1,0 +1,104 @@
+import subprocess
+import re
+
+
+def get_jpeg_fps(camera_name: str, width: int, height: int) -> list[float]:
+    """
+    Finds the supported FPS for a specific camera and JPEG resolution using v4l2-ctl.
+    """
+    print(f"Searching for '{camera_name}'...")
+
+    # --- STEP 1: Find the /dev/video path ---
+    try:
+        # Run v4l2-ctl --list-devices
+        list_process = subprocess.run(
+            ["v4l2-ctl", "--list-devices"], capture_output=True, text=True, check=True
+        )
+    except FileNotFoundError:
+        print("Error: v4l2-utils is not installed. Run: sudo apt install v4l-utils")
+        return []
+
+    device_path = None
+    lines = list_process.stdout.splitlines()
+
+    for i, line in enumerate(lines):
+        # If we find the camera name in the header line
+        if camera_name.lower() in line.lower() and not line.startswith("\t"):
+            # The next line containing a tab is the primary video node
+            if i + 1 < len(lines) and lines[i + 1].startswith("\t"):
+                device_path = lines[i + 1].strip()
+                break
+
+    if not device_path:
+        print(f"Could not find a device node for '{camera_name}'.")
+        return []
+
+    print(f"Found '{camera_name}' at {device_path}. Querying formats...")
+
+    # --- STEP 2: Query Formats & Parse ---
+    try:
+        format_process = subprocess.run(
+            ["v4l2-ctl", f"--device={device_path}", "--list-formats-ext"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to query device {device_path}: {e}")
+        return []
+
+    # State machine variables for parsing the output
+    in_mjpeg_section = False
+    in_target_resolution = False
+    supported_fps = []
+
+    target_res_string = f"{width}x{height}"
+
+    for line in format_process.stdout.splitlines():
+        # Check if we are entering a new format block
+        if line.strip().startswith("["):
+            # Look for MJPG or JPEG
+            in_mjpeg_section = "MJPG" in line or "JPEG" in line
+            in_target_resolution = False  # Reset resolution state on new format
+            continue
+
+        if in_mjpeg_section:
+            # Check if we hit our target resolution
+            if "Size: Discrete" in line:
+                in_target_resolution = target_res_string in line
+
+            # If we are in the right format AND right resolution, extract the FPS
+            elif in_target_resolution and "Interval:" in line:
+                # Regex to extract the FPS number from "(30.000 fps)"
+                match = re.search(r"\((\d+\.\d+)\s*fps\)", line)
+                if match:
+                    fps_val = float(match.group(1))
+                    supported_fps.append(fps_val)
+
+    return supported_fps
+
+
+# ==========================================
+# Example Usage:
+# ==========================================
+if __name__ == "__main__":
+    # Use the name exactly as it appeared in your v4l2-ctl --list-devices output
+    cam_name = "4K USB Camera"
+    target_w = 3840
+    target_h = 2160
+
+    # Or try 1080p if your camera doesn't support 4K MJPEG
+    # target_w = 1920
+    # target_h = 1080
+
+    fps_list = get_jpeg_fps(cam_name, target_w, target_h)
+
+    if fps_list:
+        print(f"\nSuccess! Supported FPS for {target_w}x{target_h} (JPEG):")
+        for fps in fps_list:
+            print(f" - {fps} FPS")
+        print(f"\nMax FPS: {max(fps_list)}")
+    else:
+        print(
+            f"\nNo FPS data found. The camera might not support {target_w}x{target_h} in JPEG format."
+        )
