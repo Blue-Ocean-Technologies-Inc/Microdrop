@@ -3,9 +3,17 @@ import subprocess
 import re
 
 
-def get_jpeg_fps(camera_name: str, width: int, height: int) -> list[float]:
+def get_v4l2_fps(camera_name: str, width: int, height: int, pixel_format: str = "JPEG") -> list[float]:
     """
-    Finds the supported FPS for a specific camera and JPEG resolution using v4l2-ctl.
+    Finds the supported FPS for a specific camera, resolution, and pixel format using v4l2-ctl.
+
+    Args:
+        camera_name: Camera name as shown by ``v4l2-ctl --list-devices``.
+        width: Resolution width (e.g. 1920).
+        height: Resolution height (e.g. 1080).
+        pixel_format: Pixel format to match (default ``"JPEG"``).
+                      Common values: ``"JPEG"``, ``"MJPG"``, ``"YUYV"``, ``"NV12"``, ``"H264"``.
+                      Use ``"*"`` to match all formats.
     """
     print(f"Searching for '{camera_name}'...")
 
@@ -49,21 +57,21 @@ def get_jpeg_fps(camera_name: str, width: int, height: int) -> list[float]:
         return []
 
     # State machine variables for parsing the output
-    in_mjpeg_section = False
+    in_format_section = False
     in_target_resolution = False
     supported_fps = []
+    match_all = pixel_format == "*"
 
     target_res_string = f"{width}x{height}"
 
     for line in format_process.stdout.splitlines():
         # Check if we are entering a new format block
         if line.strip().startswith("["):
-            # Look for MJPG or JPEG
-            in_mjpeg_section = "MJPG" in line or "JPEG" in line
+            in_format_section = match_all or pixel_format.upper() in line.upper()
             in_target_resolution = False  # Reset resolution state on new format
             continue
 
-        if in_mjpeg_section:
+        if in_format_section:
             # Check if we hit our target resolution
             if "Size: Discrete" in line:
                 in_target_resolution = target_res_string in line
@@ -81,22 +89,27 @@ def get_jpeg_fps(camera_name: str, width: int, height: int) -> list[float]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Query supported JPEG FPS for a V4L2 camera at a given resolution."
+        description="Query supported FPS for a V4L2 camera at a given resolution and pixel format."
     )
     parser.add_argument("camera", help="Camera name (as shown by v4l2-ctl --list-devices)")
     parser.add_argument("width", type=int, help="Resolution width (e.g. 1920)")
     parser.add_argument("height", type=int, help="Resolution height (e.g. 1080)")
+    parser.add_argument(
+        "-f", "--format", default="JPEG",
+        help="Pixel format to match (default: JPEG). Use '*' for all formats."
+    )
     args = parser.parse_args()
 
-    fps_list = get_jpeg_fps(args.camera, args.width, args.height)
+    fps_list = get_v4l2_fps(args.camera, args.width, args.height, args.format)
 
+    fmt_label = "all formats" if args.format == "*" else args.format
     if fps_list:
-        print(f"\nSupported FPS for {args.width}x{args.height} (JPEG):")
+        print(f"\nSupported FPS for {args.width}x{args.height} ({fmt_label}):")
         for fps in fps_list:
             print(f" - {fps} FPS")
         print(f"\nMax FPS: {max(fps_list)}")
     else:
         print(
             f"\nNo FPS data found. The camera might not support "
-            f"{args.width}x{args.height} in JPEG format."
+            f"{args.width}x{args.height} in {fmt_label} format."
         )
