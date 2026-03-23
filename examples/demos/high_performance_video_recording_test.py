@@ -122,7 +122,7 @@ class CameraRunner(QMainWindow):
     def toggle_recording(self):
         if not self.recorder.is_recording:
             # --- START ---
-            filename = f"hd_rec_{datetime.now().strftime('%H%M%S')}.mp4"
+            filename = f"hd_rec_{datetime.now().strftime('%H%M%S')}.mkv"
             self._output_path = save_path = str(Path.cwd() / filename)
             # CRITICAL: Use the Camera's ACTUAL resolution, not the UI size
             # This ensures 1:1 pixel mapping
