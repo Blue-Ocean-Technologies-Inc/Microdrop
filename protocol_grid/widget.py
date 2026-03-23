@@ -2754,7 +2754,7 @@ class PGCWidget(QWidget):
         return max_loop_duration
 
     def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
-        """Revert Repetitions to 1 if the step has no looping route."""
+        """Revert Repetitions to 1 if the step has no looping route"""
         try:
             reps = int(repetitions_item.text() or "1")
         except ValueError:
