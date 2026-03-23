@@ -1,7 +1,10 @@
 import argparse
 import subprocess
+import platform
 import re
-from PySide6.QtMultimedia import QMediaDevices
+from PySide6.QtMultimedia import QCamera, QMediaDevices
+
+os_name = platform.system()
 
 
 def get_v4l2_fps(device_path: str, width: int, height: int, pixel_format: str = "JPEG") -> list[float]:
@@ -64,6 +67,58 @@ def get_v4l2_fps(device_path: str, width: int, height: int, pixel_format: str = 
     return supported_fps
 
 
+def get_v4l2_all_fps(device_path: str, pixel_format: str = "JPEG") -> dict[tuple[int, int], list[float]]:
+    """Query all supported resolutions and their fps values for a V4L2 device.
+
+    Args:
+        device_path: Device node path (e.g. ``"/dev/video0"``).
+        pixel_format: Pixel format to filter by (default ``"JPEG"``).
+                      Use ``"*"`` to match all formats.
+
+    Returns:
+        Dict mapping ``(width, height)`` to a list of supported fps values,
+        e.g. ``{(1920, 1080): [30.0, 15.0], (3840, 2160): [5.0]}``.
+    """
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", f"--device={device_path}", "--list-formats-ext"],
+            capture_output=True, text=True, check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return {}
+
+    fps_map: dict[tuple[int, int], list[float]] = {}
+    in_format_section = False
+    current_res = None
+    match_all = pixel_format == "*"
+
+    size_re = re.compile(r"Size:\s+\w+\s+(\d+)x(\d+)")
+    fps_re = re.compile(r"\((\d+(?:\.\d+)?)\s*fps\)")
+
+    for line in result.stdout.splitlines():
+        if line.strip().startswith("["):
+            in_format_section = match_all or pixel_format.upper() in line.upper()
+            current_res = None
+            continue
+
+        if not in_format_section:
+            continue
+
+        size_match = size_re.search(line)
+        if size_match:
+            current_res = (int(size_match.group(1)), int(size_match.group(2)))
+            if current_res not in fps_map:
+                fps_map[current_res] = []
+            continue
+
+        if current_res is not None:
+            fps_match = fps_re.search(line)
+            if fps_match:
+                fps_map[current_res].append(float(fps_match.group(1)))
+
+    return fps_map
+
+
 def get_real_linux_nodes() -> list[int]:
     """Query V4L2 for the primary video capture nodes, bypassing Qt.
 
@@ -109,30 +164,68 @@ def get_real_linux_nodes() -> list[int]:
     return real_nodes
 
 
-def map_qt_cameras_to_linux_nodes():
-    """Pair Qt camera objects with real Linux ``/dev/videoN`` node ids (the N).
+class LinuxCamera(QCamera):
+    """QCamera subclass that carries the real V4L2 node ID and fps data on Linux.
 
-    Qt enumerates cameras in the same order as V4L2, so we zip the two
-    lists together.  Each entry is ``(id, QCameraDevice)`
+    On init, queries V4L2 for the real fps values at every supported
+    resolution.  Use ``get_fps(width, height)`` to look up the max fps
+    for a specific resolution.
 
-    Usage example::
-
-        for i, cam in map_qt_cameras_to_linux_nodes():
-            combo.addItem(name, userData=cam)
-            cam_id = i
-
+    On non-Linux platforms ``linux_node_id`` is ``None``, ``fps_map`` is
+    empty, and the camera behaves identically to a regular ``QCamera``.
     """
 
+    def __init__(self, camera_device, linux_node_id=None):
+        super().__init__(camera_device)
+        self.linux_node_id = linux_node_id
+
+        # {(width, height): [fps, ...]} — populated from V4L2 on Linux
+        if self.device_path:
+            self.fps_map = get_v4l2_all_fps(self.device_path)
+        else:
+            self.fps_map = {}
+
+    @property
+    def device_path(self):
+        """Return ``/dev/videoN`` path, or ``None`` if node ID is unknown."""
+        if self.linux_node_id is not None:
+            return f"/dev/video{self.linux_node_id}"
+        return None
+
+    def get_fps(self, width: int, height: int) -> float:
+        """Return the max fps for a resolution, or 0.0 if unknown."""
+        fps_list = self.fps_map.get((width, height), [])
+        return max(fps_list) if fps_list else 0.0
+
+
+def get_linux_video_inputs() -> list[LinuxCamera]:
+    """Discover cameras and return them as ``LinuxCamera`` instances.
+
+    On Linux, queries V4L2 for the real ``/dev/videoN`` node IDs and
+    attaches them to each camera.  On other platforms, ``linux_node_id``
+    is set to ``None``.
+    """
     qt_cameras = QMediaDevices.videoInputs()
-    real_names = get_real_linux_nodes()
+    node_ids = get_real_linux_nodes()
 
-    pairs = []
-    for i, cam in enumerate(qt_cameras):
-        # Fall back if Linux reports fewer nodes than Qt (unlikely)
-        cam_node_id = real_names[i] if i < len(real_names) else None
-        pairs.append((cam_node_id, cam))
+    cameras = []
+    for i, cam_device in enumerate(qt_cameras):
+        node_id = node_ids[i] if i < len(node_ids) else None
+        cameras.append(LinuxCamera(cam_device, linux_node_id=node_id))
 
-    return pairs
+    return cameras
+
+def get_video_inputs() -> list[QCamera]:
+    """Discover cameras and return them as ``QCamera`` instances."""
+
+    if os_name == "Linux":
+        cameras = get_linux_video_inputs()
+
+    else:
+        cameras = QMediaDevices.videoInputs()
+
+    return cameras
+
 
 
 if __name__ == "__main__":

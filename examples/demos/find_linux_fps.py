@@ -1,15 +1,24 @@
-# 1. Discover cameras — pairs Qt objects with real /dev/videoN paths
-from microdrop_utils.v4l2_fps_getter import map_qt_cameras_to_linux_nodes, get_v4l2_fps
+"""Demo: Discover Linux cameras and their real V4L2 fps values.
 
-for idx, qt_cam in map_qt_cameras_to_linux_nodes():
-    # display_name = "dev0", qt_cam = QCameraDevice object
-    device_path = f"/dev/video{idx}"
+Requires: v4l-utils (sudo apt install v4l-utils), PySide6, Linux.
+"""
+from microdrop_utils.v4l2_fps_getter import get_video_inputs
 
-    # 2. Query FPS for a specific resolution on this camera
-    fps_list = get_v4l2_fps(device_path, 1920, 1080)
+cameras = get_video_inputs()
+print(f"Found {len(cameras)} camera(s)\n")
 
-    print(f"{device_path} ({qt_cam.description()}) @ 1920x1080: {fps_list}")
-    # e.g. "dev0 (4K USB Camera) @ 1920x1080: [30.0, 15.0, 5.0]"
+for cam in cameras:
+    desc = cam.cameraDevice().description()
+    print(f"  {desc}")
+    print(f"    Node ID:     {cam.linux_node_id}")
+    print(f"    Device path: {cam.device_path}")
 
-    if fps_list:
-        print(f"  Max FPS: {max(fps_list)}")
+    if cam.fps_map:
+        print(f"    Resolutions: {len(cam.fps_map)}")
+        for (w, h), fps_list in sorted(cam.fps_map.items(), reverse=True):
+            max_fps = max(fps_list)
+            print(f"      {w}x{h}: {fps_list} (max {max_fps})")
+    else:
+        print("    No V4L2 fps data (non-Linux or query failed)")
+
+    print()
