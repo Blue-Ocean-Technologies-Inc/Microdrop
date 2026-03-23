@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dropbot_controller.preferences import DropbotPreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -2557,6 +2557,9 @@ class PGCWidget(QWidget):
         desc_item = parent.child(row, 0)
 
         if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+            # For steps, restrict Repetitions > 1 to only routes with a loop
+            if field == "Repetitions":
+                self._enforce_step_repetition_requires_loop(desc_item, item)
             self.update_single_step_dev_fields(desc_item, changed_field=field)
 
         if field == "Repetitions":
@@ -2749,6 +2752,37 @@ class PGCWidget(QWidget):
             max_loop_duration = max(max_loop_duration, loop_duration)
 
         return max_loop_duration
+
+    def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
+        """Revert Repetitions to 1 if the step has no looping route."""
+        try:
+            reps = int(repetitions_item.text() or "1")
+        except ValueError:
+            return
+        if reps <= 1:
+            return
+
+        device_state = desc_item.data(Qt.UserRole + 100)
+        has_loop = (
+            device_state
+            and device_state.has_paths()
+            and any(
+                len(path) >= 2 and path[0] == path[-1]
+                for path in device_state.paths
+            )
+        )
+        if not has_loop:
+            self._programmatic_change = True
+            try:
+                repetitions_item.setText("1")
+            finally:
+                self._programmatic_change = False
+            warning(
+                None,
+                title="Repetitions Not Supported",
+                message="Repetitions > 1 require a route that forms a loop "
+                        "(start and end on the same electrode).",
+            )
 
     def update_single_step_dev_fields(self, desc_item, changed_field=None):
         if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
