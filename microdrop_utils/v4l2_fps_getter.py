@@ -87,6 +87,76 @@ def get_v4l2_fps(camera_name: str, width: int, height: int, pixel_format: str = 
     return supported_fps
 
 
+def get_real_linux_nodes() -> list[str]:
+    """Query V4L2 for the primary video capture nodes, bypassing Qt.
+
+    On Raspberry Pi, Qt's ``QMediaDevices.videoInputs()`` returns abstract
+    camera objects without reliable device paths.  This function calls
+    ``v4l2-ctl --list-devices`` directly to discover the real ``/dev/videoN``
+    nodes and returns them as ``["dev0", "dev2", ...]``.
+
+    Internal Pi ISP/codec devices (``pispbe``, ``hevc``) are filtered out so
+    only actual cameras appear.
+
+    Returns:
+        Ordered list of primary node names, e.g. ``["dev0", "dev2"]``.
+        Empty list if ``v4l2-ctl`` is unavailable or fails.
+    """
+    real_nodes = []
+    try:
+        out = subprocess.check_output(["v4l2-ctl", "--list-devices"], text=True)
+        current_cam = None
+
+        for line in out.splitlines():
+            if not line.strip():
+                continue
+
+            if not line.startswith("\t"):
+                # Non-indented line = new camera header (e.g. "4K USB Camera (usb-...)")
+                current_cam = line.strip()
+            elif current_cam:
+                # First indented line under a header = primary /dev/videoN node.
+                # Skip Pi-internal ISP and codec devices.
+                if "pispbe" not in current_cam.lower() and "hevc" not in current_cam.lower():
+                    node_num = line.strip().split("video")[-1]
+                    real_nodes.append(f"dev{node_num}")
+
+                # Only take the first node per camera; ignore metadata nodes.
+                current_cam = None
+
+    except FileNotFoundError:
+        print("v4l2-ctl not found — install v4l-utils: sudo apt install v4l-utils")
+    except Exception as e:
+        print(f"Failed to fetch Linux video nodes: {e}")
+
+    return real_nodes
+
+
+def map_qt_cameras_to_linux_nodes():
+    """Pair Qt camera objects with real Linux ``/dev/videoN`` node names.
+
+    Qt enumerates cameras in the same order as V4L2, so we zip the two
+    lists together.  Each entry is ``(display_name, QCameraDevice)``.
+
+    Usage example::
+
+        for name, cam in map_qt_cameras_to_linux_nodes():
+            combo.addItem(name, userData=cam)
+    """
+    from PySide6.QtMultimedia import QMediaDevices
+
+    qt_cameras = QMediaDevices.videoInputs()
+    real_names = get_real_linux_nodes()
+
+    pairs = []
+    for i, cam in enumerate(qt_cameras):
+        # Fall back if Linux reports fewer nodes than Qt (unlikely)
+        display_name = real_names[i] if i < len(real_names) else f"dev_unknown_{i}"
+        pairs.append((display_name, cam))
+
+    return pairs
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Query supported FPS for a V4L2 camera at a given resolution and pixel format."
