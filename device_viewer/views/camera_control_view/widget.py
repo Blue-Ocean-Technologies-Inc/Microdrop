@@ -25,6 +25,7 @@ from pyface.qt.QtWidgets import (
 from pyface.qt.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from microdrop_application.dialogs.pyface_wrapper import error, warning, success
+from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCamera
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.colors import SECONDARY_SHADE, WHITE
@@ -301,16 +302,19 @@ class CameraControlWidget(QWidget):
                 else None
             )
 
-        self.available_cameras = QMediaDevices.videoInputs()
+        self.available_cameras = get_video_inputs()
         self.combo_cameras.clear()
         self.available_cameras.append(None)
 
         # Add descriptions to the combo box
         self.combo_cameras.blockSignals(True)  # Block signals
         for camera in self.available_cameras:
-            self.combo_cameras.addItem(
-                camera.description() if camera else "<No Camera>"
-            )
+            if camera is None:
+                self.combo_cameras.addItem("<No Camera>")
+            elif isinstance(camera, LinuxCamera):
+                self.combo_cameras.addItem(camera.device_path)
+            else:
+                self.combo_cameras.addItem(camera.description())
         self.combo_cameras.blockSignals(False)  # Re-enable signals
 
         self.combo_cameras.setCurrentIndex(
@@ -320,7 +324,14 @@ class CameraControlWidget(QWidget):
         # Set the current index to the previously selected camera if it exists (make sure something is selected here)
         if old_camera_name:
             for i, camera in enumerate(self.available_cameras):
-                if camera and camera.description() == old_camera_name:
+                if not camera:
+                    continue
+                cam_name = (
+                    camera.device_path
+                    if isinstance(camera, LinuxCamera)
+                    else camera.description()
+                )
+                if cam_name == old_camera_name:
                     self.combo_cameras.setCurrentIndex(i)
                     return
 
@@ -342,10 +353,16 @@ class CameraControlWidget(QWidget):
 
         self.video_item.setVisible(True)
 
-        # Initialize new camera
-        self.camera = QCamera(self.available_cameras[index])
+        # Initialize new camera — on Linux, available_cameras already holds
+        # LinuxCamera instances (QCamera subclass with V4L2 fps data).
+        selected = self.available_cameras[index]
+        if isinstance(selected, LinuxCamera):
+            self.camera = selected
+            self.preferences.selected_camera = selected.device_path
+        else:
+            self.camera = QCamera(selected)
+            self.preferences.selected_camera = selected.description()
         self.session.setCamera(self.camera)
-        self.preferences.selected_camera = self.available_cameras[index].description()
 
         # 3. Populate resolutions for this camera
         self.populate_resolutions()
@@ -353,6 +370,14 @@ class CameraControlWidget(QWidget):
         # 4. Restart if it was running
         if was_running:
             self.camera.start()
+
+    def _get_real_fps(self, width, height, qt_fps):
+        """Return the real fps, falling back to LinuxCamera V4L2 data if Qt reports 0."""
+        if qt_fps > 0:
+            return qt_fps
+        if isinstance(self.camera, LinuxCamera):
+            return self.camera.get_fps(width, height)
+        return qt_fps
 
     def populate_resolutions(self, allow_strict_mode=True):
         """Populate the resolution combo box with available resolutions."""
@@ -373,15 +398,13 @@ class CameraControlWidget(QWidget):
             4. Max Frame Rate
             """
             res = fmt.resolution()
-            # Helper to detect if this is our preferred format (returns 1 or 0)
-            # We check the string representation safely
             fmt_name = str(fmt.pixelFormat()).upper()
 
             return (
                 res.width(),
                 res.height(),
                 self.preferences.preferred_video_format.upper() in fmt_name,
-                fmt.maxFrameRate(),
+                self._get_real_fps(res.width(), res.height(), fmt.maxFrameRate()),
             )
 
         # 2. Sort the list descending based on our criteria
@@ -409,7 +432,7 @@ class CameraControlWidget(QWidget):
 
                 # 4. Add to Combo
                 # We construct a clean label
-                fps = fmt.maxFrameRate()
+                fps = self._get_real_fps(w, h, fmt.maxFrameRate())
                 # Clean up pixel format name (e.g., "Format_MJPEG" -> "MJPEG")
                 pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
 
@@ -674,9 +697,9 @@ class CameraControlWidget(QWidget):
         if self.rec_height % 2 != 0:
             self.rec_height -= 1
 
-        fps = int(
-            self.combo_resolutions.currentData().maxFrameRate()
-        )
+        current_fmt = self.combo_resolutions.currentData()
+        res = current_fmt.resolution()
+        fps = int(self._get_real_fps(res.width(), res.height(), current_fmt.maxFrameRate()))
 
         if not fps:
             fps = 15

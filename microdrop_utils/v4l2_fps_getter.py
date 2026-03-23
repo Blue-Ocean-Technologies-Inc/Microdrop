@@ -2,7 +2,7 @@ import argparse
 import subprocess
 import platform
 import re
-from PySide6.QtMultimedia import QCamera, QMediaDevices
+from PySide6.QtMultimedia import QCamera, QMediaDevices, QCameraDevice
 
 os_name = platform.system()
 
@@ -214,7 +214,7 @@ def get_linux_video_inputs() -> list[LinuxCamera]:
 
     return cameras
 
-def get_video_inputs() -> list[QCamera | LinuxCamera]:
+def get_video_inputs() -> list[QCameraDevice | LinuxCamera]:
     """Discover cameras and return them as ``QCamera`` instances."""
 
     if os_name == "Linux":
@@ -224,7 +224,6 @@ def get_video_inputs() -> list[QCamera | LinuxCamera]:
         cameras = QMediaDevices.videoInputs()
 
     return cameras
-
 
 
 if __name__ == "__main__":
