@@ -543,7 +543,7 @@ class CameraControlWidget(QWidget):
         return self._generate_media_filename(step_description, step_id, ".png")
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        return self._generate_media_filename(step_description, step_id, ".mp4")
+        return self._generate_media_filename(step_description, step_id, ".mkv")
 
     def on_recording_active(self, recording_data):
         if isinstance(recording_data, dict):

@@ -542,7 +542,7 @@ class ProtocolDataLogger:
             path_obj = Path(el)
             # file_url is for the 'under the hood' link
             file_url = path_obj.as_uri()
-            # display_name is just the file (e.g., "video_01.mp4")
+            # display_name is just the file (e.g., "video_01.mkv")
             display_name = path_obj.name
 
             media_file = ""
@@ -556,7 +556,7 @@ class ProtocolDataLogger:
                 # We use single quotes escaped with backslashes (\') inside the HTML string to avoid conflicts.
                 media_file += f"""
                         <br><br>
-                        <div onclick="this.outerHTML='<video width=\\'360\\' height=\\'240\\' controls autoplay><source src=\\'{file_url}\\' type=\\'video/mp4\\'>Your browser does not support the video tag.</video>'" 
+                        <div onclick="this.outerHTML='<video width=\\'360\\' height=\\'240\\' controls autoplay><source src=\\'{file_url}\\' type=\\'video/x-matroska\\'>Your browser does not support the video tag.</video>'" 
                              style="cursor: pointer; 
                                     width: 360px; 
                                     height: 240px; 
