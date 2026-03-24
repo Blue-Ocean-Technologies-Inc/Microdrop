@@ -1,7 +1,6 @@
 import contextlib
 import os
 import sys
-from pathlib import Path
 import signal
 import time
 from functools import partial
@@ -9,9 +8,8 @@ from functools import partial
 from envisage.ui.tasks.tasks_application import TasksApplication
 from pyface.qt.QtWidgets import QApplication
 
-# add microdrop module to path to access other submodules in microdrop (e.g. microdrop_utils)
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+microdrop_runner_setup()
 
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
     DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, DEFAULT_APPLICATION, SERVER_CONTEXT, \
