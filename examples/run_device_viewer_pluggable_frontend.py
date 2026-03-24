@@ -1,9 +1,5 @@
-import sys
-from pathlib import Path
-
-# add microdrop module to path to access other submodules in microdrop (e.g. microdrop_utils)
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+microdrop_runner_setup()
 
 from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, REQUIRED_CONTEXT, FRONTEND_APPLICATION, \
