@@ -246,14 +246,22 @@ class CameraControlWidget(QWidget):
         self.model.set_visible(video_key, self.camera.isActive())
 
     def check_initial_camera_state(self):
-        if self.camera and self.camera.isActive():
-            self.camera_toggle_button.setText("videocam")
-            self.camera_toggle_button.setToolTip("Camera On")
-            self.camera_toggle_button.setChecked(True)
-        else:
-            self.camera_toggle_button.setText("videocam_off")
-            self.camera_toggle_button.setToolTip("Camera Off")
-            self.camera_toggle_button.setChecked(False)
+        """Sync the camera toggle button with the actual camera state.
+
+        Uses a guard clause on ``self.camera`` to avoid accessing a
+        potentially deleted C++ object (common when QMediaCaptureSession
+        has taken ownership of a previous QCamera instance).
+        """
+        if self.camera:
+            if self.camera.isActive():
+                self.camera_toggle_button.setText("videocam")
+                self.camera_toggle_button.setToolTip("Camera On")
+                self.camera_toggle_button.setChecked(True)
+                return
+
+        self.camera_toggle_button.setText("videocam_off")
+        self.camera_toggle_button.setToolTip("Camera Off")
+        self.camera_toggle_button.setChecked(False)
 
     def toggle_align_camera_mode(self):
         if self.model.mode == "camera-edit" or (
@@ -422,9 +430,10 @@ class CameraControlWidget(QWidget):
         camera = self.combo_cameras.itemData(index)
 
         was_running = False
-        if self.camera and self.camera.isActive():
-            self.turn_off_camera()
-            was_running = True
+        if self.camera:
+            if  self.camera.isActive():
+                self.turn_off_camera()
+                was_running = True
 
         if camera:
             self.camera = self._get_camera_from_available_cameras(camera)
