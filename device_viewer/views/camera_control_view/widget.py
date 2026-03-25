@@ -7,7 +7,7 @@ from PySide6.QtCore import (
     QStandardPaths,
 )
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -328,6 +328,35 @@ class CameraControlWidget(QWidget):
         elif isinstance(selected_device, QCameraDevice):
             return selected_device.description()
 
+    def _get_camera_resolution_max_framerate(self, w=0, h=0, fmt=None):
+        """Return the max framerate for a given resolution, or 0.0 if unknown.
+
+        On most platforms Qt's QCameraFormat.maxFrameRate() returns the correct
+        value.  On Linux, however, it often reports 0 because the GStreamer
+        backend does not populate this field.  In that case we fall back to
+        V4L2 data stored in the LinuxCameraDeviceContainer for this camera.
+
+        Args:
+            w: Resolution width (used when ``fmt`` is not provided).
+            h: Resolution height (used when ``fmt`` is not provided).
+            fmt: A QCameraFormat to extract resolution and fps from.
+        """
+        # Try the Qt-reported fps first (reliable on Windows/macOS)
+        if isinstance(fmt, QCameraFormat):
+            _qt_fps = fmt.maxFrameRate()
+            if _qt_fps:
+                return _qt_fps
+
+            w = fmt.resolution().width()
+            h = fmt.resolution().height()
+
+        # Fall back to V4L2 fps data on Linux
+        _container = self._linux_device_containers.get(self.combo_cameras.currentText())
+        if _container:
+            return _container.get_fps(w, h)
+
+        return 0.0
+
     def initialize_camera_list(self):
         preferences_camera = self.preferences.selected_camera
         old_camera_name = (
@@ -458,7 +487,7 @@ class CameraControlWidget(QWidget):
                 continue
             seen_resolutions.add((w, h))
 
-            fps = fmt.maxFrameRate()
+            fps = self._get_camera_resolution_max_framerate(fmt=fmt)
             pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
             label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
             self.combo_resolutions.addItem(label, userData=fmt)
