@@ -217,6 +217,8 @@ class RouteLayerManager(HasTraits):
     trail_length = Int(1)
     trail_overlay = Int(0)
     repetitions = Int(1)
+    soft_start = Bool(False)
+    soft_terminate = Bool(False)
 
     # --------------------------- Model Helpers --------------------------
 

@@ -85,6 +85,8 @@ class RouteExecutionService(HasTraits):
             trail_overlay=self.model.routes.trail_overlay,
             paths=paths,
             activated_electrodes=activated_electrode_ids,
+            soft_start=self.model.routes.soft_start,
+            soft_terminate=self.model.routes.soft_terminate,
         )
 
         if not plan:
@@ -110,6 +112,8 @@ class RouteExecutionService(HasTraits):
             trail_overlay=self.model.routes.trail_overlay,
             paths=paths,
             activated_electrodes=activated_electrode_ids,
+            soft_start=self.model.routes.soft_start,
+            soft_terminate=self.model.routes.soft_terminate,
         )
         self._phases_per_rep = max(len(single_rep_plan), 1)
         self._total_reps = max(len(plan) // self._phases_per_rep, 1)
