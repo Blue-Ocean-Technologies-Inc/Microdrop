@@ -100,12 +100,23 @@ Label("Overlay", tooltip="electrodes actuated from one step to overlay onto next
 Label("Reps", tooltip="Times to repeat path executions"),
 )
 
+soft_transition_settings = (
+UItem('object.routes.soft_start', tooltip="Gradually ramp up overlay at the start of path execution (1, 2, ... overlay)"),
+UItem('object.routes.soft_terminate', tooltip="Gradually ramp down overlay at the end of path execution (overlay, ..., 2, 1)"),
+)
+soft_transition_settings_header = (
+Label("Soft Start", tooltip="Gradually ramp up overlay at the start of path execution (1, 2, ... overlay)"),
+Label("Soft End", tooltip="Gradually ramp down overlay at the end of path execution (overlay, ..., 2, 1)"),
+)
+
 
 protocol_execution_settings_group = HGroup(
     VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
     VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
     VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
     VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+    VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
+    VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
     enabled_when='free_mode'
 )
 
