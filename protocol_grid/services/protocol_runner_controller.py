@@ -743,9 +743,6 @@ class ProtocolRunnerController(QObject):
         Compiles the camera prewarm schedule and injects video states and offsets
         directly into the current run order. Updates the unique step count.
 
-        Args:
-            prewarm_seconds: Prewarm requirement in seconds.
-
         Returns:
             A tuple containing the generated (video_on_mask, offset_seconds_arr).
         """
