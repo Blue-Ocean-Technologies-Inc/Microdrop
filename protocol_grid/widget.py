@@ -1153,7 +1153,7 @@ class PGCWidget(QWidget):
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start(run_order, prewarm_seconds=self.preferences.camera_prewarm_seconds)
+        self.protocol_runner.start(run_order)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1311,7 +1311,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
-        self.protocol_runner.start(run_order, prewarm_seconds=0)
+        self.protocol_runner.start(run_order)
 
     def stop_protocol(self):
 
