@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Event, Property
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Range, Event, Property
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -213,10 +213,10 @@ class RouteLayerManager(HasTraits):
     phase_label = Str("")
 
     # path execution properties (mirror protocol grid step defaults)
-    duration = Float(1.0)
-    trail_length = Int(1)
-    trail_overlay = Int(0)
-    repetitions = Int(1)
+    duration = Range(low=0.0, high=10000.0, value=1.0)
+    trail_length = Range(low=1, high=10000, value=1)
+    trail_overlay = Range(low=0, high=1000, value=0)
+    repetitions = Range(low=1, high=10000, value=1)
 
     # --------------------------- Model Helpers --------------------------
 
