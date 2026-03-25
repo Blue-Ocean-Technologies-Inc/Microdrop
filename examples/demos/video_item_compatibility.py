@@ -2,6 +2,8 @@ import os
 import sys
 import platform
 
+from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
+
 os_name = platform.system()
 
 if os_name == "Windows":
@@ -41,7 +43,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtMultimedia import (
     QCamera,
     QMediaCaptureSession,
-    QMediaDevices,
+    QMediaDevices, QCameraDevice,
 )
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtCore import Qt
@@ -121,7 +123,7 @@ class CameraSceneFix(QMainWindow):
 
     def initialize_camera_list(self):
         """Populate the camera dropdown, prioritizing V4L2 devices."""
-        self.available_cameras = QMediaDevices.videoInputs()
+        self.available_cameras = get_video_inputs()
         self.combo_cameras.clear()
 
         best_index = 0
@@ -137,6 +139,16 @@ class CameraSceneFix(QMainWindow):
         if self.available_cameras:
             self.combo_cameras.setCurrentIndex(best_index)
 
+    def _get_camera_from_available_cameras(self, idx):
+        selected_device = self.available_cameras[idx]
+
+        if isinstance(selected_device, QCameraDevice):
+            return QCamera(selected_device)
+
+        elif isinstance(selected_device, LinuxCameraDeviceContainer):
+            return selected_device
+
+
     def on_camera_changed(self, index):
         """Handle user changing the camera source."""
         if index < 0 or index >= len(self.available_cameras):
@@ -149,8 +161,7 @@ class CameraSceneFix(QMainWindow):
             self.camera.stop()
 
         # 2. Initialize new camera
-        selected_device = self.available_cameras[index]
-        self.camera = QCamera(selected_device)
+        self.camera = self._get_camera_from_available_cameras(index)
         self.session.setCamera(self.camera)
 
         # 3. Populate resolutions for this camera

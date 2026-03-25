@@ -7,7 +7,7 @@ from PySide6.QtCore import (
     QStandardPaths,
 )
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -24,6 +24,7 @@ from apptools.preferences.api import Preferences
 
 from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
@@ -72,6 +73,11 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
+        # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
+        # Kept separate from combo box userData because shiboken cannot serialize
+        # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
+        # to store as combo box userData.
+        self._linux_device_containers = {}
         self.last_camera_state = False
         self.available_cameras = None
         self.available_formats = None
@@ -288,6 +294,40 @@ class CameraControlWidget(QWidget):
         if self.model.mode == "camera-edit":
             self.model.mode = "camera-place"
 
+    def _get_camera_from_available_cameras(self, selected_device):
+        """Create a QCamera from either a LinuxCameraDeviceContainer or QCameraDevice.
+
+        On Linux, cameras are wrapped in LinuxCameraDeviceContainer to carry
+        V4L2 metadata (fps, device path). This method unwraps the container
+        to get the underlying QCameraDevice before constructing the QCamera.
+        """
+        _device = None
+
+        if isinstance(selected_device, LinuxCameraDeviceContainer):
+            _device = selected_device.camera_device
+
+        elif isinstance(selected_device, QCameraDevice):
+            _device = selected_device
+
+        if isinstance(_device, QCameraDevice):
+            return QCamera(selected_device)
+
+        else:
+            logger.warning("Failed to create camera. Need to get camera from available devices")
+            return None
+
+    def _get_camera_description(self, selected_device):
+        """Return a human-readable identifier for a camera device.
+
+        LinuxCameraDeviceContainer returns the /dev/videoN path (unique on Linux),
+        while QCameraDevice returns the Qt-provided description string.
+        """
+        if isinstance(selected_device, LinuxCameraDeviceContainer):
+            return selected_device.device_path
+
+        elif isinstance(selected_device, QCameraDevice):
+            return selected_device.description()
+
     def initialize_camera_list(self):
         preferences_camera = self.preferences.selected_camera
         old_camera_name = (
@@ -296,12 +336,21 @@ class CameraControlWidget(QWidget):
             else self.combo_cameras.currentText()
         )
 
-        _available_cameras = QMediaDevices.videoInputs()
+        _available_cameras = get_video_inputs()
         self.combo_cameras.clear()
         self.combo_cameras.blockSignals(True)
+        self._linux_device_containers.clear()
 
         for camera in _available_cameras:
-            self.combo_cameras.addItem(camera.description(), userData=camera)
+            description = self._get_camera_description(camera)
+            if isinstance(camera, LinuxCameraDeviceContainer):
+                # Store the container in a side dict for V4L2 fps lookups.
+                # Only the underlying QCameraDevice goes into combo userData
+                # (shiboken crashes on non-Qt types in QVariant).
+                self._linux_device_containers[description] = camera
+                self.combo_cameras.addItem(description, userData=camera.camera_device)
+            else:
+                self.combo_cameras.addItem(description, userData=camera)
 
         # account for no camera
         _available_cameras.append(None)
@@ -313,7 +362,7 @@ class CameraControlWidget(QWidget):
 
         if old_camera_name:
             for i, camera in enumerate(_available_cameras):
-                if camera and camera.description() == old_camera_name:
+                if camera and self._get_camera_description(camera) == old_camera_name:
                     self.combo_cameras.setCurrentIndex(i)
                     return
 
@@ -347,9 +396,9 @@ class CameraControlWidget(QWidget):
             was_running = True
 
         if camera:
-            self.camera = QCamera(camera)
+            self.camera = self._get_camera_from_available_cameras(camera)
             self.session.setCamera(self.camera)
-            self.preferences.selected_camera = camera.description()
+            self.preferences.selected_camera = self._get_camera_description(camera)
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)
 
