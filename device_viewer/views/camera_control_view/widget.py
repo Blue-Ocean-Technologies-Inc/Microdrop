@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from apptools.preferences.api import Preferences
 
-from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK
+from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
@@ -43,6 +43,8 @@ from ...models.media_capture_model import MediaType
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+MIN_RECORDING_FPS = 20
 
 class CameraControlWidget(QWidget):
 
@@ -688,6 +690,24 @@ class CameraControlWidget(QWidget):
         self, directory=None, step_description=None, step_id=None, show_dialog=True
     ):
         logger.info("Starting video recorder...")
+
+        # Check fps threshold before starting
+        _current_fmt = self.combo_resolutions.currentData()
+        fps = self._get_camera_resolution_max_framerate(fmt=_current_fmt)
+        if fps < MIN_RECORDING_FPS:
+            disclaimer(
+                parent=None,
+                title="Recording Not Supported",
+                message=(
+                    f"Cannot record at <b>{fps:.0f} fps</b>. "
+                    f"Minimum supported frame rate for recording is <b>{MIN_RECORDING_FPS} fps</b>.\n\n"
+                    f"Please select a resolution with a higher frame rate."
+                ),
+                ack_button_text="OK",
+            )
+            self.record_toggle_button.setChecked(False)
+            return
+
         if not self.camera.isActive():
             self.toggle_camera()
             self._camera_state_pre_recording = False ## Flag only used for video recording management
@@ -708,14 +728,13 @@ class CameraControlWidget(QWidget):
 
         self.show_media_capture_dialog_for_video = show_dialog
 
-        _current_fmt = self.combo_resolutions.currentData()
         _resolution = (
             _current_fmt.resolution().width(),
             _current_fmt.resolution().height(),
         )
 
         self.recorder.start(
-            _recording_file_path, _resolution, _current_fmt.maxFrameRate()
+            _recording_file_path, _resolution, fps
         )
         publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="true")
 
