@@ -897,8 +897,8 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
 
-            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+            soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
             total_step_time = PathExecutionService.calculate_step_execution_time(
                 step, device_state, soft_start=soft_start, soft_terminate=soft_end
             )
@@ -1273,8 +1273,8 @@ class ProtocolRunnerController(QObject):
                 f"Executing step {self.current_index + 1} with device state: {device_state}"
             )
 
-            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+            soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
             self._current_execution_plan = (
                 PathExecutionService.calculate_step_execution_plan(
                     step, device_state, soft_start=soft_start, soft_terminate=soft_end)
@@ -1394,8 +1394,8 @@ class ProtocolRunnerController(QObject):
 
         logger.info(f"Executing step logic with device state: {device_state}")
 
-        soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-        soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+        soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+        soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
         self._current_execution_plan = (
             PathExecutionService.calculate_step_execution_plan(
                 step, device_state, soft_start=soft_start, soft_terminate=soft_end)
@@ -1422,8 +1422,8 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
         self._paused_phase_index = 0
 
-        soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-        soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+        soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+        soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
         step_timeout = PathExecutionService.calculate_step_execution_time(
             step, device_state, soft_start=soft_start, soft_terminate=soft_end
         )
@@ -1627,8 +1627,8 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
 
-            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+            soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
             self._current_execution_plan = (
                 PathExecutionService.calculate_step_execution_plan(
                     step, device_state, soft_start=soft_start, soft_terminate=soft_end)
@@ -1684,8 +1684,8 @@ class ProtocolRunnerController(QObject):
             device_state = PathExecutionService.get_empty_device_state()
 
         if not self._current_execution_plan:
-            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
-            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
+            soft_start = _is_checkbox_checked(step.parameters.get("Ramp Up", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Ramp Dn", "0"))
             self._current_execution_plan = (
                 PathExecutionService.calculate_step_execution_plan(
                     step, device_state, soft_start=soft_start, soft_terminate=soft_end)

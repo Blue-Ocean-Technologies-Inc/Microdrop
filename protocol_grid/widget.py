@@ -1830,7 +1830,7 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
 
     def _handle_checkbox_change(self, parent, row, field):
-        if field in ("Video", "Capture", "Record", "Soft Start", "Soft End"):
+        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn"):
             col = protocol_grid_fields.index(field)
             item = parent.child(row, col)
             if item:
@@ -2546,8 +2546,8 @@ class PGCWidget(QWidget):
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
 
-            # Soft Start/End affect Run Time — trigger recalculation
-            if field in ("Soft Start", "Soft End"):
+            # Ramp Up/Dn affect Run Time — trigger recalculation
+            if field in ("Ramp Up", "Ramp Dn"):
                 desc_item = parent.child(row, 0)
                 if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                     self.update_single_step_dev_fields(desc_item, changed_field=field)
@@ -2841,8 +2841,8 @@ class PGCWidget(QWidget):
             trail_overlay = int(trail_overlay_item.text() or "0")
 
             # Read soft start/end checkbox state for run time calculation
-            soft_start_col = protocol_grid_fields.index("Soft Start")
-            soft_end_col = protocol_grid_fields.index("Soft End")
+            soft_start_col = protocol_grid_fields.index("Ramp Up")
+            soft_end_col = protocol_grid_fields.index("Ramp Dn")
             soft_start_item = parent.child(row, soft_start_col)
             soft_end_item = parent.child(row, soft_end_col)
             is_soft_start = soft_start_item and soft_start_item.data(Qt.CheckStateRole) == Qt.Checked

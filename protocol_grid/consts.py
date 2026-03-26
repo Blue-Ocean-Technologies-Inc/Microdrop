@@ -59,7 +59,7 @@ protocol_grid_fields = [
     "Duration", "Voltage", "Force", "Frequency", 
     "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay",
-    "Soft Start", "Soft End",
+    "Ramp Up", "Ramp Dn",
     "Video", "Capture", "Record",
     "Volume Threshold", "Magnet", "Magnet Height (mm)",
     "Max. Path Length", "Run Time"
@@ -75,10 +75,10 @@ field_groupings = [
                 "Repeat Duration", "Repetitions",
                 "Trail Length", "Video", "Capture", "Record", "Volume Threshold",
                 "Magnet", "Magnet Height (mm)", "Trail Overlay",
-                "Soft Start", "Soft End"
+                "Ramp Up", "Ramp Dn"
             ] and f not in fixed_fields]),
             ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length",
-                                "Trail Overlay", "Soft Start", "Soft End",
+                                "Trail Overlay", "Ramp Up", "Ramp Dn",
                                 "Video", "Capture", "Record"]),
             ("Dropbot:", ["Volume Threshold"]),
             ("Magnet:", ["Magnet", "Magnet Height (mm)"]),
@@ -95,8 +95,8 @@ step_defaults = {
     "Repeat Duration": "1.0",
     "Trail Length": "1",
     "Trail Overlay": "0",
-    "Soft Start": "0",
-    "Soft End": "0",
+    "Ramp Up": "0",
+    "Ramp Dn": "0",
     "Video": "0",
     "Capture": "0",
     "Record": "0",
@@ -129,8 +129,8 @@ copy_fields_for_new_step = [
     "Repeat Duration",
     "Trail Length",
     "Trail Overlay",
-    "Soft Start",
-    "Soft End",
+    "Ramp Up",
+    "Ramp Dn",
     "Video",
     "Capture",
     "Record",
@@ -141,7 +141,7 @@ copy_fields_for_new_step = [
     "Run Time"
 ]
 
-CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet", "Soft Start", "Soft End")
+CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet", "Ramp Up", "Ramp Dn")
 
 ALLOWED_group_fields = {
     "Description",
