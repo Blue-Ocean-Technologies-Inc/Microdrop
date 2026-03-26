@@ -101,12 +101,12 @@ Label("Reps", tooltip="Times to repeat path executions"),
 )
 
 soft_transition_settings = (
-UItem('object.routes.soft_start', tooltip="Gradually ramp up overlay at the start of path execution (1, 2, ... overlay)"),
-UItem('object.routes.soft_terminate', tooltip="Gradually ramp down overlay at the end of path execution (overlay, ..., 2, 1)"),
+UItem('object.routes.soft_start', tooltip="Ramp up overlay at start"),
+UItem('object.routes.soft_terminate', tooltip="Ramp down overlay at end"),
 )
 soft_transition_settings_header = (
-Label("Soft Start", tooltip="Gradually ramp up overlay at the start of path execution (1, 2, ... overlay)"),
-Label("Soft End", tooltip="Gradually ramp down overlay at the end of path execution (overlay, ..., 2, 1)"),
+Label("Ramp Up", tooltip="Ramp up overlay at start"),
+Label("Ramp Dn", tooltip="Ramp down overlay at end"),
 )
 
 
