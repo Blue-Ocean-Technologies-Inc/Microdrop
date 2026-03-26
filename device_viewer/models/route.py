@@ -215,8 +215,16 @@ class RouteLayerManager(HasTraits):
     # path execution properties (mirror protocol grid step defaults)
     duration = Range(low=0.0, high=10000.0, value=1.0)
     trail_length = Range(low=1, high=10000, value=1)
-    trail_overlay = Range(low=0, high=1000, value=0)
+
+    # Dynamic upper bound for trail_overlay: overlay cannot exceed trail_length - 1
+    # because overlapping all electrodes would mean no movement between steps.
+    max_trail_overlay = Property(observe="trail_length")
+    trail_overlay = Range(low=0, high="max_trail_overlay")
     repetitions = Range(low=1, high=10000, value=1)
+
+    def _get_max_trail_overlay(self):
+        """Computed upper bound for trail_overlay, recalculated when trail_length changes."""
+        return self.trail_length - 1
 
     # --------------------------- Model Helpers --------------------------
 
