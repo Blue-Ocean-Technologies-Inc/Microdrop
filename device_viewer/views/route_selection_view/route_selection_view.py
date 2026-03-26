@@ -110,14 +110,20 @@ Label("Ramp Dn", tooltip="Ramp down overlay at end"),
 )
 
 
-protocol_execution_settings_group = HGroup(
-    VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
-    VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
-    VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
-    VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
-    VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
-    VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
-    enabled_when='free_mode'
+protocol_execution_settings_group = VGroup(
+    HGroup(
+        VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
+        VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
+        VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
+        VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+    ),
+    HGroup(
+        VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
+        VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
+    ),
+    label="Execution Settings",
+    show_border=True,
+    enabled_when='free_mode',
 )
 
 # --- Execution control button groups (mutually exclusive via visible_when) ---
