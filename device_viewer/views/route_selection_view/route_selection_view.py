@@ -121,9 +121,12 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
     ),
-    label="Execution Settings",
-    show_border=True,
     enabled_when='free_mode',
+)
+
+ExecutionSettingsView = View(
+    protocol_execution_settings_group,
+    resizable=True,
 )
 
 # --- Execution control button groups (mutually exclusive via visible_when) ---
@@ -179,7 +182,6 @@ execution_status_bar = HGroup(
 
 RouteLayerView = View(
     VGroup(
-        protocol_execution_settings_group,
         run_controls,
         execution_status_bar,
         Item('object.routes.layers', editor=layer_table_editor, show_label=False),
