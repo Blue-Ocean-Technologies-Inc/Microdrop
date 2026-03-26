@@ -15,7 +15,7 @@ class ProtocolStep:
             self.parameters["Force"] = ""
         
         # normalize checkbox fields for consistent storage
-        for field in ("Magnet", "Video", "Capture", "Record"):
+        for field in ("Magnet", "Video", "Capture", "Record", "Soft Start", "Soft End"):
             if field in self.parameters:
                 val = self.parameters[field]
                 if isinstance(val, bool):
