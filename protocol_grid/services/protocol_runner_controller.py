@@ -897,8 +897,10 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
 
+            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
             total_step_time = PathExecutionService.calculate_step_execution_time(
-                step, device_state
+                step, device_state, soft_start=soft_start, soft_terminate=soft_end
             )
             self._remaining_step_time = max(
                 0, total_step_time - self._step_elapsed_time
@@ -1420,8 +1422,10 @@ class ProtocolRunnerController(QObject):
         self._was_in_phase = False
         self._paused_phase_index = 0
 
+        soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+        soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
         step_timeout = PathExecutionService.calculate_step_execution_time(
-            step, device_state
+            step, device_state, soft_start=soft_start, soft_terminate=soft_end
         )
 
         self._timer.timeout.disconnect()
