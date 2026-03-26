@@ -26,8 +26,9 @@ class DeviceState:
     def has_paths(self):
         return len(self.paths) > 0
 
-    def calculated_duration(self, step_duration: float, repetitions: int, 
-                            repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0):
+    def calculated_duration(self, step_duration: float, repetitions: int,
+                            repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0,
+                            soft_start: bool = False, soft_end: bool = False):
         if not self.has_paths():
             calculated_time = step_duration * repetitions
         else:
@@ -80,7 +81,13 @@ class DeviceState:
                         loop_total_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
                     else:
                         loop_total_phases = cycle_length + 1
-                    
+
+                    # Soft start/end add ramp phases (one per overlay step up to trail_length - 1)
+                    if soft_start and trail_length > 1:
+                        loop_total_phases += trail_length - 1
+                    if soft_end and trail_length > 1:
+                        loop_total_phases += trail_length - 1
+
                     max_loop_total_phases = max(max_loop_total_phases, loop_total_phases)
                 else:
                     path_length = len(path)
@@ -116,6 +123,13 @@ class DeviceState:
                                 phases = max(1, phases - 1) if phases > 1 else 1
                         
                         cycle_length = phases
+
+                    # Soft start/end add ramp phases for open paths too
+                    if soft_start and trail_length > 1:
+                        cycle_length += trail_length - 1
+                    if soft_end and trail_length > 1:
+                        cycle_length += trail_length - 1
+
                     max_open_path_length = max(max_open_path_length, cycle_length)
             
             # calculate total phases based on the longest duration needed
