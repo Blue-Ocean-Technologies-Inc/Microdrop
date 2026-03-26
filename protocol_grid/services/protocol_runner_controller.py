@@ -1271,8 +1271,11 @@ class ProtocolRunnerController(QObject):
                 f"Executing step {self.current_index + 1} with device state: {device_state}"
             )
 
+            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
             self._current_execution_plan = (
-                PathExecutionService.calculate_step_execution_plan(step, device_state)
+                PathExecutionService.calculate_step_execution_plan(
+                    step, device_state, soft_start=soft_start, soft_terminate=soft_end)
             )
             self._current_phase_index = 0
             self._total_step_phases_completed = 0
@@ -1389,8 +1392,11 @@ class ProtocolRunnerController(QObject):
 
         logger.info(f"Executing step logic with device state: {device_state}")
 
+        soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+        soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
         self._current_execution_plan = (
-            PathExecutionService.calculate_step_execution_plan(step, device_state)
+            PathExecutionService.calculate_step_execution_plan(
+                step, device_state, soft_start=soft_start, soft_terminate=soft_end)
         )
         self._current_phase_index = 0
         self._total_step_phases_completed = 0
@@ -1617,8 +1623,11 @@ class ProtocolRunnerController(QObject):
             if not device_state:
                 device_state = PathExecutionService.get_empty_device_state()
 
+            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
             self._current_execution_plan = (
-                PathExecutionService.calculate_step_execution_plan(step, device_state)
+                PathExecutionService.calculate_step_execution_plan(
+                    step, device_state, soft_start=soft_start, soft_terminate=soft_end)
             )
             self._step_repetition_info = (
                 PathExecutionService.calculate_step_repetition_info(step, device_state)
@@ -1671,8 +1680,11 @@ class ProtocolRunnerController(QObject):
             device_state = PathExecutionService.get_empty_device_state()
 
         if not self._current_execution_plan:
+            soft_start = _is_checkbox_checked(step.parameters.get("Soft Start", "0"))
+            soft_end = _is_checkbox_checked(step.parameters.get("Soft End", "0"))
             self._current_execution_plan = (
-                PathExecutionService.calculate_step_execution_plan(step, device_state)
+                PathExecutionService.calculate_step_execution_plan(
+                    step, device_state, soft_start=soft_start, soft_terminate=soft_end)
             )
 
         if self._current_phase_index > 0 and self._current_phase_index <= len(
