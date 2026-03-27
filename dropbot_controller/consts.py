@@ -1,5 +1,4 @@
 # This module's package.
-from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
