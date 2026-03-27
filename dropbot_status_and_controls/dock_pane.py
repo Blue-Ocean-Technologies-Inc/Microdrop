@@ -1,3 +1,5 @@
+from traits.api import observe
+
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
 from .consts import PKG, PKG_name, listener_name
@@ -38,6 +40,12 @@ class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
             dialog_signals=self._dialog_signals,
             message_handler=self.message_handler,
         )
+
+    @observe("model:dielectric_material")
+    def _on_dielectric_material_changed(self, event):
+        """Forward dielectric material selection to message handler for recalculation."""
+        if hasattr(self, "message_handler") and self.message_handler is not None:
+            self.message_handler.on_dielectric_material_changed(event.new)
 
 
 if __name__ == "__main__":

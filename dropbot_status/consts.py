@@ -12,3 +12,20 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": ["dropbot/signals/#", "ui/calibration_data"]}
 
 NUM_CAPACITANCE_READINGS_AVERAGED = 5
+
+# Dielectric materials and their relative permittivity values.
+# Used to calculate dielectric thickness from device capacitance via:
+#   d = epsilon * epsilon_0 / C_device
+DIELECTRIC_MATERIALS = {
+    "Parylene C": 3.1,
+    "CYTOP": 2.1,
+    "Teflon AF": 1.93,
+    "SiO2": 3.9,
+    "SU-8": 3.2,
+    "Parylene N": 2.65,
+    "Parylene D": 2.84,
+    "PDMS": 2.7,
+}
+
+# Permittivity of free space in F/m
+EPSILON_0 = 8.854e-12

@@ -41,6 +41,10 @@ grid = VGrid(
     UItem(""),
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
+    Item("dielectric_material", label="Dielectric"),
+    UItem(""),
+    Item("dielectric_thickness_display", style="readonly", label="Thickness"),
+    UItem(""),
     id="data_grid",  # Unique identifier for layout saving
 )
 

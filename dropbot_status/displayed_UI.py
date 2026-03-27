@@ -34,6 +34,7 @@ class DropbotStatusViewModelSignals(QObject):
     voltage_changed = Signal(str)
     pressure_changed = Signal(str)
     force_changed = Signal(str)
+    dielectric_thickness_changed = Signal(str)
 
 class DropBotStatusViewModel(HasTraits):
     """
@@ -133,6 +134,10 @@ class DropBotStatusViewModel(HasTraits):
     def update_force_reading(self, event):
         pass
 
+    @observe("model:dielectric_thickness")
+    def update_dielectric_thickness_reading(self, event):
+        self.view_signals.dielectric_thickness_changed.emit(event.new)
+
 class DropBotStatusView(QWidget):
     """
     The main view container. It is "dumb" and only knows how to display
@@ -174,3 +179,17 @@ class DropBotStatusView(QWidget):
         self._view_model_signals.voltage_changed.connect(self.grid_widget.voltage_reading.setText)
         self._view_model_signals.pressure_changed.connect(self.grid_widget.pressure_reading.setText)
         self._view_model_signals.force_changed.connect(self.grid_widget.force_reading.setText)
+        self._view_model_signals.dielectric_thickness_changed.connect(self.grid_widget.dielectric_thickness_reading.setText)
+
+        # Connect dielectric material combo box selection to the dramatiq ViewModel
+        # The dock_pane will wire this up after both views are created
+        self.grid_widget.dielectric_combo.currentTextChanged.connect(self._on_dielectric_material_changed)
+
+    def set_dramatiq_view_model(self, dramatiq_view_model):
+        """Store a reference to the dramatiq ViewModel for dielectric recalculation."""
+        self._dramatiq_view_model = dramatiq_view_model
+
+    def _on_dielectric_material_changed(self, material_name):
+        """Forward the dielectric material selection to the dramatiq ViewModel."""
+        if hasattr(self, '_dramatiq_view_model') and self._dramatiq_view_model is not None:
+            self._dramatiq_view_model.on_dielectric_material_changed(material_name)
