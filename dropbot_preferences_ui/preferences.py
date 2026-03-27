@@ -1,7 +1,7 @@
 import json
 
 from traits.api import observe
-from traitsui.api import VGroup, View, Item
+from traitsui.api import VGroup, HGroup, View, Item, Label
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -56,10 +56,32 @@ class DropbotPreferencesPane(PreferencesPane):
         show_border=True,
     ),
 
+    voltage_range_settings = VGroup(
+        HGroup(
+            create_item_label_group("min_voltage", label_text="Min Voltage (V)"),
+            create_item_label_group("max_voltage", label_text="Max Voltage (V)"),
+        ),
+        label="Voltage Range",
+        show_border=True,
+    ),
+
+    frequency_range_settings = VGroup(
+        HGroup(
+            create_item_label_group("min_frequency", label_text="Min Frequency (Hz)"),
+            create_item_label_group("max_frequency", label_text="Max Frequency (Hz)"),
+        ),
+        label="Frequency Range",
+        show_border=True,
+    ),
+
     view = View(
 
         Item("_"),  # Separator
         settings,
+        Item("_"),
+        voltage_range_settings,
+        Item("_"),
+        frequency_range_settings,
         Item("_"),  # Separator to space this out from further contributions to the pane.
 
         resizable=True
