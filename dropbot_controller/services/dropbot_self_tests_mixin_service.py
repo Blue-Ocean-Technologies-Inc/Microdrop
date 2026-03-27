@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 from functools import wraps
+
+import numpy as np
 from tqdm import tqdm
 # ******************************** DO NOT remove unused imports here **************************************
 from dropbot.hardware_test import (ALL_TESTS, system_info, test_system_metrics,
@@ -141,16 +143,21 @@ class DropbotSelfTestsMixinService(HasTraits):
                     plot_data = plot_test_on_board_feedback_calibration_results(result[test_name], 
                                                                                 return_fig=True)
                 elif test_name == "test_channels":
-                    plot_data = plot_test_channels_results(result[test_name], 
+                    plot_data = plot_test_channels_results(result[test_name],
                                                         return_fig=True)
+                    c = np.array(result[test_name]['c'])
+                    test_channels_list = result[test_name]['test_channels']
+                    failed_channels = [test_channels_list[i] for i in range(c.shape[0])
+                                       if np.mean(c[i]) < 5e-12]
 
                 if plot_data is not None:
                     # Pull up the report in a window
                     def show_results_dialog():
                         self.results_dialog = ResultsDialogAction()
                         test_name_display = test_name.replace("_", " ").capitalize() + " Results"
-                        self.results_dialog.perform(title=test_name_display, 
-                                                    plot_data=plot_data)
+                        self.results_dialog.perform(title=test_name_display,
+                                                    plot_data=plot_data,
+                                                    failed_channels=failed_channels if test_name == "test_channels" else None)
                     GUI.invoke_later(show_results_dialog)
                 else:
                     shorts_dict = {'Shorts_detected': result[test_name]['shorts'], 
