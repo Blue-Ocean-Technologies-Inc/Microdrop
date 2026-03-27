@@ -33,14 +33,19 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
+    # Range bounds are read from user-configurable preferences
+    _prefs = DropbotPreferences()
     voltage = RangeWithCustomViewHints(
-        30, 140, value=DropbotPreferences().default_voltage, suffix=" V",
+        int(_prefs.min_voltage), int(_prefs.max_voltage),
+        value=int(_prefs.default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
+        int(_prefs.min_frequency), int(_prefs.max_frequency),
+        value=int(_prefs.default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
+    del _prefs  # clean up temporary reference from class namespace
 
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")

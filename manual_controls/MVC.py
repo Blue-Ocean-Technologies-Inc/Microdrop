@@ -127,17 +127,36 @@ class ToggleEditorFactory(BasicEditorFactory):
     klass = ToggleEditor
 
 
-class ManualControlModel(HasTraits):
-    voltage = Range(
-        30, 150, value=DropbotPreferences().default_voltage, #TODO: May need to give as input application preferences.
-        desc="the voltage to set on the dropbot device (V)"
-    )
-    frequency = Range(
-        100, 20000, value=DropbotPreferences().default_frequency, #TODO: May need to give as input application preferences.
-        desc="the frequency to set on the dropbot device (Hz)"
-    )
-    realtime_mode = Bool(False, desc="Enable or disable realtime mode")
-    connected = Bool(False, desc="Connected to dropbot?")
+def _make_manual_control_model():
+    """Build the ManualControlModel class with voltage/frequency ranges from DropbotPreferences.
+
+    Traits Range bounds must be set at class-definition time, so we read the
+    current preferences once and use the values as class-level constants.
+    """
+    prefs = DropbotPreferences()
+    _min_v = int(prefs.min_voltage)
+    _max_v = int(prefs.max_voltage)
+    _def_v = int(prefs.default_voltage)
+    _min_f = int(prefs.min_frequency)
+    _max_f = int(prefs.max_frequency)
+    _def_f = int(prefs.default_frequency)
+
+    class _ManualControlModel(HasTraits):
+        voltage = Range(
+            _min_v, _max_v, value=_def_v,
+            desc="the voltage to set on the dropbot device (V)"
+        )
+        frequency = Range(
+            _min_f, _max_f, value=_def_f,
+            desc="the frequency to set on the dropbot device (Hz)"
+        )
+        realtime_mode = Bool(False, desc="Enable or disable realtime mode")
+        connected = Bool(False, desc="Connected to dropbot?")
+
+    return _ManualControlModel
+
+
+ManualControlModel = _make_manual_control_model()
 
 
 ManualControlView = View(

@@ -8,13 +8,19 @@ from .consts import (
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
     DEFAULT_VOLTAGE,
     DEFAULT_FREQUENCY,
+    DEFAULT_MIN_VOLTAGE,
+    DEFAULT_MAX_VOLTAGE,
+    DEFAULT_MIN_FREQUENCY,
+    DEFAULT_MAX_FREQUENCY,
 )
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 preferences_names = [
             'droplet_detection_capacitance',
             'capacitance_update_interval',
-            'default_voltage', 'default_frequency'
+            'default_voltage', 'default_frequency',
+            'min_voltage', 'max_voltage',
+            'min_frequency', 'max_frequency',
         ]
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -34,16 +40,44 @@ class DropbotPreferences(PreferencesHelper):
     capacitance_update_interval = Int(desc="how often to poll capacitance from dropbot (in ms)")
 
     default_voltage = Range(
-        30,
-        150,
+        low=0,
+        high=300,
         value=DEFAULT_VOLTAGE,
-        desc="the voltage to set on the dropbot device in V",
+        desc="the default voltage to set on the dropbot device in V",
     )
     default_frequency = Range(
-        100,
-        20000,
+        low=0,
+        high=100_000,
         value=DEFAULT_FREQUENCY,
-        desc="the frequency to set on the dropbot device in Hz",
+        desc="the default frequency to set on the dropbot device in Hz",
+    )
+
+    # User-configurable range limits for voltage (V)
+    min_voltage = Range(
+        low=0,
+        high=300,
+        value=DEFAULT_MIN_VOLTAGE,
+        desc="the minimum allowed voltage in V",
+    )
+    max_voltage = Range(
+        low=0,
+        high=300,
+        value=DEFAULT_MAX_VOLTAGE,
+        desc="the maximum allowed voltage in V",
+    )
+
+    # User-configurable range limits for frequency (Hz)
+    min_frequency = Range(
+        low=0,
+        high=100_000,
+        value=DEFAULT_MIN_FREQUENCY,
+        desc="the minimum allowed frequency in Hz",
+    )
+    max_frequency = Range(
+        low=0,
+        high=100_000,
+        value=DEFAULT_MAX_FREQUENCY,
+        desc="the maximum allowed frequency in Hz",
     )
 
     preferences_name_map = Property(Dict)
