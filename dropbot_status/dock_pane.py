@@ -58,6 +58,10 @@ class DropbotStatusDockPane(DockPane):
 
         status_view = DropBotStatusView(view_model=view_model)
 
+        # Wire up the dramatiq ViewModel so the dielectric combo box can
+        # trigger thickness recalculation when the user selects a material.
+        status_view.set_dramatiq_view_model(dramatiq_view_model)
+
         return status_view
 
     @observe("task:window:status_bar_manager")

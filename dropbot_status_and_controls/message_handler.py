@@ -1,7 +1,7 @@
 import json
 
 import dramatiq
-from traits.api import Instance, List, Bool, Float
+from traits.api import Instance, List, Bool, Float, Str
 
 from logger.logger_service import get_logger
 from microdrop_utils.datetime_helpers import TimestampedMessage
@@ -18,6 +18,8 @@ from template_status_and_controls.base_message_handler import BaseMessageHandler
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED, listener_name
 from .model import DropbotStatusAndControlsModel
+
+from dropbot_status.consts import DIELECTRIC_MATERIALS, EPSILON_0
 
 
 class DialogSignals(QObject):
@@ -71,6 +73,10 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
     # ---- Internal state for capacitance averaging ---------------------
     _capacitance_buffer = List()
     _no_power = Bool(False)
+
+    # ---- Dielectric thickness state ------------------------------------
+    _selected_dielectric_material = Str("")
+    _c_device_pF_per_mm2 = Float(0.0)
 
     def _chip_inserted_message_default(self):
         return TimestampedMessage("", 0)
@@ -135,6 +141,11 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         if filler_cap is not None and liquid_cap is not None:
             pressure = liquid_cap - filler_cap
             self.model.pressure = f"{pressure:.4f} pF/mm^2"
+
+            # Store c_device for dielectric thickness calculation
+            self._c_device_pF_per_mm2 = pressure
+            self._recalculate_dielectric_thickness()
+
             if self.model.voltage_readback != "-":
                 self._recalculate_force(
                     voltage=get_ureg_magnitude(self.model.voltage_readback),
@@ -146,6 +157,8 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         else:
             self.model.pressure = "-"
             self.model.force = "-"
+            self._c_device_pF_per_mm2 = 0.0
+            self._recalculate_dielectric_thickness()
 
     # def _on_shorts_detected_triggered(self, shorts_dict):
     #     data = json.loads(shorts_dict)
@@ -198,3 +211,47 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             pressure = get_ureg_magnitude(self.model.pressure)
         force = ForceCalculationService.calculate_force_for_step(voltage, pressure)
         self.model.force = f"{force:.4f} mN/m" if force is not None else "-"
+
+    # ------------------------------------------------------------------ #
+    # Dielectric thickness                                                 #
+    # ------------------------------------------------------------------ #
+
+    def on_dielectric_material_changed(self, material_name):
+        """Handle dielectric material selection change and recalculate thickness."""
+        self._selected_dielectric_material = material_name
+        self._recalculate_dielectric_thickness()
+
+    def _recalculate_dielectric_thickness(self):
+        """Calculate dielectric thickness: d = epsilon_r * epsilon_0 / C_device.
+
+        C_device is the device capacitance per unit area (pF/mm^2).
+        The result is displayed in micrometres.
+        """
+        if not self._selected_dielectric_material:
+            self.model.dielectric_thickness = "-"
+            return
+
+        epsilon_r = DIELECTRIC_MATERIALS.get(self._selected_dielectric_material)
+        if epsilon_r is None:
+            self.model.dielectric_thickness = "-"
+            return
+
+        if self._c_device_pF_per_mm2 <= 0:
+            self.model.dielectric_thickness = "-"
+            return
+
+        # Convert C_device from pF/mm^2 to F/m^2
+        c_device_F_per_m2 = self._c_device_pF_per_mm2 * 1e-6
+
+        # d = epsilon_r * epsilon_0 / C_device  (result in metres)
+        thickness_m = epsilon_r * EPSILON_0 / c_device_F_per_m2
+
+        # Convert to micrometres for display
+        thickness_um = thickness_m * 1e6
+
+        self.model.dielectric_thickness = f"{thickness_um:.3f} um"
+        logger.info(
+            f"Dielectric thickness: {thickness_um:.3f} um "
+            f"(material={self._selected_dielectric_material}, "
+            f"epsilon_r={epsilon_r}, c_device={self._c_device_pF_per_mm2} pF/mm^2)"
+        )

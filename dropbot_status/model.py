@@ -12,6 +12,7 @@ class DropBotStatusModel(HasTraits):
     voltage = Str("-", desc="Voltage set to device in V")
     pressure = Str("-", desc="Pressure reading in pF/mm^2 ")
     force = Str("-", desc="Calculated force in N")
+    dielectric_thickness = Str("-", desc="Calculated dielectric thickness")
 
     def reset_readings(self):
         """Reset the readings reading counter."""
@@ -19,3 +20,4 @@ class DropBotStatusModel(HasTraits):
         self.voltage = "-"
         self.pressure = "-"
         self.force = "-"
+        self.dielectric_thickness = "-"

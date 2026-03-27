@@ -18,7 +18,7 @@ from protocol_grid.services.force_calculation_service import ForceCalculationSer
 from dropbot_controller.consts import RETRY_CONNECTION
 from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude
 
-from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
+from .consts import NUM_CAPACITANCE_READINGS_AVERAGED, DIELECTRIC_MATERIALS, EPSILON_0
 from .model import DropBotStatusModel
 
 logger = get_logger(__name__)
@@ -77,6 +77,10 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         self.pressure = 0
         self.active_electrodes = []
         self.electrode_areas = {}
+
+        # Dielectric thickness calculation state
+        self.selected_dielectric_material = ""
+        self.c_device_pF_per_mm2 = None  # c_device in pF/mm^2
 
     ###################################################################################################################
     # Publisher methods
@@ -171,6 +175,10 @@ class DramatiqDropBotStatusViewModel(HasTraits):
             self.pressure_value = liquid_cap - filler_cap
             self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
 
+            # Store c_device for dielectric thickness calculation
+            self.c_device_pF_per_mm2 = self.pressure_value
+            self._recalculate_dielectric_thickness()
+
             if self.model.voltage != "-":
                 force = ForceCalculationService.calculate_force_for_step(
                     get_ureg_magnitude(self.model.voltage),
@@ -186,6 +194,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         else:
             self.model.pressure = f"-"
             self.model.force = "-"
+            self.c_device_pF_per_mm2 = None
+            self._recalculate_dielectric_thickness()
 
 
     ####### Dropbot Icon Image Control Methods ###########
@@ -237,6 +247,54 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 f"{message}")
 
         self.view_signals.show_halted_popup.emit(text)
+
+    ###################################################################################################################
+    # Dielectric thickness calculation
+    ###################################################################################################################
+
+    def on_dielectric_material_changed(self, material_name):
+        """Handle dielectric material selection change and recalculate thickness."""
+        self.selected_dielectric_material = material_name
+        self._recalculate_dielectric_thickness()
+
+    def _recalculate_dielectric_thickness(self):
+        """Calculate dielectric thickness using d = epsilon * epsilon_0 / C_device.
+
+        C_device is the device capacitance per unit area (pF/mm^2), stored in
+        ``self.c_device_pF_per_mm2``.  The formula requires SI-consistent
+        units, so the capacitance density is converted from pF/mm^2 to F/m^2
+        before dividing.  The result is displayed in micrometres.
+        """
+        if not self.selected_dielectric_material:
+            self.model.dielectric_thickness = "-"
+            return
+
+        epsilon_r = DIELECTRIC_MATERIALS.get(self.selected_dielectric_material)
+        if epsilon_r is None:
+            self.model.dielectric_thickness = "-"
+            return
+
+        if self.c_device_pF_per_mm2 is None or self.c_device_pF_per_mm2 <= 0:
+            self.model.dielectric_thickness = "-"
+            return
+
+        # Convert C_device from pF/mm^2 to F/m^2
+        # 1 pF = 1e-12 F, 1 mm^2 = 1e-6 m^2
+        # pF/mm^2 * 1e-12 / 1e-6 = pF/mm^2 * 1e-6 F/m^2
+        c_device_F_per_m2 = self.c_device_pF_per_mm2 * 1e-6
+
+        # d = epsilon_r * epsilon_0 / C_device  (result in metres)
+        thickness_m = epsilon_r * EPSILON_0 / c_device_F_per_m2
+
+        # Convert to micrometres for display
+        thickness_um = thickness_m * 1e6
+
+        self.model.dielectric_thickness = f"{thickness_um:.3f} um"
+        logger.info(
+            f"Dielectric thickness calculated: {thickness_um:.3f} um "
+            f"(material={self.selected_dielectric_material}, "
+            f"epsilon_r={epsilon_r}, c_device={self.c_device_pF_per_mm2} pF/mm^2)"
+        )
 
 
 class DramatiqDropBotStatusView(QWidget):

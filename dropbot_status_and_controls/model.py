@@ -1,10 +1,11 @@
-from traits.api import Bool, Str, observe
+from traits.api import Bool, Str, Enum, observe
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
 
 from template_status_and_controls.base_model import BaseStatusModel
+from dropbot_status.consts import DIELECTRIC_MATERIALS
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
@@ -45,11 +46,16 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")
 
+    # ---- Dielectric material selection ----------------------------------
+    dielectric_material = Enum("", *list(DIELECTRIC_MATERIALS.keys()),
+                               desc="Dielectric material for thickness calculation")
+
     # ---- Sensor readings (raw values set by message handler) -----------
     capacitance = Str("-", desc="Raw capacitance in pF")
     voltage_readback = Str("-", desc="Voltage readback from device (V)")
     pressure = Str("-", desc="Pressure reading (pF/mm²)")
     force = Str("-", desc="Calculated force (N)")
+    dielectric_thickness = Str("-", desc="Calculated dielectric thickness")
 
     # ---- Formatted sensor readings for display -------------------------
     capacitance_display = Str("-")
@@ -57,6 +63,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     frequency_display = Str("-")
     pressure_display = Str("-")
     force_display = Str("-")
+    dielectric_thickness_display = Str("-")
 
     # ------------------------------------------------------------------ #
     # BaseStatusModel hook                                                 #
@@ -78,6 +85,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
             self.frequency_display = "-"
             self.pressure = "-"
             self.force = "-"
+            self.dielectric_thickness = "-"
 
     @observe("capacitance")
     def _update_capacitance_display(self, event):
@@ -99,6 +107,10 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("force")
     def _update_force_display(self, event):
         self.force_display = self._format_reading(event.new)
+
+    @observe("dielectric_thickness")
+    def _update_dielectric_thickness_display(self, event):
+        self.dielectric_thickness_display = event.new
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
