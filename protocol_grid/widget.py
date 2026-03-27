@@ -2707,6 +2707,15 @@ class PGCWidget(QWidget):
     def _calculate_estimated_repeat_duration(
             self, device_state, repetitions, duration, trail_length, trail_overlay
     ):
+        """Calculate the estimated repeat_duration based on the user's repetition count.
+
+        This is the forward calculation: given the number of repetitions, compute
+        how long the longest loop will take (active phases only, no idle padding).
+        Used to auto-populate the Repeat Duration field when the user edits other
+        parameters.
+        """
+        from protocol_grid.services.path_execution_service import PathExecutionService
+
         if not device_state.has_paths():
             return 1.0
 
@@ -2719,25 +2728,11 @@ class PGCWidget(QWidget):
         max_loop_duration = 1.0
 
         for path in device_state.paths:
-            is_loop = len(path) >= 2 and path[0] == path[-1]
-            if not is_loop:
+            if not PathExecutionService.is_loop_path(path):
                 continue
 
-            effective_length = len(path) - 1
-            step_size = trail_length - trail_overlay
-
-            if step_size <= 0:
-                cycle_length = effective_length
-            else:
-                phases = 0
-                position = 0
-                while position < effective_length:
-                    phases += 1
-                    position += step_size
-                    if position >= effective_length:
-                        break
-                cycle_length = phases
-
+            cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+            cycle_length = len(cycle_phases)
             single_cycle_duration = cycle_length * duration
 
             if repetitions > 1:

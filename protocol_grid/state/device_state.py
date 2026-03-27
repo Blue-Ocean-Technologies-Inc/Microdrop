@@ -26,102 +26,55 @@ class DeviceState:
     def has_paths(self):
         return len(self.paths) > 0
 
-    def calculated_duration(self, step_duration: float, repetitions: int, 
+    def calculated_duration(self, step_duration: float, repetitions: int,
                             repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0):
+        """Calculate the total duration for this step including idle/balance phases.
+
+        When repeat_duration > 0 and the step has loops, each loop independently
+        calculates how many full cycles fit within repeat_duration. After a loop
+        finishes its cycles, idle phases pad the remaining balance time. The total
+        step duration is driven by the longest loop (active + idle phases).
+        """
+        # Delegate to PathExecutionService for consistent calculation
+        from protocol_grid.services.path_execution_service import PathExecutionService
+
         if not self.has_paths():
             calculated_time = step_duration * repetitions
         else:
-            has_loops = any(len(path) >= 2 and path[0] == path[-1] for path in self.paths)
-            
-            # calculate phases for loops and open paths separately with per-path repetitions
             max_open_path_length = 0
             max_loop_total_phases = 0
-            
+
             for i, path in enumerate(self.paths):
                 is_loop = len(path) >= 2 and path[0] == path[-1]
-                
+
                 if is_loop:
-                    effective_length = len(path) - 1
-                    step_size = trail_length - trail_overlay
-                    if step_size <= 0:
-                        cycle_length = effective_length
-                    else:
-                        phases = 0
-                        position = 0
-                        while position < effective_length:
-                            phases += 1
-                            position += step_size
-                            if position >= effective_length:
-                                break
-                        cycle_length = phases
-                    
-                    single_cycle_duration = cycle_length * step_duration
-                    
-                    if repetitions > 1:
-                        repetition_based_duration = (repetitions - 1) * single_cycle_duration + single_cycle_duration + step_duration  # +1 for return phase
-                    else:
-                        repetition_based_duration = single_cycle_duration + step_duration  # +1 for return phase
-                                        
-                    if repetition_based_duration >= repeat_duration:
-                        effective_repetitions = repetitions
-                    else:
-                        effective_repetitions = repetitions
-                        while True:
-                            if effective_repetitions > 1:
-                                test_duration = (effective_repetitions - 1) * single_cycle_duration + single_cycle_duration + step_duration
-                            else:
-                                test_duration = single_cycle_duration + step_duration
-                            
-                            if test_duration >= repeat_duration:
-                                break
-                            effective_repetitions += 1
-                                            
+                    effective_repetitions = PathExecutionService.calculate_effective_repetitions_for_path(
+                        path, repetitions, step_duration, repeat_duration, trail_length, trail_overlay
+                    )
+
+                    cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                    cycle_length = len(cycle_phases)
+
                     if effective_repetitions > 1:
-                        loop_total_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
+                        active_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
                     else:
-                        loop_total_phases = cycle_length + 1
-                    
+                        active_phases = cycle_length + 1
+
+                    idle_phases = PathExecutionService.calculate_loop_balance_idle_phases(
+                        path, effective_repetitions, step_duration, repeat_duration, trail_length, trail_overlay
+                    )
+                    loop_total_phases = active_phases + idle_phases
+
                     max_loop_total_phases = max(max_loop_total_phases, loop_total_phases)
                 else:
-                    path_length = len(path)
-                    step_size = trail_length - trail_overlay
-                    if step_size <= 0:
-                        cycle_length = path_length
-                    else:
-                        phases = 0
-                        position = 0
-                        while position < path_length:
-                            phases += 1
-                            phase_end = position + trail_length - 1
-                            if phase_end >= path_length - 1:
-                                break
-                            position += step_size
-                        
-                        if phases > 0:
-                            last_phase_start = (phases - 1) * step_size
-                            electrodes_in_last_phase = min(trail_length, path_length - last_phase_start)
-                            
-                            if electrodes_in_last_phase < trail_length and path_length >= trail_length:
-                                if phases > 1:
-                                    second_last_phase_start = (phases - 2) * step_size
-                                    second_last_phase_electrodes = list(range(second_last_phase_start, 
-                                                                            second_last_phase_start + trail_length))
-                                    
-                                    adjusted_last_start = path_length - trail_length
-                                    adjusted_last_electrodes = list(range(adjusted_last_start, path_length))
-                                    
-                                    if second_last_phase_electrodes == adjusted_last_electrodes:
-                                        phases -= 1
-                            elif electrodes_in_last_phase < trail_length:
-                                phases = max(1, phases - 1) if phases > 1 else 1
-                        
-                        cycle_length = phases
+                    cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                    cycle_length = len(cycle_phases)
                     max_open_path_length = max(max_open_path_length, cycle_length)
-            
+
             # calculate total phases based on the longest duration needed
             total_phases = max(max_loop_total_phases, max_open_path_length)
             calculated_time = total_phases * step_duration
-        
+
         result = max(calculated_time, repeat_duration)
         return result
 

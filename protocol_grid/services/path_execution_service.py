@@ -20,35 +20,79 @@ class PathExecutionService:
         return any(PathExecutionService.is_loop_path(path) for path in device_state.paths)
     
     @staticmethod
-    def calculate_effective_repetitions_for_path(path: List[str], original_repetitions: int, 
-                                            duration: float, repeat_duration: float, 
+    def calculate_effective_repetitions_for_path(path: List[str], original_repetitions: int,
+                                            duration: float, repeat_duration: float,
                                             trail_length: int, trail_overlay: int) -> int:
+        """Calculate how many full loop cycles fit within repeat_duration for a given path.
+
+        When repeat_duration > 0, each loop independently calculates how many full
+        cycles fit within that duration. Any remaining balance time is handled as
+        idle phases in the execution plan (not here).
+
+        When repeat_duration <= 0, the original_repetitions value is used directly.
+        """
         if not PathExecutionService.is_loop_path(path):
             return 1
-        
+
         cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
         single_cycle_duration = len(cycle_phases) * duration
-        
-        if original_repetitions > 1:
-            repetition_based_duration = (original_repetitions - 1) * single_cycle_duration + single_cycle_duration + duration  # +1 for return phase
-        else:
-            repetition_based_duration = single_cycle_duration + duration
-                
-        if repetition_based_duration >= repeat_duration:
+
+        if repeat_duration <= 0:
             return original_repetitions
-        
-        min_repetitions = original_repetitions
-        while True:
-            if min_repetitions > 1:
-                test_duration = (min_repetitions - 1) * single_cycle_duration + single_cycle_duration + duration
-            else:
-                test_duration = single_cycle_duration + duration
-            
-            if test_duration >= repeat_duration:
-                break
-            min_repetitions += 1
-        
-        return min_repetitions
+
+        # Calculate how many full cycles fit within repeat_duration.
+        # A single rep = cycle_phases + 1 return phase.
+        # N reps = (N-1) * cycle_length + cycle_length + 1 return phase.
+        # Total time for N reps = ((N-1)*cycle_length + cycle_length + 1) * duration
+        #                        = (N * cycle_length + 1) * duration
+        cycle_length = len(cycle_phases)
+
+        # Find the maximum number of full repetitions that fit within repeat_duration.
+        # total_time(N) = (N * cycle_length + 1) * duration  for N >= 1
+        # total_time(N) <= repeat_duration
+        # N <= (repeat_duration / duration - 1) / cycle_length
+        if cycle_length <= 0 or duration <= 0:
+            return max(original_repetitions, 1)
+
+        max_reps_by_duration = int((repeat_duration / duration - 1) / cycle_length)
+        max_reps_by_duration = max(max_reps_by_duration, 1)  # at least 1 rep
+
+        # Use whichever is larger: the user-specified repetitions or the duration-derived count
+        effective_reps = max(original_repetitions, max_reps_by_duration)
+
+        return effective_reps
+
+    @staticmethod
+    def calculate_loop_balance_idle_phases(path: List[str], effective_repetitions: int,
+                                           duration: float, repeat_duration: float,
+                                           trail_length: int, trail_overlay: int) -> int:
+        """Calculate how many idle phases are needed after a loop finishes its cycles
+        to pad out the remaining time to repeat_duration.
+
+        Returns the number of idle phases (each lasting ``duration`` seconds) that
+        should be appended after the loop's active phases to fill the balance time.
+        """
+        if repeat_duration <= 0 or not PathExecutionService.is_loop_path(path):
+            return 0
+
+        cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+        cycle_length = len(cycle_phases)
+
+        # Total active phases for this loop (same formula as in execution plan)
+        if effective_repetitions > 1:
+            active_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1  # +1 return phase
+        else:
+            active_phases = cycle_length + 1  # +1 return phase
+
+        active_time = active_phases * duration
+        balance_time = repeat_duration - active_time
+
+        if balance_time <= 0:
+            return 0
+
+        # Number of whole idle phases that fit in the balance time
+        idle_phases = int(balance_time / duration)
+        return idle_phases
 
     @staticmethod
     def calculate_trail_phases_for_path(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:
@@ -157,39 +201,45 @@ class PathExecutionService:
         repeat_duration = float(step.parameters.get("Repeat Duration", "1.0"))
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
-        
+
         if not device_state.has_paths():
             return duration
 
         max_open_path_length = 0
         max_loop_total_phases = 0
-        
+
         for i, path in enumerate(device_state.paths):
             if PathExecutionService.is_loop_path(path):
                 # calculate effective repetitions for this loop
                 effective_repetitions = PathExecutionService.calculate_effective_repetitions_for_path(
                     path, repetitions, duration, repeat_duration, trail_length, trail_overlay
                 )
-                
+
                 cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
                 cycle_length = len(cycle_phases)
-                
-                # calculate total phases for this specific loop
+
+                # calculate total phases for this specific loop (active phases)
                 if effective_repetitions > 1:
                     loop_total_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
                 else:
                     loop_total_phases = cycle_length + 1
-                
+
+                # add idle phases to pad out balance time when repeat_duration is set
+                idle_phases = PathExecutionService.calculate_loop_balance_idle_phases(
+                    path, effective_repetitions, duration, repeat_duration, trail_length, trail_overlay
+                )
+                loop_total_phases += idle_phases
+
                 max_loop_total_phases = max(max_loop_total_phases, loop_total_phases)
             else:
                 cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
                 cycle_length = len(cycle_phases)
                 max_open_path_length = max(max_open_path_length, cycle_length)
-        
+
         # calculate total phases based on the longest duration needed
         total_phases = max(max_loop_total_phases, max_open_path_length)
         total_time = duration * total_phases
-                
+
         return total_time
     
     @staticmethod
@@ -260,65 +310,87 @@ class PathExecutionService:
         path_repetitions = {}
         path_info = []
         max_open_path_length = 0
-        
+
         for i, path in enumerate(device_state.paths):
             is_loop = PathExecutionService.is_loop_path(path)
-            
+
             if is_loop:
                 effective_repetitions = PathExecutionService.calculate_effective_repetitions_for_path(
                     path, repetitions, duration, repeat_duration, trail_length, trail_overlay
                 )
                 path_repetitions[i] = effective_repetitions
-                
+
                 cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
                 cycle_length = len(cycle_phases)
-                
-                # calculate total phases for this specific loop
+
+                # calculate active phases for this specific loop
                 if effective_repetitions > 1:
-                    loop_total_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
+                    active_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
                 else:
-                    loop_total_phases = cycle_length + 1
-            else: # open path
+                    active_phases = cycle_length + 1
+
+                # calculate idle phases to pad out balance time when repeat_duration is set
+                idle_phases = PathExecutionService.calculate_loop_balance_idle_phases(
+                    path, effective_repetitions, duration, repeat_duration, trail_length, trail_overlay
+                )
+                loop_total_phases = active_phases + idle_phases
+            else:  # open path
                 path_repetitions[i] = 1
                 cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
                 cycle_length = len(cycle_phases)
                 max_open_path_length = max(max_open_path_length, cycle_length)
                 loop_total_phases = cycle_length
-            
+                active_phases = cycle_length
+                idle_phases = 0
+
             path_info.append({
                 "path": path,
                 "is_loop": is_loop,
                 "cycle_length": cycle_length,
                 "cycle_phases": cycle_phases,
                 "loop_total_phases": loop_total_phases,
+                "active_phases": active_phases,
+                "idle_phases": idle_phases,
                 "effective_repetitions": path_repetitions[i]
             })
-        
+
         # calculate total phases based on the longest duration needed
         max_loop_total_phases = 0
         for path_data in path_info:
             if path_data["is_loop"]:
                 max_loop_total_phases = max(max_loop_total_phases, path_data["loop_total_phases"])
-        
+
         total_phases = max(max_loop_total_phases, max_open_path_length)
-        
+
         for phase_idx in range(total_phases):
             # individually activated electrodes always active
             phase_electrodes = set(copy.deepcopy(device_state.activated_electrodes))
-                        
+
             for path_idx, path_data in enumerate(path_info):
                 path = path_data["path"]
                 is_loop = path_data["is_loop"]
                 cycle_length = path_data["cycle_length"]
                 cycle_phases = path_data["cycle_phases"]
+                active_phases = path_data["active_phases"]
                 path_total_phases = path_data["loop_total_phases"]
                 effective_repetitions = path_data["effective_repetitions"]
-                
+
                 if is_loop:
-                    # check if the loop has completed all its repetitions
+                    # check if the loop has completed all its phases (active + idle)
                     if phase_idx >= path_total_phases:
                         continue
-                    
+
+                    # check if we are in the idle/balance phase
+                    if phase_idx >= active_phases:
+                        # Idle phase: hold at the loop's start position (first phase electrodes)
+                        if len(cycle_phases) > 0:
+                            electrode_indices = cycle_phases[0]
+                            for electrode_idx in electrode_indices:
+                                if electrode_idx < len(path) - 1:  # exclude duplicate
+                                    electrode_id = path[electrode_idx]
+                                    phase_electrodes.add(electrode_id)
+                        continue
+
                     if effective_repetitions > 1:
                         # Determine which repetition and phase within that repetition
                         if phase_idx < (effective_repetitions - 1) * cycle_length:
@@ -341,13 +413,13 @@ class PathExecutionService:
                         else:
                             phase_in_cycle = 0
                             is_return_phase = True
-                    
+
                     if is_return_phase:
                         # Return phase - use first phase of the cycle
                         if 0 < len(cycle_phases):
                             electrode_indices = cycle_phases[0]
                             for electrode_idx in electrode_indices:
-                                if electrode_idx < len(path) - 1: # exclude duplicate
+                                if electrode_idx < len(path) - 1:  # exclude duplicate
                                     electrode_id = path[electrode_idx]
                                     phase_electrodes.add(electrode_id)
                     else:
@@ -355,7 +427,7 @@ class PathExecutionService:
                         if phase_in_cycle < len(cycle_phases):
                             electrode_indices = cycle_phases[phase_in_cycle]
                             for electrode_idx in electrode_indices:
-                                if electrode_idx < len(path) - 1: # exclude duplicate
+                                if electrode_idx < len(path) - 1:  # exclude duplicate
                                     electrode_id = path[electrode_idx]
                                     phase_electrodes.add(electrode_id)
                 else:
@@ -366,7 +438,7 @@ class PathExecutionService:
                                 if electrode_idx < len(path):
                                     electrode_id = path[electrode_idx]
                                     phase_electrodes.add(electrode_id)
-            
+
             execution_plan.append({
                 "time": phase_idx * duration,
                 "duration": duration,
@@ -375,7 +447,7 @@ class PathExecutionService:
                 "step_id": step_id,
                 "step_description": step_description
             })
-        
+
         return execution_plan
 
     @staticmethod
