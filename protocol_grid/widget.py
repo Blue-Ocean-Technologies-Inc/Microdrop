@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dropbot_controller.preferences import DropbotPreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error
+from microdrop_application.dialogs.pyface_wrapper import confirm, information, NO, YES, success, error
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -924,6 +924,14 @@ class PGCWidget(QWidget):
 
             except Exception as e:
                 logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
+
+        else:
+            information(
+                None,
+                message="Preview run completed successfully.",
+                title="Preview Complete",
+                timeout=3000,
+            )
 
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
