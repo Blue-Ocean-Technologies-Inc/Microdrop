@@ -556,6 +556,21 @@ class PGCWidget(QWidget):
         _tooltip = "Protocol grid blocked; Routes are being run on device view!" if is_executing else ""
         self.tree.setToolTip(_tooltip)
 
+    def _on_voltage_frequency_range_changed(self, message: str):
+        """Update the delegate's range prefs so new cell editors use the updated bounds.
+
+        The protocol grid delegate reads from the module-level _range_prefs when
+        creating new spinners. Updating it here ensures the next cell edit will
+        use the new range without requiring an app restart.
+        """
+        import json
+        from protocol_grid.protocol_grid_helpers import _range_prefs
+        data = json.loads(message)
+        _range_prefs.min_voltage = data['min_voltage']
+        _range_prefs.max_voltage = data['max_voltage']
+        _range_prefs.min_frequency = data['min_frequency']
+        _range_prefs.max_frequency = data['max_frequency']
+
     def _check_video_recording_and_show_dialog(self) -> bool:
         """Check if video recording is active and show warning dialog.
 
@@ -610,6 +625,9 @@ class PGCWidget(QWidget):
 
         # Routes executing state from device viewer
         sig.routes_executing_changed.connect(self._on_routes_executing_changed)
+
+        # Voltage/frequency range preferences changed
+        sig.voltage_frequency_range_changed.connect(self._on_voltage_frequency_range_changed)
 
         logger.info("Widget connected to message listener")
 

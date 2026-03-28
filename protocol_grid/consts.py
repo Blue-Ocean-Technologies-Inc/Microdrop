@@ -6,6 +6,7 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
 from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 
 from microdrop_style.button_styles import get_button_dimensions
@@ -47,6 +48,7 @@ ACTOR_TOPIC_DICT = {
         ADVANCED_MODE_CHANGE,
         DEVICE_VIEWER_RECORDING_STATE,
         ROUTES_EXECUTING,
+        VOLTAGE_FREQUENCY_RANGE_CHANGED,
     ]
 }
 
