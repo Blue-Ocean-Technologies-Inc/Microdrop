@@ -1,5 +1,5 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Float, Int, Dict, Property, Range
+from traits.api import Float, Int, Dict, Property, Range, Str
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -14,7 +14,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 preferences_names = [
             'droplet_detection_capacitance',
             'capacitance_update_interval',
-            'default_voltage', 'default_frequency'
+            # 'default_voltage', 'default_frequency'
         ]
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -45,6 +45,10 @@ class DropbotPreferences(PreferencesHelper):
         value=DEFAULT_FREQUENCY,
         desc="the frequency to set on the dropbot device in Hz",
     )
+
+    # Readonly hardware limits — set at runtime when DropBot connects
+    hardware_max_voltage = Str("-", desc="maximum voltage from connected hardware")
+    hardware_max_frequency = Str("-", desc="maximum frequency from connected hardware")
 
     preferences_name_map = Property(Dict)
 

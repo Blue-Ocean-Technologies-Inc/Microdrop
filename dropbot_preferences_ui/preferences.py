@@ -86,10 +86,20 @@ class DropbotPreferencesPane(PreferencesPane):
         show_border=True,
     ),
 
+    # Readonly hardware limits reported by the connected DropBot
+    hardware_limits = VGroup(
+        Item("hardware_max_voltage", label="Max Voltage", style="readonly"),
+        Item("hardware_max_frequency", label="Max Frequency", style="readonly"),
+        label="Hardware Limits",
+        show_border=True,
+    ),
+
     view = View(
 
         Item("_"),  # Separator
         settings,
+        Item("_"),
+        hardware_limits,
         Item("_"),  # Separator to space this out from further contributions to the pane.
 
         resizable=True

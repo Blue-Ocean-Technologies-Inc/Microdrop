@@ -78,3 +78,7 @@ DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection
 
 DEFAULT_VOLTAGE = 100
 DEFAULT_FREQUENCY = 10_000
+
+# Known hardware minimum limits for DropBot DB3-120
+HARDWARE_MIN_VOLTAGE = 30    # V
+HARDWARE_MIN_FREQUENCY = 100  # Hz
