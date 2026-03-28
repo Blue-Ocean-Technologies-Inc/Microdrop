@@ -30,14 +30,11 @@ class DropbotStatesSettingMixinService(HasTraits):
     def on_set_voltage_request(self, message):
         """
         Method to set the voltage on the dropbot device.
-        Validates against user-configurable range from preferences.
         """
         try:
             self.voltage = float(message)
-            min_v = int(self.preferences.min_voltage)
-            max_v = int(self.preferences.max_voltage)
-            if self.voltage < min_v or self.voltage > max_v:
-                raise ValueError(f"Voltage must be between {min_v} and {max_v} V")
+            if self.voltage < 30 or self.voltage > 150:
+                raise ValueError("Voltage must be between 30 and 150 V")
 
             self.preferences.default_voltage = int(self.voltage)
 
@@ -59,16 +56,13 @@ class DropbotStatesSettingMixinService(HasTraits):
     def on_set_frequency_request(self, message):
         """
         Method to set the frequency on the dropbot device.
-        Validates against user-configurable range from preferences.
         """
         try:
             self.frequency = float(message)
-            min_f = int(self.preferences.min_frequency)
-            max_f = int(self.preferences.max_frequency)
-            if self.frequency < min_f or self.frequency > max_f:
-                raise ValueError(f"Frequency must be between {min_f} and {max_f} Hz")
+            if self.frequency < 100 or self.frequency > 20000:
+                raise ValueError("Frequency must be between 100 and 20000 Hz")
 
-            self.preferences.default_frequency = int(self.frequency)
+            self.preferences.default_frequency= int(self.frequency)
 
             if not hasattr(self, 'proxy') or self.proxy is None:
                 logger.error("Proxy not available for frequency setting")

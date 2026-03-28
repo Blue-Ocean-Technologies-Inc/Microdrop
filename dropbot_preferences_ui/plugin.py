@@ -23,9 +23,9 @@ class DropbotPreferencesPlugin(Plugin):
     ###########################################################################
 
     def _preferences_panes_default(self):
-        from .preferences import DropbotPreferencesPane
+        from .preferences import DropbotPreferencesPane, VoltageFrequencyRangePane
 
-        return [DropbotPreferencesPane]
+        return [DropbotPreferencesPane, VoltageFrequencyRangePane]
 
     def _preferences_categories_default(self):
         from .preferences import dropbot_tab
