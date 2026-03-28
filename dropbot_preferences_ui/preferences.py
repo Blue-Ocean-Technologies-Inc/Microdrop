@@ -1,6 +1,8 @@
 import json
 
 from apptools.preferences.api import PreferencesHelper
+from microdrop_style.text_styles import preferences_group_style_sheet
+
 from protocol_grid.preferences import protocol_grid_tab
 from traits.api import observe, Range
 from traitsui.api import VGroup, HGroup, View, Item
@@ -10,7 +12,7 @@ from envisage.ui.tasks.api import PreferencesCategory
 from envisage.ui.tasks.api import PreferencesPane
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.preferences_UI_helpers import create_item_label_group
+from microdrop_utils.preferences_UI_helpers import create_item_label_group, create_grid_group
 from dropbot_controller.preferences import DropbotPreferences
 from dropbot_controller.consts import CHANGE_SETTINGS
 
@@ -61,7 +63,7 @@ class DropbotPreferencesPane(PreferencesPane):
 
     category = dropbot_tab.id
 
-    #### 'DeviceViewerPreferencesPane' interface ################################
+    #### View definition ################################
 
     # Create the single item for the default svg for the main view group.
     drop_detect_setting = create_item_label_group("_droplet_detection_capacitance_view",
@@ -120,32 +122,26 @@ class VoltageFrequencyRangePane(PreferencesPane):
     update their bounds immediately.
     """
 
+    #### 'PreferencesPane' interface ##########################################
+
     model_factory = VoltageFrequencyRangePreferences
     category = protocol_grid_tab.id
 
-    voltage_range_settings = VGroup(
-        HGroup(
-            create_item_label_group("min_voltage", label_text="Min Voltage (V)"),
-            create_item_label_group("max_voltage", label_text="Max Voltage (V)"),
-        ),
-        label="Voltage Range",
-        show_border=True,
-    ),
+    #### View definition ################################
 
-    frequency_range_settings = VGroup(
-        HGroup(
-            create_item_label_group("min_frequency", label_text="Min Frequency (Hz)"),
-            create_item_label_group("max_frequency", label_text="Max Frequency (Hz)"),
-        ),
-        label="Frequency Range",
-        show_border=True,
-    ),
+    # Create the grid group for the sidebar items.
+    range_settings = create_grid_group(
+        ["min_voltage", "max_voltage", "min_frequency", "max_frequency"],
+        label_text=["Min Voltage (V)", "Max Voltage (V)", "Min Frequency (Hz)", "Max Frequency (Hz)"],
+        group_label="Protocol Setters Config",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+        group_columns=4
+    )
 
     view = View(
         Item("_"),
-        voltage_range_settings,
-        Item("_"),
-        frequency_range_settings,
+        range_settings,
         Item("_"),
         resizable=True
     )
