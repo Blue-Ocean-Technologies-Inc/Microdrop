@@ -7,6 +7,7 @@ from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
 from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.preferences import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase, 
@@ -133,13 +134,14 @@ def _make_manual_control_model():
     Traits Range bounds must be set at class-definition time, so we read the
     current preferences once and use the values as class-level constants.
     """
-    prefs = DropbotPreferences()
-    _min_v = int(prefs.min_voltage)
-    _max_v = int(prefs.max_voltage)
-    _def_v = int(prefs.default_voltage)
-    _min_f = int(prefs.min_frequency)
-    _max_f = int(prefs.max_frequency)
-    _def_f = int(prefs.default_frequency)
+    range_prefs = VoltageFrequencyRangePreferences()
+    dropbot_prefs = DropbotPreferences()
+    _min_v = int(range_prefs.min_voltage)
+    _max_v = int(range_prefs.max_voltage)
+    _def_v = int(dropbot_prefs.default_voltage)
+    _min_f = int(range_prefs.min_frequency)
+    _max_f = int(range_prefs.max_frequency)
+    _def_f = int(dropbot_prefs.default_frequency)
 
     class _ManualControlModel(HasTraits):
         voltage = Range(
@@ -323,6 +325,32 @@ class ManualControlControl(Controller):
     def _frequency_changed(self, event):
         if self._publish_message_if_realtime(topic=SET_FREQUENCY, message=str(event.new)):
             logger.debug(f"Requesting Frequency change to {event.new} Hz")
+
+    def _on_voltage_frequency_range_changed_triggered(self, message):
+        """Update voltage/frequency spinner bounds live when range preferences change.
+
+        Updates both the Traits Range validation bounds and the underlying
+        QSpinBox min/max so the change takes effect immediately without restart.
+        """
+        import json
+        data = json.loads(message)
+
+        # Update Traits Range validation bounds
+        voltage_trait = self.model.trait('voltage').trait_type
+        voltage_trait._low = data['min_voltage']
+        voltage_trait._high = data['max_voltage']
+        frequency_trait = self.model.trait('frequency').trait_type
+        frequency_trait._low = data['min_frequency']
+        frequency_trait._high = data['max_frequency']
+
+        # Update the QSpinBox widgets if the UI is initialized
+        if self.info and self.info.initialized:
+            if hasattr(self.info, 'voltage'):
+                self.info.voltage.control.setMinimum(data['min_voltage'])
+                self.info.voltage.control.setMaximum(data['max_voltage'])
+            if hasattr(self.info, 'frequency'):
+                self.info.frequency.control.setMinimum(data['min_frequency'])
+                self.info.frequency.control.setMaximum(data['max_frequency'])
 
 
 if __name__ == "__main__":
