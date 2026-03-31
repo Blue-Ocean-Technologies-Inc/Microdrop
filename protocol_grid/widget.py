@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning
 from PySide6.QtWidgets import (
@@ -269,13 +269,13 @@ class PGCWidget(QWidget):
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
                                                         preferences=self.application.preferences, parent=self)
 
-        _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
+        _range_prefs = VoltageFrequencyRangePreferences(preferences=self.application.preferences)
 
         self.preferences = ProtocolPreferences(preferences=self.application.preferences)
 
         step_defaults.update({
-        "Voltage": f"{float(_dropbot_preferences.default_voltage)}",
-        "Frequency": f"{float(_dropbot_preferences.default_frequency)}",
+        "Voltage": f"{float(_range_prefs.ui_default_voltage)}",
+        "Frequency": f"{float(_range_prefs.ui_default_frequency)}",
         })
 
         _device_viewer_prefs = DeviceViewerPreferences(preferences=self.application.preferences)

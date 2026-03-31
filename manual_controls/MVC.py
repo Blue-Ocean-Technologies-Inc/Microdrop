@@ -6,7 +6,6 @@ from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
-from dropbot_controller.preferences import DropbotPreferences
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
@@ -129,19 +128,18 @@ class ToggleEditorFactory(BasicEditorFactory):
 
 
 def _make_manual_control_model():
-    """Build the ManualControlModel class with voltage/frequency ranges from DropbotPreferences.
+    """Build the ManualControlModel class with voltage/frequency ranges from UI preferences.
 
     Traits Range bounds must be set at class-definition time, so we read the
     current preferences once and use the values as class-level constants.
     """
     range_prefs = VoltageFrequencyRangePreferences()
-    dropbot_prefs = DropbotPreferences()
     _min_v = int(range_prefs.ui_min_voltage)
     _max_v = int(range_prefs.ui_max_voltage)
-    _def_v = int(dropbot_prefs.default_voltage)
+    _def_v = int(range_prefs.ui_default_voltage)
     _min_f = int(range_prefs.ui_min_frequency)
     _max_f = int(range_prefs.ui_max_frequency)
-    _def_f = int(dropbot_prefs.default_frequency)
+    _def_f = int(range_prefs.ui_default_frequency)
 
     class _ManualControlModel(HasTraits):
         voltage = Range(
@@ -319,11 +317,13 @@ class ManualControlControl(Controller):
     @observe("model:voltage")
     def _voltage_changed(self, event):
         if self._publish_message_if_realtime(topic=SET_VOLTAGE, message=str(event.new)):
+            VoltageFrequencyRangePreferences().ui_default_voltage = int(event.new)
             logger.debug(f"Requesting Voltage change to {event.new} V")
 
     @observe("model:frequency")
     def _frequency_changed(self, event):
         if self._publish_message_if_realtime(topic=SET_FREQUENCY, message=str(event.new)):
+            VoltageFrequencyRangePreferences().ui_default_frequency = int(event.new)
             logger.debug(f"Requesting Frequency change to {event.new} Hz")
 
     def _on_voltage_frequency_range_changed_triggered(self, message):

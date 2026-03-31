@@ -1,6 +1,5 @@
 from traits.api import Bool, Str, observe
 
-from dropbot_controller.preferences import DropbotPreferences
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
@@ -34,20 +33,18 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
-    # Range bounds from frontend preferences; defaults from dropbot preferences
     _range_prefs = VoltageFrequencyRangePreferences()
-    _dropbot_prefs = DropbotPreferences()
     voltage = RangeWithCustomViewHints(
         int(_range_prefs.ui_min_voltage), int(_range_prefs.ui_max_voltage),
-        value=int(_dropbot_prefs.default_voltage), suffix=" V",
+        value=int(_range_prefs.ui_default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
         int(_range_prefs.ui_min_frequency), int(_range_prefs.ui_max_frequency),
-        value=int(_dropbot_prefs.default_frequency), step=100, suffix=" Hz",
+        value=int(_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
-    del _range_prefs, _dropbot_prefs
+    del _range_prefs
 
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")

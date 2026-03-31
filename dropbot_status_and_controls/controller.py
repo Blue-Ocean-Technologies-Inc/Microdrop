@@ -1,6 +1,7 @@
 from traits.api import observe
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from microdrop_utils.decorators import debounce
 from logger.logger_service import get_logger
 
@@ -40,9 +41,11 @@ class ControlsController(BaseStatusController):
     @observe("model:voltage")
     def _on_voltage_changed(self, event):
         if self._publish_or_queue(topic=SET_VOLTAGE, message=str(event.new)):
+            VoltageFrequencyRangePreferences().ui_default_voltage = int(event.new)
             logger.debug(f"Voltage → {event.new} V")
 
     @observe("model:frequency")
     def _on_frequency_changed(self, event):
         if self._publish_or_queue(topic=SET_FREQUENCY, message=str(event.new)):
+            VoltageFrequencyRangePreferences().ui_default_frequency = int(event.new)
             logger.debug(f"Frequency → {event.new} Hz")

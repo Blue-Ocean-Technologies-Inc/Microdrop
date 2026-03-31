@@ -55,10 +55,6 @@ class DropbotPreferencesPane(PreferencesPane):
 
         drop_detect_setting, Item("_"),
 
-        create_item_label_group("default_voltage", label_text="Last Applied Voltage (V)"), Item("_"),
-
-        create_item_label_group("default_frequency", label_text="Last Applied Frequency (Hz)"), Item("_"),
-
         label="",
         show_border=True,
     ),
@@ -127,9 +123,20 @@ class VoltageFrequencyRangePane(PreferencesPane):
         group_columns=4
     )
 
+    default_settings = create_grid_group(
+        ["ui_default_voltage", "ui_default_frequency"],
+        label_text=["Default Voltage (V)", "Default Frequency (Hz)"],
+        group_label="Default Values",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+        group_columns=2
+    )
+
     view = View(
         Item("_"),
         range_settings,
+        Item("_"),
+        default_settings,
         Item("_"),
         resizable=True
     )

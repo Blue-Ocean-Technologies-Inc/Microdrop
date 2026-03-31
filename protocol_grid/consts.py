@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 
@@ -88,8 +88,8 @@ step_defaults = {
     "Repetitions": "1",
     "Duration": "1.0",
     "Force": "",
-    "Voltage": f"{float(DropbotPreferences().default_voltage)}",
-    "Frequency": f"{float(DropbotPreferences().default_frequency)}",
+    "Voltage": f"{float(VoltageFrequencyRangePreferences().ui_default_voltage)}",
+    "Frequency": f"{float(VoltageFrequencyRangePreferences().ui_default_frequency)}",
     "Message": "",
     "Repeat Duration": "1.0",
     "Trail Length": "1",
