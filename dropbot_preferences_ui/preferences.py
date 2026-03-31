@@ -1,11 +1,10 @@
 import json
 
-from apptools.preferences.api import PreferencesHelper
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 from protocol_grid.preferences import protocol_grid_tab
-from traits.api import observe, Range
-from traitsui.api import VGroup, HGroup, View, Item
+from traits.api import observe
+from traitsui.api import VGroup, View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -17,35 +16,13 @@ from dropbot_controller.preferences import DropbotPreferences
 from dropbot_controller.consts import CHANGE_SETTINGS
 
 from .consts import (
-    DEFAULT_MIN_VOLTAGE, DEFAULT_MAX_VOLTAGE,
-    DEFAULT_MIN_FREQUENCY, DEFAULT_MAX_FREQUENCY,
     VOLTAGE_FREQUENCY_RANGE_CHANGED,
 )
 
 from logger.logger_service import get_logger
+from .models import VoltageFrequencyRangePreferences
+
 logger = get_logger(__name__)
-
-
-class VoltageFrequencyRangePreferences(PreferencesHelper):
-    """Frontend-only preferences for voltage/frequency spinner range limits.
-
-    These control the min/max bounds on voltage and frequency spinners across
-    all frontend plugins (manual controls, dropbot status, protocol grid).
-    Persisted under a separate preferences path from DropbotPreferences since
-    they are purely a UI concern and do not affect backend hardware validation.
-    """
-
-    preferences_path = "microdrop.voltage_frequency_range"
-
-    min_voltage = Range(low=0, high=300, value=DEFAULT_MIN_VOLTAGE,
-                        desc="minimum allowed voltage in V")
-    max_voltage = Range(low=0, high=300, value=DEFAULT_MAX_VOLTAGE,
-                        desc="maximum allowed voltage in V")
-    min_frequency = Range(low=0, high=100_000, value=DEFAULT_MIN_FREQUENCY,
-                          desc="minimum allowed frequency in Hz")
-    max_frequency = Range(low=0, high=100_000, value=DEFAULT_MAX_FREQUENCY,
-                          desc="maximum allowed frequency in Hz")
-
 
 dropbot_tab = PreferencesCategory(
     id="microdrop.dropbot_settings",
@@ -88,10 +65,11 @@ class DropbotPreferencesPane(PreferencesPane):
 
     # Readonly hardware limits reported by the connected DropBot
     hardware_limits = VGroup(
-        Item("hardware_max_voltage", label="Max Voltage", style="readonly"),
-        Item("hardware_max_frequency", label="Max Frequency", style="readonly"),
+        Item("hardware_max_voltage", label="Max Voltage (V)", style="readonly"),
+        Item("hardware_max_frequency", label="Max Frequency (Hz)", style="readonly"),
         label="Hardware Limits",
         show_border=True,
+        style_sheet=preferences_group_style_sheet
     ),
 
     view = View(
@@ -141,7 +119,7 @@ class VoltageFrequencyRangePane(PreferencesPane):
 
     # Create the grid group for the sidebar items.
     range_settings = create_grid_group(
-        ["min_voltage", "max_voltage", "min_frequency", "max_frequency"],
+        ["ui_min_voltage", "ui_max_voltage", "ui_min_frequency", "ui_max_frequency"],
         label_text=["Min Voltage (V)", "Max Voltage (V)", "Min Frequency (Hz)", "Max Frequency (Hz)"],
         group_label="Protocol Setters Config",
         group_show_border=True,
@@ -156,15 +134,15 @@ class VoltageFrequencyRangePane(PreferencesPane):
         resizable=True
     )
 
-    @observe("model:[min_voltage, max_voltage, min_frequency, max_frequency]")
+    @observe("model:[ui_min_voltage, ui_max_voltage, ui_min_frequency, ui_max_frequency]")
     def publish_range_change(self, event):
         """Publish all four range values when any one changes, so subscribers
         can update their spinner bounds in one shot."""
         if event.new != event.old:
             msg = json.dumps({
-                "min_voltage": int(self.model.min_voltage),
-                "max_voltage": int(self.model.max_voltage),
-                "min_frequency": int(self.model.min_frequency),
-                "max_frequency": int(self.model.max_frequency),
+                "ui_min_voltage": int(self.model.ui_min_voltage),
+                "ui_max_voltage": int(self.model.ui_max_voltage),
+                "ui_min_frequency": int(self.model.ui_min_frequency),
+                "ui_max_frequency": int(self.model.ui_max_frequency),
             })
             publish_message(msg, VOLTAGE_FREQUENCY_RANGE_CHANGED)

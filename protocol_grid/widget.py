@@ -566,10 +566,10 @@ class PGCWidget(QWidget):
         import json
         from protocol_grid.protocol_grid_helpers import _range_prefs
         data = json.loads(message)
-        _range_prefs.min_voltage = data['min_voltage']
-        _range_prefs.max_voltage = data['max_voltage']
-        _range_prefs.min_frequency = data['min_frequency']
-        _range_prefs.max_frequency = data['max_frequency']
+        _range_prefs.ui_min_voltage = data['ui_min_voltage']
+        _range_prefs.ui_max_voltage = data['ui_max_voltage']
+        _range_prefs.ui_min_frequency = data['ui_min_frequency']
+        _range_prefs.ui_max_frequency = data['ui_max_frequency']
 
     def _check_video_recording_and_show_dialog(self) -> bool:
         """Check if video recording is active and show warning dialog.

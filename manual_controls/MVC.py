@@ -7,7 +7,7 @@ from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
 
 from dropbot_controller.preferences import DropbotPreferences
-from dropbot_preferences_ui.preferences import VoltageFrequencyRangePreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase, 
@@ -136,11 +136,11 @@ def _make_manual_control_model():
     """
     range_prefs = VoltageFrequencyRangePreferences()
     dropbot_prefs = DropbotPreferences()
-    _min_v = int(range_prefs.min_voltage)
-    _max_v = int(range_prefs.max_voltage)
+    _min_v = int(range_prefs.ui_min_voltage)
+    _max_v = int(range_prefs.ui_max_voltage)
     _def_v = int(dropbot_prefs.default_voltage)
-    _min_f = int(range_prefs.min_frequency)
-    _max_f = int(range_prefs.max_frequency)
+    _min_f = int(range_prefs.ui_min_frequency)
+    _max_f = int(range_prefs.ui_max_frequency)
     _def_f = int(dropbot_prefs.default_frequency)
 
     class _ManualControlModel(HasTraits):
@@ -337,20 +337,20 @@ class ManualControlControl(Controller):
 
         # Update Traits Range validation bounds
         voltage_trait = self.model.trait('voltage').trait_type
-        voltage_trait._low = data['min_voltage']
-        voltage_trait._high = data['max_voltage']
+        voltage_trait._low = data['ui_min_voltage']
+        voltage_trait._high = data['ui_max_voltage']
         frequency_trait = self.model.trait('frequency').trait_type
-        frequency_trait._low = data['min_frequency']
-        frequency_trait._high = data['max_frequency']
+        frequency_trait._low = data['ui_min_frequency']
+        frequency_trait._high = data['ui_max_frequency']
 
         # Update the QSpinBox widgets if the UI is initialized
         if self.info and self.info.initialized:
             if hasattr(self.info, 'voltage'):
-                self.info.voltage.control.setMinimum(data['min_voltage'])
-                self.info.voltage.control.setMaximum(data['max_voltage'])
+                self.info.voltage.control.setMinimum(data['ui_min_voltage'])
+                self.info.voltage.control.setMaximum(data['ui_max_voltage'])
             if hasattr(self.info, 'frequency'):
-                self.info.frequency.control.setMinimum(data['min_frequency'])
-                self.info.frequency.control.setMaximum(data['max_frequency'])
+                self.info.frequency.control.setMinimum(data['ui_min_frequency'])
+                self.info.frequency.control.setMaximum(data['ui_max_frequency'])
 
 
 if __name__ == "__main__":

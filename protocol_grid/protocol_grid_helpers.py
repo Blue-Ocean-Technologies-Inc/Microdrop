@@ -13,7 +13,7 @@ from PySide6.QtGui import QStandardItem
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
-from dropbot_preferences_ui.preferences import VoltageFrequencyRangePreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from protocol_grid.consts import (
     GROUP_TYPE,
     STEP_TYPE,
@@ -98,8 +98,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             return editor
         elif field == "Frequency":
             editor = QSpinBox(parent)
-            editor.setMinimum(int(_range_prefs.min_frequency))
-            editor.setMaximum(int(_range_prefs.max_frequency))
+            editor.setMinimum(int(_range_prefs.ui_min_frequency))
+            editor.setMaximum(int(_range_prefs.ui_max_frequency))
             editor.setSingleStep(100)
             return editor
         elif field in ("Trail Overlay", "Max. Path Length"):
@@ -116,8 +116,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             return editor
         elif field == "Voltage":
             editor = QDoubleSpinBox(parent)
-            editor.setMinimum(float(_range_prefs.min_voltage))
-            editor.setMaximum(float(_range_prefs.max_voltage))
+            editor.setMinimum(float(_range_prefs.ui_min_voltage))
+            editor.setMaximum(float(_range_prefs.ui_max_voltage))
             editor.setDecimals(1)
             editor.setSingleStep(0.5)
             return editor        

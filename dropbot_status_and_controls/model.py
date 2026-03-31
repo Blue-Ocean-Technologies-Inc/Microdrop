@@ -1,7 +1,7 @@
 from traits.api import Bool, Str, observe
 
 from dropbot_controller.preferences import DropbotPreferences
-from dropbot_preferences_ui.preferences import VoltageFrequencyRangePreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
 
@@ -38,12 +38,12 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     _range_prefs = VoltageFrequencyRangePreferences()
     _dropbot_prefs = DropbotPreferences()
     voltage = RangeWithCustomViewHints(
-        int(_range_prefs.min_voltage), int(_range_prefs.max_voltage),
+        int(_range_prefs.ui_min_voltage), int(_range_prefs.ui_max_voltage),
         value=int(_dropbot_prefs.default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        int(_range_prefs.min_frequency), int(_range_prefs.max_frequency),
+        int(_range_prefs.ui_min_frequency), int(_range_prefs.ui_max_frequency),
         value=int(_dropbot_prefs.default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )

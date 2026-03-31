@@ -197,11 +197,11 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         # Update Traits Range validation bounds
         voltage_trait = self.model.trait('voltage').trait_type
-        voltage_trait._low = data['min_voltage']
-        voltage_trait._high = data['max_voltage']
+        voltage_trait._low = data['ui_min_voltage']
+        voltage_trait._high = data['ui_max_voltage']
         frequency_trait = self.model.trait('frequency').trait_type
-        frequency_trait._low = data['min_frequency']
-        frequency_trait._high = data['max_frequency']
+        frequency_trait._low = data['ui_min_frequency']
+        frequency_trait._high = data['ui_max_frequency']
 
         # Signal the UI thread to update the QSpinBox widgets
         self.dialog_signals.voltage_frequency_range_changed.emit(data)
