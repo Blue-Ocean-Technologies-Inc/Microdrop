@@ -134,12 +134,16 @@ class DropbotMonitorMixinService(HasTraits):
             self.dropbot_connection_active = True
 
         # Expose hardware limits as readonly info on the preferences model
-        if self.proxy is not None:
-            try:
-                self.preferences.hardware_max_voltage = f"{self.proxy.config.max_voltage} V"
-                self.preferences.hardware_max_frequency = f"{self.proxy.config.max_frequency} Hz"
-            except Exception as e:
-                logger.warning(f"Could not read hardware limits from proxy config: {e}")
+        try:
+            self.preferences.hardware_max_voltage = f"{self.proxy.config.max_voltage} V"
+            self.preferences.hardware_max_frequency = f"{self.proxy.config.max_frequency} Hz"
+
+            logger.info(f"DropBot hardware limits: \n"
+                        f"Max Voltage: {self.preferences.hardware_max_voltage} V\n"
+                        f"Max Frequency: {self.preferences.hardware_max_frequency} Hz\n")
+
+        except Exception as e:
+            logger.warning(f"Could not read hardware limits from proxy config: {e}")
 
     ################################# Protected methods ######################################
     def _on_dropbot_port_found(self, event):
