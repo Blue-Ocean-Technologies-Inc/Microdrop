@@ -35,13 +35,13 @@ class DropbotPreferences(PreferencesHelper):
 
     default_voltage = Range(
         30,
-        150,
+        140,
         value=DEFAULT_VOLTAGE,
         desc="the voltage to set on the dropbot device in V",
     )
     default_frequency = Range(
         100,
-        20000,
+        10_000,
         value=DEFAULT_FREQUENCY,
         desc="the frequency to set on the dropbot device in Hz",
     )
