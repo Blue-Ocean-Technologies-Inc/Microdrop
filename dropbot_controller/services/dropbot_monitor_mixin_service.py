@@ -1,3 +1,6 @@
+import time
+import functools
+
 import dropbot
 from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
@@ -15,6 +18,23 @@ from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB
     OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
 
 logger = get_logger(__name__)
+
+
+def wait_for_proxy(timeout=2, poll_interval=0.1):
+    """Decorator that polls until self.proxy is available, with a timeout."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            elapsed = 0
+            while not self.proxy and elapsed < timeout:
+                time.sleep(poll_interval)
+                elapsed += poll_interval
+            if not self.proxy:
+                logger.warning(f"Timed out waiting for proxy after {timeout}s")
+            return func(self, *args, **kwargs)
+        return wrapper
+    return decorator
+
 
 # silence all APScheduler job-exception logs
 get_logger('apscheduler.executors.default').setLevel(level="WARNING")
@@ -128,6 +148,7 @@ class DropbotMonitorMixinService(HasTraits):
             logger.info("DropBot disconnected. Resuming search for dropbot connection.")
             self.on_retry_connection_request(message="")
 
+    @wait_for_proxy(timeout=2)
     def on_connected_signal(self, message):
         # set connection active in case it was not changed.
         if not self.dropbot_connection_active:
@@ -135,8 +156,8 @@ class DropbotMonitorMixinService(HasTraits):
 
         # Expose hardware limits as readonly info on the preferences model
         try:
-            self.preferences.hardware_max_voltage = f"{self.proxy.config.max_voltage} V"
-            self.preferences.hardware_max_frequency = f"{self.proxy.config.max_frequency} Hz"
+            self.preferences.hardware_max_voltage = self.proxy.config.max_voltage
+            self.preferences.hardware_max_frequency = self.proxy.config.max_frequency
 
             logger.info(f"DropBot hardware limits: \n"
                         f"Max Voltage: {self.preferences.hardware_max_voltage} V\n"
