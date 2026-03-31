@@ -1,10 +1,12 @@
 import json
 
+from traitsui.item import Spring
+
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 from protocol_grid.preferences import protocol_grid_tab
 from traits.api import observe
-from traitsui.api import VGroup, View, Item
+from traitsui.api import VGroup, HGroup, View, Item
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -43,10 +45,10 @@ class DropbotPreferencesPane(PreferencesPane):
     #### View definition ################################
 
     # Create the single item for the default svg for the main view group.
-    drop_detect_setting = create_item_label_group("_droplet_detection_capacitance_view",
+    drop_detect_setting = create_item_label_group("droplet_detection_capacitance_view",
                                                             label_text="Drop Detect Capacitance (pF)")
 
-    capacitance_update_setting = create_item_label_group("_capacitance_update_interval_view",
+    capacitance_update_setting = create_item_label_group("capacitance_update_interval_view",
                                                          label_text="Capacitance Update Interval (ms)" )
 
 
@@ -60,12 +62,19 @@ class DropbotPreferencesPane(PreferencesPane):
     ),
 
     # Readonly hardware limits reported by the connected DropBot
-    hardware_limits = VGroup(
-        Item("hardware_max_voltage", label="Max Voltage (V)", style="readonly"),
-        Item("hardware_max_frequency", label="Max Frequency (Hz)", style="readonly"),
-        label="Hardware Limits",
+    hardware_config = HGroup(
+        VGroup(
+        Item("_hardware_max_voltage_view", label="Max Voltage (V)", style="readonly"),
+            Item("_hardware_max_frequency_view", label="Max Frequency (Hz)", style="readonly"),
+        ),
+        Item("12"), # spacer
+        VGroup(
+            Item("last_voltage", label="Last Applied Voltage (V)", style="readonly"),
+        Item("last_frequency", label="Last Applied Frequency (Hz)", style="readonly"),
+        ),
+        label="Hardware Config",
         show_border=True,
-        style_sheet=preferences_group_style_sheet
+        style_sheet=preferences_group_style_sheet,
     ),
 
     view = View(
@@ -73,7 +82,7 @@ class DropbotPreferencesPane(PreferencesPane):
         Item("_"),  # Separator
         settings,
         Item("_"),
-        hardware_limits,
+        hardware_config,
         Item("_"),  # Separator to space this out from further contributions to the pane.
 
         resizable=True
@@ -114,29 +123,32 @@ class VoltageFrequencyRangePane(PreferencesPane):
     #### View definition ################################
 
     # Create the grid group for the sidebar items.
+    # Each tuple pairs a trait name with its display label.
+    # With 2 columns, items fill left→right per row:
+    #   Row 1: Min Voltage     | Min Frequency
+    #   Row 2: Max Voltage     | Max Frequency
+    #   Row 3: Default Voltage | Default Frequency
+    _FIELD_LABEL_PAIRS = (
+        ("ui_min_voltage",       "Min Voltage (V)"),
+        ("ui_min_frequency",     "Min Frequency (Hz)"),
+        ("ui_max_voltage",       "Max Voltage (V)"),
+        ("ui_max_frequency",     "Max Frequency (Hz)"),
+        ("ui_default_voltage",   "Default Voltage (V)"),
+        ("ui_default_frequency", "Default Frequency (Hz)"),
+    )
+
     range_settings = create_grid_group(
-        ["ui_min_voltage", "ui_max_voltage", "ui_min_frequency", "ui_max_frequency"],
-        label_text=["Min Voltage (V)", "Max Voltage (V)", "Min Frequency (Hz)", "Max Frequency (Hz)"],
+        [f for f, _ in _FIELD_LABEL_PAIRS],
+        label_text=[l for _, l in _FIELD_LABEL_PAIRS],
         group_label="Protocol Setters Config",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,
         group_columns=4
     )
 
-    default_settings = create_grid_group(
-        ["ui_default_voltage", "ui_default_frequency"],
-        label_text=["Default Voltage (V)", "Default Frequency (Hz)"],
-        group_label="Default Values",
-        group_show_border=True,
-        group_style_sheet=preferences_group_style_sheet,
-        group_columns=2
-    )
-
     view = View(
         Item("_"),
         range_settings,
-        Item("_"),
-        default_settings,
         Item("_"),
         resizable=True
     )
