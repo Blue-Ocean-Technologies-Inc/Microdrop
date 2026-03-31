@@ -78,9 +78,9 @@ class DropbotPreferencesPane(PreferencesPane):
 
         drop_detect_setting, Item("_"),
 
-        create_item_label_group("default_voltage", label_text="Default Voltage (V)"), Item("_"),
+        create_item_label_group("default_voltage", label_text="Last Applied Voltage (V)"), Item("_"),
 
-        create_item_label_group("default_frequency", label_text="Default Frequency (Hz)"), Item("_"),
+        create_item_label_group("default_frequency", label_text="Last Applied Frequency (Hz)"), Item("_"),
 
         label="",
         show_border=True,
