@@ -76,8 +76,9 @@ ACTOR_TOPIC_DICT = {
 DROPLET_DETECTION_CAPACITANCE_THRESHOLD = 10
 DROPLET_DETECTION_FREQUENCY = 1000  # 1 kHz for droplet detection
 
-DEFAULT_VOLTAGE = 100
-DEFAULT_FREQUENCY = 10_000
+# Default voltage/frequency used at startup before any user action
+HARDWARE_DEFAULT_VOLTAGE = 100       # V
+HARDWARE_DEFAULT_FREQUENCY = 10_000  # Hz
 
 # Known hardware minimum limits for DropBot DB3-120
 HARDWARE_MIN_VOLTAGE = 30    # V

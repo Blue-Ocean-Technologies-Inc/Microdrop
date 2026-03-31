@@ -1,13 +1,13 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Float, Int, Dict, Property, Range, Str
+from traits.api import Float, Int, Dict, Property, Range
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 from .consts import (
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
-    DEFAULT_VOLTAGE,
-    DEFAULT_FREQUENCY,
+    HARDWARE_DEFAULT_VOLTAGE,
+    HARDWARE_DEFAULT_FREQUENCY, HARDWARE_MIN_VOLTAGE, HARDWARE_MIN_FREQUENCY,
 )
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
@@ -33,22 +33,25 @@ class DropbotPreferences(PreferencesHelper):
     droplet_detection_capacitance = Float(desc="Threshold for electrode capcitance past which we consider a droplet present.")
     capacitance_update_interval = Int(desc="how often to poll capacitance from dropbot (in ms)")
 
+    # Upper bound is a trait reference (string) — Traits dynamically resolves
+    # it against hardware_max_voltage/hardware_max_frequency at validation time.
     default_voltage = Range(
-        30,
-        140,
-        value=DEFAULT_VOLTAGE,
+        HARDWARE_MIN_VOLTAGE,
+        "hardware_max_voltage",
+        value=HARDWARE_DEFAULT_VOLTAGE,
         desc="the voltage to set on the dropbot device in V",
     )
     default_frequency = Range(
-        100,
-        10_000,
-        value=DEFAULT_FREQUENCY,
+        HARDWARE_MIN_FREQUENCY,
+        "hardware_max_frequency",
+        value=HARDWARE_DEFAULT_FREQUENCY,
         desc="the frequency to set on the dropbot device in Hz",
     )
 
-    # Readonly hardware limits — set at runtime when DropBot connects
-    hardware_max_voltage = Str("-", desc="maximum voltage from connected hardware")
-    hardware_max_frequency = Str("-", desc="maximum frequency from connected hardware")
+    # Readonly hardware limits — set at runtime when DropBot connects.
+    # Default to inf so the Range traits above are unconstrained until a device reports its limits.
+    hardware_max_voltage = Float(float("inf"), desc="maximum voltage from connected hardware")
+    hardware_max_frequency = Float(float("inf"), desc="maximum frequency from connected hardware")
 
     preferences_name_map = Property(Dict)
 
