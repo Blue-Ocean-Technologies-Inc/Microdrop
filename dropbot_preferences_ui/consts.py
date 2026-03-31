@@ -4,7 +4,7 @@ PKG_name = PKG.title().replace("_", " ")
 
 # Default range limits for voltage (V) and frequency (Hz) spinners
 DEFAULT_MIN_VOLTAGE = 30
-DEFAULT_MAX_VOLTAGE = 150
+DEFAULT_MAX_VOLTAGE = 140
 DEFAULT_MIN_FREQUENCY = 100
 DEFAULT_MAX_FREQUENCY = 20_000
 
