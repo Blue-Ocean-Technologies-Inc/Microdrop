@@ -54,7 +54,7 @@ class DropbotStatesSettingMixinService(HasTraits):
                     f"Voltage must be between {HARDWARE_MIN_VOLTAGE} and {self.hardware_max_voltage} V"
                 )
 
-            self.preferences.default_voltage = int(self.voltage)
+            self.preferences.last_voltage = int(self.voltage)
 
             if not hasattr(self, 'proxy') or self.proxy is None:
                 logger.error("Proxy not available for voltage setting")
@@ -84,7 +84,7 @@ class DropbotStatesSettingMixinService(HasTraits):
                     f"Frequency must be between {HARDWARE_MIN_FREQUENCY} and {self.hardware_max_frequency} Hz"
                 )
 
-            self.preferences.default_frequency = int(self.frequency)
+            self.preferences.last_frequency = int(self.frequency)
 
             if not hasattr(self, 'proxy') or self.proxy is None:
                 logger.error("Proxy not available for frequency setting")

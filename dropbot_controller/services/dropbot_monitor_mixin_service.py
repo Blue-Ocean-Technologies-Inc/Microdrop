@@ -148,7 +148,7 @@ class DropbotMonitorMixinService(HasTraits):
             logger.info("DropBot disconnected. Resuming search for dropbot connection.")
             self.on_retry_connection_request(message="")
 
-    @wait_for_proxy(timeout=2)
+    @wait_for_proxy(timeout=4)
     def on_connected_signal(self, message):
         # set connection active in case it was not changed.
         if not self.dropbot_connection_active:
@@ -156,12 +156,14 @@ class DropbotMonitorMixinService(HasTraits):
 
         # Expose hardware limits as readonly info on the preferences model
         try:
-            self.preferences.hardware_max_voltage = self.proxy.config.max_voltage
-            self.preferences.hardware_max_frequency = self.proxy.config.max_frequency
+            self.preferences._hardware_max_voltage = self.proxy.config.max_voltage
+            self.preferences._hardware_max_frequency = self.proxy.config.max_frequency
 
-            logger.info(f"DropBot hardware limits: \n"
-                        f"Max Voltage: {self.preferences.hardware_max_voltage} V\n"
-                        f"Max Frequency: {self.preferences.hardware_max_frequency} Hz\n")
+            cap_interval = self.proxy.state['capacitance_update_interval_ms']
+            logger.info(f"DropBot hardware report: \n"
+                        f"Max Voltage: {self.preferences._hardware_max_voltage} V\n"
+                        f"Max Frequency: {self.preferences._hardware_max_frequency} Hz\n"
+                        f"Capacitance Update Interval (ms): {cap_interval}\n")
 
         except Exception as e:
             logger.warning(f"Could not read hardware limits from proxy config: {e}")
