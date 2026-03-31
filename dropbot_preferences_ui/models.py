@@ -30,7 +30,7 @@ class VoltageFrequencyRangePreferences(PreferencesHelper):
                              desc="maximum allowed frequency in Hz")
 
     # Last-applied values — persisted so spinners restore to previous session's setting
-    ui_default_voltage = Range(low=0, high=300, value=UI_DEFAULT_VOLTAGE,
+    ui_default_voltage = Range(low="ui_min_voltage", high="ui_max_voltage", value=UI_DEFAULT_VOLTAGE,
                                desc="default voltage for UI spinners in V")
-    ui_default_frequency = Range(low=0, high=100_000, value=UI_DEFAULT_FREQUENCY,
+    ui_default_frequency = Range(low="ui_min_frequency", high="ui_max_frequency", value=UI_DEFAULT_FREQUENCY,
                                  desc="default frequency for UI spinners in Hz")

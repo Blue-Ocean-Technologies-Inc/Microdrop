@@ -156,8 +156,9 @@ class DropbotMonitorMixinService(HasTraits):
 
         # Expose hardware limits as readonly info on the preferences model
         try:
-            self.preferences._hardware_max_voltage = self.proxy.config.max_voltage
-            self.preferences._hardware_max_frequency = self.proxy.config.max_frequency
+            with self.proxy.transaction_lock:
+                self.preferences._hardware_max_voltage = self.proxy.config.max_voltage
+                self.preferences._hardware_max_frequency = self.proxy.config.max_frequency
 
             cap_interval = self.proxy.state['capacitance_update_interval_ms']
             logger.info(f"DropBot hardware report: \n"

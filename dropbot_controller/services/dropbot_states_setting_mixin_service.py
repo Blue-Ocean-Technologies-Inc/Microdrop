@@ -30,16 +30,26 @@ class DropbotStatesSettingMixinService(HasTraits):
     @property
     def hardware_max_voltage(self):
         """Maximum voltage supported by the connected DropBot hardware."""
-        if hasattr(self, 'proxy') and self.proxy is not None:
-            return self.proxy.config.max_voltage
-        return 0
+        try:
+            with self.proxy.transaction_lock:
+                max_voltage = self.proxy.config.max_voltage
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            max_voltage = 140
+
+        return max_voltage
 
     @property
     def hardware_max_frequency(self):
         """Maximum frequency supported by the connected DropBot hardware."""
-        if hasattr(self, 'proxy') and self.proxy is not None:
-            return self.proxy.config.max_frequency
-        return 0
+        try:
+            with self.proxy.transaction_lock:
+                max_freq = self.proxy.config.max_frequency
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            max_freq = 10_000
+
+        return max_freq
 
     def on_set_voltage_request(self, message):
         """Set voltage on the dropbot device.
