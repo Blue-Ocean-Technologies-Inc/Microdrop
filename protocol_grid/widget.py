@@ -4,7 +4,8 @@ from pathlib import Path
 
 from dropbot_controller.preferences import DropbotPreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning, information
+
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -925,6 +926,14 @@ class PGCWidget(QWidget):
             except Exception as e:
                 logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
 
+        else:
+            information(
+                None,
+                message="Preview run completed successfully.",
+                title="Preview Complete",
+                timeout=3000,
+            )
+
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
     @with_loading_screen("Generating Run Report...")
@@ -1153,7 +1162,7 @@ class PGCWidget(QWidget):
         # set droplet check mode
         self.protocol_runner.set_droplet_check_enabled(droplet_check_enabled)
 
-        self.protocol_runner.start(run_order, prewarm_seconds=self.preferences.camera_prewarm_seconds)
+        self.protocol_runner.start(run_order)
 
         self.navigation_bar.btn_play.setText(ICON_PAUSE)
         self.navigation_bar.btn_play.setToolTip("Pause Protocol")
@@ -1311,7 +1320,7 @@ class PGCWidget(QWidget):
         self.tree.clearSelection()
         self._last_selected_step_id = None
         self._last_published_step_id = None
-        self.protocol_runner.start(run_order, prewarm_seconds=0)
+        self.protocol_runner.start(run_order)
 
     def stop_protocol(self):
 
