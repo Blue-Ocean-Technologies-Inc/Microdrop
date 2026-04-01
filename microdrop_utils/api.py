@@ -71,6 +71,21 @@ from microdrop_utils.dramatiq_controller_base import (  # noqa: E402
 )
 
 
+# ---------------------------------------------------------------------------
+# Source imports — all topic values come from plugin consts.py modules
+# ---------------------------------------------------------------------------
+from dropbot_controller import consts as _dropbot
+from electrode_controller import consts as _electrode
+from protocol_grid import consts as _protocol
+from microdrop_application import consts as _app
+from peripheral_controller import consts as _peripheral
+from ssh_controls import consts as _ssh
+from opendrop_controller import consts as _opendrop
+from pgva_controller_plugin import consts as _pgva
+from mock_dropbot_controller import consts as _mock
+from dropbot_preferences_ui import consts as _prefs_ui
+
+
 # ===================================================================
 # Topic Constants -- organised by domain / plugin
 # ===================================================================
@@ -84,40 +99,39 @@ class DropbotTopics:
 
     class Signals:
         """Topics emitted by the backend when hardware events occur."""
-        CAPACITANCE_UPDATED     = "dropbot/signals/capacitance_updated"
-        SHORTS_DETECTED         = "dropbot/signals/shorts_detected"
-        HALTED                  = "dropbot/signals/halted"
-        CHIP_INSERTED           = "dropbot/signals/chip_inserted"
-        CHIP_NOT_INSERTED       = "dropbot/signals/chip_not_inserted"
-        SELF_TESTS_PROGRESS     = "dropbot/signals/self_tests_progress"
-        DROPLETS_DETECTED       = "dropbot/signals/drops_detected"
+        CAPACITANCE_UPDATED     = _dropbot.CAPACITANCE_UPDATED
+        SHORTS_DETECTED         = _dropbot.SHORTS_DETECTED
+        HALTED                  = _dropbot.HALTED
+        CHIP_INSERTED           = _dropbot.CHIP_INSERTED
+        SELF_TESTS_PROGRESS     = _dropbot.SELF_TESTS_PROGRESS
+        DROPLETS_DETECTED       = _dropbot.DROPLETS_DETECTED
 
     class Warnings:
         """Warning-level signals published by the backend."""
-        NO_DROPBOT_AVAILABLE    = "dropbot/signals/warnings/no_dropbot_available"
-        NO_POWER                = "dropbot/signals/warnings/no_power"
+        NO_DROPBOT_AVAILABLE    = _dropbot.NO_DROPBOT_AVAILABLE
+        NO_POWER                = _dropbot.NO_POWER
 
     class Requests:
         """Topics consumed by the backend -- send these to request an action."""
-        START_DEVICE_MONITORING             = "dropbot/requests/start_device_monitoring"
-        DETECT_SHORTS                       = "dropbot/requests/detect_shorts"
-        RETRY_CONNECTION                    = "dropbot/requests/retry_connection"
-        HALT                                = "dropbot/requests/halt"
-        SET_VOLTAGE                         = "dropbot/requests/set_voltage"
-        SET_FREQUENCY                       = "dropbot/requests/set_frequency"
-        RUN_ALL_TESTS                       = "dropbot/requests/run_all_tests"
-        TEST_VOLTAGE                        = "dropbot/requests/test_voltage"
-        TEST_ON_BOARD_FEEDBACK_CALIBRATION  = "dropbot/requests/test_on_board_feedback_calibration"
-        TEST_SHORTS                         = "dropbot/requests/test_shorts"
-        TEST_CHANNELS                       = "dropbot/requests/test_channels"
-        CHIP_CHECK                          = "dropbot/requests/chip_check"
-        SELF_TEST_CANCEL                    = "dropbot/requests/self_test_cancel"
-        DETECT_DROPLETS                     = "dropbot/requests/detect_droplets"
-        CHANGE_SETTINGS                     = "dropbot/requests/change_settings"
+        START_DEVICE_MONITORING             = _dropbot.START_DEVICE_MONITORING
+        DETECT_SHORTS                       = _dropbot.DETECT_SHORTS
+        RETRY_CONNECTION                    = _dropbot.RETRY_CONNECTION
+        HALT                                = _dropbot.HALT
+        SET_VOLTAGE                         = _dropbot.SET_VOLTAGE
+        SET_FREQUENCY                       = _dropbot.SET_FREQUENCY
+        RUN_ALL_TESTS                       = _dropbot.RUN_ALL_TESTS
+        TEST_VOLTAGE                        = _dropbot.TEST_VOLTAGE
+        TEST_ON_BOARD_FEEDBACK_CALIBRATION  = _dropbot.TEST_ON_BOARD_FEEDBACK_CALIBRATION
+        TEST_SHORTS                         = _dropbot.TEST_SHORTS
+        TEST_CHANNELS                       = _dropbot.TEST_CHANNELS
+        CHIP_CHECK                          = _dropbot.CHIP_CHECK
+        SELF_TEST_CANCEL                    = _dropbot.SELF_TEST_CANCEL
+        DETECT_DROPLETS                     = _dropbot.DETECT_DROPLETS
+        CHANGE_SETTINGS                     = _dropbot.CHANGE_SETTINGS
 
     class Errors:
         """Error topics for the DropBot domain."""
-        DROPBOT_ERROR           = "dropbot/error"
+        DROPBOT_ERROR           = _dropbot.DROPBOT_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -129,34 +143,35 @@ class HardwareTopics:
 
     class Signals:
         """Signals emitted by hardware backends."""
-        CONNECTED               = "hardware/signals/connected"
-        DISCONNECTED            = "hardware/signals/disconnected"
-        REALTIME_MODE_UPDATED   = "hardware/signals/realtime_mode_updated"
-        DISABLED_CHANNELS_CHANGED = "hardware/signals/disabled_channels_changed"
+        CONNECTED                 = _dropbot.DROPBOT_CONNECTED
+        DISCONNECTED              = _dropbot.DROPBOT_DISCONNECTED
+        REALTIME_MODE_UPDATED     = _dropbot.REALTIME_MODE_UPDATED
+        DISABLED_CHANNELS_CHANGED = _dropbot.DISABLED_CHANNELS_CHANGED
 
     class Requests:
         """Requests accepted by hardware backends."""
-        ELECTRODES_STATE_CHANGE = "hardware/requests/electrodes_state_change"
-        ELECTRODES_DISABLE      = "hardware/requests/electrodes_disable"
-        SET_REALTIME_MODE       = "hardware/requests/set_realtime_mode"
+        ELECTRODES_STATE_CHANGE = _electrode.ELECTRODES_STATE_CHANGE
+        ELECTRODES_DISABLE      = _electrode.ELECTRODES_DISABLE_REQUEST
+        SET_REALTIME_MODE       = _dropbot.SET_REALTIME_MODE
 
 
 # ---------------------------------------------------------------------------
-# UI Topics  (protocol_grid/consts.py, device_viewer)
+# UI Topics  (protocol_grid/consts.py, dropbot_preferences_ui/consts.py)
 # ---------------------------------------------------------------------------
 
 class UITopics:
     """Topics for UI state synchronisation between frontend plugins."""
 
-    DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
-    PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
-    CALIBRATION_DATA            = "ui/calibration_data"
-    DEVICE_VIEWER_SCREEN_CAPTURE    = "ui/device_viewer/screen_capture"
-    DEVICE_VIEWER_SCREEN_RECORDING  = "ui/device_viewer/screen_recording"
-    DEVICE_VIEWER_CAMERA_ACTIVE     = "ui/device_viewer/camera_active"
-    DEVICE_VIEWER_MEDIA_CAPTURED    = "ui/device_viewer/camera/media_captured"
-    DEVICE_VIEWER_RECORDING_STATE   = "ui/device_viewer/recording_state"
-    ROUTES_EXECUTING                = "ui/device_viewer/routes_executing"
+    DEVICE_VIEWER_STATE_CHANGED     = _protocol.DEVICE_VIEWER_STATE_CHANGED
+    PROTOCOL_GRID_DISPLAY_STATE     = _protocol.PROTOCOL_GRID_DISPLAY_STATE
+    CALIBRATION_DATA                = _protocol.CALIBRATION_DATA
+    DEVICE_VIEWER_SCREEN_CAPTURE    = _protocol.DEVICE_VIEWER_SCREEN_CAPTURE
+    DEVICE_VIEWER_SCREEN_RECORDING  = _protocol.DEVICE_VIEWER_SCREEN_RECORDING
+    DEVICE_VIEWER_CAMERA_ACTIVE     = _protocol.DEVICE_VIEWER_CAMERA_ACTIVE
+    DEVICE_VIEWER_MEDIA_CAPTURED    = _protocol.DEVICE_VIEWER_MEDIA_CAPTURED
+    DEVICE_VIEWER_RECORDING_STATE   = _protocol.DEVICE_VIEWER_RECORDING_STATE
+    ROUTES_EXECUTING                = _protocol.ROUTES_EXECUTING
+    VOLTAGE_FREQUENCY_RANGE_CHANGED = _prefs_ui.VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 
 # ---------------------------------------------------------------------------
@@ -165,8 +180,8 @@ class UITopics:
 
 class ApplicationTopics:
     """Application-wide topics published by the core MicroDrop plugin."""
-    ADVANCED_MODE_CHANGE    = "microdrop/advanced_mode_change"
-    PROTOCOL_RUNNING        = "microdrop/protocol_running"
+    ADVANCED_MODE_CHANGE    = _app.ADVANCED_MODE_CHANGE
+    PROTOCOL_RUNNING        = _protocol.PROTOCOL_RUNNING
 
 
 # ---------------------------------------------------------------------------
@@ -176,27 +191,27 @@ class ApplicationTopics:
 class ZStageTopics:
     """Topics for the ZStage peripheral (MR-Box magnets / z-stage)."""
 
-    DEVICE_NAME = "ZStage"
+    DEVICE_NAME = _peripheral.DEVICE_NAME
 
     class Signals:
         """Signals emitted by the ZStage backend."""
-        CONNECTED           = "ZStage/signals/connected"
-        DISCONNECTED        = "ZStage/signals/disconnected"
-        POSITION_UPDATED    = "ZStage/signals/position_updated"
+        CONNECTED           = _peripheral.CONNECTED
+        DISCONNECTED        = _peripheral.DISCONNECTED
+        POSITION_UPDATED    = _peripheral.ZSTAGE_POSITION_UPDATED
 
     class Requests:
         """Requests accepted by the ZStage backend."""
-        START_DEVICE_MONITORING = "ZStage/requests/start_device_monitoring"
-        GO_HOME                 = "ZStage/requests/go_home"
-        MOVE_UP                 = "ZStage/requests/move_up"
-        MOVE_DOWN               = "ZStage/requests/move_down"
-        SET_POSITION            = "ZStage/requests/set_position"
-        RETRY_CONNECTION        = "ZStage/requests/retry_connection"
-        UPDATE_CONFIG           = "ZStage/requests/update_config"
+        START_DEVICE_MONITORING = _peripheral.START_DEVICE_MONITORING
+        GO_HOME                 = _peripheral.GO_HOME
+        MOVE_UP                 = _peripheral.MOVE_UP
+        MOVE_DOWN               = _peripheral.MOVE_DOWN
+        SET_POSITION            = _peripheral.SET_POSITION
+        RETRY_CONNECTION        = _peripheral.RETRY_CONNECTION
+        UPDATE_CONFIG           = _peripheral.UPDATE_CONFIG
 
     class Errors:
         """Error topics for the ZStage domain."""
-        ERROR               = "ZStage/error"
+        ERROR               = _peripheral.ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -208,22 +223,22 @@ class SSHTopics:
 
     class Requests:
         """Requests accepted by the SSH controls backend."""
-        GENERATE_KEYPAIR    = "ssh_service/request/generate_keypair"
-        KEY_UPLOAD          = "ssh_service/request/key_upload"
+        GENERATE_KEYPAIR    = _ssh.GENERATE_KEYPAIR
+        KEY_UPLOAD          = _ssh.KEY_UPLOAD
 
     class Success:
         """Success signals published by the SSH controls backend."""
-        SSH_KEYGEN_SUCCESS      = "ssh_service/success/ssh_keygen_success"
-        SSH_KEY_UPLOAD_SUCCESS  = "ssh_service/success/ssh_key_upload_success"
+        SSH_KEYGEN_SUCCESS      = _ssh.SSH_KEYGEN_SUCCESS
+        SSH_KEY_UPLOAD_SUCCESS  = _ssh.SSH_KEY_UPLOAD_SUCCESS
 
     class Warnings:
         """Warning signals published by the SSH controls backend."""
-        SSH_KEYGEN_WARNING  = "ssh_service/warning/ssh_keygen_warning"
+        SSH_KEYGEN_WARNING  = _ssh.SSH_KEYGEN_WARNING
 
     class Errors:
         """Error signals published by the SSH controls backend."""
-        SSH_KEYGEN_ERROR        = "ssh_service/error/ssh_keygen_error"
-        SSH_KEY_UPLOAD_ERROR    = "ssh_service/error/ssh_key_upload_error"
+        SSH_KEYGEN_ERROR        = _ssh.SSH_KEYGEN_ERROR
+        SSH_KEY_UPLOAD_ERROR    = _ssh.SSH_KEY_UPLOAD_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -235,19 +250,19 @@ class OpenDropTopics:
 
     class Signals:
         """Signals emitted by the OpenDrop backend."""
-        TEMPERATURES_UPDATED    = "opendrop/signals/temperatures_updated"
-        FEEDBACK_UPDATED        = "opendrop/signals/feedback_updated"
-        BOARD_INFO              = "opendrop/signals/board_info"
+        TEMPERATURES_UPDATED    = _opendrop.OPENDROP_TEMPERATURES_UPDATED
+        FEEDBACK_UPDATED        = _opendrop.OPENDROP_FEEDBACK_UPDATED
+        BOARD_INFO              = _opendrop.OPENDROP_BOARD_INFO
 
     class Requests:
         """Requests accepted by the OpenDrop backend."""
-        RETRY_CONNECTION    = "opendrop/requests/retry_connection"
-        SET_FEEDBACK        = "opendrop/requests/set_feedback"
-        SET_TEMPERATURES    = "opendrop/requests/set_temperatures"
-        SET_TEMPERATURE_1   = "opendrop/requests/set_temperature_1"
-        SET_TEMPERATURE_2   = "opendrop/requests/set_temperature_2"
-        SET_TEMPERATURE_3   = "opendrop/requests/set_temperature_3"
-        CHANGE_SETTINGS     = "opendrop/requests/change_settings"
+        RETRY_CONNECTION    = _opendrop.RETRY_CONNECTION
+        SET_FEEDBACK        = _opendrop.SET_FEEDBACK
+        SET_TEMPERATURES    = _opendrop.SET_TEMPERATURES
+        SET_TEMPERATURE_1   = _opendrop.SET_TEMPERATURE_1
+        SET_TEMPERATURE_2   = _opendrop.SET_TEMPERATURE_2
+        SET_TEMPERATURE_3   = _opendrop.SET_TEMPERATURE_3
+        CHANGE_SETTINGS     = _opendrop.CHANGE_SETTINGS
 
 
 # ---------------------------------------------------------------------------
@@ -259,40 +274,40 @@ class PGVATopics:
 
     class Signals:
         """Signals emitted by the PGVA backend."""
-        CONNECTED                   = "pgva/signals/connected"
-        DISCONNECTED                = "pgva/signals/disconnected"
-        PRESSURE_UPDATED            = "pgva/signals/pressure_updated"
-        VACUUM_UPDATED              = "pgva/signals/vacuum_updated"
-        OUTPUT_PRESSURE_UPDATED     = "pgva/signals/output_pressure_updated"
-        STATUS_UPDATED              = "pgva/signals/status_updated"
-        WARNINGS_UPDATED            = "pgva/signals/warnings_updated"
-        ERRORS_UPDATED              = "pgva/signals/errors_updated"
-        COMPREHENSIVE_STATUS_UPDATED = "pgva/signals/comprehensive_status_updated"
-        HEALTH_CHECK_UPDATED        = "pgva/signals/health_check_updated"
-        DEVICE_INFO_UPDATED         = "pgva/signals/device_info_updated"
-        ERROR                       = "pgva/signals/error"
+        CONNECTED                    = _pgva.PGVA_CONNECTED
+        DISCONNECTED                 = _pgva.PGVA_DISCONNECTED
+        PRESSURE_UPDATED             = _pgva.PGVA_PRESSURE_UPDATED
+        VACUUM_UPDATED               = _pgva.PGVA_VACUUM_UPDATED
+        OUTPUT_PRESSURE_UPDATED      = _pgva.PGVA_OUTPUT_PRESSURE_UPDATED
+        STATUS_UPDATED               = _pgva.PGVA_STATUS_UPDATED
+        WARNINGS_UPDATED             = _pgva.PGVA_WARNINGS_UPDATED
+        ERRORS_UPDATED               = _pgva.PGVA_ERRORS_UPDATED
+        COMPREHENSIVE_STATUS_UPDATED = _pgva.PGVA_COMPREHENSIVE_STATUS_UPDATED
+        HEALTH_CHECK_UPDATED         = _pgva.PGVA_HEALTH_CHECK_UPDATED
+        DEVICE_INFO_UPDATED          = _pgva.PGVA_DEVICE_INFO_UPDATED
+        ERROR                        = _pgva.PGVA_ERROR_SIGNAL
 
     class Requests:
         """Requests accepted by the PGVA backend."""
-        SET_PRESSURE            = "pgva/requests/set_pressure"
-        SET_VACUUM              = "pgva/requests/set_vacuum"
-        SET_OUTPUT_PRESSURE     = "pgva/requests/set_output_pressure"
-        GET_PRESSURE            = "pgva/requests/get_pressure"
-        GET_VACUUM              = "pgva/requests/get_vacuum"
-        GET_OUTPUT_PRESSURE     = "pgva/requests/get_output_pressure"
-        GET_STATUS              = "pgva/requests/get_status"
-        GET_WARNINGS            = "pgva/requests/get_warnings"
-        GET_ERRORS              = "pgva/requests/get_errors"
-        GET_COMPREHENSIVE_STATUS = "pgva/requests/get_comprehensive_status"
-        GET_HEALTH_CHECK        = "pgva/requests/get_health_check"
-        GET_DEVICE_INFO         = "pgva/requests/get_device_info"
-        ENABLE                  = "pgva/requests/enable"
-        DISABLE                 = "pgva/requests/disable"
-        RESET                   = "pgva/requests/reset"
-        TRIGGER_MANUAL          = "pgva/requests/trigger_manual"
-        STORE_TO_EEPROM         = "pgva/requests/store_to_eeprom"
-        CONNECT                 = "pgva/requests/connect"
-        DISCONNECT              = "pgva/requests/disconnect"
+        SET_PRESSURE            = _pgva.SET_PRESSURE
+        SET_VACUUM              = _pgva.SET_VACUUM
+        SET_OUTPUT_PRESSURE     = _pgva.SET_OUTPUT_PRESSURE
+        GET_PRESSURE            = _pgva.GET_PRESSURE
+        GET_VACUUM              = _pgva.GET_VACUUM
+        GET_OUTPUT_PRESSURE     = _pgva.GET_OUTPUT_PRESSURE
+        GET_STATUS              = _pgva.GET_STATUS
+        GET_WARNINGS            = _pgva.GET_WARNINGS
+        GET_ERRORS              = _pgva.GET_ERRORS
+        GET_COMPREHENSIVE_STATUS = _pgva.GET_COMPREHENSIVE_STATUS
+        GET_HEALTH_CHECK        = _pgva.GET_HEALTH_CHECK
+        GET_DEVICE_INFO         = _pgva.GET_DEVICE_INFO
+        ENABLE                  = _pgva.ENABLE_PGVA
+        DISABLE                 = _pgva.DISABLE_PGVA
+        RESET                   = _pgva.RESET_PGVA
+        TRIGGER_MANUAL          = _pgva.TRIGGER_MANUAL
+        STORE_TO_EEPROM         = _pgva.STORE_TO_EEPROM
+        CONNECT                 = _pgva.CONNECT_PGVA
+        DISCONNECT              = _pgva.DISCONNECT_PGVA
 
 
 # ---------------------------------------------------------------------------
@@ -304,17 +319,17 @@ class MockDropbotTopics:
 
     class Requests:
         """Requests accepted by the mock DropBot backend."""
-        CHANGE_SIM_SETTINGS     = "mock_dropbot/requests/change_simulation_settings"
-        SIMULATE_CONNECT        = "mock_dropbot/requests/simulate_connect"
-        SIMULATE_DISCONNECT     = "mock_dropbot/requests/simulate_disconnect"
-        SIMULATE_CHIP_INSERT    = "mock_dropbot/requests/simulate_chip_insert"
-        SIMULATE_SHORTS         = "mock_dropbot/requests/simulate_shorts"
-        SIMULATE_HALT           = "mock_dropbot/requests/simulate_halt"
+        CHANGE_SIM_SETTINGS     = _mock.MOCK_CHANGE_SIM_SETTINGS
+        SIMULATE_CONNECT        = _mock.MOCK_SIMULATE_CONNECT
+        SIMULATE_DISCONNECT     = _mock.MOCK_SIMULATE_DISCONNECT
+        SIMULATE_CHIP_INSERT    = _mock.MOCK_SIMULATE_CHIP_INSERT
+        SIMULATE_SHORTS         = _mock.MOCK_SIMULATE_SHORTS
+        SIMULATE_HALT           = _mock.MOCK_SIMULATE_HALT
 
     class Signals:
         """Signals emitted by the mock DropBot backend."""
-        ACTUATED_CHANNELS_UPDATED   = "mock_dropbot/signals/actuated_channels_updated"
-        STREAM_STATUS_UPDATED       = "mock_dropbot/signals/stream_status_updated"
+        ACTUATED_CHANNELS_UPDATED   = _mock.MOCK_ACTUATED_CHANNELS_UPDATED
+        STREAM_STATUS_UPDATED       = _mock.MOCK_STREAM_STATUS_UPDATED
 
 
 # ===================================================================
