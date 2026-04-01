@@ -33,18 +33,17 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
-    _range_prefs = VoltageFrequencyRangePreferences()
+    voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
     voltage = RangeWithCustomViewHints(
-        int(_range_prefs.ui_min_voltage), int(_range_prefs.ui_max_voltage),
-        value=int(_range_prefs.ui_default_voltage), suffix=" V",
+        int(voltage_frequency_range_prefs.ui_min_voltage), int(voltage_frequency_range_prefs.ui_max_voltage),
+        value=int(voltage_frequency_range_prefs.ui_default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        int(_range_prefs.ui_min_frequency), int(_range_prefs.ui_max_frequency),
-        value=int(_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
+        int(voltage_frequency_range_prefs.ui_min_frequency), int(voltage_frequency_range_prefs.ui_max_frequency),
+        value=int(voltage_frequency_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
-    del _range_prefs
 
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")
@@ -103,6 +102,12 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("force")
     def _update_force_display(self, event):
         self.force_display = self._format_reading(event.new)
+
+    @observe("voltage, frequency")
+    def _update_prefs(self, event):
+        """Persist last-applied voltage/frequency to UI preferences on every change."""
+        logger.debug(f"Updating preferences: {event}")
+        self.voltage_frequency_range_prefs.trait_set(**{f"ui_default_{event.name}": event.new})
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
