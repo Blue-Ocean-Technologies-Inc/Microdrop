@@ -13,7 +13,6 @@ from PySide6.QtGui import QStandardItem
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
-from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from protocol_grid.consts import (
     GROUP_TYPE,
     STEP_TYPE,
@@ -22,8 +21,6 @@ from protocol_grid.consts import (
     CHECKBOX_COLS,
     ALLOWED_group_fields,
 )
-
-_range_prefs = VoltageFrequencyRangePreferences()
 
 
 class PGCItem(QStandardItem):
@@ -44,6 +41,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
+
+        self._voltage_frequency_range_prefs = self.parent_widget._voltage_frequency_range_prefs
 
     def paint(self, painter, option, index):
         """
@@ -68,6 +67,8 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                 return None
 
         field = protocol_grid_fields[index.column()]
+
+        _range_prefs = self._voltage_frequency_range_prefs
 
         if field == "Force":
             return None            

@@ -41,7 +41,6 @@ from protocol_grid.state.protocol_state import (
 )
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (
-    DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_GRID_DISPLAY_STATE,
     CALIBRATION_DATA,
     GROUP_TYPE,
@@ -269,13 +268,13 @@ class PGCWidget(QWidget):
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
                                                         preferences=self.application.preferences, parent=self)
 
-        _range_prefs = VoltageFrequencyRangePreferences(preferences=self.application.preferences)
+        self._voltage_frequency_range_prefs = _voltage_frequency_range_prefs = VoltageFrequencyRangePreferences(preferences=self.application.preferences)
 
         self.preferences = ProtocolPreferences(preferences=self.application.preferences)
 
         step_defaults.update({
-        "Voltage": f"{float(_range_prefs.ui_default_voltage)}",
-        "Frequency": f"{float(_range_prefs.ui_default_frequency)}",
+        "Voltage": f"{float(_voltage_frequency_range_prefs.ui_default_voltage)}",
+        "Frequency": f"{float(_voltage_frequency_range_prefs.ui_default_frequency)}",
         })
 
         _device_viewer_prefs = DeviceViewerPreferences(preferences=self.application.preferences)
@@ -557,15 +556,15 @@ class PGCWidget(QWidget):
         self.tree.setToolTip(_tooltip)
 
     def _on_voltage_frequency_range_changed(self, message: str):
-        """Update the delegate's range prefs so new cell editors use the updated bounds.
+        """Update range prefs so new cell editors use the updated bounds.
 
-        The protocol grid delegate reads from the module-level _range_prefs when
+        The protocol grid delegate reads from the shared prefs instance when
         creating new spinners. Updating it here ensures the next cell edit will
         use the new range without requiring an app restart.
         """
-        import json
-        from protocol_grid.protocol_grid_helpers import _range_prefs
         data = json.loads(message)
+
+        _range_prefs = self._voltage_frequency_range_prefs
         _range_prefs.ui_min_voltage = data['ui_min_voltage']
         _range_prefs.ui_max_voltage = data['ui_max_voltage']
         _range_prefs.ui_min_frequency = data['ui_min_frequency']
