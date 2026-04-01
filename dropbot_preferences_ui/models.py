@@ -18,7 +18,7 @@ class VoltageFrequencyRangePreferences(PreferencesHelper):
     backend hardware validation.
     """
 
-    preferences_path = "microdrop.voltage_frequency_range"
+    preferences_path = "microdrop.ui.voltage_frequency_range"
 
     ui_min_voltage = Range(low=0, high=300, value=UI_DEFAULT_MIN_VOLTAGE,
                            desc="minimum allowed voltage in V")
