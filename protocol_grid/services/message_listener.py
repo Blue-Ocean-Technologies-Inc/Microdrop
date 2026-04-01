@@ -14,7 +14,8 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
                                   CALIBRATION_DATA, DEVICE_VIEWER_MEDIA_CAPTURED,
-                                  DEVICE_VIEWER_RECORDING_STATE, ROUTES_EXECUTING)
+                                  DEVICE_VIEWER_RECORDING_STATE, ROUTES_EXECUTING,
+                                  VOLTAGE_FREQUENCY_RANGE_CHANGED)
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,7 @@ class MessageListenerSignalEmitter(QObject):
     advanced_mode_changed = Signal(bool)
     video_recording_state_changed = Signal(bool)  # True when recording active
     routes_executing_changed = Signal(bool)  # True when device viewer routes are executing
+    voltage_frequency_range_changed = Signal(str)  # JSON payload with new min/max values
 
 
 class MessageListener(HasTraits):
@@ -100,6 +102,10 @@ class MessageListener(HasTraits):
                 is_executing = message.casefold() == "true"
                 logger.info(f"Routes executing state changed: {is_executing}")
                 self.signal_emitter.routes_executing_changed.emit(is_executing)
+
+            elif topic == VOLTAGE_FREQUENCY_RANGE_CHANGED:
+                logger.info("Voltage/frequency range preferences changed")
+                self.signal_emitter.voltage_frequency_range_changed.emit(message)
 
             else:
                 logger.info(f"Unhandled message topic: {topic}")

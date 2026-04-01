@@ -1,6 +1,6 @@
 from traits.api import Bool, Str, observe
 
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
 
@@ -33,12 +33,15 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
+    voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
     voltage = RangeWithCustomViewHints(
-        30, 140, value=DropbotPreferences().default_voltage, suffix=" V",
+        int(voltage_frequency_range_prefs.ui_min_voltage), int(voltage_frequency_range_prefs.ui_max_voltage),
+        value=int(voltage_frequency_range_prefs.ui_default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
+        int(voltage_frequency_range_prefs.ui_min_frequency), int(voltage_frequency_range_prefs.ui_max_frequency),
+        value=int(voltage_frequency_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
 
@@ -99,6 +102,12 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("force")
     def _update_force_display(self, event):
         self.force_display = self._format_reading(event.new)
+
+    @observe("voltage, frequency")
+    def _update_prefs(self, event):
+        """Persist last-applied voltage/frequency to UI preferences on every change."""
+        logger.debug(f"Updating preferences: {event}")
+        self.voltage_frequency_range_prefs.trait_set(**{f"ui_default_{event.name}": event.new})
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

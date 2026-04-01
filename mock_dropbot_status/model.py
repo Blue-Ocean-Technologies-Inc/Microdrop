@@ -6,7 +6,7 @@ from microdrop_style.colors import GREY, SUCCESS_COLOR, WARNING_COLOR, ERROR_COL
 from mock_dropbot_controller.consts import (
     DEFAULT_BASE_CAPACITANCE_PF, DEFAULT_CAPACITANCE_DELTA_PF,
     DEFAULT_CAPACITANCE_NOISE_PF, DEFAULT_STREAM_INTERVAL_MS,
-    DEFAULT_VOLTAGE, DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
+    HARDWARE_DEFAULT_VOLTAGE, HARDWARE_DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
 )
 
 from logger.logger_service import get_logger
@@ -32,8 +32,8 @@ class MockDropbotStatusModel(BaseStatusModel):
     stream_interval_ms = Range(50, 5000, value=DEFAULT_STREAM_INTERVAL_MS, desc="Stream publish interval in ms")
     stream_active = Bool(False, desc="Whether capacitance stream is active")
 
-    voltage = Float(DEFAULT_VOLTAGE)
-    frequency = Float(DEFAULT_FREQUENCY)
+    voltage = Float(HARDWARE_DEFAULT_VOLTAGE)
+    frequency = Float(HARDWARE_DEFAULT_FREQUENCY)
     num_channels = Int(DEFAULT_NUM_CHANNELS)
 
     shorts_channels_text = Str("5, 12, 18", desc="Comma-separated channel indices for simulated shorts")
