@@ -41,7 +41,7 @@ from .message_dialog_types import (
     ErrorAlertDialog,
     InformationDialog,
     SuccessDialog,
-    WarningAlertDialog,
+    WarningAlertDialog, DisclaimerDialog,
 )
 
 
@@ -243,6 +243,19 @@ def warning(
     mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
     return _with_checkbox(dialog, mapped)
 
+def disclaimer(
+        parent=None,
+        title: str = "Disclaimer",
+        message: str = "Disclaimer text goes here.",
+        ack_button_text: str = "I Understand",
+        **kwargs,
+):
+    dialog = DisclaimerDialog(parent, title, message, ack_button_text, **kwargs)
+
+    result = dialog.exec()
+
+    mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
+    return _with_checkbox(dialog, mapped)
 
 def error(
     parent: Optional[QWidget] = None,

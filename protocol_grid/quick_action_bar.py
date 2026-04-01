@@ -115,9 +115,17 @@ class QuickProtocolActionsController:
             return
         selected_paths = self.protocol_grid.get_selected_paths()
 
-        has_selection = len(selected_paths) > 0
+        _enable_import_protocol = False
+        has_single_selection = len(selected_paths) == 1
+        if has_single_selection:
+            current_path = selected_paths[0]
+            current_item = self.protocol_grid.get_item_by_path(current_path)
+            if current_item:
+                if current_item.data(ROW_TYPE_ROLE) == GROUP_TYPE:
+                    _enable_import_protocol = True
+
         if not self.protocol_grid._protocol_running:
-            self.view.actions["import_protocol"].setEnabled(has_selection)
+            self.view.actions["import_protocol"].setEnabled(_enable_import_protocol)
 
     def _update_ui_enabled_state(self, enabled):
         for id in [el[0] for el in quick_protocol_actions]:

@@ -22,7 +22,7 @@ left = HGroup(
             "realtime_mode",
             style="custom",
             editor=ToggleEditorFactory(),
-            enabled_when="connected and not halted",
+            enabled_when="connected and not halted and not protocol_running",
         ),
         Spring("10"),
     ),

@@ -1,4 +1,4 @@
-from pyface.action.schema.schema_addition import SchemaAddition
+# from pyface.action.schema.schema_addition import SchemaAddition
 
 from template_status_and_controls.base_plugin import BaseStatusPlugin
 
@@ -18,12 +18,12 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 
-    def _get_menu_additions(self) -> list:
-        from .menus import menu_factory
-        return [
-            SchemaAddition(
-                factory=menu_factory,
-                before="TaskToggleGroup",
-                path="MenuBar/View",
-            )
-        ]
+    # def _get_menu_additions(self) -> list:
+    #     from .menus import menu_factory
+    #     return [
+    #         SchemaAddition(
+    #             factory=menu_factory,
+    #             before="TaskToggleGroup",
+    #             path="MenuBar/View",
+    #         )
+    #     ]

@@ -668,7 +668,7 @@ class ProtocolRunnerController(QObject):
     def set_preview_mode(self, preview_mode):
         self._preview_mode = preview_mode
 
-    def start(self, run_order: list[Dict[str, Any]], prewarm_seconds: float) -> None:
+    def start(self, run_order: list[Dict[str, Any]]) -> None:
         """
         Initializes and starts the protocol execution.
 
@@ -678,7 +678,6 @@ class ProtocolRunnerController(QObject):
 
         Args:
             run_order: A list of dictionaries defining the steps to execute.
-            prewarm_seconds: The duration (in seconds) required to prewarm the camera.
         """
         if self._is_running:
             logger.warning("Protocol already running. Ignoring start request.")
@@ -743,9 +742,6 @@ class ProtocolRunnerController(QObject):
         """
         Compiles the camera prewarm schedule and injects video states and offsets
         directly into the current run order. Updates the unique step count.
-
-        Args:
-            prewarm_seconds: Prewarm requirement in seconds.
 
         Returns:
             A tuple containing the generated (video_on_mask, offset_seconds_arr).
