@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QStandardItem
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
 from protocol_grid.consts import (
@@ -42,7 +43,16 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.parent_widget = parent
 
-        self._voltage_frequency_range_prefs = self.parent_widget._voltage_frequency_range_prefs
+        # Share the widget's range prefs instance so spinner bounds stay in sync.
+        # Fall back to a fresh instance if the parent doesn't provide one.
+        if hasattr(parent, "_voltage_frequency_range_prefs"):
+            prefs = getattr(parent, "_voltage_frequency_range_prefs")
+            if isinstance(prefs, VoltageFrequencyRangePreferences):
+                self._voltage_frequency_range_prefs = prefs
+            else:
+                self._voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
+        else:
+            self._voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
 
     def paint(self, painter, option, index):
         """
@@ -206,11 +216,13 @@ class ProtocolGridDelegate(QStyledItemDelegate):
         elif isinstance(editor, (QSpinBox, QDoubleSpinBox)):
             value = editor.value()
 
-            # A. Side Effects (Publishing)
+            # A. Side Effects (Publishing + persisting UI default)
             if field == "Voltage":
                 publish_message(str(value), SET_VOLTAGE)
+                self._voltage_frequency_range_prefs.ui_default_voltage = int(value)
             elif field == "Frequency":
                 publish_message(str(value), SET_FREQUENCY)
+                self._voltage_frequency_range_prefs.ui_default_frequency = int(value)
 
             # B. Saving Data
             if field == "Magnet Height (mm)":
