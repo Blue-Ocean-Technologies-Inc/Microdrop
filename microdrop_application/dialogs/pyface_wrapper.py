@@ -173,12 +173,12 @@ def information(
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, detail_collapsible, **kwargs)
 
-    result = dialog.exec()
-
     if timeout: # temp message
+        dialog.show()
         QTimer.singleShot(timeout, dialog.close)
 
     else:
+        result = dialog.exec()
         mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
         return _with_checkbox(dialog, mapped)
 
