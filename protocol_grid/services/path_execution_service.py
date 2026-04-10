@@ -35,7 +35,6 @@ class PathExecutionService:
             return 1
 
         cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
-        single_cycle_duration = len(cycle_phases) * duration
 
         if repeat_duration <= 0:
             return original_repetitions
@@ -54,13 +53,10 @@ class PathExecutionService:
         if cycle_length <= 0 or duration <= 0:
             return max(original_repetitions, 1)
 
-        max_reps_by_duration = int((repeat_duration / duration - 1) / cycle_length)
+        max_reps_by_duration = int(((repeat_duration / duration) - 1) / cycle_length)
         max_reps_by_duration = max(max_reps_by_duration, 1)  # at least 1 rep
 
-        # Use whichever is larger: the user-specified repetitions or the duration-derived count
-        effective_reps = max(original_repetitions, max_reps_by_duration)
-
-        return effective_reps
+        return max_reps_by_duration
 
     @staticmethod
     def calculate_loop_balance_idle_phases(path: List[str], effective_repetitions: int,
@@ -198,7 +194,8 @@ class PathExecutionService:
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState) -> float:
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
-        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0"))
+        repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
+        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0")) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
 
@@ -247,7 +244,8 @@ class PathExecutionService:
         """calculate repetition information for status bar display."""
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
-        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0"))
+        repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
+        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0")) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
@@ -285,7 +283,8 @@ class PathExecutionService:
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState) -> List[Dict[str, Any]]:
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
-        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0"))
+        repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
+        repeat_duration = float(step.parameters.get("Repeat Duration", "1.0")) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
         
@@ -462,12 +461,19 @@ class PathExecutionService:
         step_uid: str = "",
         step_id: str = "",
         step_description: str = "Step",
+        repeat_duration_mode: bool = True,
     ) -> List[Dict[str, Any]]:
-        """Calculate execution plan from raw parameters without needing ProtocolStep or DeviceState."""
+        """Calculate execution plan from raw parameters without needing ProtocolStep or DeviceState.
+
+        When repeat_duration_mode is True (default), repeat_duration is used to
+        cap how many loops fit in the allotted time.  When False, each loop runs
+        exactly ``repetitions`` times regardless of repeat_duration.
+        """
         step = ProtocolStep(parameters={
             "Duration": str(duration),
             "Repetitions": str(repetitions),
             "Repeat Duration": str(repeat_duration),
+            "Repeat Duration Mode": "1" if repeat_duration_mode else "0",
             "Trail Length": str(trail_length),
             "Trail Overlay": str(trail_overlay),
             "UID": step_uid,

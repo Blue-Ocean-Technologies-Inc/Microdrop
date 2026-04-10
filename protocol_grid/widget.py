@@ -34,6 +34,7 @@ from protocol_grid.quick_action_bar import (
     QuickProtocolActionsController,
 )
 from protocol_grid.services.message_listener import MessageListenerSignalEmitter
+from protocol_grid.services.path_execution_service import PathExecutionService
 from protocol_grid.state.protocol_state import (
     ProtocolState,
     ProtocolStep,
@@ -47,6 +48,7 @@ from protocol_grid.consts import (
     GROUP_TYPE,
     STEP_TYPE,
     ROW_TYPE_ROLE,
+    REPEAT_DURATION_CONTROLS_ROLE,
     step_defaults,
     group_defaults,
     protocol_grid_fields,
@@ -2342,6 +2344,12 @@ class PGCWidget(QWidget):
                     parameters["UID"] = str(uid)
 
                 if row_type == STEP_TYPE:
+                    # Persist the repeat-duration-controls flag
+                    if desc_item.data(REPEAT_DURATION_CONTROLS_ROLE):
+                        parameters["Repeat Duration Mode"] = "1"
+                    else:
+                        parameters["Repeat Duration Mode"] = "0"
+
                     step = ProtocolStep(
                         parameters=parameters,
                         name=parameters.get("Description", "Step"),
@@ -2446,6 +2454,9 @@ class PGCWidget(QWidget):
                 if isinstance(element, ProtocolStep):
                     row_items = make_row(step_defaults, element.parameters, STEP_TYPE)
                     row_items[0].setData(element.device_state, Qt.UserRole + 100)
+                    # Restore repeat-duration-controls flag
+                    if element.parameters.get("Repeat Duration Mode") == "1":
+                        row_items[0].setData(True, REPEAT_DURATION_CONTROLS_ROLE)
                     parent_item.appendRow(row_items)
 
                 elif isinstance(element, ProtocolGroup):
@@ -2560,6 +2571,11 @@ class PGCWidget(QWidget):
             # For steps, restrict Repetitions > 1 to only routes with a loop
             if field == "Repetitions":
                 self._enforce_step_repetition_requires_loop(desc_item, item)
+                if not self._handle_repetitions_mode_switch(desc_item, item):
+                    return
+            elif field == "Repeat Duration":
+                if not self._handle_repeat_duration_mode_switch(desc_item, parent, row):
+                    return
             self.update_single_step_dev_fields(desc_item, changed_field=field)
 
         if field == "Repetitions":
@@ -2748,6 +2764,121 @@ class PGCWidget(QWidget):
 
         return max_loop_duration
 
+    def _handle_repeat_duration_mode_switch(self, desc_item, parent, row):
+        """Ask to switch control to Repeat Duration when the user edits that field.
+
+        Returns True if the edit should proceed, False to revert.
+        """
+        if getattr(self, "_loading_from_file", False):
+            return True
+
+        duration_controls = desc_item.data(REPEAT_DURATION_CONTROLS_ROLE)
+        if duration_controls:
+            return True  # already in this mode
+
+        repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+        repeat_duration_item = parent.child(row, repeat_duration_col)
+        if not repeat_duration_item:
+            return True
+
+        try:
+            val = float(repeat_duration_item.text() or "0")
+        except ValueError:
+            return True
+
+        if val <= 0:
+            return True
+
+        # Check whether the user-edited value differs from the auto-calculated one
+        device_state = desc_item.data(Qt.UserRole + 100) or DeviceState()
+        repetitions = int((parent.child(row, protocol_grid_fields.index("Repetitions")).text() or "1"))
+        dur = float((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1.0"))
+        tl = int((parent.child(row, protocol_grid_fields.index("Trail Length")).text() or "1"))
+        to = int((parent.child(row, protocol_grid_fields.index("Trail Overlay")).text() or "0"))
+        estimated = self._calculate_estimated_repeat_duration(
+            device_state, repetitions, dur, tl, to,
+        )
+        if abs(val - estimated) < 0.05:
+            return True  # value matches auto-calc, no mode switch needed
+
+        result = confirm(
+            None,
+            title="Switch to Repeat Duration Control",
+            message=(
+                "Using Repeat Duration will calculate the maximum number of "
+                "complete loops that fit within the specified time. Any "
+                "remaining time will be spent idling.\n\n"
+                "Repetitions will become read-only while Repeat Duration "
+                "is in control."
+            ),
+            yes_label="Switch",
+            no_label="Cancel",
+        )
+        if result != YES:
+            # revert to the estimated repeat duration
+            self._programmatic_change = True
+            try:
+                repeat_duration_item.setText(f"{estimated:.1f}")
+            finally:
+                self._programmatic_change = False
+            return False
+
+        desc_item.setData(True, REPEAT_DURATION_CONTROLS_ROLE)
+        return True
+
+    def _handle_repetitions_mode_switch(self, desc_item, repetitions_item):
+        """When user edits Repetitions while Repeat Duration is in control,
+        ask to switch back to Repetitions control.
+
+        Returns True if the edit should proceed, False to revert.
+        """
+        if getattr(self, "_loading_from_file", False):
+            return True
+
+        duration_controls = desc_item.data(REPEAT_DURATION_CONTROLS_ROLE)
+        if not duration_controls:
+            return True  # already in repetitions mode
+
+        result = confirm(
+            None,
+            title="Switch to Repetitions Control",
+            message=(
+                "Switching back to Repetitions control will loop until "
+                "the largest loop has completed all repetitions.\n\n"
+                "The Repeat Duration will be recalculated to match "
+                "exactly (no idle time)."
+            ),
+            yes_label="Switch",
+            no_label="Cancel",
+        )
+        if result != YES:
+            # revert the repetitions edit — recalculate from repeat duration
+            parent = desc_item.parent() or self.model.invisibleRootItem()
+            row = desc_item.row()
+            device_state = desc_item.data(Qt.UserRole + 100) or DeviceState()
+            duration = float((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1.0"))
+            repeat_dur = float((parent.child(row, protocol_grid_fields.index("Repeat Duration")).text() or "0.0"))
+            trail_length = int((parent.child(row, protocol_grid_fields.index("Trail Length")).text() or "1"))
+            trail_overlay = int((parent.child(row, protocol_grid_fields.index("Trail Overlay")).text() or "0"))
+
+            if device_state.has_paths() and repeat_dur > 0:
+                max_eff = 1
+                for path in device_state.paths:
+                    eff = PathExecutionService.calculate_effective_repetitions_for_path(
+                        path, 1, duration, repeat_dur, trail_length, trail_overlay,
+                    )
+                    max_eff = max(max_eff, eff)
+                self._programmatic_change = True
+                try:
+                    repetitions_item.setText(str(max_eff))
+                finally:
+                    self._programmatic_change = False
+            return False
+
+        # Switch back: clear flag, recalculate repeat duration as perfect multiple
+        desc_item.setData(False, REPEAT_DURATION_CONTROLS_ROLE)
+        return True
+
     def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
         """Revert Repetitions to 1 if the step has no looping route"""
         try:
@@ -2827,23 +2958,36 @@ class PGCWidget(QWidget):
             trail_length = int(trail_length_item.text() or "1")
             trail_overlay = int(trail_overlay_item.text() or "0")
 
+            duration_controls = desc_item.data(REPEAT_DURATION_CONTROLS_ROLE)
+
             estimated_repeat_duration = self._calculate_estimated_repeat_duration(
                 device_state, repetitions, duration, trail_length, trail_overlay
             )
 
-            should_update_repeat_duration = (
-                    changed_field != "Repeat Duration" and self._protocol_running == False
-            )
-
-            if should_update_repeat_duration:
-                repeat_duration_to_use = estimated_repeat_duration
-            else:
+            # When Repeat Duration controls, calculate effective reps and use
+            # the user-specified repeat_duration for run time.
+            # When Repetitions controls, pass repeat_duration=0 so each loop
+            # uses exactly original_repetitions (no extra cycles for smaller loops).
+            effective_reps = None
+            if duration_controls and current_repeat_duration > 0:
                 repeat_duration_to_use = current_repeat_duration
+                if device_state.has_paths():
+                    max_eff = 1
+                    for path in device_state.paths:
+                        eff = PathExecutionService.calculate_effective_repetitions_for_path(
+                            path, repetitions, duration, current_repeat_duration,
+                            trail_length, trail_overlay,
+                        )
+                        max_eff = max(max_eff, eff)
+                    effective_reps = max_eff
+            else:
+                # Repetitions in control — each loop does exactly N reps
+                repeat_duration_to_use = 0
 
             max_path_length = device_state.longest_path_length()
             run_time = device_state.calculated_duration(
                 duration,
-                repetitions,
+                effective_reps if effective_reps is not None else repetitions,
                 repeat_duration_to_use,
                 trail_length,
                 trail_overlay,
@@ -2854,8 +2998,19 @@ class PGCWidget(QWidget):
                 max_path_item.setText(str(max_path_length))
                 run_time_item.setText(f"{run_time:.1f}")
 
-                if should_update_repeat_duration:
-                    repeat_duration_item.setText(f"{estimated_repeat_duration:.1f}")
+                if duration_controls:
+                    # Show effective reps (still editable — editing triggers
+                    # a confirmation dialog to switch back to repetitions mode)
+                    if effective_reps is not None:
+                        repetitions_item.setText(str(effective_reps))
+                else:
+                    # Auto-update repeat duration when not in duration-control mode
+                    if (
+                        changed_field is not None
+                        and changed_field != "Repeat Duration"
+                        and not self._protocol_running
+                    ):
+                        repeat_duration_item.setText(f"{estimated_repeat_duration:.1f}")
 
             finally:
                 self._programmatic_change = False

@@ -53,6 +53,7 @@ ACTOR_TOPIC_DICT = {
 GROUP_TYPE = "group"
 STEP_TYPE = "step"
 ROW_TYPE_ROLE = Qt.UserRole + 1
+REPEAT_DURATION_CONTROLS_ROLE = Qt.UserRole + 3
 
 protocol_grid_fields = [
     "Description", "ID", "Repetitions", 
