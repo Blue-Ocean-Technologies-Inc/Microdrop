@@ -192,6 +192,12 @@ class PathExecutionService:
 
     @staticmethod
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState) -> float:
+        """Return the total execution time (seconds) for a single protocol step.
+
+        When "Repeat Duration Mode" is "1", repeat_duration caps loop
+        iterations; otherwise repeat_duration is ignored (treated as 0)
+        and loops run exactly ``repetitions`` times.
+        """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
@@ -241,7 +247,12 @@ class PathExecutionService:
     
     @staticmethod
     def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState) -> Dict[str, int]:
-        """calculate repetition information for status bar display."""
+        """Calculate repetition information for status bar display.
+
+        Respects "Repeat Duration Mode": when enabled, effective
+        repetitions are derived from Repeat Duration; when disabled,
+        the raw Repetitions value is used.
+        """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
@@ -281,6 +292,12 @@ class PathExecutionService:
     
     @staticmethod
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState) -> List[Dict[str, Any]]:
+        """Build the full phase-by-phase execution plan for a protocol step.
+
+        Each entry in the returned list describes one timed phase with its
+        activated electrodes.  Respects "Repeat Duration Mode" to decide
+        whether loop repetitions are time-capped or count-based.
+        """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
