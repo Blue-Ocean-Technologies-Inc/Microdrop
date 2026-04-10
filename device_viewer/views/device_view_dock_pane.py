@@ -1034,7 +1034,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info(
                 f"Buffering message for device viewer state change: {self.message_buffer}"
             )
-            self.publish_model_message()
+
+            # inform protocol grid of model change from free mode.
+            if self.model.free_mode:
+                self.publish_model_message()
 
         except Exception as e:
             logger.error(e, exc_info=True)
