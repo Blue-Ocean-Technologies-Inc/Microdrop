@@ -25,6 +25,7 @@ DIELECTRIC_MATERIALS = {
     "Parylene N": 2.65,
     "Parylene D": 2.84,
     "PDMS": 2.7,
+    "Si3N4": 7.5,
 }
 
 # Permittivity of free space in F/m
