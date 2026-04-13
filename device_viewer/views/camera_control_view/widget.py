@@ -7,7 +7,7 @@ from PySide6.QtCore import (
     QStandardPaths,
 )
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -22,8 +22,9 @@ from PySide6.QtWidgets import (
 
 from apptools.preferences.api import Preferences
 
-from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK
+from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
@@ -42,6 +43,8 @@ from ...models.media_capture_model import MediaType
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+MIN_RECORDING_FPS = 20
 
 class CameraControlWidget(QWidget):
 
@@ -72,6 +75,11 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
+        # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
+        # Kept separate from combo box userData because shiboken cannot serialize
+        # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
+        # to store as combo box userData.
+        self._linux_device_containers = {}
         self.last_camera_state = False
         self.available_cameras = None
         self.available_formats = None
@@ -238,14 +246,22 @@ class CameraControlWidget(QWidget):
         self.model.set_visible(video_key, self.camera.isActive())
 
     def check_initial_camera_state(self):
-        if self.camera and self.camera.isActive():
-            self.camera_toggle_button.setText("videocam")
-            self.camera_toggle_button.setToolTip("Camera On")
-            self.camera_toggle_button.setChecked(True)
-        else:
-            self.camera_toggle_button.setText("videocam_off")
-            self.camera_toggle_button.setToolTip("Camera Off")
-            self.camera_toggle_button.setChecked(False)
+        """Sync the camera toggle button with the actual camera state.
+
+        Uses a guard clause on ``self.camera`` to avoid accessing a
+        potentially deleted C++ object (common when QMediaCaptureSession
+        has taken ownership of a previous QCamera instance).
+        """
+        if self.camera:
+            if self.camera.isActive():
+                self.camera_toggle_button.setText("videocam")
+                self.camera_toggle_button.setToolTip("Camera On")
+                self.camera_toggle_button.setChecked(True)
+                return
+
+        self.camera_toggle_button.setText("videocam_off")
+        self.camera_toggle_button.setToolTip("Camera Off")
+        self.camera_toggle_button.setChecked(False)
 
     def toggle_align_camera_mode(self):
         if self.model.mode == "camera-edit" or (
@@ -288,6 +304,69 @@ class CameraControlWidget(QWidget):
         if self.model.mode == "camera-edit":
             self.model.mode = "camera-place"
 
+    def _get_camera_from_available_cameras(self, selected_device):
+        """Create a QCamera from either a LinuxCameraDeviceContainer or QCameraDevice.
+
+        On Linux, cameras are wrapped in LinuxCameraDeviceContainer to carry
+        V4L2 metadata (fps, device path). This method unwraps the container
+        to get the underlying QCameraDevice before constructing the QCamera.
+        """
+        _device = None
+
+        if isinstance(selected_device, LinuxCameraDeviceContainer):
+            _device = selected_device.camera_device
+
+        elif isinstance(selected_device, QCameraDevice):
+            _device = selected_device
+
+        if isinstance(_device, QCameraDevice):
+            return QCamera(selected_device)
+
+        else:
+            logger.warning("Failed to create camera. Need to get camera from available devices")
+            return None
+
+    def _get_camera_description(self, selected_device):
+        """Return a human-readable identifier for a camera device.
+
+        LinuxCameraDeviceContainer returns the /dev/videoN path (unique on Linux),
+        while QCameraDevice returns the Qt-provided description string.
+        """
+        if isinstance(selected_device, LinuxCameraDeviceContainer):
+            return selected_device.device_path
+
+        elif isinstance(selected_device, QCameraDevice):
+            return selected_device.description()
+
+    def _get_camera_resolution_max_framerate(self, w=0, h=0, fmt=None):
+        """Return the max framerate for a given resolution, or 0.0 if unknown.
+
+        On most platforms Qt's QCameraFormat.maxFrameRate() returns the correct
+        value.  On Linux, however, it often reports 0 because the GStreamer
+        backend does not populate this field.  In that case we fall back to
+        V4L2 data stored in the LinuxCameraDeviceContainer for this camera.
+
+        Args:
+            w: Resolution width (used when ``fmt`` is not provided).
+            h: Resolution height (used when ``fmt`` is not provided).
+            fmt: A QCameraFormat to extract resolution and fps from.
+        """
+        # Try the Qt-reported fps first (reliable on Windows/macOS)
+        if isinstance(fmt, QCameraFormat):
+            _qt_fps = fmt.maxFrameRate()
+            if _qt_fps:
+                return _qt_fps
+
+            w = fmt.resolution().width()
+            h = fmt.resolution().height()
+
+        # Fall back to V4L2 fps data on Linux
+        _container = self._linux_device_containers.get(self.combo_cameras.currentText())
+        if _container:
+            return _container.get_fps(w, h)
+
+        return 0.0
+
     def initialize_camera_list(self):
         preferences_camera = self.preferences.selected_camera
         old_camera_name = (
@@ -296,12 +375,21 @@ class CameraControlWidget(QWidget):
             else self.combo_cameras.currentText()
         )
 
-        _available_cameras = QMediaDevices.videoInputs()
+        _available_cameras = get_video_inputs()
         self.combo_cameras.clear()
         self.combo_cameras.blockSignals(True)
+        self._linux_device_containers.clear()
 
         for camera in _available_cameras:
-            self.combo_cameras.addItem(camera.description(), userData=camera)
+            description = self._get_camera_description(camera)
+            if isinstance(camera, LinuxCameraDeviceContainer):
+                # Store the container in a side dict for V4L2 fps lookups.
+                # Only the underlying QCameraDevice goes into combo userData
+                # (shiboken crashes on non-Qt types in QVariant).
+                self._linux_device_containers[description] = camera
+                self.combo_cameras.addItem(description, userData=camera.camera_device)
+            else:
+                self.combo_cameras.addItem(description, userData=camera)
 
         # account for no camera
         _available_cameras.append(None)
@@ -313,7 +401,7 @@ class CameraControlWidget(QWidget):
 
         if old_camera_name:
             for i, camera in enumerate(_available_cameras):
-                if camera and camera.description() == old_camera_name:
+                if camera and self._get_camera_description(camera) == old_camera_name:
                     self.combo_cameras.setCurrentIndex(i)
                     return
 
@@ -342,14 +430,15 @@ class CameraControlWidget(QWidget):
         camera = self.combo_cameras.itemData(index)
 
         was_running = False
-        if self.camera and self.camera.isActive():
-            self.turn_off_camera()
-            was_running = True
+        if self.camera:
+            if  self.camera.isActive():
+                self.turn_off_camera()
+                was_running = True
 
         if camera:
-            self.camera = QCamera(camera)
+            self.camera = self._get_camera_from_available_cameras(camera)
             self.session.setCamera(self.camera)
-            self.preferences.selected_camera = camera.description()
+            self.preferences.selected_camera = self._get_camera_description(camera)
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)
 
@@ -409,7 +498,7 @@ class CameraControlWidget(QWidget):
                 continue
             seen_resolutions.add((w, h))
 
-            fps = fmt.maxFrameRate()
+            fps = self._get_camera_resolution_max_framerate(fmt=fmt)
             pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
             label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
             self.combo_resolutions.addItem(label, userData=fmt)
@@ -610,6 +699,24 @@ class CameraControlWidget(QWidget):
         self, directory=None, step_description=None, step_id=None, show_dialog=True
     ):
         logger.info("Starting video recorder...")
+
+        # Check fps threshold before starting
+        _current_fmt = self.combo_resolutions.currentData()
+        fps = self._get_camera_resolution_max_framerate(fmt=_current_fmt)
+        if fps < MIN_RECORDING_FPS:
+            disclaimer(
+                parent=None,
+                title="Recording Not Supported",
+                message=(
+                    f"Cannot record at <b>{fps:.0f} fps</b>. "
+                    f"Minimum supported frame rate for recording is <b>{MIN_RECORDING_FPS} fps</b>.\n\n"
+                    f"Please select a resolution with a higher frame rate."
+                ),
+                ack_button_text="OK",
+            )
+            self.record_toggle_button.setChecked(False)
+            return
+
         if not self.camera.isActive():
             self.toggle_camera()
             self._camera_state_pre_recording = False ## Flag only used for video recording management
@@ -630,14 +737,13 @@ class CameraControlWidget(QWidget):
 
         self.show_media_capture_dialog_for_video = show_dialog
 
-        _current_fmt = self.combo_resolutions.currentData()
         _resolution = (
             _current_fmt.resolution().width(),
             _current_fmt.resolution().height(),
         )
 
         self.recorder.start(
-            _recording_file_path, _resolution, _current_fmt.maxFrameRate()
+            _recording_file_path, _resolution, fps
         )
         publish_message(topic=DEVICE_VIEWER_RECORDING_STATE, message="true")
 

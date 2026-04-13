@@ -103,7 +103,7 @@ from .electrode_view.electrode_layer import ElectrodeLayer
 # Device Viewer electrode and route views
 from .electrode_view.electrode_scene import ElectrodeScene
 from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import RouteLayerView
+from .route_selection_view.route_selection_view import RouteLayerView, ExecutionSettingsView
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 
 logger = get_logger(__name__)
@@ -674,6 +674,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
+        self.execution_settings_ui = self.model.edit_traits(view=ExecutionSettingsView)
 
         # mode_picker_view code
         _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
@@ -715,9 +716,18 @@ class DeviceViewerDockPane(TraitsDockPane):
                 ],
             )
         )
+        self.execution_settings_box = CollapsibleVStackBox(
+            "Execution Settings", control_widgets=self.execution_settings_ui.control
+        )
+        self.execution_settings_box.set_expanded(False)
+        self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
         scroll_layout.addWidget(
             CollapsibleVStackBox(
-                "Paths", control_widgets=[self.layer_ui.control, self.mode_picker_view]
+                "Paths", control_widgets=[
+                    self.execution_settings_box,
+                    self.layer_ui.control,
+                    self.mode_picker_view,
+                ]
             )
         )
         scroll_layout.addWidget(

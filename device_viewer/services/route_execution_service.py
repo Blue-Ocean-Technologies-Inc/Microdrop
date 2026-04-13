@@ -55,6 +55,14 @@ class RouteExecutionService(HasTraits):
 
     @observe("model:routes:execute_path_requested")
     def _execute_path_requested_change(self, event):
+        """Build an execution plan for the requested routes and start phase-by-phase playback.
+
+        One repetition is defined as every selected loop path completing one full
+        cycle. The displayed rep counter is derived from the longest loop's cycle
+        length so that each block of ``_phases_per_rep`` phases maps to one rep.
+        Open (non-loop) paths are traversed once and do not contribute to the rep
+        count.
+        """
         routes_to_execute = event.new
         if not routes_to_execute:
             return
@@ -85,6 +93,8 @@ class RouteExecutionService(HasTraits):
             trail_overlay=self.model.routes.trail_overlay,
             paths=paths,
             activated_electrodes=activated_electrode_ids,
+            soft_start=self.model.routes.soft_start,
+            soft_terminate=self.model.routes.soft_terminate,
         )
 
         if not plan:
@@ -101,18 +111,39 @@ class RouteExecutionService(HasTraits):
         self.model.route_execution_service_paused = False
         publish_message(topic=ROUTES_EXECUTING, message="true")
 
-        # Compute phases-per-rep by running a single-rep plan
-        single_rep_plan = PathExecutionService.calculate_execution_plan_from_params(
-            duration=self.model.routes.duration,
-            repetitions=1,
-            repeat_duration=0.0,
-            trail_length=self.model.routes.trail_length,
-            trail_overlay=self.model.routes.trail_overlay,
-            paths=paths,
-            activated_electrodes=activated_electrode_ids,
-        )
-        self._phases_per_rep = max(len(single_rep_plan), 1)
-        self._total_reps = max(len(plan) // self._phases_per_rep, 1)
+        # Compute phases-per-rep from the longest loop cycle across all paths
+        max_cycle_length = 0
+        max_effective_reps = 1
+        has_loops = False
+        for path in paths:
+            if PathExecutionService.is_loop_path(path):
+                has_loops = True
+                effective_reps = PathExecutionService.calculate_effective_repetitions_for_path(
+                    path,
+                    self.model.routes.repetitions,
+                    self.model.routes.duration,
+                    0.0,  # repeat_duration
+                    self.model.routes.trail_length,
+                    self.model.routes.trail_overlay,
+                )
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(
+                    path, self.model.routes.trail_length, self.model.routes.trail_overlay
+                )
+                cycle_length = len(cycle_phases)
+                if cycle_length > max_cycle_length or (
+                    cycle_length == max_cycle_length and effective_reps > max_effective_reps
+                ):
+                    max_cycle_length = cycle_length
+                    max_effective_reps = effective_reps
+
+        if has_loops:
+            # One rep = one full cycle of the longest loop path
+            self._phases_per_rep = max(max_cycle_length, 1)
+            self._total_reps = max_effective_reps
+        else:
+            # Open paths only — no repetitions, entire plan is one rep
+            self._phases_per_rep = max(len(plan), 1)
+            self._total_reps = 1
 
         # Initialize status display
         self._total_phases = len(plan)

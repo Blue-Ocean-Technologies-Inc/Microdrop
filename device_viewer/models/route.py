@@ -222,6 +222,9 @@ class RouteLayerManager(HasTraits):
     trail_overlay = Range(low=0, high="max_trail_overlay")
     repetitions = Range(low=1, high=10000, value=1)
 
+    soft_start = Bool(False)
+    soft_terminate = Bool(False)
+
     def _get_max_trail_overlay(self):
         """Computed upper bound for trail_overlay, recalculated when trail_length changes."""
         return self.trail_length - 1
