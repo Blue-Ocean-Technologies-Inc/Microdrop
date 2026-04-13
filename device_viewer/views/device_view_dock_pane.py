@@ -3,7 +3,6 @@ import json
 import traceback
 from pathlib import Path
 import dramatiq
-from dropbot_controller.consts import SET_REALTIME_MODE
 from traits.observation._set_change_event import SetChangeEvent
 
 from electrode_controller.consts import electrode_state_change_publisher
@@ -17,9 +16,9 @@ from microdrop_application.dialogs.pyface_wrapper import (
     YES,
     FileDialog,
     confirm,
-    error, information, warning,
+    error, warning,
 )
-from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
+from pyface.qt.QtCore import QPointF, QSizeF, Qt
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (

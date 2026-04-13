@@ -1,4 +1,4 @@
-from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label
+from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label, RangeEditor
 from traitsui.key_bindings import KeyBindings, KeyBinding
 
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
@@ -88,10 +88,18 @@ layer_table_editor = TableEditor(
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
 
 protocol_execution_settings = (
-UItem('object.routes.duration', tooltip="Duration of each step in route (seconds)"),
-UItem('object.routes.trail_length', tooltip="Length of each step in route (# electrodes)"),
-UItem('object.routes.trail_overlay', tooltip="electrodes actuated from one step to overlay onto next step"),
-UItem('object.routes.repetitions', tooltip="Times to repeat path executions"),
+UItem('object.routes.duration',
+      editor=RangeEditor(low=0.0, high=10000.0, mode='spinner', format_str='%.1f', is_float=True),
+      tooltip="Duration of each step in route (seconds)"),
+UItem('object.routes.trail_length',
+      editor=RangeEditor(low=1, high=10000, mode='spinner'),
+      tooltip="Length of each step in route (# electrodes)"),
+UItem('object.routes.trail_overlay',
+      editor=RangeEditor(low=0, high_name='object.routes.max_trail_overlay', mode='spinner'),
+      tooltip="electrodes actuated from one step to overlay onto next step"),
+UItem('object.routes.repetitions',
+      editor=RangeEditor(low=1, high=10000, mode='spinner'),
+      tooltip="Times to repeat path executions"),
 )
 protocol_execution_settings_header = (
 Label("Duration", tooltip="Duration of each step in route (seconds)"),
