@@ -5,7 +5,8 @@ from PySide6.QtCore import Qt
 from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
+from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 
 from microdrop_style.button_styles import get_button_dimensions
@@ -47,6 +48,7 @@ ACTOR_TOPIC_DICT = {
         ADVANCED_MODE_CHANGE,
         DEVICE_VIEWER_RECORDING_STATE,
         ROUTES_EXECUTING,
+        VOLTAGE_FREQUENCY_RANGE_CHANGED,
     ]
 }
 
@@ -60,24 +62,27 @@ protocol_grid_fields = [
     "Duration", "Voltage", "Force", "Frequency", 
     "Message", "Repeat Duration",
     "Trail Length", "Trail Overlay",
+    "Ramp Up", "Ramp Dn",
     "Video", "Capture", "Record",
     "Volume Threshold", "Magnet", "Magnet Height (mm)",
     "Max. Path Length", "Run Time"
 ]
 protocol_grid_column_widths = [
-    120, 70, 80, 70, 70, 70, 90, 80, 130, 100, 100, 50, 140, 70, 110, 140, 90
+    120, 70, 80, 70, 70, 70, 90, 80, 130, 100, 100, 80, 80, 50, 140, 70, 110, 140, 90
 ]
 hidden_fields = ["UID"]
 all_fields = protocol_grid_fields + hidden_fields
 fixed_fields = {"Description", "ID"}
 field_groupings = [
             (None, [f for f in protocol_grid_fields if f not in [
-                "Repeat Duration", "Repetitions", 
-                "Trail Length", "Video", "Capture", "Record", "Volume Threshold", 
-                "Magnet", "Magnet Height (mm)", "Trail Overlay"
+                "Repeat Duration", "Repetitions",
+                "Trail Length", "Video", "Capture", "Record", "Volume Threshold",
+                "Magnet", "Magnet Height (mm)", "Trail Overlay",
+                "Ramp Up", "Ramp Dn"
             ] and f not in fixed_fields]),
-            ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length", 
-                                "Trail Overlay", "Video", "Capture", "Record"]),
+            ("Device Viewer:", ["Repeat Duration", "Repetitions", "Trail Length",
+                                "Trail Overlay", "Ramp Up", "Ramp Dn",
+                                "Video", "Capture", "Record"]),
             ("Dropbot:", ["Volume Threshold"]),
             ("Magnet:", ["Magnet", "Magnet Height (mm)"]),
         ]
@@ -87,12 +92,14 @@ step_defaults = {
     "Repetitions": "1",
     "Duration": "1.0",
     "Force": "",
-    "Voltage": f"{float(DropbotPreferences().default_voltage)}",
-    "Frequency": f"{float(DropbotPreferences().default_frequency)}",
+    "Voltage": f"{float(VoltageFrequencyRangePreferences().ui_default_voltage)}",
+    "Frequency": f"{float(VoltageFrequencyRangePreferences().ui_default_frequency)}",
     "Message": "",
     "Repeat Duration": "1.0",
     "Trail Length": "1",
     "Trail Overlay": "0",
+    "Ramp Up": "0",
+    "Ramp Dn": "0",
     "Video": "0",
     "Capture": "0",
     "Record": "0",
@@ -125,6 +132,8 @@ copy_fields_for_new_step = [
     "Repeat Duration",
     "Trail Length",
     "Trail Overlay",
+    "Ramp Up",
+    "Ramp Dn",
     "Video",
     "Capture",
     "Record",
@@ -135,7 +144,7 @@ copy_fields_for_new_step = [
     "Run Time"
 ]
 
-CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet")
+CHECKBOX_COLS = ("Video", "Capture", "Record", "Magnet", "Ramp Up", "Ramp Dn")
 
 ALLOWED_group_fields = {
     "Description",

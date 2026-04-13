@@ -1,4 +1,4 @@
-from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label
+from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label, RangeEditor
 from traitsui.key_bindings import KeyBindings, KeyBinding
 
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
@@ -88,10 +88,18 @@ layer_table_editor = TableEditor(
 # Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
 
 protocol_execution_settings = (
-UItem('object.routes.duration', tooltip="Duration of each step in route (seconds)"),
-UItem('object.routes.trail_length', tooltip="Length of each step in route (# electrodes)"),
-UItem('object.routes.trail_overlay', tooltip="electrodes actuated from one step to overlay onto next step"),
-UItem('object.routes.repetitions', tooltip="Times to repeat path executions"),
+UItem('object.routes.duration',
+      editor=RangeEditor(low=0.0, high=10000.0, mode='spinner', format_str='%.1f', is_float=True),
+      tooltip="Duration of each step in route (seconds)"),
+UItem('object.routes.trail_length',
+      editor=RangeEditor(low=1, high=10000, mode='spinner'),
+      tooltip="Length of each step in route (# electrodes)"),
+UItem('object.routes.trail_overlay',
+      editor=RangeEditor(low=0, high_name='object.routes.max_trail_overlay', mode='spinner'),
+      tooltip="electrodes actuated from one step to overlay onto next step"),
+UItem('object.routes.repetitions',
+      editor=RangeEditor(low=1, high=10000, mode='spinner'),
+      tooltip="Times to repeat path executions"),
 )
 protocol_execution_settings_header = (
 Label("Duration", tooltip="Duration of each step in route (seconds)"),
@@ -100,13 +108,33 @@ Label("Overlay", tooltip="electrodes actuated from one step to overlay onto next
 Label("Reps", tooltip="Times to repeat path executions"),
 )
 
+soft_transition_settings = (
+UItem('object.routes.soft_start', tooltip="Ramp up overlay at start"),
+UItem('object.routes.soft_terminate', tooltip="Ramp down overlay at end"),
+)
+soft_transition_settings_header = (
+Label("Ramp Up", tooltip="Ramp up overlay at start"),
+Label("Ramp Dn", tooltip="Ramp down overlay at end"),
+)
 
-protocol_execution_settings_group = HGroup(
-    VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
-    VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
-    VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
-    VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
-    enabled_when='free_mode'
+
+protocol_execution_settings_group = VGroup(
+    HGroup(
+        VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
+        VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
+        VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
+        VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+    ),
+    HGroup(
+        VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
+        VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
+    ),
+    enabled_when='free_mode',
+)
+
+ExecutionSettingsView = View(
+    protocol_execution_settings_group,
+    resizable=True,
 )
 
 # --- Execution control button groups (mutually exclusive via visible_when) ---
@@ -162,7 +190,6 @@ execution_status_bar = HGroup(
 
 RouteLayerView = View(
     VGroup(
-        protocol_execution_settings_group,
         run_controls,
         execution_status_bar,
         Item('object.routes.layers', editor=layer_table_editor, show_label=False),

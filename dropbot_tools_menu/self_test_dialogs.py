@@ -339,7 +339,7 @@ class WaitForTestDialogAction:
 
 
 class ResultsDialog(QDialog):
-    def __init__(self, parent=None, title="Test Results", plot_data=None):
+    def __init__(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(600, 400)
@@ -355,6 +355,20 @@ class ResultsDialog(QDialog):
         self.canvas = FigureCanvas(fig)
         layout.addWidget(self.canvas)
 
+        # Show failed channel numbers if provided
+        if failed_channels is not None:
+            if failed_channels:
+                channel_list = ", ".join(str(ch) for ch in failed_channels)
+                label_text = f"<b>Failed channels ({len(failed_channels)}):</b> {channel_list}"
+                label_color = "color: red;"
+            else:
+                label_text = "<b>All channels passed.</b>"
+                label_color = "color: green;"
+            failed_label = QLabel(label_text)
+            failed_label.setStyleSheet(label_color)
+            failed_label.setWordWrap(True)
+            layout.addWidget(failed_label)
+
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
         button_box.clicked.connect(self.close)
         layout.addWidget(button_box, alignment=Qt.AlignCenter)
@@ -363,9 +377,9 @@ class ResultsDialog(QDialog):
 class ResultsDialogAction(Action):
     name = Str("&Results Dialog")
 
-    def perform(self, parent=None, title="Test Results", plot_data=None):
+    def perform(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
         # The dialong is a child window of non UI class
-        dialog = ResultsDialog(parent=parent, title=title, plot_data=plot_data)
+        dialog = ResultsDialog(parent=parent, title=title, plot_data=plot_data, failed_channels=failed_channels)
         # use exec_() to block the main thread until the dialog is closed otherwise the window is garbage collected
         dialog.exec_()
 

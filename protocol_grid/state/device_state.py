@@ -27,15 +27,15 @@ class DeviceState:
         return len(self.paths) > 0
 
     def calculated_duration(self, step_duration: float, repetitions: int,
-                            repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0):
+                            repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0,
+                            soft_start: bool = False, soft_end: bool = False):
         """Calculate the total duration for this step including idle/balance phases.
 
         When repeat_duration > 0 and the step has loops, each loop independently
-        calculates how many full cycles fit within repeat_duration. After a loop
-        finishes its cycles, idle phases pad the remaining balance time. The total
-        step duration is driven by the longest loop (active + idle phases).
+        calculates how many full cycles fit within repeat_duration. Idle phases
+        pad the remaining balance time.  Soft start/end add ramp phases on top.
+        The total step duration is driven by the longest loop.
         """
-        # Delegate to PathExecutionService for consistent calculation
         from protocol_grid.services.path_execution_service import PathExecutionService
 
         if not self.has_paths():
@@ -65,9 +65,21 @@ class DeviceState:
                     )
                     loop_total_phases = active_phases + idle_phases
 
+                    if soft_start and cycle_phases:
+                        loop_total_phases += len(
+                            PathExecutionService.calculate_soft_start_phases(cycle_phases[0])
+                        )
+                    if soft_end and cycle_phases:
+                        loop_total_phases += len(
+                            PathExecutionService.calculate_soft_terminate_phases(cycle_phases[-1])
+                        )
+
                     max_loop_total_phases = max(max_loop_total_phases, loop_total_phases)
                 else:
-                    cycle_phases = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+                    cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
+                        path, trail_length, trail_overlay,
+                        soft_start=soft_start, soft_terminate=soft_end,
+                    )
                     cycle_length = len(cycle_phases)
                     max_open_path_length = max(max_open_path_length, cycle_length)
 
