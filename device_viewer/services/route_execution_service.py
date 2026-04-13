@@ -88,7 +88,7 @@ class RouteExecutionService(HasTraits):
         plan = PathExecutionService.calculate_execution_plan_from_params(
             duration=self.model.routes.duration,
             repetitions=self.model.routes.repetitions,
-            repeat_duration=0.0,
+            repeat_duration=self.model.routes.repeat_duration,
             trail_length=self.model.routes.trail_length,
             trail_overlay=self.model.routes.trail_overlay,
             paths=paths,
@@ -122,7 +122,7 @@ class RouteExecutionService(HasTraits):
                     path,
                     self.model.routes.repetitions,
                     self.model.routes.duration,
-                    0.0,  # repeat_duration
+                    self.model.routes.repeat_duration,  # repeat_duration
                     self.model.routes.trail_length,
                     self.model.routes.trail_overlay,
                 )

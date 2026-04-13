@@ -221,6 +221,7 @@ class RouteLayerManager(HasTraits):
     max_trail_overlay = Property(observe="trail_length")
     trail_overlay = Range(low=0, high="max_trail_overlay")
     repetitions = Range(low=1, high=10000, value=1)
+    repeat_duration = Range(low=0, high=10000, value=0)
 
     soft_start = Bool(False)
     soft_terminate = Bool(False)
@@ -341,3 +342,14 @@ class RouteLayerManager(HasTraits):
                 routes_to_run.append(el)
 
         self.execute_path_requested = routes_to_run
+
+    # Only one of `repetitions` or `repeat_duration` drives loop execution at a
+    # time. Editing one resets the other so the two controls stay mutually
+    # exclusive in the UI and the execution plan sees a single source of truth.
+    @observe("repetitions")
+    def _route_repeats_changed(self, event):
+        self.repeat_duration = 0
+
+    @observe("repeat_duration")
+    def _route_repeat_duration_changed(self, event):
+        self.repetitions = 1

@@ -99,13 +99,18 @@ UItem('object.routes.trail_overlay',
       tooltip="electrodes actuated from one step to overlay onto next step"),
 UItem('object.routes.repetitions',
       editor=RangeEditor(low=1, high=10000, mode='spinner'),
-      tooltip="Times to repeat path executions"),
+      tooltip="Times to repeat loops execution"),
+UItem('object.routes.repeat_duration',
+      editor=RangeEditor(low=0, high=10000, mode='spinner'),
+      tooltip="Seconds to repeat path executions. Idle time in end if loop cannot be completed"),
 )
+
 protocol_execution_settings_header = (
 Label("Duration", tooltip="Duration of each step in route (seconds)"),
 Label("Length", tooltip="Length of each step in route (# electrodes)"),
 Label("Overlay", tooltip="electrodes actuated from one step to overlay onto next step"),
 Label("Reps", tooltip="Times to repeat path executions"),
+Label("Rep Duration", tooltip="Seconds to repeat path executions. Idle time in end if loop cannot be completed"),
 )
 
 soft_transition_settings = (
@@ -123,13 +128,16 @@ protocol_execution_settings_group = VGroup(
         VGroup(protocol_execution_settings_header[0], protocol_execution_settings[0]),
         VGroup(protocol_execution_settings_header[1], protocol_execution_settings[1]),
         VGroup(protocol_execution_settings_header[2], protocol_execution_settings[2]),
+    ),
+    HGroup(
         VGroup(protocol_execution_settings_header[3], protocol_execution_settings[3]),
+        VGroup(protocol_execution_settings_header[4], protocol_execution_settings[4]),
     ),
     HGroup(
         VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
     ),
-    enabled_when='free_mode',
+    # enabled_when='free_mode',
 )
 
 ExecutionSettingsView = View(
