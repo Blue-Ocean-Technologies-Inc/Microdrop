@@ -1,4 +1,6 @@
-from traits.api import Instance
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMenu
+from traits.api import Instance, observe
 
 from dropbot_status_and_controls.preferences import DropbotStatusAndControlsPreferences
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
@@ -48,6 +50,24 @@ class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
             dialog_signals=self._dialog_signals,
             message_handler=self.message_handler,
         )
+
+    @observe("control")
+    def _install_context_menu(self, event):
+        widget = event.new
+        if widget is None:
+            return
+        widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        widget.customContextMenuRequested.connect(self._show_context_menu)
+
+    def _show_context_menu(self, point):
+        menu = QMenu(self.control)
+        action = menu.addAction("Show Dielectric Info")
+        action.setCheckable(True)
+        action.setChecked(self.model.show_dielectric_info)
+        action.toggled.connect(
+            lambda checked: setattr(self.model, "show_dielectric_info", checked)
+        )
+        menu.exec(self.control.mapToGlobal(point))
 
 if __name__ == "__main__":
     model = DropbotStatusAndControlsModel()
