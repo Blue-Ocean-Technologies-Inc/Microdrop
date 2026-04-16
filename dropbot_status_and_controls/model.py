@@ -1,7 +1,7 @@
 import math
 
 import pint
-from traits.api import Str, Enum, Instance, observe
+from traits.api import Str, Enum, Instance, observe, Bool
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
@@ -61,6 +61,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     dielectric_material = Enum(*list(DIELECTRIC_MATERIALS.keys()),
                                desc="Dielectric material for thickness calculation")
     dielectric_thickness = Instance(pint.Quantity, desc="Calculated dielectric thickness (um)")
+    show_dielectric_info = Bool(desc="Whether the dielectric readout section is visible")
     # --------------------------------------------------
 
     preferences = Instance(DropbotStatusAndControlsPreferences)
@@ -82,6 +83,9 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     def _dielectric_material_default(self):
         return self.preferences.default_dielectric_material
+
+    def _show_dielectric_info_default(self):
+        return self.preferences.show_dielectric_info
 
     # ---- Formatted sensor readings for display -------------------------
     capacitance_display = Str("-")
@@ -182,6 +186,16 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("dielectric_material")
     def _update_preferred_dielectric(self, event):
         self.preferences.default_dielectric_material = event.new
+
+    @observe("show_dielectric_info")
+    def _persist_show_dielectric_info(self, event):
+        if self.preferences.show_dielectric_info != event.new:
+            self.preferences.show_dielectric_info = event.new
+
+    @observe("preferences:show_dielectric_info")
+    def _sync_show_dielectric_info_from_preferences(self, event):
+        if self.show_dielectric_info != event.new:
+            self.show_dielectric_info = event.new
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
