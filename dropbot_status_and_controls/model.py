@@ -1,11 +1,14 @@
-from traits.api import Bool, Str, Enum, observe
+import math
+
+import pint
+from traits.api import Str, Enum, Instance, observe
 
 from dropbot_controller.preferences import DropbotPreferences
 from logger.logger_service import get_logger
-from microdrop_utils.ureg_helpers import trim_to_n_digits, ureg
+from microdrop_utils.ureg_helpers import ureg
+from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from template_status_and_controls.base_model import BaseStatusModel
-from dropbot_status.consts import DIELECTRIC_MATERIALS
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
@@ -16,6 +19,22 @@ from .view_helpers import RangeWithCustomViewHints
 logger = get_logger(__name__)
 
 N_DISPLAY_DIGITS = 3
+
+# Dielectric materials and their relative permittivity values.
+# Used to calculate dielectric thickness from device capacitance via:
+#   d = epsilon * epsilon_0 / C_device
+DIELECTRIC_MATERIALS = {
+    "Choose Dielectric": float('nan'),
+    "Parylene C": 3.1,
+    "CYTOP": 2.1,
+    "Teflon AF": 1.93,
+    "SiO2": 3.9,
+    "SU-8": 3.2,
+    "Parylene N": 2.65,
+    "Parylene D": 2.84,
+    "PDMS": 2.7,
+    "Si3N4": 7.5,
+}
 
 
 class DropbotStatusAndControlsModel(BaseStatusModel):
@@ -47,21 +66,40 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     chip_status_text = Str("Not Inserted")
 
     # ---- Dielectric material selection ----------------------------------
-    dielectric_material = Enum("", *list(DIELECTRIC_MATERIALS.keys()),
+    dielectric_material = Enum(*list(DIELECTRIC_MATERIALS.keys()),
                                desc="Dielectric material for thickness calculation")
 
     # ---- Sensor readings (raw values set by message handler) -----------
-    capacitance = Str("-", desc="Raw capacitance in pF")
-    voltage_readback = Str("-", desc="Voltage readback from device (V)")
-    pressure = Str("-", desc="Pressure reading (pF/mm²)")
-    force = Str("-", desc="Calculated force (N)")
-    dielectric_thickness = Str("-", desc="Calculated dielectric thickness")
+    # NaN magnitude means "no reading available"
+    capacitance = Instance(pint.Quantity, desc="Raw capacitance (pF)")
+    voltage_readback = Instance(pint.Quantity, desc="Voltage readback from device (V)")
+    c_device = Instance(pint.Quantity, desc="Capacitance density / c_device (pF/mm²)")
+    force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
+    dielectric_thickness = Instance(pint.Quantity, desc="Calculated dielectric thickness (um)")
+
+    def _capacitance_default(self):
+        return ureg("nan pF")
+
+    def _voltage_readback_default(self):
+        return ureg("nan V")
+
+    def _c_device_default(self):
+        return ureg("nan pF/mm^2")
+
+    def _force_default(self):
+        return ureg("nan mN/m")
+
+    def _dielectric_thickness_default(self):
+        return ureg("nan um")
+
+    def _dielectric_material_default(self):
+        return "Choose Dielectric"
 
     # ---- Formatted sensor readings for display -------------------------
     capacitance_display = Str("-")
     voltage_readback_display = Str("-")
     frequency_display = Str("-")
-    pressure_display = Str("-")
+    c_device_display = Str("-")
     force_display = Str("-")
     dielectric_thickness_display = Str("-")
 
@@ -80,12 +118,11 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     def _reset_readings_on_realtime_off(self, event):
         """Clear sensor displays when realtime mode is disabled."""
         if not event.new:
-            self.capacitance = "-"
-            self.voltage_readback = "-"
+            self.reset_traits([
+                "capacitance", "voltage_readback", "c_device",
+                "force", "dielectric_thickness",
+            ])
             self.frequency_display = "-"
-            self.pressure = "-"
-            self.force = "-"
-            self.dielectric_thickness = "-"
 
     @observe("capacitance")
     def _update_capacitance_display(self, event):
@@ -98,11 +135,11 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("frequency,realtime_mode")
     def _update_frequency_display(self, event):
         if self.realtime_mode:
-            self.frequency_display = self._format_reading(f"{self.frequency} Hz")
+            self.frequency_display = self._format_reading(self.frequency * ureg.Hz)
 
-    @observe("pressure")
-    def _update_pressure_display(self, event):
-        self.pressure_display = self._format_reading(event.new)
+    @observe("c_device")
+    def _update_c_device_display(self, event):
+        self.c_device_display = self._format_reading(event.new)
 
     @observe("force")
     def _update_force_display(self, event):
@@ -110,7 +147,49 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     @observe("dielectric_thickness")
     def _update_dielectric_thickness_display(self, event):
-        self.dielectric_thickness_display = event.new
+        self.dielectric_thickness_display = self._format_reading(event.new)
+
+    @observe("voltage_readback, c_device")
+    def _recalculate_force(self, event):
+        """Recalculate force when voltage_readback or c_device changes."""
+        if math.isnan(self.voltage_readback.magnitude) or math.isnan(self.c_device.magnitude):
+            self.force = ureg("nan mN/m")
+            return
+        force = ForceCalculationService.calculate_force_for_step(
+            self.voltage_readback.magnitude, self.c_device.magnitude
+        )
+        self.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
+
+    @observe("dielectric_material, c_device")
+    def _recalculate_dielectric_thickness(self, event):
+        """Recalculate dielectric thickness: d = epsilon_r * epsilon_0 / C_device.
+
+        Triggered automatically when ``dielectric_material`` or ``c_device``
+        changes.  Uses pint's built-in ``vacuum_permittivity`` for epsilon_0
+        and converts the result to micrometres.
+        """
+        if not self.dielectric_material:
+            self.reset_traits("dielectric_thickness")
+            return
+
+        epsilon_r = DIELECTRIC_MATERIALS.get(self.dielectric_material)
+        if epsilon_r is None:
+            self.reset_traits("dielectric_thickness")
+            return
+
+        if self.c_device is None or self.c_device.magnitude <= 0:
+            self.reset_traits("dielectric_thickness")
+            return
+
+        # d = epsilon_r * epsilon_0 / C_device
+        # Convert to micrometres
+
+        self.dielectric_thickness = (epsilon_r * ureg.vacuum_permittivity / self.c_device).to("um")
+        logger.info(
+            f"Dielectric thickness calculated: {self.dielectric_thickness:.3f} um "
+            f"(material={self.dielectric_material}, "
+            f"epsilon_r={epsilon_r}, c_device={self.c_device} pF/mm^2)"
+        )
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
@@ -118,10 +197,6 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     @staticmethod
     def _format_reading(value):
-        try:
-            return trim_to_n_digits(ureg.Quantity(value).to_compact(), N_DISPLAY_DIGITS)
-        except AssertionError:
-            if value == "-":
-                return value
-            logger.warning(f"Cannot parse reading: '{value}'. Expected '[quantity] [units]'")
+        if value is None or math.isnan(value.magnitude):
             return "-"
+        return f"{value.to_compact():.{N_DISPLAY_DIGITS}g~H}"
