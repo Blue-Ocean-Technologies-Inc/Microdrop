@@ -1,5 +1,6 @@
 # sys imports
 import json
+import math
 import os
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -16,30 +17,33 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import RETRY_CONNECTION
-from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude
+from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED, DIELECTRIC_MATERIALS, EPSILON_0
 from .model import DropBotStatusModel
 
 logger = get_logger(__name__)
 
-from microdrop_utils.ureg_helpers import ureg
-
 BORDER_RADIUS = 4
 
 
 def check_change_significance(old_value, new_value, threshold=60, threshold_type='percentage') -> bool:
-    if old_value == '-' and new_value != '-':
+    old_nan = math.isnan(old_value.magnitude)
+    new_nan = math.isnan(new_value.magnitude)
+
+    if old_nan and not new_nan:
         return True
 
-    elif old_value != '-' and new_value != '-':
+    elif not old_nan and not new_nan:
+        old_mag = old_value.magnitude
+        new_mag = new_value.magnitude
         change = 0
 
         if threshold_type == 'percentage':
-            change = ureg_quant_percent_change(old=old_value, new=new_value)
+            change = 100 * abs(old_mag - new_mag) / old_mag
 
         elif threshold_type == 'absolute_diff':
-            change = abs(ureg_diff(old=old_value, new=new_value))
+            change = abs(old_mag - new_mag)
 
         if change > threshold:
             return True
@@ -127,23 +131,25 @@ class DramatiqDropBotStatusViewModel(HasTraits):
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
         if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
-            new_capacitance = json.loads(body).get('capacitance', '-')
-            new_voltage = json.loads(body).get('voltage', '-')
+            data = json.loads(body)
+            new_capacitance_str = data.get('capacitance')
+            new_voltage_str = data.get('voltage')
+
+            if not new_capacitance_str or not new_voltage_str:
+                return
 
             old_capacitance = self.model.capacitance
             old_voltage = self.model.voltage
 
-            self.capacitances.append(get_ureg_magnitude(new_capacitance))
+            self.capacitances.append(get_ureg_magnitude(new_capacitance_str))
 
             if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
-                new_capacitance = sum(self.capacitances) / len(self.capacitances)
-                new_capacitance = new_capacitance * ureg.picofarad
-                new_capacitance = f"{new_capacitance:.4g~P}"
+                new_capacitance = (sum(self.capacitances) / len(self.capacitances)) * ureg.picofarad
                 self.capacitances = []
-
             else:
                 new_capacitance = old_capacitance
 
+            new_voltage = ureg(new_voltage_str)
 
             cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
             voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
@@ -155,13 +161,13 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 self.model.voltage = new_voltage
                 force = None
 
-                if self.model.pressure != "-":
+                if not math.isnan(self.model.pressure.magnitude):
                     force = ForceCalculationService.calculate_force_for_step(
-                        get_ureg_magnitude(new_voltage),
-                        get_ureg_magnitude(self.model.pressure)
+                        new_voltage.magnitude,
+                        self.model.pressure.magnitude
                     )
 
-                self.model.force = f"{force:.4f} mN/m" if force is not None else "-"
+                self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
 
     ################## Calibration data #########################
 
@@ -173,27 +179,27 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
         if filler_cap is not None and liquid_cap is not None:
             self.pressure_value = liquid_cap - filler_cap
-            self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
+            self.model.pressure = ureg(f"{self.pressure_value:.4f} pF/mm^2")
 
             # Store c_device for dielectric thickness calculation
             self.c_device_pF_per_mm2 = self.pressure_value
             self._recalculate_dielectric_thickness()
 
-            if self.model.voltage != "-":
+            if not math.isnan(self.model.voltage.magnitude):
                 force = ForceCalculationService.calculate_force_for_step(
-                    get_ureg_magnitude(self.model.voltage),
+                    self.model.voltage.magnitude,
                     self.pressure_value
                 )
 
-                self.model.force = f"{force:.4f} mN/m"
+                self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
 
             else:
                 logger.error("Voltage is not set! Cannot find Force. Recalibrate once voltage is set.")
-                self.model.force = "-"
+                self.model.force = ureg("nan mN/m")
 
         else:
-            self.model.pressure = f"-"
-            self.model.force = "-"
+            self.model.pressure = ureg("nan pF/mm^2")
+            self.model.force = ureg("nan mN/m")
             self.c_device_pF_per_mm2 = None
             self._recalculate_dielectric_thickness()
 
@@ -263,19 +269,21 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         C_device is the device capacitance per unit area (pF/mm^2), stored in
         ``self.c_device_pF_per_mm2``.  The formula requires SI-consistent
         units, so the capacitance density is converted from pF/mm^2 to F/m^2
-        before dividing.  The result is displayed in micrometres.
+        before dividing.  The result is stored in micrometres.
         """
+        nan_thickness = ureg("nan um")
+
         if not self.selected_dielectric_material:
-            self.model.dielectric_thickness = "-"
+            self.model.dielectric_thickness = nan_thickness
             return
 
         epsilon_r = DIELECTRIC_MATERIALS.get(self.selected_dielectric_material)
         if epsilon_r is None:
-            self.model.dielectric_thickness = "-"
+            self.model.dielectric_thickness = nan_thickness
             return
 
         if self.c_device_pF_per_mm2 is None or self.c_device_pF_per_mm2 <= 0:
-            self.model.dielectric_thickness = "-"
+            self.model.dielectric_thickness = nan_thickness
             return
 
         # Convert C_device from pF/mm^2 to F/m^2
@@ -286,10 +294,10 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         # d = epsilon_r * epsilon_0 / C_device  (result in metres)
         thickness_m = epsilon_r * EPSILON_0 / c_device_F_per_m2
 
-        # Convert to micrometres for display
+        # Convert to micrometres
         thickness_um = thickness_m * 1e6
 
-        self.model.dielectric_thickness = f"{thickness_um:.3f} um"
+        self.model.dielectric_thickness = thickness_um * ureg.micrometer
         logger.info(
             f"Dielectric thickness calculated: {thickness_um:.3f} um "
             f"(material={self.selected_dielectric_material}, "
