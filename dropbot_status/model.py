@@ -1,4 +1,7 @@
-from traits.api import HasTraits, Bool, Str
+import pint
+from traits.api import HasTraits, Bool, Instance
+
+from microdrop_utils.ureg_helpers import ureg
 
 
 class DropBotStatusModel(HasTraits):
@@ -7,17 +10,36 @@ class DropBotStatusModel(HasTraits):
     connected = Bool(False, desc="True if the DropBot is connected")
     chip_inserted = Bool(False, desc="True if a chip is inserted")
 
-    # Sensor readings
-    capacitance = Str("-", desc="Raw capacitance in pF")
-    voltage = Str("-", desc="Voltage set to device in V")
-    pressure = Str("-", desc="Pressure reading in pF/mm^2 ")
-    force = Str("-", desc="Calculated force in N")
-    dielectric_thickness = Str("-", desc="Calculated dielectric thickness")
+    # Sensor readings — NaN magnitude means "no reading available"
+    capacitance = Instance(pint.Quantity, desc="Raw capacitance (pF)")
+    voltage = Instance(pint.Quantity, desc="Voltage set to device (V)")
+    pressure = Instance(pint.Quantity, desc="Capacitance density / c_device (pF/mm^2)")
+    force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
+    dielectric_thickness = Instance(pint.Quantity, desc="Calculated dielectric thickness (um)")
+
+    def _capacitance_default(self):
+        return ureg("nan pF")
+
+    def _voltage_default(self):
+        return ureg("nan V")
+
+    def _pressure_default(self):
+        return ureg("nan pF/mm^2")
+
+    def _force_default(self):
+        return ureg("nan mN/m")
+
+    def _dielectric_thickness_default(self):
+        return ureg("nan um")
 
     def reset_readings(self):
-        """Reset the readings reading counter."""
-        self.capacitance = "-"
-        self.voltage = "-"
-        self.pressure = "-"
-        self.force = "-"
-        self.dielectric_thickness = "-"
+        """Reset all sensor readings to NaN."""
+        self.reset_traits(
+            [
+                "capacitance",
+                "voltage",
+                "pressure",
+                "force",
+                "dielectric_thickness",
+            ]
+        )
