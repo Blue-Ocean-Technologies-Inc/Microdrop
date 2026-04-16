@@ -27,6 +27,7 @@ class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
     view.handler = controller
 
     def traits_init(self):
+        super().traits_init()
         self.dropbot_status_preferences = DropbotStatusAndControlsPreferences(
             preferences=self.task.window.application.preferences_helper.preferences
         )
