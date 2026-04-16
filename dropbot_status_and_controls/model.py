@@ -11,30 +11,15 @@ from protocol_grid.services.force_calculation_service import ForceCalculationSer
 from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
-    DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE,
+    DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, DIELECTRIC_MATERIALS,
     disconnected_color, connected_no_device_color, connected_color, halted_color,
 )
+from .preferences import DropbotStatusAndControlsPreferences
 from .view_helpers import RangeWithCustomViewHints
 
 logger = get_logger(__name__)
 
 N_DISPLAY_DIGITS = 3
-
-# Dielectric materials and their relative permittivity values.
-# Used to calculate dielectric thickness from device capacitance via:
-#   d = epsilon * epsilon_0 / C_device
-DIELECTRIC_MATERIALS = {
-    "Choose Dielectric": float('nan'),
-    "Parylene C": 3.1,
-    "CYTOP": 2.1,
-    "Teflon AF": 1.93,
-    "SiO2": 3.9,
-    "SU-8": 3.2,
-    "Parylene N": 2.65,
-    "Parylene D": 2.84,
-    "PDMS": 2.7,
-    "Si3N4": 7.5,
-}
 
 
 class DropbotStatusAndControlsModel(BaseStatusModel):
@@ -65,17 +50,20 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Not Inserted")
 
-    # ---- Dielectric material selection ----------------------------------
-    dielectric_material = Enum(*list(DIELECTRIC_MATERIALS.keys()),
-                               desc="Dielectric material for thickness calculation")
-
     # ---- Sensor readings (raw values set by message handler) -----------
     # NaN magnitude means "no reading available"
     capacitance = Instance(pint.Quantity, desc="Raw capacitance (pF)")
     voltage_readback = Instance(pint.Quantity, desc="Voltage readback from device (V)")
     c_device = Instance(pint.Quantity, desc="Capacitance density / c_device (pF/mm²)")
     force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
+
+    # ---- Dielectric ----------------------------------
+    dielectric_material = Enum(*list(DIELECTRIC_MATERIALS.keys()),
+                               desc="Dielectric material for thickness calculation")
     dielectric_thickness = Instance(pint.Quantity, desc="Calculated dielectric thickness (um)")
+    # --------------------------------------------------
+
+    preferences = Instance(DropbotStatusAndControlsPreferences)
 
     def _capacitance_default(self):
         return ureg("nan pF")
@@ -93,7 +81,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
         return ureg("nan um")
 
     def _dielectric_material_default(self):
-        return "Choose Dielectric"
+        return self.preferences.default_dielectric_material
 
     # ---- Formatted sensor readings for display -------------------------
     capacitance_display = Str("-")
@@ -190,6 +178,10 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
             f"(material={self.dielectric_material}, "
             f"epsilon_r={epsilon_r}, c_device={self.c_device} pF/mm^2)"
         )
+
+    @observe("dielectric_material")
+    def _update_preferred_dielectric(self, event):
+        self.preferences.default_dielectric_material = event.new
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

@@ -1,5 +1,6 @@
-from traits.api import observe
+from traits.api import Instance
 
+from dropbot_status_and_controls.preferences import DropbotStatusAndControlsPreferences
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 
 from .consts import PKG, PKG_name, listener_name
@@ -17,10 +18,17 @@ class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
     name = f"{PKG_name} Dock Pane"
 
     # TraitsDockPane wires these together; view.handler must be set at class level.
+    dropbot_status_preferences = Instance(DropbotStatusAndControlsPreferences)
     model = DropbotStatusAndControlsModel()
     view = UnifiedView
     controller = ControlsController(model)
     view.handler = controller
+
+    def traits_init(self):
+        self.dropbot_status_preferences = DropbotStatusAndControlsPreferences(
+            preferences=self.task.window.application.preferences_helper.preferences
+        )
+        self.model.preferences=self.dropbot_status_preferences
 
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factories                                          #
