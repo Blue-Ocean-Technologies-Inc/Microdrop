@@ -19,7 +19,7 @@ from protocol_grid.services.force_calculation_service import ForceCalculationSer
 from dropbot_controller.consts import RETRY_CONNECTION
 from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
-from .consts import NUM_CAPACITANCE_READINGS_AVERAGED, DIELECTRIC_MATERIALS, EPSILON_0
+from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .model import DropBotStatusModel
 
 logger = get_logger(__name__)
@@ -78,14 +78,9 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
         self.filler_capacitance_over_area = 0 # Initialize calibration data values
         self.liquid_capacitance_over_area = 0 # Both of these are in pF/mm^2
-        self.pressure = 0
+        self.c_device = 0
         self.active_electrodes = []
         self.electrode_areas = {}
-
-        # Dielectric thickness calculation state
-        self.selected_dielectric_material = ""
-        self.c_device_pF_per_mm2 = None  # c_device in pF/mm^2
-
     ###################################################################################################################
     # Publisher methods
     ###################################################################################################################
@@ -161,10 +156,10 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 self.model.voltage = new_voltage
                 force = None
 
-                if not math.isnan(self.model.pressure.magnitude):
+                if not math.isnan(self.model.c_device.magnitude):
                     force = ForceCalculationService.calculate_force_for_step(
                         new_voltage.magnitude,
-                        self.model.pressure.magnitude
+                        self.model.c_device.magnitude
                     )
 
                 self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
@@ -178,17 +173,13 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         liquid_cap = data.get('liquid_capacitance_over_area')
 
         if filler_cap is not None and liquid_cap is not None:
-            self.pressure_value = liquid_cap - filler_cap
-            self.model.pressure = ureg(f"{self.pressure_value:.4f} pF/mm^2")
-
-            # Store c_device for dielectric thickness calculation
-            self.c_device_pF_per_mm2 = self.pressure_value
-            self._recalculate_dielectric_thickness()
+            self.c_device_value = liquid_cap - filler_cap
+            self.model.c_device = ureg(f"{self.c_device_value:.4f} pF/mm^2")
 
             if not math.isnan(self.model.voltage.magnitude):
                 force = ForceCalculationService.calculate_force_for_step(
                     self.model.voltage.magnitude,
-                    self.pressure_value
+                    self.c_device_value
                 )
 
                 self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
@@ -198,11 +189,8 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 self.model.force = ureg("nan mN/m")
 
         else:
-            self.model.pressure = ureg("nan pF/mm^2")
+            self.model.c_device = ureg("nan pF/mm^2")
             self.model.force = ureg("nan mN/m")
-            self.c_device_pF_per_mm2 = None
-            self._recalculate_dielectric_thickness()
-
 
     ####### Dropbot Icon Image Control Methods ###########
 
@@ -253,57 +241,6 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 f"{message}")
 
         self.view_signals.show_halted_popup.emit(text)
-
-    ###################################################################################################################
-    # Dielectric thickness calculation
-    ###################################################################################################################
-
-    def on_dielectric_material_changed(self, material_name):
-        """Handle dielectric material selection change and recalculate thickness."""
-        self.selected_dielectric_material = material_name
-        self._recalculate_dielectric_thickness()
-
-    def _recalculate_dielectric_thickness(self):
-        """Calculate dielectric thickness using d = epsilon * epsilon_0 / C_device.
-
-        C_device is the device capacitance per unit area (pF/mm^2), stored in
-        ``self.c_device_pF_per_mm2``.  The formula requires SI-consistent
-        units, so the capacitance density is converted from pF/mm^2 to F/m^2
-        before dividing.  The result is stored in micrometres.
-        """
-        nan_thickness = ureg("nan um")
-
-        if not self.selected_dielectric_material:
-            self.model.dielectric_thickness = nan_thickness
-            return
-
-        epsilon_r = DIELECTRIC_MATERIALS.get(self.selected_dielectric_material)
-        if epsilon_r is None:
-            self.model.dielectric_thickness = nan_thickness
-            return
-
-        if self.c_device_pF_per_mm2 is None or self.c_device_pF_per_mm2 <= 0:
-            self.model.dielectric_thickness = nan_thickness
-            return
-
-        # Convert C_device from pF/mm^2 to F/m^2
-        # 1 pF = 1e-12 F, 1 mm^2 = 1e-6 m^2
-        # pF/mm^2 * 1e-12 / 1e-6 = pF/mm^2 * 1e-6 F/m^2
-        c_device_F_per_m2 = self.c_device_pF_per_mm2 * 1e-6
-
-        # d = epsilon_r * epsilon_0 / C_device  (result in metres)
-        thickness_m = epsilon_r * EPSILON_0 / c_device_F_per_m2
-
-        # Convert to micrometres
-        thickness_um = thickness_m * 1e6
-
-        self.model.dielectric_thickness = thickness_um * ureg.micrometer
-        logger.info(
-            f"Dielectric thickness calculated: {thickness_um:.3f} um "
-            f"(material={self.selected_dielectric_material}, "
-            f"epsilon_r={epsilon_r}, c_device={self.c_device_pF_per_mm2} pF/mm^2)"
-        )
-
 
 class DramatiqDropBotStatusView(QWidget):
     """

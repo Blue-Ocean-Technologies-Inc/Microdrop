@@ -78,13 +78,13 @@ class Window(QMainWindow):
         if self.model.connected:
             cap = f"{random.uniform(10, 50):.5f} pF"
             volt = f"{random.uniform(1, 100):.5f} V"
-            pressure = f"{random.uniform(1, 100):.4f} pF/mm^2"
+            c_device = f"{random.uniform(99, 100):.4f} pF/mm^2"
             force = f"{random.uniform(1,100):.4f} mN/m"
             self.model.capacitance = ureg(cap)
             self.model.voltage = ureg(volt)
-            self.model.pressure = ureg(pressure)
+            self.model.c_device = ureg(c_device)
             self.model.force = ureg(force)
-            print(f"HARNESS: Simulating backend update. Capacitance: {cap}; Voltage: {volt}; Pressure: {pressure}; Force: {force}")
+            print(f"HARNESS: Simulating backend update. Capacitance: {cap}; Voltage: {volt}; c_device: {c_device}; Force: {force}")
         else:
             # If not connected, reset to default values
             self.model.reset_readings()

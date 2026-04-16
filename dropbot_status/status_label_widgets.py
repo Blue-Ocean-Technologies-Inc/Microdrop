@@ -1,9 +1,8 @@
 from PySide6.QtGui import Qt, QPixmap
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout, QComboBox
+
+from dropbot_status.model import DIELECTRIC_MATERIALS
 from logger.logger_service import get_logger
-
-from dropbot_status.consts import DIELECTRIC_MATERIALS
-
 logger = get_logger(__name__)
 
 BORDER_RADIUS = 4
@@ -99,12 +98,12 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(volt_label, 3, 0)
         layout.addWidget(self.voltage_reading, 3, 1)
 
-        # c_device (Pressure)
+        # c_device (c_device)
         c_device_label = QLabel("c<sub>device</sub>:")
         c_device_label.setFont(bold_font)
-        self.pressure_reading = QLabel("-")
+        self.c_device_reading = QLabel("-")
         layout.addWidget(c_device_label, 4, 0)
-        layout.addWidget(self.pressure_reading, 4, 1)
+        layout.addWidget(self.c_device_reading, 4, 1)
 
         # Force
         force_label = QLabel("Force:")
