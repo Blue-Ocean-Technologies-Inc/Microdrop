@@ -93,6 +93,8 @@ class RouteExecutionService(HasTraits):
             trail_overlay=self.model.routes.trail_overlay,
             paths=paths,
             activated_electrodes=activated_electrode_ids,
+            soft_start=self.model.routes.soft_start,
+            soft_terminate=self.model.routes.soft_terminate,
         )
 
         if not plan:

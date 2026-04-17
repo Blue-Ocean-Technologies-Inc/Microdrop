@@ -178,8 +178,8 @@ class DropbotControllerBase(HasTraits):
         try:
             self.proxy.update_state(
                 capacitance_update_interval_ms=self.preferences.capacitance_update_interval,
-                voltage=self.preferences.default_voltage,
-                frequency=self.preferences.default_frequency,
+                voltage=self.preferences.last_voltage,
+                frequency=self.preferences.last_frequency,
                 hv_output_selected=False,
                 hv_output_enabled=False,
                 event_mask=EVENT_CHANNELS_UPDATED | EVENT_SHORTS_DETECTED | EVENT_ENABLE
@@ -215,7 +215,7 @@ class DropbotControllerBase(HasTraits):
             return True
             
         except Exception as e:
-            logger.error(f"Error during enhanced proxy setup: {e}")
+            logger.error(f"Error during enhanced proxy setup: {e}", exc_info=True)
             return False
 
     ######################################################################

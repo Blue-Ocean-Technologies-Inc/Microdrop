@@ -3,7 +3,6 @@ import json
 import traceback
 from pathlib import Path
 import dramatiq
-from dropbot_controller.consts import SET_REALTIME_MODE
 from traits.observation._set_change_event import SetChangeEvent
 
 from electrode_controller.consts import electrode_state_change_publisher
@@ -17,9 +16,9 @@ from microdrop_application.dialogs.pyface_wrapper import (
     YES,
     FileDialog,
     confirm,
-    error, information, warning,
+    error, warning,
 )
-from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
+from pyface.qt.QtCore import QPointF, QSizeF, Qt
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
@@ -104,7 +103,7 @@ from .electrode_view.electrode_layer import ElectrodeLayer
 # Device Viewer electrode and route views
 from .electrode_view.electrode_scene import ElectrodeScene
 from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import RouteLayerView
+from .route_selection_view.route_selection_view import RouteLayerView, ExecutionSettingsView
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 
 logger = get_logger(__name__)
@@ -675,6 +674,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # layer_view code
         layer_view = RouteLayerView
         self.layer_ui = self.model.edit_traits(view=layer_view)
+        self.execution_settings_ui = self.model.edit_traits(view=ExecutionSettingsView)
 
         # mode_picker_view code
         _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
@@ -716,9 +716,18 @@ class DeviceViewerDockPane(TraitsDockPane):
                 ],
             )
         )
+        self.execution_settings_box = CollapsibleVStackBox(
+            "Execution Settings", control_widgets=self.execution_settings_ui.control
+        )
+        self.execution_settings_box.set_expanded(False)
+        self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
         scroll_layout.addWidget(
             CollapsibleVStackBox(
-                "Paths", control_widgets=[self.layer_ui.control, self.mode_picker_view]
+                "Paths", control_widgets=[
+                    self.execution_settings_box,
+                    self.layer_ui.control,
+                    self.mode_picker_view,
+                ]
             )
         )
         scroll_layout.addWidget(

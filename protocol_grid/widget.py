@@ -2,9 +2,10 @@ import copy
 import json
 from pathlib import Path
 
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning, information
+
 from PySide6.QtWidgets import (
     QWidget,
     QFileDialog,
@@ -41,7 +42,6 @@ from protocol_grid.state.protocol_state import (
 )
 from protocol_grid.protocol_state_helpers import flatten_protocol_for_run
 from protocol_grid.consts import (
-    DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_GRID_DISPLAY_STATE,
     CALIBRATION_DATA,
     GROUP_TYPE,
@@ -269,13 +269,13 @@ class PGCWidget(QWidget):
         self.protocol_runner = ProtocolRunnerController(self.state, flatten_protocol_for_run, self.experiment_manager,
                                                         preferences=self.application.preferences, parent=self)
 
-        _dropbot_preferences = DropbotPreferences(preferences=self.application.preferences)
+        self._voltage_frequency_range_prefs = _voltage_frequency_range_prefs = VoltageFrequencyRangePreferences(preferences=self.application.preferences)
 
         self.preferences = ProtocolPreferences(preferences=self.application.preferences)
 
         step_defaults.update({
-        "Voltage": f"{float(_dropbot_preferences.default_voltage)}",
-        "Frequency": f"{float(_dropbot_preferences.default_frequency)}",
+        "Voltage": f"{float(_voltage_frequency_range_prefs.ui_default_voltage)}",
+        "Frequency": f"{float(_voltage_frequency_range_prefs.ui_default_frequency)}",
         })
 
         _device_viewer_prefs = DeviceViewerPreferences(preferences=self.application.preferences)
@@ -556,6 +556,21 @@ class PGCWidget(QWidget):
         _tooltip = "Protocol grid blocked; Routes are being run on device view!" if is_executing else ""
         self.tree.setToolTip(_tooltip)
 
+    def _on_voltage_frequency_range_changed(self, message: str):
+        """Update range prefs so new cell editors use the updated bounds.
+
+        The protocol grid delegate reads from the shared prefs instance when
+        creating new spinners. Updating it here ensures the next cell edit will
+        use the new range without requiring an app restart.
+        """
+        data = json.loads(message)
+
+        _range_prefs = self._voltage_frequency_range_prefs
+        _range_prefs.ui_min_voltage = data['ui_min_voltage']
+        _range_prefs.ui_max_voltage = data['ui_max_voltage']
+        _range_prefs.ui_min_frequency = data['ui_min_frequency']
+        _range_prefs.ui_max_frequency = data['ui_max_frequency']
+
     def _check_video_recording_and_show_dialog(self) -> bool:
         """Check if video recording is active and show warning dialog.
 
@@ -610,6 +625,9 @@ class PGCWidget(QWidget):
 
         # Routes executing state from device viewer
         sig.routes_executing_changed.connect(self._on_routes_executing_changed)
+
+        # Voltage/frequency range preferences changed
+        sig.voltage_frequency_range_changed.connect(self._on_voltage_frequency_range_changed)
 
         logger.info("Widget connected to message listener")
 
@@ -924,6 +942,14 @@ class PGCWidget(QWidget):
 
             except Exception as e:
                 logger.error(f"Error handling regular mode completion: {e}", exc_info=True)
+
+        else:
+            information(
+                None,
+                message="Preview run completed successfully.",
+                title="Preview Complete",
+                timeout=3000,
+            )
 
         QTimer.singleShot(10, self._cleanup_after_protocol_operation)
 
@@ -1830,7 +1856,7 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
 
     def _handle_checkbox_change(self, parent, row, field):
-        if field in ("Video", "Capture", "Record"):
+        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn"):
             col = protocol_grid_fields.index(field)
             item = parent.child(row, col)
             if item:
@@ -2545,6 +2571,14 @@ class PGCWidget(QWidget):
 
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
+
+            # Ramp Up/Dn affect Run Time — trigger recalculation
+            if field in ("Ramp Up", "Ramp Dn"):
+                desc_item = parent.child(row, 0)
+                if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
+                    self.update_single_step_dev_fields(desc_item, changed_field=field)
+                    self._update_parent_aggregations(parent)
+
             if not self._protocol_running or (
                     self._protocol_running
                     and self._advanced_user_mode
@@ -2832,6 +2866,14 @@ class PGCWidget(QWidget):
             trail_length = int(trail_length_item.text() or "1")
             trail_overlay = int(trail_overlay_item.text() or "0")
 
+            # Read soft start/end checkbox state for run time calculation
+            soft_start_col = protocol_grid_fields.index("Ramp Up")
+            soft_end_col = protocol_grid_fields.index("Ramp Dn")
+            soft_start_item = parent.child(row, soft_start_col)
+            soft_end_item = parent.child(row, soft_end_col)
+            is_soft_start = soft_start_item and soft_start_item.data(Qt.CheckStateRole) == Qt.Checked
+            is_soft_end = soft_end_item and soft_end_item.data(Qt.CheckStateRole) == Qt.Checked
+
             estimated_repeat_duration = self._calculate_estimated_repeat_duration(
                 device_state, repetitions, duration, trail_length, trail_overlay
             )
@@ -2852,6 +2894,8 @@ class PGCWidget(QWidget):
                 repeat_duration_to_use,
                 trail_length,
                 trail_overlay,
+                soft_start=is_soft_start,
+                soft_end=is_soft_end,
             )
 
             self._programmatic_change = True

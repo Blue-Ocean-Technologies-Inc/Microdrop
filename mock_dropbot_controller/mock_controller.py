@@ -24,7 +24,7 @@ from .consts import (
     TestEvent, create_test_progress_message,
     DEFAULT_BASE_CAPACITANCE_PF, DEFAULT_CAPACITANCE_DELTA_PF,
     DEFAULT_CAPACITANCE_NOISE_PF, DEFAULT_STREAM_INTERVAL_MS,
-    DEFAULT_VOLTAGE, DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
+    HARDWARE_DEFAULT_VOLTAGE, HARDWARE_DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
     MOCK_SIMULATE_CONNECT, MOCK_SIMULATE_DISCONNECT,
     MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
     MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
@@ -51,8 +51,8 @@ class MockDropbotController(HasTraits):
     connected = Bool(False)
     realtime_mode = Bool(False)
     chip_inserted = Bool(False)
-    voltage = Float(DEFAULT_VOLTAGE)
-    frequency = Float(DEFAULT_FREQUENCY)
+    voltage = Float(HARDWARE_DEFAULT_VOLTAGE)
+    frequency = Float(HARDWARE_DEFAULT_FREQUENCY)
     actuated_channels = Set(Int)
     num_channels = Int(DEFAULT_NUM_CHANNELS)
 

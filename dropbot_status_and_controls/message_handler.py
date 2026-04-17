@@ -25,6 +25,7 @@ class DialogSignals(QObject):
     show_no_power_dialog = Signal()
     close_no_power_dialog = Signal()
     show_halted_popup = Signal(dict)
+    voltage_frequency_range_changed = Signal(dict)
 
 logger = get_logger(__name__)
 
@@ -184,3 +185,13 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             'reason': reason,
             'message': message,
         })
+
+    def _on_voltage_frequency_range_changed_triggered(self, message):
+        """Update voltage/frequency spinner bounds live when range preferences change.
+
+        Updates the Traits Range validation bounds on the model, then emits a
+        Qt signal so the dock pane can update the QSpinBox widgets on the UI thread.
+        """
+        data = json.loads(message)
+        # Signal the UI thread to update the QSpinBox widgets
+        self.dialog_signals.voltage_frequency_range_changed.emit(data)

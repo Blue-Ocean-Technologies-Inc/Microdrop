@@ -3,7 +3,7 @@ import math
 import pint
 from traits.api import Str, Enum, Instance, observe, Bool
 
-from dropbot_controller.preferences import DropbotPreferences
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
 from microdrop_utils.ureg_helpers import ureg
 from protocol_grid.services.force_calculation_service import ForceCalculationService
@@ -38,12 +38,15 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
+    voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
     voltage = RangeWithCustomViewHints(
-        30, 140, value=DropbotPreferences().default_voltage, suffix=" V",
+        int(voltage_frequency_range_prefs.ui_min_voltage), int(voltage_frequency_range_prefs.ui_max_voltage),
+        value=int(voltage_frequency_range_prefs.ui_default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithCustomViewHints(
-        100, 20000, value=DropbotPreferences().default_frequency, step=100, suffix=" Hz",
+        int(voltage_frequency_range_prefs.ui_min_frequency), int(voltage_frequency_range_prefs.ui_max_frequency),
+        value=int(voltage_frequency_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
 
@@ -196,6 +199,12 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     def _sync_show_dielectric_info_from_preferences(self, event):
         if self.show_dielectric_info != event.new:
             self.show_dielectric_info = event.new
+
+    @observe("voltage, frequency")
+    def _update_prefs(self, event):
+        """Persist last-applied voltage/frequency to UI preferences on every change."""
+        logger.debug(f"Updating preferences: {event}")
+        self.voltage_frequency_range_prefs.trait_set(**{f"ui_default_{event.name}": event.new})
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

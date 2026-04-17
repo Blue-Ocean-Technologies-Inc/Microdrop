@@ -3,6 +3,7 @@ import os
 from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED, DROPBOT_CONNECTED
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
 from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
+from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -14,7 +15,7 @@ listener_name = f"{PKG}_listener"
 
 # Single listener subscribing to all dropbot signals + calibration data
 ACTOR_TOPIC_DICT = {
-    listener_name: ["dropbot/signals/#", "hardware/signals/#", "ui/calibration_data", PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE]
+    listener_name: ["dropbot/signals/#", "hardware/signals/#", "ui/calibration_data", PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE, VOLTAGE_FREQUENCY_RANGE_CHANGED]
 }
 
 # Image paths
