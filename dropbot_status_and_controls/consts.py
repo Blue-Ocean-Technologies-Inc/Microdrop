@@ -1,9 +1,8 @@
 import os
 
-from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED, DROPBOT_CONNECTED
+from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
 from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
-from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])

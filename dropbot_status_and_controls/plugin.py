@@ -4,7 +4,6 @@ from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from traits.api import List
 
 from template_status_and_controls.base_plugin import BaseStatusPlugin
-
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 
 

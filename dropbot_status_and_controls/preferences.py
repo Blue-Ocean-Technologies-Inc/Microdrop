@@ -1,13 +1,10 @@
-from PySide6.QtWidgets import QApplication
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from traits.api import Bool, Enum
 from traitsui.api import Item, VGroup, View
 
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
-
 from .consts import DIELECTRIC_MATERIALS
-
 
 dropbot_status_and_controls_tab = PreferencesCategory(
     id="microdrop.dropbot_status_and_controls",

@@ -1,14 +1,14 @@
 from PySide6.QtGui import QPixmap, Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy
 from pyface.qt import QtWidgets
+from traits.api import Int, Property, HasTraits, Range, Str
+from traitsui.api import Item, View
 from traitsui.basic_editor_factory import BasicEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
-from traitsui.api import Item, View
-from traits.api import Int, Property, HasTraits, Range, Str
 
 from dropbot_status_and_controls.consts import BORDER_RADIUS
-
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
