@@ -4,6 +4,7 @@ from traits.api import Bool, Enum
 from traitsui.api import Item, VGroup, View
 
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
+from microdrop_utils.traitsui_qt_helpers import HoverScrollEnumEditor
 from .consts import DIELECTRIC_MATERIALS
 
 dropbot_status_and_controls_tab = PreferencesCategory(
@@ -39,6 +40,7 @@ class DropbotStatusAndControlsPreferencesPane(PreferencesPane):
         create_item_label_group(
             "default_dielectric_material",
             label_text="Default Dielectric Material",
+            editor=HoverScrollEnumEditor(values=list(DIELECTRIC_MATERIALS.keys())),
         ),
         Item("_"),
         create_item_label_group(
