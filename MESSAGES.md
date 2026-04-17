@@ -101,5 +101,31 @@ Receiving: (Via handlers)
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
 - START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring"
+- DEVICE_VIEWER_STATE_CHANGED "ui/device_viewer/state_changed"
 
+---
+
+## Detailed Flows
+
+Deeper references for message flows whose payloads or plumbing are non-obvious from the topic list alone. Add a new subsection here whenever you find yourself reverse-engineering a flow.
+
+### Device Viewer → Protocol Grid: routes / state sync
+
+The device viewer pushes its full UI state (routes, free-mode electrode state, colors) to the protocol grid so the grid can turn user-drawn electrode paths into protocol steps. One topic carries the whole serialized model.
+
+**Topic**
+- `DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"` — defined in `protocol_grid/consts.py:25`.
+
+**Publisher side (device_viewer)**
+- `device_viewer/views/device_view_dock_pane.py:408` — `publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)`.
+- Triggered reactively by the Traits observer at `device_view_dock_pane.py:1024-1048` (`@observe("model.routes.layers.items.route.route.items")`), which serializes the UI model and calls `publish_model_message()` at line 1047.
+- Payload is assembled in `device_viewer/utils/message_utils.py:4-20` via `gui_models_to_message_model()` — routes are extracted as `[(layer.route.route, layer.color) for layer in model.routes.layers]`.
+
+**Payload schema**
+- Pydantic `DeviceViewerMessageModel` at `device_viewer/models/messages.py:5-61`.
+- Key field: `routes: list[tuple[list[str], str]]` — each entry is `(electrode_id_list, color_string)`.
+- Serialized with `.serialize()` (JSON) and rebuilt with `.deserialize()` on the receiving side.
+
+**Subscriber side (protocol_grid)**
+- `protocol_grid/services/message_listener.py:52-54` — `_on_device_viewer_message_received()` handles the topic, deserializes, and re-emits a Qt signal `device_viewer_message_received` for UI consumption.
 
