@@ -1,4 +1,4 @@
-from dropbot_status_and_controls.view_helpers import StatusIconEditorFactory
+from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory
 from manual_controls.MVC import ToggleEditorFactory
 
 from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, Label, Readonly

@@ -57,7 +57,7 @@ class DeviceViewerMessageModel(BaseModel):
         return cls.model_validate_json(json_str)
 
     def __repr__(self):
-        count = sum(1 for v in self.channels_activated.values() if v)
+        count = len(self.channels_activated)
         return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} activated={count}>"
 
 

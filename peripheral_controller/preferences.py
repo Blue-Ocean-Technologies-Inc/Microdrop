@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
-from microdrop_utils.pyface_helpers import RangeWithViewHints
+from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from .consts import DEFAULT_UP_HEIGHT_MM, DEFAULT_DOWN_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM
 

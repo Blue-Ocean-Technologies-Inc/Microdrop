@@ -1,22 +1,22 @@
 import math
-
 import pint
+
 from traits.api import Str, Enum, Instance, observe, Bool
-
-from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
-from logger.logger_service import get_logger
-from microdrop_utils.ureg_helpers import ureg
-from protocol_grid.services.force_calculation_service import ForceCalculationService
-
-from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
     DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, DIELECTRIC_MATERIALS,
     disconnected_color, connected_no_device_color, connected_color, halted_color,
 )
 from .preferences import DropbotStatusAndControlsPreferences
-from .view_helpers import RangeWithCustomViewHints
 
+from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
+from microdrop_utils.ureg_helpers import ureg
+
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
+from protocol_grid.services.force_calculation_service import ForceCalculationService
+from template_status_and_controls.base_model import BaseStatusModel
+
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 N_DISPLAY_DIGITS = 3
@@ -39,19 +39,19 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     # ---- Hardware controls (user-writable via UI) ----------------------
     voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
-    voltage = RangeWithCustomViewHints(
+    voltage = RangeWithSteppedSpinViewHint(
         int(voltage_frequency_range_prefs.ui_min_voltage), int(voltage_frequency_range_prefs.ui_max_voltage),
         value=int(voltage_frequency_range_prefs.ui_default_voltage), suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
-    frequency = RangeWithCustomViewHints(
+    frequency = RangeWithSteppedSpinViewHint(
         int(voltage_frequency_range_prefs.ui_min_frequency), int(voltage_frequency_range_prefs.ui_max_frequency),
         value=int(voltage_frequency_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
 
     # ---- Device-specific status ----------------------------------------
-    chip_status_text = Str("Not Inserted")
+    chip_status_text = Str("Absent")
 
     # ---- Sensor readings (raw values set by message handler) -----------
     # NaN magnitude means "no reading available"
@@ -103,7 +103,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # ------------------------------------------------------------------ #
 
     def _update_chip_display(self, inserted: bool) -> None:
-        self.chip_status_text = "Inserted" if inserted else "Not Inserted"
+        self.chip_status_text = "Present" if inserted else "Absent"
 
     # ------------------------------------------------------------------ #
     # Observers                                                            #

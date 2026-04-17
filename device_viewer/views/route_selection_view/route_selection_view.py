@@ -4,10 +4,11 @@ from traitsui.key_bindings import KeyBindings, KeyBinding
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
 
-from microdrop_utils.pyface_helpers import SafeCancelTableHandler
-from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn, CustomCheckboxColumn
+from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn, CustomCheckboxColumn, \
+    SafeCancelTableHandler
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 class RouteLayerTableHandler(SafeCancelTableHandler):

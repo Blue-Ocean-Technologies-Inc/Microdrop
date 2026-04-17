@@ -7,7 +7,8 @@ with consistent styling and behavior across the application.
 import functools
 from typing import Union, List, Optional
 
-from PySide6.QtGui import QColor, QPainter
+from PySide6 import QtWidgets, QtGui, QtCore
+from PySide6.QtGui import QColor, QPainter, Qt, QPixmap
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QProgressDialog,
     QProgressBar,
-    QGraphicsOpacityEffect,
+    QGraphicsOpacityEffect, QSizePolicy,
 )
 from PySide6.QtCore import (
     Qt,
@@ -28,11 +29,12 @@ from PySide6.QtCore import (
     QPropertyAnimation, Signal,
 )
 
+from microdrop_style.button_styles import get_tooltip_style
+from microdrop_style.helpers import is_dark_mode
+
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-from microdrop_style.button_styles import get_tooltip_style
-from microdrop_style.helpers import is_dark_mode
 
 
 
@@ -601,3 +603,119 @@ class ClickableToggleIcon(QLabel):
         else:
             self.setToolTip(self._inactive_tooltip)
             self.setStyleSheet(self._inactive_stylesheet + _tooltip_style)
+
+
+class MarqueeComboBox(QtWidgets.QComboBox):
+    """Non-editable QComboBox that marquee-scrolls overflow text on hover.
+
+    Behavior: when the current item is wider than the edit-field rect, hovering
+    over the widget scrolls the text leftward until its tail is visible, then
+    holds that position until the mouse leaves — at which point the offset
+    resets to the start. The dropdown list is unaffected.
+    """
+
+    SCROLL_INTERVAL_MS = 25   # ~40 fps
+    SCROLL_STEP_PX = 2
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._offset = 0
+        self._timer = QtCore.QTimer(self)
+        self._timer.setInterval(self.SCROLL_INTERVAL_MS)
+        self._timer.timeout.connect(self._tick)
+        self.currentTextChanged.connect(self._reset_scroll)
+
+    def _text_rect(self):
+        opt = QtWidgets.QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        return self.style().subControlRect(
+            QtWidgets.QStyle.CC_ComboBox, opt,
+            QtWidgets.QStyle.SC_ComboBoxEditField, self,
+        )
+
+    def _max_offset(self):
+        """Distance the text must travel so its tail reaches the right edge."""
+        text_w = self.fontMetrics().horizontalAdvance(self.currentText())
+        return max(0, text_w - self._text_rect().adjusted(4, 0, -4, 0).width())
+
+    def _reset_scroll(self, _=None):
+        self._timer.stop()
+        self._offset = 0
+        self.update()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self._max_offset() > 0 and not self._timer.isActive():
+            self._offset = 0
+            self._timer.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._reset_scroll()
+
+    def _tick(self):
+        max_offset = self._max_offset()
+        self._offset = min(self._offset + self.SCROLL_STEP_PX, max_offset)
+        if self._offset >= max_offset:
+            self._timer.stop()
+        self.update()
+
+    def paintEvent(self, event):
+        opt = QtWidgets.QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        text = opt.currentText
+        opt.currentText = ""  # suppress default text; we draw our own
+
+        painter = QtGui.QPainter(self)
+        self.style().drawComplexControl(
+            QtWidgets.QStyle.CC_ComboBox, opt, painter, self,
+        )
+
+        rect = self._text_rect().adjusted(4, 0, -4, 0)
+        painter.setClipRect(rect)
+        align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        text_w = painter.fontMetrics().horizontalAdvance(text)
+
+        painter.drawText(
+            rect.x() - self._offset, rect.y(),
+            text_w + self._offset, rect.height(),
+            align, text,
+        )
+
+
+class _ScalingPixmapLabel(QLabel):
+    """QLabel that auto-scales its pixmap to fill available space on resize.
+
+    Uses ``Ignored`` vertical policy so the grid sibling drives the
+    HGroup height.  On every resize the max-width is clamped to the
+    current height, keeping the icon square.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._source_pixmap = QPixmap()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Ignored vertically → the grid determines the row height.
+        # Preferred horizontally → width is governed by maxWidth set in resizeEvent.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
+        self.setMinimumSize(120, 120)
+        self.setStyleSheet("padding: 5px;")
+    def set_source_pixmap(self, pixmap):
+        self._source_pixmap = pixmap
+        self._rescale()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Keep the icon square: max width tracks the actual height
+        h = self.height()
+        self.setMaximumWidth(h)
+        self._rescale()
+
+    def _rescale(self):
+        if not self._source_pixmap.isNull():
+            scaled = self._source_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.setPixmap(scaled)

@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QVBoxLayout,
-    QComboBox,
     QLabel,
     QSizePolicy,
     QApplication,
@@ -24,6 +23,7 @@ from apptools.preferences.api import Preferences
 
 from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from protocol_grid.consts import DEVICE_VIEWER_RECORDING_STATE
 
@@ -109,9 +109,9 @@ class CameraControlWidget(QWidget):
 
     def _init_ui(self):
         # Camera Combo Box
-        self.combo_cameras = QComboBox()
+        self.combo_cameras = MarqueeComboBox()
         self.camera_label = QLabel("Camera:")
-        self.combo_resolutions = QComboBox()
+        self.combo_resolutions = MarqueeComboBox()
         self.resolution_label = QLabel("Resolution: ")
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)

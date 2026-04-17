@@ -2,11 +2,6 @@ from pyface.action.api import StatusBarManager as _StatusBarManager
 from pyface.qt.QtWidgets import QApplication, QStatusBar, QLabel
 from pyface.qt.QtCore import Qt
 from pyface.tasks.dock_pane import DockPane
-from pyface.qt.QtGui import QShortcut, QKeySequence, Qt
-
-from traits.api import Range, Any
-
-from traitsui.api import Handler, UIInfo
 
 from microdrop_style.helpers import QT_THEME_NAMES, is_dark_mode
 from microdrop_style.label_style import get_label_style
@@ -110,55 +105,3 @@ class StatusBarManager(_StatusBarManager):
         # probably also need to extend the API to allow a "message" to be a
         # widget - depends on what wx is capable of.
         self.persistent_label.setText("\t".join(self.messages))
-
-
-class RangeWithViewHints(Range):
-    def create_editor(self):
-        """ Returns the default UI editor for the trait.
-        """
-        # fixme: Needs to support a dynamic range editor.
-
-        auto_set = self.auto_set
-        if auto_set is None:
-            auto_set = True
-
-        from traitsui.api import RangeEditor
-
-        return RangeEditor(
-            self,
-            mode=self.mode or "auto",
-            cols=self.cols or 3,
-            auto_set=auto_set,
-            enter_set=self.enter_set or False,
-            low_label=self.low or "",
-            high_label=self.high or "",
-            low_name=self._low_name,
-            high_name=self._high_name,
-            format_str='%.2f',
-            is_float=True
-        )
-
-
-class SafeCancelTableHandler(Handler):
-    """
-    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
-    """
-    escape_shortcut = Any()
-
-    def init(self, info: UIInfo):
-        """Runs once when the UI is generated."""
-
-        # 1. Create a shortcut that intercepts the Escape key
-        self.escape_shortcut = QShortcut(QKeySequence.Cancel, info.ui.control)
-
-        # 2. Ensure it captures the key even if the user is clicked inside the table
-        self.escape_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
-
-        # 3. Route it to a custom method instead of closing the window
-        self.escape_shortcut.activated.connect(lambda: self.handle_escape(info))
-
-        return True
-
-    def handle_escape(self, info: UIInfo):
-        """Swallows the Escape key press so the table doesn't hide."""
-        pass
