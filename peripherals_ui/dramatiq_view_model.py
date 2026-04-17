@@ -50,3 +50,6 @@ class DramatiqStatusViewModel(HasTraits):
 
     def _on_position_updated_triggered(self, body):
         self.model.position = float(body)
+
+    def _on_start_device_monitoring_triggered(self, body):
+        self.model.search_requested = True

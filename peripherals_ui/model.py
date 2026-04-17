@@ -8,3 +8,5 @@ class PeripheralModel(HasTraits):
     status = Bool(False)
     position = Float(0.0)  # Position in mm
     realtime_mode = Bool(False)
+    # True once a connection search has been requested (by button or menu action) this session.
+    search_requested = Bool(False)
