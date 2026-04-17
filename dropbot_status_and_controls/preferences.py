@@ -41,6 +41,7 @@ class DropbotStatusAndControlsPreferencesPane(PreferencesPane):
             "default_dielectric_material",
             label_text="Default Dielectric Material",
             editor=HoverScrollEnumEditor(values=list(DIELECTRIC_MATERIALS.keys())),
+            width=160,
         ),
         Item("_"),
         create_item_label_group(
