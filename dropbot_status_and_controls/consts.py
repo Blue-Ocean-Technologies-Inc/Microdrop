@@ -45,4 +45,3 @@ disconnected_color = GREY["lighter"]
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 halted_color = ERROR_COLOR
-BORDER_RADIUS = 4

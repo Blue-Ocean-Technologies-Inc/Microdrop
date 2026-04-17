@@ -1,5 +1,5 @@
 from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
-from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory, FixedWidthEnumEditor
+from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory, HoverScrollEnumEditor
 from manual_controls.MVC import ToggleEditorFactory
 
 from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid
@@ -45,7 +45,7 @@ grid = VGrid(
     Item("dielectric_thickness_display", style="readonly", label="Dielectric", visible_when="show_dielectric_info"),
     UItem(
         "dielectric_material",
-        editor=FixedWidthEnumEditor(
+        editor=HoverScrollEnumEditor(
             values=list(DIELECTRIC_MATERIALS.keys()),
         ),
         visible_when="show_dielectric_info",

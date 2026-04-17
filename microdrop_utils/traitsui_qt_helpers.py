@@ -9,7 +9,6 @@ from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as Tab
                           UIInfo, Handler, RangeEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
 
-from dropbot_status_and_controls.consts import BORDER_RADIUS
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK
 from microdrop_style.helpers import is_dark_mode
@@ -288,7 +287,7 @@ class StatusIconEditor(QtEditor):
 
     def _apply_background_color(self, color):
         self.control.setStyleSheet(
-            f"background-color: {color}; border-radius: {BORDER_RADIUS}px;"
+            f"background-color: {color}; border-radius: {self.factory.border_radius}px;"
         )
 
     def _on_icon_color_changed(self, event):
@@ -306,8 +305,10 @@ class StatusIconEditor(QtEditor):
 class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
+    border_radius = Int(4)
 
-class _FixedWidthEnumEditor(QtEditor):
+
+class _HoverScrollEnumEditor(QtEditor):
     """Qt editor that renders an Enum trait via :class:`_MarqueeComboBox`.
 
     The combo box uses ``AdjustToMinimumContentsLengthWithIcon`` so it doesn't
@@ -320,7 +321,7 @@ class _FixedWidthEnumEditor(QtEditor):
         self.control.addItems(list(self.factory.values))
 
         self.control.setSizeAdjustPolicy(
-            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
 
         self.control.currentTextChanged.connect(self.update_object)
@@ -336,7 +337,7 @@ class _FixedWidthEnumEditor(QtEditor):
             self.control.blockSignals(False)
 
 
-class FixedWidthEnumEditor(BasicEditorFactory):
+class HoverScrollEnumEditor(BasicEditorFactory):
     """Factory for an Enum combo box that marquee-scrolls overflow text on hover."""
 
     klass = Property
@@ -344,4 +345,4 @@ class FixedWidthEnumEditor(BasicEditorFactory):
     values = List(Str)
 
     def _get_klass(self):
-        return _FixedWidthEnumEditor
+        return _HoverScrollEnumEditor
