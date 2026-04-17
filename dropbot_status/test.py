@@ -11,6 +11,7 @@ from displayed_UI import (
 )
 from dropbot_status.model import DropBotStatusModel
 
+from microdrop_utils.ureg_helpers import ureg
 
 class Window(QMainWindow):
     """
@@ -77,17 +78,16 @@ class Window(QMainWindow):
         if self.model.connected:
             cap = f"{random.uniform(10, 50):.5f} pF"
             volt = f"{random.uniform(1, 100):.5f} V"
-            pressure = f"{random.uniform(1, 100):.4f} pF/mm^2"
-            force = self.model.force = f"{random.uniform(1,100):.4f} mN/m"
-            self.model.capacitance = cap
-            self.model.voltage = volt
-            self.model.pressure = pressure
-            self.model.force = force
-            print(f"HARNESS: Simulating backend update. Capacitance: {cap}; Voltage: {volt}; Pressure: {pressure}; Force: {force}")
+            c_device = f"{random.uniform(99, 100):.4f} pF/mm^2"
+            force = f"{random.uniform(1,100):.4f} mN/m"
+            self.model.capacitance = ureg(cap)
+            self.model.voltage = ureg(volt)
+            self.model.c_device = ureg(c_device)
+            self.model.force = ureg(force)
+            print(f"HARNESS: Simulating backend update. Capacitance: {cap}; Voltage: {volt}; c_device: {c_device}; Force: {force}")
         else:
             # If not connected, reset to default values
-            self.model.capacitance = "-"
-            self.model.voltage = "-"
+            self.model.reset_readings()
             print("HARNESS: Simulating backend update (disconnected).")
 
 

@@ -1,5 +1,6 @@
 # sys imports
 import json
+import math
 import os
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -16,30 +17,33 @@ from microdrop_utils.datetime_helpers import TimestampedMessage
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
 from dropbot_controller.consts import RETRY_CONNECTION
-from microdrop_utils.ureg_helpers import ureg_quant_percent_change, ureg_diff, get_ureg_magnitude
+from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .model import DropBotStatusModel
 
 logger = get_logger(__name__)
 
-from microdrop_utils.ureg_helpers import ureg
-
 BORDER_RADIUS = 4
 
 
 def check_change_significance(old_value, new_value, threshold=60, threshold_type='percentage') -> bool:
-    if old_value == '-' and new_value != '-':
+    old_nan = math.isnan(old_value.magnitude)
+    new_nan = math.isnan(new_value.magnitude)
+
+    if old_nan and not new_nan:
         return True
 
-    elif old_value != '-' and new_value != '-':
+    elif not old_nan and not new_nan:
+        old_mag = old_value.magnitude
+        new_mag = new_value.magnitude
         change = 0
 
         if threshold_type == 'percentage':
-            change = ureg_quant_percent_change(old=old_value, new=new_value)
+            change = 100 * abs(old_mag - new_mag) / old_mag
 
         elif threshold_type == 'absolute_diff':
-            change = abs(ureg_diff(old=old_value, new=new_value))
+            change = abs(old_mag - new_mag)
 
         if change > threshold:
             return True
@@ -74,10 +78,9 @@ class DramatiqDropBotStatusViewModel(HasTraits):
 
         self.filler_capacitance_over_area = 0 # Initialize calibration data values
         self.liquid_capacitance_over_area = 0 # Both of these are in pF/mm^2
-        self.pressure = 0
+        self.c_device = 0
         self.active_electrodes = []
         self.electrode_areas = {}
-
     ###################################################################################################################
     # Publisher methods
     ###################################################################################################################
@@ -123,23 +126,25 @@ class DramatiqDropBotStatusViewModel(HasTraits):
     ################# Capcitance Voltage readings ##################
     def _on_capacitance_updated_triggered(self, body):
         if self.realtime_mode: # Only update the capacitance and voltage readings if we are in realtime mode
-            new_capacitance = json.loads(body).get('capacitance', '-')
-            new_voltage = json.loads(body).get('voltage', '-')
+            data = json.loads(body)
+            new_capacitance_str = data.get('capacitance')
+            new_voltage_str = data.get('voltage')
+
+            if not new_capacitance_str or not new_voltage_str:
+                return
 
             old_capacitance = self.model.capacitance
             old_voltage = self.model.voltage
 
-            self.capacitances.append(get_ureg_magnitude(new_capacitance))
+            self.capacitances.append(get_ureg_magnitude(new_capacitance_str))
 
             if len(self.capacitances) == NUM_CAPACITANCE_READINGS_AVERAGED:
-                new_capacitance = sum(self.capacitances) / len(self.capacitances)
-                new_capacitance = new_capacitance * ureg.picofarad
-                new_capacitance = f"{new_capacitance:.4g~P}"
+                new_capacitance = (sum(self.capacitances) / len(self.capacitances)) * ureg.picofarad
                 self.capacitances = []
-
             else:
                 new_capacitance = old_capacitance
 
+            new_voltage = ureg(new_voltage_str)
 
             cap_change_significant = check_change_significance(old_capacitance, new_capacitance, threshold=3, threshold_type='absolute_diff')
             voltage_change_significant = check_change_significance(old_voltage, new_voltage, threshold=1, threshold_type='absolute_diff')
@@ -151,13 +156,13 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 self.model.voltage = new_voltage
                 force = None
 
-                if self.model.pressure != "-":
+                if not math.isnan(self.model.c_device.magnitude):
                     force = ForceCalculationService.calculate_force_for_step(
-                        get_ureg_magnitude(new_voltage),
-                        get_ureg_magnitude(self.model.pressure)
+                        new_voltage.magnitude,
+                        self.model.c_device.magnitude
                     )
 
-                self.model.force = f"{force:.4f} mN/m" if force is not None else "-"
+                self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
 
     ################## Calibration data #########################
 
@@ -168,25 +173,24 @@ class DramatiqDropBotStatusViewModel(HasTraits):
         liquid_cap = data.get('liquid_capacitance_over_area')
 
         if filler_cap is not None and liquid_cap is not None:
-            self.pressure_value = liquid_cap - filler_cap
-            self.model.pressure = f"{self.pressure_value:.4f} pF/mm^2"
+            self.c_device_value = liquid_cap - filler_cap
+            self.model.c_device = ureg(f"{self.c_device_value:.4f} pF/mm^2")
 
-            if self.model.voltage != "-":
+            if not math.isnan(self.model.voltage.magnitude):
                 force = ForceCalculationService.calculate_force_for_step(
-                    get_ureg_magnitude(self.model.voltage),
-                    self.pressure_value
+                    self.model.voltage.magnitude,
+                    self.c_device_value
                 )
 
-                self.model.force = f"{force:.4f} mN/m"
+                self.model.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
 
             else:
                 logger.error("Voltage is not set! Cannot find Force. Recalibrate once voltage is set.")
-                self.model.force = "-"
+                self.model.force = ureg("nan mN/m")
 
         else:
-            self.model.pressure = f"-"
-            self.model.force = "-"
-
+            self.model.c_device = ureg("nan pF/mm^2")
+            self.model.force = ureg("nan mN/m")
 
     ####### Dropbot Icon Image Control Methods ###########
 
@@ -237,7 +241,6 @@ class DramatiqDropBotStatusViewModel(HasTraits):
                 f"{message}")
 
         self.view_signals.show_halted_popup.emit(text)
-
 
 class DramatiqDropBotStatusView(QWidget):
     """

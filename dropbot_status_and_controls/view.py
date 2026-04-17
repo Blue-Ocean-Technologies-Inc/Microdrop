@@ -32,15 +32,17 @@ left = HGroup(
 # 2. Add label, id, and dock='tab' to the grid group
 grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
-    UItem("voltage", label="Voltage", enabled_when="free_mode and not protocol_running and not halted"),
+    UItem("voltage", enabled_when="free_mode and not protocol_running and not halted"),
     Item("frequency_display", label="Frequency", style="readonly"),
-    UItem("frequency", label="Frequency", enabled_when="free_mode and not protocol_running and not halted"),
+    UItem("frequency", enabled_when="free_mode and not protocol_running and not halted"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
-    Item("pressure_display", style="readonly", label="c_device"),
+    Item("c_device_display", style="readonly", label="c_device"),
     UItem(""),
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
+    Item("dielectric_thickness_display", style="readonly", label="Dielectric Thickness", visible_when="show_dielectric_info"),
+    UItem("dielectric_material", visible_when="show_dielectric_info"),
     id="data_grid",  # Unique identifier for layout saving
 )
 

@@ -1,3 +1,4 @@
+import math
 from functools import wraps
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpacerItem, QSizePolicy
@@ -10,7 +11,6 @@ from dropbot_status.status_label_widgets import DropBotIconWidget, DropBotStatus
 
 from microdrop_style.colors import SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, GREY
 from logger.logger_service import get_logger
-from microdrop_utils.ureg_helpers import trim_to_n_digits
 
 logger = get_logger(__name__)
 
@@ -32,8 +32,11 @@ class DropbotStatusViewModelSignals(QObject):
 
     capacitance_changed = Signal(str)
     voltage_changed = Signal(str)
-    pressure_changed = Signal(str)
+    c_device_changed = Signal(str)
     force_changed = Signal(str)
+
+    dielectric_material_changed = Signal(str)
+    dielectric_thickness_changed = Signal(str)
 
 class DropBotStatusViewModel(HasTraits):
     """
@@ -43,6 +46,13 @@ class DropBotStatusViewModel(HasTraits):
 
     model = Instance(DropBotStatusModel)
     view_signals = Instance(DropbotStatusViewModelSignals)
+
+    def traits_init(self):
+        self.view_signals.dielectric_material_changed.connect(self._on_selected_dielectric_material_changed)
+
+    # ------------------ view change handlers -----------------------------
+    def _on_selected_dielectric_material_changed(self, material):
+        self.model.selected_dielectric_material = material
 
     # ---------- Model traits presentation value getters  -----------------
     def _get_connection_status_text(self):
@@ -68,30 +78,20 @@ class DropBotStatusViewModel(HasTraits):
     @staticmethod
     def format_and_emit_measurements(signal_name: str):
         """
-        A decorator factory that formats the event.new value from an observer
-        and emits it on a specified signal.
+        A decorator factory that formats a pint.Quantity from an observer
+        and emits the display string on a specified signal.
+        NaN magnitude is displayed as "-".
         """
-
 
         def decorator(func):
             @wraps(func)
             def wrapper(self, event):
-                # 1. Format the incoming value
-                try:
-                    formatted_value = trim_to_n_digits(event.new, N_DISPLAY_DIGITS)
-                except AssertionError:
-                    if event.new == "-":
-                        logger.info(f"{event.name.title()} is not measured by device. Value is {event.new}")
-                        formatted_value = event.new
-                    else:
-                        logger.warning(f"{event.name.title()} changed to value that cannot be parsed. Format needed: '[quantity] [units]'")
+                if event.new is None or math.isnan(event.new.magnitude):
+                    formatted_value = "-"
+                else:
+                    formatted_value = f"{event.new:.{N_DISPLAY_DIGITS}g~H}"
 
-                        return
-
-                # 2. Get the correct signal from the instance using its name
                 signal_to_emit = getattr(self.view_signals, signal_name)
-
-                # 3. Emit the formatted value
                 signal_to_emit.emit(formatted_value)
 
             return wrapper
@@ -123,15 +123,22 @@ class DropBotStatusViewModel(HasTraits):
     def update_voltage_reading(self, event):
         pass
 
-    @observe("model:pressure")
-    @format_and_emit_measurements("pressure_changed")
-    def update_pressure_reading(self, event):
+    @observe("model:c_device")
+    @format_and_emit_measurements("c_device_changed")
+    def update_c_device_reading(self, event):
         pass
 
     @observe("model:force")
     @format_and_emit_measurements("force_changed")
     def update_force_reading(self, event):
         pass
+
+    @observe("model:dielectric_thickness")
+    def update_dielectric_thickness_reading(self, event):
+        if event.new is None or math.isnan(event.new.magnitude):
+            self.view_signals.dielectric_thickness_changed.emit("-")
+        else:
+            self.view_signals.dielectric_thickness_changed.emit(f"{event.new:.3f~H}")
 
 class DropBotStatusView(QWidget):
     """
@@ -172,5 +179,9 @@ class DropBotStatusView(QWidget):
         self._view_model_signals.chip_status_text_changed.connect(self.grid_widget.chip_status.setText)
         self._view_model_signals.capacitance_changed.connect(self.grid_widget.capacitance_reading.setText)
         self._view_model_signals.voltage_changed.connect(self.grid_widget.voltage_reading.setText)
-        self._view_model_signals.pressure_changed.connect(self.grid_widget.pressure_reading.setText)
+        self._view_model_signals.c_device_changed.connect(self.grid_widget.c_device_reading.setText)
         self._view_model_signals.force_changed.connect(self.grid_widget.force_reading.setText)
+        self._view_model_signals.dielectric_thickness_changed.connect(self.grid_widget.dielectric_thickness_reading.setText)
+
+        # Connect VIEW changes to the VIEWMODEL
+        self.grid_widget.dielectric_combo.currentTextChanged.connect(self._view_model_signals.dielectric_material_changed)

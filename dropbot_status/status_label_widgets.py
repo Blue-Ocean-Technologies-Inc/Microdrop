@@ -1,7 +1,8 @@
 from PySide6.QtGui import Qt, QPixmap
-from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout
-from logger.logger_service import get_logger
+from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget, QGridLayout, QComboBox
 
+from dropbot_status.model import DIELECTRIC_MATERIALS
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 BORDER_RADIUS = 4
@@ -97,12 +98,12 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(volt_label, 3, 0)
         layout.addWidget(self.voltage_reading, 3, 1)
 
-        # c_device (Pressure)
+        # c_device (c_device)
         c_device_label = QLabel("c<sub>device</sub>:")
         c_device_label.setFont(bold_font)
-        self.pressure_reading = QLabel("-")
+        self.c_device_reading = QLabel("-")
         layout.addWidget(c_device_label, 4, 0)
-        layout.addWidget(self.pressure_reading, 4, 1)
+        layout.addWidget(self.c_device_reading, 4, 1)
 
         # Force
         force_label = QLabel("Force:")
@@ -111,6 +112,23 @@ class DropBotStatusGridWidget(QWidget):
         layout.addWidget(force_label, 5, 0)
         layout.addWidget(self.force_reading, 5, 1)
 
+        # Dielectric Material
+        dielectric_label = QLabel("Dielectric:")
+        dielectric_label.setFont(bold_font)
+        self.dielectric_combo = QComboBox()
+        self.dielectric_combo.addItem("")  # empty default
+        for material in DIELECTRIC_MATERIALS:
+            self.dielectric_combo.addItem(material)
+        self.dielectric_combo.setCurrentIndex(0)
+        layout.addWidget(dielectric_label, 6, 0)
+        layout.addWidget(self.dielectric_combo, 6, 1)
+
+        # Dielectric Thickness
+        thickness_label = QLabel("Thickness:")
+        thickness_label.setFont(bold_font)
+        self.dielectric_thickness_reading = QLabel("-")
+        layout.addWidget(thickness_label, 7, 0)
+        layout.addWidget(self.dielectric_thickness_reading, 7, 1)
 
         # The 'Maximum' policy tells the layout that the widget's size hint
         # is also its maximum size.
