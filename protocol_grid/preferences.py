@@ -11,7 +11,7 @@ from envisage.ui.tasks.api import PreferencesCategory
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_grid_group
-from microdrop_utils.pyface_helpers import RangeWithViewHints
+from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from .consts import (
     DEFAULT_CAMERA_PREWARM_SECONDS,

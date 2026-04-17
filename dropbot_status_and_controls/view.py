@@ -1,4 +1,5 @@
-from dropbot_status_and_controls.view_helpers import StatusIconEditorFactory
+from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
+from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory, FixedWidthEnumEditor
 from manual_controls.MVC import ToggleEditorFactory
 
 from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid
@@ -41,8 +42,14 @@ grid = VGrid(
     UItem(""),
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
-    Item("dielectric_thickness_display", style="readonly", label="Dielectric Thickness", visible_when="show_dielectric_info"),
-    UItem("dielectric_material", visible_when="show_dielectric_info"),
+    Item("dielectric_thickness_display", style="readonly", label="Dielectric", visible_when="show_dielectric_info"),
+    UItem(
+        "dielectric_material",
+        editor=FixedWidthEnumEditor(
+            values=list(DIELECTRIC_MATERIALS.keys()),
+        ),
+        visible_when="show_dielectric_info",
+    ),
     id="data_grid",  # Unique identifier for layout saving
 )
 

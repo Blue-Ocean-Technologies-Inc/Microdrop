@@ -28,7 +28,7 @@ NUM_CAPACITANCE_READINGS_AVERAGED = 5
 # Used to calculate dielectric thickness from device capacitance via:
 #   d = epsilon * epsilon_0 / C_device
 DIELECTRIC_MATERIALS = {
-    "Choose Dielectric": float('nan'),
+    "Pick a dielectric...": float('nan'),
     "Parylene C": 3.1,
     "CYTOP": 2.1,
     "Teflon AF": 1.93,

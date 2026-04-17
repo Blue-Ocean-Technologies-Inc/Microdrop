@@ -1,17 +1,23 @@
-from typing import Any
-
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
 from PySide6.QtWidgets import QStyledItemDelegate
-from traitsui.api import ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_
-from traits.api import Str, Instance
 
-from traitsui.api import RangeEditor
+from pyface.qt import QtWidgets
 
-import logger
+from traits.api import Instance, Any, Range, List, Str, Int, Property
+from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_,
+                          UIInfo, Handler, RangeEditor, BasicEditorFactory)
+from traitsui.qt.editor import Editor as QtEditor
+
+from dropbot_status_and_controls.consts import BORDER_RADIUS
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
+from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, _MarqueeComboBox
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 class TableColumn(TableColumn_):
@@ -137,7 +143,205 @@ class RangeColumn(ObjectColumn):
 
             return self.format % (self.get_raw_value(object),)
         except:
-            logger.exception(
+            logger.error(
                 "Error occurred trying to format a %s value" % self.__class__.__name__
             )
             return "Format!"
+
+## --------------------------------------------------------
+# Range editing spinner box with custom increments
+## --------------------------------------------------------
+
+class _SteppedSpinEditor(QtEditor):
+    """The actual Qt implementation of the spin box."""
+
+    def init(self, parent):
+        """Initializes the editor by creating the underlying toolkit widget."""
+        # Use QDoubleSpinBox for floats. (Use QSpinBox for ints).
+        self.control = QtWidgets.QSpinBox()
+
+        # Configure range bounds from the factory
+        self.control.setMinimum(self.factory.low)
+        self.control.setMaximum(self.factory.high)
+
+        if self.factory.suffix:
+            self.control.setSuffix(self.factory.suffix)
+
+        self.control.setSingleStep(self.factory.step)
+
+        # Connect the Qt signal to update the Trait value
+        self.control.valueChanged.connect(self.update_object)
+
+    def update_object(self, value):
+        """Handles the user changing the value in the GUI."""
+        self.value = value
+
+    def update_editor(self):
+        """Updates the GUI when the Trait changes externally."""
+        if self.control is not None:
+            # Block signals temporarily to prevent an infinite update loop
+            self.control.blockSignals(True)
+            self.control.setValue(self.value)
+            self.control.blockSignals(False)
+
+
+class SteppedSpinEditor(BasicEditorFactory):
+    """The factory class passed into the Item's editor parameter."""
+
+    klass = Property
+
+    # Expose custom parameters to the TraitsUI Item
+    step = Int(1)
+    suffix = Str("")
+    low = Int(-1000000)  # Default arbitrary low bound
+    high = Int(1000000)  # Default arbitrary high bound
+
+    def _get_klass(self):
+        return _SteppedSpinEditor
+
+
+class RangeWithSteppedSpinViewHint(Range):
+    def create_editor(self):
+        """ Returns the default UI editor for the trait.
+        """
+        return SteppedSpinEditor(
+            low=self._low,
+            high=self._high,
+            step=self._metadata.get("step", 1),
+            suffix=self._metadata.get("suffix", ""),
+        )
+
+
+class RangeWithViewHints(Range):
+    def create_editor(self):
+        """ Returns the default UI editor for the trait.
+        """
+        # fixme: Needs to support a dynamic range editor.
+
+        auto_set = self.auto_set
+        if auto_set is None:
+            auto_set = True
+
+        from traitsui.api import RangeEditor
+
+        return RangeEditor(
+            self,
+            mode=self.mode or "auto",
+            cols=self.cols or 3,
+            auto_set=auto_set,
+            enter_set=self.enter_set or False,
+            low_label=self.low or "",
+            high_label=self.high or "",
+            low_name=self._low_name,
+            high_name=self._high_name,
+            format_str='%.2f',
+            is_float=True
+        )
+
+class SafeCancelTableHandler(Handler):
+    """
+    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
+    """
+    escape_shortcut = Any()
+
+    def init(self, info: UIInfo):
+        """Runs once when the UI is generated."""
+
+        # 1. Create a shortcut that intercepts the Escape key
+        self.escape_shortcut = QShortcut(QKeySequence.Cancel, info.ui.control)
+
+        # 2. Ensure it captures the key even if the user is clicked inside the table
+        self.escape_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+
+        # 3. Route it to a custom method instead of closing the window
+        self.escape_shortcut.activated.connect(lambda: self.handle_escape(info))
+
+        return True
+
+    def handle_escape(self, info: UIInfo):
+        """Swallows the Escape key press so the table doesn't hide."""
+        pass
+
+
+class StatusIconEditor(QtEditor):
+    """Custom TraitsUI editor that displays an icon with colored background.
+
+    The editor value is bound to `icon_path` (str path to the image).
+    It also observes `icon_color` on the model to update the background color.
+    """
+
+    def init(self, parent):
+        self.control = _ScalingPixmapLabel()
+
+        # Load initial image
+        self._load_pixmap(self.value)
+
+        # Observe icon_color on the model for background color updates
+        self.object.observe(self._on_icon_color_changed, "icon_color")
+        self._apply_background_color(self.object.icon_color)
+
+    def _load_pixmap(self, path):
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            logger.error(f"Failed to load image: {path}")
+        self.control.set_source_pixmap(pixmap)
+
+    def _apply_background_color(self, color):
+        self.control.setStyleSheet(
+            f"background-color: {color}; border-radius: {BORDER_RADIUS}px;"
+        )
+
+    def _on_icon_color_changed(self, event):
+        self._apply_background_color(event.new)
+
+    def update_editor(self):
+        """Called when icon_path trait changes."""
+        self._load_pixmap(self.value)
+
+    def dispose(self):
+        self.object.observe(self._on_icon_color_changed, "icon_color", remove=True)
+        super().dispose()
+
+
+class StatusIconEditorFactory(BasicEditorFactory):
+    klass = StatusIconEditor
+
+
+class _FixedWidthEnumEditor(QtEditor):
+    """Qt editor that renders an Enum trait via :class:`_MarqueeComboBox`.
+
+    The combo box uses ``AdjustToMinimumContentsLengthWithIcon`` so it doesn't
+    expand to fit the widest item; overflow text marquee-scrolls on hover (see
+    :class:`_MarqueeComboBox`). The dropdown list still renders full names.
+    """
+
+    def init(self, parent):
+        self.control = _MarqueeComboBox()
+        self.control.addItems(list(self.factory.values))
+
+        self.control.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+
+        self.control.currentTextChanged.connect(self.update_object)
+
+    def update_object(self, value):
+        self.value = value
+
+    def update_editor(self):
+        if self.control is not None:
+            # Block signals so programmatic updates don't re-fire update_object.
+            self.control.blockSignals(True)
+            self.control.setCurrentText(str(self.value))
+            self.control.blockSignals(False)
+
+
+class FixedWidthEnumEditor(BasicEditorFactory):
+    """Factory for an Enum combo box that marquee-scrolls overflow text on hover."""
+
+    klass = Property
+
+    values = List(Str)
+
+    def _get_klass(self):
+        return _FixedWidthEnumEditor

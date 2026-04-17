@@ -4,8 +4,7 @@ from traitsui.api import View, Item, Group, Action, Menu, TableEditor
 
 from device_viewer.default_settings import default_alphas, default_visibility
 from microdrop_style.helpers import style_app
-from microdrop_utils.pyface_helpers import SafeCancelTableHandler
-from microdrop_utils.traitsui_qt_helpers import VisibleColumn, RangeColumn, ObjectColumn
+from microdrop_utils.traitsui_qt_helpers import VisibleColumn, RangeColumn, ObjectColumn, SafeCancelTableHandler
 
 alpha_table_editor = TableEditor(
     columns=[
