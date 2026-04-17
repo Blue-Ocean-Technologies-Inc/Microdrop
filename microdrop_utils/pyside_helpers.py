@@ -605,7 +605,7 @@ class ClickableToggleIcon(QLabel):
             self.setStyleSheet(self._inactive_stylesheet + _tooltip_style)
 
 
-class _MarqueeComboBox(QtWidgets.QComboBox):
+class MarqueeComboBox(QtWidgets.QComboBox):
     """Non-editable QComboBox that marquee-scrolls overflow text on hover.
 
     Behavior: when the current item is wider than the edit-field rect, hovering

@@ -13,7 +13,7 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
-from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, _MarqueeComboBox
+from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -309,15 +309,15 @@ class StatusIconEditorFactory(BasicEditorFactory):
 
 
 class _HoverScrollEnumEditor(QtEditor):
-    """Qt editor that renders an Enum trait via :class:`_MarqueeComboBox`.
+    """Qt editor that renders an Enum trait via :class:`MarqueeComboBox`.
 
     The combo box uses ``AdjustToMinimumContentsLengthWithIcon`` so it doesn't
     expand to fit the widest item; overflow text marquee-scrolls on hover (see
-    :class:`_MarqueeComboBox`). The dropdown list still renders full names.
+    :class:`MarqueeComboBox`). The dropdown list still renders full names.
     """
 
     def init(self, parent):
-        self.control = _MarqueeComboBox()
+        self.control = MarqueeComboBox()
         self.control.addItems(list(self.factory.values))
 
         self.control.setSizeAdjustPolicy(
