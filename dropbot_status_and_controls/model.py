@@ -51,7 +51,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     )
 
     # ---- Device-specific status ----------------------------------------
-    chip_status_text = Str("Not Inserted")
+    chip_status_text = Str("Absent")
 
     # ---- Sensor readings (raw values set by message handler) -----------
     # NaN magnitude means "no reading available"
@@ -103,7 +103,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # ------------------------------------------------------------------ #
 
     def _update_chip_display(self, inserted: bool) -> None:
-        self.chip_status_text = "Inserted" if inserted else "Not Inserted"
+        self.chip_status_text = "Present" if inserted else "Absent"
 
     # ------------------------------------------------------------------ #
     # Observers                                                            #

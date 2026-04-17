@@ -21,7 +21,7 @@ class MockDropbotStatusModel(BaseStatusModel):
     CONNECTED_COLOR = SUCCESS_COLOR
     HALTED_COLOR = ERROR_COLOR
 
-    chip_status_text = Str("Not Inserted")
+    chip_status_text = Str("Absent")
     capacitance_display = Str("-")
     voltage_display = Str("-")
     frequency_display_text = Str("-")
@@ -47,4 +47,4 @@ class MockDropbotStatusModel(BaseStatusModel):
     actuated_channels_text = Str("None")
 
     def _update_chip_display(self, inserted: bool) -> None:
-        self.chip_status_text = "Inserted" if inserted else "Not Inserted"
+        self.chip_status_text = "Present" if inserted else "Absent"
