@@ -1,4 +1,6 @@
 import sys
+
+from PySide6.QtCore import Slot, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -7,14 +9,19 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QMainWindow,
-    QGroupBox,
     QDoubleSpinBox,
 )
-from PySide6.QtCore import Slot
 
+from dropbot_status.displayed_UI import (
+    connected_color,
+    connected_no_device_color,
+    disconnected_color,
+)
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 from peripheral_controller.consts import MIN_ZSTAGE_HEIGHT_MM, MAX_ZSTAGE_HEIGHT_MM
 from peripherals_ui.z_stage.view_model import ZStageViewModel
+
+_STATUS_DOT_DIAMETER_PX = 14
 
 
 class ZStageView(QWidget):
@@ -34,8 +41,16 @@ class ZStageView(QWidget):
         self.status_label = QLabel("Status: ...")
         self.current_position_label = QLabel("Position: ...")
 
-        # Color box for status
-        self.status_color_box = QLabel()
+        # Traffic-light indicator. Doubles as the "Search Connection" trigger:
+        # yellow = clickable (search available), grey = disconnected, green = connected.
+        self.status_indicator = QPushButton()
+        self.status_indicator.setFixedSize(_STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
+        self.status_indicator.setFlat(True)
+        self.status_indicator.setFocusPolicy(Qt.NoFocus)
+        self._status_active = False
+        self._search_available = False
+        self._refresh_status_indicator()
+
         # control buttons
         self.up_button = QPushButton("Up")
         self.down_button = QPushButton("Down")
@@ -58,6 +73,7 @@ class ZStageView(QWidget):
 
         status_layout = QHBoxLayout(status_contents_container)  # Set layout on container
 
+        status_layout.addWidget(self.status_indicator)
         status_layout.addWidget(self.status_label)
         status_layout.addWidget(self.current_position_label)
         status_layout.addStretch()  # Add stretch to keep them to the left
@@ -100,10 +116,12 @@ class ZStageView(QWidget):
         self.up_button.clicked.connect(self.view_model.move_up)
         self.down_button.clicked.connect(self.view_model.move_down)
         self.home_button.clicked.connect(self.view_model.go_home)
+        self.status_indicator.clicked.connect(self.view_model.search_connection)
         self.position_spinbox.valueChanged.connect(self.view_model.set_position)
 
         # Connect signals (ViewModel) -> slots (View widgets)
         self.view_signals.status_text_changed.connect(self.status_label.setText)
+        self.view_signals.status_text_changed.connect(self.on_status_text_changed)
 
         # Connect the formatted text signal to our new display label
         self.view_signals.position_text_changed.connect(self.current_position_label.setText)
@@ -112,6 +130,42 @@ class ZStageView(QWidget):
         self.view_signals.position_value_changed.connect(self.on_position_value_changed)
 
         self.view_signals.controls_enabled_changed.connect(self.set_controls_enabled)
+        self.view_signals.search_enabled_changed.connect(self.on_search_enabled_changed)
+
+    @Slot(str)
+    def on_status_text_changed(self, text: str):
+        """Drive the traffic-light off the status text ('Status: Active' / 'Status: Inactive')."""
+        self._status_active = "Active" in text
+        self._refresh_status_indicator()
+
+    @Slot(bool)
+    def on_search_enabled_changed(self, enabled: bool):
+        self._search_available = enabled
+        self._refresh_status_indicator()
+
+    def _refresh_status_indicator(self):
+        """Tri-state: green=connected, yellow=clickable to search, grey=disconnected."""
+        if self._status_active:
+            color, tooltip, clickable = connected_color, "Connected", False
+        elif self._search_available:
+            color, tooltip, clickable = (
+                connected_no_device_color,
+                "Click to search for Z-Stage connection",
+                True,
+            )
+        else:
+            color, tooltip, clickable = disconnected_color, "Disconnected", False
+
+        radius = _STATUS_DOT_DIAMETER_PX // 2
+        self.status_indicator.setStyleSheet(
+            f"QPushButton {{ background-color: {color};"
+            f" border: none; border-radius: {radius}px; }}"
+        )
+        self.status_indicator.setEnabled(clickable)
+        self.status_indicator.setCursor(
+            Qt.PointingHandCursor if clickable else Qt.ArrowCursor
+        )
+        self.status_indicator.setToolTip(tooltip)
 
     @Slot(float)
     def on_position_value_changed(self, value: float):

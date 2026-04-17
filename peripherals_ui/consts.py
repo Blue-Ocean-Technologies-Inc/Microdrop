@@ -8,9 +8,9 @@ PKG_name = PKG.title().replace("_", " ").replace("Ui", "UI")
 
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
 
-from peripheral_controller.consts import DEVICE_NAME
+from peripheral_controller.consts import DEVICE_NAME, START_DEVICE_MONITORING
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [f"{DEVICE_NAME}/signals/#", SET_REALTIME_MODE]
+    f"{PKG}_listener": [f"{DEVICE_NAME}/signals/#", SET_REALTIME_MODE, START_DEVICE_MONITORING]
 }
