@@ -10,6 +10,8 @@ from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_MENU
+from microdrop_utils.hardware_device_monitoring_helpers import check_connected_ports_hwid
+from peripheral_controller.consts import MR_BOX_HWID, START_DEVICE_MONITORING as START_DEVICE_MONITORING_PERIPHERAL
 from .consts import (scibots_icon_path, sidebar_menu_options,
                      hamburger_btn_stylesheet, EXPERIMENT_DIR)
 
@@ -186,7 +188,17 @@ class MicrodropApplication(TasksApplication):
     def _on_application_initialized(self, event):
         logger.critical("Application Initialized")
         _show_beta_disclaimer()
+
+        logger.info("Requesting Dropbot Search")
         publish_message(message="", topic=START_DEVICE_MONITORING)
+
+        # check if peripheral board connected
+        if check_connected_ports_hwid(MR_BOX_HWID):
+            logger.critical("Peripheral Board Maybe Connected: Requesting Peripheral Board Search")
+            publish_message(message="", topic=START_DEVICE_MONITORING_PERIPHERAL)
+        else:
+            logger.info("Peripheral Board not connected. To start search, goto tools menu:"
+                        "Tools -> Peripherals -> Z-Stage -> Search Connection or use the peripheral UI Dock Pane button.")
 
     ############################# Initialization ############################################################
     def traits_init(self):

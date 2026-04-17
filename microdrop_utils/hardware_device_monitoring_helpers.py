@@ -24,7 +24,11 @@ def check_connected_ports_hwid(id_to_screen, regexp='USB Serial'):
 
 def check_devices_available(hwids_to_check):
     """
-    Method to find the USB port of the DropBot if it is connected.
+    Method to find the USB port of device with hwid in hwids_to_check if it is connected.
+
+    Note:
+        Returns the first port name found if multiple ports are connected with devices having given hwid.
+        Does not screen rest of provided hwids once port was found.
     """
 
     for hwid in hwids_to_check:
