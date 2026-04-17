@@ -1,29 +1,24 @@
 import json
 
-from traitsui.item import Spring
-
-from microdrop_style.text_styles import preferences_group_style_sheet
-
-from protocol_grid.preferences import protocol_grid_tab
+# Enthought library imports.
+from envisage.ui.tasks.api import PreferencesCategory
+from envisage.ui.tasks.api import PreferencesPane
 from traits.api import observe
 from traitsui.api import VGroup, HGroup, View, Item
-from envisage.ui.tasks.api import PreferencesCategory
 
-# Enthought library imports.
-from envisage.ui.tasks.api import PreferencesPane
-
+# local imports
+from dropbot_controller.consts import CHANGE_SETTINGS
+from dropbot_controller.preferences import DropbotPreferences
+from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.preferences_UI_helpers import create_item_label_group, create_grid_group
-from dropbot_controller.preferences import DropbotPreferences
-from dropbot_controller.consts import CHANGE_SETTINGS
-
+from protocol_grid.preferences import protocol_grid_tab
 from .consts import (
     VOLTAGE_FREQUENCY_RANGE_CHANGED,
 )
-
-from logger.logger_service import get_logger
 from .models import VoltageFrequencyRangePreferences
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 dropbot_tab = PreferencesCategory(
