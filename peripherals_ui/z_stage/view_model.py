@@ -12,7 +12,7 @@ from peripherals_ui.model import PeripheralModel
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-from peripheral_controller.consts import GO_HOME, MOVE_UP, MOVE_DOWN, SET_POSITION
+from peripheral_controller.consts import GO_HOME, MOVE_UP, MOVE_DOWN, SET_POSITION, START_DEVICE_MONITORING
 
 def log_function_call_and_exceptions(func):
     """
@@ -43,6 +43,7 @@ class ZStageViewModelSignals(QObject):
     position_text_changed = Signal(str)
     position_value_changed = Signal(float)  # Signal for the raw float value
     controls_enabled_changed = Signal(bool)
+    search_enabled_changed = Signal(bool)
 
 
 class ZStageViewModel(HasTraits):
@@ -75,6 +76,14 @@ class ZStageViewModel(HasTraits):
     @log_function_call_and_exceptions
     def disconnect_device(self):
         self.model.status = not self.model.status
+
+    @log_function_call_and_exceptions
+    def search_connection(self):
+        """Mirror of the menu-bar 'Search Connection' action."""
+        if self.model.search_requested:
+            return
+        publish_message("", START_DEVICE_MONITORING)
+        self.model.search_requested = True
 
     # --- Logic Methods ---
     # These contain the formatting logic, so observers are simple.
@@ -122,6 +131,11 @@ class ZStageViewModel(HasTraits):
         # Emit the raw float value for the spin box
         self.view_signals.position_value_changed.emit(event.new)
 
+    @observe("model:search_requested")
+    def _on_search_requested_changed(self, event):
+        """Disable the search button once a search has been requested (button or menu)."""
+        self.view_signals.search_enabled_changed.emit(not event.new)
+
 
     # --- Initializer ---
     def force_initial_update(self):
@@ -130,5 +144,6 @@ class ZStageViewModel(HasTraits):
         self._update_position_display()
         self.view_signals.position_value_changed.emit(self.model.position)
         self.view_signals.controls_enabled_changed.emit(self.model.status)
+        self.view_signals.search_enabled_changed.emit(not self.model.search_requested)
 
 
