@@ -7,7 +7,7 @@
 
 The device viewer sidebar (`RouteLayerManager`) owns execution parameters (`duration`, `repetitions`, `repeat_duration`, `trail_length`, `trail_overlay`, `soft_start`, `soft_terminate`) that drive local `RouteExecutionService` playback. These parameters map 1:1 to the protocol grid columns `Duration`, `Repetitions`, `Repeat Duration`, `Trail Length`, `Trail Overlay`, `Ramp Up`, `Ramp Dn`.
 
-Today, the cross-plugin state sync (`DEVICE_VIEWER_STATE_CHANGED` via `DeviceViewerMessageModel`) carries only route geometry and activated electrodes. If a user tunes execution parameters in the device viewer sidebar, those tweaks stay local; they never reach the protocol step. Conversely, when a user selects a step in the grid, the sidebar sliders are not reconciled against the step's stored values.
+Today, the cross-plugin state sync (`DEVICE_VIEWER_STATE_CHANGED` for DV → grid; `PROTOCOL_GRID_DISPLAY_STATE` for grid → DV — both carrying `DeviceViewerMessageModel`) carries only route geometry and activated electrodes. If a user tunes execution parameters in the device viewer sidebar, those tweaks stay local; they never reach the protocol step. Conversely, when a user selects a step in the grid, the sidebar sliders are not reconciled against the step's stored values.
 
 ## Goals
 
@@ -126,7 +126,7 @@ Add the topic to `ACTOR_TOPIC_DICT[PROTOCOL_GRID_LISTENER_NAME]` in the same fil
 
 ### Step-switch with uncommitted sidebar changes
 
-When the device viewer receives a grid → DV `DEVICE_VIEWER_STATE_CHANGED` whose `step_id` differs from `_last_applied_step_id`, and `commit_enabled` is `True` (sidebar is dirty):
+When the device viewer receives a grid → DV `PROTOCOL_GRID_DISPLAY_STATE` whose `step_id` differs from `_last_applied_step_id`, and `commit_enabled` is `True` (sidebar is dirty):
 
 - Show a modal: "You have uncommitted execution parameter changes for step *X*. Commit, Discard, or Cancel?"
   - **Commit** → publish `STEP_PARAMS_COMMIT` for the *old* `step_id`, update baseline, then apply the incoming message's params to the sidebar for the new step.
