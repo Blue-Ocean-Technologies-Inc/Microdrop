@@ -1,9 +1,10 @@
 from pathlib import Path
 
+from PySide6.QtGui import QColor
 from apptools.preferences.api import PreferencesHelper
 from traits.etsconfig.api import ETSConfig
 from traits.api import Bool, Str, Directory, Range
-from traitsui.api import VGroup, View, Item, Group, RangeEditor
+from traitsui.api import VGroup, View, Item, Group, RangeEditor, Color
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -38,14 +39,16 @@ class MicrodropPreferences(PreferencesHelper):
     # dialogs:
     suppress_no_shorts_information = Bool(False)
 
-    # Central canvas background styling.
-    # When `canvas_background_use_custom` is False the canvas follows the
-    # system color scheme (white in light mode, a soft dark in dark mode).
-    # When True, `canvas_background_color` (hex, e.g. "#1E1E1E") is used.
+    # ---- Central canvas background styling ----------------------------------
+    # `canvas_background_use_custom` is the master switch:
+    #   - False → canvas follows the system color scheme (white in light mode,
+    #     black in dark mode) as defined in MicrodropCentralCanvas.
+    #   - True  → use `canvas_background_color` (picked via a Color dialog in
+    #     the preferences view).
     # `canvas_background_opacity` is a percentage (0–100) applied to whichever
-    # colour ends up being used.
+    # colour ends up being used, producing the final rgba stylesheet.
     canvas_background_use_custom = Bool(False)
-    canvas_background_color = Str("#FFFFFF")
+    canvas_background_color = Color()
     canvas_background_opacity = Range(low=0, high=100, value=100)
 
     def _EXPERIMENTS_DIR_default(self) -> Path:
@@ -55,6 +58,21 @@ class MicrodropPreferences(PreferencesHelper):
 
         return default_dir
 
+    def _anytrait_changed(self, trait_name, old, new):
+        """Normalize QColor values before letting apptools persist them.
+
+        The `Color` trait delivers a `QColor` object in/out, but apptools'
+        PreferencesHelper can only serialize simple scalars to the preferences
+        node — a raw QColor raises during storage. We convert it to an integer
+        hex string (e.g. `"0xff112233"`) here so the round-trip through
+        preferences storage works, and the canvas re-reads it as a QColor via
+        the Color trait's own parsing on load.
+        """
+        if isinstance(new, QColor):
+            new = hex(new.rgba())
+
+        super()._anytrait_changed(trait_name, old, new)
+
 
 microdrop_tab = PreferencesCategory(
     id="microdrop.app.general_settings",
@@ -63,7 +81,9 @@ microdrop_tab = PreferencesCategory(
 
 
 class MicrodropPreferencesPane(PreferencesPane):
-    """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
+    """Microdrop General preferences pane — hosts app-startup and canvas-
+    background groups.
+    """
 
     #### 'PreferencesPane' interface ##########################################
 
@@ -109,7 +129,12 @@ class MicrodropPreferencesPane(PreferencesPane):
 
 
 class MicrodropDialogsPreferencesPane(PreferencesPane):
-    """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
+    """Microdrop General preferences pane — 'Dialog Settings' group.
+
+    Contributes to the same `microdrop.app.general_settings` tab as
+    MicrodropPreferencesPane but in a separate group so the dialog-related
+    toggles can live independently of the canvas/startup controls.
+    """
 
     #### 'PreferencesPane' interface ##########################################
 
