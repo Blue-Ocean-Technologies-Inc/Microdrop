@@ -97,7 +97,7 @@ step_defaults = {
     "Voltage": f"{float(VoltageFrequencyRangePreferences().ui_default_voltage)}",
     "Frequency": f"{float(VoltageFrequencyRangePreferences().ui_default_frequency)}",
     "Message": "",
-    "Repeat Duration": "1",
+    "Repeat Duration": "0",
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Ramp Up": "0",

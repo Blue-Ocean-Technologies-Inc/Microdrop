@@ -1,7 +1,7 @@
 from pathlib import Path
 from microdrop_utils.decorators import debounce
 
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID, provides
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID, provides, DelegatesTo
 from pyface.undo.api import UndoManager
 
 from .alpha import AlphaValue
@@ -42,11 +42,7 @@ class DeviceViewMainModel(HasTraits):
     # `enabled_when` on the sidebar commit button picks up changes without
     # needing an independent UI action. Nested paths like
     # `object.routes.commit_enabled` don't re-evaluate reliably in enabled_when.
-    routes_commit_enabled = Bool(False)
-
-    @observe("routes:commit_enabled")
-    def _mirror_routes_commit_enabled(self, event):
-        self.routes_commit_enabled = bool(event.new)
+    routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
 
     # route Execution status display
     execution_status = Str("")
@@ -62,7 +58,7 @@ class DeviceViewMainModel(HasTraits):
     # Merge: User can only merge paths. They cannot edit.
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
-    # Camera-Edit: User can edit the perspecive correction of the camera feed
+    # Camera-Edit: User can edit the perspective correction of the camera feed
     # Pan: User can pan svg device (useful when zoomed in)
     # To change the mode, set the mode property and clean up any references/inconsistencies
     mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
