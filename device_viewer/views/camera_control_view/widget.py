@@ -4,7 +4,6 @@ from PySide6.QtCore import (
     Signal,
     Slot,
     QTimer,
-    QStandardPaths,
 )
 from PySide6.QtGui import QImage
 from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 from apptools.preferences.api import Preferences
 
 from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
+from microdrop_application.helpers import get_current_experiment_directory
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
@@ -578,14 +578,9 @@ class CameraControlWidget(QWidget):
 
         # 4. Generate Path
         filename = self._generate_capture_filename(step_description, step_id)
-        if directory:
-            save_path = Path(directory) / "captures" / filename
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-        else:
-            save_path = (
-                Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation))
-                / filename
-            )
+        base_dir = Path(directory) if directory else get_current_experiment_directory()
+        save_path = base_dir / "captures" / filename
+        save_path.parent.mkdir(parents=True, exist_ok=True)
 
         worker = ImageSaver(image.copy(), str(save_path))
 
@@ -626,7 +621,7 @@ class CameraControlWidget(QWidget):
         elif step_id:
             return f"step_{step_id}_{timestamp}{file_extension}"
         else:
-            return f"captured_media_{timestamp}{file_extension}"
+            return f"free_mode_{timestamp}{file_extension}"
 
     def _generate_capture_filename(self, step_description=None, step_id=None):
         return self._generate_media_filename(step_description, step_id, ".png")
@@ -725,15 +720,10 @@ class CameraControlWidget(QWidget):
             self._camera_state_pre_recording = True
 
         filename = self._generate_recording_filename(step_description, step_id)
-        if directory:
-            path = Path(directory) / "recordings" / filename
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _recording_file_path = str(path)
-        else:
-            _recording_file_path = str(
-                Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.MoviesLocation))
-                / filename
-            )
+        base_dir = Path(directory) if directory else get_current_experiment_directory()
+        path = base_dir / "recordings" / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _recording_file_path = str(path)
 
         self.show_media_capture_dialog_for_video = show_dialog
 
