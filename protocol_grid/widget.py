@@ -2839,15 +2839,15 @@ class PGCWidget(QWidget):
         from protocol_grid.services.path_execution_service import PathExecutionService
 
         if not device_state.has_paths():
-            return 1.0
+            return 0
 
         has_loops = any(
             len(path) >= 2 and path[0] == path[-1] for path in device_state.paths
         )
         if not has_loops:
-            return 1.0
+            return 0
 
-        max_loop_duration = 1.0
+        max_loop_duration = 0
 
         for path in device_state.paths:
             if not PathExecutionService.is_loop_path(path):
@@ -3169,7 +3169,7 @@ class PGCWidget(QWidget):
                         and changed_field != "Repeat Duration"
                         and not self._protocol_running
                     ):
-                        repeat_duration_item.setText(f"{estimated_repeat_duration:.1f}")
+                        repeat_duration_item.setText(str(int(round(estimated_repeat_duration))))
 
             finally:
                 self._programmatic_change = False
