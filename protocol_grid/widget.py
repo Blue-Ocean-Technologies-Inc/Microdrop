@@ -633,6 +633,9 @@ class PGCWidget(QWidget):
         # Voltage/frequency range preferences changed
         sig.voltage_frequency_range_changed.connect(self._on_voltage_frequency_range_changed)
 
+        # Sidebar commit of execution params to a step
+        sig.step_params_commit_received.connect(self._on_step_params_commit)
+
         logger.info("Widget connected to message listener")
 
     def on_device_viewer_message(self, message):
@@ -718,6 +721,45 @@ class PGCWidget(QWidget):
             logger.error(f"Failed to update DeviceState from device_viewer message: {e}", exc_info=True)
         finally:
             self._processing_device_viewer_message = False
+            self._programmatic_change = False
+
+    def _on_step_params_commit(self, commit_msg):
+        """Write the 7 execution-param cells of the step identified by step_id."""
+        target_item, target_path = self._find_step_by_uid(commit_msg.step_id)
+        if not target_item:
+            logger.warning(
+                f"Commit received for unknown step_id={commit_msg.step_id}; ignoring"
+            )
+            return
+
+        parent = target_item.parent() or self.model.invisibleRootItem()
+        row = target_item.row()
+
+        updates = {
+            "Duration":        f"{commit_msg.duration:g}",
+            "Repetitions":     str(commit_msg.repetitions),
+            "Repeat Duration": f"{commit_msg.repeat_duration:g}",
+            "Trail Length":    str(commit_msg.trail_length),
+            "Trail Overlay":   str(commit_msg.trail_overlay),
+            "Ramp Up":         "1" if commit_msg.soft_start else "0",
+            "Ramp Dn":         "1" if commit_msg.soft_terminate else "0",
+        }
+
+        self._programmatic_change = True
+        try:
+            for field, text in updates.items():
+                col = protocol_grid_fields.index(field)
+                cell = parent.child(row, col)
+                if cell is not None:
+                    cell.setText(text)
+
+            # Mirror into the ProtocolStep.parameters dict so persistence is up to date.
+            step_data = self.state.get_element_by_path(target_path)
+            if step_data is not None:
+                step_data.parameters.update(updates)
+
+            self._mark_protocol_modified()
+        finally:
             self._programmatic_change = False
 
     def on_calibration_message(self, message, topic):
