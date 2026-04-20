@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
 )
 
-from dropbot_status.displayed_UI import (
+from dropbot_status_and_controls.consts import (
     connected_color,
     connected_no_device_color,
     disconnected_color,
