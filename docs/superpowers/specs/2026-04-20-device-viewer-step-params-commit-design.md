@@ -153,7 +153,7 @@ When the device viewer receives a grid → DV `PROTOCOL_GRID_DISPLAY_STATE` whos
 - Unit, `StepParamsCommitMessage`: round-trip serialization; rejects missing fields.
 - Unit, `device_state_to_device_viewer_message`: carries `execution_params` when provided, returns `None` otherwise.
 - Unit, `RouteLayerManager.commit_enabled`: transitions correctly across (no baseline) → (baseline set, equal) → (baseline set, divergent) → (committed, equal).
-- Integration (place under `examples/tests/tests_with_redis_server_need/` since it exercises the message router): publish a grid-side `DEVICE_VIEWER_STATE_CHANGED` with `execution_params` and a new `step_id`; assert sidebar values update and `commit_enabled` is `False`. Mutate a sidebar value; assert `commit_enabled` is `True`. Trigger commit; assert the step's cells are updated and `commit_enabled` returns to `False`.
+- Integration (place under `examples/tests/tests_with_redis_server_need/` since it exercises the message router): publish a grid-side `PROTOCOL_GRID_DISPLAY_STATE` with `execution_params` and a new `step_id`; assert sidebar values update and `commit_enabled` is `False`. Mutate a sidebar value; assert `commit_enabled` is `True`. Trigger commit; assert the step's cells are updated and `commit_enabled` returns to `False`.
 - UI smoke (manual, to be verified in a dev run): select step → edit field → commit → switch steps → verify params pull; dirty + switch → verify dialog; accept new-step-from-free-mode → verify params bundled.
 
 ## `MESSAGES.md` updates
