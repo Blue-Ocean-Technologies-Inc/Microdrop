@@ -238,19 +238,21 @@ class RouteLayerManager(HasTraits):
     commit_to_step_btn = Button("save")
 
     # True iff a baseline is set AND current values diverge from it.
-    commit_enabled = Property(
-        observe=(
-            "_committed_params_baseline.items,"
-            "duration,repetitions,repeat_duration,"
-            "trail_length,trail_overlay,soft_start,soft_terminate"
-        )
-    )
+    # Plain Bool trait (not a Property) so TraitsUI's `enabled_when` sees
+    # changes without needing an independent UI action to poll.
+    commit_enabled = Bool(False)
 
-    def _get_commit_enabled(self):
+    @observe(
+        "_committed_params_baseline.items,"
+        "duration,repetitions,repeat_duration,"
+        "trail_length,trail_overlay,soft_start,soft_terminate"
+    )
+    def _recompute_commit_enabled(self, event):
         baseline = self._committed_params_baseline
         if not baseline:
-            return False
-        return self._current_params() != baseline
+            self.commit_enabled = False
+        else:
+            self.commit_enabled = self._current_params() != baseline
 
     def _current_params(self) -> dict:
         return {
