@@ -901,7 +901,13 @@ class PGCWidget(QWidget):
         self.status_bar.set_linear_repeats(enabled)
 
     def _toggle_linear_repeats_preference(self):
-        """Flip the Linear Repeats preference and refresh the indicator."""
+        """Flip the Linear Repeats preference and refresh the indicator.
+
+        Recomputes every step's derived columns (Run Time, etc.) and any
+        parent group aggregations so totals reflect the new mode
+        immediately — linear paths that now repeat add to Run Time, and
+        vice-versa when disabling.
+        """
         try:
             from protocol_grid.preferences import ProtocolPreferences
             prefs = ProtocolPreferences()
@@ -910,6 +916,8 @@ class PGCWidget(QWidget):
             logger.error(f"Failed to toggle Linear Repeats preference: {e}", exc_info=True)
             return
         self._refresh_linear_repeats_indicator()
+        self.update_step_dev_fields()
+        self.update_all_group_aggregations()
 
     def update_status_bar(self, status):
         self._refresh_linear_repeats_indicator()
@@ -3038,13 +3046,24 @@ class PGCWidget(QWidget):
         return True
 
     def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
-        """Revert Repetitions to 1 if the step has no looping route"""
+        """Revert Repetitions to 1 if the step has no looping route.
+
+        Skipped when the Linear Repeats preference is on — in that mode,
+        linear paths honor Repetitions too, so the guard would be incorrect.
+        """
         try:
             reps = int(repetitions_item.text() or "1")
         except ValueError:
             return
         if reps <= 1:
             return
+
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            if bool(ProtocolPreferences().linear_repeats):
+                return
+        except Exception:
+            pass
 
         device_state = desc_item.data(Qt.UserRole + 100)
         has_loop = (
