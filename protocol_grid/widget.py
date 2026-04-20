@@ -736,9 +736,9 @@ class PGCWidget(QWidget):
         row = target_item.row()
 
         updates = {
-            "Duration":        f"{commit_msg.duration:g}",
+            "Duration":        str(commit_msg.duration),
             "Repetitions":     str(commit_msg.repetitions),
-            "Repeat Duration": f"{commit_msg.repeat_duration:g}",
+            "Repeat Duration": str(commit_msg.repeat_duration),
             "Trail Length":    str(commit_msg.trail_length),
             "Trail Overlay":   str(commit_msg.trail_overlay),
             "Ramp Up":         "1" if commit_msg.soft_start else "0",
@@ -1993,9 +1993,9 @@ class PGCWidget(QWidget):
 
         # Seed the new step's execution params from the DV sidebar if provided.
         if dv_msg.execution_params:
-            new_step.parameters["Duration"]        = f"{dv_msg.execution_params['duration']:g}"
+            new_step.parameters["Duration"]        = str(int(dv_msg.execution_params["duration"]))
             new_step.parameters["Repetitions"]     = str(dv_msg.execution_params["repetitions"])
-            new_step.parameters["Repeat Duration"] = f"{dv_msg.execution_params['repeat_duration']:g}"
+            new_step.parameters["Repeat Duration"] = str(int(dv_msg.execution_params["repeat_duration"]))
             new_step.parameters["Trail Length"]    = str(dv_msg.execution_params["trail_length"])
             new_step.parameters["Trail Overlay"]   = str(dv_msg.execution_params["trail_overlay"])
             new_step.parameters["Ramp Up"]         = "1" if dv_msg.execution_params["soft_start"] else "0"
@@ -2778,13 +2778,17 @@ class PGCWidget(QWidget):
             value = float(item.text())
             if field == "Volume Threshold":
                 item.setText(f"{value:.2f}")
-            elif field in ("Duration", "Repeat Duration", "Run Time"):
+            elif field in ("Duration", "Repeat Duration"):
+                item.setText(str(int(value)))
+            elif field == "Run Time":
                 item.setText(f"{value:.1f}")
             else:
                 item.setText(f"{value:.1f}")
         except ValueError:
             if field == "Volume Threshold":
                 item.setText("0.00")
+            elif field in ("Duration", "Repeat Duration"):
+                item.setText("0")
             else:
                 item.setText("0.0")
 
@@ -2909,7 +2913,7 @@ class PGCWidget(QWidget):
             return True
 
         try:
-            val = float(repeat_duration_item.text() or "0")
+            val = int(repeat_duration_item.text() or "0")
         except ValueError:
             return True
 
@@ -2919,13 +2923,13 @@ class PGCWidget(QWidget):
         # Check whether the user-edited value differs from the auto-calculated one
         device_state = desc_item.data(Qt.UserRole + 100) or DeviceState()
         repetitions = int((parent.child(row, protocol_grid_fields.index("Repetitions")).text() or "1"))
-        dur = float((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1.0"))
+        dur = int((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1"))
         tl = int((parent.child(row, protocol_grid_fields.index("Trail Length")).text() or "1"))
         to = int((parent.child(row, protocol_grid_fields.index("Trail Overlay")).text() or "0"))
         estimated = self._calculate_estimated_repeat_duration(
             device_state, repetitions, dur, tl, to,
         )
-        if abs(val - estimated) < 0.05:
+        if val == int(round(estimated)):
             return True  # value matches auto-calc, no mode switch needed
 
         result = confirm(
@@ -2945,7 +2949,7 @@ class PGCWidget(QWidget):
             # revert to the estimated repeat duration
             self._programmatic_change = True
             try:
-                repeat_duration_item.setText(f"{estimated:.1f}")
+                repeat_duration_item.setText(str(int(round(estimated))))
             finally:
                 self._programmatic_change = False
             return False
@@ -2987,8 +2991,8 @@ class PGCWidget(QWidget):
             parent = desc_item.parent() or self.model.invisibleRootItem()
             row = desc_item.row()
             device_state = desc_item.data(Qt.UserRole + 100) or DeviceState()
-            duration = float((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1.0"))
-            repeat_dur = float((parent.child(row, protocol_grid_fields.index("Repeat Duration")).text() or "0.0"))
+            duration = int((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1"))
+            repeat_dur = int((parent.child(row, protocol_grid_fields.index("Repeat Duration")).text() or "0"))
             trail_length = int((parent.child(row, protocol_grid_fields.index("Trail Length")).text() or "1"))
             trail_overlay = int((parent.child(row, protocol_grid_fields.index("Trail Overlay")).text() or "0"))
 
@@ -3102,8 +3106,8 @@ class PGCWidget(QWidget):
                 desc_item.setData(device_state, Qt.UserRole + 100)
 
             repetitions = int(repetitions_item.text() or "1")
-            duration = float(duration_item.text() or "1.0")
-            current_repeat_duration = float(repeat_duration_item.text() or "0.0")
+            duration = int(duration_item.text() or "1")
+            current_repeat_duration = int(repeat_duration_item.text() or "0")
             trail_length = int(trail_length_item.text() or "1")
             trail_overlay = int(trail_overlay_item.text() or "0")
 

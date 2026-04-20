@@ -16,9 +16,9 @@ def test_execution_params_defaults_to_none():
 
 def test_execution_params_roundtrip():
     params = {
-        "duration": 1.5,
+        "duration": 2,
         "repetitions": 3,
-        "repeat_duration": 0.0,
+        "repeat_duration": 0,
         "trail_length": 2,
         "trail_overlay": 1,
         "soft_start": True,

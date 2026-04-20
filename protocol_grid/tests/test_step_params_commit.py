@@ -7,9 +7,9 @@ from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 def _valid_kwargs():
     return dict(
         step_id="abc123",
-        duration=1.5,
+        duration=2,
         repetitions=3,
-        repeat_duration=0.0,
+        repeat_duration=0,
         trail_length=2,
         trail_overlay=1,
         soft_start=True,
@@ -35,9 +35,9 @@ from protocol_grid.protocol_grid_helpers import extract_execution_params
 
 def test_extract_execution_params_happy_path():
     parameters = {
-        "Duration": "1.5",
+        "Duration": "2",
         "Repetitions": "3",
-        "Repeat Duration": "0.0",
+        "Repeat Duration": "0",
         "Trail Length": "2",
         "Trail Overlay": "1",
         "Ramp Up": "1",
@@ -46,9 +46,9 @@ def test_extract_execution_params_happy_path():
     }
     result = extract_execution_params(parameters)
     assert result == {
-        "duration": 1.5,
+        "duration": 2,
         "repetitions": 3,
-        "repeat_duration": 0.0,
+        "repeat_duration": 0,
         "trail_length": 2,
         "trail_overlay": 1,
         "soft_start": True,
@@ -56,12 +56,24 @@ def test_extract_execution_params_happy_path():
     }
 
 
+def test_extract_execution_params_legacy_float_strings():
+    # Pre-existing protocols may have stored "1.0" etc. — the helper should
+    # tolerate these via int(float(...)).
+    parameters = {
+        "Duration": "1.0",
+        "Repeat Duration": "2.0",
+    }
+    result = extract_execution_params(parameters)
+    assert result["duration"] == 1
+    assert result["repeat_duration"] == 2
+
+
 def test_extract_execution_params_missing_keys_use_defaults():
     # If a key is absent, fall back to step_defaults string, then cast.
     result = extract_execution_params({})
-    assert result["duration"] == 1.0
+    assert result["duration"] == 1
     assert result["repetitions"] == 1
-    assert result["repeat_duration"] == 1.0
+    assert result["repeat_duration"] == 1
     assert result["trail_length"] == 1
     assert result["trail_overlay"] == 0
     assert result["soft_start"] is False
@@ -76,9 +88,9 @@ from protocol_grid.state.device_state import (
 
 def test_device_state_message_carries_execution_params():
     params = {
-        "duration": 2.0,
+        "duration": 2,
         "repetitions": 5,
-        "repeat_duration": 0.0,
+        "repeat_duration": 0,
         "trail_length": 3,
         "trail_overlay": 2,
         "soft_start": True,

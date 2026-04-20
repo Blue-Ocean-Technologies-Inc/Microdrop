@@ -3,9 +3,9 @@ from pydantic import BaseModel
 
 class StepParamsCommitMessage(BaseModel):
     step_id: str
-    duration: float
+    duration: int
     repetitions: int
-    repeat_duration: float
+    repeat_duration: int
     trail_length: int
     trail_overlay: int
     soft_start: bool
