@@ -29,6 +29,7 @@ from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
     calculate_group_aggregation_from_children,
+    extract_execution_params,
 )
 from protocol_grid.quick_action_bar import (
     QuickProtocolActions,
@@ -1778,15 +1779,18 @@ class PGCWidget(QWidget):
 
         step_uid = step_item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
 
+        step_data = self.state.get_element_by_path(step_path)
+        execution_params = extract_execution_params(step_data.parameters) if step_data else None
+
         msg_model = device_state_to_device_viewer_message(
-            device_state, step_uid, step_description, step_id, editable
+            device_state, step_uid, step_description, step_id, editable,
+            execution_params=execution_params,
         )
         publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
 
         electrode_state_change_publisher.publish(msg_model.channels_activated)
 
-        step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
         voltage = step_data.parameters["Voltage"]
         frequency = step_data.parameters["Frequency"]
