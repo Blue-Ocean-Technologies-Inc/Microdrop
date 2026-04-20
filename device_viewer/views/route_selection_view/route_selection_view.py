@@ -191,7 +191,7 @@ run_controls = HGroup(
     UItem(
         "object.routes.commit_to_step_btn",
         tooltip="Commit execution parameters to selected step",
-        enabled_when="object.routes.commit_enabled",
+        enabled_when="object.routes_commit_enabled",
         visible_when=f"not {executing}",
         springy=True,
     ),  # commit to step

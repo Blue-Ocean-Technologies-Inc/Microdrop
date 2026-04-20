@@ -38,6 +38,16 @@ class DeviceViewMainModel(HasTraits):
     route_execution_service_executing = Bool(False)
     route_execution_service_paused = Bool(False)
 
+    # Mirror of routes.commit_enabled at the top level so TraitsUI's
+    # `enabled_when` on the sidebar commit button picks up changes without
+    # needing an independent UI action. Nested paths like
+    # `object.routes.commit_enabled` don't re-evaluate reliably in enabled_when.
+    routes_commit_enabled = Bool(False)
+
+    @observe("routes:commit_enabled")
+    def _mirror_routes_commit_enabled(self, event):
+        self.routes_commit_enabled = bool(event.new)
+
     # route Execution status display
     execution_status = Str("")
 
