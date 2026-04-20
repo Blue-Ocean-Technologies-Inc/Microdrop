@@ -66,3 +66,33 @@ def test_extract_execution_params_missing_keys_use_defaults():
     assert result["trail_overlay"] == 0
     assert result["soft_start"] is False
     assert result["soft_terminate"] is False
+
+
+from protocol_grid.state.device_state import (
+    DeviceState,
+    device_state_to_device_viewer_message,
+)
+
+
+def test_device_state_message_carries_execution_params():
+    params = {
+        "duration": 2.0,
+        "repetitions": 5,
+        "repeat_duration": 0.0,
+        "trail_length": 3,
+        "trail_overlay": 2,
+        "soft_start": True,
+        "soft_terminate": False,
+    }
+    state = DeviceState()
+    msg = device_state_to_device_viewer_message(
+        state, step_uid="u1", step_description="Step", step_id="1",
+        execution_params=params,
+    )
+    assert msg.execution_params == params
+
+
+def test_device_state_message_execution_params_defaults_none():
+    state = DeviceState()
+    msg = device_state_to_device_viewer_message(state, step_uid="u1")
+    assert msg.execution_params is None
