@@ -15,7 +15,8 @@ from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
                                   CALIBRATION_DATA, DEVICE_VIEWER_MEDIA_CAPTURED,
                                   DEVICE_VIEWER_RECORDING_STATE, ROUTES_EXECUTING,
-                                  VOLTAGE_FREQUENCY_RANGE_CHANGED)
+                                  VOLTAGE_FREQUENCY_RANGE_CHANGED, STEP_PARAMS_COMMIT)
+from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,7 @@ class MessageListenerSignalEmitter(QObject):
     video_recording_state_changed = Signal(bool)  # True when recording active
     routes_executing_changed = Signal(bool)  # True when device viewer routes are executing
     voltage_frequency_range_changed = Signal(str)  # JSON payload with new min/max values
+    step_params_commit_received = Signal(object)  # StepParamsCommitMessage
 
 
 class MessageListener(HasTraits):
@@ -106,6 +108,15 @@ class MessageListener(HasTraits):
             elif topic == VOLTAGE_FREQUENCY_RANGE_CHANGED:
                 logger.info("Voltage/frequency range preferences changed")
                 self.signal_emitter.voltage_frequency_range_changed.emit(message)
+
+            elif topic == STEP_PARAMS_COMMIT:
+                try:
+                    commit_msg = StepParamsCommitMessage.deserialize(message)
+                except Exception as e:
+                    logger.error(f"Failed to parse STEP_PARAMS_COMMIT: {e}", exc_info=True)
+                    return
+                logger.info(f"Received step params commit for step_id={commit_msg.step_id}")
+                self.signal_emitter.step_params_commit_received.emit(commit_msg)
 
             else:
                 logger.info(f"Unhandled message topic: {topic}")
