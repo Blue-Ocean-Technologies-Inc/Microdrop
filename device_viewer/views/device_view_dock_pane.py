@@ -362,8 +362,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
         if message_model.step_id != self._last_applied_step_id:
-            self._apply_step_transition(message_model)
-            self._last_applied_step_id = message_model.step_id
+            if self._apply_step_transition(message_model):
+                self._last_applied_step_id = message_model.step_id
+            # On cancel we do NOT update _last_applied_step_id.
+            # The grid's selection remains visually on the new row, but the
+            # sidebar stays on the old values — see spec open item re:
+            # forcing the grid to revert selection.
 
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
@@ -410,14 +414,49 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _apply_step_transition(self, message_model):
         """Pull execution params from the newly-selected step into the sidebar.
 
-        Called only when step_id changes. If the inbound message has no
-        execution_params (free mode or legacy), clear the baseline instead so
-        the commit button becomes disabled.
+        If the sidebar is dirty, prompt Commit/Discard/Cancel. Returns True if
+        the caller should update _last_applied_step_id, False on cancel.
         """
+        if self.model.routes.commit_enabled and self._last_applied_step_id:
+            choice = self._prompt_uncommitted_changes()
+            if choice == "cancel":
+                return False
+            if choice == "commit":
+                prev_id = self._last_applied_step_id
+                params = self.model.routes._current_params()
+                commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
+                publish_message.send(
+                    topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
+                )
+            # "discard" falls through to apply the new step.
+
         if message_model.execution_params:
             self.model.routes.apply_execution_params(message_model.execution_params)
         else:
             self.model.routes.clear_committed_baseline()
+        return True
+
+    def _prompt_uncommitted_changes(self) -> str:
+        """Modal Commit/Discard/Cancel dialog. Returns 'commit', 'discard', or 'cancel'."""
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox()
+        box.setWindowTitle("Uncommitted execution parameters")
+        box.setText(
+            f"You have uncommitted execution parameter changes for step "
+            f"{self._last_applied_step_id}."
+        )
+        box.setInformativeText("Commit the changes to that step, discard them, or cancel?")
+        commit_btn = box.addButton("Commit", QMessageBox.AcceptRole)
+        discard_btn = box.addButton("Discard", QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is commit_btn:
+            return "commit"
+        if clicked is discard_btn:
+            return "discard"
+        return "cancel"
 
     @observe("model:routes:commit_to_step_btn")
     def _on_commit_to_step_btn_fired(self, event):
