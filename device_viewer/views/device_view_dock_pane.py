@@ -66,7 +66,8 @@ from microdrop_utils.pyside_helpers import (
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
+from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED, STEP_PARAMS_COMMIT
+from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
     PKG,
@@ -417,6 +418,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.routes.apply_execution_params(message_model.execution_params)
         else:
             self.model.routes.clear_committed_baseline()
+
+    @observe("model:routes:commit_to_step_btn")
+    def _on_commit_to_step_btn_fired(self, event):
+        step_id = self._last_applied_step_id
+        if not step_id:
+            # No step selected — shouldn't happen because the button is disabled,
+            # but guard anyway.
+            return
+
+        params = self.model.routes._current_params()
+        msg = StepParamsCommitMessage(step_id=step_id, **params)
+        publish_message.send(topic=STEP_PARAMS_COMMIT, message=msg.serialize())
+
+        # Re-baseline so the button goes back to disabled.
+        self.model.routes.mark_params_committed()
 
     def publish_model_message(self):
         logger.debug(
