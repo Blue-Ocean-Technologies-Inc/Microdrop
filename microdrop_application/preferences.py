@@ -156,3 +156,7 @@ class MicrodropDialogsPreferencesPane(PreferencesPane):
         Item("_"),  # Separator
         resizable=True,
     )
+
+    def apply(self, info=None):
+        # super().apply(info)
+        pass
