@@ -366,6 +366,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
 
         self.status_bar = StatusBar(self)
+        self._refresh_linear_repeats_indicator()
 
         layout = QVBoxLayout()
 
@@ -889,7 +890,17 @@ class PGCWidget(QWidget):
 
         clear_recursive(self.model.invisibleRootItem())
 
+    def _refresh_linear_repeats_indicator(self):
+        """Re-read the Linear Repeats preference and update the status bar."""
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            enabled = bool(ProtocolPreferences().linear_repeats)
+        except Exception:
+            enabled = False
+        self.status_bar.set_linear_repeats(enabled)
+
     def update_status_bar(self, status):
+        self._refresh_linear_repeats_indicator()
         self.status_bar.lbl_total_time.setText(
             f"Total Time: {int(status['total_time'])} s"
         )
@@ -1419,6 +1430,7 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("0/")
+        self._refresh_linear_repeats_indicator()
 
     def _update_ui_enabled_state(self):
         enabled = not self._protocol_running

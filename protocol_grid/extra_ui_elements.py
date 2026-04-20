@@ -359,14 +359,27 @@ class StatusBar(QScrollArea):
         self.lbl_next_step.setFixedWidth(180)
         self.lbl_next_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-        for widget in [self.lbl_total_time, self.lbl_step_time, self.lbl_step_progress, 
-                      self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step]:
+        # Live indicator for the "Linear Repeats" preference.
+        # Uses setText / setStyleSheet via set_linear_repeats(bool).
+        self.lbl_linear_repeats = QLabel()
+        self.lbl_linear_repeats.setFixedWidth(100)
+        self.lbl_linear_repeats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_linear_repeats.setToolTip(
+            "Linear Repeats preference — when enabled, linear paths are "
+            "replayed by the Repetitions count just like loops."
+        )
+        self.set_linear_repeats(False)
+
+        for widget in [self.lbl_total_time, self.lbl_step_time, self.lbl_step_progress,
+                      self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step,
+                      self.lbl_linear_repeats]:
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setFixedHeight(20)
 
         layout.addWidget(self.lbl_total_time)
         layout.addWidget(self.lbl_step_time)
         layout.addWidget(repeat_widget)
+        layout.addWidget(self.lbl_linear_repeats)
         layout.addWidget(self.lbl_step_progress)
         layout.addWidget(self.lbl_step_repetition)
         layout.addWidget(self.lbl_recent_step)
@@ -393,6 +406,18 @@ class StatusBar(QScrollArea):
 
         QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
     
+    def set_linear_repeats(self, enabled: bool):
+        """Update the Lin-Reps indicator to reflect the current preference.
+
+        ``✓ Lin-Reps`` in green when on; ``✗ Lin-Reps`` in red when off.
+        """
+        if enabled:
+            self.lbl_linear_repeats.setText("✓ Lin-Reps")
+            self.lbl_linear_repeats.setStyleSheet("QLabel { color: #2e7d32; font-weight: bold; }")
+        else:
+            self.lbl_linear_repeats.setText("✗ Lin-Reps")
+            self.lbl_linear_repeats.setStyleSheet("QLabel { color: #c62828; font-weight: bold; }")
+
     def _apply_styling(self):
         """Apply theme-specific styling to all labels and input fields."""
         if is_dark_mode():
@@ -417,19 +442,21 @@ class StatusBar(QScrollArea):
                     padding: 2px;
                 }}
             """
-        
+
         label_style = f"QLabel {{ color: {text_color}; }}"
-        
-        # Apply styling to all labels
+
+        # Apply styling to all labels. `lbl_linear_repeats` keeps its own
+        # coloured stylesheet (set by `set_linear_repeats`), independent of
+        # the light/dark text color.
         all_labels = [
             self.lbl_total_time, self.lbl_step_time, self.lbl_repeat_protocol,
             self.lbl_repeat_protocol_status, self.lbl_step_progress,
             self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step
         ]
-        
+
         for label in all_labels:
             label.setStyleSheet(label_style)
-        
+
         # Apply styling to input field
         self.edit_repeat_protocol.setStyleSheet(input_style)
 

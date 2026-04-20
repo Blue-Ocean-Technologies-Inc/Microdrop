@@ -84,6 +84,11 @@ class RouteExecutionService(HasTraits):
             if channel in self.model.electrodes.channels_electrode_ids_map:
                 activated_electrode_ids.extend(self.model.electrodes.channels_electrode_ids_map[channel])
 
+        # Read the linear-repeats preference once so the plan and the
+        # rep/phase counters below agree on the mode.
+        from protocol_grid.preferences import ProtocolPreferences
+        linear_repeats = bool(ProtocolPreferences().linear_repeats)
+
         # Build execution plan using PathExecutionService with raw params
         plan = PathExecutionService.calculate_execution_plan_from_params(
             duration=self.model.routes.duration,
@@ -95,6 +100,7 @@ class RouteExecutionService(HasTraits):
             activated_electrodes=activated_electrode_ids,
             soft_start=self.model.routes.soft_start,
             soft_terminate=self.model.routes.soft_terminate,
+            linear_repeats=linear_repeats,
         )
 
         if not plan:
@@ -140,8 +146,21 @@ class RouteExecutionService(HasTraits):
             # One rep = one full cycle of the longest loop path
             self._phases_per_rep = max(max_cycle_length, 1)
             self._total_reps = max_effective_reps
+        elif linear_repeats:
+            # Open-only paths with linear_repeats on: longest path's single
+            # traversal = one rep; total reps = the raw Repetitions count.
+            max_open_cycle = 0
+            for path in paths:
+                cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
+                    path, self.model.routes.trail_length, self.model.routes.trail_overlay,
+                    soft_start=self.model.routes.soft_start,
+                    soft_terminate=self.model.routes.soft_terminate,
+                )
+                max_open_cycle = max(max_open_cycle, len(cycle_phases))
+            self._phases_per_rep = max(max_open_cycle, 1)
+            self._total_reps = max(int(self.model.routes.repetitions), 1)
         else:
-            # Open paths only — no repetitions, entire plan is one rep
+            # Open paths only, no linear repeats — entire plan is one rep
             self._phases_per_rep = max(len(plan), 1)
             self._total_reps = 1
 
