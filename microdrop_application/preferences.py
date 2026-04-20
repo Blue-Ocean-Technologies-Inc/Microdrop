@@ -2,8 +2,8 @@ from pathlib import Path
 
 from apptools.preferences.api import PreferencesHelper
 from traits.etsconfig.api import ETSConfig
-from traits.api import Bool, Str, Directory
-from traitsui.api import VGroup, View, Item, Group
+from traits.api import Bool, Str, Directory, Range
+from traitsui.api import VGroup, View, Item, Group, RangeEditor
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -38,6 +38,16 @@ class MicrodropPreferences(PreferencesHelper):
     # dialogs:
     suppress_no_shorts_information = Bool(False)
 
+    # Central canvas background styling.
+    # When `canvas_background_use_custom` is False the canvas follows the
+    # system color scheme (white in light mode, a soft dark in dark mode).
+    # When True, `canvas_background_color` (hex, e.g. "#1E1E1E") is used.
+    # `canvas_background_opacity` is a percentage (0–100) applied to whichever
+    # colour ends up being used.
+    canvas_background_use_custom = Bool(False)
+    canvas_background_color = Str("#FFFFFF")
+    canvas_background_opacity = Range(low=0, high=100, value=100)
+
     def _EXPERIMENTS_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Experiments"
 
@@ -71,11 +81,26 @@ class MicrodropPreferencesPane(PreferencesPane):
             style_sheet=preferences_group_style_sheet,
         ),
 
+    canvas_settings = VGroup(
+            Item('canvas_background_use_custom', label="Use Custom Color"),
+            Item('canvas_background_color', label="Background Color (hex)",
+                 enabled_when='canvas_background_use_custom'),
+            Item('canvas_background_opacity', label="Opacity (%)",
+                 editor=RangeEditor(low=0, high=100, mode='slider')),
+            label="Canvas Background",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
+
     view = View(
 
         Item("_"), # Separator
 
         app_startup_settings,
+
+        Item("_"),
+
+        canvas_settings,
 
         Item("_"),  # ensure other contributed pane groups are spaced out from this pane's group.
 
