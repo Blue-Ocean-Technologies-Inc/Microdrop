@@ -235,7 +235,7 @@ class RouteLayerManager(HasTraits):
     _suspend_repeat_exclusion = Bool(False)
 
     # Button for pushing current sidebar params to the selected protocol step.
-    commit_to_step_btn = Button("save")
+    commit_to_step_btn = Button("sync_alt")
 
     # True iff a baseline is set AND current values diverge from it.
     # The main model mirrors this into `routes_commit_enabled` for the view's

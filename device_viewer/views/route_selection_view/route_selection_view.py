@@ -190,7 +190,7 @@ run_controls = HGroup(
     ),  # stop
     UItem(
         "object.routes.commit_to_step_btn",
-        tooltip="Commit execution parameters to selected step",
+        tooltip="Apply execution params to step",
         enabled_when="object.routes_commit_enabled",
         visible_when=f"not {executing}",
         springy=True,
