@@ -1984,11 +1984,22 @@ class PGCWidget(QWidget):
 
     def _insert_free_mode_state_as_new_step(self):
         """Create a new protocol step populated with the tracked free mode device state."""
-        device_state = device_state_from_device_viewer_message(self.last_device_view_free_mode_msg_with_unsaved_changes)
+        dv_msg = self.last_device_view_free_mode_msg_with_unsaved_changes
+        device_state = device_state_from_device_viewer_message(dv_msg)
 
         scroll_pos = self.save_scroll_positions()
         self.state.snapshot_for_undo()
         new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
+
+        # Seed the new step's execution params from the DV sidebar if provided.
+        if dv_msg.execution_params:
+            new_step.parameters["Duration"]        = f"{dv_msg.execution_params['duration']:g}"
+            new_step.parameters["Repetitions"]     = str(dv_msg.execution_params["repetitions"])
+            new_step.parameters["Repeat Duration"] = f"{dv_msg.execution_params['repeat_duration']:g}"
+            new_step.parameters["Trail Length"]    = str(dv_msg.execution_params["trail_length"])
+            new_step.parameters["Trail Overlay"]   = str(dv_msg.execution_params["trail_overlay"])
+            new_step.parameters["Ramp Up"]         = "1" if dv_msg.execution_params["soft_start"] else "0"
+            new_step.parameters["Ramp Dn"]         = "1" if dv_msg.execution_params["soft_terminate"] else "0"
 
         new_step.device_state.from_dict(device_state.to_dict())
 
