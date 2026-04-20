@@ -17,7 +17,7 @@ def listener():
 def test_listener_emits_step_params_commit_received(listener):
     msg = StepParamsCommitMessage(
         step_id="uid-1",
-        duration=2, repetitions=3, repeat_duration=0,
+        duration=2.0, repetitions=3, repeat_duration=0,
         trail_length=2, trail_overlay=1,
         soft_start=True, soft_terminate=False,
     )

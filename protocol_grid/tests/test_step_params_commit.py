@@ -7,7 +7,7 @@ from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 def _valid_kwargs():
     return dict(
         step_id="abc123",
-        duration=2,
+        duration=1.5,
         repetitions=3,
         repeat_duration=0,
         trail_length=2,
@@ -35,7 +35,7 @@ from protocol_grid.protocol_grid_helpers import extract_execution_params
 
 def test_extract_execution_params_happy_path():
     parameters = {
-        "Duration": "2",
+        "Duration": "1.5",
         "Repetitions": "3",
         "Repeat Duration": "0",
         "Trail Length": "2",
@@ -46,7 +46,7 @@ def test_extract_execution_params_happy_path():
     }
     result = extract_execution_params(parameters)
     assert result == {
-        "duration": 2,
+        "duration": 1.5,
         "repetitions": 3,
         "repeat_duration": 0,
         "trail_length": 2,
@@ -56,22 +56,18 @@ def test_extract_execution_params_happy_path():
     }
 
 
-def test_extract_execution_params_legacy_float_strings():
-    # Pre-existing protocols may have stored "1.0" etc. — the helper should
-    # tolerate these via int(float(...)).
-    parameters = {
-        "Duration": "1.0",
-        "Repeat Duration": "2.0",
-    }
+def test_extract_execution_params_legacy_repeat_duration_float():
+    # Pre-existing protocols may have stored Repeat Duration as "1.0" etc. —
+    # the helper should tolerate these via int(float(...)).
+    parameters = {"Repeat Duration": "2.0"}
     result = extract_execution_params(parameters)
-    assert result["duration"] == 1
     assert result["repeat_duration"] == 2
 
 
 def test_extract_execution_params_missing_keys_use_defaults():
     # If a key is absent, fall back to step_defaults string, then cast.
     result = extract_execution_params({})
-    assert result["duration"] == 1
+    assert result["duration"] == 1.0
     assert result["repetitions"] == 1
     assert result["repeat_duration"] == 1
     assert result["trail_length"] == 1
@@ -88,7 +84,7 @@ from protocol_grid.state.device_state import (
 
 def test_device_state_message_carries_execution_params():
     params = {
-        "duration": 2,
+        "duration": 2.0,
         "repetitions": 5,
         "repeat_duration": 0,
         "trail_length": 3,

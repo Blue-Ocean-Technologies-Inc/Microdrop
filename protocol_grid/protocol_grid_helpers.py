@@ -120,9 +120,11 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setMaximum(1000)
             return editor
         elif field == "Duration":
-            editor = QSpinBox(parent)
-            editor.setMinimum(0)
-            editor.setMaximum(10000)
+            editor = QDoubleSpinBox(parent)
+            editor.setMinimum(0.0)
+            editor.setMaximum(10000.0)
+            editor.setDecimals(1)
+            editor.setSingleStep(0.1)
             return editor
         elif field == "Voltage":
             editor = QDoubleSpinBox(parent)
@@ -363,11 +365,11 @@ def calculate_group_aggregation_from_children(group_items, children):
                 rep_idx = protocol_grid_fields.index("Repetitions")
                 run_idx = protocol_grid_fields.index("Run Time")
                 try:
-                    duration = int(child_row[dur_idx].text() or "0")
+                    duration = float(child_row[dur_idx].text() or "0")
                     repetitions = int(child_row[rep_idx].text() or "1")
                     run_time = float(child_row[run_idx].text() or "0")
                 except ValueError:
-                    duration = 0
+                    duration = 0.0
                     repetitions = 1
                     run_time = 0.0
                 total_duration += duration * repetitions
@@ -377,10 +379,10 @@ def calculate_group_aggregation_from_children(group_items, children):
                 dur_idx = protocol_grid_fields.index("Duration")
                 run_idx = protocol_grid_fields.index("Run Time")
                 try:
-                    duration = int(child_row[dur_idx].text() or "0")
+                    duration = float(child_row[dur_idx].text() or "0")
                     run_time = float(child_row[run_idx].text() or "0")
                 except ValueError:
-                    duration = 0
+                    duration = 0.0
                     run_time = 0.0
                 total_duration += duration
                 total_run_time += run_time
@@ -404,7 +406,7 @@ def calculate_group_aggregation_from_children(group_items, children):
             group_reps = int(group_items[rep_idx].text() or "1")
         except ValueError:
             group_reps = 1
-        group_items[dur_idx].setText(str(total_duration * group_reps))
+        group_items[dur_idx].setText(f"{total_duration * group_reps:.1f}")
         group_items[run_idx].setText(f"{total_run_time * group_reps:.2f}")
     except IndexError:
         pass
@@ -417,7 +419,7 @@ def _int_cast(s):
 
 _EXEC_PARAM_FIELD_MAP = {
     # device-viewer key: (grid cell key, cast)
-    "duration":        ("Duration",        _int_cast),
+    "duration":        ("Duration",        float),
     "repetitions":     ("Repetitions",     int),
     "repeat_duration": ("Repeat Duration", _int_cast),
     "trail_length":    ("Trail Length",    int),

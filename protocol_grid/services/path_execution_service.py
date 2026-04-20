@@ -260,7 +260,7 @@ class PathExecutionService:
         ``repetitions`` times.  Soft start/terminate add ramp phases
         on top.
         """
-        duration = int(float(step.parameters.get("Duration", "1")))
+        duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
@@ -324,7 +324,7 @@ class PathExecutionService:
         repetitions are derived from Repeat Duration; when disabled,
         the raw Repetitions value is used.
         """
-        duration = int(float(step.parameters.get("Duration", "1")))
+        duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
@@ -371,7 +371,7 @@ class PathExecutionService:
         whether loop repetitions are time-capped (with idle padding) or
         count-based.  Soft start/terminate add ramp phases on top.
         """
-        duration = int(float(step.parameters.get("Duration", "1")))
+        duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
         repeat_duration_mode = step.parameters.get("Repeat Duration Mode", "0") == "1"
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0

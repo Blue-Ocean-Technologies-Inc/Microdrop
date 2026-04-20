@@ -213,7 +213,7 @@ class RouteLayerManager(HasTraits):
     phase_label = Str("")
 
     # path execution properties (mirror protocol grid step defaults)
-    duration = Range(low=0, high=10000, value=1)
+    duration = Range(low=0.0, high=10000.0, value=1.0)
     trail_length = Range(low=1, high=10000, value=1)
 
     # Dynamic upper bound for trail_overlay: overlay cannot exceed trail_length - 1
@@ -254,7 +254,7 @@ class RouteLayerManager(HasTraits):
 
     def _current_params(self) -> dict:
         return {
-            "duration": int(self.duration),
+            "duration": float(self.duration),
             "repetitions": int(self.repetitions),
             "repeat_duration": int(self.repeat_duration),
             "trail_length": int(self.trail_length),
