@@ -1,4 +1,4 @@
-from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Range, Event, Property
+from traits.api import HasTraits, List, Enum, Bool, Instance, observe, Str, Button, Float, Int, Range, Event, Property, Dict
 from collections import Counter
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -226,6 +226,91 @@ class RouteLayerManager(HasTraits):
     soft_start = Bool(False)
     soft_terminate = Bool(False)
 
+    # -------- Step-params commit state --------
+    # Empty dict means no step is currently selected — commit button disabled.
+    _committed_params_baseline = Dict()
+
+    # Internal flag to suspend the repetitions ↔ repeat_duration reset observers
+    # during bulk writes (e.g. apply_execution_params).
+    _suspend_repeat_exclusion = Bool(False)
+
+    # Button for pushing current sidebar params to the selected protocol step.
+    commit_to_step_btn = Button("save")
+
+    # True iff a baseline is set AND current values diverge from it.
+    # The main model mirrors this into `routes_commit_enabled` for the view's
+    # `enabled_when` binding, which doesn't track nested paths reliably.
+    commit_enabled = Property(
+        observe=(
+            "_committed_params_baseline.items,"
+            "duration,repetitions,repeat_duration,"
+            "trail_length,trail_overlay,soft_start,soft_terminate"
+        )
+    )
+
+    def _get_commit_enabled(self):
+        baseline = self._committed_params_baseline
+        if not baseline:
+            return False
+        return self._current_params() != baseline
+
+    def _current_params(self) -> dict:
+        return {
+            "duration": float(self.duration),
+            "repetitions": int(self.repetitions),
+            "repeat_duration": int(self.repeat_duration),
+            "trail_length": int(self.trail_length),
+            "trail_overlay": int(self.trail_overlay),
+            "soft_start": bool(self.soft_start),
+            "soft_terminate": bool(self.soft_terminate),
+        }
+
+    def apply_execution_params(self, params: dict) -> None:
+        """Apply params from the grid to the sidebar, then baseline them.
+
+        The existing observers on `repetitions` / `repeat_duration` reset each
+        other — we suppress them for the duration of the bulk write so the
+        pulled values stick.
+        """
+        with self._suppress_repeat_exclusion():
+            self.trait_set(
+                duration=params["duration"],
+                repetitions=params["repetitions"],
+                repeat_duration=params["repeat_duration"],
+                trail_length=params["trail_length"],
+                trail_overlay=params["trail_overlay"],
+                soft_start=params["soft_start"],
+                soft_terminate=params["soft_terminate"],
+            )
+        self.mark_params_committed()
+
+    def mark_params_committed(self) -> None:
+        """Snapshot current values as the committed baseline → disables button."""
+        self._committed_params_baseline = self._current_params()
+
+    def clear_committed_baseline(self) -> None:
+        """Clear baseline — e.g. when transitioning to free mode."""
+        self._committed_params_baseline = {}
+
+    def _suppress_repeat_exclusion(self):
+        """Context manager that pauses the repetitions ↔ repeat_duration reset.
+
+        `_route_repeats_changed` / `_route_repeat_duration_changed` observers
+        check `_suspend_repeat_exclusion` and bail out while this is True.
+        """
+        mgr = self
+
+        class _Ctx:
+            def __enter__(self_inner):
+                mgr._suspend_repeat_exclusion = True
+                return self_inner
+
+            def __exit__(self_inner, *exc):
+                mgr._suspend_repeat_exclusion = False
+                return False
+
+        return _Ctx()
+
     def _get_max_trail_overlay(self):
         """Computed upper bound for trail_overlay, recalculated when trail_length changes."""
         return self.trail_length - 1
@@ -348,8 +433,12 @@ class RouteLayerManager(HasTraits):
     # exclusive in the UI and the execution plan sees a single source of truth.
     @observe("repetitions")
     def _route_repeats_changed(self, event):
+        if self._suspend_repeat_exclusion:
+            return
         self.repeat_duration = 0
 
     @observe("repeat_duration")
     def _route_repeat_duration_changed(self, event):
+        if self._suspend_repeat_exclusion:
+            return
         self.repetitions = 1

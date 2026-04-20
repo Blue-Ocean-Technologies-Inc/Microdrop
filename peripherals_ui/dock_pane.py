@@ -16,7 +16,7 @@ from microdrop_style.label_style import get_label_style
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from .consts import PKG, PKG_name,DEVICE_NAME
 
-from dropbot_status.displayed_UI import disconnected_color, connected_color
+from dropbot_status_and_controls.consts import disconnected_color, connected_color
 
 
 class PeripheralStatusDockPane(DockPane):

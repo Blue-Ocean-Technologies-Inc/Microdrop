@@ -21,6 +21,7 @@ from protocol_grid.consts import (
     protocol_grid_fields,
     CHECKBOX_COLS,
     ALLOWED_group_fields,
+    step_defaults,
 )
 
 
@@ -139,7 +140,12 @@ class ProtocolGridDelegate(QStyledItemDelegate):
             editor.setDecimals(2)
             editor.setSingleStep(0.05)
             return editor
-        elif field in ("Repeat Duration", "Run Time"):
+        elif field == "Repeat Duration":
+            editor = QSpinBox(parent)
+            editor.setMinimum(0)
+            editor.setMaximum(10000)
+            return editor
+        elif field == "Run Time":
             editor = QDoubleSpinBox(parent)
             editor.setMinimum(0.0)
             editor.setMaximum(99999.9)
@@ -404,3 +410,36 @@ def calculate_group_aggregation_from_children(group_items, children):
         group_items[run_idx].setText(f"{total_run_time * group_reps:.2f}")
     except IndexError:
         pass
+
+
+# Int-from-string cast tolerant of legacy float strings like "1.0".
+def _int_cast(s):
+    return int(float(s))
+
+
+_EXEC_PARAM_FIELD_MAP = {
+    # device-viewer key: (grid cell key, cast)
+    "duration":        ("Duration",        float),
+    "repetitions":     ("Repetitions",     int),
+    "repeat_duration": ("Repeat Duration", _int_cast),
+    "trail_length":    ("Trail Length",    int),
+    "trail_overlay":   ("Trail Overlay",   int),
+    "soft_start":      ("Ramp Up",         lambda s: str(s).strip() in ("1", "true", "True")),
+    "soft_terminate":  ("Ramp Dn",         lambda s: str(s).strip() in ("1", "true", "True")),
+}
+
+
+def extract_execution_params(parameters: dict) -> dict:
+    """Read the 7 execution params out of a step's `parameters` dict.
+
+    Falls back to `step_defaults` when a key is missing. Returns a dict keyed
+    by the device-viewer trait names (lowercase snake_case), typed correctly.
+    """
+    out = {}
+    for dv_key, (cell_key, cast) in _EXEC_PARAM_FIELD_MAP.items():
+        raw = parameters.get(cell_key, step_defaults.get(cell_key, ""))
+        try:
+            out[dv_key] = cast(raw)
+        except (ValueError, TypeError):
+            out[dv_key] = cast(step_defaults[cell_key])
+    return out

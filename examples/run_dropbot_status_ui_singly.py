@@ -11,7 +11,7 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 def main(args):
     """Run the application."""
 
-    from dropbot_status.plugin import DropbotStatusPlugin
+    # from dropbot_status_and_controls.plugin import DropbotStatusPlugin
     from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
     from message_router.plugin import MessageRouterPlugin
     from BlankMicrodropCanvas.plugin import BlankMicrodropCanvasPlugin

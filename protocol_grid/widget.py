@@ -29,6 +29,7 @@ from protocol_grid.protocol_grid_helpers import (
     make_row,
     ProtocolGridDelegate,
     calculate_group_aggregation_from_children,
+    extract_execution_params,
 )
 from protocol_grid.quick_action_bar import (
     QuickProtocolActions,
@@ -632,6 +633,9 @@ class PGCWidget(QWidget):
         # Voltage/frequency range preferences changed
         sig.voltage_frequency_range_changed.connect(self._on_voltage_frequency_range_changed)
 
+        # Sidebar commit of execution params to a step
+        sig.step_params_commit_received.connect(self._on_step_params_commit)
+
         logger.info("Widget connected to message listener")
 
     def on_device_viewer_message(self, message):
@@ -717,6 +721,45 @@ class PGCWidget(QWidget):
             logger.error(f"Failed to update DeviceState from device_viewer message: {e}", exc_info=True)
         finally:
             self._processing_device_viewer_message = False
+            self._programmatic_change = False
+
+    def _on_step_params_commit(self, commit_msg):
+        """Write the 7 execution-param cells of the step identified by step_id."""
+        target_item, target_path = self._find_step_by_uid(commit_msg.step_id)
+        if not target_item:
+            logger.warning(
+                f"Commit received for unknown step_id={commit_msg.step_id}; ignoring"
+            )
+            return
+
+        parent = target_item.parent() or self.model.invisibleRootItem()
+        row = target_item.row()
+
+        updates = {
+            "Duration":        f"{commit_msg.duration:.1f}",
+            "Repetitions":     str(commit_msg.repetitions),
+            "Repeat Duration": str(commit_msg.repeat_duration),
+            "Trail Length":    str(commit_msg.trail_length),
+            "Trail Overlay":   str(commit_msg.trail_overlay),
+            "Ramp Up":         "1" if commit_msg.soft_start else "0",
+            "Ramp Dn":         "1" if commit_msg.soft_terminate else "0",
+        }
+
+        self._programmatic_change = True
+        try:
+            for field, text in updates.items():
+                col = protocol_grid_fields.index(field)
+                cell = parent.child(row, col)
+                if cell is not None:
+                    cell.setText(text)
+
+            # Mirror into the ProtocolStep.parameters dict so persistence is up to date.
+            step_data = self.state.get_element_by_path(target_path)
+            if step_data is not None:
+                step_data.parameters.update(updates)
+
+            self._mark_protocol_modified()
+        finally:
             self._programmatic_change = False
 
     def on_calibration_message(self, message, topic):
@@ -1778,15 +1821,18 @@ class PGCWidget(QWidget):
 
         step_uid = step_item.data(Qt.UserRole + 1000 + hash("UID") % 1000) or ""
 
+        step_data = self.state.get_element_by_path(step_path)
+        execution_params = extract_execution_params(step_data.parameters) if step_data else None
+
         msg_model = device_state_to_device_viewer_message(
-            device_state, step_uid, step_description, step_id, editable
+            device_state, step_uid, step_description, step_id, editable,
+            execution_params=execution_params,
         )
         publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
 
         electrode_state_change_publisher.publish(msg_model.channels_activated)
 
-        step_data = self.state.get_element_by_path(step_path)
         logger.info(f"selected step data: {step_data}")
         voltage = step_data.parameters["Voltage"]
         frequency = step_data.parameters["Frequency"]
@@ -1938,11 +1984,22 @@ class PGCWidget(QWidget):
 
     def _insert_free_mode_state_as_new_step(self):
         """Create a new protocol step populated with the tracked free mode device state."""
-        device_state = device_state_from_device_viewer_message(self.last_device_view_free_mode_msg_with_unsaved_changes)
+        dv_msg = self.last_device_view_free_mode_msg_with_unsaved_changes
+        device_state = device_state_from_device_viewer_message(dv_msg)
 
         scroll_pos = self.save_scroll_positions()
         self.state.snapshot_for_undo()
         new_step = ProtocolStep(parameters=dict(step_defaults), name="Step")
+
+        # Seed the new step's execution params from the DV sidebar if provided.
+        if dv_msg.execution_params:
+            new_step.parameters["Duration"]        = f"{float(dv_msg.execution_params['duration']):.1f}"
+            new_step.parameters["Repetitions"]     = str(dv_msg.execution_params["repetitions"])
+            new_step.parameters["Repeat Duration"] = str(int(dv_msg.execution_params["repeat_duration"]))
+            new_step.parameters["Trail Length"]    = str(dv_msg.execution_params["trail_length"])
+            new_step.parameters["Trail Overlay"]   = str(dv_msg.execution_params["trail_overlay"])
+            new_step.parameters["Ramp Up"]         = "1" if dv_msg.execution_params["soft_start"] else "0"
+            new_step.parameters["Ramp Dn"]         = "1" if dv_msg.execution_params["soft_terminate"] else "0"
 
         new_step.device_state.from_dict(device_state.to_dict())
 
@@ -2721,13 +2778,17 @@ class PGCWidget(QWidget):
             value = float(item.text())
             if field == "Volume Threshold":
                 item.setText(f"{value:.2f}")
-            elif field in ("Duration", "Repeat Duration", "Run Time"):
+            elif field == "Repeat Duration":
+                item.setText(str(int(value)))
+            elif field in ("Duration", "Run Time"):
                 item.setText(f"{value:.1f}")
             else:
                 item.setText(f"{value:.1f}")
         except ValueError:
             if field == "Volume Threshold":
                 item.setText("0.00")
+            elif field == "Repeat Duration":
+                item.setText("0")
             else:
                 item.setText("0.0")
 
@@ -2778,15 +2839,15 @@ class PGCWidget(QWidget):
         from protocol_grid.services.path_execution_service import PathExecutionService
 
         if not device_state.has_paths():
-            return 1.0
+            return 0
 
         has_loops = any(
             len(path) >= 2 and path[0] == path[-1] for path in device_state.paths
         )
         if not has_loops:
-            return 1.0
+            return 0
 
-        max_loop_duration = 1.0
+        max_loop_duration = 0
 
         for path in device_state.paths:
             if not PathExecutionService.is_loop_path(path):
@@ -2852,7 +2913,7 @@ class PGCWidget(QWidget):
             return True
 
         try:
-            val = float(repeat_duration_item.text() or "0")
+            val = int(repeat_duration_item.text() or "0")
         except ValueError:
             return True
 
@@ -2868,7 +2929,7 @@ class PGCWidget(QWidget):
         estimated = self._calculate_estimated_repeat_duration(
             device_state, repetitions, dur, tl, to,
         )
-        if abs(val - estimated) < 0.05:
+        if val == int(round(estimated)):
             return True  # value matches auto-calc, no mode switch needed
 
         result = confirm(
@@ -2888,7 +2949,7 @@ class PGCWidget(QWidget):
             # revert to the estimated repeat duration
             self._programmatic_change = True
             try:
-                repeat_duration_item.setText(f"{estimated:.1f}")
+                repeat_duration_item.setText(str(int(round(estimated))))
             finally:
                 self._programmatic_change = False
             return False
@@ -2931,7 +2992,7 @@ class PGCWidget(QWidget):
             row = desc_item.row()
             device_state = desc_item.data(Qt.UserRole + 100) or DeviceState()
             duration = float((parent.child(row, protocol_grid_fields.index("Duration")).text() or "1.0"))
-            repeat_dur = float((parent.child(row, protocol_grid_fields.index("Repeat Duration")).text() or "0.0"))
+            repeat_dur = int((parent.child(row, protocol_grid_fields.index("Repeat Duration")).text() or "0"))
             trail_length = int((parent.child(row, protocol_grid_fields.index("Trail Length")).text() or "1"))
             trail_overlay = int((parent.child(row, protocol_grid_fields.index("Trail Overlay")).text() or "0"))
 
@@ -3046,7 +3107,7 @@ class PGCWidget(QWidget):
 
             repetitions = int(repetitions_item.text() or "1")
             duration = float(duration_item.text() or "1.0")
-            current_repeat_duration = float(repeat_duration_item.text() or "0.0")
+            current_repeat_duration = int(repeat_duration_item.text() or "0")
             trail_length = int(trail_length_item.text() or "1")
             trail_overlay = int(trail_overlay_item.text() or "0")
 
@@ -3108,7 +3169,7 @@ class PGCWidget(QWidget):
                         and changed_field != "Repeat Duration"
                         and not self._protocol_running
                     ):
-                        repeat_duration_item.setText(f"{estimated_repeat_duration:.1f}")
+                        repeat_duration_item.setText(str(int(round(estimated_repeat_duration))))
 
             finally:
                 self._programmatic_change = False

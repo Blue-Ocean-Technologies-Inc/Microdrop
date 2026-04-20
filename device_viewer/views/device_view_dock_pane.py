@@ -36,7 +36,7 @@ from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
 from pyface.api import GUI
 
-from traits.api import Instance, Str, observe, provides
+from traits.api import Any, Instance, Str, observe, provides
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.view import View
 
@@ -66,7 +66,8 @@ from microdrop_utils.pyside_helpers import (
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED
+from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED, STEP_PARAMS_COMMIT
+from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
     PKG,
@@ -141,6 +142,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Variables
     _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
+    _last_applied_step_id = Any()  # Optional[str]; None means no step applied yet
     message_buffer = (
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
@@ -359,6 +361,14 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
+        if message_model.step_id != self._last_applied_step_id:
+            if self._apply_step_transition(message_model):
+                self._last_applied_step_id = message_model.step_id
+            # On cancel we do NOT update _last_applied_step_id.
+            # The grid's selection remains visually on the new row, but the
+            # sidebar stays on the old values — see spec open item re:
+            # forcing the grid to revert selection.
+
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
 
@@ -400,6 +410,68 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         QApplication.processEvents()
+
+    def _apply_step_transition(self, message_model):
+        """Pull execution params from the newly-selected step into the sidebar.
+
+        If the sidebar is dirty, prompt Commit/Discard/Cancel. Returns True if
+        the caller should update _last_applied_step_id, False on cancel.
+        """
+        if self.model.routes.commit_enabled and self._last_applied_step_id:
+            choice = self._prompt_uncommitted_changes()
+            if choice == "cancel":
+                return False
+            if choice == "commit":
+                prev_id = self._last_applied_step_id
+                params = self.model.routes._current_params()
+                commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
+                publish_message.send(
+                    topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
+                )
+            # "discard" falls through to apply the new step.
+
+        if message_model.execution_params:
+            self.model.routes.apply_execution_params(message_model.execution_params)
+        else:
+            self.model.routes.clear_committed_baseline()
+        return True
+
+    def _prompt_uncommitted_changes(self) -> str:
+        """Modal Commit/Discard/Cancel dialog. Returns 'commit', 'discard', or 'cancel'."""
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox()
+        box.setWindowTitle("Uncommitted execution parameters")
+        box.setText(
+            f"You have uncommitted execution parameter changes for step "
+            f"{self._last_applied_step_id}."
+        )
+        box.setInformativeText("Commit the changes to that step, discard them, or cancel?")
+        commit_btn = box.addButton("Commit", QMessageBox.AcceptRole)
+        discard_btn = box.addButton("Discard", QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is commit_btn:
+            return "commit"
+        if clicked is discard_btn:
+            return "discard"
+        return "cancel"
+
+    @observe("model:routes:commit_to_step_btn")
+    def _on_commit_to_step_btn_fired(self, event):
+        step_id = self._last_applied_step_id
+        if not step_id:
+            # No step selected — shouldn't happen because the button is disabled,
+            # but guard anyway.
+            return
+
+        params = self.model.routes._current_params()
+        msg = StepParamsCommitMessage(step_id=step_id, **params)
+        publish_message.send(topic=STEP_PARAMS_COMMIT, message=msg.serialize())
+
+        # Re-baseline so the button goes back to disabled.
+        self.model.routes.mark_params_committed()
 
     def publish_model_message(self):
         logger.debug(

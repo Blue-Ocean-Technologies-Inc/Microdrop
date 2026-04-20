@@ -191,9 +191,10 @@ def device_state_from_device_viewer_message(dv_msg):
         activated_electrodes_area_mm2=dv_msg.activated_electrodes_area_mm2
     )
 
-def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: str=None, 
-                                          step_description: str=None, step_id: str=None, 
-                                          editable: bool=True) -> DeviceViewerMessageModel:
+def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: str=None,
+                                          step_description: str=None, step_id: str=None,
+                                          editable: bool=True,
+                                          execution_params: dict=None) -> DeviceViewerMessageModel:
     # electrode IDs to channels for activated electrodes
     channels_activated = set()
     for electrode_id in device_state.activated_electrodes:
@@ -229,5 +230,6 @@ def device_state_to_device_viewer_message(device_state: DeviceState, step_uid: s
         routes=routes,
         id_to_channel=id_to_channel,
         step_info=step_info,
-        editable=editable
+        editable=editable,
+        execution_params=execution_params,
     )
