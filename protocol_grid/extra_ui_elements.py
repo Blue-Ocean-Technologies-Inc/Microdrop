@@ -374,13 +374,8 @@ class StatusBar(QScrollArea):
         # Live indicator for the "Linear Repeats" preference.
         # Clickable — emits `clicked` so the widget can toggle the pref.
         self.lbl_linear_repeats = _ClickableLabel()
-        self.lbl_linear_repeats.setFixedWidth(100)
-        self.lbl_linear_repeats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_linear_repeats.setCursor(Qt.PointingHandCursor)
-        self.lbl_linear_repeats.setToolTip(
-            "Linear Repeats preference — when enabled, linear paths are "
-            "replayed by the Repetitions count just like loops. Click to toggle."
-        )
+        self.lbl_linear_repeats.setToolTip("Loop linear paths")
         self.set_linear_repeats(False)
 
         for widget in [self.lbl_total_time, self.lbl_step_time, self.lbl_step_progress,
