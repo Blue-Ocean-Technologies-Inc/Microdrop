@@ -23,6 +23,7 @@ current_folder_path = os.path.dirname(os.path.abspath(__file__))
 PROTOCOL_GRID_LISTENER_NAME = f"{PKG}_listener"
 
 DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
+STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
 CALIBRATION_DATA = "ui/calibration_data"
 DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
@@ -37,6 +38,7 @@ DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 ACTOR_TOPIC_DICT = {
     PROTOCOL_GRID_LISTENER_NAME: [
         DEVICE_VIEWER_STATE_CHANGED,
+        STEP_PARAMS_COMMIT,
         DROPBOT_DISCONNECTED,
         CHIP_INSERTED,
         DROPBOT_CONNECTED,
@@ -88,14 +90,14 @@ field_groupings = [
         ]
 step_defaults = {
     "Description": "Step",
-    "ID": "", 
+    "ID": "",
     "Repetitions": "1",
     "Duration": "1.0",
     "Force": "",
     "Voltage": f"{float(VoltageFrequencyRangePreferences().ui_default_voltage)}",
     "Frequency": f"{float(VoltageFrequencyRangePreferences().ui_default_frequency)}",
     "Message": "",
-    "Repeat Duration": "1.0",
+    "Repeat Duration": "0",
     "Trail Length": "1",
     "Trail Overlay": "0",
     "Ramp Up": "0",

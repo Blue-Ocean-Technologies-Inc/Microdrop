@@ -24,6 +24,8 @@ class DeviceViewerMessageModel(BaseModel):
 
     svg_file: Optional[Path | str] = None
 
+    execution_params: Optional[dict] = None
+
     @computed_field
     @property
     def step_id(self) -> Optional[str]:
