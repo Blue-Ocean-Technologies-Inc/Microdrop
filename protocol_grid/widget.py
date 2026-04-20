@@ -366,6 +366,8 @@ class PGCWidget(QWidget):
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
 
         self.status_bar = StatusBar(self)
+        self.status_bar.lbl_linear_repeats.clicked.connect(self._toggle_linear_repeats_preference)
+        self._refresh_linear_repeats_indicator()
 
         layout = QVBoxLayout()
 
@@ -889,7 +891,36 @@ class PGCWidget(QWidget):
 
         clear_recursive(self.model.invisibleRootItem())
 
+    def _refresh_linear_repeats_indicator(self):
+        """Re-read the Linear Repeats preference and update the status bar."""
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            enabled = bool(ProtocolPreferences().linear_repeats)
+        except Exception:
+            enabled = False
+        self.status_bar.set_linear_repeats(enabled)
+
+    def _toggle_linear_repeats_preference(self):
+        """Flip the Linear Repeats preference and refresh the indicator.
+
+        Recomputes every step's derived columns (Run Time, etc.) and any
+        parent group aggregations so totals reflect the new mode
+        immediately — linear paths that now repeat add to Run Time, and
+        vice-versa when disabling.
+        """
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            prefs = ProtocolPreferences()
+            prefs.linear_repeats = not bool(prefs.linear_repeats)
+        except Exception as e:
+            logger.error(f"Failed to toggle Linear Repeats preference: {e}", exc_info=True)
+            return
+        self._refresh_linear_repeats_indicator()
+        self.update_step_dev_fields()
+        self.update_all_group_aggregations()
+
     def update_status_bar(self, status):
+        self._refresh_linear_repeats_indicator()
         self.status_bar.lbl_total_time.setText(
             f"Total Time: {int(status['total_time'])} s"
         )
@@ -1419,6 +1450,7 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("0/")
+        self._refresh_linear_repeats_indicator()
 
     def _update_ui_enabled_state(self):
         enabled = not self._protocol_running
@@ -3014,13 +3046,24 @@ class PGCWidget(QWidget):
         return True
 
     def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
-        """Revert Repetitions to 1 if the step has no looping route"""
+        """Revert Repetitions to 1 if the step has no looping route.
+
+        Skipped when the Linear Repeats preference is on — in that mode,
+        linear paths honor Repetitions too, so the guard would be incorrect.
+        """
         try:
             reps = int(repetitions_item.text() or "1")
         except ValueError:
             return
         if reps <= 1:
             return
+
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            if bool(ProtocolPreferences().linear_repeats):
+                return
+        except Exception:
+            pass
 
         device_state = desc_item.data(Qt.UserRole + 100)
         has_loop = (

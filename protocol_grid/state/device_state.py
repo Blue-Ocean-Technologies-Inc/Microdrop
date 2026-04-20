@@ -28,15 +28,24 @@ class DeviceState:
 
     def calculated_duration(self, step_duration: float, repetitions: int,
                             repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0,
-                            soft_start: bool = False, soft_end: bool = False):
+                            soft_start: bool = False, soft_end: bool = False,
+                            linear_repeats: bool = None):
         """Calculate the total duration for this step including idle/balance phases.
 
         When repeat_duration > 0 and the step has loops, each loop independently
         calculates how many full cycles fit within repeat_duration. Idle phases
         pad the remaining balance time.  Soft start/end add ramp phases on top.
         The total step duration is driven by the longest loop.
+
+        When ``linear_repeats`` is True, open paths also play ``repetitions``
+        times. None reads from ``ProtocolPreferences``.
         """
-        from protocol_grid.services.path_execution_service import PathExecutionService
+        from protocol_grid.services.path_execution_service import (
+            PathExecutionService, _read_linear_repeats_preference,
+        )
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
 
         if not self.has_paths():
             calculated_time = step_duration * repetitions
@@ -81,7 +90,8 @@ class DeviceState:
                         soft_start=soft_start, soft_terminate=soft_end,
                     )
                     cycle_length = len(cycle_phases)
-                    max_open_path_length = max(max_open_path_length, cycle_length)
+                    open_reps = repetitions if linear_repeats else 1
+                    max_open_path_length = max(max_open_path_length, cycle_length * open_reps)
 
             # calculate total phases based on the longest duration needed
             total_phases = max(max_loop_total_phases, max_open_path_length)

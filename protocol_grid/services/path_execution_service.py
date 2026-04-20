@@ -1,6 +1,6 @@
 import copy
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from device_viewer.models.messages import DeviceViewerMessageModel
 from protocol_grid.state.device_state import DeviceState
@@ -8,6 +8,16 @@ from protocol_grid.state.protocol_state import ProtocolStep
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def _read_linear_repeats_preference() -> bool:
+    """Read the `linear_repeats` preference. Localized so the import is lazy
+    (avoids circular-import issues at module load time)."""
+    try:
+        from protocol_grid.preferences import ProtocolPreferences
+        return bool(ProtocolPreferences().linear_repeats)
+    except Exception:
+        return False
 
 class PathExecutionService:
 
@@ -251,7 +261,8 @@ class PathExecutionService:
 
     @staticmethod
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState,
-                                      soft_start: bool = False, soft_terminate: bool = False) -> float:
+                                      soft_start: bool = False, soft_terminate: bool = False,
+                                      linear_repeats: Optional[bool] = None) -> float:
         """Return the total execution time (seconds) for a single protocol step.
 
         When "Repeat Duration Mode" is "1", repeat_duration caps loop
@@ -259,6 +270,9 @@ class PathExecutionService:
         repeat_duration is ignored (treated as 0) and loops run exactly
         ``repetitions`` times.  Soft start/terminate add ramp phases
         on top.
+
+        When ``linear_repeats`` is True, linear (non-loop) paths are replayed
+        ``Repetitions`` times. None (default) reads from ``ProtocolPreferences``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -266,6 +280,9 @@ class PathExecutionService:
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
 
         if not device_state.has_paths():
             return duration
@@ -308,7 +325,8 @@ class PathExecutionService:
                     soft_start=soft_start, soft_terminate=soft_terminate
                 )
                 cycle_length = len(cycle_phases)
-                max_open_path_length = max(max_open_path_length, cycle_length)
+                open_reps = repetitions if linear_repeats else 1
+                max_open_path_length = max(max_open_path_length, cycle_length * open_reps)
 
         # calculate total phases based on the longest duration needed
         total_phases = max(max_loop_total_phases, max_open_path_length)
@@ -317,12 +335,16 @@ class PathExecutionService:
         return total_time
     
     @staticmethod
-    def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState) -> Dict[str, int]:
+    def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState,
+                                       linear_repeats: Optional[bool] = None) -> Dict[str, int]:
         """Calculate repetition information for status bar display.
 
         Respects "Repeat Duration Mode": when enabled, effective
         repetitions are derived from Repeat Duration; when disabled,
         the raw Repetitions value is used.
+
+        When ``linear_repeats`` is True, open paths contribute their cycle
+        length and ``Repetitions`` count to the info dict.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -330,13 +352,27 @@ class PathExecutionService:
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
-        
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
+
         if not device_state.has_paths():
             return {"max_cycle_length": 1, "max_effective_repetitions": 1}
-        
+
         has_loops = PathExecutionService.has_any_loops(device_state)
-        
+
         if not has_loops:
+            if linear_repeats:
+                max_open_cycle = 0
+                for path in device_state.paths:
+                    cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
+                        path, trail_length, trail_overlay,
+                    )
+                    max_open_cycle = max(max_open_cycle, len(cycle_phases))
+                return {
+                    "max_cycle_length": max(max_open_cycle, 1),
+                    "max_effective_repetitions": max(repetitions, 1),
+                }
             return {"max_cycle_length": 1, "max_effective_repetitions": 1}
         
         max_cycle_length = 0
@@ -363,13 +399,18 @@ class PathExecutionService:
     
     @staticmethod
     def calculate_step_execution_plan(step: ProtocolStep, device_state: DeviceState,
-                                      soft_start: bool = False, soft_terminate: bool = False) -> List[Dict[str, Any]]:
+                                      soft_start: bool = False, soft_terminate: bool = False,
+                                      linear_repeats: Optional[bool] = None) -> List[Dict[str, Any]]:
         """Build the full phase-by-phase execution plan for a protocol step.
 
         Each entry in the returned list describes one timed phase with its
         activated electrodes.  Respects "Repeat Duration Mode" to decide
         whether loop repetitions are time-capped (with idle padding) or
         count-based.  Soft start/terminate add ramp phases on top.
+
+        When ``linear_repeats`` is True, linear (non-loop) paths are replayed
+        ``Repetitions`` times. When None (default), the preference is read
+        from ``ProtocolPreferences``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -377,6 +418,9 @@ class PathExecutionService:
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
 
         step_uid = step.parameters.get("UID", "")
         step_id = step.parameters.get("ID", "")
@@ -438,16 +482,18 @@ class PathExecutionService:
                     + len(soft_terminate_phases)
                 )
             else:  # open path
-                path_repetitions[i] = 1
+                open_reps = repetitions if linear_repeats else 1
+                path_repetitions[i] = open_reps
                 # For open paths, soft start/terminate phases are baked into the trail phases
                 cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
                     path, trail_length, trail_overlay,
                     soft_start=soft_start, soft_terminate=soft_terminate
                 )
                 cycle_length = len(cycle_phases)
-                max_open_path_length = max(max_open_path_length, cycle_length)
-                loop_total_phases = cycle_length
-                active_phases = cycle_length
+                total_open_phases = cycle_length * open_reps
+                max_open_path_length = max(max_open_path_length, total_open_phases)
+                loop_total_phases = total_open_phases
+                active_phases = total_open_phases
                 idle_phases = 0
                 soft_start_phases = []
                 soft_terminate_phases = []
@@ -571,9 +617,13 @@ class PathExecutionService:
                                     electrode_id = path[electrode_idx]
                                     phase_electrodes.add(electrode_id)
                 else:
-                    if phase_idx < cycle_length:
-                        if phase_idx < len(cycle_phases):
-                            electrode_indices = cycle_phases[phase_idx]
+                    # Open path: with linear_repeats, total active phases =
+                    # cycle_length * repetitions; we wrap phase_idx around the
+                    # cycle so the trail replays from the start each rep.
+                    if phase_idx < path_total_phases:
+                        phase_in_cycle = phase_idx % cycle_length if cycle_length > 0 else 0
+                        if phase_in_cycle < len(cycle_phases):
+                            electrode_indices = cycle_phases[phase_in_cycle]
                             for electrode_idx in electrode_indices:
                                 if electrode_idx < len(path):
                                     electrode_id = path[electrode_idx]
@@ -605,6 +655,7 @@ class PathExecutionService:
         repeat_duration_mode: bool = True,
         soft_start: bool = False,
         soft_terminate: bool = False,
+        linear_repeats: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
         """Calculate execution plan from raw parameters without needing ProtocolStep or DeviceState.
 
@@ -632,7 +683,9 @@ class PathExecutionService:
             paths=paths,
         )
         return PathExecutionService.calculate_step_execution_plan(
-            step, device_state, soft_start=soft_start, soft_terminate=soft_terminate
+            step, device_state,
+            soft_start=soft_start, soft_terminate=soft_terminate,
+            linear_repeats=linear_repeats,
         )
 
     @staticmethod

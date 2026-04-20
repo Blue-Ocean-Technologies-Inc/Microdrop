@@ -3,7 +3,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import List, Enum, Directory
+from traits.api import List, Enum, Directory, Bool
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import View, Item
 from envisage.ui.tasks.api import PreferencesCategory
@@ -60,6 +60,11 @@ class ProtocolPreferences(PreferencesHelper):
 
     capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
 
+    # When enabled, linear (non-loop) paths are also replayed `Repetitions`
+    # times. When disabled (default), only loop paths honor the Repetitions
+    # count and linear paths play exactly once.
+    linear_repeats = Bool(False)
+
     PROTOCOL_REPO_DIR = Directory()
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
@@ -103,6 +108,14 @@ class ProtocolPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    routes_execution_grid = create_grid_group(
+        ["linear_repeats"],
+        label_text=["Linear Repeats"],
+        group_label="Routes Execution Config",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
     general_protocol_settings_grid = create_grid_group(
         items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
         label_text = ["Realtime Mode Pre-Protocol (s)", "Logs Accepted Post-Protocol (s)"],
@@ -116,6 +129,8 @@ class ProtocolPreferencesPane(PreferencesPane):
         general_protocol_settings_grid,
         Item("_"),
         camera_settings_grid,
+        Item("_"),
+        routes_execution_grid,
         Item("_"),  # Separator to space this out from further contributions to the pane.
         resizable=True
     )
