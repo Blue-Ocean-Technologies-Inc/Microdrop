@@ -36,7 +36,7 @@ from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
 from pyface.api import GUI
 
-from traits.api import Instance, Str, observe, provides
+from traits.api import Any, Instance, Str, observe, provides
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.view import View
 
@@ -141,6 +141,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Variables
     _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
+    _last_applied_step_id = Any()  # Optional[str]; None means no step applied yet
     message_buffer = (
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
@@ -359,6 +360,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
+        if message_model.step_id != self._last_applied_step_id:
+            self._apply_step_transition(message_model)
+            self._last_applied_step_id = message_model.step_id
+
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
 
@@ -400,6 +405,18 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         QApplication.processEvents()
+
+    def _apply_step_transition(self, message_model):
+        """Pull execution params from the newly-selected step into the sidebar.
+
+        Called only when step_id changes. If the inbound message has no
+        execution_params (free mode or legacy), clear the baseline instead so
+        the commit button becomes disabled.
+        """
+        if message_model.execution_params:
+            self.model.routes.apply_execution_params(message_model.execution_params)
+        else:
+            self.model.routes.clear_committed_baseline()
 
     def publish_model_message(self):
         logger.debug(
