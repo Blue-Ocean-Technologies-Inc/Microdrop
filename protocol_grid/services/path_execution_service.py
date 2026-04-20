@@ -261,7 +261,8 @@ class PathExecutionService:
 
     @staticmethod
     def calculate_step_execution_time(step: ProtocolStep, device_state: DeviceState,
-                                      soft_start: bool = False, soft_terminate: bool = False) -> float:
+                                      soft_start: bool = False, soft_terminate: bool = False,
+                                      linear_repeats: Optional[bool] = None) -> float:
         """Return the total execution time (seconds) for a single protocol step.
 
         When "Repeat Duration Mode" is "1", repeat_duration caps loop
@@ -269,6 +270,9 @@ class PathExecutionService:
         repeat_duration is ignored (treated as 0) and loops run exactly
         ``repetitions`` times.  Soft start/terminate add ramp phases
         on top.
+
+        When ``linear_repeats`` is True, linear (non-loop) paths are replayed
+        ``Repetitions`` times. None (default) reads from ``ProtocolPreferences``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -276,6 +280,9 @@ class PathExecutionService:
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
 
         if not device_state.has_paths():
             return duration
@@ -318,7 +325,8 @@ class PathExecutionService:
                     soft_start=soft_start, soft_terminate=soft_terminate
                 )
                 cycle_length = len(cycle_phases)
-                max_open_path_length = max(max_open_path_length, cycle_length)
+                open_reps = repetitions if linear_repeats else 1
+                max_open_path_length = max(max_open_path_length, cycle_length * open_reps)
 
         # calculate total phases based on the longest duration needed
         total_phases = max(max_loop_total_phases, max_open_path_length)
@@ -327,12 +335,16 @@ class PathExecutionService:
         return total_time
     
     @staticmethod
-    def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState) -> Dict[str, int]:
+    def calculate_step_repetition_info(step: ProtocolStep, device_state: DeviceState,
+                                       linear_repeats: Optional[bool] = None) -> Dict[str, int]:
         """Calculate repetition information for status bar display.
 
         Respects "Repeat Duration Mode": when enabled, effective
         repetitions are derived from Repeat Duration; when disabled,
         the raw Repetitions value is used.
+
+        When ``linear_repeats`` is True, open paths contribute their cycle
+        length and ``Repetitions`` count to the info dict.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -340,13 +352,27 @@ class PathExecutionService:
         repeat_duration = int(float(step.parameters.get("Repeat Duration", "1"))) if repeat_duration_mode else 0
         trail_length = int(step.parameters.get("Trail Length", "1"))
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
-        
+
+        if linear_repeats is None:
+            linear_repeats = _read_linear_repeats_preference()
+
         if not device_state.has_paths():
             return {"max_cycle_length": 1, "max_effective_repetitions": 1}
-        
+
         has_loops = PathExecutionService.has_any_loops(device_state)
-        
+
         if not has_loops:
+            if linear_repeats:
+                max_open_cycle = 0
+                for path in device_state.paths:
+                    cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
+                        path, trail_length, trail_overlay,
+                    )
+                    max_open_cycle = max(max_open_cycle, len(cycle_phases))
+                return {
+                    "max_cycle_length": max(max_open_cycle, 1),
+                    "max_effective_repetitions": max(repetitions, 1),
+                }
             return {"max_cycle_length": 1, "max_effective_repetitions": 1}
         
         max_cycle_length = 0
