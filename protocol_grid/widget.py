@@ -366,6 +366,7 @@ class PGCWidget(QWidget):
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
 
         self.status_bar = StatusBar(self)
+        self.status_bar.lbl_linear_repeats.clicked.connect(self._toggle_linear_repeats_preference)
         self._refresh_linear_repeats_indicator()
 
         layout = QVBoxLayout()
@@ -898,6 +899,17 @@ class PGCWidget(QWidget):
         except Exception:
             enabled = False
         self.status_bar.set_linear_repeats(enabled)
+
+    def _toggle_linear_repeats_preference(self):
+        """Flip the Linear Repeats preference and refresh the indicator."""
+        try:
+            from protocol_grid.preferences import ProtocolPreferences
+            prefs = ProtocolPreferences()
+            prefs.linear_repeats = not bool(prefs.linear_repeats)
+        except Exception as e:
+            logger.error(f"Failed to toggle Linear Repeats preference: {e}", exc_info=True)
+            return
+        self._refresh_linear_repeats_indicator()
 
     def update_status_bar(self, status):
         self._refresh_linear_repeats_indicator()

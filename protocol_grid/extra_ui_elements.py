@@ -24,6 +24,18 @@ from microdrop_style.colors import (WHITE, BLACK)
 from microdrop_style.button_styles import BUTTON_SPACING, get_button_style
 
 
+class _ClickableLabel(QLabel):
+    """Minimal QLabel that emits `clicked` on left-click."""
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+
 class ExperimentLabel(QLabel):
     """shows experiment info - clickable label"""
     clicked = Signal()
@@ -360,13 +372,14 @@ class StatusBar(QScrollArea):
         self.lbl_next_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         # Live indicator for the "Linear Repeats" preference.
-        # Uses setText / setStyleSheet via set_linear_repeats(bool).
-        self.lbl_linear_repeats = QLabel()
+        # Clickable — emits `clicked` so the widget can toggle the pref.
+        self.lbl_linear_repeats = _ClickableLabel()
         self.lbl_linear_repeats.setFixedWidth(100)
         self.lbl_linear_repeats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_linear_repeats.setCursor(Qt.PointingHandCursor)
         self.lbl_linear_repeats.setToolTip(
             "Linear Repeats preference — when enabled, linear paths are "
-            "replayed by the Repetitions count just like loops."
+            "replayed by the Repetitions count just like loops. Click to toggle."
         )
         self.set_linear_repeats(False)
 
