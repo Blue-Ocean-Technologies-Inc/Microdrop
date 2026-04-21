@@ -706,6 +706,10 @@ class PGCWidget(QWidget):
                     device_state.to_dict()
                 )  # apply new device states to selected step
 
+                # Reconcile before model_to_state() reads cell text — otherwise a
+                # newly-linear-only step would persist its stale Repetitions /
+                # Repeat Duration into state.sequence before load_from_state()
+                # rebuilds the cells.
                 self._reconcile_step_freeze_state(target_item)
 
                 self.model_to_state()
