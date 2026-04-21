@@ -29,7 +29,7 @@ class DeviceState:
     def calculated_duration(self, step_duration: float, repetitions: int,
                             repeat_duration: float = 1.0, trail_length: int = 1, trail_overlay: int = 0,
                             soft_start: bool = False, soft_end: bool = False,
-                            linear_repeats: bool = None):
+                            linear_repeats: bool = False):
         """Calculate the total duration for this step including idle/balance phases.
 
         When repeat_duration > 0 and the step has loops, each loop independently
@@ -38,14 +38,10 @@ class DeviceState:
         The total step duration is driven by the longest loop.
 
         When ``linear_repeats`` is True, open paths also play ``repetitions``
-        times. None reads from ``ProtocolPreferences``.
+        times. Callers are expected to pass the per-step value explicitly; the
+        default of False is only a safety net for test fixtures that don't care.
         """
-        from protocol_grid.services.path_execution_service import (
-            PathExecutionService, _read_linear_repeats_preference,
-        )
-
-        if linear_repeats is None:
-            linear_repeats = _read_linear_repeats_preference()
+        from protocol_grid.services.path_execution_service import PathExecutionService
 
         if not self.has_paths():
             calculated_time = step_duration * repetitions
