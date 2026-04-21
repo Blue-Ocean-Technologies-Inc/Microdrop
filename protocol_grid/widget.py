@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning, information
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, information
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -2714,7 +2714,6 @@ class PGCWidget(QWidget):
             # Mode-switch handlers return False (and revert the edit) when the
             # user cancels the confirmation dialog, so we bail out early.
             if field == "Repetitions":
-                self._enforce_step_repetition_requires_loop(desc_item, item)
                 if not self._handle_repetitions_mode_switch(desc_item, item):
                     return
             elif field == "Repeat Duration":
@@ -3052,48 +3051,6 @@ class PGCWidget(QWidget):
         # Switch back: clear flag, recalculate repeat duration as perfect multiple
         desc_item.setData(False, REPEAT_DURATION_CONTROLS_ROLE)
         return True
-
-    def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
-        """Revert Repetitions to 1 if the step has no looping route.
-
-        Skipped when the Linear Repeats preference is on — in that mode,
-        linear paths honor Repetitions too, so the guard would be incorrect.
-        """
-        try:
-            reps = int(repetitions_item.text() or "1")
-        except ValueError:
-            return
-        if reps <= 1:
-            return
-
-        try:
-            from protocol_grid.preferences import ProtocolPreferences
-            if bool(ProtocolPreferences().linear_repeats):
-                return
-        except Exception:
-            pass
-
-        device_state = desc_item.data(Qt.UserRole + 100)
-        has_loop = (
-            device_state
-            and device_state.has_paths()
-            and any(
-                len(path) >= 2 and path[0] == path[-1]
-                for path in device_state.paths
-            )
-        )
-        if not has_loop:
-            self._programmatic_change = True
-            try:
-                repetitions_item.setText("1")
-            finally:
-                self._programmatic_change = False
-            warning(
-                None,
-                title="Repetitions Not Supported",
-                message="Repetitions > 1 require a route that forms a loop "
-                        "(start and end on the same electrode).",
-            )
 
     def _reconcile_step_freeze_state(self, desc_item):
         """Freeze Repetitions / Repeat Duration on linear-only steps with Lin Reps off.
