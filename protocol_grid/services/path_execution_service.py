@@ -275,7 +275,8 @@ class PathExecutionService:
         on top.
 
         When ``linear_repeats`` is True, linear (non-loop) paths are replayed
-        ``Repetitions`` times. None (default) reads from ``ProtocolPreferences``.
+        ``Repetitions`` times. None (default) reads the per-step ``Lin Reps``
+        cell from the supplied ``step``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -412,8 +413,8 @@ class PathExecutionService:
         count-based.  Soft start/terminate add ramp phases on top.
 
         When ``linear_repeats`` is True, linear (non-loop) paths are replayed
-        ``Repetitions`` times. When None (default), the preference is read
-        from ``ProtocolPreferences``.
+        ``Repetitions`` times. None (default) reads the per-step ``Lin Reps``
+        cell from the supplied ``step``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
