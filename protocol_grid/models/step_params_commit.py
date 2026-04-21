@@ -10,6 +10,7 @@ class StepParamsCommitMessage(BaseModel):
     trail_overlay: int
     soft_start: bool
     soft_terminate: bool
+    linear_repeats: bool
 
     def serialize(self) -> str:
         return self.model_dump_json()

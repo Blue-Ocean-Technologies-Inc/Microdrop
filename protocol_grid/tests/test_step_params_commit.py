@@ -14,6 +14,7 @@ def _valid_kwargs():
         trail_overlay=1,
         soft_start=True,
         soft_terminate=False,
+        linear_repeats=True,
     )
 
 
@@ -104,3 +105,10 @@ def test_device_state_message_execution_params_defaults_none():
     state = DeviceState()
     msg = device_state_to_device_viewer_message(state, step_uid="u1")
     assert msg.execution_params is None
+
+
+def test_step_params_commit_carries_linear_repeats():
+    msg = StepParamsCommitMessage(**_valid_kwargs())
+    assert msg.linear_repeats is True
+    rebuilt = StepParamsCommitMessage.deserialize(msg.serialize())
+    assert rebuilt.linear_repeats is True
