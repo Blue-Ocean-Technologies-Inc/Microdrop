@@ -2035,6 +2035,7 @@ class PGCWidget(QWidget):
             new_step.parameters["Trail Overlay"]   = str(dv_msg.execution_params["trail_overlay"])
             new_step.parameters["Ramp Up"]         = "1" if dv_msg.execution_params["soft_start"] else "0"
             new_step.parameters["Ramp Dn"]         = "1" if dv_msg.execution_params["soft_terminate"] else "0"
+            new_step.parameters["Lin Reps"]        = "1" if dv_msg.execution_params["linear_repeats"] else "0"
 
         new_step.device_state.from_dict(device_state.to_dict())
 
