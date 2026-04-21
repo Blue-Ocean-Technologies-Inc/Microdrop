@@ -19,7 +19,7 @@ def test_listener_emits_step_params_commit_received(listener):
         step_id="uid-1",
         duration=2.0, repetitions=3, repeat_duration=0,
         trail_length=2, trail_overlay=1,
-        soft_start=True, soft_terminate=False,
+        soft_start=True, soft_terminate=False, linear_repeats=False,
     )
 
     received = []
