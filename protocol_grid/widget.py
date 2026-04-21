@@ -2685,8 +2685,8 @@ class PGCWidget(QWidget):
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
 
-            # Ramp Up/Dn affect Run Time — trigger recalculation
-            if field in ("Ramp Up", "Ramp Dn"):
+            # Ramp Up/Dn and Lin Reps affect Run Time — trigger recalculation
+            if field in ("Ramp Up", "Ramp Dn", "Lin Reps"):
                 desc_item = parent.child(row, 0)
                 if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                     self.update_single_step_dev_fields(desc_item, changed_field=field)
