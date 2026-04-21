@@ -225,6 +225,7 @@ class RouteLayerManager(HasTraits):
 
     soft_start = Bool(False)
     soft_terminate = Bool(False)
+    linear_repeats = Bool(False)
 
     # -------- Step-params commit state --------
     # Empty dict means no step is currently selected — commit button disabled.
@@ -244,7 +245,7 @@ class RouteLayerManager(HasTraits):
         observe=(
             "_committed_params_baseline.items,"
             "duration,repetitions,repeat_duration,"
-            "trail_length,trail_overlay,soft_start,soft_terminate"
+            "trail_length,trail_overlay,soft_start,soft_terminate,linear_repeats"
         )
     )
 
@@ -263,6 +264,7 @@ class RouteLayerManager(HasTraits):
             "trail_overlay": int(self.trail_overlay),
             "soft_start": bool(self.soft_start),
             "soft_terminate": bool(self.soft_terminate),
+            "linear_repeats": bool(self.linear_repeats),
         }
 
     def apply_execution_params(self, params: dict) -> None:
@@ -281,6 +283,7 @@ class RouteLayerManager(HasTraits):
                 trail_overlay=params["trail_overlay"],
                 soft_start=params["soft_start"],
                 soft_terminate=params["soft_terminate"],
+                linear_repeats=params["linear_repeats"],
             )
         self.mark_params_committed()
 
