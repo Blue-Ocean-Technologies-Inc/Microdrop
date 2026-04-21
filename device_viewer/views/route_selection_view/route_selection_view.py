@@ -117,10 +117,12 @@ Label("Rep Duration", tooltip="Seconds to repeat path executions. Idle time in e
 soft_transition_settings = (
 UItem('object.routes.soft_start', tooltip="Ramp up overlay at start"),
 UItem('object.routes.soft_terminate', tooltip="Ramp down overlay at end"),
+UItem('object.routes.linear_repeats', tooltip="Replay linear paths Repetitions times"),
 )
 soft_transition_settings_header = (
 Label("Ramp Up", tooltip="Ramp up overlay at start"),
 Label("Ramp Dn", tooltip="Ramp down overlay at end"),
+Label("Lin Reps", tooltip="Replay linear paths Repetitions times"),
 )
 
 
@@ -137,6 +139,7 @@ protocol_execution_settings_group = VGroup(
     HGroup(
         VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
+        VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
     ),
     # enabled_when='free_mode',
 )
