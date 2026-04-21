@@ -3168,6 +3168,10 @@ class PGCWidget(QWidget):
             is_soft_start = soft_start_item and soft_start_item.data(Qt.CheckStateRole) == Qt.Checked
             is_soft_end = soft_end_item and soft_end_item.data(Qt.CheckStateRole) == Qt.Checked
 
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            lin_reps_item = parent.child(row, lin_reps_col)
+            is_linear_repeats = bool(lin_reps_item and lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked)
+
             estimated_repeat_duration = self._calculate_estimated_repeat_duration(
                 device_state, repetitions, duration, trail_length, trail_overlay
             )
@@ -3197,6 +3201,7 @@ class PGCWidget(QWidget):
                 trail_overlay,
                 soft_start=is_soft_start,
                 soft_end=is_soft_end,
+                linear_repeats=is_linear_repeats,
             )
 
             self._programmatic_change = True
