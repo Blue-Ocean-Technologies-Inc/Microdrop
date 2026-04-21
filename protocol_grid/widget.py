@@ -1922,7 +1922,7 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
 
     def _handle_checkbox_change(self, parent, row, field):
-        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn", "Lin Reps"):
+        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn"):
             col = protocol_grid_fields.index(field)
             item = parent.child(row, col)
             if item:
@@ -3060,26 +3060,25 @@ class PGCWidget(QWidget):
         )
         frozen = (not has_loop) and (not lin_reps_on)
 
-        if frozen:
-            self._programmatic_change = True
-            try:
+        # All cell mutations below run as programmatic changes so the
+        # itemChanged re-entry from setText/setFlags doesn't trigger
+        # on_item_changed → update_single_step_dev_fields →
+        # _reconcile_step_freeze_state recursion.
+        prior_programmatic = self._programmatic_change
+        self._programmatic_change = True
+        try:
+            if frozen:
                 if repetitions_item.text() != "1":
                     repetitions_item.setText("1")
                 if repeat_duration_item.text() != "0":
                     repeat_duration_item.setText("0")
-            finally:
-                self._programmatic_change = False
-            repetitions_item.setFlags(repetitions_item.flags() & ~Qt.ItemIsEditable)
-            repeat_duration_item.setFlags(repeat_duration_item.flags() & ~Qt.ItemIsEditable)
-        else:
-            repetitions_item.setFlags(repetitions_item.flags() | Qt.ItemIsEditable)
-            repeat_duration_item.setFlags(repeat_duration_item.flags() | Qt.ItemIsEditable)
-
-        # setFlags alone doesn't always cause the view to repaint the cell's
-        # editability state — emit dataChanged explicitly so delegates pick up
-        # the change immediately.
-        for cell in (repetitions_item, repeat_duration_item):
-            self.model.dataChanged.emit(cell.index(), cell.index(), [Qt.EditRole])
+                repetitions_item.setFlags(repetitions_item.flags() & ~Qt.ItemIsEditable)
+                repeat_duration_item.setFlags(repeat_duration_item.flags() & ~Qt.ItemIsEditable)
+            else:
+                repetitions_item.setFlags(repetitions_item.flags() | Qt.ItemIsEditable)
+                repeat_duration_item.setFlags(repeat_duration_item.flags() | Qt.ItemIsEditable)
+        finally:
+            self._programmatic_change = prior_programmatic
 
     def update_single_step_dev_fields(self, desc_item, changed_field=None):
         """Recalculate derived columns (Max. Path Length, Run Time, etc.) for one step row.
