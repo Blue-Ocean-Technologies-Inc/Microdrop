@@ -745,6 +745,7 @@ class PGCWidget(QWidget):
             "Trail Overlay":   str(commit_msg.trail_overlay),
             "Ramp Up":         "1" if commit_msg.soft_start else "0",
             "Ramp Dn":         "1" if commit_msg.soft_terminate else "0",
+            "Lin Reps":        "1" if commit_msg.linear_repeats else "0",
         }
 
         self._programmatic_change = True
