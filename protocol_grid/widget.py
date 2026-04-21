@@ -706,6 +706,8 @@ class PGCWidget(QWidget):
                     device_state.to_dict()
                 )  # apply new device states to selected step
 
+                self._reconcile_step_freeze_state(target_item)
+
                 self.model_to_state()
                 self.load_from_state()
 
@@ -3089,6 +3091,61 @@ class PGCWidget(QWidget):
                         "(start and end on the same electrode).",
             )
 
+    def _reconcile_step_freeze_state(self, desc_item):
+        """Freeze Repetitions / Repeat Duration on linear-only steps with Lin Reps off.
+
+        A step is "frozen" when it has no loop path AND its ``Lin Reps`` cell is
+        off — in that mode, Repetitions > 1 is meaningless, so we pin the two
+        cells to ``"1"`` / ``"0"`` and disable editing. The cells become
+        editable again as soon as either condition flips (a loop route is added
+        or ``Lin Reps`` is toggled on).
+        """
+        if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+
+        parent = desc_item.parent() or self.model.invisibleRootItem()
+        row = desc_item.row()
+
+        try:
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            repetitions_col = protocol_grid_fields.index("Repetitions")
+            repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+        except ValueError:
+            return
+
+        lin_reps_item = parent.child(row, lin_reps_col)
+        repetitions_item = parent.child(row, repetitions_col)
+        repeat_duration_item = parent.child(row, repeat_duration_col)
+        if not (lin_reps_item and repetitions_item and repeat_duration_item):
+            return
+
+        lin_reps_on = lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked
+        device_state = desc_item.data(Qt.UserRole + 100)
+        has_loop = bool(
+            device_state
+            and device_state.has_paths()
+            and any(
+                len(path) >= 2 and path[0] == path[-1]
+                for path in device_state.paths
+            )
+        )
+        frozen = (not has_loop) and (not lin_reps_on)
+
+        if frozen:
+            self._programmatic_change = True
+            try:
+                if repetitions_item.text() != "1":
+                    repetitions_item.setText("1")
+                if repeat_duration_item.text() != "0":
+                    repeat_duration_item.setText("0")
+            finally:
+                self._programmatic_change = False
+            repetitions_item.setFlags(repetitions_item.flags() & ~Qt.ItemIsEditable)
+            repeat_duration_item.setFlags(repeat_duration_item.flags() & ~Qt.ItemIsEditable)
+        else:
+            repetitions_item.setFlags(repetitions_item.flags() | Qt.ItemIsEditable)
+            repeat_duration_item.setFlags(repeat_duration_item.flags() | Qt.ItemIsEditable)
+
     def update_single_step_dev_fields(self, desc_item, changed_field=None):
         """Recalculate derived columns (Max. Path Length, Run Time, etc.) for one step row.
 
@@ -3113,6 +3170,8 @@ class PGCWidget(QWidget):
         """
         if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return
+
+        self._reconcile_step_freeze_state(desc_item)
 
         parent = desc_item.parent() or self.model.invisibleRootItem()
         row = desc_item.row()
