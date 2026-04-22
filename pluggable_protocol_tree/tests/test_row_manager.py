@@ -104,3 +104,55 @@ def test_move_reparents_into_group(manager):
     new_group = manager.root.children[0]
     assert len(new_group.children) == 1
     assert new_group.children[0].name == "S"
+
+
+# --- selection ---
+
+def test_select_set_replaces_selection(manager):
+    a = manager.add_step()
+    b = manager.add_step()
+    manager.select([a])
+    manager.select([b], mode="set")
+    assert manager.selection == [b]
+
+
+def test_select_add_appends(manager):
+    a = manager.add_step()
+    b = manager.add_step()
+    manager.select([a])
+    manager.select([b], mode="add")
+    assert manager.selection == [a, b]
+
+
+def test_select_range_fills_between(manager):
+    paths = [manager.add_step() for _ in range(5)]
+    manager.select([paths[1], paths[3]], mode="range")
+    # Range selects all top-level siblings between the two
+    assert manager.selection == [paths[1], paths[2], paths[3]]
+
+
+def test_selected_rows_returns_row_objects(manager):
+    a = manager.add_step(values={"name": "A"})
+    b = manager.add_step(values={"name": "B"})
+    manager.select([a, b])
+    names = [r.name for r in manager.selected_rows()]
+    assert names == ["A", "B"]
+
+
+# --- uuid lookup ---
+
+def test_get_row_by_uuid_returns_row(manager):
+    p = manager.add_step()
+    row = manager.get_row(p)
+    assert manager.get_row_by_uuid(row.uuid) is row
+
+
+def test_get_row_by_uuid_none_for_unknown(manager):
+    assert manager.get_row_by_uuid("does-not-exist") is None
+
+
+def test_get_row_by_uuid_searches_nested(manager):
+    g = manager.add_group()
+    s = manager.add_step(parent_path=g)
+    row = manager.get_row(s)
+    assert manager.get_row_by_uuid(row.uuid) is row

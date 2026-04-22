@@ -137,3 +137,57 @@ class RowManager(HasTraits):
         for offset, row in enumerate(rows):
             target.insert_row(target_index + offset, row)
         self.rows_changed = True
+
+    # --- selection ---
+
+    def select(self, paths: List[Path], mode: str = "set") -> None:
+        """Update `selection`.
+
+        Modes:
+        - 'set'   : replace selection with `paths`
+        - 'add'   : append `paths`, deduplicating
+        - 'range' : selection becomes all top-level siblings between the
+                    first and last of `paths`. Only meaningful when the
+                    given paths have a common parent.
+        """
+        paths = [tuple(p) for p in paths]
+        if mode == "set":
+            self.selection = paths
+        elif mode == "add":
+            seen = set(tuple(p) for p in self.selection)
+            new = [p for p in paths if p not in seen]
+            self.selection = list(self.selection) + new
+        elif mode == "range":
+            if not paths:
+                return
+            # Take common parent of first and last; select siblings
+            # between their positions.
+            first, last = paths[0], paths[-1]
+            if first[:-1] != last[:-1]:
+                # Different parents — fall back to 'set'.
+                self.selection = [first, last]
+                return
+            parent_path = first[:-1]
+            lo, hi = sorted([first[-1], last[-1]])
+            self.selection = [parent_path + (i,) for i in range(lo, hi + 1)]
+        else:
+            raise ValueError(f"Unknown selection mode: {mode}")
+
+    def selected_rows(self) -> List[BaseRow]:
+        return [self.get_row(p) for p in self.selection]
+
+    # --- uuid lookup ---
+
+    def get_row_by_uuid(self, uuid: str) -> Optional[BaseRow]:
+        return self._find_by_uuid(self.root, uuid)
+
+    @classmethod
+    def _find_by_uuid(cls, node, uuid: str) -> Optional[BaseRow]:
+        if isinstance(node, GroupRow):
+            for child in node.children:
+                if child.uuid == uuid:
+                    return child
+                found = cls._find_by_uuid(child, uuid)
+                if found is not None:
+                    return found
+        return None
