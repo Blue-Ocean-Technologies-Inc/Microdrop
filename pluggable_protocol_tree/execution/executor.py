@@ -1,4 +1,4 @@
-"""Protocol executor — runs a RowManager's rows on a QThread.
+"""Protocol executor — runs a RowManager's rows on a worker thread.
 
 Responsibilities:
   * Walk row_manager.iter_execution_steps() in order.
@@ -11,8 +11,11 @@ Responsibilities:
     boundaries only; first hook exception aborts the step and routes to
     protocol_error.
 
-This task ships only the scaffolding + public control API. The run loop,
-hook fan-out, and conflict assertion land in subsequent tasks.
+The worker thread is a plain ``threading.Thread``, not ``QThread``. The
+executor itself is a HasTraits, not a QObject — moveToThread only works
+on QObjects. Qt signal marshalling to GUI-thread slots still works
+because ExecutorSignals is its own QObject; emissions from any thread
+queue correctly to slots living on the GUI thread.
 """
 
 import logging
@@ -21,7 +24,6 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
-from pyface.qt.QtCore import QThread
 from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
 
 from pluggable_protocol_tree.execution.events import PauseEvent
@@ -60,16 +62,18 @@ class ProtocolExecutor(HasTraits):
     # ------- public control API (called from the GUI thread) -------
 
     def start(self) -> None:
-        """Spawn a QThread and call run() on it. Idempotent — a second
-        call while already running is ignored."""
-        if self._thread is not None and self._thread.isRunning():
+        """Spawn a worker thread and call run() on it. Idempotent —
+        a second call while already running is ignored."""
+        if self._thread is not None and self._thread.is_alive():
             return
         self.pause_event.clear()
         self.stop_event.clear()
         self._error = None
-        self._thread = QThread()
-        self.moveToThread(self._thread)
-        self._thread.started.connect(self.run)
+        self._thread = threading.Thread(
+            target=self.run,
+            name="pluggable_protocol_tree_executor",
+            daemon=True,
+        )
         self._thread.start()
 
     def pause(self) -> None:
@@ -133,8 +137,9 @@ class ProtocolExecutor(HasTraits):
 
         finally:
             self._emit_terminal_signal()
-            if self._thread is not None:
-                self._thread.quit()
+            # threading.Thread terminates naturally when run() returns;
+            # nothing to quit() here. start() checks is_alive() to make
+            # sure a previous run has completed before starting a new one.
 
     # ------- helpers -------
 

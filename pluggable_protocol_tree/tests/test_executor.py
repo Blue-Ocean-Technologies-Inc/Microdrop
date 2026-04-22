@@ -99,6 +99,69 @@ def test_executor_resume_emits_protocol_resumed():
     assert received == ["resumed"]
 
 
+def test_executor_start_runs_protocol_on_worker_thread_and_finishes():
+    """Regression test: start() spawns a worker thread that calls run().
+
+    Originally written using QThread + moveToThread, which raised
+    AttributeError because ProtocolExecutor is a HasTraits, not a
+    QObject. Switched to threading.Thread.
+    """
+    from pyface.qt.QtCore import Qt
+    ex = _make_executor()
+    ex.row_manager.add_step(values={"name": "A"})
+    finished = threading.Event()
+    # DirectConnection so the slot fires synchronously on the worker
+    # thread without needing a Qt event loop on the receiver side.
+    ex.qsignals.protocol_finished.connect(finished.set, type=Qt.DirectConnection)
+    ex.start()
+    # start() returns immediately; wait for the worker to finish.
+    assert finished.wait(timeout=5.0), "protocol_finished did not fire within 5s"
+    # The worker thread should have terminated by the time finished fires.
+    ex._thread.join(timeout=1.0)
+    assert not ex._thread.is_alive()
+
+
+def test_executor_start_is_idempotent_while_running():
+    """A second start() while already running should be a no-op (not
+    a TypeError or a duplicate thread)."""
+    import time
+    from pyface.qt.QtCore import Qt
+    ex = _make_executor()
+    started_count = []
+    # Make the protocol take a moment so the second start() races with it.
+    pause_in_step = threading.Event()
+
+    class _SlowHandler(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            pause_in_step.wait(timeout=2.0)
+
+    slow_col = Column(
+        model=BaseColumnModel(col_id="slow", col_name="slow", default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_SlowHandler(),
+    )
+    ex.row_manager.columns = list(ex.row_manager.columns) + [slow_col]
+    ex.row_manager.add_step(values={"name": "A"})
+    ex.qsignals.protocol_started.connect(
+        lambda: started_count.append(1), type=Qt.DirectConnection,
+    )
+
+    ex.start()
+    # Give the first start a head start before issuing the second one.
+    time.sleep(0.05)
+    first_thread = ex._thread
+    ex.start()              # should be a no-op
+    assert ex._thread is first_thread, "start() must not replace the live thread"
+
+    # Let the protocol finish.
+    pause_in_step.set()
+    finished = threading.Event()
+    ex.qsignals.protocol_finished.connect(finished.set, type=Qt.DirectConnection)
+    assert finished.wait(timeout=5.0)
+    ex._thread.join(timeout=1.0)
+    assert sum(started_count) == 1, "protocol_started fired more than once"
+
+
 def test_executor_stop_sets_stop_event_and_clears_pause():
     """stop() must also clear pause_event so a Stop-while-paused doesn't
     deadlock the main loop in wait_cleared()."""
