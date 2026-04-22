@@ -254,3 +254,63 @@ def test_step_context_scratch_is_per_step_and_independent():
     b.scratch["k"] = "bv"
     assert a.scratch["k"] == "av"
     assert b.scratch["k"] == "bv"
+
+
+# --- listener active-step pointer ---
+
+from pluggable_protocol_tree.execution import listener as _listener
+
+
+def test_listener_active_step_initially_none():
+    _listener.clear_active_step()
+    assert _listener.get_active_step() is None
+
+
+def test_listener_set_then_get_returns_step():
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    _listener.set_active_step(step)
+    try:
+        assert _listener.get_active_step() is step
+    finally:
+        _listener.clear_active_step()
+
+
+def test_listener_clear_resets_to_none():
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    _listener.set_active_step(step)
+    _listener.clear_active_step()
+    assert _listener.get_active_step() is None
+
+
+def test_listener_route_to_active_step_deposits_into_mailbox():
+    """Direct route() helper bypasses Dramatiq for unit testing."""
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    step.open_mailbox("t/foo")
+    _listener.set_active_step(step)
+    try:
+        _listener.route_to_active_step("t/foo", {"v": 42})
+        item = step.wait_for("t/foo", timeout=0.1)
+        assert item == {"v": 42}
+    finally:
+        _listener.clear_active_step()
+
+
+def test_listener_route_with_no_active_step_drops_silently():
+    _listener.clear_active_step()
+    # No exception, no observable side effect.
+    _listener.route_to_active_step("t/foo", {"v": 1})
+
+
+def test_listener_route_for_unopened_topic_drops_silently():
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    step.open_mailbox("t/known")
+    _listener.set_active_step(step)
+    try:
+        # No exception — the listener simply has nowhere to put it.
+        _listener.route_to_active_step("t/unknown", {"v": 1})
+    finally:
+        _listener.clear_active_step()
