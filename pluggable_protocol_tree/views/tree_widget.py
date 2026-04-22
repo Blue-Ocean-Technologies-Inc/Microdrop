@@ -4,7 +4,7 @@ remove / copy / cut / paste / group."""
 import logging
 from enum import Enum
 
-from pyface.qt.QtCore import Qt, QPersistentModelIndex
+from pyface.qt.QtCore import Qt, QPersistentModelIndex, Signal
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
@@ -16,6 +16,26 @@ from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 logger = logging.getLogger(__name__)
 
 
+class _ProtocolTreeView(QTreeView):
+    """QTreeView subclass that emits a Qt signal on Delete keypress.
+
+    Using a keyPressEvent override (rather than QShortcut) is the most
+    reliable path: the event is captured directly on the focused widget,
+    no overload-resolution surprises, no shortcut-context confusion, and
+    we explicitly accept() the event so Qt's default key handling
+    doesn't get a second chance to interpret it.
+    """
+
+    delete_pressed = Signal()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            self.delete_pressed.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class ProtocolTreeWidget(QWidget):
     def __init__(self, row_manager: RowManager, parent=None):
         super().__init__(parent)
@@ -24,10 +44,11 @@ class ProtocolTreeWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.tree = QTreeView()
+        self.tree = _ProtocolTreeView()
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree.setEditTriggers(QAbstractItemView.DoubleClicked
                                   | QAbstractItemView.EditKeyPressed)
+        self.tree.delete_pressed.connect(self._delete_selection)
         layout.addWidget(self.tree)
 
         self.model = MvcTreeModel(row_manager, parent=self.tree)
@@ -39,20 +60,17 @@ class ProtocolTreeWidget(QWidget):
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_context_menu)
 
-        # Keyboard shortcuts. Bind via .activated.connect() rather than
-        # the (seq, parent, callable) constructor — the latter can fail
-        # to wire silently in PySide6 (the third arg is documented as a
-        # const char* slot name in Qt; passing a Python callable lands
-        # in an overload that may discard it). Bind to the tree, with
-        # WidgetWithChildrenShortcut context so they only fire when the
-        # tree or its delegates have focus — pressing Delete in the
-        # toolbar or anywhere else in the window must not delete rows.
+        # Copy / Cut / Paste keyboard shortcuts. Bind via
+        # .activated.connect() rather than the (seq, parent, callable)
+        # constructor — the latter can fail to wire silently in PySide6.
+        # WidgetWithChildrenShortcut so they only fire when the tree
+        # has focus. Delete is handled by _ProtocolTreeView.keyPressEvent
+        # rather than a QShortcut for maximum reliability.
         self._shortcuts = []     # keep refs alive (Qt doesn't, in PySide6)
         for seq, slot in (
-            (QKeySequence.Copy,   self._copy),
-            (QKeySequence.Cut,    self._cut),
-            (QKeySequence.Paste,  self._paste),
-            (QKeySequence.Delete, self._delete_selection),
+            (QKeySequence.Copy,  self._copy),
+            (QKeySequence.Cut,   self._cut),
+            (QKeySequence.Paste, self._paste),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)

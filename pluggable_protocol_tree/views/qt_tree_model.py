@@ -30,6 +30,13 @@ class MvcTreeModel(QAbstractItemModel):
         super().__init__(parent)
         self._manager = row_manager
         self._active_node = None
+        # Strong refs to every row this model has handed to Qt via
+        # createIndex(). Qt stores the third arg as a raw void*; if
+        # Python GCs the row before Qt drops the QModelIndex, the
+        # next access (selection sync, parent walk, etc.) dereferences
+        # freed memory and segfaults the QApplication. Keeping refs
+        # here costs O(rows-ever-shown) memory but is bulletproof.
+        self._owned_rows = set()
 
         # Rebroadcast manager changes as layoutChanged
         row_manager.observe(self._on_rows_changed, "rows_changed")
@@ -49,7 +56,12 @@ class MvcTreeModel(QAbstractItemModel):
         node = parent.internalPointer() if parent.isValid() else self._manager.root
         if row >= len(node.children):
             return QModelIndex()
-        return self.createIndex(row, column, node.children[row])
+        child = node.children[row]
+        # Pin the row so Qt's createIndex pointer stays valid even
+        # after the user removes the row from the manager (Qt's stale
+        # QModelIndex would otherwise dereference freed memory).
+        self._owned_rows.add(child)
+        return self.createIndex(row, column, child)
 
     def parent(self, index):
         if not index.isValid():
