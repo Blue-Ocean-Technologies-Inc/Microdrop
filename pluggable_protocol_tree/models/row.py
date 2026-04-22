@@ -60,3 +60,27 @@ class GroupRow(BaseRow):
         if row in self.children:
             self.children.remove(row)
             row.parent = None
+
+
+def build_row_type(columns, base=BaseRow, name="ProtocolStepRow") -> type:
+    """Build a fresh HasTraits subclass of `base` with one trait per column.
+
+    Called once per protocol open (twice actually: for step and group
+    subclasses). The subclass is per-protocol-session; closing a protocol
+    lets Python garbage-collect it. This avoids mutating shared classes,
+    preserves full Traits semantics (observers, validation, defaults),
+    and keeps the row schema explicit.
+
+    Args:
+        columns: List of IColumn instances contributing traits.
+        base: BaseRow (for steps) or GroupRow (for groups).
+        name: Name for the new class (shown in tracebacks only).
+
+    Returns:
+        A new class derived from `base` with each column's trait added.
+    """
+    class_dict = {
+        col.model.col_id: col.model.trait_for_row()
+        for col in columns
+    }
+    return type(name, (base,), class_dict)

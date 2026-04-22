@@ -107,3 +107,64 @@ def test_path_updates_when_ancestor_sibling_inserted():
     assert s.path == (0, 0)
     root.insert_row(0, GroupRow(name="Other"))
     assert s.path == (1, 0)
+
+
+# --- build_row_type tests ---
+
+from unittest.mock import MagicMock
+from traits.api import Float, Int
+
+from pluggable_protocol_tree.models.row import build_row_type, BaseRow, GroupRow
+
+
+def _mock_column(col_id, trait):
+    """Minimal column stand-in for build_row_type tests.
+
+    Only the model.col_id and model.trait_for_row() surface are exercised
+    here; real IColumn is introduced in Task 6.
+    """
+    c = MagicMock()
+    c.model.col_id = col_id
+    c.model.trait_for_row.return_value = trait
+    return c
+
+
+def test_build_row_type_adds_declared_traits():
+    cols = [_mock_column("voltage", Float(100.0)),
+            _mock_column("reps", Int(1))]
+    RowType = build_row_type(cols, base=BaseRow)
+    r = RowType()
+    # Declared traits are present with their defaults
+    assert r.voltage == 100.0
+    assert r.reps == 1
+
+
+def test_build_row_type_preserves_base_traits():
+    cols = [_mock_column("voltage", Float(50.0))]
+    RowType = build_row_type(cols, base=BaseRow)
+    r = RowType(name="Custom")
+    assert r.name == "Custom"
+    assert r.row_type == "step"
+    assert r.uuid  # still auto-generated
+
+
+def test_build_row_type_for_group_base():
+    cols = [_mock_column("voltage", Float(0.0))]
+    GroupType = build_row_type(cols, base=GroupRow, name="ProtocolGroupRow")
+    g = GroupType(name="G")
+    assert g.row_type == "group"
+    assert g.voltage == 0.0
+    # children list still works
+    child = GroupType(name="Child")
+    g.add_row(child)
+    assert g.children == [child]
+
+
+def test_build_row_type_distinct_classes_do_not_share_traits():
+    """Fresh type() calls must not leak traits across invocations."""
+    TypeA = build_row_type([_mock_column("a", Float(1.0))], base=BaseRow, name="A")
+    TypeB = build_row_type([_mock_column("b", Float(2.0))], base=BaseRow, name="B")
+    a = TypeA()
+    b = TypeB()
+    assert hasattr(a, "a") and not hasattr(a, "b")
+    assert hasattr(b, "b") and not hasattr(b, "a")
