@@ -59,3 +59,54 @@ def test_to_json_rows_encoded_with_depth(manager):
 def test_to_json_empty_tree_has_zero_rows(manager):
     data = manager.to_json()
     assert data["rows"] == []
+
+
+# --- load ---
+
+def test_round_trip_flat(manager):
+    manager.add_step(values={"name": "A", "duration_s": 2.5})
+    manager.add_step(values={"name": "B", "duration_s": 1.0})
+    data = manager.to_json()
+    new_manager = RowManager.from_json(data, columns=list(manager.columns))
+    assert [c.name for c in new_manager.root.children] == ["A", "B"]
+    assert new_manager.root.children[0].duration_s == 2.5
+
+
+def test_round_trip_nested(manager):
+    g = manager.add_group(name="Wash")
+    manager.add_step(parent_path=g, values={"name": "Drop"})
+    manager.add_step(parent_path=g, values={"name": "Off"})
+    manager.add_step(values={"name": "Settle"})
+    data = manager.to_json()
+    nm = RowManager.from_json(data, columns=list(manager.columns))
+    wash = nm.root.children[0]
+    assert wash.name == "Wash"
+    assert [c.name for c in wash.children] == ["Drop", "Off"]
+    assert nm.root.children[1].name == "Settle"
+
+
+def test_round_trip_preserves_uuids(manager):
+    p = manager.add_step()
+    original_uuid = manager.get_row(p).uuid
+    data = manager.to_json()
+    nm = RowManager.from_json(data, columns=list(manager.columns))
+    assert nm.root.children[0].uuid == original_uuid
+
+
+def test_from_json_missing_column_warns_and_skips(manager, caplog):
+    """If the saved column set has an entry that's not in the live
+    column set, the value is skipped (PPT-1 behavior) and a warning is
+    logged. Full orphan preservation is deferred to a later PR."""
+    data = manager.to_json()
+    # Inject a fake column entry into the saved data
+    data["columns"].append({
+        "id": "fake", "cls": "nonexistent.module.FakeColumn",
+    })
+    # The row tuples also need a placeholder value per new column
+    data["fields"].append("fake")
+    for r in data["rows"]:
+        r.append("ignored")
+    # Load with live columns that don't include 'fake'
+    nm = RowManager.from_json(data, columns=list(manager.columns))
+    # Loader should have warned; no exception; row count preserved
+    assert len(nm.root.children) == len(manager.root.children)

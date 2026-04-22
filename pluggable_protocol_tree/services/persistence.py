@@ -51,3 +51,75 @@ def _walk_with_depth(node, columns: list, depth: int, skip_root: bool) -> Iterat
         for child in node.children:
             yield from _walk_with_depth(child, columns, depth + (0 if skip_root else 1),
                                          skip_root=False)
+
+
+import importlib
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def deserialize_tree(data: dict, columns: list, step_type, group_type) -> GroupRow:
+    """Reconstruct a tree from a saved-JSON dict.
+
+    Args:
+        data: output of serialize_tree (possibly from another session).
+        columns: live IColumn list to load values into.
+        step_type: dynamic step subclass for this protocol.
+        group_type: dynamic group subclass for this protocol.
+    """
+    live_by_col_id = {c.model.col_id: c for c in columns}
+    col_specs: list = data["columns"]
+    fields: list = data["fields"]
+
+    # Per-saved-column resolution: (col_id, live_col_or_None)
+    resolved: list = []
+    for spec in col_specs:
+        col_id = spec["id"]
+        cls_path = spec["cls"]
+        live = live_by_col_id.get(col_id)
+        if live is None:
+            # Try to import the class to distinguish orphan-present-but-unused
+            # from missing-plugin — in PPT-1 we just warn in both cases.
+            try:
+                importlib.import_module(cls_path.rsplit(".", 1)[0])
+                logger.warning(
+                    "Column '%s' exists in save but not in live column set — "
+                    "its values will be skipped.", col_id,
+                )
+            except ImportError:
+                logger.warning(
+                    "Column '%s' class '%s' could not be imported — "
+                    "plugin missing? Values will be skipped.",
+                    col_id, cls_path,
+                )
+        resolved.append((col_id, live))
+
+    root = group_type(name="Root")
+    stack: list = [root]
+
+    first_value_idx = 4   # fields = depth, uuid, type, name, *col_ids
+    for row_tuple in data["rows"]:
+        depth = int(row_tuple[0])
+        uuid_ = str(row_tuple[1])
+        row_type = str(row_tuple[2])
+        name = str(row_tuple[3])
+        values = row_tuple[first_value_idx:]
+
+        stack = stack[: depth + 1]   # trim to the right ancestor
+        parent = stack[-1]
+
+        row_cls = step_type if row_type == "step" else group_type
+        row = row_cls(name=name, uuid=uuid_)
+
+        for (col_id, live_col), raw in zip(resolved, values):
+            if live_col is None:
+                continue
+            setattr(row, col_id, live_col.model.deserialize(raw))
+
+        parent.add_row(row)
+
+        if row_type == "group":
+            stack.append(row)
+
+    return root

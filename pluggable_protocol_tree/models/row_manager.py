@@ -450,3 +450,13 @@ class RowManager(HasTraits):
     def to_json(self) -> dict:
         from pluggable_protocol_tree.services.persistence import serialize_tree
         return serialize_tree(self.root, list(self.columns))
+
+    @classmethod
+    def from_json(cls, data: dict, columns: list) -> "RowManager":
+        from pluggable_protocol_tree.services.persistence import deserialize_tree
+        # Construct an empty manager so we can use its step_type/group_type
+        manager = cls(columns=columns)
+        manager.root = deserialize_tree(
+            data, columns, manager.step_type, manager.group_type,
+        )
+        return manager
