@@ -205,3 +205,45 @@ def test_copy_paste_includes_children_of_groups(manager):
     assert copied_group.name == "G"
     assert len(copied_group.children) == 1
     assert copied_group.children[0].name == "Inner"
+
+
+# --- iter_execution_steps ---
+
+def test_iter_execution_flat_protocol(manager):
+    manager.add_step(values={"name": "A"})
+    manager.add_step(values={"name": "B"})
+    names = [r.name for r in manager.iter_execution_steps()]
+    assert names == ["A", "B"]
+
+
+def test_iter_execution_flattens_groups(manager):
+    g = manager.add_group(name="G")
+    manager.add_step(parent_path=g, values={"name": "A"})
+    manager.add_step(parent_path=g, values={"name": "B"})
+    manager.add_step(values={"name": "C"})
+    names = [r.name for r in manager.iter_execution_steps()]
+    assert names == ["A", "B", "C"]
+
+
+def test_iter_execution_expands_repetitions(manager):
+    """Until PPT-1 integrates the repetitions column, the default
+    repetitions value is 1. The iter_execution_steps loop reads a
+    `repetitions` attribute if present, defaulting to 1."""
+    manager.add_step(values={"name": "A"})
+    s = manager.add_step(values={"name": "B"})
+    # Simulate the repetitions column by assigning the attribute dynamically
+    # (real repetitions column lands alongside this method — see comment in
+    # RowManager.iter_execution_steps for the contract).
+    setattr(manager.get_row(s), "repetitions", 3)
+    names = [r.name for r in manager.iter_execution_steps()]
+    # A once, B three times (in order)
+    assert names == ["A", "B", "B", "B"]
+
+
+def test_iter_execution_group_repetitions_expand(manager):
+    g = manager.add_group(name="G")
+    manager.add_step(parent_path=g, values={"name": "A"})
+    manager.add_step(parent_path=g, values={"name": "B"})
+    setattr(manager.get_row(g), "repetitions", 2)
+    names = [r.name for r in manager.iter_execution_steps()]
+    assert names == ["A", "B", "A", "B"]

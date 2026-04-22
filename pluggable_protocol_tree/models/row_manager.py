@@ -339,3 +339,30 @@ class RowManager(HasTraits):
         if "rows" not in payload:
             return
         self._paste_from_payload(payload, target_path)
+
+    # --- execution iteration ---
+
+    def iter_execution_steps(self) -> Iterator[BaseRow]:
+        """Yield rows in execution order, flattening groups and expanding
+        repetitions.
+
+        Repetitions contract: any row may have an integer attribute named
+        ``repetitions``. When present, that row's yield is multiplied. If
+        the row is a step, it's yielded `n` times. If a group, its entire
+        child-subtree is expanded n times. Missing attribute defaults to
+        1 rep. (The repetitions column is a core built-in that lands
+        alongside PPT-3's trail-config columns; PPT-1 establishes the
+        contract so the executor in PPT-2 can rely on it.)
+        """
+        yield from self._expand(self.root)
+
+    @classmethod
+    def _expand(cls, node) -> Iterator[BaseRow]:
+        reps = max(1, int(getattr(node, "repetitions", 1) or 1))
+        if isinstance(node, GroupRow):
+            for _ in range(reps):
+                for child in node.children:
+                    yield from cls._expand(child)
+        else:
+            for _ in range(reps):
+                yield node
