@@ -1161,7 +1161,7 @@ ReadOnlyLabelColumnView.
 """
 
 from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QLineEdit
+from pyface.qt.QtWidgets import QLineEdit
 from traits.api import HasTraits, Bool, Instance, provides
 
 from pluggable_protocol_tree.interfaces.i_column import IColumnView, IColumnModel
@@ -1364,7 +1364,7 @@ Create `src/pluggable_protocol_tree/views/columns/string_edit.py`:
 """Editable line-edit column view for Str-typed columns."""
 
 from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QLineEdit
+from pyface.qt.QtWidgets import QLineEdit
 from traits.api import provides
 
 from pluggable_protocol_tree.interfaces.i_column import IColumnView
@@ -1400,7 +1400,7 @@ spinbox hint configurations."""
 import math
 
 from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QSpinBox, QDoubleSpinBox
+from pyface.qt.QtWidgets import QSpinBox, QDoubleSpinBox
 from traits.api import Float, Int, provides
 
 from pluggable_protocol_tree.interfaces.i_column import IColumnView
