@@ -40,6 +40,11 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 logger = logging.getLogger(__name__)
 
 
+def _dotted_path(path: tuple) -> str:
+    """1-indexed dotted display ('1.2.3') for a 0-indexed path tuple."""
+    return ".".join(str(i + 1) for i in path) if path else ""
+
+
 class ProtocolExecutor(HasTraits):
     """One executor per RowManager. Reused across runs."""
 
@@ -96,22 +101,37 @@ class ProtocolExecutor(HasTraits):
 
     def run(self) -> None:
         """Main loop. Runs synchronously when called directly (tests),
-        or on its QThread when entered via start()."""
+        or on its worker thread when entered via start()."""
+        import time as _time
         cols = list(self.row_manager.columns)
         proto_ctx = ProtocolContext(
             columns=cols, stop_event=self.stop_event,
         )
+        proto_started_at = _time.monotonic()
         try:
             self._run_hooks("on_protocol_start", cols, proto_ctx, row=None)
             self.qsignals.protocol_started.emit()
+            logger.info("Protocol started")
 
+            step_index = 0
             for row in self.row_manager.iter_execution_steps():
                 if self.stop_event.is_set():
                     break
                 if self.pause_event.is_set():
+                    logger.info("Protocol paused at step %d", step_index + 1)
                     self.pause_event.wait_cleared()
                     if self.stop_event.is_set():
                         break
+                    logger.info("Protocol resumed")
+
+                step_index += 1
+                step_started_at = _time.monotonic()
+                logger.info(
+                    "Step %d started: %r (path %s, duration_s=%s)",
+                    step_index, row.name,
+                    _dotted_path(row.path),
+                    getattr(row, "duration_s", None),
+                )
 
                 step_ctx = self._build_step_ctx(row, cols, proto_ctx)
                 set_active_step(step_ctx)
@@ -123,6 +143,11 @@ class ProtocolExecutor(HasTraits):
                     self.qsignals.step_finished.emit(row)
                 finally:
                     clear_active_step()
+
+                logger.info(
+                    "Step %d finished: %r in %.2fs",
+                    step_index, row.name, _time.monotonic() - step_started_at,
+                )
 
             # on_protocol_end runs even on stop, as best-effort cleanup.
             self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
@@ -137,6 +162,15 @@ class ProtocolExecutor(HasTraits):
 
         finally:
             self._emit_terminal_signal()
+            outcome = (
+                "errored" if self._error is not None
+                else "aborted" if self.stop_event.is_set()
+                else "finished"
+            )
+            logger.info(
+                "Protocol %s in %.2fs",
+                outcome, _time.monotonic() - proto_started_at,
+            )
             # threading.Thread terminates naturally when run() returns;
             # nothing to quit() here. start() checks is_alive() to make
             # sure a previous run has completed before starting a new one.

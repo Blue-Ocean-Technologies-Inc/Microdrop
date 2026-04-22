@@ -11,12 +11,15 @@ Run: pixi run python -m pluggable_protocol_tree.demos.run_widget
 """
 
 import json
+import logging
 import sys
 import threading
+import time
 
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
-    QApplication, QFileDialog, QMainWindow, QMessageBox, QToolBar,
+    QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QStatusBar,
+    QToolBar,
 )
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
@@ -60,11 +63,23 @@ class DemoWindow(QMainWindow):
             stop_event=threading.Event(),
         )
 
+        # Per-step timing state (mutated from GUI thread only).
+        self._step_index = 0
+        self._step_total = 0
+        self._step_started_at = None
+        self._step_total_duration = None
+        self._current_row = None
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(100)   # 10 Hz elapsed-time display
+        self._tick_timer.timeout.connect(self._refresh_status)
+
+        self._build_status_bar()
         self._wire_signals()
         self._build_toolbar()
+        self._reset_status()
 
     def _wire_signals(self):
-        # Active-row highlighting. Only step_started + terminal signals
+        # Active-row highlight. Only step_started + terminal signals
         # touch the highlight — step_finished does NOT clear it, so the
         # highlight stays on the just-finished row through the gap until
         # the next step_started replaces it. (Clearing on step_finished
@@ -72,6 +87,9 @@ class DemoWindow(QMainWindow):
         self.executor.qsignals.step_started.connect(
             self.widget.highlight_active_row
         )
+        # Status bar updates
+        self.executor.qsignals.step_started.connect(self._on_step_started)
+        self.executor.qsignals.step_finished.connect(self._on_step_finished)
         # Button state machine
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
         self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
@@ -116,24 +134,106 @@ class DemoWindow(QMainWindow):
         else:
             self.executor.pause()
 
+    # --- status bar (step counter + elapsed time + step name/path) ---
+
+    def _build_status_bar(self):
+        sb = QStatusBar()
+        self.setStatusBar(sb)
+        self._status_step_label = QLabel("Idle")
+        self._status_time_label = QLabel("")
+        self._status_row_label = QLabel("")
+        # First two stretch=0 (fixed width to text); row label takes the rest.
+        sb.addWidget(self._status_step_label)
+        sb.addWidget(self._status_row_label, stretch=1)
+        sb.addPermanentWidget(self._status_time_label)
+
+    def _reset_status(self):
+        self._step_index = 0
+        self._step_total = 0
+        self._step_started_at = None
+        self._step_total_duration = None
+        self._current_row = None
+        self._status_step_label.setText("Idle")
+        self._status_row_label.setText("")
+        self._status_time_label.setText("")
+
+    def _refresh_status(self):
+        if self._step_started_at is None or self._current_row is None:
+            return
+        elapsed = time.monotonic() - self._step_started_at
+        if self._step_total_duration is not None:
+            self._status_time_label.setText(
+                f"{elapsed:5.2f}s / {self._step_total_duration:.2f}s"
+            )
+        else:
+            self._status_time_label.setText(f"{elapsed:5.2f}s")
+
     # --- protocol-state slot handlers ---
 
     def _on_protocol_started(self):
         self._set_running_button_state()
+        # Pre-count total steps after rep expansion. This forces a one-
+        # time walk of iter_execution_steps; for huge protocols the cost
+        # is O(N) but acceptable here. Re-counted because reps may have
+        # changed since last run.
+        try:
+            self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
+        except Exception:
+            self._step_total = 0
+        self._step_index = 0
+        self._status_step_label.setText(f"Step 0 / {self._step_total}")
+
+    def _on_step_started(self, row):
+        self._step_index += 1
+        self._current_row = row
+        self._step_started_at = time.monotonic()
+        try:
+            self._step_total_duration = float(getattr(row, "duration_s", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self._step_total_duration = None
+        path = ".".join(str(i + 1) for i in row.path) if row.path else ""
+        path_str = f" (path {path})" if path else ""
+        self._status_step_label.setText(
+            f"Step {self._step_index} / {self._step_total}"
+        )
+        self._status_row_label.setText(f"{row.name}{path_str}")
+        self._refresh_status()
+        if not self._tick_timer.isActive():
+            self._tick_timer.start()
+
+    def _on_step_finished(self, _row):
+        # Freeze the time label at the step's actual elapsed; keep the
+        # step labels visible until the next step_started replaces them.
+        if self._step_started_at is not None:
+            elapsed = time.monotonic() - self._step_started_at
+            if self._step_total_duration is not None:
+                self._status_time_label.setText(
+                    f"{elapsed:5.2f}s / {self._step_total_duration:.2f}s"
+                )
+            else:
+                self._status_time_label.setText(f"{elapsed:5.2f}s")
 
     def _on_protocol_paused(self):
         self._pause_action.setText("Resume")
+        # Stop the elapsed-time tick during pause; resume restarts it.
+        self._tick_timer.stop()
 
     def _on_protocol_resumed(self):
         self._pause_action.setText("Pause")
+        if self._step_started_at is not None:
+            self._tick_timer.start()
 
     def _on_protocol_terminated(self):
         self.widget.highlight_active_row(None)
         self._set_idle_button_state()
+        self._tick_timer.stop()
+        self._reset_status()
 
     def _on_error(self, msg):
         self.widget.highlight_active_row(None)
         self._set_idle_button_state()
+        self._tick_timer.stop()
+        self._reset_status()
         QMessageBox.critical(self, "Protocol error", msg)
 
     def _save(self):
@@ -171,6 +271,13 @@ class DemoWindow(QMainWindow):
 
 
 def main():
+    # Surface the executor's INFO-level step transition logs so the
+    # demo user sees them in the terminal as the protocol runs.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
     app = QApplication.instance() or QApplication(sys.argv)
     w = DemoWindow()
     w.show()

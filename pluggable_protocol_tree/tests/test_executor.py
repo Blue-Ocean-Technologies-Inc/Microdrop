@@ -56,13 +56,32 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.duration_column import (
+    DurationColumnHandler, DurationColumnModel, make_duration_column,
+)
+from pluggable_protocol_tree.models.column import Column
+from pluggable_protocol_tree.views.columns.spinbox import DoubleSpinBoxColumnView
+
+
+def _fast_duration_column():
+    """Like make_duration_column() but defaults to 0s so unit tests
+    don't actually sleep. Production duration column is used in the
+    demo and integration tests."""
+    return Column(
+        model=DurationColumnModel(
+            col_id="duration_s", col_name="Duration (s)", default_value=0.0,
+        ),
+        view=DoubleSpinBoxColumnView(
+            low=0.0, high=3600.0, decimals=2, single_step=0.1,
+        ),
+        handler=DurationColumnHandler(),
+    )
 
 
 def _make_executor():
     """Bare-bones executor with the four PPT-1 built-in columns."""
     cols = [make_type_column(), make_id_column(),
-            make_name_column(), make_duration_column()]
+            make_name_column(), _fast_duration_column()]
     rm = RowManager(columns=cols)
     return ProtocolExecutor(
         row_manager=rm,
@@ -313,7 +332,7 @@ def _executor_with(cols):
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.duration_column import make_duration_column
     builtins = [make_type_column(), make_id_column(),
-                make_name_column(), make_duration_column()]
+                make_name_column(), _fast_duration_column()]
     rm = RowManager(columns=builtins + list(cols))
     rm.add_step(values={"name": "A"})
     return ProtocolExecutor(
