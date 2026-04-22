@@ -47,6 +47,30 @@ def get_active_step() -> Optional[StepContext]:
         return _active_step_ctx
 
 
+def warm_broker_connection() -> None:
+    """Touch the Dramatiq broker so the first publish_message during a
+    step doesn't pay first-connection latency.
+
+    The first call to ``broker.enqueue(...)`` against a RedisBroker
+    establishes the underlying TCP connection and pulls in middleware —
+    we've measured ~2 seconds on the first call after process start.
+    Subsequent calls reuse the connection (microseconds). Doing a cheap
+    ``client.ping()`` here at protocol start hides that from the first
+    step's measured duration.
+
+    Best-effort — silently skips if no broker is configured, the broker
+    doesn't expose a client (e.g. StubBroker), or the ping itself
+    fails. The first real publish will pay the cost in those cases.
+    """
+    try:
+        broker = dramatiq.get_broker()
+        client = getattr(broker, "client", None)
+        if client is not None and hasattr(client, "ping"):
+            client.ping()
+    except Exception:
+        pass
+
+
 def route_to_active_step(topic: str, payload) -> None:
     """Deposit a payload into the active step's mailbox for ``topic``.
     Drops silently if no protocol is running, or if the active step

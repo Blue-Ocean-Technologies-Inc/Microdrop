@@ -28,7 +28,7 @@ from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.listener import (
-    set_active_step, clear_active_step,
+    set_active_step, clear_active_step, warm_broker_connection,
 )
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.execution.step_context import (
@@ -109,6 +109,9 @@ class ProtocolExecutor(HasTraits):
         )
         proto_started_at = _time.monotonic()
         try:
+            # Hide first-publish latency (Redis connect ~2s) from step 1's
+            # observed duration by warming the broker connection upfront.
+            warm_broker_connection()
             self._run_hooks("on_protocol_start", cols, proto_ctx, row=None)
             self.qsignals.protocol_started.emit()
             logger.info("Protocol started")
