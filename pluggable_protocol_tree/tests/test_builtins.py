@@ -71,3 +71,43 @@ def test_duration_column_renders_on_group_but_not_editable_there():
 def test_duration_column_hidden_by_default_false():
     col = make_duration_column()
     assert col.view.hidden_by_default is False
+
+
+# --- id column ---
+
+from pluggable_protocol_tree.builtins.id_column import make_id_column
+
+
+def test_id_column_read_only():
+    from pyface.qt.QtCore import Qt
+    col = make_id_column()
+    assert not (col.view.get_flags(BaseRow()) & Qt.ItemIsEditable)
+
+
+def test_id_column_top_level_display():
+    """A top-level row at position 0 displays '1' (1-indexed)."""
+    col = make_id_column()
+    root = GroupRow(name="Root")
+    a = BaseRow()
+    b = BaseRow()
+    root.add_row(a)
+    root.add_row(b)
+    assert col.view.format_display(None, a) == "1"
+    assert col.view.format_display(None, b) == "2"
+
+
+def test_id_column_nested_display():
+    """Step 0 inside Group 0 inside Root displays '1.1'."""
+    col = make_id_column()
+    root = GroupRow(name="Root")
+    g = GroupRow(name="G")
+    s = BaseRow()
+    root.add_row(g)
+    g.add_row(s)
+    assert col.view.format_display(None, g) == "1"
+    assert col.view.format_display(None, s) == "1.1"
+
+
+def test_id_column_orphan_row_empty():
+    col = make_id_column()
+    assert col.view.format_display(None, BaseRow()) == ""
