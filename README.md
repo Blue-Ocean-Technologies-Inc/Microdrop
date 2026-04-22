@@ -98,3 +98,28 @@ The command to create the environment is:
 ```conda create -f environment.yml```
 
 And remember to startup the redis server. There is a start_redis_server.py python script for thisnin examples. Or one can just ruin ``redis-server`` on a terminal.
+
+# **Remote Microdrop Instructions**
+
+## **1. SERVER-SIDE (via SSH)**
+
+- Start your Redis server (see Redis configuration note below).
+
+- Run the backend script by executing: pixi run microdrop-backend
+
+## **2. CLIENT-SIDE (Local Machine)**
+- Headless: Send commands using publish_message(message, topic).
+- GUI: Run pixi run microdrop-frontend to use the visual interface to send commands.
+
+## **Redis Configuration Note**
+
+### **On the Redis server machine:** 
+
+- Ensure the Redis server is configured to accept external connections.
+- This means binding to the correct network adapter in the redis.conf file, and disabling protected mode if applicable.
+- This Redis server can actually run anywhere; it does not need to be on the exact same machine as the microdrop-backend script.
+
+### **On each client machine (frontend/backend):** 
+- Tell the application where to find the Redis server by editing the redis_settings.json (you can copy the template [redis_settings.example.json](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/blob/main/redis_settings.example.json))
+- Set the host to the Redis server's IP and the port to match.
+
