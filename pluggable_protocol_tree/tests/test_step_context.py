@@ -168,3 +168,89 @@ def test_mailbox_predicate_rejects_all_pre_deposited_then_blocks():
         stop_event=stop,
     )
     assert item == {"ready": True}
+
+
+# --- ProtocolContext + StepContext + wait_for ---
+
+from pluggable_protocol_tree.execution.step_context import (
+    ProtocolContext, StepContext,
+)
+from pluggable_protocol_tree.models.row import BaseRow
+
+
+def _make_step_ctx(topics: list) -> StepContext:
+    """Helper: build a StepContext with mailboxes pre-opened for `topics`."""
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    for t in topics:
+        step.open_mailbox(t)
+    return step
+
+
+def test_wait_for_returns_payload_after_deposit():
+    step = _make_step_ctx(["t/foo"])
+    threading.Timer(
+        0.05, lambda: step.deposit("t/foo", {"v": 1})
+    ).start()
+    payload = step.wait_for("t/foo", timeout=1.0)
+    assert payload == {"v": 1}
+
+
+def test_wait_for_returns_pre_deposited_immediately():
+    """The race-fix that justifies the per-step pre-registration model."""
+    step = _make_step_ctx(["t/ack"])
+    step.deposit("t/ack", {"ok": True})
+    start = time.monotonic()
+    payload = step.wait_for("t/ack", timeout=1.0)
+    assert payload == {"ok": True}
+    assert time.monotonic() - start < 0.1
+
+
+def test_wait_for_unknown_topic_raises_keyerror():
+    """Unopened topics indicate a missing wait_for_topics declaration."""
+    step = _make_step_ctx(["t/known"])
+    import pytest
+    with pytest.raises(KeyError):
+        step.wait_for("t/unknown", timeout=0.1)
+
+
+def test_wait_for_timeout():
+    step = _make_step_ctx(["t/never"])
+    import pytest
+    with pytest.raises(TimeoutError):
+        step.wait_for("t/never", timeout=0.05)
+
+
+def test_wait_for_abort_when_stop_event_fires():
+    step = _make_step_ctx(["t/never"])
+    threading.Timer(0.05, step.protocol.stop_event.set).start()
+    import pytest
+    with pytest.raises(AbortError):
+        step.wait_for("t/never", timeout=2.0)
+
+
+def test_wait_for_predicate_filters_payloads():
+    step = _make_step_ctx(["t/status"])
+    step.deposit("t/status", {"ready": False})
+    step.deposit("t/status", {"ready": True})
+    payload = step.wait_for(
+        "t/status", timeout=1.0,
+        predicate=lambda p: p.get("ready") is True,
+    )
+    assert payload == {"ready": True}
+
+
+def test_protocol_context_scratch_is_per_protocol():
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    proto.scratch["k"] = "v"
+    assert proto.scratch["k"] == "v"
+
+
+def test_step_context_scratch_is_per_step_and_independent():
+    proto = ProtocolContext(columns=[], stop_event=threading.Event())
+    a = StepContext(row=BaseRow(name="a"), protocol=proto)
+    b = StepContext(row=BaseRow(name="b"), protocol=proto)
+    a.scratch["k"] = "av"
+    b.scratch["k"] = "bv"
+    assert a.scratch["k"] == "av"
+    assert b.scratch["k"] == "bv"

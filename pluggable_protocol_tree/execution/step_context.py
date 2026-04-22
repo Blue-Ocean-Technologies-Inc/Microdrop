@@ -98,3 +98,80 @@ class Mailbox:
             if triggered is stop_event:
                 raise AbortError("stop_event fired while waiting")
             # else self._wake fired; loop back and try to drain.
+
+
+# --- contexts ---
+
+from traits.api import Any, Dict, HasTraits, Instance, Str, List
+
+from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.models.row import BaseRow
+
+
+class ProtocolContext(HasTraits):
+    """Spans one protocol run.
+
+    Hooks reach this from a StepContext via ``ctx.protocol``. Use
+    ``scratch`` for cross-step state (e.g. cumulative stats). The
+    ``stop_event`` lets long-running CPU hooks check for Stop without
+    going through ctx.wait_for; e.g.
+    ``while not ctx.protocol.stop_event.is_set(): ...``.
+    """
+    columns    = List(Instance(IColumn))
+    scratch    = Dict(Str, Any,
+                      desc="protocol-scoped scratch (cleared on each run)")
+    stop_event = Instance(threading.Event)
+
+
+class StepContext(HasTraits):
+    """Spans one row's execution.
+
+    Hooks call ``wait_for(topic, ...)`` on this. Mailboxes are opened by
+    the executor before any hook runs (so a hook can publish a request
+    and immediately wait for the ack without losing fast replies).
+    """
+    row       = Instance(BaseRow)
+    protocol  = Instance(ProtocolContext)
+    scratch   = Dict(Str, Any,
+                     desc="step-scoped scratch (cleared per step)")
+    _mailboxes = Dict(Str, Instance(Mailbox))
+
+    def open_mailbox(self, topic: str) -> None:
+        """Pre-register a mailbox for ``topic``. Called by the executor
+        at step start for every topic in the union of all handlers'
+        wait_for_topics. Idempotent."""
+        if topic not in self._mailboxes:
+            self._mailboxes[topic] = Mailbox()
+
+    def deposit(self, topic: str, payload) -> None:
+        """Called by the dramatiq listener for any message on a topic
+        the active step has a mailbox for. Drops messages for topics
+        without an open mailbox (handler didn't declare wait_for)."""
+        box = self._mailboxes.get(topic)
+        if box is not None:
+            box.deposit(payload)
+
+    def wait_for(self, topic: str, timeout: float = 5.0,
+                 predicate: Optional[Callable] = None):
+        """Block until a message on ``topic`` satisfying ``predicate``
+        arrives, or the timeout/stop fires.
+
+        Returns the payload. Raises:
+          * ``KeyError`` if ``topic`` was not declared in any handler's
+            ``wait_for_topics`` (the executor would not have opened a
+            mailbox; waiting would block forever).
+          * ``TimeoutError`` after ``timeout`` seconds.
+          * ``AbortError`` if the protocol's stop_event fires.
+        """
+        try:
+            box = self._mailboxes[topic]
+        except KeyError:
+            raise KeyError(
+                f"wait_for({topic!r}) called but topic not in any handler's "
+                f"wait_for_topics; declare it on the IColumnHandler."
+            )
+        return box.drain_one(
+            predicate=predicate,
+            timeout=timeout,
+            stop_event=self.protocol.stop_event,
+        )
