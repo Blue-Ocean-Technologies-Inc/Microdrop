@@ -13,6 +13,7 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -56,6 +57,38 @@ class PluggableProtocolTreePlugin(Plugin):
             make_type_column(),
             make_id_column(),
             make_name_column(),
+            make_repetitions_column(),
             make_duration_column(),
         ]
-        return builtins + list(self.contributed_columns)
+        try:
+            contributed = list(self.contributed_columns)
+        except ValueError:
+            # No extension registry attached (e.g. headless unit tests).
+            contributed = []
+        return builtins + contributed
+
+    def start(self):
+        """Register the executor listener's subscriptions with the
+        message router. Called by Envisage at plugin start, after
+        extension points have resolved (so contributed_columns is
+        populated)."""
+        super().start()
+        try:
+            from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterData
+        except ImportError:
+            # Headless test environments may not have a broker. Plugin
+            # construction must not require Redis; a missing broker is
+            # only a problem at the moment a protocol actually runs.
+            return
+        topics = sorted({
+            t for c in self._assemble_columns()
+            for t in (c.handler.wait_for_topics or [])
+        })
+        if not topics:
+            return
+        router_data = MessageRouterData()
+        for topic in topics:
+            router_data.add_subscriber_to_topic(
+                topic=topic,
+                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+            )
