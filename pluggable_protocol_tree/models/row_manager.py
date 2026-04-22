@@ -10,7 +10,7 @@ active column set.
 from typing import Iterator, List, Optional, Tuple
 
 from traits.api import (
-    HasTraits, Instance, List as ListTrait, Tuple as TupleTrait, Int,
+    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Int,
     Event, Str, observe,
 )
 
@@ -31,7 +31,9 @@ class RowManager(HasTraits):
     step_type = Instance(type)
     group_type = Instance(type)
 
-    selection = ListTrait(TupleTrait(Int),
+    # Path tuples are variable-length; Tuple(Int) would be a fixed 1-element
+    # tuple validator, which rejects nested-row paths like (0, 2).
+    selection = ListTrait(AnyTrait,
         desc="List of 0-indexed path tuples currently selected")
 
     clipboard_mime = Str(PROTOCOL_ROWS_MIME)

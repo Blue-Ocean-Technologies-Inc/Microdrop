@@ -131,6 +131,16 @@ def test_select_range_fills_between(manager):
     assert manager.selection == [paths[1], paths[2], paths[3]]
 
 
+def test_select_accepts_nested_paths(manager):
+    """Regression: the selection trait must accept variable-length path
+    tuples. Originally declared as Tuple(Int) which validated as a
+    one-element tuple and rejected nested rows like (0, 2)."""
+    g = manager.add_group()
+    s = manager.add_step(parent_path=g)   # path == (0, 0)
+    manager.select([s])
+    assert manager.selection == [(0, 0)]
+
+
 def test_selected_rows_returns_row_objects(manager):
     a = manager.add_step(values={"name": "A"})
     b = manager.add_step(values={"name": "B"})
