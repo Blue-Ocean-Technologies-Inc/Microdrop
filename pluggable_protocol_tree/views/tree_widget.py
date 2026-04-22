@@ -1,14 +1,19 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
+import logging
 from enum import Enum
 
 from pyface.qt.QtCore import Qt, QPersistentModelIndex
+from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProtocolTreeWidget(QWidget):
@@ -34,12 +39,25 @@ class ProtocolTreeWidget(QWidget):
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_context_menu)
 
-        # Keyboard shortcuts for copy/cut/paste
-        from pyface.qt.QtGui import QShortcut, QKeySequence
-        QShortcut(QKeySequence.Copy, self, self._copy)
-        QShortcut(QKeySequence.Cut, self, self._cut)
-        QShortcut(QKeySequence.Paste, self, self._paste)
-        QShortcut(QKeySequence.Delete, self, self._delete_selection)
+        # Keyboard shortcuts. Bind via .activated.connect() rather than
+        # the (seq, parent, callable) constructor — the latter can fail
+        # to wire silently in PySide6 (the third arg is documented as a
+        # const char* slot name in Qt; passing a Python callable lands
+        # in an overload that may discard it). Bind to the tree, with
+        # WidgetWithChildrenShortcut context so they only fire when the
+        # tree or its delegates have focus — pressing Delete in the
+        # toolbar or anywhere else in the window must not delete rows.
+        self._shortcuts = []     # keep refs alive (Qt doesn't, in PySide6)
+        for seq, slot in (
+            (QKeySequence.Copy,   self._copy),
+            (QKeySequence.Cut,    self._cut),
+            (QKeySequence.Paste,  self._paste),
+            (QKeySequence.Delete, self._delete_selection),
+        ):
+            sc = QShortcut(seq, self.tree)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
 
         # Mirror Qt selection → RowManager selection
         self.tree.selectionModel().selectionChanged.connect(self._sync_selection)
@@ -128,16 +146,40 @@ class ProtocolTreeWidget(QWidget):
         return path[:-1]
 
     def _copy(self):
-        self._manager.copy()
+        try:
+            self._manager.copy()
+        except Exception:
+            logger.exception("Copy failed")
 
     def _cut(self):
-        self._manager.cut()
+        try:
+            self._manager.cut()
+        except Exception:
+            logger.exception("Cut failed")
 
     def _paste(self):
-        # Use current anchor as target
-        idxs = self.tree.selectionModel().selectedRows(0)
-        target = self._index_to_path(idxs[-1]) if idxs else None
-        self._manager.paste(target_path=target)
+        try:
+            idxs = self.tree.selectionModel().selectedRows(0)
+            target = self._index_to_path(idxs[-1]) if idxs else None
+            self._manager.paste(target_path=target)
+        except Exception:
+            logger.exception("Paste failed")
 
     def _delete_selection(self):
-        self._manager.remove(list(self._manager.selection))
+        """Remove the currently-selected rows. Defensive: stale paths
+        (rows already removed by a previous action) are silently
+        skipped rather than propagating IndexError, which under
+        PySide6 6.x terminates the QApplication."""
+        try:
+            paths = [tuple(p) for p in self._manager.selection]
+            valid = []
+            for p in paths:
+                try:
+                    self._manager.get_row(p)
+                except (IndexError, KeyError):
+                    continue
+                valid.append(p)
+            if valid:
+                self._manager.remove(valid)
+        except Exception:
+            logger.exception("Delete failed")
