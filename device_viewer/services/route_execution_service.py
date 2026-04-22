@@ -84,10 +84,9 @@ class RouteExecutionService(HasTraits):
             if channel in self.model.electrodes.channels_electrode_ids_map:
                 activated_electrode_ids.extend(self.model.electrodes.channels_electrode_ids_map[channel])
 
-        # Read the linear-repeats preference once so the plan and the
-        # rep/phase counters below agree on the mode.
-        from protocol_grid.preferences import ProtocolPreferences
-        linear_repeats = bool(ProtocolPreferences().linear_repeats)
+        # Source linear-repeats from the live RoutesModel (mirrors how
+        # soft_start / soft_terminate are sourced below).
+        linear_repeats = bool(self.model.routes.linear_repeats)
 
         # Build execution plan using PathExecutionService with raw params
         plan = PathExecutionService.calculate_execution_plan_from_params(

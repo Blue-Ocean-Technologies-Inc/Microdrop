@@ -10,14 +10,17 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-def _read_linear_repeats_preference() -> bool:
-    """Read the `linear_repeats` preference. Localized so the import is lazy
-    (avoids circular-import issues at module load time)."""
+def _read_linear_repeats_from_step(step: "ProtocolStep") -> bool:
+    """Read the per-step `Lin Reps` cell value (parsed bool).
+
+    Falls back to False if the field is missing (legacy protocol JSON without
+    the column).
+    """
+    raw = step.parameters.get("Lin Reps", "0")
     try:
-        from protocol_grid.preferences import ProtocolPreferences
-        return bool(ProtocolPreferences().linear_repeats)
-    except Exception:
-        return False
+        return bool(int(raw))
+    except (TypeError, ValueError):
+        return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 class PathExecutionService:
 
@@ -272,7 +275,8 @@ class PathExecutionService:
         on top.
 
         When ``linear_repeats`` is True, linear (non-loop) paths are replayed
-        ``Repetitions`` times. None (default) reads from ``ProtocolPreferences``.
+        ``Repetitions`` times. None (default) reads the per-step ``Lin Reps``
+        cell from the supplied ``step``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -282,7 +286,7 @@ class PathExecutionService:
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
 
         if linear_repeats is None:
-            linear_repeats = _read_linear_repeats_preference()
+            linear_repeats = _read_linear_repeats_from_step(step)
 
         if not device_state.has_paths():
             return duration
@@ -354,7 +358,7 @@ class PathExecutionService:
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
 
         if linear_repeats is None:
-            linear_repeats = _read_linear_repeats_preference()
+            linear_repeats = _read_linear_repeats_from_step(step)
 
         if not device_state.has_paths():
             return {"max_cycle_length": 1, "max_effective_repetitions": 1}
@@ -409,8 +413,8 @@ class PathExecutionService:
         count-based.  Soft start/terminate add ramp phases on top.
 
         When ``linear_repeats`` is True, linear (non-loop) paths are replayed
-        ``Repetitions`` times. When None (default), the preference is read
-        from ``ProtocolPreferences``.
+        ``Repetitions`` times. None (default) reads the per-step ``Lin Reps``
+        cell from the supplied ``step``.
         """
         duration = float(step.parameters.get("Duration", "1.0"))
         repetitions = int(step.parameters.get("Repetitions", "1"))
@@ -420,7 +424,7 @@ class PathExecutionService:
         trail_overlay = int(step.parameters.get("Trail Overlay", "0"))
 
         if linear_repeats is None:
-            linear_repeats = _read_linear_repeats_preference()
+            linear_repeats = _read_linear_repeats_from_step(step)
 
         step_uid = step.parameters.get("UID", "")
         step_id = step.parameters.get("ID", "")

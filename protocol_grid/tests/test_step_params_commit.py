@@ -14,6 +14,7 @@ def _valid_kwargs():
         trail_overlay=1,
         soft_start=True,
         soft_terminate=False,
+        linear_repeats=True,
     )
 
 
@@ -42,6 +43,7 @@ def test_extract_execution_params_happy_path():
         "Trail Overlay": "1",
         "Ramp Up": "1",
         "Ramp Dn": "0",
+        "Lin Reps": "1",
         "Voltage": "100",  # should be ignored
     }
     result = extract_execution_params(parameters)
@@ -53,6 +55,7 @@ def test_extract_execution_params_happy_path():
         "trail_overlay": 1,
         "soft_start": True,
         "soft_terminate": False,
+        "linear_repeats": True,
     }
 
 
@@ -74,6 +77,7 @@ def test_extract_execution_params_missing_keys_use_defaults():
     assert result["trail_overlay"] == 0
     assert result["soft_start"] is False
     assert result["soft_terminate"] is False
+    assert result["linear_repeats"] is False
 
 
 from protocol_grid.state.device_state import (
@@ -91,6 +95,7 @@ def test_device_state_message_carries_execution_params():
         "trail_overlay": 2,
         "soft_start": True,
         "soft_terminate": False,
+        "linear_repeats": False,
     }
     state = DeviceState()
     msg = device_state_to_device_viewer_message(
@@ -104,3 +109,10 @@ def test_device_state_message_execution_params_defaults_none():
     state = DeviceState()
     msg = device_state_to_device_viewer_message(state, step_uid="u1")
     assert msg.execution_params is None
+
+
+def test_step_params_commit_carries_linear_repeats():
+    msg = StepParamsCommitMessage(**_valid_kwargs())
+    assert msg.linear_repeats is True
+    rebuilt = StepParamsCommitMessage.deserialize(msg.serialize())
+    assert rebuilt.linear_repeats is True

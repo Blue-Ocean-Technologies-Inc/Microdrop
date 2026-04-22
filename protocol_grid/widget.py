@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, warning, information
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, information
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -366,8 +366,6 @@ class PGCWidget(QWidget):
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
 
         self.status_bar = StatusBar(self)
-        self.status_bar.lbl_linear_repeats.clicked.connect(self._toggle_linear_repeats_preference)
-        self._refresh_linear_repeats_indicator()
 
         layout = QVBoxLayout()
 
@@ -706,6 +704,12 @@ class PGCWidget(QWidget):
                     device_state.to_dict()
                 )  # apply new device states to selected step
 
+                # Reconcile before model_to_state() reads cell text — otherwise a
+                # newly-linear-only step would persist its stale Repetitions /
+                # Repeat Duration into state.sequence before load_from_state()
+                # rebuilds the cells.
+                self._reconcile_step_freeze_state(target_item)
+
                 self.model_to_state()
                 self.load_from_state()
 
@@ -745,6 +749,7 @@ class PGCWidget(QWidget):
             "Trail Overlay":   str(commit_msg.trail_overlay),
             "Ramp Up":         "1" if commit_msg.soft_start else "0",
             "Ramp Dn":         "1" if commit_msg.soft_terminate else "0",
+            "Lin Reps":        "1" if commit_msg.linear_repeats else "0",
         }
 
         self._programmatic_change = True
@@ -891,36 +896,7 @@ class PGCWidget(QWidget):
 
         clear_recursive(self.model.invisibleRootItem())
 
-    def _refresh_linear_repeats_indicator(self):
-        """Re-read the Linear Repeats preference and update the status bar."""
-        try:
-            from protocol_grid.preferences import ProtocolPreferences
-            enabled = bool(ProtocolPreferences().linear_repeats)
-        except Exception:
-            enabled = False
-        self.status_bar.set_linear_repeats(enabled)
-
-    def _toggle_linear_repeats_preference(self):
-        """Flip the Linear Repeats preference and refresh the indicator.
-
-        Recomputes every step's derived columns (Run Time, etc.) and any
-        parent group aggregations so totals reflect the new mode
-        immediately — linear paths that now repeat add to Run Time, and
-        vice-versa when disabling.
-        """
-        try:
-            from protocol_grid.preferences import ProtocolPreferences
-            prefs = ProtocolPreferences()
-            prefs.linear_repeats = not bool(prefs.linear_repeats)
-        except Exception as e:
-            logger.error(f"Failed to toggle Linear Repeats preference: {e}", exc_info=True)
-            return
-        self._refresh_linear_repeats_indicator()
-        self.update_step_dev_fields()
-        self.update_all_group_aggregations()
-
     def update_status_bar(self, status):
-        self._refresh_linear_repeats_indicator()
         self.status_bar.lbl_total_time.setText(
             f"Total Time: {int(status['total_time'])} s"
         )
@@ -1450,7 +1426,6 @@ class PGCWidget(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         self.status_bar.lbl_repeat_protocol_status.setText("0/")
-        self._refresh_linear_repeats_indicator()
 
     def _update_ui_enabled_state(self):
         enabled = not self._protocol_running
@@ -1947,7 +1922,7 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
 
     def _handle_checkbox_change(self, parent, row, field):
-        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn"):
+        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn", "Lin Reps"):
             col = protocol_grid_fields.index(field)
             item = parent.child(row, col)
             if item:
@@ -2034,6 +2009,7 @@ class PGCWidget(QWidget):
             new_step.parameters["Trail Overlay"]   = str(dv_msg.execution_params["trail_overlay"])
             new_step.parameters["Ramp Up"]         = "1" if dv_msg.execution_params["soft_start"] else "0"
             new_step.parameters["Ramp Dn"]         = "1" if dv_msg.execution_params["soft_terminate"] else "0"
+            new_step.parameters["Lin Reps"]        = "1" if dv_msg.execution_params["linear_repeats"] else "0"
 
         new_step.device_state.from_dict(device_state.to_dict())
 
@@ -2683,8 +2659,16 @@ class PGCWidget(QWidget):
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
 
-            # Ramp Up/Dn affect Run Time — trigger recalculation
-            if field in ("Ramp Up", "Ramp Dn"):
+            # Turning Lin Reps off on a linear-only step will revert any custom
+            # Repetitions / Repeat Duration to 1 / 0 — confirm before proceeding.
+            if field == "Lin Reps":
+                desc_item = parent.child(row, 0)
+                if desc_item and not self._confirm_lin_reps_toggle_off(desc_item, parent, row):
+                    QTimer.singleShot(0, self._reset_undo_snapshotted)
+                    return
+
+            # Ramp Up/Dn and Lin Reps affect Run Time — trigger recalculation
+            if field in ("Ramp Up", "Ramp Dn", "Lin Reps"):
                 desc_item = parent.child(row, 0)
                 if desc_item and desc_item.data(ROW_TYPE_ROLE) == STEP_TYPE:
                     self.update_single_step_dev_fields(desc_item, changed_field=field)
@@ -2706,7 +2690,6 @@ class PGCWidget(QWidget):
             # Mode-switch handlers return False (and revert the edit) when the
             # user cancels the confirmation dialog, so we bail out early.
             if field == "Repetitions":
-                self._enforce_step_repetition_requires_loop(desc_item, item)
                 if not self._handle_repetitions_mode_switch(desc_item, item):
                     return
             elif field == "Repeat Duration":
@@ -3045,28 +3028,42 @@ class PGCWidget(QWidget):
         desc_item.setData(False, REPEAT_DURATION_CONTROLS_ROLE)
         return True
 
-    def _enforce_step_repetition_requires_loop(self, desc_item, repetitions_item):
-        """Revert Repetitions to 1 if the step has no looping route.
+    def _confirm_lin_reps_toggle_off(self, desc_item, parent, row):
+        """Warn before turning Lin Reps off on a linear-only step with custom reps.
 
-        Skipped when the Linear Repeats preference is on — in that mode,
-        linear paths honor Repetitions too, so the guard would be incorrect.
+        When the step has no loop path, ``_reconcile_step_freeze_state`` will
+        reset ``Repetitions`` to 1 and ``Repeat Duration`` to 0 once Lin Reps
+        goes off. If the user had set custom values there, this is silent data
+        loss — so we prompt first and revert the checkbox click on cancel.
+
+        Returns True if the toggle should proceed, False if it was reverted.
         """
-        try:
-            reps = int(repetitions_item.text() or "1")
-        except ValueError:
-            return
-        if reps <= 1:
-            return
+        if desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return True
+        if getattr(self, "_loading_from_file", False):
+            return True
+        if self._programmatic_change:
+            return True
 
         try:
-            from protocol_grid.preferences import ProtocolPreferences
-            if bool(ProtocolPreferences().linear_repeats):
-                return
-        except Exception:
-            pass
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            repetitions_col = protocol_grid_fields.index("Repetitions")
+            repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+        except ValueError:
+            return True
+
+        lin_reps_item = parent.child(row, lin_reps_col)
+        repetitions_item = parent.child(row, repetitions_col)
+        repeat_duration_item = parent.child(row, repeat_duration_col)
+        if not (lin_reps_item and repetitions_item and repeat_duration_item):
+            return True
+
+        # Only warn when the user just turned Lin Reps OFF.
+        if lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked:
+            return True
 
         device_state = desc_item.data(Qt.UserRole + 100)
-        has_loop = (
+        has_loop = bool(
             device_state
             and device_state.has_paths()
             and any(
@@ -3074,18 +3071,109 @@ class PGCWidget(QWidget):
                 for path in device_state.paths
             )
         )
-        if not has_loop:
-            self._programmatic_change = True
-            try:
-                repetitions_item.setText("1")
-            finally:
-                self._programmatic_change = False
-            warning(
-                None,
-                title="Repetitions Not Supported",
-                message="Repetitions > 1 require a route that forms a loop "
-                        "(start and end on the same electrode).",
+        # If the step has a loop path, turning Lin Reps off doesn't freeze
+        # anything — no data loss, no prompt needed.
+        if has_loop:
+            return True
+
+        try:
+            current_reps = int(repetitions_item.text() or "1")
+        except ValueError:
+            current_reps = 1
+        try:
+            current_repeat_dur = int(repeat_duration_item.text() or "0")
+        except ValueError:
+            current_repeat_dur = 0
+
+        if current_reps <= 1 and current_repeat_dur <= 0:
+            return True
+
+        result = confirm(
+            self,
+            "Turning Lin Reps off on a step with no loop path will reset "
+            "Repetitions and Repeat Duration to their defaults.",
+            title="Reset Repetitions?",
+            informative=(
+                f"This step currently has Repetitions = {current_reps} and "
+                f"Repeat Duration = {current_repeat_dur}. Without Lin Reps "
+                "and no loop path, these values have no effect and will be "
+                "reset to 1 and 0 respectively.<br><br>"
+                "Do you want to continue?"
+            ),
+            yes_label="Continue",
+            no_label="Cancel",
+        )
+        if result == YES:
+            return True
+
+        # Revert the checkbox click programmatically.
+        self._programmatic_change = True
+        try:
+            lin_reps_item.setData(Qt.Checked, Qt.CheckStateRole)
+            lin_reps_item.emitDataChanged()
+        finally:
+            self._programmatic_change = False
+        return False
+
+    def _reconcile_step_freeze_state(self, desc_item):
+        """Freeze Repetitions / Repeat Duration on linear-only steps with Lin Reps off.
+
+        A step is "frozen" when it has no loop path AND its ``Lin Reps`` cell is
+        off — in that mode, Repetitions > 1 is meaningless, so we pin the two
+        cells to ``"1"`` / ``"0"`` and disable editing. The cells become
+        editable again as soon as either condition flips (a loop route is added
+        or ``Lin Reps`` is toggled on).
+        """
+        if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return
+
+        parent = desc_item.parent() or self.model.invisibleRootItem()
+        row = desc_item.row()
+
+        try:
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            repetitions_col = protocol_grid_fields.index("Repetitions")
+            repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+        except ValueError:
+            return
+
+        lin_reps_item = parent.child(row, lin_reps_col)
+        repetitions_item = parent.child(row, repetitions_col)
+        repeat_duration_item = parent.child(row, repeat_duration_col)
+        if not (lin_reps_item and repetitions_item and repeat_duration_item):
+            return
+
+        lin_reps_on = lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked
+        device_state = desc_item.data(Qt.UserRole + 100)
+        has_loop = bool(
+            device_state
+            and device_state.has_paths()
+            and any(
+                len(path) >= 2 and path[0] == path[-1]
+                for path in device_state.paths
             )
+        )
+        frozen = (not has_loop) and (not lin_reps_on)
+
+        # All cell mutations below run as programmatic changes so the
+        # itemChanged re-entry from setText/setFlags doesn't trigger
+        # on_item_changed → update_single_step_dev_fields →
+        # _reconcile_step_freeze_state recursion.
+        prior_programmatic = self._programmatic_change
+        self._programmatic_change = True
+        try:
+            if frozen:
+                if repetitions_item.text() != "1":
+                    repetitions_item.setText("1")
+                if repeat_duration_item.text() != "0":
+                    repeat_duration_item.setText("0")
+                repetitions_item.setFlags(repetitions_item.flags() & ~Qt.ItemIsEditable)
+                repeat_duration_item.setFlags(repeat_duration_item.flags() & ~Qt.ItemIsEditable)
+            else:
+                repetitions_item.setFlags(repetitions_item.flags() | Qt.ItemIsEditable)
+                repeat_duration_item.setFlags(repeat_duration_item.flags() | Qt.ItemIsEditable)
+        finally:
+            self._programmatic_change = prior_programmatic
 
     def update_single_step_dev_fields(self, desc_item, changed_field=None):
         """Recalculate derived columns (Max. Path Length, Run Time, etc.) for one step row.
@@ -3111,6 +3199,8 @@ class PGCWidget(QWidget):
         """
         if not desc_item or desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
             return
+
+        self._reconcile_step_freeze_state(desc_item)
 
         parent = desc_item.parent() or self.model.invisibleRootItem()
         row = desc_item.row()
@@ -3166,6 +3256,10 @@ class PGCWidget(QWidget):
             is_soft_start = soft_start_item and soft_start_item.data(Qt.CheckStateRole) == Qt.Checked
             is_soft_end = soft_end_item and soft_end_item.data(Qt.CheckStateRole) == Qt.Checked
 
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            lin_reps_item = parent.child(row, lin_reps_col)
+            is_linear_repeats = bool(lin_reps_item and lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked)
+
             estimated_repeat_duration = self._calculate_estimated_repeat_duration(
                 device_state, repetitions, duration, trail_length, trail_overlay
             )
@@ -3195,6 +3289,7 @@ class PGCWidget(QWidget):
                 trail_overlay,
                 soft_start=is_soft_start,
                 soft_end=is_soft_end,
+                linear_repeats=is_linear_repeats,
             )
 
             self._programmatic_change = True

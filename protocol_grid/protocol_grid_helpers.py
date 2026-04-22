@@ -426,6 +426,7 @@ _EXEC_PARAM_FIELD_MAP = {
     "trail_overlay":   ("Trail Overlay",   int),
     "soft_start":      ("Ramp Up",         lambda s: str(s).strip() in ("1", "true", "True")),
     "soft_terminate":  ("Ramp Dn",         lambda s: str(s).strip() in ("1", "true", "True")),
+    "linear_repeats":  ("Lin Reps",        lambda s: str(s).strip() in ("1", "true", "True")),
 }
 
 

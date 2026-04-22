@@ -225,6 +225,16 @@ class RouteLayerManager(HasTraits):
 
     soft_start = Bool(False)
     soft_terminate = Bool(False)
+    linear_repeats = Bool(False)
+
+    # True when linear_repeats is off AND no layer contains a loop route —
+    # Repetitions / Repeat Duration are meaningless in that mode, so the
+    # sidebar spinners are disabled and the values are pinned to 1 / 0.
+    # Mirrored to DeviceViewMainModel.routes_repeats_frozen so the view's
+    # `enabled_when` binding picks it up (nested paths don't re-evaluate).
+    repeats_frozen = Property(
+        observe="linear_repeats,layers.items.route.route.items"
+    )
 
     # -------- Step-params commit state --------
     # Empty dict means no step is currently selected — commit button disabled.
@@ -244,7 +254,7 @@ class RouteLayerManager(HasTraits):
         observe=(
             "_committed_params_baseline.items,"
             "duration,repetitions,repeat_duration,"
-            "trail_length,trail_overlay,soft_start,soft_terminate"
+            "trail_length,trail_overlay,soft_start,soft_terminate,linear_repeats"
         )
     )
 
@@ -263,6 +273,7 @@ class RouteLayerManager(HasTraits):
             "trail_overlay": int(self.trail_overlay),
             "soft_start": bool(self.soft_start),
             "soft_terminate": bool(self.soft_terminate),
+            "linear_repeats": bool(self.linear_repeats),
         }
 
     def apply_execution_params(self, params: dict) -> None:
@@ -281,6 +292,7 @@ class RouteLayerManager(HasTraits):
                 trail_overlay=params["trail_overlay"],
                 soft_start=params["soft_start"],
                 soft_terminate=params["soft_terminate"],
+                linear_repeats=params["linear_repeats"],
             )
         self.mark_params_committed()
 
@@ -314,6 +326,24 @@ class RouteLayerManager(HasTraits):
     def _get_max_trail_overlay(self):
         """Computed upper bound for trail_overlay, recalculated when trail_length changes."""
         return self.trail_length - 1
+
+    def _get_repeats_frozen(self):
+        if self.linear_repeats:
+            return False
+        return not any(layer.route.is_loop() for layer in self.layers)
+
+    @observe("repeats_frozen")
+    def _repeats_frozen_changed(self, event):
+        """Reset Repetitions / Repeat Duration when the freeze kicks in.
+
+        When Lin Reps goes off on a linear-only layer set, the two controls
+        have no effect, so pin them to 1 / 0. The view disables the spinners
+        for the duration via ``enabled_when="not routes_repeats_frozen"``.
+        """
+        if not self.repeats_frozen:
+            return
+        with self._suppress_repeat_exclusion():
+            self.trait_set(repetitions=1, repeat_duration=0)
 
     # --------------------------- Model Helpers --------------------------
 
