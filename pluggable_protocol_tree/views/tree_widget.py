@@ -44,6 +44,35 @@ class ProtocolTreeWidget(QWidget):
         # Mirror Qt selection → RowManager selection
         self.tree.selectionModel().selectionChanged.connect(self._sync_selection)
 
+    # --- active-row highlight + scroll (called by the executor wiring) ---
+
+    def highlight_active_row(self, node):
+        """Mark `node` as the currently-active step and scroll to it.
+
+        Pass `None` to clear the highlight (typical at protocol end).
+        """
+        self.model.set_active_node(node)
+        if node is None:
+            return
+        idx = self._node_to_index(node)
+        if idx.isValid():
+            self.tree.scrollTo(idx, QTreeView.PositionAtCenter)
+            # Expand any collapsed ancestor groups so the row is visible.
+            parent = idx.parent()
+            while parent.isValid():
+                self.tree.expand(parent)
+                parent = parent.parent()
+
+    def _node_to_index(self, node):
+        """Walk the row's path to a QModelIndex on the first column."""
+        path = node.path
+        idx = self.model.index(path[0], 0) if path else self.model.index(-1, -1)
+        for r in path[1:]:
+            if not idx.isValid():
+                return idx
+            idx = self.model.index(r, 0, idx)
+        return idx
+
     # --- selection sync ---
 
     def _sync_selection(self, *_):

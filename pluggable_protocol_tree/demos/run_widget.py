@@ -64,19 +64,23 @@ class DemoWindow(QMainWindow):
         self._build_toolbar()
 
     def _wire_signals(self):
-        # Active-row highlighting
+        # Active-row highlighting. Only step_started + terminal signals
+        # touch the highlight — step_finished does NOT clear it, so the
+        # highlight stays on the just-finished row through the gap until
+        # the next step_started replaces it. (Clearing on step_finished
+        # makes the highlight flash off between steps and is invisible.)
         self.executor.qsignals.step_started.connect(
-            self.widget.model.set_active_node
+            self.widget.highlight_active_row
         )
-        self.executor.qsignals.step_finished.connect(
-            lambda _row: self.widget.model.set_active_node(None)
-        )
-        # Clean up highlight on terminal lifecycle signals
+        # Button state machine
+        self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
+        self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
+        self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
         for sig in (
             self.executor.qsignals.protocol_finished,
             self.executor.qsignals.protocol_aborted,
         ):
-            sig.connect(lambda: self.widget.model.set_active_node(None))
+            sig.connect(self._on_protocol_terminated)
         self.executor.qsignals.protocol_error.connect(self._on_error)
 
     def _build_toolbar(self):
@@ -88,20 +92,48 @@ class DemoWindow(QMainWindow):
         tb.addAction("Save…", self._save)
         tb.addAction("Load…", self._load)
         tb.addSeparator()
-        tb.addAction("Run",   self.executor.start)
+        self._run_action = tb.addAction("Run", self.executor.start)
         self._pause_action = tb.addAction("Pause", self._toggle_pause)
-        tb.addAction("Stop",  self.executor.stop)
+        self._stop_action = tb.addAction("Stop", self.executor.stop)
+        # Initial state: only Run is enabled.
+        self._set_idle_button_state()
+
+    def _set_idle_button_state(self):
+        self._run_action.setEnabled(True)
+        self._pause_action.setEnabled(False)
+        self._pause_action.setText("Pause")
+        self._stop_action.setEnabled(False)
+
+    def _set_running_button_state(self):
+        self._run_action.setEnabled(False)
+        self._pause_action.setEnabled(True)
+        self._pause_action.setText("Pause")
+        self._stop_action.setEnabled(True)
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
             self.executor.resume()
-            self._pause_action.setText("Pause")
         else:
             self.executor.pause()
-            self._pause_action.setText("Resume")
+
+    # --- protocol-state slot handlers ---
+
+    def _on_protocol_started(self):
+        self._set_running_button_state()
+
+    def _on_protocol_paused(self):
+        self._pause_action.setText("Resume")
+
+    def _on_protocol_resumed(self):
+        self._pause_action.setText("Pause")
+
+    def _on_protocol_terminated(self):
+        self.widget.highlight_active_row(None)
+        self._set_idle_button_state()
 
     def _on_error(self, msg):
-        self.widget.model.set_active_node(None)
+        self.widget.highlight_active_row(None)
+        self._set_idle_button_state()
         QMessageBox.critical(self, "Protocol error", msg)
 
     def _save(self):

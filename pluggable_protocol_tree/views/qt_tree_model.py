@@ -15,14 +15,16 @@ from pluggable_protocol_tree.models.row import GroupRow
 class MvcTreeModel(QAbstractItemModel):
     """Qt tree model over a RowManager.
 
-    An 'active' row (set via set_active_node) gets a light-green
-    background via BackgroundRole — used in PPT-2 by the executor to
-    highlight the running step. In PPT-1 this stays None.
+    An 'active' row (set via set_active_node) gets a blue background
+    with white foreground — used by the executor to highlight the
+    currently-running step (matching the legacy protocol_grid look).
+    In a non-running protocol this stays None.
     """
 
     structure_changed = Signal()   # high-level "redraw" nudge
 
-    _ACTIVE_BG = QBrush(QColor(200, 255, 200))
+    _ACTIVE_BG = QBrush(QColor(0, 90, 200))   # solid blue
+    _ACTIVE_FG = QBrush(QColor(255, 255, 255))
 
     def __init__(self, row_manager, parent=None):
         super().__init__(parent)
@@ -69,8 +71,11 @@ class MvcTreeModel(QAbstractItemModel):
         node = index.internalPointer()
         col = self._manager.columns[index.column()]
 
-        if role == Qt.BackgroundRole and node is self._active_node:
-            return self._ACTIVE_BG
+        if node is self._active_node:
+            if role == Qt.BackgroundRole:
+                return self._ACTIVE_BG
+            if role == Qt.ForegroundRole:
+                return self._ACTIVE_FG
 
         value = col.model.get_value(node)
 
