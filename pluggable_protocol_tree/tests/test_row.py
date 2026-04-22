@@ -168,3 +168,22 @@ def test_build_row_type_distinct_classes_do_not_share_traits():
     b = TypeB()
     assert hasattr(a, "a") and not hasattr(a, "b")
     assert hasattr(b, "b") and not hasattr(b, "a")
+
+
+def test_build_row_type_preserves_traits_semantics():
+    """type() construction must route through MetaHasTraits: validation
+    and observers must fire on dynamic-class instances. The whole design
+    rests on this; a regression here would be silent and dangerous."""
+    import pytest
+    from traits.api import TraitError
+
+    RowType = build_row_type([_mock_column("voltage", Float(0.0))], base=BaseRow)
+    r = RowType()
+
+    with pytest.raises(TraitError):
+        r.voltage = "not a float"
+
+    seen = []
+    r.observe(lambda e: seen.append((e.old, e.new)), "voltage")
+    r.voltage = 5.0
+    assert seen == [(0.0, 5.0)]
