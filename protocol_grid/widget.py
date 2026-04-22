@@ -2659,6 +2659,14 @@ class PGCWidget(QWidget):
         if field in CHECKBOX_COLS:
             self._handle_checkbox_change(parent, row, field)
 
+            # Turning Lin Reps off on a linear-only step will revert any custom
+            # Repetitions / Repeat Duration to 1 / 0 — confirm before proceeding.
+            if field == "Lin Reps":
+                desc_item = parent.child(row, 0)
+                if desc_item and not self._confirm_lin_reps_toggle_off(desc_item, parent, row):
+                    QTimer.singleShot(0, self._reset_undo_snapshotted)
+                    return
+
             # Ramp Up/Dn and Lin Reps affect Run Time — trigger recalculation
             if field in ("Ramp Up", "Ramp Dn", "Lin Reps"):
                 desc_item = parent.child(row, 0)
@@ -3019,6 +3027,93 @@ class PGCWidget(QWidget):
         # Switch back: clear flag, recalculate repeat duration as perfect multiple
         desc_item.setData(False, REPEAT_DURATION_CONTROLS_ROLE)
         return True
+
+    def _confirm_lin_reps_toggle_off(self, desc_item, parent, row):
+        """Warn before turning Lin Reps off on a linear-only step with custom reps.
+
+        When the step has no loop path, ``_reconcile_step_freeze_state`` will
+        reset ``Repetitions`` to 1 and ``Repeat Duration`` to 0 once Lin Reps
+        goes off. If the user had set custom values there, this is silent data
+        loss — so we prompt first and revert the checkbox click on cancel.
+
+        Returns True if the toggle should proceed, False if it was reverted.
+        """
+        if desc_item.data(ROW_TYPE_ROLE) != STEP_TYPE:
+            return True
+        if getattr(self, "_loading_from_file", False):
+            return True
+        if self._programmatic_change:
+            return True
+
+        try:
+            lin_reps_col = protocol_grid_fields.index("Lin Reps")
+            repetitions_col = protocol_grid_fields.index("Repetitions")
+            repeat_duration_col = protocol_grid_fields.index("Repeat Duration")
+        except ValueError:
+            return True
+
+        lin_reps_item = parent.child(row, lin_reps_col)
+        repetitions_item = parent.child(row, repetitions_col)
+        repeat_duration_item = parent.child(row, repeat_duration_col)
+        if not (lin_reps_item and repetitions_item and repeat_duration_item):
+            return True
+
+        # Only warn when the user just turned Lin Reps OFF.
+        if lin_reps_item.data(Qt.CheckStateRole) == Qt.Checked:
+            return True
+
+        device_state = desc_item.data(Qt.UserRole + 100)
+        has_loop = bool(
+            device_state
+            and device_state.has_paths()
+            and any(
+                len(path) >= 2 and path[0] == path[-1]
+                for path in device_state.paths
+            )
+        )
+        # If the step has a loop path, turning Lin Reps off doesn't freeze
+        # anything — no data loss, no prompt needed.
+        if has_loop:
+            return True
+
+        try:
+            current_reps = int(repetitions_item.text() or "1")
+        except ValueError:
+            current_reps = 1
+        try:
+            current_repeat_dur = int(repeat_duration_item.text() or "0")
+        except ValueError:
+            current_repeat_dur = 0
+
+        if current_reps <= 1 and current_repeat_dur <= 0:
+            return True
+
+        result = confirm(
+            self,
+            "Turning Lin Reps off on a step with no loop path will reset "
+            "Repetitions and Repeat Duration to their defaults.",
+            title="Reset Repetitions?",
+            informative=(
+                f"This step currently has Repetitions = {current_reps} and "
+                f"Repeat Duration = {current_repeat_dur}. Without Lin Reps "
+                "and no loop path, these values have no effect and will be "
+                "reset to 1 and 0 respectively.<br><br>"
+                "Do you want to continue?"
+            ),
+            yes_label="Continue",
+            no_label="Cancel",
+        )
+        if result == YES:
+            return True
+
+        # Revert the checkbox click programmatically.
+        self._programmatic_change = True
+        try:
+            lin_reps_item.setData(Qt.Checked, Qt.CheckStateRole)
+            lin_reps_item.emitDataChanged()
+        finally:
+            self._programmatic_change = False
+        return False
 
     def _reconcile_step_freeze_state(self, desc_item):
         """Freeze Repetitions / Repeat Duration on linear-only steps with Lin Reps off.
