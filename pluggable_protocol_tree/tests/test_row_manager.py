@@ -156,3 +156,52 @@ def test_get_row_by_uuid_searches_nested(manager):
     s = manager.add_step(parent_path=g)
     row = manager.get_row(s)
     assert manager.get_row_by_uuid(row.uuid) is row
+
+
+# --- clipboard ---
+
+def test_copy_paste_round_trip_preserves_names(manager):
+    a = manager.add_step(values={"name": "A", "duration_s": 2.0})
+    manager.select([a])
+    # Use an in-memory clipboard surrogate so tests don't depend on a
+    # running QApplication — RowManager exposes a serialize_selection
+    # helper that returns the payload, and paste_from_json accepts it.
+    payload = manager._serialize_selection()
+    assert payload["rows"][0][manager._field_index("name")] == "A"
+
+    manager._paste_from_payload(payload, target_path=None)
+    assert len(manager.root.children) == 2
+    assert manager.root.children[1].name == "A"
+
+
+def test_copy_paste_regenerates_uuids(manager):
+    a = manager.add_step()
+    original_uuid = manager.get_row(a).uuid
+    manager.select([a])
+    payload = manager._serialize_selection()
+    manager._paste_from_payload(payload, target_path=None)
+    pasted = manager.root.children[1]
+    assert pasted.uuid != original_uuid
+
+
+def test_cut_removes_originals(manager):
+    a = manager.add_step(values={"name": "A"})
+    b = manager.add_step(values={"name": "B"})
+    manager.select([a])
+    payload = manager._serialize_selection()
+    manager.remove([a])   # cut = copy + remove; here we drive manually
+    assert [r.name for r in manager.root.children] == ["B"]
+    manager._paste_from_payload(payload, target_path=None)
+    assert [r.name for r in manager.root.children] == ["B", "A"]
+
+
+def test_copy_paste_includes_children_of_groups(manager):
+    g = manager.add_group(name="G")
+    manager.add_step(parent_path=g, values={"name": "Inner"})
+    manager.select([g])
+    payload = manager._serialize_selection()
+    manager._paste_from_payload(payload, target_path=None)
+    copied_group = manager.root.children[1]
+    assert copied_group.name == "G"
+    assert len(copied_group.children) == 1
+    assert copied_group.children[0].name == "Inner"
