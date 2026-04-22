@@ -366,3 +366,56 @@ class RowManager(HasTraits):
         else:
             for _ in range(reps):
                 yield node
+
+    # --- slicing (pandas facade) ---
+
+    @property
+    def table(self):
+        """Snapshot DataFrame. Index = path tuples. Columns = col_ids.
+        Rebuilt on each access (O(N rows)); not cached."""
+        import pandas as pd
+        rows_data = []
+        index = []
+        for path, row in self._walk():
+            index.append(path)
+            row_vals = {}
+            for col in self.columns:
+                row_vals[col.model.col_id] = col.model.get_value(row)
+            rows_data.append(row_vals)
+        col_ids = [c.model.col_id for c in self.columns]
+        return pd.DataFrame(rows_data, index=pd.Index(index, tupleize_cols=False),
+                            columns=col_ids)
+
+    def _walk(self, node=None, prefix=()):
+        """Depth-first traversal yielding (path, row). Skips the root."""
+        if node is None:
+            for i, child in enumerate(self.root.children):
+                yield from self._walk(child, (i,))
+            return
+        yield (prefix, node)
+        if isinstance(node, GroupRow):
+            for i, child in enumerate(node.children):
+                yield from self._walk(child, prefix + (i,))
+
+    def rows(self, selector):
+        df = self.table
+        if isinstance(selector, slice):
+            return df.iloc[selector]
+        if callable(selector):
+            mask = df.apply(selector, axis=1)
+            return df[mask]
+        if isinstance(selector, list):
+            # selector is a list of path tuples
+            return df.loc[[tuple(p) for p in selector]]
+        raise TypeError(f"Unsupported selector type: {type(selector)}")
+
+    def cols(self, col_ids):
+        return self.table[list(col_ids)]
+
+    def slice(self, rows=None, cols=None):
+        df = self.table
+        if rows is not None:
+            df = self.rows(rows) if not isinstance(rows, slice) else df.iloc[rows]
+        if cols is not None:
+            df = df[list(cols)]
+        return df

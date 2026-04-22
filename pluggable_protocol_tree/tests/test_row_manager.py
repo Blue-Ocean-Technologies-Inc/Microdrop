@@ -247,3 +247,58 @@ def test_iter_execution_group_repetitions_expand(manager):
     setattr(manager.get_row(g), "repetitions", 2)
     names = [r.name for r in manager.iter_execution_steps()]
     assert names == ["A", "B", "A", "B"]
+
+
+# --- slicing ---
+
+import pandas as pd
+
+
+def test_table_is_dataframe_indexed_by_path(manager):
+    manager.add_step(values={"name": "A", "duration_s": 2.0})
+    manager.add_step(values={"name": "B", "duration_s": 3.0})
+    df = manager.table
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.index) == [(0,), (1,)]
+    assert "name" in df.columns
+    assert "duration_s" in df.columns
+
+
+def test_table_values_correct(manager):
+    p = manager.add_step(values={"name": "X", "duration_s": 4.5})
+    df = manager.table
+    # Use iloc to avoid pandas' (label,) tuple-vs-2-arg ambiguity on .loc
+    assert df.iloc[0]["name"] == "X"
+    assert df.iloc[0]["duration_s"] == 4.5
+
+
+def test_cols_subset(manager):
+    manager.add_step(values={"name": "A", "duration_s": 1.0})
+    manager.add_step(values={"name": "B", "duration_s": 2.0})
+    df = manager.cols(["duration_s"])
+    assert list(df.columns) == ["duration_s"]
+    assert df.shape == (2, 1)
+
+
+def test_rows_slice(manager):
+    for i in range(5):
+        manager.add_step(values={"name": f"S{i}"})
+    df = manager.rows(slice(1, 3))
+    assert df.shape[0] == 2
+    assert df.iloc[0]["name"] == "S1"
+
+
+def test_rows_predicate(manager):
+    manager.add_step(values={"name": "A", "duration_s": 1.0})
+    manager.add_step(values={"name": "B", "duration_s": 5.0})
+    df = manager.rows(lambda r: r["duration_s"] > 3.0)
+    assert df.shape[0] == 1
+    assert df.iloc[0]["name"] == "B"
+
+
+def test_slice_combines_rows_and_cols(manager):
+    manager.add_step(values={"name": "A", "duration_s": 1.0})
+    manager.add_step(values={"name": "B", "duration_s": 2.0})
+    df = manager.slice(rows=slice(0, 1), cols=["name"])
+    assert df.shape == (1, 1)
+    assert df.iloc[0]["name"] == "A"
