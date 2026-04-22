@@ -1922,7 +1922,7 @@ class PGCWidget(QWidget):
         return "1" if self._is_checkbox_checked(value) else "0"
 
     def _handle_checkbox_change(self, parent, row, field):
-        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn"):
+        if field in ("Video", "Capture", "Record", "Ramp Up", "Ramp Dn", "Lin Reps"):
             col = protocol_grid_fields.index(field)
             item = parent.child(row, col)
             if item:
