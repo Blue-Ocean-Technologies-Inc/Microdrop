@@ -8,7 +8,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from PySide6.QtGui import QStandardItem
+from PySide6.QtGui import QStandardItem, QBrush, QColor
+
+from microdrop_style.helpers import is_dark_mode
 
 from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
@@ -54,6 +56,27 @@ class ProtocolGridDelegate(QStyledItemDelegate):
                 self._voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
         else:
             self._voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
+
+    # Light-grey fill for read-only cells so they visually match the column
+    # header row (issue #359). A cell is "read-only" here when the item is not
+    # editable AND not user-checkable — checkbox cells are non-editable by
+    # design but remain interactive, so we leave them alone.
+    _READ_ONLY_BG_LIGHT = QColor("#E8E8E8")
+    _READ_ONLY_BG_DARK = QColor("#3A3A3A")
+
+    @classmethod
+    def _read_only_brush(cls):
+        return QBrush(cls._READ_ONLY_BG_DARK if is_dark_mode() else cls._READ_ONLY_BG_LIGHT)
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        model = index.model()
+        item = model.itemFromIndex(index) if hasattr(model, "itemFromIndex") else None
+        if item is None:
+            return
+        flags = item.flags()
+        if not (flags & Qt.ItemIsEditable) and not (flags & Qt.ItemIsUserCheckable):
+            option.backgroundBrush = self._read_only_brush()
 
     def paint(self, painter, option, index):
         """
