@@ -302,3 +302,27 @@ def test_slice_combines_rows_and_cols(manager):
     df = manager.slice(rows=slice(0, 1), cols=["name"])
     assert df.shape == (1, 1)
     assert df.iloc[0]["name"] == "A"
+
+
+# --- bulk write ---
+
+def test_set_value_single(manager):
+    p = manager.add_step()
+    manager.set_value(p, "name", "Updated")
+    assert manager.get_row(p).name == "Updated"
+
+
+def test_set_values_bulk(manager):
+    a = manager.add_step()
+    b = manager.add_step()
+    manager.set_values([a, b], "duration_s", 4.2)
+    assert manager.get_row(a).duration_s == 4.2
+    assert manager.get_row(b).duration_s == 4.2
+
+
+def test_apply_runs_callable_per_row(manager):
+    a = manager.add_step(values={"duration_s": 1.0})
+    b = manager.add_step(values={"duration_s": 2.0})
+    manager.apply([a, b], lambda r: setattr(r, "duration_s", r.duration_s * 10))
+    assert manager.get_row(a).duration_s == 10.0
+    assert manager.get_row(b).duration_s == 20.0

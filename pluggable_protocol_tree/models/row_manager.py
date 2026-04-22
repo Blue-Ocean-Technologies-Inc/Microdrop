@@ -419,3 +419,28 @@ class RowManager(HasTraits):
         if cols is not None:
             df = df[list(cols)]
         return df
+
+    # --- imperative bulk write ---
+
+    def set_value(self, path: Path, col_id: str, value) -> None:
+        col = self._column_by_id(col_id)
+        row = self.get_row(path)
+        col.model.set_value(row, value)
+        self.rows_changed = True
+
+    def set_values(self, paths: List[Path], col_id: str, value) -> None:
+        col = self._column_by_id(col_id)
+        for p in paths:
+            col.model.set_value(self.get_row(p), value)
+        self.rows_changed = True
+
+    def apply(self, paths: List[Path], fn) -> None:
+        for p in paths:
+            fn(self.get_row(p))
+        self.rows_changed = True
+
+    def _column_by_id(self, col_id: str) -> IColumn:
+        for c in self.columns:
+            if c.model.col_id == col_id:
+                return c
+        raise KeyError(col_id)
