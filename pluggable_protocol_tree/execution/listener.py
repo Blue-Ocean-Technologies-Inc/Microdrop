@@ -62,13 +62,16 @@ def route_to_active_step(topic: str, payload) -> None:
 
 @dramatiq.actor(actor_name="pluggable_protocol_tree_executor_listener",
                 queue_name="default")
-def executor_listener(message: dict) -> None:
-    """Receives every message on any topic in the aggregated
-    wait_for_topics set. Conforms to the project's message-router
-    payload shape: ``{"topic": ..., "message": ...}`` (the message
-    router's publish_message wraps user payloads in this envelope)."""
-    topic = message.get("topic")
-    payload = message.get("message")
-    if topic is None:
-        return
-    route_to_active_step(topic, payload)
+def executor_listener(message: str, topic: str, timestamp: float = None) -> None:
+    """Receives every message routed by message_router_actor on any
+    topic the plugin aggregated from contributed handlers'
+    wait_for_topics. Signature mirrors the project's message-router
+    contract: ``(message, topic, timestamp)`` — see
+    DramatiqControllerBase._listener_actor_default for reference.
+
+    The payload is whatever ``publish_message(message=..., topic=...)``
+    sent, after str()-conversion via TimestampedMessage. Handlers that
+    publish JSON-encoded dicts json.loads() the result on the
+    receiving side.
+    """
+    route_to_active_step(topic, message)
