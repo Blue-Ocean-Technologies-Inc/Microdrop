@@ -444,3 +444,9 @@ class RowManager(HasTraits):
             if c.model.col_id == col_id:
                 return c
         raise KeyError(col_id)
+
+    # --- persistence ---
+
+    def to_json(self) -> dict:
+        from pluggable_protocol_tree.services.persistence import serialize_tree
+        return serialize_tree(self.root, list(self.columns))
