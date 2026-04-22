@@ -153,10 +153,29 @@ class ProtocolExecutor(HasTraits):
 
     def _build_step_ctx(self, row, cols, proto_ctx) -> StepContext:
         """Construct a fresh StepContext and pre-open one mailbox per
-        topic in the union of all handlers' wait_for_topics."""
+        topic in the union of all handlers' wait_for_topics.
+
+        Raises ValueError if two columns *in the same priority bucket*
+        declare the same topic — they'd race for the mailbox under
+        parallel fan-out, and we don't yet have a use case for
+        broadcast-to-multiple-waiters semantics. Same topic in
+        different buckets is fine (sequential).
+        """
         step_ctx = StepContext(row=row, protocol=proto_ctx)
+        # Detect within-bucket topic collisions before opening any boxes.
+        per_priority_topics: dict[int, dict[str, str]] = {}  # priority → topic → col_id
         for col in cols:
-            for topic in (col.handler.wait_for_topics or []):
+            topics = col.handler.wait_for_topics or []
+            bucket = per_priority_topics.setdefault(col.handler.priority, {})
+            for topic in topics:
+                if topic in bucket:
+                    raise ValueError(
+                        f"Topic conflict: columns {bucket[topic]!r} and "
+                        f"{col.model.col_id!r} both declare wait_for_topics={topic!r} "
+                        f"at the same priority bucket ({col.handler.priority}); "
+                        f"they would race for the mailbox."
+                    )
+                bucket[topic] = col.model.col_id
                 step_ctx.open_mailbox(topic)
         return step_ctx
 

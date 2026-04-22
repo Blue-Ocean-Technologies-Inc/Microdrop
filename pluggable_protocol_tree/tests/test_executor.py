@@ -313,3 +313,118 @@ def test_run_hooks_all_five_phases_fire_in_order_for_one_step():
         "on_pre_step", "on_step", "on_post_step",
         "on_protocol_end",
     ]
+
+
+# --- same-topic conflict + error propagation ---
+
+def _handler_with_topic(name, priority, topic, log):
+    class _H(BaseColumnHandler):
+        wait_for_topics = [topic]
+        def on_step(self, row, ctx):
+            log.append((name, "on_step"))
+    h = _H()
+    h.priority = priority
+    return h
+
+
+def _column_with_topic_handler(col_id, priority, topic, log):
+    return Column(
+        model=BaseColumnModel(col_id=col_id, col_name=col_id, default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_handler_with_topic(col_id, priority, topic, log),
+    )
+
+
+def test_same_topic_in_same_priority_bucket_raises():
+    """Two columns both declaring the same wait_for_topic at the same
+    priority would race for the mailbox. Detected at step start."""
+    log = []
+    a = _column_with_topic_handler("a", 20, "shared/topic", log)
+    b = _column_with_topic_handler("b", 20, "shared/topic", log)
+    ex = _executor_with([a, b])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    # Surfaces as a protocol_error (the _build_step_ctx assertion raises).
+    assert spy.events[-1][0] == "protocol_error"
+    assert "shared/topic" in spy.events[-1][1]
+
+
+def test_same_topic_different_priority_buckets_is_fine():
+    """Sequential — no race. Should not raise."""
+    log = []
+    a = _column_with_topic_handler("a", 10, "shared/topic", log)
+    b = _column_with_topic_handler("b", 30, "shared/topic", log)
+    ex = _executor_with([a, b])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    assert spy.events[-1] == ("protocol_finished",)
+
+
+def test_hook_exception_emits_protocol_error_not_finished():
+    log = []
+
+    class _Boom(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            raise RuntimeError("kaboom")
+
+    col = Column(
+        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_Boom(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    err_events = [e for e in spy.events if e[0] == "protocol_error"]
+    assert len(err_events) == 1
+    assert "kaboom" in err_events[0][1]
+    # Did NOT emit finished or aborted.
+    assert ("protocol_finished",) not in spy.events
+    assert ("protocol_aborted",) not in spy.events
+
+
+def test_on_protocol_end_runs_even_on_error():
+    """Best-effort cleanup: if on_step raises, on_protocol_end still
+    fires (in the except branch's fallback)."""
+    log = []
+
+    class _Boom(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            raise RuntimeError("kaboom")
+        def on_protocol_end(self, ctx):
+            log.append("end_ran")
+
+    col = Column(
+        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_Boom(),
+    )
+    ex = _executor_with([col])
+    ex.run()
+    assert "end_ran" in log
+
+
+def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
+    """If both on_step AND on_protocol_end raise, the original error
+    wins (it's what surfaces as protocol_error) and the on_protocol_end
+    exception is logged but not re-raised."""
+    log = []
+
+    class _DoubleBoom(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            raise RuntimeError("first")
+        def on_protocol_end(self, ctx):
+            raise RuntimeError("second")
+
+    col = Column(
+        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_DoubleBoom(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    err_events = [e for e in spy.events if e[0] == "protocol_error"]
+    assert len(err_events) == 1
+    assert "first" in err_events[0][1]
+    assert "second" not in err_events[0][1]
