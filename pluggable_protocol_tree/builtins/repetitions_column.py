@@ -10,6 +10,7 @@ new protocols. The fallback is kept for safety against persisted
 protocols that pre-date the column.
 """
 
+from pyface.qt.QtCore import Qt
 from traits.api import Int
 
 from pluggable_protocol_tree.models.column import BaseColumnModel, Column
@@ -22,10 +23,23 @@ class RepetitionsColumnModel(BaseColumnModel):
                             "expand subtree N×)")
 
 
+class RepsSpinBoxColumnView(IntSpinBoxColumnView):
+    """IntSpinBoxColumnView variant that stays editable on group rows.
+
+    The base IntSpinBoxColumnView strips ItemIsEditable on GroupRow
+    cells (numbers don't apply to most group columns). Repetitions IS
+    meaningful on groups — it multiplies the child subtree — so groups
+    must be editable here too.
+    """
+
+    def get_flags(self, row):
+        return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable
+
+
 def make_repetitions_column():
     return Column(
         model=RepetitionsColumnModel(
             col_id="repetitions", col_name="Reps", default_value=1,
         ),
-        view=IntSpinBoxColumnView(low=1, high=1000),
+        view=RepsSpinBoxColumnView(low=1, high=1000),
     )

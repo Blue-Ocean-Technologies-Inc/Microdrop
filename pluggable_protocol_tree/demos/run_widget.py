@@ -88,6 +88,7 @@ class DemoWindow(QMainWindow):
             self.widget.highlight_active_row
         )
         # Status bar updates
+        self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
         self.executor.qsignals.step_started.connect(self._on_step_started)
         self.executor.qsignals.step_finished.connect(self._on_step_finished)
         # Button state machine
@@ -140,11 +141,13 @@ class DemoWindow(QMainWindow):
         sb = QStatusBar()
         self.setStatusBar(sb)
         self._status_step_label = QLabel("Idle")
-        self._status_time_label = QLabel("")
         self._status_row_label = QLabel("")
-        # First two stretch=0 (fixed width to text); row label takes the rest.
+        self._status_reps_label = QLabel("")
+        self._status_time_label = QLabel("")
+        # Row label takes any remaining width via stretch=1.
         sb.addWidget(self._status_step_label)
         sb.addWidget(self._status_row_label, stretch=1)
+        sb.addPermanentWidget(self._status_reps_label)
         sb.addPermanentWidget(self._status_time_label)
 
     def _reset_status(self):
@@ -155,6 +158,7 @@ class DemoWindow(QMainWindow):
         self._current_row = None
         self._status_step_label.setText("Idle")
         self._status_row_label.setText("")
+        self._status_reps_label.setText("")
         self._status_time_label.setText("")
 
     def _refresh_status(self):
@@ -182,6 +186,16 @@ class DemoWindow(QMainWindow):
             self._step_total = 0
         self._step_index = 0
         self._status_step_label.setText(f"Step 0 / {self._step_total}")
+
+    def _on_step_repetition(self, rep_chain):
+        """Render the active rep context — e.g. "rep 2/3 of 'Wash'" —
+        into the status bar. Empty chain (no repeating ancestor) clears."""
+        if not rep_chain:
+            self._status_reps_label.setText("")
+            return
+        parts = [f"rep {idx}/{total} of '{name}'"
+                 for name, idx, total in rep_chain]
+        self._status_reps_label.setText(" · ".join(parts))
 
     def _on_step_started(self, row):
         self._step_index += 1

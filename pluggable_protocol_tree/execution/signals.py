@@ -23,3 +23,8 @@ class ExecutorSignals(QObject):
     # Per-step
     step_started       = Signal(object)     # row
     step_finished      = Signal(object)     # row
+    # Tuple of (group_name, rep_idx_1based, rep_total) entries describing
+    # the active rep context for the current step (outermost-first).
+    # Empty tuple means "no repeating ancestor". Emitted just before
+    # each step_started so UI labels can update in lockstep.
+    step_repetition    = Signal(object)

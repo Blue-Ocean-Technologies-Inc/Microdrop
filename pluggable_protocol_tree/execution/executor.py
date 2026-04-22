@@ -117,7 +117,7 @@ class ProtocolExecutor(HasTraits):
             logger.info("Protocol started")
 
             step_index = 0
-            for row in self.row_manager.iter_execution_steps():
+            for row, rep_chain in self.row_manager.iter_execution_frames():
                 if self.stop_event.is_set():
                     break
                 if self.pause_event.is_set():
@@ -129,16 +129,25 @@ class ProtocolExecutor(HasTraits):
 
                 step_index += 1
                 step_started_at = _time.monotonic()
+                rep_str = (
+                    " | " + ", ".join(f"rep {i}/{n} of {name!r}"
+                                      for name, i, n in rep_chain)
+                    if rep_chain else ""
+                )
                 logger.info(
-                    "Step %d started: %r (path %s, duration_s=%s)",
+                    "Step %d started: %r (path %s, duration_s=%s)%s",
                     step_index, row.name,
                     _dotted_path(row.path),
                     getattr(row, "duration_s", None),
+                    rep_str,
                 )
 
                 step_ctx = self._build_step_ctx(row, cols, proto_ctx)
                 set_active_step(step_ctx)
                 try:
+                    # Rep info first so UI labels are populated before the
+                    # row-highlight fires from step_started.
+                    self.qsignals.step_repetition.emit(rep_chain)
                     self.qsignals.step_started.emit(row)
                     self._run_hooks("on_pre_step",  cols, step_ctx, row)
                     self._run_hooks("on_step",      cols, step_ctx, row)

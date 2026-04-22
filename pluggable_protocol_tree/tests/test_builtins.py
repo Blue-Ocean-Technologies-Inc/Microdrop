@@ -153,3 +153,13 @@ def test_repetitions_column_metadata():
     col = make_repetitions_column()
     assert col.model.col_id == "repetitions"
     assert col.model.col_name == "Reps"
+
+
+def test_repetitions_column_editable_on_groups():
+    """Reps must be editable on group rows — that's the whole point of
+    group repetitions. The base IntSpinBoxColumnView strips
+    ItemIsEditable on groups; the reps column overrides that."""
+    from pyface.qt.QtCore import Qt
+    col = make_repetitions_column()
+    flags = col.view.get_flags(GroupRow())
+    assert flags & Qt.ItemIsEditable
