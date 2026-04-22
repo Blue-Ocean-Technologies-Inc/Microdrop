@@ -108,3 +108,95 @@ def test_executor_stop_sets_stop_event_and_clears_pause():
     ex.stop()
     assert ex.stop_event.is_set() is True
     assert ex.pause_event.is_set() is False
+
+
+# --- ProtocolExecutor.run() — main loop ---
+
+import time
+
+from pluggable_protocol_tree.execution.signals import ExecutorSignals
+
+
+class _SignalSpy:
+    """Collects signal emissions into a list for assertion."""
+    def __init__(self, sigs: ExecutorSignals):
+        self.events = []
+        sigs.protocol_started.connect(lambda: self.events.append(("protocol_started",)))
+        sigs.step_started.connect(lambda r: self.events.append(("step_started", r.name)))
+        sigs.step_finished.connect(lambda r: self.events.append(("step_finished", r.name)))
+        sigs.protocol_finished.connect(lambda: self.events.append(("protocol_finished",)))
+        sigs.protocol_aborted.connect(lambda: self.events.append(("protocol_aborted",)))
+        sigs.protocol_error.connect(lambda m: self.events.append(("protocol_error", m)))
+
+
+def test_run_empty_protocol_emits_started_then_finished():
+    ex = _make_executor()
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()       # synchronous; bypasses start()/QThread
+    assert spy.events[0] == ("protocol_started",)
+    assert spy.events[-1] == ("protocol_finished",)
+
+
+def test_run_three_steps_emits_step_signals_in_order():
+    ex = _make_executor()
+    a = ex.row_manager.add_step(values={"name": "A"})
+    b = ex.row_manager.add_step(values={"name": "B"})
+    c = ex.row_manager.add_step(values={"name": "C"})
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    step_events = [e for e in spy.events if e[0] in ("step_started", "step_finished")]
+    assert step_events == [
+        ("step_started", "A"), ("step_finished", "A"),
+        ("step_started", "B"), ("step_finished", "B"),
+        ("step_started", "C"), ("step_finished", "C"),
+    ]
+
+
+def test_run_stop_pre_set_aborts_immediately():
+    ex = _make_executor()
+    ex.row_manager.add_step(values={"name": "A"})
+    ex.row_manager.add_step(values={"name": "B"})
+    ex.stop_event.set()
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    # No step events; terminal is aborted, not finished.
+    assert ("step_started", "A") not in spy.events
+    assert spy.events[-1] == ("protocol_aborted",)
+
+
+def test_run_pause_then_resume_blocks_then_continues():
+    """Set pause_event before calling run() so iter_execution_steps's
+    first iteration hits wait_cleared(). Then clear it from another
+    thread to release."""
+    ex = _make_executor()
+    ex.row_manager.add_step(values={"name": "A"})
+    ex.pause_event.set()
+    spy = _SignalSpy(ex.qsignals)
+
+    def resumer():
+        time.sleep(0.05)
+        ex.pause_event.clear()
+
+    threading.Thread(target=resumer, daemon=True).start()
+    start = time.monotonic()
+    ex.run()
+    elapsed = time.monotonic() - start
+    # We waited ~50ms before resume; protocol then completed quickly.
+    assert elapsed >= 0.05
+    assert spy.events[-1] == ("protocol_finished",)
+
+
+def test_run_stop_while_paused_breaks_out():
+    """Regression for the deadlock-avoidance code in stop()."""
+    ex = _make_executor()
+    ex.row_manager.add_step(values={"name": "A"})
+    ex.pause_event.set()
+    spy = _SignalSpy(ex.qsignals)
+
+    def stopper():
+        time.sleep(0.05)
+        ex.stop()
+
+    threading.Thread(target=stopper, daemon=True).start()
+    ex.run()
+    assert spy.events[-1] == ("protocol_aborted",)

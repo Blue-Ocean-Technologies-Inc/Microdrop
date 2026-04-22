@@ -24,7 +24,13 @@ from pyface.qt.QtCore import QThread
 from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
 
 from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.listener import (
+    set_active_step, clear_active_step,
+)
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
+from pluggable_protocol_tree.execution.step_context import (
+    ProtocolContext, StepContext,
+)
 from pluggable_protocol_tree.models.row_manager import RowManager
 
 
@@ -81,8 +87,95 @@ class ProtocolExecutor(HasTraits):
         self.stop_event.set()
         self.pause_event.clear()
 
-    # ------- main loop (overridden in Task 9) -------
+    # ------- main loop -------
 
     def run(self) -> None:
-        """Stub — fully implemented in Task 9."""
-        raise NotImplementedError("run() lands in Task 9")
+        """Main loop. Runs synchronously when called directly (tests),
+        or on its QThread when entered via start()."""
+        cols = list(self.row_manager.columns)
+        proto_ctx = ProtocolContext(
+            columns=cols, stop_event=self.stop_event,
+        )
+        try:
+            self._run_hooks("on_protocol_start", cols, proto_ctx, row=None)
+            self.qsignals.protocol_started.emit()
+
+            for row in self.row_manager.iter_execution_steps():
+                if self.stop_event.is_set():
+                    break
+                if self.pause_event.is_set():
+                    self.pause_event.wait_cleared()
+                    if self.stop_event.is_set():
+                        break
+
+                step_ctx = self._build_step_ctx(row, cols, proto_ctx)
+                set_active_step(step_ctx)
+                try:
+                    self.qsignals.step_started.emit(row)
+                    self._run_hooks("on_pre_step",  cols, step_ctx, row)
+                    self._run_hooks("on_step",      cols, step_ctx, row)
+                    self._run_hooks("on_post_step", cols, step_ctx, row)
+                    self.qsignals.step_finished.emit(row)
+                finally:
+                    clear_active_step()
+
+            # on_protocol_end runs even on stop, as best-effort cleanup.
+            self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
+
+        except Exception as e:
+            self._error = e
+            logger.exception("Protocol error")
+            try:
+                self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
+            except Exception:
+                logger.exception("on_protocol_end raised during error cleanup")
+
+        finally:
+            self._emit_terminal_signal()
+            if self._thread is not None:
+                self._thread.quit()
+
+    # ------- helpers -------
+
+    def _emit_terminal_signal(self) -> None:
+        """Single source of truth for which lifecycle-end signal fires.
+
+        Order matters: an in-loop exception (recorded as self._error)
+        wins over user Stop, which wins over normal completion.
+        """
+        if self._error is not None:
+            self.qsignals.protocol_error.emit(str(self._error))
+        elif self.stop_event.is_set():
+            self.qsignals.protocol_aborted.emit()
+        else:
+            self.qsignals.protocol_finished.emit()
+
+    def _build_step_ctx(self, row, cols, proto_ctx) -> StepContext:
+        """Construct a fresh StepContext and pre-open one mailbox per
+        topic in the union of all handlers' wait_for_topics."""
+        step_ctx = StepContext(row=row, protocol=proto_ctx)
+        for col in cols:
+            for topic in (col.handler.wait_for_topics or []):
+                step_ctx.open_mailbox(topic)
+        return step_ctx
+
+    def _run_hooks(self, hook_name, cols, ctx, row) -> None:
+        """Stub — full priority-bucket implementation lands in Task 10.
+        Until then, run hooks sequentially in given order so the run-loop
+        tests can pass without depending on the bucket fan-out yet."""
+        for col in cols:
+            self._invoke_hook(col, hook_name, ctx, row)
+
+    def _invoke_hook(self, col, hook_name, ctx, row) -> None:
+        """Dispatch to the handler's named hook with the right signature.
+
+        Per-step hooks take (row, ctx); protocol-level take (ctx).
+        Default handlers from BaseColumnHandler are no-ops, so calling
+        them on every column is safe (and cheaper than introspecting
+        which columns override).
+        """
+        fn = getattr(col.handler, hook_name)
+        if hook_name in ("on_protocol_start", "on_protocol_end"):
+            fn(ctx)
+        else:
+            fn(row, ctx)
