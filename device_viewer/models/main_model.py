@@ -44,6 +44,11 @@ class DeviceViewMainModel(HasTraits):
     # `object.routes.commit_enabled` don't re-evaluate reliably in enabled_when.
     routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
 
+    # Mirror of routes.repeats_frozen at the top level so the sidebar's
+    # Repetitions / Repeat Duration spinners re-evaluate `enabled_when`
+    # reliably when a loop is added/removed or Lin Reps is toggled.
+    routes_repeats_frozen = DelegatesTo("routes", prefix="repeats_frozen")
+
     # route Execution status display
     execution_status = Str("")
 

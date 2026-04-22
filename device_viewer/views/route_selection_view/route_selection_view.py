@@ -100,9 +100,11 @@ UItem('object.routes.trail_overlay',
       tooltip="electrodes actuated from one step to overlay onto next step"),
 UItem('object.routes.repetitions',
       editor=RangeEditor(low=1, high=10000, mode='spinner'),
+      enabled_when="not object.routes_repeats_frozen",
       tooltip="Times to repeat loops execution"),
 UItem('object.routes.repeat_duration',
       editor=RangeEditor(low=0, high=10000, mode='spinner'),
+      enabled_when="not object.routes_repeats_frozen",
       tooltip="Seconds to repeat path executions. Idle time in end if loop cannot be completed"),
 )
 
