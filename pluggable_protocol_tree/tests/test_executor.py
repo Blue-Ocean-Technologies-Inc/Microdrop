@@ -200,3 +200,116 @@ def test_run_stop_while_paused_breaks_out():
     threading.Thread(target=stopper, daemon=True).start()
     ex.run()
     assert spy.events[-1] == ("protocol_aborted",)
+
+
+# --- priority bucket fan-out ---
+
+from traits.api import HasTraits, Int, List, provides, Str
+
+from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
+from pluggable_protocol_tree.models.column import (
+    BaseColumnHandler, BaseColumnModel, Column,
+)
+from pluggable_protocol_tree.views.columns.readonly_label import (
+    ReadOnlyLabelColumnView,
+)
+
+
+def _recording_handler(name, priority, log: list, barrier=None):
+    """Build a handler that appends (name, hook_name) to `log` on each
+    fire. Optional `barrier` makes the handler block on a threading
+    barrier inside on_step (used to prove parallel execution)."""
+    class _H(BaseColumnHandler):
+        def on_protocol_start(self, ctx):  log.append((name, "on_protocol_start"))
+        def on_pre_step(self, row, ctx):   log.append((name, "on_pre_step"))
+        def on_step(self, row, ctx):
+            log.append((name, "on_step"))
+            if barrier is not None:
+                barrier.wait(timeout=2.0)
+        def on_post_step(self, row, ctx):  log.append((name, "on_post_step"))
+        def on_protocol_end(self, ctx):    log.append((name, "on_protocol_end"))
+    h = _H()
+    h.priority = priority
+    return h
+
+
+def _make_recording_column(col_id, priority, log, barrier=None):
+    return Column(
+        model=BaseColumnModel(col_id=col_id, col_name=col_id, default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_recording_handler(col_id, priority, log, barrier),
+    )
+
+
+def _executor_with(cols):
+    """Build an executor on a fresh RowManager containing one step,
+    with the given extra columns layered on top of the four PPT-1
+    builtins (so iter_execution_steps yields one row)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    builtins = [make_type_column(), make_id_column(),
+                make_name_column(), make_duration_column()]
+    rm = RowManager(columns=builtins + list(cols))
+    rm.add_step(values={"name": "A"})
+    return ProtocolExecutor(
+        row_manager=rm,
+        qsignals=ExecutorSignals(),
+        pause_event=PauseEvent(),
+        stop_event=threading.Event(),
+    )
+
+
+def test_run_hooks_orders_buckets_by_priority():
+    log = []
+    low = _make_recording_column("low", priority=10, log=log)
+    high = _make_recording_column("high", priority=30, log=log)
+    ex = _executor_with([high, low])   # deliberately shuffled
+    ex.run()
+    on_step_calls = [name for (name, hook) in log if hook == "on_step"]
+    # All low (priority 10) before any high (priority 30)
+    assert on_step_calls.index("low") < on_step_calls.index("high")
+
+
+def test_run_hooks_fans_same_priority_in_parallel():
+    log = []
+    barrier = threading.Barrier(2)
+    a = _make_recording_column("a", priority=20, log=log, barrier=barrier)
+    b = _make_recording_column("b", priority=20, log=log, barrier=barrier)
+    ex = _executor_with([a, b])
+    # If they don't run in parallel the barrier never trips and the
+    # executor blocks until barrier timeout (2s) — test would take >2s.
+    start = time.monotonic()
+    ex.run()
+    elapsed = time.monotonic() - start
+    assert elapsed < 1.5, "same-priority hooks did not fan out in parallel"
+    on_step_names = [name for (name, hook) in log if hook == "on_step"]
+    assert sorted(on_step_names) == ["a", "b"]
+
+
+def test_run_hooks_uses_default_priority_50_for_unset():
+    """BaseColumnHandler defaults priority to 50 — no explicit set
+    needed for a column that doesn't care about ordering."""
+    log = []
+    no_pri = _make_recording_column("default", priority=50, log=log)
+    early = _make_recording_column("early", priority=10, log=log)
+    ex = _executor_with([no_pri, early])
+    ex.run()
+    on_step_calls = [name for (name, hook) in log if hook == "on_step"]
+    assert on_step_calls.index("early") < on_step_calls.index("default")
+
+
+def test_run_hooks_all_five_phases_fire_in_order_for_one_step():
+    log = []
+    col = _make_recording_column("c", priority=50, log=log)
+    ex = _executor_with([col])
+    ex.run()
+    # Filter to the recording column only (built-ins also fire but with
+    # no logging side effect — their handlers are BaseColumnHandler).
+    c_calls = [hook for (name, hook) in log if name == "c"]
+    assert c_calls == [
+        "on_protocol_start",
+        "on_pre_step", "on_step", "on_post_step",
+        "on_protocol_end",
+    ]

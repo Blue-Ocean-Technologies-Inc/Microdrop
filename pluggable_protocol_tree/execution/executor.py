@@ -17,7 +17,8 @@ hook fan-out, and conflict assertion land in subsequent tasks.
 
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 from pyface.qt.QtCore import QThread
@@ -160,11 +161,41 @@ class ProtocolExecutor(HasTraits):
         return step_ctx
 
     def _run_hooks(self, hook_name, cols, ctx, row) -> None:
-        """Stub — full priority-bucket implementation lands in Task 10.
-        Until then, run hooks sequentially in given order so the run-loop
-        tests can pass without depending on the bucket fan-out yet."""
+        """Priority-bucket fan-out.
+
+        Lower priority runs first. Equal priorities run in parallel
+        (one ThreadPoolExecutor per bucket; the executor returns
+        only when every future in the bucket has resolved).
+
+        The first exception in any bucket wins: stop_event is set so
+        sibling hooks waiting on ctx.wait_for() return promptly via
+        AbortError, the pool drains, and the original exception is
+        re-raised out of this method.
+        """
+        buckets = defaultdict(list)
         for col in cols:
-            self._invoke_hook(col, hook_name, ctx, row)
+            buckets[col.handler.priority].append(col)
+
+        for priority in sorted(buckets):
+            bucket_cols = buckets[priority]
+            with self.bucket_pool_factory(
+                max_workers=max(1, len(bucket_cols)),
+            ) as pool:
+                futures = {
+                    pool.submit(self._invoke_hook, col, hook_name, ctx, row): col
+                    for col in bucket_cols
+                }
+                first_exc = None
+                for f in as_completed(futures):
+                    exc = f.exception()
+                    if exc is not None and first_exc is None:
+                        first_exc = exc
+                        # Set stop so sibling wait_for() calls return
+                        # promptly — pool.__exit__ will then wait for
+                        # those threads to drain naturally.
+                        self.stop_event.set()
+                if first_exc is not None:
+                    raise first_exc
 
     def _invoke_hook(self, col, hook_name, ctx, row) -> None:
         """Dispatch to the handler's named hook with the right signature.
