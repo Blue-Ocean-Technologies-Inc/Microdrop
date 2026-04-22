@@ -21,7 +21,7 @@ PERSISTENCE_SCHEMA_VERSION = 1
 
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:
-PROTOCOL_TOPIC_PREFIX = "microdrop/pluggable_protocol_tree"
+PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
 
 # No ACTOR_TOPIC_DICT entries yet — no listener in PPT-1.
 ACTOR_TOPIC_DICT: dict[str, list[str]] = {}
