@@ -20,9 +20,9 @@ from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 class BaseRow(HasTraits):
     uuid = Str(desc="Stable identity for merges/diffs and device-viewer routing")
     name = Str("Step", desc="User-visible row name")
-    parent = Instance("BaseRow", desc="Owning GroupRow (None for rows at the top")
+    parent = Instance("BaseRow", desc="Owning GroupRow (None for rows at the top)")
     row_type = Str("step", desc="'step' or 'group' — drives per-column visibility")
-    path = Property(Tuple, observe="parent, parent.children.items",
+    path = Property(Tuple, observe="parent.path, parent.children.items",
                     desc="0-indexed tuple of positions from the root (empty for orphans)")
 
     def _uuid_default(self):
@@ -43,8 +43,10 @@ class BaseRow(HasTraits):
 
 @provides(IGroupRow)
 class GroupRow(BaseRow):
-    row_type = Str("group")
     children = List(Instance(BaseRow))
+
+    def _row_type_default(self):
+        return "group"
 
     def add_row(self, row):
         row.parent = self

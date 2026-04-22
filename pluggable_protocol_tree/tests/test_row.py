@@ -76,3 +76,34 @@ def test_path_doubly_nested():
     g.add_row(s)
     assert g.path == (0,)
     assert s.path == (0, 0)
+
+
+def test_path_updates_when_sibling_inserted_before():
+    root = GroupRow(name="Root")
+    a = BaseRow(name="A")
+    root.add_row(a)
+    assert a.path == (0,)
+    root.insert_row(0, BaseRow(name="B"))
+    assert a.path == (1,)
+
+
+def test_path_updates_after_remove():
+    root = GroupRow(name="Root")
+    a, b = BaseRow(name="A"), BaseRow(name="B")
+    root.add_row(a)
+    root.add_row(b)
+    assert b.path == (1,)
+    root.remove_row(a)
+    assert b.path == (0,)
+
+
+def test_path_updates_when_ancestor_sibling_inserted():
+    """A change at the root level must propagate to deeply nested paths."""
+    root = GroupRow(name="Root")
+    g = GroupRow(name="Group")
+    s = BaseRow(name="Step")
+    root.add_row(g)
+    g.add_row(s)
+    assert s.path == (0, 0)
+    root.insert_row(0, GroupRow(name="Other"))
+    assert s.path == (1, 0)
