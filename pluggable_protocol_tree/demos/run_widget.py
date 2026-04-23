@@ -17,7 +17,7 @@ import threading
 import time
 
 import dramatiq
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QStatusBar,
     QToolBar, QSplitter,
@@ -72,6 +72,11 @@ logger = logging.getLogger(__name__)
 # self.device_view via a global hook set by DemoWindow.__init__.
 _overlay_target = {"viewer": None}
 
+# Module-level hook for the phase-ack listener. The actor runs on a
+# Dramatiq worker thread; it emits a Qt signal that auto-connection
+# delivers on the GUI thread, where the timers are mutated.
+_ack_target = {"window": None}
+
 
 @dramatiq.actor(actor_name="ppt_demo_actuation_overlay_listener",
                 queue_name="default")
@@ -86,6 +91,20 @@ def _overlay_listener(message: str, topic: str, timestamp: float = None):
     electrodes = payload.get("electrodes", []) or []
     # Cross-thread emit — auto-connection delivers on the GUI thread.
     viewer.actuation_changed.emit(list(electrodes))
+
+
+@dramatiq.actor(actor_name="ppt_demo_phase_ack_listener",
+                queue_name="default")
+def _phase_ack_listener(message: str, topic: str, timestamp: float = None):
+    """Fires on each ELECTRODES_STATE_APPLIED ack so the status bar
+    can start the per-phase / per-step timers from the moment hardware
+    actually confirmed the actuation, not from the upstream
+    publish_message call (which can sit in the worker queue for
+    1-2 seconds on a cold broker)."""
+    window = _ack_target["window"]
+    if window is None:
+        return
+    window.phase_acked.emit()
 
 
 def _columns():
@@ -109,6 +128,12 @@ def _columns():
 
 
 class DemoWindow(QMainWindow):
+
+    # Cross-thread signal for the phase-ack listener. The Dramatiq
+    # worker thread emits via _phase_ack_listener; auto-connection
+    # delivers _on_phase_ack on the GUI thread.
+    phase_acked = Signal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Pluggable Protocol Tree — Demo (PPT-2)")
@@ -130,8 +155,10 @@ class DemoWindow(QMainWindow):
             f"e{i:02d}": i for i in range(GRID_W * GRID_H)
         }
 
-        # Wire the overlay listener to this window's device_view.
+        # Wire the overlay + ack listener targets to this window.
         _overlay_target["viewer"] = self.device_view
+        _ack_target["window"] = self
+        self.phase_acked.connect(self._on_phase_ack)
 
         self.executor = ProtocolExecutor(
             row_manager=self.manager,
@@ -140,11 +167,15 @@ class DemoWindow(QMainWindow):
             stop_event=threading.Event(),
         )
 
-        # Per-step timing state (mutated from GUI thread only).
+        # Per-step / per-phase timing state. All timestamps are
+        # ``time.monotonic()`` from the moment the corresponding ack
+        # arrives — not from when step_started fires. None means "not
+        # yet started; display 0.00s". Mutated from GUI thread only.
         self._step_index = 0
         self._step_total = 0
-        self._step_started_at = None
-        self._step_total_duration = None
+        self._step_started_at = None    # set on first ack of step
+        self._phase_started_at = None    # set on each ack
+        self._phase_target = None        # row.duration_s, captured at step_started
         self._current_row = None
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(100)   # 10 Hz elapsed-time display
@@ -194,6 +225,12 @@ class DemoWindow(QMainWindow):
             router.message_router_data.add_subscriber_to_topic(
                 topic=ELECTRODES_STATE_CHANGE,
                 subscribing_actor_name="ppt_demo_actuation_overlay_listener",
+            )
+            # Status-bar phase-ack listener — drives the per-phase /
+            # per-step timers from the actual hardware ack moment.
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_APPLIED,
+                subscribing_actor_name="ppt_demo_phase_ack_listener",
             )
             self._router = router
         except ValueError as e:
@@ -292,34 +329,48 @@ class DemoWindow(QMainWindow):
         self._status_step_label = QLabel("Idle")
         self._status_row_label = QLabel("")
         self._status_reps_label = QLabel("")
-        self._status_time_label = QLabel("")
+        self._status_step_time_label = QLabel("")
+        self._status_phase_time_label = QLabel("")
         # Row label takes any remaining width via stretch=1.
         sb.addWidget(self._status_step_label)
         sb.addWidget(self._status_row_label, stretch=1)
         sb.addPermanentWidget(self._status_reps_label)
-        sb.addPermanentWidget(self._status_time_label)
+        sb.addPermanentWidget(self._status_step_time_label)
+        sb.addPermanentWidget(self._status_phase_time_label)
 
     def _reset_status(self):
         self._step_index = 0
         self._step_total = 0
         self._step_started_at = None
-        self._step_total_duration = None
+        self._phase_started_at = None
+        self._phase_target = None
         self._current_row = None
         self._status_step_label.setText("Idle")
         self._status_row_label.setText("")
         self._status_reps_label.setText("")
-        self._status_time_label.setText("")
+        self._status_step_time_label.setText("")
+        self._status_phase_time_label.setText("")
 
     def _refresh_status(self):
-        if self._step_started_at is None or self._current_row is None:
+        """Recompute the two timer labels from the ack-driven
+        timestamps. Both show 0.00s until the corresponding ack lands."""
+        if self._current_row is None:
             return
-        elapsed = time.monotonic() - self._step_started_at
-        if self._step_total_duration is not None:
-            self._status_time_label.setText(
-                f"{elapsed:5.2f}s / {self._step_total_duration:.2f}s"
-            )
+        target = self._phase_target if self._phase_target is not None else 0.0
+        if self._step_started_at is None:
+            step_elapsed = 0.0
         else:
-            self._status_time_label.setText(f"{elapsed:5.2f}s")
+            step_elapsed = time.monotonic() - self._step_started_at
+        if self._phase_started_at is None:
+            phase_elapsed = 0.0
+        else:
+            phase_elapsed = time.monotonic() - self._phase_started_at
+        self._status_step_time_label.setText(
+            f"Step {step_elapsed:5.2f}s"
+        )
+        self._status_phase_time_label.setText(
+            f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
+        )
 
     # --- protocol-state slot handlers ---
 
@@ -347,13 +398,18 @@ class DemoWindow(QMainWindow):
         self._status_reps_label.setText(" · ".join(parts))
 
     def _on_step_started(self, row):
+        # Reset the timer state — both timers stay at 0.00s until the
+        # first phase ack lands. The ack handler (_on_phase_ack)
+        # bumps the timestamps from None to monotonic() at the actual
+        # hardware-confirmed moment.
         self._step_index += 1
         self._current_row = row
-        self._step_started_at = time.monotonic()
+        self._step_started_at = None
+        self._phase_started_at = None
         try:
-            self._step_total_duration = float(getattr(row, "duration_s", 0.0) or 0.0)
+            self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
-            self._step_total_duration = None
+            self._phase_target = None
         path = ".".join(str(i + 1) for i in row.path) if row.path else ""
         path_str = f" (path {path})" if path else ""
         self._status_step_label.setText(
@@ -364,17 +420,25 @@ class DemoWindow(QMainWindow):
         if not self._tick_timer.isActive():
             self._tick_timer.start()
 
+    def _on_phase_ack(self):
+        """Each ELECTRODES_STATE_APPLIED ack (re)starts the per-phase
+        timer. The first ack of a step also starts the per-step timer.
+        Subsequent acks within the step leave the step timer running
+        and only restart the phase timer, so the phase value reflects
+        the dwell time on the current actuation snapshot."""
+        if self._current_row is None:
+            return     # ack outside an active step (e.g., late stragglers)
+        now = time.monotonic()
+        if self._step_started_at is None:
+            self._step_started_at = now
+        self._phase_started_at = now
+
     def _on_step_finished(self, _row):
-        # Freeze the time label at the step's actual elapsed; keep the
-        # step labels visible until the next step_started replaces them.
-        if self._step_started_at is not None:
-            elapsed = time.monotonic() - self._step_started_at
-            if self._step_total_duration is not None:
-                self._status_time_label.setText(
-                    f"{elapsed:5.2f}s / {self._step_total_duration:.2f}s"
-                )
-            else:
-                self._status_time_label.setText(f"{elapsed:5.2f}s")
+        # Freeze the time labels at the step's actual elapsed; keep
+        # them visible until the next step_started resets to 0.00s.
+        # If no ack ever arrived (e.g., a step with no actuation), the
+        # labels already show 0.00s — leave them.
+        self._refresh_status()
 
     def _on_protocol_paused(self):
         self._pause_action.setText("Resume")
@@ -383,7 +447,7 @@ class DemoWindow(QMainWindow):
 
     def _on_protocol_resumed(self):
         self._pause_action.setText("Pause")
-        if self._step_started_at is not None:
+        if self._current_row is not None:
             self._tick_timer.start()
 
     def _on_protocol_terminated(self):

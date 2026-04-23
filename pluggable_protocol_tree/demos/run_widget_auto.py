@@ -20,7 +20,7 @@ import threading
 import time
 
 import dramatiq
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QMainWindow, QSplitter,
 )
@@ -94,6 +94,8 @@ PHASE_LOG_ACTOR_NAME = "ppt_auto_phase_log"
 # ActorNotFound storm that backs up the worker queue and pushes
 # wait_for past its timeout.)
 OVERLAY_ACTOR_NAME = "ppt_demo_actuation_overlay_listener"
+# Same trick for the phase-ack listener that drives the status timers.
+ACK_ACTOR_NAME = "ppt_demo_phase_ack_listener"
 
 
 @dramatiq.actor(actor_name=PHASE_LOG_ACTOR_NAME, queue_name="default")
@@ -107,6 +109,20 @@ def _phase_log_actor(message: str, topic: str, timestamp: float = None):
     _phase_log.append(payload)
     print(f"[PHASE] electrodes={payload['electrodes']} "
           f"channels={payload['channels']}", flush=True)
+
+
+_ack_target = {"window": None}
+
+
+@dramatiq.actor(actor_name=ACK_ACTOR_NAME, queue_name="default")
+def _phase_ack_listener(message: str, topic: str, timestamp: float = None):
+    """Each ELECTRODES_STATE_APPLIED ack hops through this actor and
+    is forwarded to the GUI via a Qt signal (auto-connection marshals
+    to the GUI thread). Drives the per-phase / per-step timers."""
+    window = _ack_target["window"]
+    if window is None:
+        return
+    window.phase_acked.emit()
 
 
 @dramatiq.actor(actor_name=OVERLAY_ACTOR_NAME, queue_name="default")
@@ -149,6 +165,9 @@ class AutoDemoWindow(QMainWindow):
     POST_DONE_QUIT_MS = 600        # leave a beat for the last paint
     HARD_TIMEOUT_S = 30.0          # safety net
 
+    # Cross-thread signal from the phase-ack actor.
+    phase_acked = Signal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Pluggable Protocol Tree — Auto Demo (PPT-3)")
@@ -169,6 +188,8 @@ class AutoDemoWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
         _overlay_target["viewer"] = self.device_view
+        _ack_target["window"] = self
+        self.phase_acked.connect(self._on_phase_ack)
 
         self.executor = ProtocolExecutor(
             row_manager=self.manager,
@@ -177,15 +198,66 @@ class AutoDemoWindow(QMainWindow):
             stop_event=threading.Event(),
         )
 
+        # Per-step / per-phase timing state. None = "not yet started;
+        # display 0.00s". Mutated from GUI thread only.
+        self._current_row = None
+        self._step_started_at = None
+        self._phase_started_at = None
+        self._phase_target = None
+
         self._dramatiq_worker = None
         self._setup_dramatiq_routing()
 
+        self._build_status_bar()
         self._wire_verbose_logging()
         self._wire_terminate_to_quit()
 
         # Auto-start + safety net.
         QTimer.singleShot(self.AUTO_RUN_DELAY_MS, self._auto_run)
         QTimer.singleShot(int(self.HARD_TIMEOUT_S * 1000), self._hard_timeout)
+
+    def _build_status_bar(self):
+        from pyface.qt.QtWidgets import QStatusBar, QLabel
+        sb = QStatusBar()
+        self.setStatusBar(sb)
+        self._status_step_label = QLabel("Idle")
+        self._status_step_time_label = QLabel("")
+        self._status_phase_time_label = QLabel("")
+        sb.addWidget(self._status_step_label, stretch=1)
+        sb.addPermanentWidget(self._status_step_time_label)
+        sb.addPermanentWidget(self._status_phase_time_label)
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(100)
+        self._tick_timer.timeout.connect(self._refresh_status)
+
+    def _refresh_status(self):
+        if self._current_row is None:
+            return
+        target = self._phase_target if self._phase_target is not None else 0.0
+        step_elapsed = (
+            0.0 if self._step_started_at is None
+            else time.monotonic() - self._step_started_at
+        )
+        phase_elapsed = (
+            0.0 if self._phase_started_at is None
+            else time.monotonic() - self._phase_started_at
+        )
+        self._status_step_time_label.setText(f"Step {step_elapsed:5.2f}s")
+        self._status_phase_time_label.setText(
+            f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
+        )
+
+    def _on_phase_ack(self):
+        if self._current_row is None:
+            return
+        now = time.monotonic()
+        if self._step_started_at is None:
+            self._step_started_at = now
+        self._phase_started_at = now
+        # Verifiable from stdout when run unattended.
+        print(f"[ACK] step_elapsed="
+              f"{(now - self._step_started_at):.3f}s; "
+              f"phase reset to 0", flush=True)
 
     def _populate_protocol(self):
         """Three steps that exercise both column types and the
@@ -232,6 +304,9 @@ class AutoDemoWindow(QMainWindow):
                  "pluggable_protocol_tree_executor_listener"),
                 (ELECTRODES_STATE_CHANGE, PHASE_LOG_ACTOR_NAME),
                 (ELECTRODES_STATE_CHANGE, OVERLAY_ACTOR_NAME),
+                # Status-bar timer driver — same actor name as
+                # run_widget.py so subscriptions stay live across demos.
+                (ELECTRODES_STATE_APPLIED, ACK_ACTOR_NAME),
             )
             self._purge_stale_subscribers(broker, router, wanted)
             for topic, actor in wanted:
@@ -284,6 +359,7 @@ class AutoDemoWindow(QMainWindow):
         sigs = self.executor.qsignals
         sigs.protocol_started.connect(
             lambda: print("[PROTOCOL STARTED]", flush=True))
+        sigs.step_started.connect(self._on_step_started_status)
         sigs.step_started.connect(
             lambda r: print(
                 f"[STEP STARTED] {r.name!r} "
@@ -307,6 +383,21 @@ class AutoDemoWindow(QMainWindow):
                 cur.data(Qt.UserRole) if cur.isValid() else None
             )
         )
+
+    def _on_step_started_status(self, row):
+        """Reset the timer state. Both timers stay at 0.00s until the
+        first phase ack lands."""
+        self._current_row = row
+        self._step_started_at = None
+        self._phase_started_at = None
+        try:
+            self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self._phase_target = None
+        self._status_step_label.setText(f"Step: {row.name!r}")
+        self._refresh_status()
+        if not self._tick_timer.isActive():
+            self._tick_timer.start()
 
     def _wire_terminate_to_quit(self):
         sigs = self.executor.qsignals
@@ -341,11 +432,21 @@ class AutoDemoWindow(QMainWindow):
 
     def _clear_all_highlights(self):
         """Restore an idle visual state at protocol end. Clears, in order:
+          - tick timer + status timer state (so labels stop updating)
           - tree active-row highlight (blue executor cursor)
           - device viewer (statics + routes + actuated overlay)
           - tree selection AND current index (last so currentRowChanged
             doesn't fight the explicit set_active_row(None) above)."""
         from pyface.qt.QtCore import QModelIndex
+        if self._tick_timer.isActive():
+            self._tick_timer.stop()
+        self._current_row = None
+        self._step_started_at = None
+        self._phase_started_at = None
+        self._phase_target = None
+        self._status_step_label.setText("Idle")
+        self._status_step_time_label.setText("")
+        self._status_phase_time_label.setText("")
         self.widget.highlight_active_row(None)
         self.device_view.set_active_row(None)
         self.widget.tree.clearSelection()
