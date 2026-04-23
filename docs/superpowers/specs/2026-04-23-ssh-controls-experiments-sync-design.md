@@ -8,9 +8,39 @@
 
 Add a "Sync Remote Experiments" feature that pulls the remote backend's `Experiments/` folder to a local directory via `rsync` over SSH. The feature is triggered from the frontend, executed asynchronously on the backend via the existing Dramatiq pub/sub message router, and surfaced to the user with a loading indicator, completion status, and a timeout warning with a Quit option.
 
+## Topology & Security
+
+This feature needs an explicit trust-boundary model because rsync-over-SSH inherently pairs two hosts, and the wrong direction leaks private material.
+
+**The pull model (chosen).** The machine running the Microdrop GUI (the "frontend" physical host) acts as the rsync **client** and initiates the transfer. It holds the SSH private key generated locally by the Key Portal. The remote Microdrop backend host stores only the matching public key in its `~/.ssh/authorized_keys`. rsync runs locally on the frontend host, pulling `Experiments/` from the backend host.
+
+**The push model (rejected).** The alternative — backend as rsync client, pushing files to the frontend — would require (a) shipping the private key to the remote backend machine, (b) granting the backend write access to the frontend's filesystem, and (c) running an SSH server on the frontend host. All three are unacceptable security trade-offs for this application.
+
+**Consequence for plugin placement.** The `ssh_controls` plugin is Dramatiq-worker style — it is not a UI plugin and has no physical-hardware dependency — but it must execute *on the frontend host*, because that is where the private key lives and where rsync must run. Putting it on the backend host would either fail (no private key) or force the push model (rejected above).
+
+This motivates a new plugin category: **service plugins**.
+
+### Service plugins — new concept
+
+Up until now, plugins fell into two buckets in `examples/plugin_consts.py`:
+
+| Category | Examples | Role |
+| --- | --- | --- |
+| Frontend | `MicrodropPlugin`, `DeviceViewerPlugin`, `ProtocolGridControllerUIPlugin` | Qt/Pyface UI. Must be in the GUI process. |
+| Backend | `DropbotControllerPlugin`, `ElectrodeControllerPlugin` | Talk to physical hardware (DropBot). Must be on the host wired to the device. |
+
+**Service plugins** are a third category: Dramatiq message-router workers that are **host-bound by user-trust context**, not by hardware or UI. They:
+
+- Are not UI — no Qt widgets, no menu contributions. (UI counterparts live in a matching `*_ui` frontend plugin.)
+- Do not depend on physical hardware (no DropBot proxy).
+- Handle credentials or filesystem resources local to the user running the GUI (SSH keys, local directories, rsync binary, etc.).
+- Must therefore run in the same process as the user's GUI — *never* on the remote backend host.
+
+`ssh_controls` is the first member of this category. The new `SERVICE_PLUGINS` list in `plugin_consts.py` makes the classification explicit so future reviewers / plugin authors do not misfile analogous plugins into `BACKEND_PLUGINS`.
+
 ## Scope
 
-This replaces the initial standalone-plugin approach on this branch (commits `1b3a9d3`, `d75befc`, `667decc`, `b99909d`). That scaffold is dropped. The work is absorbed into the existing `ssh_controls` (backend) and `ssh_controls_ui` (frontend) plugins, reusing their MVC + ViewModel + Dramatiq listener pattern.
+This replaces the initial standalone-plugin approach on this branch (commits `1b3a9d3`, `d75befc`, `667decc`, `b99909d`). That scaffold is dropped. The work is absorbed into the existing `ssh_controls` (service) and `ssh_controls_ui` (frontend) plugins, reusing their MVC + ViewModel + Dramatiq listener pattern.
 
 ### Removals
 
@@ -21,14 +51,22 @@ This replaces the initial standalone-plugin approach on this branch (commits `1b
 
 | Plugin | Change |
 | --- | --- |
-| `ssh_controls/` (backend) | New `models.py` with `ExperimentsSyncRequest` (Pydantic) + `ExperimentsSyncRequestPublisher` (ValidatedTopicPublisher). New topics and handler in `service.py`. |
+| `ssh_controls/` (service) | New `models.py` with `ExperimentsSyncRequest` (Pydantic) + `ExperimentsSyncRequestPublisher` (ValidatedTopicPublisher). New topics and handler in `service.py`. |
 | `ssh_controls_ui/` (frontend) | New `sync_dialog/` subpackage (model + view_model + widget + dramatiq listener). New menu action registered alongside the Key Portal action. New topics in `consts.py`. |
+| `examples/plugin_consts.py` | New `SERVICE_PLUGINS` list containing `SSHControlsPlugin`. Add `SSHUIPlugin` to `FRONTEND_PLUGINS`. Document the "service plugin" concept in a module-level comment. |
+| `examples/run_device_viewer_pluggable.py` | Include `SERVICE_PLUGINS` in the combined plugin list (runs alongside frontend + backend). |
+| `examples/run_device_viewer_pluggable_frontend.py` | Include `SERVICE_PLUGINS` in the plugin list (runs with the GUI, even when the backend is remote). |
+| `examples/run_device_viewer_pluggable_backend.py` | Does **not** include `SERVICE_PLUGINS` — intentionally. |
 
 No changes to `microdrop_utils/file_sync_helpers.py`. No changes to `ssh_controls/plugin.py` or `ssh_controls_ui/plugin.py` (both already contribute `ACTOR_TOPIC_DICT` which is the only touch point).
 
+Note: neither `SSHControlsPlugin` nor `SSHUIPlugin` is currently registered in any run config — the plugins exist as files but were never wired up. The additions above include registering them for the first time, not just for the sync feature.
+
 ## Architecture
 
-### Backend — `ssh_controls/`
+### Service — `ssh_controls/`
+
+Classified as a **service plugin** (see Topology & Security). Runs in the GUI process, not on the remote Microdrop backend host.
 
 **`ssh_controls/models.py`** (new):
 
