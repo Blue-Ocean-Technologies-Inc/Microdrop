@@ -36,12 +36,25 @@ class DurationColumnHandler(BaseColumnHandler):
     every tick so a user Stop press lands within ~50ms even if the
     duration is long. Without this, a 30-second duration would block
     the worker thread for the full 30s past the Stop press.
+
+    If a higher-priority handler has already paid the dwell as part of
+    its own work (e.g. RoutesHandler dwells per-phase and so spends
+    the full row's duration across N phases), it sets a sentinel on
+    ``ctx.scratch`` and we skip the second dwell here.
     """
     priority = 90
 
     _SLICE_S = 0.05
 
     def on_step(self, row, ctx):
+        # RoutesHandler imports cleanly from this module's neighbour;
+        # local import keeps duration_column free of that dep at module
+        # load time.
+        from pluggable_protocol_tree.builtins.routes_column import (
+            DURATION_CONSUMED_KEY,
+        )
+        if ctx.scratch.get(DURATION_CONSUMED_KEY):
+            return
         remaining = float(getattr(row, "duration_s", 0.0) or 0.0)
         while remaining > 0:
             if ctx.protocol.stop_event.is_set():

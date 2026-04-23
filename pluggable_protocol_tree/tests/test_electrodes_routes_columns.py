@@ -113,10 +113,15 @@ def test_routes_handler_publishes_each_phase_then_waits():
     row.soft_end = False
     row.repeat_duration = 0.0
     row.linear_repeats = False
-    row.duration_s = 1.0
+    row.duration_s = 0.0     # no per-phase dwell so the unit test stays fast
     row.repetitions = 1
 
     ctx = MagicMock()
+    # MagicMock returns a truthy Mock for any attribute access; the
+    # handler bails on stop_event.is_set() being truthy. Pin it to a
+    # real falsy callable so the publish loop runs to completion.
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.scratch = {}
     ctx.protocol.scratch = {"electrode_to_channel": {
         "e0": 0, "e1": 1, "e2": 2, "e3": 3, "e4": 4,
     }}
@@ -154,10 +159,12 @@ def test_routes_handler_unmapped_electrode_logs_warning_and_skips_channel():
     row.soft_end = False
     row.repeat_duration = 0.0
     row.linear_repeats = False
-    row.duration_s = 1.0
+    row.duration_s = 0.0
     row.repetitions = 1
 
     ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.scratch = {}
     ctx.protocol.scratch = {"electrode_to_channel": {}}
 
     published = []

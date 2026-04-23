@@ -310,21 +310,31 @@ class AutoDemoWindow(QMainWindow):
         self.executor.start()
 
     def _on_finished(self):
-        print(f"[AUTO DONE] FINISHED — phases published: {len(_phase_log)}",
+        print(f"[AUTO DONE] FINISHED -- phases published: {len(_phase_log)}",
               flush=True)
+        self._clear_tree_selection()
         self._summarize_phases()
         self._shutdown(0)
 
     def _on_aborted(self):
-        print(f"[AUTO DONE] ABORTED — phases published: {len(_phase_log)}",
+        print(f"[AUTO DONE] ABORTED -- phases published: {len(_phase_log)}",
               flush=True)
+        self._clear_tree_selection()
         self._summarize_phases()
         self._shutdown(2)
 
     def _on_error(self, msg):
-        print(f"[AUTO DONE] ERROR — {msg}", flush=True)
+        print(f"[AUTO DONE] ERROR -- {msg}", flush=True)
+        self._clear_tree_selection()
         self._summarize_phases()
         self._shutdown(1)
+
+    def _clear_tree_selection(self):
+        """Drop selection + current index so the device viewer's
+        currentRowChanged listener clears its highlights."""
+        from pyface.qt.QtCore import QModelIndex
+        self.widget.tree.clearSelection()
+        self.widget.tree.setCurrentIndex(QModelIndex())
 
     def _hard_timeout(self):
         if self.executor._thread is None or not self.executor._thread.is_alive():

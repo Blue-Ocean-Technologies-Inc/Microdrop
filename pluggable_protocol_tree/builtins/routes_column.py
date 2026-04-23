@@ -17,6 +17,7 @@ ALL phases have completed and been ack'd.
 
 import json
 import logging
+import time
 
 from pyface.qt.QtCore import Qt
 from traits.api import List, Str
@@ -33,6 +34,16 @@ from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 
 logger = logging.getLogger(__name__)
+
+# Sentinel set on ctx.scratch by RoutesHandler so DurationColumnHandler
+# (priority 90) knows the per-phase dwells have already covered the
+# row's total duration and shouldn't be slept again.
+DURATION_CONSUMED_KEY = "_routes_consumed_duration"
+
+# Cooperative-sleep slice: how often to check stop_event during a
+# per-phase dwell so a Stop press lands within ~50ms even on long
+# durations.
+_SLICE_S = 0.05
 
 
 class RoutesColumnModel(BaseColumnModel):
@@ -58,12 +69,22 @@ class RoutesSummaryView(BaseColumnView):
 
 
 class RoutesHandler(BaseColumnHandler):
-    """Drives electrode actuation for the step. See module docstring."""
+    """Drives electrode actuation for the step. See module docstring.
+
+    The row's ``duration_s`` is the dwell time PER PHASE. Each phase
+    actuates for ``duration_s`` seconds before transitioning to the
+    next; this matches the legacy protocol_grid where each protocol
+    row was a single phase. After the last phase, RoutesHandler marks
+    the per-step duration as consumed via ``ctx.scratch`` so the
+    DurationColumnHandler at priority 90 doesn't dwell a second time.
+    """
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
 
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
+        per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
+        stop_event = ctx.protocol.stop_event
         for phase in iter_phases(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
             routes=list(getattr(row, "routes", []) or []),
@@ -76,6 +97,8 @@ class RoutesHandler(BaseColumnHandler):
             n_repeats=int(getattr(row, "repetitions", 1)),
             step_duration_s=float(getattr(row, "duration_s", 1.0)),
         ):
+            if stop_event.is_set():
+                break
             electrodes = sorted(phase)
             channels = sorted(mapping[e] for e in electrodes if e in mapping)
             for e in electrodes:
@@ -98,6 +121,22 @@ class RoutesHandler(BaseColumnHandler):
             # the single dramatiq worker queue. Hardware controllers
             # typically ack in <100ms.
             ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            _cooperative_sleep(per_phase_dwell, stop_event)
+        # Tell DurationColumnHandler we already covered the dwell.
+        ctx.scratch[DURATION_CONSUMED_KEY] = True
+
+
+def _cooperative_sleep(seconds: float, stop_event) -> None:
+    """Sleep for ``seconds``, waking every _SLICE_S to check stop_event.
+    Used so a Stop press lands within ~50ms even mid-dwell. Returns
+    early on stop or when seconds reaches 0."""
+    remaining = seconds
+    while remaining > 0:
+        if stop_event.is_set():
+            return
+        slice_dur = min(_SLICE_S, remaining)
+        time.sleep(slice_dur)
+        remaining -= slice_dur
 
 
 def make_routes_column():

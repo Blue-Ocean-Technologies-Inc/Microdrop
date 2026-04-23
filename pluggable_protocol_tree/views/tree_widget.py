@@ -4,7 +4,7 @@ remove / copy / cut / paste / group."""
 import logging
 from enum import Enum
 
-from pyface.qt.QtCore import Qt, QPersistentModelIndex, Signal
+from pyface.qt.QtCore import Qt, QPersistentModelIndex, QModelIndex, Signal
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
@@ -24,6 +24,12 @@ class _ProtocolTreeView(QTreeView):
     no overload-resolution surprises, no shortcut-context confusion, and
     we explicitly accept() the event so Qt's default key handling
     doesn't get a second chance to interpret it.
+
+    Left-click on empty tree space clears the selection AND the current
+    index. Mirrors the legacy protocol_grid behaviour and lets a
+    listener on currentRowChanged drive 'no row selected' UI (e.g. the
+    SimpleDeviceViewer clears its electrodes/routes display when the
+    active row is None).
     """
 
     delete_pressed = Signal()
@@ -34,6 +40,16 @@ class _ProtocolTreeView(QTreeView):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            idx = self.indexAt(event.position().toPoint())
+            if not idx.isValid():
+                self.clearSelection()
+                self.setCurrentIndex(QModelIndex())
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 class ProtocolTreeWidget(QWidget):

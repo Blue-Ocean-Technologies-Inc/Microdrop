@@ -388,16 +388,27 @@ class DemoWindow(QMainWindow):
 
     def _on_protocol_terminated(self):
         self.widget.highlight_active_row(None)
+        self._clear_tree_selection()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self._reset_status()
 
     def _on_error(self, msg):
         self.widget.highlight_active_row(None)
+        self._clear_tree_selection()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self._reset_status()
         QMessageBox.critical(self, "Protocol error", msg)
+
+    def _clear_tree_selection(self):
+        """Drop current row + selection so the device viewer follows
+        suit (its currentRowChanged listener calls set_active_row(None)
+        when the index becomes invalid, which clears statics, routes,
+        and the live actuation overlay)."""
+        from pyface.qt.QtCore import QModelIndex
+        self.widget.tree.clearSelection()
+        self.widget.tree.setCurrentIndex(QModelIndex())
 
     def _save(self):
         path, _ = QFileDialog.getSaveFileName(

@@ -88,9 +88,16 @@ class SimpleDeviceViewer(QWidget):
 
     def set_active_row(self, row):
         """Called when the tree's selection changes AND when the
-        executor's step_started fires."""
+        executor's step_started fires.
+
+        Passing ``None`` clears the editor: no active row, no static or
+        route highlights, and no live actuation overlay (so the green
+        cells from the last completed phase don't linger after the
+        protocol ends or the user clicks empty tree space)."""
         self._active_row = row
         self._in_progress_route = []
+        if row is None:
+            self._actuated = set()
         self._update_route_button_state()
         self.update()
 
