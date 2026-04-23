@@ -24,9 +24,23 @@ from pyface.qt.QtWidgets import (
 )
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.linear_repeats_column import (
+    make_linear_repeats_column,
+)
 from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.repeat_duration_column import (
+    make_repeat_duration_column,
+)
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
+from pluggable_protocol_tree.builtins.soft_start_column import make_soft_start_column
+from pluggable_protocol_tree.builtins.trail_length_column import make_trail_length_column
+from pluggable_protocol_tree.builtins.trail_overlay_column import (
+    make_trail_overlay_column,
+)
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
@@ -85,6 +99,14 @@ def _columns():
         make_name_column(),
         make_repetitions_column(),
         make_duration_column(),
+        make_electrodes_column(),
+        make_routes_column(),
+        make_trail_length_column(),
+        make_trail_overlay_column(),
+        make_soft_start_column(),
+        make_soft_end_column(),
+        make_repeat_duration_column(),
+        make_linear_repeats_column(),
         make_message_column(),
         make_ack_roundtrip_column(),
     ]
