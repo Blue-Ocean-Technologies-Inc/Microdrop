@@ -84,12 +84,8 @@ def _overlay_listener(message: str, topic: str, timestamp: float = None):
     except (TypeError, ValueError):
         return
     electrodes = payload.get("electrodes", []) or []
-    # Marshal into the GUI thread via a queued connection.
-    from pyface.qt.QtCore import QMetaObject, Q_ARG
-    QMetaObject.invokeMethod(
-        viewer, "set_actuated_qt_safe", Qt.QueuedConnection,
-        Q_ARG(object, set(electrodes)),
-    )
+    # Cross-thread emit — auto-connection delivers on the GUI thread.
+    viewer.actuation_changed.emit(list(electrodes))
 
 
 def _columns():
