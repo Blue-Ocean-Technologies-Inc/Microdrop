@@ -32,3 +32,37 @@ def test_assemble_columns_canonical_order():
                    if c.model.col_id in ("type", "id", "name",
                                          "repetitions", "duration_s")]
     assert builtin_ids == ["type", "id", "name", "repetitions", "duration_s"]
+
+
+# --- PPT-3 additions ---
+
+def test_assemble_columns_includes_electrodes_and_routes():
+    p = PluggableProtocolTreePlugin()
+    ids = [c.model.col_id for c in p._assemble_columns()]
+    assert "electrodes" in ids
+    assert "routes" in ids
+
+
+def test_assemble_columns_includes_six_hidden_config_columns():
+    p = PluggableProtocolTreePlugin()
+    ids = [c.model.col_id for c in p._assemble_columns()]
+    for hid in ("trail_length", "trail_overlay", "soft_start",
+                "soft_end", "repeat_duration", "linear_repeats"):
+        assert hid in ids
+
+
+def test_assemble_columns_canonical_order_after_ppt3():
+    p = PluggableProtocolTreePlugin()
+    ids = [c.model.col_id for c in p._assemble_columns()
+           if c.model.col_id in (
+               "type", "id", "name", "repetitions", "duration_s",
+               "electrodes", "routes",
+               "trail_length", "trail_overlay", "soft_start", "soft_end",
+               "repeat_duration", "linear_repeats",
+           )]
+    assert ids == [
+        "type", "id", "name", "repetitions", "duration_s",
+        "electrodes", "routes",
+        "trail_length", "trail_overlay", "soft_start", "soft_end",
+        "repeat_duration", "linear_repeats",
+    ]
