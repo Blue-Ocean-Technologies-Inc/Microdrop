@@ -54,6 +54,16 @@ class ProtocolTreeWidget(QWidget):
         self.model = MvcTreeModel(row_manager, parent=self.tree)
         self.tree.setModel(self.model)
 
+        # PPT-3: hide columns marked hidden_by_default at construction
+        for i, col in enumerate(self._manager.columns):
+            if getattr(col.view, "hidden_by_default", False):
+                self.tree.setColumnHidden(i, True)
+
+        # PPT-3: header right-click menu to toggle column visibility
+        header = self.tree.header()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._on_header_context_menu)
+
         self.delegate = ProtocolItemDelegate(row_manager, parent=self.tree)
         self.tree.setItemDelegate(self.delegate)
 
@@ -141,6 +151,22 @@ class ProtocolTreeWidget(QWidget):
         menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _on_header_context_menu(self, pos):
+        """Header right-click → menu listing every column with a
+        toggleable 'Show' checkmark. Affects only the QTreeView's
+        column visibility — does not touch the underlying row data."""
+        menu = QMenu()
+        for i, col in enumerate(self._manager.columns):
+            action = menu.addAction(col.model.col_name)
+            action.setCheckable(True)
+            action.setChecked(not self.tree.isColumnHidden(i))
+
+            def _toggle(checked, idx=i):
+                self.tree.setColumnHidden(idx, not checked)
+
+            action.toggled.connect(_toggle)
+        menu.exec(self.tree.header().viewport().mapToGlobal(pos))
 
     def _add_step_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
