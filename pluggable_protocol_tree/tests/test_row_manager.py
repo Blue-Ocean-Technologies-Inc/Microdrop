@@ -408,3 +408,16 @@ def test_iter_execution_steps_still_works_via_delegation(manager):
     setattr(manager.get_row(g), "repetitions", 2)
     names = [r.name for r in manager.iter_execution_steps()]
     assert names == ["A", "A"]
+
+
+# --- PPT-3: protocol_metadata ---
+
+def test_protocol_metadata_defaults_empty(manager):
+    assert manager.protocol_metadata == {}
+
+
+def test_protocol_metadata_holds_arbitrary_payload(manager):
+    manager.protocol_metadata["electrode_to_channel"] = {"e00": 0, "e01": 1}
+    manager.protocol_metadata["someone_elses_key"] = [1, 2, 3]
+    assert manager.protocol_metadata["electrode_to_channel"] == {"e00": 0, "e01": 1}
+    assert manager.protocol_metadata["someone_elses_key"] == [1, 2, 3]

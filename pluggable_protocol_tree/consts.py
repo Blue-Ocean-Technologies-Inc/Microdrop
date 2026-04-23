@@ -23,5 +23,9 @@ PERSISTENCE_SCHEMA_VERSION = 1
 # Reserved namespace for future use:
 PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
 
+# PPT-3: per-phase electrode actuation
+ELECTRODES_STATE_CHANGE  = f"{PROTOCOL_TOPIC_PREFIX}/electrodes_state_change"
+ELECTRODES_STATE_APPLIED = f"{PROTOCOL_TOPIC_PREFIX}/electrodes_state_applied"
+
 # No ACTOR_TOPIC_DICT entries yet — no listener in PPT-1.
 ACTOR_TOPIC_DICT: dict[str, list[str]] = {}

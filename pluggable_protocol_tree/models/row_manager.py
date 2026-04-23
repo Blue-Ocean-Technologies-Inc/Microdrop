@@ -10,7 +10,7 @@ active column set.
 from typing import Iterator, List, Optional, Tuple
 
 from traits.api import (
-    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Int,
+    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Dict, Int,
     Event, Str, observe,
 )
 
@@ -37,6 +37,12 @@ class RowManager(HasTraits):
         desc="List of 0-indexed path tuples currently selected")
 
     clipboard_mime = Str(PROTOCOL_ROWS_MIME)
+
+    protocol_metadata = Dict(Str, AnyTrait,
+        desc="Per-protocol scratch persisted in the JSON header. Keys "
+             "are namespaced by feature ('electrode_to_channel', etc.). "
+             "Hydrated into ProtocolContext.scratch by the executor at "
+             "run start.")
 
     rows_changed = Event(
         desc="Fires on structure or value changes. Batch-coalesced by UI.")
