@@ -118,3 +118,44 @@ def _route_with_repeats(
         passes = max(1, int(n_repeats)) if linear_repeats else 1
         for _ in range(passes):
             yield from cycle
+
+
+def _zip_with_static(per_route_iters: list,
+                     static: Set[str]) -> Iterator[Set[str]]:
+    """At each tick, union the static set with each route's current
+    window. Routes that exhaust early hold at their last yielded
+    window; the iteration stops only when ALL routes are exhausted.
+
+    No routes at all → yield the static set exactly once (the step
+    still gets one phase). No static + no routes → yield one empty
+    phase (preserves the 'every step has at least one phase'
+    invariant the executor relies on).
+    """
+    if not per_route_iters:
+        yield set(static)
+        return
+
+    # Drive each iterator forward by one step; remember the last value
+    # so an exhausted route can keep contributing.
+    last_windows: list = [None] * len(per_route_iters)
+
+    while True:
+        any_advanced = False
+        for i, it in enumerate(per_route_iters):
+            try:
+                last_windows[i] = next(it)
+                any_advanced = True
+            except StopIteration:
+                pass   # keep last_windows[i] as the held value
+        # If on the very first tick none of the iterators yielded, fall
+        # back to one phase of just the static set.
+        if not any_advanced and all(w is None for w in last_windows):
+            yield set(static)
+            return
+        if not any_advanced:
+            return
+        merged = set(static)
+        for w in last_windows:
+            if w is not None:
+                merged |= w
+        yield merged

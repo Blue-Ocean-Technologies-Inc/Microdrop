@@ -145,3 +145,51 @@ def test_repeats_empty_route_yields_nothing():
         linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
     ))
     assert out == []
+
+
+# --- _zip_with_static ---
+
+from pluggable_protocol_tree.services.phase_math import _zip_with_static
+
+
+def test_zip_no_routes_yields_static_once_then_stops():
+    out = list(_zip_with_static([], static={"x", "y"}))
+    assert out == [{"x", "y"}]
+
+
+def test_zip_no_routes_no_static_yields_one_empty_phase():
+    """Edge case: still emit one (empty) phase to keep the executor
+    semantics that 'every step has at least one phase'."""
+    out = list(_zip_with_static([], static=set()))
+    assert out == [set()]
+
+
+def test_zip_one_route_unions_static_each_phase():
+    route_iter = iter([{"a"}, {"b"}, {"c"}])
+    out = list(_zip_with_static([route_iter], static={"x"}))
+    assert out == [{"a", "x"}, {"b", "x"}, {"c", "x"}]
+
+
+def test_zip_two_routes_same_length_union_each_phase():
+    r1 = iter([{"a"}, {"b"}])
+    r2 = iter([{"p"}, {"q"}])
+    out = list(_zip_with_static([r1, r2], static=set()))
+    assert out == [{"a", "p"}, {"b", "q"}]
+
+
+def test_zip_routes_of_different_length_shorter_holds_at_last():
+    """The shorter route holds at its last window once exhausted, so
+    the longer route's remaining windows still get emitted."""
+    r1 = iter([{"a"}, {"b"}, {"c"}])
+    r2 = iter([{"p"}])
+    out = list(_zip_with_static([r1, r2], static=set()))
+    assert out == [{"a", "p"}, {"b", "p"}, {"c", "p"}]
+
+
+def test_zip_stops_when_all_routes_exhausted():
+    """An empty-from-the-start route iterator contributes nothing; the
+    other route's iterator drives the output."""
+    r1 = iter([{"a"}, {"b"}])
+    r2 = iter([])
+    out = list(_zip_with_static([r1, r2], static={"x"}))
+    assert out == [{"a", "x"}, {"b", "x"}]
