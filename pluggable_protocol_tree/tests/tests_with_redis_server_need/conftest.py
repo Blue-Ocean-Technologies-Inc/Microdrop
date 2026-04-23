@@ -30,3 +30,17 @@ def pytest_collection_modifyitems(config, items):
     skip_marker = pytest.mark.skip(reason="Redis broker not reachable")
     for item in items:
         item.add_marker(skip_marker)
+
+
+@pytest.fixture(scope="session")
+def router_actor():
+    """One MessageRouterActor for the whole pytest session.
+
+    DramatiqControllerBase.traits_init registers the underlying actor
+    on construction, and Dramatiq raises ValueError on duplicate actor
+    names — so each test that calls MessageRouterActor() works in
+    isolation but two tests in the same session conflict. Construct
+    once, reuse everywhere.
+    """
+    from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
+    return MessageRouterActor()
