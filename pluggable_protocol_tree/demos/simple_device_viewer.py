@@ -12,7 +12,7 @@ bright green. Wired in run_widget.py.
 
 from typing import Iterable, Optional, Set
 
-from pyface.qt.QtCore import QPoint, QRect, Qt, Signal
+from pyface.qt.QtCore import QPoint, QRect, Qt, Signal, Slot
 from pyface.qt.QtGui import QBrush, QColor, QPainter, QPen
 from pyface.qt.QtWidgets import (
     QButtonGroup, QGridLayout, QHBoxLayout, QPushButton, QRadioButton,
@@ -93,6 +93,13 @@ class SimpleDeviceViewer(QWidget):
         route layers."""
         self._actuated = set(electrode_ids or [])
         self.update()
+
+    @Slot(object)
+    def set_actuated_qt_safe(self, electrode_ids):
+        """Qt-decorated slot — the actuation listener calls this via
+        QMetaObject.invokeMethod with QueuedConnection so the actual
+        widget mutation runs on the GUI thread."""
+        self.set_actuated(electrode_ids)
 
     # ---------- mode ----------
 

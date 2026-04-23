@@ -20,7 +20,7 @@ import dramatiq
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QStatusBar,
-    QToolBar,
+    QToolBar, QSplitter,
 )
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
@@ -28,11 +28,20 @@ from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.consts import (
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+)
 from pluggable_protocol_tree.demos.ack_roundtrip_column import (
     DEMO_APPLIED_TOPIC, DEMO_REQUEST_TOPIC, RESPONDER_ACTOR_NAME,
     make_ack_roundtrip_column,
 )
+from pluggable_protocol_tree.demos.electrode_responder import (
+    DEMO_RESPONDER_ACTOR_NAME,
+)
 from pluggable_protocol_tree.demos.message_column import make_message_column
+from pluggable_protocol_tree.demos.simple_device_viewer import (
+    GRID_H, GRID_W, SimpleDeviceViewer,
+)
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -44,6 +53,29 @@ for el in dramatiq.get_broker().middleware:
     if el.__module__ == "dramatiq.middleware.prometheus":
         dramatiq.get_broker().middleware.remove(el)
 logger = logging.getLogger(__name__)
+
+# Module-level Dramatiq actor for live overlay updates. Captures
+# self.device_view via a global hook set by DemoWindow.__init__.
+_overlay_target = {"viewer": None}
+
+
+@dramatiq.actor(actor_name="ppt_demo_actuation_overlay_listener",
+                queue_name="default")
+def _overlay_listener(message: str, topic: str, timestamp: float = None):
+    viewer = _overlay_target["viewer"]
+    if viewer is None:
+        return
+    try:
+        payload = json.loads(message)
+    except (TypeError, ValueError):
+        return
+    electrodes = payload.get("electrodes", []) or []
+    # Marshal into the GUI thread via a queued connection.
+    from pyface.qt.QtCore import QMetaObject, Q_ARG
+    QMetaObject.invokeMethod(
+        viewer, "set_actuated_qt_safe", Qt.QueuedConnection,
+        Q_ARG(object, set(electrodes)),
+    )
 
 
 def _columns():
@@ -66,7 +98,22 @@ class DemoWindow(QMainWindow):
 
         self.manager = RowManager(columns=_columns())
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
-        self.setCentralWidget(self.widget)
+        self.device_view = SimpleDeviceViewer(self.manager, parent=self)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.widget)
+        splitter.addWidget(self.device_view)
+        splitter.setSizes([700, 400])
+        self.setCentralWidget(splitter)
+
+        # Seed the electrode→channel mapping. e00..e24 → channels 0..24.
+        # The RoutesHandler reads this from ProtocolContext.scratch.
+        self.manager.protocol_metadata["electrode_to_channel"] = {
+            f"e{i:02d}": i for i in range(GRID_W * GRID_H)
+        }
+
+        # Wire the overlay listener to this window's device_view.
+        _overlay_target["viewer"] = self.device_view
 
         self.executor = ProtocolExecutor(
             row_manager=self.manager,
@@ -116,6 +163,20 @@ class DemoWindow(QMainWindow):
                 topic=DEMO_APPLIED_TOPIC,
                 subscribing_actor_name="pluggable_protocol_tree_executor_listener",
             )
+            # PPT-3: actuation chain
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_CHANGE,
+                subscribing_actor_name=DEMO_RESPONDER_ACTOR_NAME,
+            )
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_APPLIED,
+                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+            )
+            # And a tiny consumer that paints the live overlay in the demo.
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_CHANGE,
+                subscribing_actor_name="ppt_demo_actuation_overlay_listener",
+            )
             self._router = router
 
             self._dramatiq_worker = Worker(
@@ -150,6 +211,18 @@ class DemoWindow(QMainWindow):
         # makes the highlight flash off between steps and is invisible.)
         self.executor.qsignals.step_started.connect(
             self.widget.highlight_active_row
+        )
+
+        # PPT-3: device viewer follows the tree's selection AND the
+        # executor's currently-running step.
+        sel_model = self.widget.tree.selectionModel()
+        sel_model.currentRowChanged.connect(
+            lambda cur, _prev: self.device_view.set_active_row(
+                cur.data(Qt.UserRole) if cur.isValid() else None
+            )
+        )
+        self.executor.qsignals.step_started.connect(
+            self.device_view.set_active_row
         )
         # Status bar updates
         self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
