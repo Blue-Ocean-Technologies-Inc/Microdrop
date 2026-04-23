@@ -111,3 +111,55 @@ def test_id_column_nested_display():
 def test_id_column_orphan_row_empty():
     col = make_id_column()
     assert col.view.format_display(None, BaseRow()) == ""
+
+
+# --- repetitions column ---
+
+from pluggable_protocol_tree.builtins.repetitions_column import (
+    make_repetitions_column,
+)
+
+
+def test_repetitions_column_default_one():
+    col = make_repetitions_column()
+    assert col.model.default_value == 1
+
+
+def test_repetitions_column_trait_is_int_with_default_one():
+    col = make_repetitions_column()
+    RowType = build_row_type([col], base=BaseRow)
+    r = RowType()
+    assert r.repetitions == 1
+
+
+def test_repetitions_column_view_uses_intspinbox_range():
+    col = make_repetitions_column()
+    assert col.view.low == 1
+    assert col.view.high == 1000
+
+
+def test_repetitions_column_drives_iter_execution_steps_expansion():
+    """Locks in the PPT-1 contract through a real column (not setattr)."""
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    cols = [make_type_column(), make_id_column(), make_name_column(),
+            make_repetitions_column(), make_duration_column()]
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "A", "repetitions": 3})
+    names = [r.name for r in rm.iter_execution_steps()]
+    assert names == ["A", "A", "A"]
+
+
+def test_repetitions_column_metadata():
+    col = make_repetitions_column()
+    assert col.model.col_id == "repetitions"
+    assert col.model.col_name == "Reps"
+
+
+def test_repetitions_column_editable_on_groups():
+    """Reps must be editable on group rows — that's the whole point of
+    group repetitions. The base IntSpinBoxColumnView strips
+    ItemIsEditable on groups; the reps column overrides that."""
+    from pyface.qt.QtCore import Qt
+    col = make_repetitions_column()
+    flags = col.view.get_flags(GroupRow())
+    assert flags & Qt.ItemIsEditable

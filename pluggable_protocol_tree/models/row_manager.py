@@ -346,28 +346,49 @@ class RowManager(HasTraits):
 
     def iter_execution_steps(self) -> Iterator[BaseRow]:
         """Yield rows in execution order, flattening groups and expanding
-        repetitions.
-
-        Repetitions contract: any row may have an integer attribute named
-        ``repetitions``. When present, that row's yield is multiplied. If
-        the row is a step, it's yielded `n` times. If a group, its entire
-        child-subtree is expanded n times. Missing attribute defaults to
-        1 rep. (The repetitions column is a core built-in that lands
-        alongside PPT-3's trail-config columns; PPT-1 establishes the
-        contract so the executor in PPT-2 can rely on it.)
+        repetitions. Backward-compat shim — delegates to the richer
+        ``iter_execution_frames``.
         """
-        yield from self._expand(self.root)
+        for row, _rep_chain in self.iter_execution_frames():
+            yield row
+
+    def iter_execution_frames(self) -> Iterator[tuple]:
+        """Yield ``(row, rep_chain)`` tuples in execution order.
+
+        ``rep_chain`` is a tuple of ``(name, rep_idx_1based, rep_total)``
+        triples, ordered outermost-first, covering ancestors with
+        ``repetitions > 1`` plus the row itself if its own reps > 1.
+        Singleton-rep rows contribute nothing to the chain. The root
+        group is always excluded from the chain (it represents "the
+        protocol", not a meaningful group).
+
+        Demos and the executor format ``rep_chain`` for human display
+        (e.g. "rep 2/3 of 'Wash'"). The empty tuple means "no repeating
+        ancestors" — a plain step in a non-repeating context.
+
+        Repetitions contract: any row may have an integer attribute
+        named ``repetitions``. Missing attribute defaults to 1.
+        """
+        yield from self._expand_frames(self.root, prefix=(), is_root=True)
 
     @classmethod
-    def _expand(cls, node) -> Iterator[BaseRow]:
+    def _expand_frames(cls, node, prefix, is_root=False) -> Iterator[tuple]:
         reps = max(1, int(getattr(node, "repetitions", 1) or 1))
         if isinstance(node, GroupRow):
-            for _ in range(reps):
+            for r in range(reps):
+                # Don't surface the root in the rep chain; it's "the
+                # protocol", not a group the user reasons about.
+                child_prefix = prefix
+                if not is_root and reps > 1:
+                    child_prefix = prefix + ((node.name, r + 1, reps),)
                 for child in node.children:
-                    yield from cls._expand(child)
+                    yield from cls._expand_frames(child, child_prefix)
         else:
-            for _ in range(reps):
-                yield node
+            for r in range(reps):
+                row_prefix = prefix
+                if reps > 1:
+                    row_prefix = prefix + ((node.name, r + 1, reps),)
+                yield (node, row_prefix)
 
     # --- slicing (pandas facade) ---
 

@@ -336,3 +336,75 @@ def test_apply_runs_callable_per_row(manager):
     manager.apply([a, b], lambda r: setattr(r, "duration_s", r.duration_s * 10))
     assert manager.get_row(a).duration_s == 10.0
     assert manager.get_row(b).duration_s == 20.0
+
+
+# --- iter_execution_frames (rep context surface) ---
+
+def test_frames_step_no_reps_yields_empty_chain(manager):
+    manager.add_step(values={"name": "A"})
+    frames = list(manager.iter_execution_frames())
+    assert len(frames) == 1
+    row, chain = frames[0]
+    assert row.name == "A"
+    assert chain == ()
+
+
+def test_frames_step_with_reps_carries_self_in_chain(manager):
+    s = manager.add_step(values={"name": "A"})
+    setattr(manager.get_row(s), "repetitions", 3)
+    frames = list(manager.iter_execution_frames())
+    assert [c for _r, c in frames] == [
+        (("A", 1, 3),), (("A", 2, 3),), (("A", 3, 3),),
+    ]
+
+
+def test_frames_group_reps_propagate_to_child_chain(manager):
+    g = manager.add_group(name="Wash")
+    manager.add_step(parent_path=g, values={"name": "A"})
+    manager.add_step(parent_path=g, values={"name": "B"})
+    setattr(manager.get_row(g), "repetitions", 2)
+    frames = list(manager.iter_execution_frames())
+    names = [r.name for r, _c in frames]
+    chains = [c for _r, c in frames]
+    assert names == ["A", "B", "A", "B"]
+    # Each child carries the group's rep context (outermost-first).
+    assert chains == [
+        (("Wash", 1, 2),), (("Wash", 1, 2),),
+        (("Wash", 2, 2),), (("Wash", 2, 2),),
+    ]
+
+
+def test_frames_nested_group_reps_compose(manager):
+    outer = manager.add_group(name="Outer")
+    inner = manager.add_group(parent_path=outer, name="Inner")
+    manager.add_step(parent_path=inner, values={"name": "S"})
+    setattr(manager.get_row(outer), "repetitions", 2)
+    setattr(manager.get_row(inner), "repetitions", 3)
+    chains = [c for _r, c in manager.iter_execution_frames()]
+    # 2 outer × 3 inner = 6 yields. Outer first, inner second.
+    assert chains == [
+        (("Outer", 1, 2), ("Inner", 1, 3)),
+        (("Outer", 1, 2), ("Inner", 2, 3)),
+        (("Outer", 1, 2), ("Inner", 3, 3)),
+        (("Outer", 2, 2), ("Inner", 1, 3)),
+        (("Outer", 2, 2), ("Inner", 2, 3)),
+        (("Outer", 2, 2), ("Inner", 3, 3)),
+    ]
+
+
+def test_frames_singleton_group_reps_excluded_from_chain(manager):
+    """Groups with reps==1 don't appear in the chain — chain represents
+    *active repetition context*, not group nesting."""
+    g = manager.add_group(name="Plain")
+    manager.add_step(parent_path=g, values={"name": "A"})
+    chains = [c for _r, c in manager.iter_execution_frames()]
+    assert chains == [()]
+
+
+def test_iter_execution_steps_still_works_via_delegation(manager):
+    """Backward compat: iter_execution_steps must still yield plain rows."""
+    g = manager.add_group(name="G")
+    manager.add_step(parent_path=g, values={"name": "A"})
+    setattr(manager.get_row(g), "repetitions", 2)
+    names = [r.name for r in manager.iter_execution_steps()]
+    assert names == ["A", "A"]

@@ -15,19 +15,28 @@ from pluggable_protocol_tree.models.row import GroupRow
 class MvcTreeModel(QAbstractItemModel):
     """Qt tree model over a RowManager.
 
-    An 'active' row (set via set_active_node) gets a light-green
-    background via BackgroundRole — used in PPT-2 by the executor to
-    highlight the running step. In PPT-1 this stays None.
+    An 'active' row (set via set_active_node) gets a blue background
+    with white foreground — used by the executor to highlight the
+    currently-running step (matching the legacy protocol_grid look).
+    In a non-running protocol this stays None.
     """
 
     structure_changed = Signal()   # high-level "redraw" nudge
 
-    _ACTIVE_BG = QBrush(QColor(200, 255, 200))
+    _ACTIVE_BG = QBrush(QColor(0, 90, 200))   # solid blue
+    _ACTIVE_FG = QBrush(QColor(255, 255, 255))
 
     def __init__(self, row_manager, parent=None):
         super().__init__(parent)
         self._manager = row_manager
         self._active_node = None
+        # Strong refs to every row this model has handed to Qt via
+        # createIndex(). Qt stores the third arg as a raw void*; if
+        # Python GCs the row before Qt drops the QModelIndex, the
+        # next access (selection sync, parent walk, etc.) dereferences
+        # freed memory and segfaults the QApplication. Keeping refs
+        # here costs O(rows-ever-shown) memory but is bulletproof.
+        self._owned_rows = set()
 
         # Rebroadcast manager changes as layoutChanged
         row_manager.observe(self._on_rows_changed, "rows_changed")
@@ -47,7 +56,12 @@ class MvcTreeModel(QAbstractItemModel):
         node = parent.internalPointer() if parent.isValid() else self._manager.root
         if row >= len(node.children):
             return QModelIndex()
-        return self.createIndex(row, column, node.children[row])
+        child = node.children[row]
+        # Pin the row so Qt's createIndex pointer stays valid even
+        # after the user removes the row from the manager (Qt's stale
+        # QModelIndex would otherwise dereference freed memory).
+        self._owned_rows.add(child)
+        return self.createIndex(row, column, child)
 
     def parent(self, index):
         if not index.isValid():
@@ -69,8 +83,11 @@ class MvcTreeModel(QAbstractItemModel):
         node = index.internalPointer()
         col = self._manager.columns[index.column()]
 
-        if role == Qt.BackgroundRole and node is self._active_node:
-            return self._ACTIVE_BG
+        if node is self._active_node:
+            if role == Qt.BackgroundRole:
+                return self._ACTIVE_BG
+            if role == Qt.ForegroundRole:
+                return self._ACTIVE_FG
 
         value = col.model.get_value(node)
 
