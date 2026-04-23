@@ -226,6 +226,19 @@ class TestSSHTopicsMatchConsts:
         assert SSHTopics.Errors.SSH_KEYGEN_ERROR == SSH_KEYGEN_ERROR
         assert SSHTopics.Errors.SSH_KEY_UPLOAD_ERROR == SSH_KEY_UPLOAD_ERROR
 
+    def test_sync_experiments_request(self):
+        from ssh_controls.consts import SYNC_EXPERIMENTS_REQUEST
+        assert SSHTopics.Requests.SYNC_EXPERIMENTS == SYNC_EXPERIMENTS_REQUEST
+
+    def test_sync_experiments_started(self):
+        from ssh_controls.consts import SYNC_EXPERIMENTS_STARTED
+        assert SSHTopics.Started.SYNC_EXPERIMENTS_STARTED == SYNC_EXPERIMENTS_STARTED
+
+    def test_sync_experiments_success_and_error(self):
+        from ssh_controls.consts import SYNC_EXPERIMENTS_SUCCESS, SYNC_EXPERIMENTS_ERROR
+        assert SSHTopics.Success.SYNC_EXPERIMENTS_SUCCESS == SYNC_EXPERIMENTS_SUCCESS
+        assert SSHTopics.Errors.SYNC_EXPERIMENTS_ERROR == SYNC_EXPERIMENTS_ERROR
+
 
 class TestOpenDropTopicsMatchConsts:
 
