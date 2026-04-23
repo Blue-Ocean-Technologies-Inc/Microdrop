@@ -120,6 +120,86 @@ def _route_with_repeats(
             yield from cycle
 
 
+def _ramp_up(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
+    """Prepend ramp phases that grow from 1 electrode to the size of
+    the first phase. K=1 first phase → no-op. K=3 first phase {a,b,c}
+    → yields {a}, {a,b} BEFORE the original {a,b,c}.
+
+    Element ordering within a set is non-deterministic; the ramp picks
+    elements in `sorted()` order so the choice is at least stable
+    across runs."""
+    try:
+        first = next(phases)
+    except StopIteration:
+        return
+    if len(first) > 1:
+        ordered = sorted(first)
+        for size in range(1, len(first)):
+            yield set(ordered[:size])
+    yield first
+    yield from phases
+
+
+def _ramp_down(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
+    """Append ramp phases that shrink from the last phase's size down
+    to 1. Mirror of _ramp_up — same sorted-element ordering for
+    stability."""
+    last = None
+    for p in phases:
+        if last is not None:
+            yield last
+        last = p
+    if last is None:
+        return
+    yield last
+    if len(last) > 1:
+        ordered = sorted(last)
+        for size in range(len(last) - 1, 0, -1):
+            yield set(ordered[-size:])
+
+
+def iter_phases(
+    static_electrodes: List[str],
+    routes: List[List[str]],
+    *,
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    soft_start: bool = False,
+    soft_end: bool = False,
+    repeat_duration_s: float = 0.0,
+    linear_repeats: bool = False,
+    n_repeats: int = 1,
+    step_duration_s: float = 1.0,
+) -> Iterator[Set[str]]:
+    """Yield each phase as the set of electrode IDs to actuate.
+
+    Each yield is one snapshot in time: static electrodes always
+    included; per-route trail windows unioned in. The caller (a
+    RoutesHandler) publishes the set, waits for the device's apply
+    confirmation, then asks for the next phase.
+
+    Composes the small helpers in this module — see the module
+    docstring for the full pipeline.
+    """
+    static = set(static_electrodes or [])
+    if not routes:
+        # No paths to traverse; the static set is the only phase.
+        yield static
+        return
+    per_route = [_route_with_repeats(r, trail_length, trail_overlay,
+                                     linear_repeats=linear_repeats,
+                                     n_repeats=n_repeats,
+                                     repeat_duration_s=repeat_duration_s,
+                                     step_duration_s=step_duration_s)
+                 for r in routes]
+    base = _zip_with_static(per_route, static)
+    if soft_start:
+        base = _ramp_up(base)
+    if soft_end:
+        base = _ramp_down(base)
+    yield from base
+
+
 def _zip_with_static(per_route_iters: list,
                      static: Set[str]) -> Iterator[Set[str]]:
     """At each tick, union the static set with each route's current

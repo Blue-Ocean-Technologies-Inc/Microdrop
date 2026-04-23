@@ -193,3 +193,132 @@ def test_zip_stops_when_all_routes_exhausted():
     r2 = iter([])
     out = list(_zip_with_static([r1, r2], static={"x"}))
     assert out == [{"a", "x"}, {"b", "x"}]
+
+
+# --- _ramp_up / _ramp_down ---
+
+from pluggable_protocol_tree.services.phase_math import (
+    _ramp_up, _ramp_down,
+)
+
+
+def test_ramp_up_single_electrode_first_phase_is_noop():
+    """First phase has 1 electrode → nothing to ramp."""
+    out = list(_ramp_up(iter([{"a"}, {"b"}])))
+    assert out == [{"a"}, {"b"}]
+
+
+def test_ramp_up_three_electrode_first_phase_prepends_two():
+    """First phase {a,b,c} → prepend {a}, {a,b} so the trail grows."""
+    out = list(_ramp_up(iter([{"a", "b", "c"}, {"d", "e", "f"}])))
+    assert len(out) == 4
+    assert len(out[0]) == 1 and out[0].issubset({"a", "b", "c"})
+    assert len(out[1]) == 2 and out[1].issubset({"a", "b", "c"})
+    assert out[2] == {"a", "b", "c"}
+    assert out[3] == {"d", "e", "f"}
+
+
+def test_ramp_up_empty_input_yields_empty():
+    out = list(_ramp_up(iter([])))
+    assert out == []
+
+
+def test_ramp_down_single_electrode_last_phase_is_noop():
+    out = list(_ramp_down(iter([{"a"}, {"b"}])))
+    assert out == [{"a"}, {"b"}]
+
+
+def test_ramp_down_three_electrode_last_phase_appends_two():
+    """Last phase {x,y,z} → append two ramp-down phases shrinking by 1."""
+    out = list(_ramp_down(iter([{"a"}, {"x", "y", "z"}])))
+    assert len(out) == 4
+    assert out[0] == {"a"}
+    assert out[1] == {"x", "y", "z"}
+    assert len(out[2]) == 2 and out[2].issubset({"x", "y", "z"})
+    assert len(out[3]) == 1 and out[3].issubset({"x", "y", "z"})
+
+
+# --- iter_phases (public composition) ---
+
+from pluggable_protocol_tree.services.phase_math import iter_phases
+
+
+def test_iter_phases_no_routes_static_only():
+    out = list(iter_phases(static_electrodes=["a", "b"], routes=[]))
+    assert out == [{"a", "b"}]
+
+
+def test_iter_phases_no_routes_no_static_one_empty_phase():
+    out = list(iter_phases(static_electrodes=[], routes=[]))
+    assert out == [set()]
+
+
+def test_iter_phases_one_open_route_with_static():
+    out = list(iter_phases(
+        static_electrodes=["x"], routes=[["a", "b", "c"]],
+        trail_length=1, trail_overlay=0,
+    ))
+    assert out == [{"a", "x"}, {"b", "x"}, {"c", "x"}]
+
+
+def test_iter_phases_one_loop_route():
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b", "c", "a"]],
+        trail_length=1, trail_overlay=0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}]
+
+
+def test_iter_phases_two_routes_zip_with_static():
+    out = list(iter_phases(
+        static_electrodes=["x"],
+        routes=[["a", "b"], ["p", "q"]],
+        trail_length=1, trail_overlay=0,
+    ))
+    assert out == [{"a", "p", "x"}, {"b", "q", "x"}]
+
+
+def test_iter_phases_soft_start_prepends_ramp():
+    """trail_length=3 + soft_start: {a},{a,b},{a,b,c},{b,c,d},{c,d,e}.
+    Five phases for a 5-electrode line: 2 ramps + 3 windows."""
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b", "c", "d", "e"]],
+        trail_length=3, trail_overlay=2, soft_start=True,
+    ))
+    assert len(out) == 5
+    assert len(out[0]) == 1   # ramp
+    assert len(out[1]) == 2   # ramp
+    assert all(len(p) == 3 for p in out[2:])    # full windows
+
+
+def test_iter_phases_soft_end_appends_ramp():
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b", "c", "d", "e"]],
+        trail_length=3, trail_overlay=2, soft_end=True,
+    ))
+    assert len(out) == 5
+    assert all(len(p) == 3 for p in out[:3])
+    assert len(out[3]) == 2
+    assert len(out[4]) == 1
+
+
+def test_iter_phases_repeat_duration_caps_loop_cycles():
+    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles."""
+    out = list(iter_phases(
+        static_electrodes=[],
+        routes=[["a", "b", "c", "a"]],
+        trail_length=1, trail_overlay=0,
+        repeat_duration_s=6.5, step_duration_s=1.0,
+        n_repeats=999,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+
+
+def test_iter_phases_linear_repeats_replays_open_route():
+    """Linear-repeats true on an open route: replay n_repeats times."""
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b"]],
+        trail_length=1, trail_overlay=0,
+        linear_repeats=True, n_repeats=3,
+    ))
+    assert out == [{"a"}, {"b"}, {"a"}, {"b"}, {"a"}, {"b"}]
