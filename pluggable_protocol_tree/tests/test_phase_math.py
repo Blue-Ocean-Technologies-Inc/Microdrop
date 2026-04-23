@@ -72,3 +72,76 @@ def test_windows_loop_route_trail_2_wraps():
 def test_windows_empty_route_yields_nothing():
     out = list(_route_windows([], trail_length=1, trail_overlay=0))
     assert out == []
+
+
+# --- _route_with_repeats ---
+
+from pluggable_protocol_tree.services.phase_math import _route_with_repeats
+
+
+def test_repeats_open_route_no_linear_repeats_one_pass():
+    """Open route, linear_repeats=False: same as one _route_windows pass."""
+    out = list(_route_with_repeats(
+        ["a", "b", "c"], trail_length=1, trail_overlay=0,
+        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}]
+
+
+def test_repeats_open_route_linear_repeats_replays_n_times():
+    """Open route, linear_repeats=True: replay the windows N=2 times."""
+    out = list(_route_with_repeats(
+        ["a", "b"], trail_length=1, trail_overlay=0,
+        linear_repeats=True, n_repeats=2,
+        repeat_duration_s=0.0, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"a"}, {"b"}]
+
+
+def test_repeats_loop_route_default_one_cycle():
+    out = list(_route_with_repeats(
+        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
+        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}]
+
+
+def test_repeats_loop_route_n_repeats():
+    """Loop route + n_repeats=2 → 2 full cycles."""
+    out = list(_route_with_repeats(
+        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
+        linear_repeats=False, n_repeats=2,
+        repeat_duration_s=0.0, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+
+
+def test_repeats_loop_with_repeat_duration_caps_cycles():
+    """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
+    cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
+    cycle (always at least one pass). Test: 1 cycle yielded."""
+    out = list(_route_with_repeats(
+        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
+        linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
+        repeat_duration_s=2.5, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}]   # 1 cycle
+
+
+def test_repeats_loop_with_repeat_duration_fits_two_cycles():
+    """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
+    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles."""
+    out = list(_route_with_repeats(
+        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
+        linear_repeats=False, n_repeats=999,
+        repeat_duration_s=6.5, step_duration_s=1.0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles
+
+
+def test_repeats_empty_route_yields_nothing():
+    out = list(_route_with_repeats(
+        [], trail_length=1, trail_overlay=0,
+        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
+    ))
+    assert out == []

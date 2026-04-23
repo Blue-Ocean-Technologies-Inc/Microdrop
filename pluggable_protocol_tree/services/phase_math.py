@@ -74,3 +74,47 @@ def _route_windows(route: List[str], trail_length: int,
             if pos + trail_length >= n:
                 return
             pos += step
+
+
+def _route_with_repeats(
+    route: List[str],
+    trail_length: int,
+    trail_overlay: int,
+    *,
+    linear_repeats: bool = False,
+    n_repeats: int = 1,
+    repeat_duration_s: float = 0.0,
+    step_duration_s: float = 1.0,
+) -> Iterator[Set[str]]:
+    """Wraps _route_windows with repeat-count + duration-budget logic.
+
+    Open route + linear_repeats=False → one pass of _route_windows.
+    Open route + linear_repeats=True  → n_repeats passes (the row's
+                                        `repetitions` column).
+    Loop route → n_repeats cycles UNLESS repeat_duration_s > 0, in
+                 which case cycles = max(1, floor(repeat_duration_s /
+                 (cycle_phases * step_duration_s))). The minimum of 1
+                 guarantees at least one cycle even on tiny budgets.
+
+    Empty route yields nothing.
+    """
+    if not route:
+        return
+    cycle = list(_route_windows(route, trail_length, trail_overlay))
+    if not cycle:
+        return
+
+    is_loop = _is_loop_route(route)
+    if is_loop:
+        if repeat_duration_s > 0 and step_duration_s > 0:
+            cycle_phases = len(cycle)
+            cycles = max(1, int(repeat_duration_s
+                                / (cycle_phases * step_duration_s)))
+        else:
+            cycles = max(1, int(n_repeats))
+        for _ in range(cycles):
+            yield from cycle
+    else:
+        passes = max(1, int(n_repeats)) if linear_repeats else 1
+        for _ in range(passes):
+            yield from cycle
