@@ -496,3 +496,28 @@ class RowManager(HasTraits):
         manager.root = root
         manager.protocol_metadata = metadata
         return manager
+
+    def set_state_from_json(self, data: dict, columns: list) -> None:
+        """Reconstruct tree state in-place from a serialized payload dynamically."""
+        from pluggable_protocol_tree.services.persistence import deserialize_tree
+
+        # 1. Update columns. This triggers _on_columns_change via Traits,
+        #    which automatically rebuilds self.step_type and self.group_type.
+        self.columns = list(columns)
+
+        # 2. Deserialize the payload into a new root and metadata dict
+        root, metadata = deserialize_tree(
+            data, self.columns,
+            step_type=self.step_type,
+            group_type=self.group_type,
+        )
+
+        # 3. Apply the new state
+        self.root = root
+        self.protocol_metadata = metadata
+
+        # 4. Clear any dangling selection paths, as the old tree structure is gone
+        self.selection = []
+
+        # 5. Notify the UI/observers that the structure has completely changed
+        self.rows_changed = True

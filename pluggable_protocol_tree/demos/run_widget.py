@@ -493,20 +493,20 @@ class DemoWindow(QMainWindow):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         try:
-            self.manager = RowManager.from_json(data, columns=_columns())
+            self.manager.set_state_from_json(data, columns=_columns())
         except Exception as e:
             QMessageBox.critical(self, "Load error", str(e))
             return
-        self.widget = ProtocolTreeWidget(self.manager, parent=self)
-        self.setCentralWidget(self.widget)
-        # Re-wire executor against the new manager
-        self.executor = ProtocolExecutor(
-            row_manager=self.manager,
-            qsignals=ExecutorSignals(),
-            pause_event=PauseEvent(),
-            stop_event=threading.Event(),
-        )
-        self._wire_signals()
+        # self.widget = ProtocolTreeWidget(self.manager, parent=self)
+        # self.setCentralWidget(self.widget)
+        # # Re-wire executor against the new manager
+        # self.executor = ProtocolExecutor(
+        #     row_manager=self.manager,
+        #     qsignals=ExecutorSignals(),
+        #     pause_event=PauseEvent(),
+        #     stop_event=threading.Event(),
+        # )
+        # self._wire_signals()
 
 
 def main():
