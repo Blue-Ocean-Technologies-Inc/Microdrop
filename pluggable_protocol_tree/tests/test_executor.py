@@ -118,6 +118,70 @@ def test_executor_resume_emits_protocol_resumed():
     assert received == ["resumed"]
 
 
+def test_executor_constructible_with_only_row_manager():
+    """Headless / scripting use: pass just the row_manager and let
+    qsignals / pause_event / stop_event default."""
+    cols = [make_type_column(), make_id_column(),
+            make_name_column(), _fast_duration_column()]
+    rm = RowManager(columns=cols)
+    ex = ProtocolExecutor(row_manager=rm)
+    assert ex.qsignals is not None
+    assert ex.pause_event is not None
+    assert ex.stop_event is not None
+
+
+def test_executor_wait_returns_true_when_never_started():
+    cols = [make_type_column(), make_id_column(),
+            make_name_column(), _fast_duration_column()]
+    rm = RowManager(columns=cols)
+    ex = ProtocolExecutor(row_manager=rm)
+    # Never called start(); wait should return True immediately.
+    assert ex.wait(timeout=0.01) is True
+
+
+def test_executor_wait_blocks_until_run_finishes():
+    from pyface.qt.QtCore import Qt
+    cols = [make_type_column(), make_id_command if False else make_id_column(),
+            make_name_column(), _fast_duration_column()]
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "A"})
+    ex = ProtocolExecutor(row_manager=rm)
+    finished = []
+    ex.qsignals.protocol_finished.connect(
+        lambda: finished.append(True), type=Qt.DirectConnection,
+    )
+    ex.start()
+    assert ex.wait(timeout=5.0) is True
+    assert finished == [True]
+
+
+def test_executor_execute_classmethod_blocks_by_default():
+    cols = [make_type_column(), make_id_column(),
+            make_name_column(), _fast_duration_column()]
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "A"})
+    ex = ProtocolExecutor.execute(rm)   # blocking=True by default
+    # By the time execute returns, the worker thread is done.
+    assert not ex._thread.is_alive()
+
+
+def test_executor_execute_classmethod_non_blocking_returns_immediately():
+    import time as _time
+    cols = [make_type_column(), make_id_column(),
+            make_name_column(), make_duration_column()]   # full 1s default
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "A"})
+    t0 = _time.monotonic()
+    ex = ProtocolExecutor.execute(rm, blocking=False)
+    elapsed = _time.monotonic() - t0
+    # Returned without waiting for the 1s dwell.
+    assert elapsed < 0.5, f"execute(blocking=False) took {elapsed:.3f}s"
+    assert ex._thread is not None
+    # Stop and wait so the thread isn't left running for the next test.
+    ex.stop()
+    ex.wait(timeout=5.0)
+
+
 def test_executor_start_runs_protocol_on_worker_thread_and_finishes():
     """Regression test: start() spawns a worker thread that calls run().
 

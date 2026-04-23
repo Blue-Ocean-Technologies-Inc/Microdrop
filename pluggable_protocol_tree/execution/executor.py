@@ -61,8 +61,41 @@ class ProtocolExecutor(HasTraits):
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
 
+    # ------- defaults so headless callers can ProtocolExecutor(row_manager=rm) -------
+
+    def _qsignals_default(self):
+        return ExecutorSignals()
+
+    def _pause_event_default(self):
+        return PauseEvent()
+
+    def _stop_event_default(self):
+        return threading.Event()
+
     def _bucket_pool_factory_default(self):
         return ThreadPoolExecutor
+
+    # ------- one-shot convenience for headless / scripting callers -------
+
+    @classmethod
+    def execute(cls, row_manager, blocking: bool = True,
+                timeout: float = None) -> "ProtocolExecutor":
+        """Construct an executor with sensible defaults, start it, and
+        optionally block until done. Returns the executor so the caller
+        can pause/resume/stop or inspect signals afterwards.
+
+        Headless usage:
+            ex = ProtocolExecutor.execute(rm, blocking=False)
+            ex.pause()
+            time.sleep(2)
+            ex.resume()
+            ex.wait()
+        """
+        ex = cls(row_manager=row_manager)
+        ex.start()
+        if blocking:
+            ex.wait(timeout=timeout)
+        return ex
 
     # ------- public control API (called from the GUI thread) -------
 
@@ -80,6 +113,16 @@ class ProtocolExecutor(HasTraits):
             daemon=True,
         )
         self._thread.start()
+
+    def wait(self, timeout: float = None) -> bool:
+        """Block until the executor's worker thread finishes (or the
+        timeout elapses). Returns True if the thread is no longer
+        running, False if it's still going (timeout case). Returns True
+        immediately if start() was never called."""
+        if self._thread is None:
+            return True
+        self._thread.join(timeout=timeout)
+        return not self._thread.is_alive()
 
     def pause(self) -> None:
         """Set pause_event. Effective at the next step boundary."""
