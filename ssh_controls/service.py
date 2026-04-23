@@ -3,20 +3,24 @@ import warnings
 
 import dramatiq
 from paramiko import AuthenticationException
+from pydantic import ValidationError
 from traits.api import HasTraits, provides, Instance
 
 from logger.logger_service import get_logger
 from microdrop_utils import paramiko_helpers
 from microdrop_utils.dramatiq_controller_base import (
-    IDramatiqControllerBase, 
-    basic_listener_actor_routine, 
+    IDramatiqControllerBase,
+    basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.file_sync_helpers import Rsync
 
 
 from .consts import listener_name, SSH_KEYGEN_SUCCESS, \
-    SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR, SSH_KEY_UPLOAD_ERROR, SSH_KEY_UPLOAD_SUCCESS
+    SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR, SSH_KEY_UPLOAD_ERROR, SSH_KEY_UPLOAD_SUCCESS, \
+    SYNC_EXPERIMENTS_STARTED, SYNC_EXPERIMENTS_SUCCESS, SYNC_EXPERIMENTS_ERROR
+from .models import ExperimentsSyncRequest
 
 logger = get_logger(__name__)
 
@@ -132,3 +136,64 @@ class SSHService(HasTraits):
         finally:
             if ssh_client:
                 ssh_client.close()
+
+    def _on_sync_experiments_request(self, message):
+        """Handler for ``ssh_service/request/sync_experiments``.
+
+        Runs rsync over SSH as the local (frontend) host, pulling from
+        the remote backend. Publishes a ``started`` ack on receipt and
+        either ``success`` or ``error`` when the blocking rsync call
+        completes. Blocks this dramatiq worker for the duration of the
+        transfer (consistent with _on_key_upload_request).
+        """
+        try:
+            model = ExperimentsSyncRequest.model_validate_json(message)
+        except ValidationError as e:
+            publish_message(
+                json.dumps({"title": "Invalid sync request", "text": str(e)}),
+                SYNC_EXPERIMENTS_ERROR,
+            )
+            return
+
+        publish_message(
+            json.dumps({"message": "Sync started"}),
+            SYNC_EXPERIMENTS_STARTED,
+        )
+
+        try:
+            result = Rsync().sync(
+                src=model.src,
+                dest=model.dest,
+                identity=model.identity_path,
+                ssh_port=model.port,
+                archive=True,
+                partial=True,
+                verbose=True,
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                publish_message(
+                    json.dumps({"message": "Sync complete."}),
+                    SYNC_EXPERIMENTS_SUCCESS,
+                )
+            else:
+                tail = (result.stderr or "")[-500:]
+                publish_message(
+                    json.dumps({
+                        "title": f"rsync exit {result.returncode}",
+                        "text": tail,
+                    }),
+                    SYNC_EXPERIMENTS_ERROR,
+                )
+        except FileNotFoundError as e:
+            publish_message(
+                json.dumps({"title": "rsync executable not found", "text": str(e)}),
+                SYNC_EXPERIMENTS_ERROR,
+            )
+        except Exception as e:
+            logger.exception("Remote sync failed")
+            publish_message(
+                json.dumps({"title": "Unexpected error", "text": str(e)}),
+                SYNC_EXPERIMENTS_ERROR,
+            )
