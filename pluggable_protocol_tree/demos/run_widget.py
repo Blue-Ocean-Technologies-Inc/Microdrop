@@ -27,12 +27,19 @@ from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.demos.ack_roundtrip_column import (
+    DEMO_APPLIED_TOPIC, DEMO_REQUEST_TOPIC, RESPONDER_ACTOR_NAME,
+    make_ack_roundtrip_column,
+)
 from pluggable_protocol_tree.demos.message_column import make_message_column
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
+
+
+logger = logging.getLogger(__name__)
 
 
 def _columns():
@@ -43,6 +50,7 @@ def _columns():
         make_repetitions_column(),
         make_duration_column(),
         make_message_column(),
+        make_ack_roundtrip_column(),
     ]
 
 
@@ -73,10 +81,62 @@ class DemoWindow(QMainWindow):
         self._tick_timer.setInterval(100)   # 10 Hz elapsed-time display
         self._tick_timer.timeout.connect(self._refresh_status)
 
+        # Set up Dramatiq routing + a worker so the ack-roundtrip
+        # column's publish → wait_for actually completes. Best-effort:
+        # if Redis isn't running, the column will time out at runtime
+        # and surface as protocol_error in the dialog.
+        self._dramatiq_worker = None
+        self._setup_dramatiq_routing()
+
         self._build_status_bar()
         self._wire_signals()
         self._build_toolbar()
         self._reset_status()
+
+    def _setup_dramatiq_routing(self):
+        """Best-effort: register subscriptions for the ack-roundtrip
+        column's request/applied topics, and spin up an in-process
+        Dramatiq worker so the responder + executor_listener actors
+        actually receive messages."""
+        try:
+            from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
+            from dramatiq import Worker
+            import dramatiq
+
+            router = MessageRouterActor()
+            router.message_router_data.add_subscriber_to_topic(
+                topic=DEMO_REQUEST_TOPIC,
+                subscribing_actor_name=RESPONDER_ACTOR_NAME,
+            )
+            router.message_router_data.add_subscriber_to_topic(
+                topic=DEMO_APPLIED_TOPIC,
+                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+            )
+            self._router = router
+
+            self._dramatiq_worker = Worker(
+                dramatiq.get_broker(), worker_timeout=100,
+            )
+            self._dramatiq_worker.start()
+            logger.info("Dramatiq worker started for demo")
+        except ValueError as e:
+            # MessageRouterActor() raises if message_router_actor is
+            # already registered (e.g. demo loaded a second time in
+            # the same process via Load…). Reuse — don't double-register.
+            if "already registered" not in str(e):
+                logger.warning("Demo Dramatiq routing setup failed: %s", e)
+        except Exception as e:
+            logger.warning(
+                "Demo Dramatiq routing setup failed (Redis not running?): %s", e,
+            )
+
+    def closeEvent(self, event):
+        if self._dramatiq_worker is not None:
+            try:
+                self._dramatiq_worker.stop()
+            except Exception:
+                logger.exception("Error stopping demo dramatiq worker")
+        super().closeEvent(event)
 
     def _wire_signals(self):
         # Active-row highlight. Only step_started + terminal signals
