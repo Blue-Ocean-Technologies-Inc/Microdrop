@@ -7,6 +7,7 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
 
 
@@ -110,3 +111,33 @@ def test_from_json_missing_column_warns_and_skips(manager, caplog):
     nm = RowManager.from_json(data, columns=list(manager.columns))
     # Loader should have warned; no exception; row count preserved
     assert len(nm.root.children) == len(manager.root.children)
+
+
+# --- PPT-3: protocol_metadata in the JSON header ---
+
+def test_protocol_metadata_round_trips():
+    cols = [make_type_column(), make_id_column(), make_name_column(),
+            make_repetitions_column(), make_duration_column()]
+    rm = RowManager(columns=cols)
+    rm.protocol_metadata["electrode_to_channel"] = {"e00": 0, "e01": 1}
+    rm.add_step(values={"name": "A"})
+
+    payload = rm.to_json()
+    assert payload["protocol_metadata"] == {"electrode_to_channel": {"e00": 0, "e01": 1}}
+
+    rm2 = RowManager.from_json(payload, columns=list(cols))
+    assert rm2.protocol_metadata == {"electrode_to_channel": {"e00": 0, "e01": 1}}
+
+
+def test_protocol_metadata_missing_in_legacy_payload_loads_as_empty():
+    """Backward-compat: a PPT-1/PPT-2 era JSON without the
+    protocol_metadata key loads with manager.protocol_metadata == {}."""
+    cols = [make_type_column(), make_id_column(), make_name_column(),
+            make_repetitions_column(), make_duration_column()]
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "A"})
+    payload = rm.to_json()
+    payload.pop("protocol_metadata", None)   # simulate older format
+
+    rm2 = RowManager.from_json(payload, columns=list(cols))
+    assert rm2.protocol_metadata == {}

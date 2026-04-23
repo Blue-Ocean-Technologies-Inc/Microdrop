@@ -477,15 +477,22 @@ class RowManager(HasTraits):
     # --- persistence ---
 
     def to_json(self) -> dict:
+        """Serialize the tree + per-protocol metadata to a JSON-ready dict."""
         from pluggable_protocol_tree.services.persistence import serialize_tree
-        return serialize_tree(self.root, list(self.columns))
+        return serialize_tree(
+            self.root, list(self.columns),
+            protocol_metadata=dict(self.protocol_metadata),
+        )
 
     @classmethod
     def from_json(cls, data: dict, columns: list) -> "RowManager":
+        """Reconstruct a RowManager from a serialized payload."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
-        # Construct an empty manager so we can use its step_type/group_type
-        manager = cls(columns=columns)
-        manager.root = deserialize_tree(
-            data, columns, manager.step_type, manager.group_type,
+        manager = cls(columns=list(columns))
+        root, metadata = deserialize_tree(
+            data, columns,
+            step_type=manager.step_type, group_type=manager.group_type,
         )
+        manager.root = root
+        manager.protocol_metadata = metadata
         return manager
