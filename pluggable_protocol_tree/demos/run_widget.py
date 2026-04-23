@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 
+import dramatiq
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QStatusBar,
@@ -38,7 +39,10 @@ from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
-
+# remove prometheus metrics for now
+for el in dramatiq.get_broker().middleware:
+    if el.__module__ == "dramatiq.middleware.prometheus":
+        dramatiq.get_broker().middleware.remove(el)
 logger = logging.getLogger(__name__)
 
 
