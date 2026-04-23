@@ -91,7 +91,13 @@ class RoutesHandler(BaseColumnHandler):
                     "channels": channels,
                 }),
             )
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=2.0)
+            # 5.0s matches ack_roundtrip_column. Keeps headroom for the
+            # first publish in a process (cold broker pays ~1-2s) and
+            # for queue contention when other handlers in the same
+            # priority bucket publish in parallel and serialize through
+            # the single dramatiq worker queue. Hardware controllers
+            # typically ack in <100ms.
+            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
 
 
 def make_routes_column():

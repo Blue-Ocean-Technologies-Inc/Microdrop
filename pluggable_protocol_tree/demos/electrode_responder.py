@@ -27,6 +27,6 @@ DEMO_APPLY_DELAY_S = 0.05
 def _demo_electrode_responder(message: str, topic: str,
                                timestamp: float = None):
     """Hardware-controller stand-in. ~50ms apply delay, acks."""
-    logger.debug("[demo electrode responder] received %r on %s", message, topic)
+    logger.info("[demo electrode responder] received %r on %s", message, topic)
     time.sleep(DEMO_APPLY_DELAY_S)
     publish_message(message="ok", topic=ELECTRODES_STATE_APPLIED)

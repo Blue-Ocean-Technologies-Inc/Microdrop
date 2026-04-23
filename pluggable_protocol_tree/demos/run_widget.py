@@ -196,12 +196,6 @@ class DemoWindow(QMainWindow):
                 subscribing_actor_name="ppt_demo_actuation_overlay_listener",
             )
             self._router = router
-
-            self._dramatiq_worker = Worker(
-                dramatiq.get_broker(), worker_timeout=100,
-            )
-            self._dramatiq_worker.start()
-            logger.info("Dramatiq worker started for demo")
         except ValueError as e:
             # MessageRouterActor() raises if message_router_actor is
             # already registered (e.g. demo loaded a second time in
@@ -454,4 +448,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    from microdrop_utils.broker_server_helpers import redis_server_context, dramatiq_workers_context
+
+    with redis_server_context():
+        with dramatiq_workers_context():
+            main()
