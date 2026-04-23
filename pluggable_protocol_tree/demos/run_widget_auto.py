@@ -294,9 +294,19 @@ class AutoDemoWindow(QMainWindow):
         sigs.step_finished.connect(
             lambda r: print(f"[STEP FINISHED] {r.name!r}", flush=True))
 
-        # Drive the device viewer's active-row highlight from
-        # step_started so the green overlay maps to the right row.
+        # Tree active-row highlight (blue background) follows the
+        # currently-running step.
+        sigs.step_started.connect(self.widget.highlight_active_row)
+        # Device viewer active-row highlight follows step_started AND
+        # the user's tree selection (so clicking a step previews its
+        # electrodes/routes; clicking empty space clears the viewer).
         sigs.step_started.connect(self.device_view.set_active_row)
+        sel_model = self.widget.tree.selectionModel()
+        sel_model.currentRowChanged.connect(
+            lambda cur, _prev: self.device_view.set_active_row(
+                cur.data(Qt.UserRole) if cur.isValid() else None
+            )
+        )
 
     def _wire_terminate_to_quit(self):
         sigs = self.executor.qsignals
@@ -312,27 +322,32 @@ class AutoDemoWindow(QMainWindow):
     def _on_finished(self):
         print(f"[AUTO DONE] FINISHED -- phases published: {len(_phase_log)}",
               flush=True)
-        self._clear_tree_selection()
+        self._clear_all_highlights()
         self._summarize_phases()
         self._shutdown(0)
 
     def _on_aborted(self):
         print(f"[AUTO DONE] ABORTED -- phases published: {len(_phase_log)}",
               flush=True)
-        self._clear_tree_selection()
+        self._clear_all_highlights()
         self._summarize_phases()
         self._shutdown(2)
 
     def _on_error(self, msg):
         print(f"[AUTO DONE] ERROR -- {msg}", flush=True)
-        self._clear_tree_selection()
+        self._clear_all_highlights()
         self._summarize_phases()
         self._shutdown(1)
 
-    def _clear_tree_selection(self):
-        """Drop selection + current index so the device viewer's
-        currentRowChanged listener clears its highlights."""
+    def _clear_all_highlights(self):
+        """Restore an idle visual state at protocol end. Clears, in order:
+          - tree active-row highlight (blue executor cursor)
+          - device viewer (statics + routes + actuated overlay)
+          - tree selection AND current index (last so currentRowChanged
+            doesn't fight the explicit set_active_row(None) above)."""
         from pyface.qt.QtCore import QModelIndex
+        self.widget.highlight_active_row(None)
+        self.device_view.set_active_row(None)
         self.widget.tree.clearSelection()
         self.widget.tree.setCurrentIndex(QModelIndex())
 

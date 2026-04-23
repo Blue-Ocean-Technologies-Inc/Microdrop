@@ -387,26 +387,27 @@ class DemoWindow(QMainWindow):
             self._tick_timer.start()
 
     def _on_protocol_terminated(self):
-        self.widget.highlight_active_row(None)
-        self._clear_tree_selection()
+        self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self._reset_status()
 
     def _on_error(self, msg):
-        self.widget.highlight_active_row(None)
-        self._clear_tree_selection()
+        self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self._reset_status()
         QMessageBox.critical(self, "Protocol error", msg)
 
-    def _clear_tree_selection(self):
-        """Drop current row + selection so the device viewer follows
-        suit (its currentRowChanged listener calls set_active_row(None)
-        when the index becomes invalid, which clears statics, routes,
-        and the live actuation overlay)."""
+    def _clear_all_highlights(self):
+        """Restore an idle visual state at protocol end. Clears, in order:
+          - tree active-row highlight (blue executor cursor)
+          - device viewer (statics + routes + actuated overlay)
+          - tree selection AND current index (last so currentRowChanged
+            doesn't fight the explicit set_active_row(None) above)."""
         from pyface.qt.QtCore import QModelIndex
+        self.widget.highlight_active_row(None)
+        self.device_view.set_active_row(None)
         self.widget.tree.clearSelection()
         self.widget.tree.setCurrentIndex(QModelIndex())
 
