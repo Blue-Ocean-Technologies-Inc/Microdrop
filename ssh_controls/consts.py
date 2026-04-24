@@ -30,9 +30,9 @@ SSH_KEY_UPLOAD_ERROR = "ssh_service/error/ssh_key_upload_error"
 
 # --- Remote experiments sync ----------------------------------------------
 # Response topics (ssh_controls service -> frontend)
-SYNC_EXPERIMENTS_STARTED = "ssh_service/started/sync_experiments"
-SYNC_EXPERIMENTS_SUCCESS = "ssh_service/success/sync_experiments"
-SYNC_EXPERIMENTS_ERROR   = "ssh_service/error/sync_experiments"
+SYNC_EXPERIMENTS_STARTED = "ssh_service/started/sync_experiments_started"
+SYNC_EXPERIMENTS_SUCCESS = "ssh_service/success/sync_experiments_success"
+SYNC_EXPERIMENTS_ERROR   = "ssh_service/error/sync_experiments_error"
 
 # Convenience publisher singleton (matches electrode_controller/consts.py style).
 # Imported here so call sites can do:
