@@ -19,8 +19,13 @@ from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow
 
 
-def serialize_tree(root: GroupRow, columns: list) -> dict:
-    """Build the full JSON dict for `root` using the given column set."""
+def serialize_tree(root: GroupRow, columns: list, protocol_metadata=None) -> dict:
+    """Build the full JSON dict for `root` using the given column set.
+
+    `protocol_metadata` is a dict of namespaced settings (PPT-3:
+    'electrode_to_channel'). Optional for backward compat with
+    PPT-1/PPT-2 callers that don't pass it.
+    """
     col_specs = [
         {
             "id": c.model.col_id,
@@ -34,6 +39,7 @@ def serialize_tree(root: GroupRow, columns: list) -> dict:
 
     return {
         "schema_version": PERSISTENCE_SCHEMA_VERSION,
+        "protocol_metadata": dict(protocol_metadata or {}),
         "columns": col_specs,
         "fields": fields,
         "rows": rows_out,
@@ -59,7 +65,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def deserialize_tree(data: dict, columns: list, step_type, group_type) -> GroupRow:
+def deserialize_tree(data: dict, columns: list, step_type, group_type):
     """Reconstruct a tree from a saved-JSON dict.
 
     Args:
@@ -67,6 +73,9 @@ def deserialize_tree(data: dict, columns: list, step_type, group_type) -> GroupR
         columns: live IColumn list to load values into.
         step_type: dynamic step subclass for this protocol.
         group_type: dynamic group subclass for this protocol.
+
+    Returns (root, protocol_metadata) tuple; protocol_metadata is an
+    empty dict if the JSON predates PPT-3.
     """
     live_by_col_id = {c.model.col_id: c for c in columns}
     col_specs: list = data["columns"]
@@ -122,4 +131,5 @@ def deserialize_tree(data: dict, columns: list, step_type, group_type) -> GroupR
         if row_type == "group":
             stack.append(row)
 
-    return root
+    metadata = dict(data.get("protocol_metadata") or {})
+    return root, metadata

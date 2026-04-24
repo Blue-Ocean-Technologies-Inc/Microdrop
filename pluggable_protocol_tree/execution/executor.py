@@ -150,6 +150,10 @@ class ProtocolExecutor(HasTraits):
         proto_ctx = ProtocolContext(
             columns=cols, stop_event=self.stop_event,
         )
+        # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
+        # into the context's scratch so handlers can reach it without
+        # holding a reference to the RowManager.
+        proto_ctx.scratch.update(self.row_manager.protocol_metadata)
         proto_started_at = _time.monotonic()
         try:
             # Hide first-publish latency (Redis connect ~2s) from step 1's

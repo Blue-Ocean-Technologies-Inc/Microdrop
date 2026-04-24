@@ -4,7 +4,7 @@ remove / copy / cut / paste / group."""
 import logging
 from enum import Enum
 
-from pyface.qt.QtCore import Qt, QPersistentModelIndex, Signal
+from pyface.qt.QtCore import Qt, QPersistentModelIndex, QModelIndex, Signal
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
@@ -24,6 +24,12 @@ class _ProtocolTreeView(QTreeView):
     no overload-resolution surprises, no shortcut-context confusion, and
     we explicitly accept() the event so Qt's default key handling
     doesn't get a second chance to interpret it.
+
+    Left-click on empty tree space clears the selection AND the current
+    index. Mirrors the legacy protocol_grid behaviour and lets a
+    listener on currentRowChanged drive 'no row selected' UI (e.g. the
+    SimpleDeviceViewer clears its electrodes/routes display when the
+    active row is None).
     """
 
     delete_pressed = Signal()
@@ -34,6 +40,16 @@ class _ProtocolTreeView(QTreeView):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            idx = self.indexAt(event.position().toPoint())
+            if not idx.isValid():
+                self.clearSelection()
+                self.setCurrentIndex(QModelIndex())
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 class ProtocolTreeWidget(QWidget):
@@ -53,6 +69,16 @@ class ProtocolTreeWidget(QWidget):
 
         self.model = MvcTreeModel(row_manager, parent=self.tree)
         self.tree.setModel(self.model)
+
+        # PPT-3: hide columns marked hidden_by_default at construction
+        for i, col in enumerate(self._manager.columns):
+            if getattr(col.view, "hidden_by_default", False):
+                self.tree.setColumnHidden(i, True)
+
+        # PPT-3: header right-click menu to toggle column visibility
+        header = self.tree.header()
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._on_header_context_menu)
 
         self.delegate = ProtocolItemDelegate(row_manager, parent=self.tree)
         self.tree.setItemDelegate(self.delegate)
@@ -141,6 +167,22 @@ class ProtocolTreeWidget(QWidget):
         menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _on_header_context_menu(self, pos):
+        """Header right-click → menu listing every column with a
+        toggleable 'Show' checkmark. Affects only the QTreeView's
+        column visibility — does not touch the underlying row data."""
+        menu = QMenu()
+        for i, col in enumerate(self._manager.columns):
+            action = menu.addAction(col.model.col_name)
+            action.setCheckable(True)
+            action.setChecked(not self.tree.isColumnHidden(i))
+
+            def _toggle(checked, idx=i):
+                self.tree.setColumnHidden(idx, not checked)
+
+            action.toggled.connect(_toggle)
+        menu.exec(self.tree.header().viewport().mapToGlobal(pos))
 
     def _add_step_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)

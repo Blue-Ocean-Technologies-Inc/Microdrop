@@ -10,7 +10,7 @@ active column set.
 from typing import Iterator, List, Optional, Tuple
 
 from traits.api import (
-    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Int,
+    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Dict, Int,
     Event, Str, observe,
 )
 
@@ -37,6 +37,12 @@ class RowManager(HasTraits):
         desc="List of 0-indexed path tuples currently selected")
 
     clipboard_mime = Str(PROTOCOL_ROWS_MIME)
+
+    protocol_metadata = Dict(Str, AnyTrait,
+        desc="Per-protocol scratch persisted in the JSON header. Keys "
+             "are namespaced by feature ('electrode_to_channel', etc.). "
+             "Hydrated into ProtocolContext.scratch by the executor at "
+             "run start.")
 
     rows_changed = Event(
         desc="Fires on structure or value changes. Batch-coalesced by UI.")
@@ -471,15 +477,47 @@ class RowManager(HasTraits):
     # --- persistence ---
 
     def to_json(self) -> dict:
+        """Serialize the tree + per-protocol metadata to a JSON-ready dict."""
         from pluggable_protocol_tree.services.persistence import serialize_tree
-        return serialize_tree(self.root, list(self.columns))
+        return serialize_tree(
+            self.root, list(self.columns),
+            protocol_metadata=dict(self.protocol_metadata),
+        )
 
     @classmethod
     def from_json(cls, data: dict, columns: list) -> "RowManager":
+        """Reconstruct a RowManager from a serialized payload."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
-        # Construct an empty manager so we can use its step_type/group_type
-        manager = cls(columns=columns)
-        manager.root = deserialize_tree(
-            data, columns, manager.step_type, manager.group_type,
+        manager = cls(columns=list(columns))
+        root, metadata = deserialize_tree(
+            data, columns,
+            step_type=manager.step_type, group_type=manager.group_type,
         )
+        manager.root = root
+        manager.protocol_metadata = metadata
         return manager
+
+    def set_state_from_json(self, data: dict, columns: list) -> None:
+        """Reconstruct tree state in-place from a serialized payload dynamically."""
+        from pluggable_protocol_tree.services.persistence import deserialize_tree
+
+        # 1. Update columns. This triggers _on_columns_change via Traits,
+        #    which automatically rebuilds self.step_type and self.group_type.
+        self.columns = list(columns)
+
+        # 2. Deserialize the payload into a new root and metadata dict
+        root, metadata = deserialize_tree(
+            data, self.columns,
+            step_type=self.step_type,
+            group_type=self.group_type,
+        )
+
+        # 3. Apply the new state
+        self.root = root
+        self.protocol_metadata = metadata
+
+        # 4. Clear any dangling selection paths, as the old tree structure is gone
+        self.selection = []
+
+        # 5. Notify the UI/observers that the structure has completely changed
+        self.rows_changed = True

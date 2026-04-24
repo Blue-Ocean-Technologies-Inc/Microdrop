@@ -47,14 +47,40 @@ for _m in list(dramatiq.get_broker().middleware):
     if _m.__module__ == "dramatiq.middleware.prometheus":
         dramatiq.get_broker().middleware.remove(_m)
 
+import json
+
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.electrodes_column import (
+    make_electrodes_column,
+)
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.linear_repeats_column import (
+    make_linear_repeats_column,
+)
 from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.repeat_duration_column import (
+    make_repeat_duration_column,
+)
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
+from pluggable_protocol_tree.builtins.soft_start_column import make_soft_start_column
+from pluggable_protocol_tree.builtins.trail_length_column import (
+    make_trail_length_column,
+)
+from pluggable_protocol_tree.builtins.trail_overlay_column import (
+    make_trail_overlay_column,
+)
 from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.consts import (
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+)
 from pluggable_protocol_tree.demos.ack_roundtrip_column import (
     DEMO_APPLIED_TOPIC, DEMO_REQUEST_TOPIC, RESPONDER_ACTOR_NAME,
     make_ack_roundtrip_column,
+)
+from pluggable_protocol_tree.demos.electrode_responder import (
+    DEMO_RESPONDER_ACTOR_NAME,
 )
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.models.row_manager import RowManager
@@ -63,9 +89,26 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 logger = logging.getLogger(__name__)
 
 
+PHASE_LOG_ACTOR_NAME = "ppt_headless_phase_log"
+
+
+@dramatiq.actor(actor_name=PHASE_LOG_ACTOR_NAME, queue_name="default")
+def _log_phase(message: str, topic: str, timestamp: float = None):
+    """Spies on every actuation phase the executor publishes so the
+    headless caller sees what the hardware would receive."""
+    payload = json.loads(message)
+    print(f"  phase: electrodes={payload['electrodes']} "
+          f"channels={payload['channels']}")
+
+
 _SUBSCRIPTIONS = (
     (DEMO_REQUEST_TOPIC, RESPONDER_ACTOR_NAME),
     (DEMO_APPLIED_TOPIC, "pluggable_protocol_tree_executor_listener"),
+    # PPT-3: electrode actuation chain + a console-spy on every phase.
+    (ELECTRODES_STATE_CHANGE, DEMO_RESPONDER_ACTOR_NAME),
+    (ELECTRODES_STATE_APPLIED,
+     "pluggable_protocol_tree_executor_listener"),
+    (ELECTRODES_STATE_CHANGE, PHASE_LOG_ACTOR_NAME),
 )
 
 
@@ -131,29 +174,65 @@ def _teardown_dramatiq_routing(worker, router):
 
 def _build_protocol(include_ack_column: bool) -> RowManager:
     """A small protocol exercising flat steps + a repeating group +
-    optionally the publish/wait_for round-trip column."""
+    the PPT-3 electrodes/routes columns + optionally the older
+    publish/wait_for round-trip column."""
     cols = [
         make_type_column(),
         make_id_column(),
         make_name_column(),
         make_repetitions_column(),
         make_duration_column(),
+        # PPT-3 — the headless electrode-actuation columns.
+        make_electrodes_column(),
+        make_routes_column(),
+        make_trail_length_column(),
+        make_trail_overlay_column(),
+        make_soft_start_column(),
+        make_soft_end_column(),
+        make_repeat_duration_column(),
+        make_linear_repeats_column(),
     ]
     if include_ack_column:
         cols.append(make_ack_roundtrip_column())
     rm = RowManager(columns=cols)
 
-    rm.add_step(values={"name": "Warmup", "duration_s": 0.5})
+    # PPT-3 — the per-protocol electrode→channel mapping the
+    # RoutesHandler reads from ProtocolContext.scratch when resolving
+    # actuation channels for each phase.
+    rm.protocol_metadata["electrode_to_channel"] = {
+        f"e{i:02d}": i for i in range(25)
+    }
 
-    # A group that repeats twice — each child runs through the
-    # publish/wait_for cycle (if enabled) before its dwell timer.
+    # Step 1 — pure static actuation: hold three pads for the dwell.
+    rm.add_step(values={
+        "name": "Hold three-cell pad",
+        "duration_s": 0.5,
+        "electrodes": ["e00", "e01", "e02"],
+    })
+
+    # A group that repeats twice — each child walks a short route
+    # (4 phases at trail_length=1) before its dwell timer.
     g = rm.add_group(name="LoopBody")
     rm.get_row(g).repetitions = 2
-    rm.add_step(parent_path=g, values={"name": "InnerA", "duration_s": 0.3})
-    rm.add_step(parent_path=g, values={"name": "InnerB", "duration_s": 0.3})
+    rm.add_step(parent_path=g, values={
+        "name": "Walk top row",
+        "duration_s": 0.3,
+        "routes": [["e00", "e01", "e02", "e03", "e04"]],
+        "trail_length": 1,
+    })
+    rm.add_step(parent_path=g, values={
+        "name": "Walk diagonal",
+        "duration_s": 0.3,
+        "routes": [["e00", "e06", "e12", "e18", "e24"]],
+        "trail_length": 1,
+    })
 
-    # A step that repeats by itself
-    s = rm.add_step(values={"name": "ThreeTimes", "duration_s": 0.2})
+    # A self-repeating step that holds two electrodes 3 times.
+    s = rm.add_step(values={
+        "name": "Pulse pair",
+        "duration_s": 0.2,
+        "electrodes": ["e12", "e13"],
+    })
     rm.get_row(s).repetitions = 3
 
     rm.add_step(values={"name": "Cooldown", "duration_s": 0.5})
@@ -162,9 +241,9 @@ def _build_protocol(include_ack_column: bool) -> RowManager:
         # Override the State value on a few rows so the per-step log
         # lines show different request payloads (the responder echoes
         # them back in its "applied: ..." reply). Top-level positions:
-        # 0=Warmup, 1=LoopBody (group), 2=ThreeTimes, 3=Cooldown.
+        # 0=Hold pad, 1=LoopBody (group), 2=Pulse pair, 3=Cooldown.
         rm.get_row((0,)).state = "HV=on"
-        rm.get_row((1, 0)).state = "HV=ramp"   # InnerA inside LoopBody
+        rm.get_row((1, 0)).state = "HV=ramp"   # Walk top row inside LoopBody
         rm.get_row((2,)).state = "HV=peak"
         rm.get_row((3,)).state = "HV=off"
 
