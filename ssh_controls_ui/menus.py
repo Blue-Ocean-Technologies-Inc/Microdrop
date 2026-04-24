@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QMainWindow
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup
 
+from .preferences import SSHControlPreferences
 from .dramatiq_listener import SSHControlUIListener
 from .view_model import SSHControlViewModel, SSHControlViewModelSignals
 from .widget import SSHControlView
@@ -32,9 +33,11 @@ class ShowSshKeyUploaderAction(Action):
 
     def traits_init(self, *args, **kwargs):
         self._window = None
+        self.prefs = SSHControlPreferences()
         self.model = SSHControlModel()
         self.view_model = SSHControlViewModel(
             model=self.model,
+            prefs=self.prefs,
             view_signals=SSHControlViewModelSignals(),
         )
         self.listener = SSHControlUIListener(ui=self.view_model)
@@ -46,11 +49,11 @@ class ShowSshKeyUploaderAction(Action):
 
         widget = SSHControlView(view_model=self.view_model)
         widget.initialize_field_values(
-            host=self.model.host,
-            port=self.model.port,
-            username=self.model.username,
+            host=self.prefs.host,
+            port=self.prefs.port,
+            username=self.prefs.username,
             password=self.model.password,
-            key_name=self.model.key_name,
+            key_name=self.prefs.key_name,
         )
         widget.connect_signals()
 
@@ -76,9 +79,11 @@ class ShowSyncRemoteExperimentsAction(Action):
 
     def traits_init(self, *args, **kwargs):
         self._window = None
+        self.prefs = SSHControlPreferences()
         self.model = SyncDialogModel()
         self.view_model = SyncDialogViewModel(
             model=self.model,
+            prefs=self.prefs,
             view_signals=SyncDialogViewModelSignals(),
         )
         self.listener = SyncDialogListener(ui=self.view_model)
@@ -90,12 +95,13 @@ class ShowSyncRemoteExperimentsAction(Action):
 
         widget = SyncDialogView(view_model=self.view_model)
         widget.initialize_field_values(
-            host=self.model.host,
-            port=self.model.port,
-            username=self.model.username,
-            key_name=self.model.key_name,
-            remote_path=self.model.remote_experiments_path,
-            local_dest=self.model._default_dest(),
+            host=self.prefs.host,
+            port=self.prefs.port,
+            username=self.prefs.username,
+            key_name=self.prefs.key_name,
+            remote_path=self.prefs.remote_experiments_path,
+            local_dest=self.model.resolve_dest(self.prefs.device_id),
+            device_id=self.prefs.device_id,
         )
         widget.connect_signals()
 
