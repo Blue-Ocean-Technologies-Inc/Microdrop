@@ -20,6 +20,7 @@ from traits.api import HasTraits, Instance, Str
 
 from logger.logger_service import get_logger
 from ssh_controls.consts import experiments_sync_publisher
+from ..preferences import SSHControlPreferences, _sanitize_host
 from .model import SyncDialogModel
 
 logger = get_logger(__name__)
@@ -36,13 +37,24 @@ class SyncDialogViewModelSignals(QObject):
     show_timeout_warning = Signal()             # triggers Keep-Waiting/Quit dialog
     show_message_box    = Signal(str, str, str) # msg_type, title, text
     close_dialog        = Signal()
+    # Device ID was auto-derived (or explicitly set via prefs observe) — the
+    # View binds this to its device_id QLineEdit so @observe("host") updates
+    # on the helper show up in the dialog.
+    device_id_changed   = Signal(str)
+    # local_dest is a derived path (base / device_id). Emitted whenever the
+    # device_id changes so the View's read-only label stays current.
+    local_dest_changed  = Signal(str)
 
 
 class SyncDialogViewModel(HasTraits):
     """ViewModel for the Sync Remote Experiments dialog."""
     model = Instance(SyncDialogModel)
+    prefs = Instance(SSHControlPreferences)
     view_signals = Instance(SyncDialogViewModelSignals)
     name = Str("Sync Dialog View Model")
+
+    def _prefs_default(self):
+        return SSHControlPreferences()
 
     # QTimer is owned by Qt; assigned in traits_init rather than declared
     # as a Trait so it stays tied to the Qt event loop.
@@ -54,18 +66,44 @@ class SyncDialogViewModel(HasTraits):
         self._timeout_timer.setInterval(TIMEOUT_MS)
         self._timeout_timer.timeout.connect(self._on_timeout_fired)
 
+        # Seed the transient model from persisted prefs so any consumer
+        # holding the model sees current values.
+        if self.model is not None and self.prefs is not None:
+            self.model.host = self.prefs.host
+            self.model.port = self.prefs.port
+            self.model.username = self.prefs.username
+            self.model.key_name = self.prefs.key_name
+            self.model.remote_experiments_path = self.prefs.remote_experiments_path
+
+            # When host changes, the prefs helper auto-derives a new
+            # device_id (unless the user customised it). Mirror that
+            # change out to the View so its device_id field and local
+            # destination label stay in sync.
+            self.prefs.observe(self._on_prefs_device_id_changed, "device_id")
+
+    def _on_prefs_device_id_changed(self, event):
+        new_id = event.new or ""
+        if self.view_signals is None:
+            return
+        self.view_signals.device_id_changed.emit(new_id)
+        self.view_signals.local_dest_changed.emit(self.model.resolve_dest(new_id))
+
     # ---- View -> ViewModel (commands) ------------------------------------
     @Slot()
     def sync_command(self):
         """Called when the user clicks the Sync button."""
-        if not all([self.model.host, self.model.username, self.model.port]):
+        if not all([self.prefs.host, self.prefs.username, self.prefs.port]):
             self.view_signals.show_message_box.emit(
                 "error", "Missing fields",
                 "Host, username and port are required."
             )
             return
 
-        identity_path = self.model.resolve_identity_path()
+        # Ensure device_id is set (fallback to sanitized host)
+        if not self.prefs.device_id:
+            self.prefs.device_id = _sanitize_host(self.prefs.host)
+
+        identity_path = self.model.resolve_identity_path(self.prefs.key_name)
         if not Path(identity_path).exists():
             self.view_signals.show_message_box.emit(
                 "error", "SSH key missing",
@@ -74,10 +112,12 @@ class SyncDialogViewModel(HasTraits):
             )
             return
 
-        dest = self.model._default_dest()
+        dest = self.model.resolve_dest(self.prefs.device_id)
         os.makedirs(dest, exist_ok=True)
 
-        src = self.model.resolve_src()
+        src = self.model.resolve_src(
+            self.prefs.username, self.prefs.host, self.prefs.remote_experiments_path
+        )
 
         self.model.in_progress = True
         self.view_signals.enable_sync_button.emit(False)
@@ -88,9 +128,9 @@ class SyncDialogViewModel(HasTraits):
 
         try:
             experiments_sync_publisher.publish(
-                host=self.model.host,
-                port=int(self.model.port),
-                username=self.model.username,
+                host=self.prefs.host,
+                port=int(self.prefs.port),
+                username=self.prefs.username,
                 identity_path=identity_path,
                 src=src,
                 dest=dest,
@@ -118,29 +158,51 @@ class SyncDialogViewModel(HasTraits):
         self.view_signals.status_changed.emit("Still syncing...")
 
     # ---- Data binding slots ---------------------------------------------
+    #
+    # Persisted fields write to BOTH the model (mirror, for consumers
+    # that hold the model) and prefs (canonical / persisted — the write
+    # is what triggers apptools.preferences persistence). Changing
+    # prefs.host fires @observe("host") on the helper, which may update
+    # prefs.device_id, which in turn triggers our device_id observer
+    # above — so the View's device_id and local_dest stay in sync.
     @Slot(str)
     def set_host(self, text):
         self.model.host = text
+        self.prefs.host = text
 
     @Slot(str)
     def set_port_str(self, text):
         try:
-            self.model.port = int(text)
+            port = int(text)
         except ValueError:
             if not text:
                 self.model.port = 0
+                self.prefs.port = 0
+            return
+        self.model.port = port
+        self.prefs.port = port
 
     @Slot(str)
     def set_username(self, text):
         self.model.username = text
+        self.prefs.username = text
 
     @Slot(str)
     def set_key_name(self, text):
-        self.model.key_name = text.strip()
+        clean = text.strip()
+        self.model.key_name = clean
+        self.prefs.key_name = clean
 
     @Slot(str)
     def set_remote_path(self, text):
         self.model.remote_experiments_path = text
+        self.prefs.remote_experiments_path = text
+
+    @Slot(str)
+    def set_device_id(self, text):
+        self.prefs.device_id = text.strip()
+        # The device_id observer will emit device_id_changed and
+        # local_dest_changed for us — no redundant emit here.
 
     # ---- Dramatiq-triggered handlers ------------------------------------
     def _on_sync_experiments_started_triggered(self, message):
