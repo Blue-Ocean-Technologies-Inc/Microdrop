@@ -1,4 +1,4 @@
-from traits.api import HasTraits, Str
+from traits.api import HasTraits, Str, Password, Int
 
 
 class SSHControlModel(HasTraits):
@@ -9,6 +9,10 @@ class SSHControlModel(HasTraits):
     intentionally session-only: it is used once for the key upload,
     and plaintext ETSConfig persistence is a security risk.
     """
-    password = Str
+    host = Str
+    port = Int
+    username = Str
+    password = Password
     generated_pub_key = Str
     generated_pub_key_path = Str
+    key_name = Str
