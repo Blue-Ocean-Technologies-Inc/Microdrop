@@ -29,12 +29,27 @@ class SSHControlViewModel(HasTraits):
     The ViewModel. Owns the transient Model (password, generated-key)
     and the persisted SSHControlPreferences helper. Mediates between
     the View (GUI) and the Dramatiq controller.
+
+    The Model retains mirror fields (host/port/username/key_name) so
+    any consumer holding the model sees current values; the Prefs
+    helper is the canonical persisted store. Data-binding slots write
+    to both in lockstep, and the ViewModel initialises the model from
+    prefs at construction time.
     """
 
     model = Instance(SSHControlModel)
     prefs = Instance(SSHControlPreferences)
     view_signals = Instance(SSHControlViewModelSignals)
     name = "SSH Control View Model"
+
+    def traits_init(self):
+        # Seed the transient model from persisted prefs so any consumer
+        # that reads model.host etc. gets the right value out of the gate.
+        if self.model is not None and self.prefs is not None:
+            self.model.host = self.prefs.host
+            self.model.port = self.prefs.port
+            self.model.username = self.prefs.username
+            self.model.key_name = self.prefs.key_name
 
     # --- Slots for the View (User Commands) ---
     @Slot()
@@ -79,30 +94,43 @@ class SSHControlViewModel(HasTraits):
         publish_message(json.dumps(config), KEY_UPLOAD)
 
      # --- Slots for the View (Data Binding) ---
+    #
+    # Persisted fields: write to BOTH the model (mirror) and the prefs
+    # (canonical / persisted). The prefs write-through is what causes
+    # apptools.preferences to save the value to ETSConfig.
     @Slot(str)
     def set_host(self, text):
+        self.model.host = text
         self.prefs.host = text
 
     @Slot(str)
     def set_port_str(self, text):
         try:
-            self.prefs.port = int(text)
+            port = int(text)
         except ValueError:
             self.view_signals.show_message_box.emit("error", "Error", "Port must be an integer.")
             if not text:
+                self.model.port = 0
                 self.prefs.port = 0
+            return
+        self.model.port = port
+        self.prefs.port = port
 
     @Slot(str)
     def set_username(self, text):
+        self.model.username = text
         self.prefs.username = text
 
     @Slot(str)
     def set_password(self, text):
+        # Session-only: stays on the model by design (security)
         self.model.password = text
 
     @Slot(str)
     def set_key_name(self, text):
-        self.prefs.key_name = text.strip()
+        clean = text.strip()
+        self.model.key_name = clean
+        self.prefs.key_name = clean
 
     # --- Slots for the Dramatiq Controller (Results) ---
 
