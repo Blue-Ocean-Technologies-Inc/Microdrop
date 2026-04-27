@@ -43,9 +43,8 @@ import dramatiq
 # message_durations' inside its after_process_message hook, which
 # corrupts the dispatch chain and turns every subsequent publish into
 # a silent drop. (The GUI demo applies the same workaround.)
-for _m in list(dramatiq.get_broker().middleware):
-    if _m.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(_m)
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 
 import json
 

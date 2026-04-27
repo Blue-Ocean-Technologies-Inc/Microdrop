@@ -18,12 +18,11 @@ import time
 from pathlib import Path
 
 import dramatiq
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
 
 # Strip Prometheus middleware (matches the other demos); without this,
 # every actor publish raises inside its after_process_message hook.
-for _m in list(dramatiq.get_broker().middleware):
-    if _m.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(_m)
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 
 from pluggable_protocol_tree.builtins.duration_column import (
     make_duration_column,

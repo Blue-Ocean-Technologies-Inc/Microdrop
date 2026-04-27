@@ -10,9 +10,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
 # Initialize logger
 logger = get_logger(__name__)
 # remove prometheus metrics for now
-for el in dramatiq.get_broker().middleware:
-    if el.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(el)
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 
 
 class MessageRouterPlugin(Plugin):

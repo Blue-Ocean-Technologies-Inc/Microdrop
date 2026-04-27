@@ -63,9 +63,8 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 # remove prometheus metrics for now
-for el in dramatiq.get_broker().middleware:
-    if el.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(el)
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 logger = logging.getLogger(__name__)
 
 # Module-level Dramatiq actor for live overlay updates. Captures

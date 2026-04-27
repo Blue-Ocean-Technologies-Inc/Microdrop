@@ -11,9 +11,8 @@ import dramatiq
 import pytest
 
 # Strip Prometheus middleware before importing anything that uses the broker.
-for _m in list(dramatiq.get_broker().middleware):
-    if _m.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(_m)
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 
 from pluggable_protocol_tree.builtins.duration_column import (
     make_duration_column,
