@@ -89,3 +89,17 @@ def test_compound_column_default_handler_when_none_provided():
     cc = CompoundColumn(model=m, view=v)
     assert isinstance(cc.handler, BaseCompoundColumnHandler)
     assert cc.handler.model is m
+
+
+def test_compound_column_rewires_model_on_handler_reassignment():
+    """I2 regression: reassigning .handler after construction should
+    re-wire handler.model so third-party authors don't have to remember."""
+    m = _DemoModel()
+    v = DictCompoundColumnView(cell_views={
+        "ec_enabled": CheckboxColumnView(),
+        "ec_count": IntSpinBoxColumnView(low=0, high=999),
+    })
+    cc = CompoundColumn(model=m, view=v)
+    new_handler = BaseCompoundColumnHandler()
+    cc.handler = new_handler
+    assert new_handler.model is m

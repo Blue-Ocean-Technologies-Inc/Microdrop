@@ -1,7 +1,7 @@
 """Base classes + composite for compound columns. Mirrors the structure
 of models/column.py for single-cell columns. See spec section 2."""
 
-from traits.api import Dict, HasTraits, Instance, Int, List, Str, provides
+from traits.api import Dict, HasTraits, Instance, Int, List, Str, observe, provides
 
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
@@ -72,7 +72,8 @@ class BaseCompoundColumnHandler(HasTraits):
 @provides(ICompoundColumn)
 class CompoundColumn(HasTraits):
     """Composite. Auto-substitutes BaseCompoundColumnHandler if the
-    handler kwarg is omitted; auto-wires handler.model = model."""
+    handler kwarg is omitted; auto-wires handler.model = model on
+    construction AND on handler reassignment."""
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
@@ -80,4 +81,12 @@ class CompoundColumn(HasTraits):
     def traits_init(self):
         if self.handler is None:
             self.handler = BaseCompoundColumnHandler()
-        self.handler.model = self.model
+        # _wire_handler will run via the observe decorator when handler is
+        # assigned; but on first construction the trait change may already
+        # have fired before post_init=True activates, so call explicitly:
+        self._wire_handler(None)
+
+    @observe("handler", post_init=True)
+    def _wire_handler(self, event):
+        if self.handler is not None and self.model is not None:
+            self.handler.model = self.model
