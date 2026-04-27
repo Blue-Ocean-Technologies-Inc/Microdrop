@@ -86,3 +86,39 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     def on_protocol_end(self, ctx):
         if self.is_owner:
             self.compound_handler.on_protocol_end(ctx)
+
+
+from .column import Column  # noqa: E402 — after class definitions to avoid circular
+from ..interfaces.i_compound_column import ICompoundColumn  # noqa: E402
+
+
+def _expand_compound(c: ICompoundColumn) -> list:
+    """Expand a CompoundColumn contribution into N synthesized per-cell
+    Column instances. The model + handler are shared via adapter shims
+    so downstream consumers (RowManager, executor, MvcTreeModel,
+    persistence) keep speaking single-cell Column / IColumnModel."""
+    specs = c.model.field_specs()
+    expanded = []
+    for idx, spec in enumerate(specs):
+        model_adapter = _CompoundFieldAdapter(
+            col_id=spec.field_id,
+            col_name=spec.col_name,
+            default_value=spec.default_value,
+            compound_model=c.model,
+            field_id=spec.field_id,
+            compound_base_id=c.model.base_id,
+            is_owner=(idx == 0),
+        )
+        handler_adapter = _CompoundFieldHandlerAdapter(
+            compound_handler=c.handler,
+            compound_model=c.model,
+            field_id=spec.field_id,
+            is_owner=(idx == 0),
+            priority=c.handler.priority,
+            wait_for_topics=list(c.handler.wait_for_topics or []),
+        )
+        view = c.view.cell_view_for_field(spec.field_id)
+        expanded.append(Column(
+            model=model_adapter, view=view, handler=handler_adapter,
+        ))
+    return expanded

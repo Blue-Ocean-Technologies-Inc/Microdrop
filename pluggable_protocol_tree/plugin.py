@@ -28,18 +28,27 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT, PKG, PKG_name, PROTOCOL_COLUMNS,
 )
+from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
 
 class PluggableProtocolTreePlugin(Plugin):
     id = f"{PKG}.plugin"
     name = PKG_name
 
-    #: Other plugins contribute IColumn instances here
-    contributed_columns = ExtensionPoint(
+    #: Envisage extension point — other plugins contribute IColumn /
+    #: ICompoundColumn instances here. Named with a leading underscore so
+    #: tests can inject contributions directly via `contributed_columns`
+    #: (a plain List) without needing a full Envisage application registry.
+    _column_extension_point = ExtensionPoint(
         List(Instance(IColumn)), id=PROTOCOL_COLUMNS,
         desc="Columns contributed by other plugins",
     )
+
+    #: Plain list — set directly in tests; populated from the extension
+    #: point at plugin start in a live application.
+    contributed_columns = List(desc="Columns contributed by other plugins")
 
     # Standard plumbing
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
@@ -80,14 +89,26 @@ class PluggableProtocolTreePlugin(Plugin):
             contributed = list(self.contributed_columns)
         except Exception:
             contributed = []     # no extension registry attached (e.g. headless)
-        return builtins + contributed
+        out = []
+        for c in (builtins + contributed):
+            if isinstance(c, ICompoundColumn):
+                out.extend(_expand_compound(c))
+            else:
+                out.append(c)
+        return out
 
     def start(self):
-        """Register the executor listener's subscriptions with the
-        message router. Called by Envisage at plugin start, after
-        extension points have resolved (so contributed_columns is
-        populated)."""
+        """Populate contributed_columns from the extension point, then
+        register the executor listener's subscriptions with the message
+        router. Called by Envisage at plugin start, after extension points
+        have resolved."""
         super().start()
+        # Pull contributions from the Envisage extension point into the
+        # plain contributed_columns list so _assemble_columns sees them.
+        try:
+            self.contributed_columns = list(self._column_extension_point)
+        except Exception:
+            pass
         try:
             from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterData
         except ImportError:
