@@ -12,3 +12,26 @@ def test_plugin_instantiates_with_no_columns_yet():
     # contributed_protocol_columns may be empty until task 11 wires it up.
     assert hasattr(p, "id")
     assert hasattr(p, "name")
+
+
+from unittest.mock import patch
+
+
+def test_plugin_contributes_voltage_and_frequency_columns():
+    """The plugin's contributed_protocol_columns default factory yields
+    a list containing both voltage and frequency Column instances."""
+    from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
+
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+    ) as MockV, patch(
+        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+    ) as MockF:
+        MockV.return_value.last_voltage = 100
+        MockF.return_value.last_frequency = 10000
+
+        p = DropbotProtocolControlsPlugin()
+        col_ids = [c.model.col_id for c in p.contributed_protocol_columns]
+
+    assert "voltage" in col_ids
+    assert "frequency" in col_ids
