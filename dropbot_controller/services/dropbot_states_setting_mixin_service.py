@@ -5,7 +5,10 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import REALTIME_MODE_UPDATED, HARDWARE_MIN_VOLTAGE, HARDWARE_MIN_FREQUENCY, VOLTAGE_APPLIED
+from ..consts import (
+    REALTIME_MODE_UPDATED, HARDWARE_MIN_VOLTAGE, HARDWARE_MIN_FREQUENCY,
+    VOLTAGE_APPLIED, FREQUENCY_APPLIED,
+)
 
 
 logger = get_logger(__name__)
@@ -100,6 +103,26 @@ class DropbotStatesSettingMixinService(HasTraits):
             logger.error(f"Proxy error setting protocol voltage: {e}")
         except Exception as e:
             logger.error(f"Error setting protocol voltage: {e}")
+            raise
+
+    def on_protocol_set_frequency_request(self, message):
+        """Set frequency on the dropbot for protocol-driven writes.
+
+        Symmetric to on_set_frequency_request but bypasses the realtime-mode
+        gate and does NOT persist to DropbotPreferences.last_frequency.
+        Publishes FREQUENCY_APPLIED ack on RPC return. On hardware error,
+        the ack is NOT published — the executor's wait_for times out and
+        the protocol step fails.
+        """
+        try:
+            v = int(message)
+            with self.proxy.transaction_lock:
+                self.proxy.update_state(frequency=v)
+            publish_message(topic=FREQUENCY_APPLIED, message=str(v))
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Proxy error setting protocol frequency: {e}")
+        except Exception as e:
+            logger.error(f"Error setting protocol frequency: {e}")
             raise
 
     def on_set_frequency_request(self, message):
