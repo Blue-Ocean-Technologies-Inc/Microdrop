@@ -33,6 +33,8 @@ import dramatiq
 
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
+from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 from pluggable_protocol_tree.models.row_manager import RowManager
 
 
@@ -48,43 +50,99 @@ def resolve_columns(payload: dict) -> List[IColumn]:
     """Walk ``payload['columns']`` and instantiate each column from the
     recorded model class name.
 
-    Convention: a column whose model lives in module ``M`` has a
-    matching ``make_*_column`` factory in ``M`` that returns a
-    ``Column`` with a model of that class. We iterate ``M``'s
-    ``make_*`` functions, call each, and pick the one whose model is
-    an instance of the recorded class.
+    Two shapes:
+    - **Simple column entry** (no ``compound_id``): instantiated via its
+      module's ``make_*_column`` factory, appended as-is.
+    - **Compound field entries** (have ``compound_id``): consecutive
+      entries with the same ``(cls, compound_id)`` are grouped; the
+      factory is called ONCE and the returned ``CompoundColumn`` is
+      expanded into N per-cell ``Column`` instances inline — so the
+      caller sees a flat list and downstream consumers (RowManager,
+      executor, persistence) keep speaking single-cell Column.
 
     Raises ``ColumnResolutionError`` if any column can't be resolved.
     """
-    columns: List[IColumn] = []
-    for entry in payload.get("columns", []):
-        cls_qualname = entry.get("cls")
-        col_id = entry.get("id", "<unknown>")
-        if not cls_qualname:
-            raise ColumnResolutionError(
-                f"column {col_id!r} has no 'cls' qualname in payload"
-            )
-        module_name, class_name = cls_qualname.rsplit(".", 1)
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError as e:
-            raise ColumnResolutionError(
-                f"can't import {module_name!r} for column {col_id!r}: {e}"
-            ) from e
-        target_cls = getattr(module, class_name, None)
-        if target_cls is None:
-            raise ColumnResolutionError(
-                f"module {module_name!r} has no class {class_name!r} "
-                f"(needed for column {col_id!r})"
-            )
-        factory = _find_factory(module, target_cls)
-        if factory is None:
-            raise ColumnResolutionError(
-                f"no make_*_column factory in {module_name!r} returns a "
-                f"Column with model {class_name} (needed for column {col_id!r})"
-            )
-        columns.append(factory())
-    return columns
+    entries = payload.get("columns", [])
+    out: List[IColumn] = []
+    i = 0
+    while i < len(entries):
+        e = entries[i]
+        compound_id = e.get("compound_id")
+        if compound_id is None:
+            out.append(_resolve_simple_entry(e))
+            i += 1
+            continue
+        # Group consecutive entries with the same (cls, compound_id).
+        cls_qualname = e["cls"]
+        j = i
+        while (j < len(entries)
+               and entries[j].get("cls") == cls_qualname
+               and entries[j].get("compound_id") == compound_id):
+            j += 1
+        compound_col = _resolve_compound_entry(cls_qualname, e.get("id", "<unknown>"))
+        # _expand_compound returns N per-cell Column instances. The
+        # field order from the LIVE compound's field_specs() is used
+        # (must match the saved order; if it doesn't, that's a real
+        # plugin-version mismatch and we let the caller hit the missing
+        # data at deserialize_tree time).
+        out.extend(_expand_compound(compound_col))
+        i = j
+    return out
+
+
+def _resolve_simple_entry(entry: dict) -> IColumn:
+    """Instantiate a simple (non-compound) column from a payload entry."""
+    cls_qualname = entry.get("cls")
+    col_id = entry.get("id", "<unknown>")
+    if not cls_qualname:
+        raise ColumnResolutionError(
+            f"column {col_id!r} has no 'cls' qualname in payload"
+        )
+    target_cls, module = _import_target_class(cls_qualname, col_id)
+    factory = _find_factory(module, target_cls)
+    if factory is None:
+        raise ColumnResolutionError(
+            f"no make_*_column factory in {module.__name__!r} returns a "
+            f"Column with model {target_cls.__name__} (needed for column {col_id!r})"
+        )
+    return factory()
+
+
+def _resolve_compound_entry(cls_qualname: str, col_id: str):
+    """Instantiate a CompoundColumn from a (cls, compound_id) group."""
+    target_cls, module = _import_target_class(cls_qualname, col_id)
+    factory = _find_factory(module, target_cls)
+    if factory is None:
+        raise ColumnResolutionError(
+            f"no make_*_compound factory in {module.__name__!r} returns a "
+            f"CompoundColumn with model {target_cls.__name__} (needed for "
+            f"compound column entry {col_id!r})"
+        )
+    result = factory()
+    if not isinstance(result, ICompoundColumn):
+        raise ColumnResolutionError(
+            f"factory in {module.__name__!r} for compound entry {col_id!r} "
+            f"returned {type(result).__name__}, expected ICompoundColumn"
+        )
+    return result
+
+
+def _import_target_class(cls_qualname: str, col_id: str):
+    """Resolve cls_qualname to (target_cls, module). Raises ColumnResolutionError."""
+    module_name, class_name = cls_qualname.rsplit(".", 1)
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as e:
+        raise ColumnResolutionError(
+            f"can't import {module_name!r} for column {col_id!r}: {e}"
+        ) from e
+    target_cls = getattr(module, class_name, None)
+    if target_cls is None:
+        raise ColumnResolutionError(
+            f"module {module_name!r} has no class {class_name!r} "
+            f"(needed for column {col_id!r})"
+        )
+    return target_cls, module
 
 
 def _purge_stale_subscribers(broker, router, topics) -> None:
