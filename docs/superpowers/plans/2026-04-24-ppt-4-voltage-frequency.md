@@ -12,7 +12,7 @@
 
 **Type policy:** voltage and frequency are **Ints** end-to-end — column trait, payload string, ack value, preference. No floats anywhere in this feature.
 
-**Branch:** `feat/ppt-3-electrodes-routes` (the WIP spec lives here; new branch `feat/ppt-4-voltage-frequency` can be cut at task 1 if preferred — both are fine).
+**Branch:** `feat/ppt-4-dropbot-columns` — branched from `feat/ppt-3-electrodes-routes` HEAD (which has the PPT-3 implementation in place; PPT-4 depends on the executor, RoutesHandler at priority 30, ProtocolSession, etc. that PPT-3 introduced). The 3 PPT-4 spec/plan commits live on this branch only (PPT-3 branch was reset back to its last PPT-3 commit). All implementation commits in this plan land here.
 
 **Test runner:** All commands run from the outer repo root `C:\Users\Info\PycharmProjects\pixi-microdrop\microdrop-py`. Use `pixi run pytest …` — `pixi run` activates the right Python environment.
 
