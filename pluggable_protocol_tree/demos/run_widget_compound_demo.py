@@ -9,10 +9,12 @@ Auto-populates 3 sample steps so the user can immediately verify:
   2. The Count cell is read-only when Enabled is unchecked (greyed out
      spinner that won't accept clicks)
   3. Toggling Enabled makes the Count cell editable
-  4. Save -> reload via the toolbar's Save / Load buttons preserves
-     both fields
-  5. The compound handler's on_step fires exactly once per row (via
+  4. The compound handler's on_step fires exactly once per row (via
      the logged invocation count line)
+
+(Save / load round-trip is verified by the test
+test_compound_round_trip_via_protocol_session — not exercised in this
+headed demo.)
 
 Run: pixi run python -m pluggable_protocol_tree.demos.run_widget_compound_demo
 """
@@ -68,7 +70,6 @@ class _CountingHandler(BaseCompoundColumnHandler):
 def _columns():
     cc = make_enabled_count_compound()
     cc.handler = _CountingHandler()
-    cc.handler.model = cc.model
     return [
         make_type_column(), make_id_column(), make_name_column(),
         make_duration_column(),
