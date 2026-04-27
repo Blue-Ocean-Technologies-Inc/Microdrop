@@ -40,3 +40,6 @@ SYNC_EXPERIMENTS_ERROR   = "ssh_service/error/sync_experiments_error"
 #   experiments_sync_publisher.publish(host=..., ...)
 from ssh_controls.models import ExperimentsSyncRequestPublisher
 experiments_sync_publisher = ExperimentsSyncRequestPublisher(topic=SYNC_EXPERIMENTS_REQUEST)
+SYNC_EXCEPTIONS_TO_PASS = [
+    "Could not create directory '/home/Info/.ssh' (No such file or directory).\nFailed to add the host to the list of known hosts (/home/Info/.ssh/known_hosts).\n"
+]
