@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QMainWindow
 from pyface.action.api import Action
-from pyface.tasks.action.api import SGroup
+from pyface.tasks.action.api import SGroup, SMenu
 
 from .preferences import SSHControlPreferences
 from .dramatiq_listener import SSHControlUIListener
@@ -27,7 +27,6 @@ class SshKeyUploaderApp(QMainWindow):
 class ShowSshKeyUploaderAction(Action):
     """Pyface action that shows the SSH Key Portal window."""
     name = "SSH &Key Portal..."
-    accelerator = "Ctrl+Shift+S"
     tooltip = "Launch the SSH Key Uploader application."
     style = "window"
 
@@ -74,6 +73,7 @@ class SyncDialogApp(QMainWindow):
 class ShowSyncRemoteExperimentsAction(Action):
     """Pyface action that shows the Sync Remote Experiments dialog."""
     name = "Sync Remote &Experiments..."
+    accelerator = "Ctrl+Shift+S"
     tooltip = "Pull the remote backend's Experiments/ folder locally via rsync over SSH."
     style = "window"
 
@@ -111,8 +111,9 @@ class ShowSyncRemoteExperimentsAction(Action):
 
 def menu_factory():
     """Menu group containing both SSH actions."""
-    return SGroup(
+    return SMenu(
         ShowSshKeyUploaderAction(),
         ShowSyncRemoteExperimentsAction(),
         id="remote_controls",
+        name="&Remote Controls",
     )

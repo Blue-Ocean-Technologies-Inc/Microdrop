@@ -42,7 +42,7 @@ class SSHUIPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=menu_factory,
-                        path='MenuBar/Edit',
+                        path='MenuBar/Tools',
                     )
 
                 ]

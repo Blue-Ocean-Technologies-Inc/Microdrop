@@ -131,23 +131,6 @@ class SSHControlPreferencesPane(PreferencesPane):
 
     category = ssh_controls_tab.id
 
-    reset_to_env = Button("Reset to .env defaults")
-
-    def _reset_to_env_fired(self):
-        """Restore persisted values to the current ``.env`` snapshot.
-
-        ``override=True`` re-reads the file in case it was edited since app
-        start. Setting each trait writes through to the preferences store
-        (that's how ``PreferencesHelper`` works).
-        """
-        load_dotenv(override=True)
-        self.model.host                    = _env_host()
-        self.model.port                    = _env_port()
-        self.model.username                = _env_username()
-        self.model.key_name                = _DEFAULT_KEY_NAME
-        self.model.remote_experiments_path = _DEFAULT_REMOTE_EXPERIMENTS_PATH
-        self.model.device_id               = _sanitize_host(self.model.host)
-
     settings = VGroup(
         create_item_label_group("host",                    label_text="Host"),
         create_item_label_group("port",                    label_text="SSH Port"),
@@ -164,7 +147,6 @@ class SSHControlPreferencesPane(PreferencesPane):
         Item("_"),
         settings,
         Item("_"),
-        Item("reset_to_env", show_label=False),
         Item("_"),
         resizable=True,
     )
