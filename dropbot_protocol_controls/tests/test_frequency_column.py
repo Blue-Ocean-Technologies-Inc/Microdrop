@@ -112,3 +112,47 @@ def test_frequency_handler_on_step_publishes_int_payload():
         handler.on_step(row, ctx)
 
     assert published[0]["message"] == "5000"
+
+
+def test_frequency_handler_on_interact_writes_through_to_row():
+    from dropbot_protocol_controls.protocol_columns.frequency_column import (
+        FrequencyHandler, FrequencyColumnModel,
+    )
+    handler = FrequencyHandler()
+    model = FrequencyColumnModel(col_id="frequency", col_name="Hz",
+                                  default_value=10000)
+    handler.model = model
+
+    class FakeRow:
+        frequency = 10000
+    row = FakeRow()
+
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+    ):
+        handler.on_interact(row, model, 5000)
+
+    assert row.frequency == 5000
+
+
+def test_frequency_handler_on_interact_persists_to_prefs():
+    from dropbot_protocol_controls.protocol_columns.frequency_column import (
+        FrequencyHandler, FrequencyColumnModel,
+    )
+    handler = FrequencyHandler()
+    model = FrequencyColumnModel(col_id="frequency", col_name="Hz",
+                                  default_value=10000)
+    handler.model = model
+
+    class FakeRow:
+        frequency = 10000
+    row = FakeRow()
+
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+    ) as MockPrefs:
+        prefs_instance = MockPrefs.return_value
+        handler.on_interact(row, model, 5000)
+
+    MockPrefs.assert_called_once_with()
+    assert prefs_instance.last_frequency == 5000
