@@ -5,6 +5,11 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QLabel, QProgressBar, QMessageBox,
 )
 
+from microdrop_application.dialogs.pyface_wrapper import information, warning, error, confirm, NO
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
 
 class SyncDialogView(QWidget):
     """Qt View for the Sync Remote Experiments dialog."""
@@ -118,30 +123,34 @@ class SyncDialogView(QWidget):
     @Slot(str, str, str)
     def show_message_box(self, msg_type, title, text):
         if msg_type == "error":
-            QMessageBox.critical(self, title, text)
+            error(None, text, title)
         elif msg_type == "info":
-            QMessageBox.information(self, title, text)
+            information(None, text, title)
         else:
-            QMessageBox.warning(self, title, text)
+            warning(None, text, title)
 
     @Slot()
     def show_timeout_warning(self):
         """Prompt the user when the sync takes longer than expected."""
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
-        box.setWindowTitle("Still syncing")
-        box.setText(
-            "The remote sync is taking longer than expected. "
-            "Keep waiting, or quit and let it finish in the background?"
-        )
-        keep_btn = box.addButton("Keep Waiting", QMessageBox.AcceptRole)
-        quit_btn = box.addButton("Quit", QMessageBox.RejectRole)
-        box.exec()
 
-        if box.clickedButton() is keep_btn:
-            self.view_model.keep_waiting_command()
-        else:
+        title = "Still syncing"
+        msg ="The remote sync is taking longer than expected. Keep waiting? (if no process will quit and finish in background)"
+
+        ### Open a confirmation dialog ####
+        user_choice = confirm(
+            None,
+            msg,
+            title=title,
+            cancel=False,
+        )
+
+        # If user says NO, stop here. Do not run the function.
+        if user_choice == NO:
+            logger.warning("Action cancelled due to unsaved changes.")
             self.view_model.quit_command()
+
+        else:
+            self.view_model.keep_waiting_command()
 
     @Slot()
     def _close_parent_window(self):
