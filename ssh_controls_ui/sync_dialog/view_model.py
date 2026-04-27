@@ -146,10 +146,59 @@ class SyncDialogViewModel(HasTraits):
 
     @Slot()
     def quit_command(self):
-        """Frontend-only dismiss — backend rsync keeps running (v1 behavior)."""
-        self._timeout_timer.stop()
-        self.model.in_progress = False
+        """Frontend-only dismiss — backend rsync keeps running (v1 behavior).
+
+        Emit ``close_dialog`` first so the View can begin tearing down its
+        window, then call ``shutdown`` to stop the timer, mark the request
+        abandoned, and disconnect every view-bound signal — so a late
+        Dramatiq response cannot drive a deleted Qt slot.
+        """
         self.view_signals.close_dialog.emit()
+        self.shutdown()
+
+    @Slot()
+    def shutdown(self):
+        """Abandon any in-flight request and disconnect view-bound signals.
+
+        Called from ``quit_command`` and from the View's ``closeEvent`` so
+        every path out of the dialog ends in the same defensive state:
+        a stale ``_on_sync_experiments_*_triggered`` callback finds
+        ``in_progress == False`` (early-returns) and, even if it didn't,
+        ``view_signals`` is fully disconnected so any ``emit`` is a no-op.
+        Idempotent — safe to call more than once.
+        """
+        if self._timeout_timer is not None:
+            self._timeout_timer.stop()
+        if self.model is not None:
+            self.model.in_progress = False
+        if self.view_signals is not None:
+            for sig in (
+                self.view_signals.status_changed,
+                self.view_signals.enable_sync_button,
+                self.view_signals.show_in_progress,
+                self.view_signals.show_timeout_warning,
+                self.view_signals.show_message_box,
+                self.view_signals.close_dialog,
+                self.view_signals.device_id_changed,
+                self.view_signals.local_dest_changed,
+            ):
+                try:
+                    sig.disconnect()
+                except (TypeError, RuntimeError):
+                    # No connections (TypeError) or signal/object already
+                    # destroyed (RuntimeError). Either way, nothing to do.
+                    pass
+        if self.prefs is not None:
+            try:
+                self.prefs.observe(
+                    self._on_prefs_device_id_changed,
+                    "device_id",
+                    remove=True,
+                )
+            except Exception:
+                # The observer may not be registered (e.g. shutdown called
+                # before traits_init or after an earlier shutdown).
+                pass
 
     @Slot()
     def keep_waiting_command(self):
