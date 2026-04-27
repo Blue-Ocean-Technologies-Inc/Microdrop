@@ -75,3 +75,80 @@ def test_serialize_compound_field_order_preserved():
     payload = serialize_tree(root, cols)
     ids = [e["id"] for e in payload["columns"]]
     assert ids.index("ec_enabled") < ids.index("ec_count")
+
+
+import json
+
+from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.session import resolve_columns
+
+
+# Module-level so resolve_columns can find both the model and factory:
+
+class _RTModel(BaseCompoundColumnModel):
+    base_id = "rt"
+    def field_specs(self):
+        return [FieldSpec("rt_a", "A", False),
+                FieldSpec("rt_b", "B", 0)]
+    def trait_for_field(self, field_id):
+        return Bool(False) if field_id == "rt_a" else Int(0)
+
+
+def make_rt_compound():
+    return CompoundColumn(
+        model=_RTModel(),
+        view=DictCompoundColumnView(cell_views={
+            "rt_a": CheckboxColumnView(),
+            "rt_b": IntSpinBoxColumnView(low=0, high=999),
+        }),
+        handler=BaseCompoundColumnHandler(),
+    )
+
+
+def _all_columns():
+    """Required builtins for a runnable RowManager + the compound under test."""
+    return [
+        make_type_column(), make_id_column(), make_name_column(),
+        *_expand_compound(make_rt_compound()),
+    ]
+
+
+def test_compound_round_trip_through_json_preserves_all_fields():
+    """to_json -> from_json -> read row.* yields the saved values for
+    BOTH fields of the compound."""
+    cols = _all_columns()
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "S1", "rt_a": True, "rt_b": 42})
+
+    payload = rm.to_json()
+    json_str = json.dumps(payload)
+    parsed = json.loads(json_str)
+
+    rm2 = RowManager.from_json(parsed, columns=resolve_columns(parsed))
+    step = rm2.root.children[0]
+    assert step.rt_a is True
+    assert step.rt_b == 42
+    assert isinstance(step.rt_b, int)
+
+
+def test_compound_round_trip_via_protocol_session(tmp_path):
+    """Same round-trip but through ProtocolSession.from_file (resolves
+    columns automatically from the saved cls qualnames)."""
+    from pluggable_protocol_tree.session import ProtocolSession
+
+    cols = _all_columns()
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "S1", "rt_a": True,  "rt_b": 11})
+    rm.add_step(values={"name": "S2", "rt_a": False, "rt_b": 22})
+
+    path = tmp_path / "protocol.json"
+    path.write_text(json.dumps(rm.to_json()))
+
+    session = ProtocolSession.from_file(str(path), with_demo_hardware=False)
+    assert session.manager.root.children[0].rt_a is True
+    assert session.manager.root.children[0].rt_b == 11
+    assert session.manager.root.children[1].rt_a is False
+    assert session.manager.root.children[1].rt_b == 22
