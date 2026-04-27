@@ -65,6 +65,7 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 from dropbot_controller.consts import (
+    PROTOCOL_SET_VOLTAGE, PROTOCOL_SET_FREQUENCY,
     VOLTAGE_APPLIED, FREQUENCY_APPLIED,
 )
 from dropbot_protocol_controls.protocol_columns.voltage_column import (
@@ -89,7 +90,7 @@ logger = logging.getLogger(__name__)
 # auto-connection delivers on the GUI thread.
 # ---------------------------------------------------------------------------
 
-_overlay_target = {"viewer": None}   # SimpleDeviceViewer (electrode overlay)
+_overlay_target = {"viewer": None}  # SimpleDeviceViewer (electrode overlay)
 _ack_target = {"window": None}       # DemoWindow (phase-ack timer trigger)
 _vf_target = {"window": None}        # DemoWindow (voltage/frequency readouts)
 
@@ -285,7 +286,50 @@ class DemoWindow(QMainWindow):
             from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
             from dramatiq import Worker
 
+            broker = dramatiq.get_broker()
+            # Drop any queued messages from prior demo runs.
+            broker.flush_all()
+
             router = MessageRouterActor()
+
+            # Purge stale demo subscribers — actor names recorded in
+            # Redis by prior demo processes whose actors aren't
+            # registered in this process. Without this, a previous demo
+            # (e.g. run_voltage_frequency_demo's ppt_vf_demo_spy) leaves
+            # behind a subscription that fires ActorNotFound on every
+            # publish.
+            #
+            # Only touch demo-namespaced actor names — leave real
+            # listeners (e.g., dropbot_controller_listener subscribed
+            # from the full app running in another process) alone.
+            _demo_prefixes = ("ppt_demo_", "ppt4_demo_", "ppt_vf_demo_")
+            _demo_topics = (
+                ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED,
+                PROTOCOL_SET_VOLTAGE, PROTOCOL_SET_FREQUENCY,
+                VOLTAGE_APPLIED, FREQUENCY_APPLIED,
+            )
+            for topic in _demo_topics:
+                try:
+                    subs = router.message_router_data.get_subscribers_for_topic(topic)
+                except Exception:
+                    continue
+                for entry in subs:
+                    actor_name = entry[0] if isinstance(entry, tuple) else entry
+                    if not actor_name.startswith(_demo_prefixes):
+                        continue
+                    try:
+                        broker.get_actor(actor_name)
+                    except Exception:
+                        try:
+                            router.message_router_data.remove_subscriber_from_topic(
+                                topic=topic, subscribing_actor_name=actor_name,
+                            )
+                            logger.info("purged stale demo subscriber %s on %s",
+                                        actor_name, topic)
+                        except Exception:
+                            logger.warning("failed to purge %s on %s: %s",
+                                           actor_name, topic,
+                                           "wrong listener_queue (likely from another router)")
 
             # PPT-3: electrode actuation chain
             router.message_router_data.add_subscriber_to_topic(
