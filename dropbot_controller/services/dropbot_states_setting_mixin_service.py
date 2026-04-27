@@ -88,12 +88,19 @@ class DropbotStatesSettingMixinService(HasTraits):
         gate and does NOT persist to DropbotPreferences.last_voltage —
         protocol writes are unconditional and transient. Publishes
         VOLTAGE_APPLIED ack on RPC return so the protocol executor's
-        wait_for unblocks.
+        wait_for unblocks. On hardware error, the ack is NOT published —
+        the executor's wait_for times out and the protocol step fails.
         """
-        v = int(message)
-        with self.proxy.transaction_lock:
-            self.proxy.update_state(voltage=v)
-        publish_message(topic=VOLTAGE_APPLIED, message=str(v))
+        try:
+            v = int(message)
+            with self.proxy.transaction_lock:
+                self.proxy.update_state(voltage=v)
+            publish_message(topic=VOLTAGE_APPLIED, message=str(v))
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Proxy error setting protocol voltage: {e}")
+        except Exception as e:
+            logger.error(f"Error setting protocol voltage: {e}")
+            raise
 
     def on_set_frequency_request(self, message):
         """Set frequency on the dropbot device.

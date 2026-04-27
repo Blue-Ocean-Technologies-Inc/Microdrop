@@ -47,13 +47,13 @@ def test_on_protocol_set_voltage_request_bypasses_realtime_mode():
 def test_on_protocol_set_voltage_request_does_not_persist_prefs():
     """Prefs are user-action-driven only; protocol writes don't churn them."""
     svc = _make_service()
+    svc.preferences.last_voltage = 999  # sentinel — handler must not overwrite
     with patch(
         "dropbot_controller.services.dropbot_states_setting_mixin_service.publish_message",
     ):
         svc.on_protocol_set_voltage_request("90")
 
-    setattr_calls = [
-        c for c in svc.preferences.mock_calls
-        if "last_voltage" in str(c)
-    ]
-    assert setattr_calls == []
+    assert svc.preferences.last_voltage == 999, (
+        "Handler must not write to preferences.last_voltage; "
+        f"sentinel 999 was overwritten with {svc.preferences.last_voltage}"
+    )
