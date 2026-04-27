@@ -1,5 +1,6 @@
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
+from microdrop_application.dialogs.pyface_wrapper import information, warning, error
 
 
 class SSHControlView(QWidget):
@@ -92,11 +93,11 @@ class SSHControlView(QWidget):
     def show_message_box(self, msg_type, title, text):
         """A slot to show a message box from the ViewModel."""
         if msg_type == "error":
-            QMessageBox.critical(self, title, text)
+            error(None, text, title)
         elif msg_type == "info":
-            QMessageBox.information(self, title, text)
+            information(None, text, title)
         else:
-            QMessageBox.warning(self, title, text)
+            warning(None, text, title)
 
     def initialize_field_values(self, host="", port=0, username="", key_name="", password=""):
         """Initialize the fields values."""
