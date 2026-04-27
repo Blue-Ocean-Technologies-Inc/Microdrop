@@ -21,6 +21,7 @@ from dropbot_controller.consts import (
 logger = logging.getLogger(__name__)
 
 DEMO_VF_RESPONDER_ACTOR_NAME = "ppt_demo_voltage_frequency_responder"
+EXECUTOR_LISTENER_ACTOR_NAME = "pluggable_protocol_tree_executor_listener"
 DEMO_APPLY_DELAY_S = 0.01  # Smaller than electrode responder; just enough to be observable.
 
 
@@ -40,20 +41,29 @@ def _demo_voltage_frequency_responder(message: str, topic: str,
 
 
 def subscribe_demo_responder(router) -> None:
-    """Subscribe the in-process voltage/frequency responder to its
-    request topics on the given MessageRouterActor.
+    """Wire the in-process voltage/frequency demo path on ``router``.
 
-    Use after a ProtocolSession has been built with with_demo_hardware=True
-    if your protocol uses voltage/frequency columns and you want the
-    setpoint roundtrip to complete in-process. Importing this module
-    already registers the dramatiq actor; this helper just wires the
-    topic->actor subscriptions.
+    Two subscriptions per side of the round-trip:
+    1. The demo responder actor subscribes to PROTOCOL_SET_VOLTAGE /
+       PROTOCOL_SET_FREQUENCY so it sees protocol writes and acks them.
+    2. The executor's listener actor subscribes to VOLTAGE_APPLIED /
+       FREQUENCY_APPLIED so the protocol's wait_for() unblocks when
+       an ack lands.
+
+    Without (2), wait_for would always time out — _setup_demo_hardware
+    only wires the ELECTRODES_STATE_APPLIED ack for the PPT-3 electrode
+    handshake. Use after a ProtocolSession has been built with
+    with_demo_hardware=True if your protocol uses voltage/frequency
+    columns. Importing this module already registers the dramatiq actor;
+    this helper just wires the topic-to-actor subscriptions.
     """
-    router.message_router_data.add_subscriber_to_topic(
-        topic=PROTOCOL_SET_VOLTAGE,
-        subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
-    )
-    router.message_router_data.add_subscriber_to_topic(
-        topic=PROTOCOL_SET_FREQUENCY,
-        subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
-    )
+    for topic in (PROTOCOL_SET_VOLTAGE, PROTOCOL_SET_FREQUENCY):
+        router.message_router_data.add_subscriber_to_topic(
+            topic=topic,
+            subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
+        )
+    for topic in (VOLTAGE_APPLIED, FREQUENCY_APPLIED):
+        router.message_router_data.add_subscriber_to_topic(
+            topic=topic,
+            subscribing_actor_name=EXECUTOR_LISTENER_ACTOR_NAME,
+        )

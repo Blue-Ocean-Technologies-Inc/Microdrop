@@ -107,34 +107,6 @@ def _build_sample_protocol_file(path: Path) -> None:
         json.dump(rm.to_json(), f, indent=2)
 
 
-EXECUTOR_LISTENER_ACTOR_NAME = "pluggable_protocol_tree_executor_listener"
-
-
-def _subscribe_executor_listener(session: ProtocolSession) -> None:
-    """Subscribe the executor_listener actor to the voltage/frequency ack
-    topics so that acks deposited by the demo responder reach the
-    active step's mailbox.
-
-    _setup_demo_hardware wires ELECTRODES_STATE_APPLIED for the
-    electrode handshake but knows nothing about the dropbot_protocol_controls
-    columns — we must add the voltage/frequency acks ourselves.
-    """
-    if session._router is None:
-        return
-    for topic in (VOLTAGE_APPLIED, FREQUENCY_APPLIED):
-        try:
-            session._router.message_router_data.remove_subscriber_from_topic(
-                topic=topic,
-                subscribing_actor_name=EXECUTOR_LISTENER_ACTOR_NAME,
-            )
-        except Exception:
-            pass
-        session._router.message_router_data.add_subscriber_to_topic(
-            topic=topic,
-            subscribing_actor_name=EXECUTOR_LISTENER_ACTOR_NAME,
-        )
-
-
 def _subscribe_spy(session: ProtocolSession) -> None:
     """Watch all voltage/frequency request + ack topics."""
     if session._router is None:
@@ -170,7 +142,6 @@ def main() -> int:
               f"({len(session.manager.columns)} columns resolved).")
 
         subscribe_demo_responder(session._router)
-        _subscribe_executor_listener(session)
         _subscribe_spy(session)
 
         print("\nStarting protocol...\n")
