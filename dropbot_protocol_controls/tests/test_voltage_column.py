@@ -57,3 +57,63 @@ def test_make_voltage_column_default_reads_from_prefs():
         MockPrefs.return_value.last_voltage = 75
         col = make_voltage_column()
     assert col.model.default_value == 75
+
+
+from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED
+
+
+def test_voltage_handler_priority_20():
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler,
+    )
+    handler = VoltageHandler()
+    assert handler.priority == 20
+
+
+def test_voltage_handler_wait_for_topics_includes_voltage_applied():
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler,
+    )
+    handler = VoltageHandler()
+    assert VOLTAGE_APPLIED in handler.wait_for_topics
+
+
+def test_voltage_handler_on_step_publishes_and_waits():
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler,
+    )
+    handler = VoltageHandler()
+    row = MagicMock()
+    row.voltage = 120
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+
+    published = []
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
+        handler.on_step(row, ctx)
+
+    assert published == [{"topic": PROTOCOL_SET_VOLTAGE, "message": "120"}]
+    ctx.wait_for.assert_called_once_with(VOLTAGE_APPLIED, timeout=5.0)
+
+
+def test_voltage_handler_on_step_publishes_int_payload():
+    """Even if row.voltage is somehow a float, payload is a stringified int."""
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler,
+    )
+    handler = VoltageHandler()
+    row = MagicMock()
+    row.voltage = 99.7  # float — should be coerced to int
+    ctx = MagicMock()
+
+    published = []
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
+        handler.on_step(row, ctx)
+
+    assert published[0]["message"] == "99"  # int(99.7) = 99
