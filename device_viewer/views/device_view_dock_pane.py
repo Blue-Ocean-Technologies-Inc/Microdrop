@@ -1108,6 +1108,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.warning("Not processing device view model state change since state messages are disabled.")
             return
 
+        if not self.model.electrodes.svg_model:
+            logger.warning("Unable to publish device view model yet. Need svg_model to fully initialize.")
+            return
+
         try:
             logger.info("Processing device view model state change...")
             self.model_change_handler_with_timeout(event)

@@ -264,7 +264,11 @@ class DeviceViewMainModel(HasTraits):
     @observe("electrodes.svg_model.filename")
     def push_globals(self, event):
         logger.debug(f"push_globals: {event.name}: {event.new}")
-        app_globals["microdrop.device_svg.name"] = Path(self.electrodes.svg_model.filename).stem
+
+        if self.electrodes.svg_model:
+            app_globals["microdrop.device_svg.name"] = Path(self.electrodes.svg_model.filename).stem
+        else:
+            logger.warning("Unable to push svg filename to globals yet. Need svg_model to fully initialize.")
 
     @observe('electrode_scale')
     def update_stored_capacitances_on_area_scale_change(self, event):
