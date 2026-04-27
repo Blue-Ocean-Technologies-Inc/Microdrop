@@ -43,6 +43,18 @@ class VoltageHandler(BaseColumnHandler):
     priority = 20
     wait_for_topics = [VOLTAGE_APPLIED]
 
+    def on_interact(self, row, model, value):
+        """User edited a voltage cell — write through AND persist to prefs.
+
+        DropbotPreferences() with no args attaches to the global preferences
+        object set during envisage startup (PreferencesHelper convention,
+        see dropbot_controller/preferences.py:22-25). Storing here means
+        the next session's status-panel boot value matches the last
+        cell-edit, just like editing the spinner in the dropbot status panel.
+        """
+        super().on_interact(row, model, value)
+        DropbotPreferences().last_voltage = int(value)
+
     def on_step(self, row, ctx):
         v = int(row.voltage)
         publish_message(topic=PROTOCOL_SET_VOLTAGE, message=str(v))

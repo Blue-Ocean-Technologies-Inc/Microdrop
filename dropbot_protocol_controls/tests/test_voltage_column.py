@@ -117,3 +117,47 @@ def test_voltage_handler_on_step_publishes_int_payload():
         handler.on_step(row, ctx)
 
     assert published[0]["message"] == "99"  # int(99.7) = 99
+
+
+def test_voltage_handler_on_interact_writes_through_to_row():
+    """super().on_interact behavior: model.set_value writes to row."""
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler, VoltageColumnModel,
+    )
+    handler = VoltageHandler()
+    model = VoltageColumnModel(col_id="voltage", col_name="V", default_value=100)
+    handler.model = model
+
+    class FakeRow:
+        voltage = 100
+    row = FakeRow()
+
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+    ):
+        handler.on_interact(row, model, 120)
+
+    assert row.voltage == 120
+
+
+def test_voltage_handler_on_interact_persists_to_prefs():
+    """User cell-edit becomes the new default for next session."""
+    from dropbot_protocol_controls.protocol_columns.voltage_column import (
+        VoltageHandler, VoltageColumnModel,
+    )
+    handler = VoltageHandler()
+    model = VoltageColumnModel(col_id="voltage", col_name="V", default_value=100)
+    handler.model = model
+
+    class FakeRow:
+        voltage = 100
+    row = FakeRow()
+
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+    ) as MockPrefs:
+        prefs_instance = MockPrefs.return_value
+        handler.on_interact(row, model, 120)
+
+    MockPrefs.assert_called_once_with()  # no-arg construct hits global prefs
+    assert prefs_instance.last_voltage == 120
