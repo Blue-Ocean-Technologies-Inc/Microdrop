@@ -1,5 +1,6 @@
 import json
 import re
+import socket
 import subprocess
 import warnings
 
@@ -62,6 +63,35 @@ def _classify_rsync_stderr(returncode: int, stderr_tail: str) -> tuple[str, str]
             "port is reachable.\n\n" + stderr_tail,
         )
     return (f"rsync exit {returncode}", stderr_tail)
+
+
+# Bound for the pre-flight TCP probe. Short — we only want a quick "is the
+# SSH port open" check; the full SSH handshake budget belongs to rsync.
+SSH_REACHABILITY_TIMEOUT_S = 3.0
+
+
+def _ssh_port_reachable(host: str, port: int,
+                        timeout_s: float = SSH_REACHABILITY_TIMEOUT_S) -> tuple[bool, str]:
+    """Return (reachable, error_text).
+
+    Opens a TCP connection to ``host:port`` and closes it. Tests the SSH
+    service is listening and accepting connections, which is more accurate
+    than ICMP and works without admin privileges. ``error_text`` is empty
+    on success and a short human-readable string on failure (suitable for
+    the frontend error dialog).
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout_s):
+            return True, ""
+    except socket.gaierror as e:
+        return False, f"Could not resolve hostname {host!r}: {e}"
+    except socket.timeout:
+        return False, (
+            f"Timed out after {timeout_s:.0f}s waiting for {host}:{port} to accept "
+            "a TCP connection."
+        )
+    except OSError as e:
+        return False, f"{host}:{port} refused or unreachable: {e}"
 
 
 @provides(IDramatiqControllerBase)
@@ -191,6 +221,24 @@ class SSHService(HasTraits):
             logger.error(e, exc_info=True)
             publish_message(
                 json.dumps({"title": "Invalid sync request", "text": str(e)}),
+                SYNC_EXPERIMENTS_ERROR,
+            )
+            return
+
+        # Pre-flight: TCP-connect to the SSH port. Fails in a few seconds when
+        # the host is offline / wrong IP / wrong port, instead of waiting on
+        # rsync's 15s ConnectTimeout. Auth failures still surface from rsync.
+        reachable, reach_err = _ssh_port_reachable(model.host, model.port)
+        if not reachable:
+            logger.error(
+                "SSH host %s:%s unreachable before sync: %s",
+                model.host, model.port, reach_err,
+            )
+            publish_message(
+                json.dumps({
+                    "title": "Could not reach remote host",
+                    "text": reach_err,
+                }),
                 SYNC_EXPERIMENTS_ERROR,
             )
             return
