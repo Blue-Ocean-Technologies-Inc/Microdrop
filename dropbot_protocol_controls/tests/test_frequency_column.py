@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from traits.api import HasTraits
 
 from dropbot_protocol_controls.protocol_columns.frequency_column import (

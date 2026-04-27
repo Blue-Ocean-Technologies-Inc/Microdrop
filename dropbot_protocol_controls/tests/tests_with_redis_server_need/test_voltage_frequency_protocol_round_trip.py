@@ -44,6 +44,9 @@ from dropbot_protocol_controls.protocol_columns.voltage_column import (
 from dropbot_protocol_controls.protocol_columns.frequency_column import (
     make_frequency_column,
 )
+from dropbot_protocol_controls.demos.voltage_frequency_responder import (
+    DEMO_VF_RESPONDER_ACTOR_NAME, EXECUTOR_LISTENER_ACTOR_NAME,
+)
 
 
 # Recording spy actor — captures every relevant topic with timestamps
@@ -129,12 +132,12 @@ def setup_responder_and_spy(router_actor):
         for topic in (PROTOCOL_SET_VOLTAGE, PROTOCOL_SET_FREQUENCY):
             router.message_router_data.remove_subscriber_from_topic(
                 topic=topic,
-                subscribing_actor_name="ppt_demo_voltage_frequency_responder",
+                subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
             )
         for topic in (VOLTAGE_APPLIED, FREQUENCY_APPLIED):
             router.message_router_data.remove_subscriber_from_topic(
                 topic=topic,
-                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+                subscribing_actor_name=EXECUTOR_LISTENER_ACTOR_NAME,
             )
 
 

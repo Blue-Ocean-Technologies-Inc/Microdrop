@@ -6,7 +6,7 @@ prefs persistence — protocol writes are unconditional and transient.
 """
 from unittest.mock import MagicMock, patch
 
-from dropbot_controller.consts import VOLTAGE_APPLIED
+from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
 from dropbot_controller.services.dropbot_states_setting_mixin_service import (
     DropbotStatesSettingMixinService,
 )
@@ -57,9 +57,6 @@ def test_on_protocol_set_voltage_request_does_not_persist_prefs():
         "Handler must not write to preferences.last_voltage; "
         f"sentinel 999 was overwritten with {svc.preferences.last_voltage}"
     )
-
-
-from dropbot_controller.consts import FREQUENCY_APPLIED
 
 
 def test_on_protocol_set_frequency_request_calls_proxy_and_publishes_ack():

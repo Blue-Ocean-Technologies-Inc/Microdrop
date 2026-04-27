@@ -20,7 +20,10 @@ from dropbot_controller.preferences import DropbotPreferences
 
 # Static spinbox upper. Hardware-reported max isn't known at column
 # construction time. Backend validates against proxy.config.max_frequency.
-_DEFAULT_HARDWARE_MAX_HZ = 10_000  # DropBot DB3-120 nominal max
+# 100_000 Hz matches dropbot_preferences_ui/models.py's ui_max_frequency
+# Range high (the UI already lets users raise prefs.last_frequency above
+# 10 kHz) — using a lower cap here would silently clamp those edits.
+_DEFAULT_HARDWARE_MAX_HZ = 100_000
 
 
 class FrequencyColumnModel(BaseColumnModel):
