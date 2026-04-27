@@ -64,7 +64,12 @@ FRONTEND_PLUGINS = [
     DeviceViewerPlugin,
     PeripheralUiPlugin,
     UserHelpPlugin,
+<<<<<<< feat/remote-experiments-sync
     SSHUIPlugin,
+=======
+    # PluggableProtocolTreePlugin,
+    # DropbotProtocolControlsPlugin
+>>>>>>> main
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
