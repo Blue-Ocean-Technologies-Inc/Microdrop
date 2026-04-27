@@ -72,9 +72,8 @@ from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 
 # Strip the Prometheus middleware up front (matches run_widget.py).
-for _m in list(dramatiq.get_broker().middleware):
-    if _m.__module__ == "dramatiq.middleware.prometheus":
-        dramatiq.get_broker().middleware.remove(_m)
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
+remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
 
 
 logger = logging.getLogger(__name__)

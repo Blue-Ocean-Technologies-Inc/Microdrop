@@ -2,6 +2,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 from dramatiq import get_broker, Worker
 from dramatiq.middleware import CurrentMessage
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
 from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
 
 
@@ -35,10 +36,7 @@ if __name__ == "__main__":
     BROKER = get_broker()
 
     # Remove Prometheus middleware
-    BROKER.middleware[:] = [
-        m for m in BROKER.middleware
-        if m.__module__ != "dramatiq.middleware.prometheus"
-    ]
+    remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=BROKER)
 
     # Add the CurrentMessage middleware so you we can inspect the timestamp
     BROKER.add_middleware(CurrentMessage())
