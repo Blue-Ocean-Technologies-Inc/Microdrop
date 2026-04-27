@@ -3,7 +3,7 @@ microdrop_runner_setup()
 
 from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, REQUIRED_CONTEXT, FRONTEND_APPLICATION, \
-    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS
+    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, SERVICE_PLUGINS
 
 
 def main(args):
@@ -12,7 +12,7 @@ def main(args):
     # You can now access the validated device choice here
     print(f"Starting with device: {args.device}")
 
-    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS
+    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + SERVICE_PLUGINS
 
     if args.device == "dropbot":
         plugins += DROPBOT_FRONTEND_PLUGINS

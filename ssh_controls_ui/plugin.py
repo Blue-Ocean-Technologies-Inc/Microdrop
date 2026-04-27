@@ -1,7 +1,7 @@
 # enthought imports
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str
-from envisage.api import Plugin, TASK_EXTENSIONS
+from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from envisage.ui.tasks.api import TaskExtension
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -28,6 +28,9 @@ class SSHUIPlugin(Plugin):
 
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
     #### Trait initializers ###################################################
 
     def _contributed_task_extensions_default(self):
@@ -39,9 +42,17 @@ class SSHUIPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=menu_factory,
-                        path='MenuBar/Edit',
+                        path='MenuBar/Tools',
                     )
 
                 ]
             )
         ]
+
+    def _preferences_panes_default(self):
+        from .preferences import SSHControlPreferencesPane
+        return [SSHControlPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import ssh_controls_tab
+        return [ssh_controls_tab]

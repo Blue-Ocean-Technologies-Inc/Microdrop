@@ -50,7 +50,8 @@ class _RsyncWin:
             ipv6: bool = False,
             ssh_port: Optional[int] = None,
             capture_output: bool = True,
-            check: bool = True
+            check: bool = True,
+            timeout: Optional[float] = None,
     ) -> subprocess.CompletedProcess:
         """
         Executes the rsync-win command with the specified options.
@@ -76,6 +77,11 @@ class _RsyncWin:
                                    If False, output streams to the parent process
                                    (useful for seeing live --progress).
             check (bool): If True (default), raise CalledProcessError on non-zero exit.
+            timeout (Optional[float]): Wall-clock seconds before the rsync
+                                       subprocess is killed and ``subprocess.TimeoutExpired``
+                                       is raised. Note: rsync-win.exe does not expose ssh
+                                       options, so this subprocess timeout is the only
+                                       safety net here.
 
         Returns:
             subprocess.CompletedProcess: The result of the command execution.
@@ -84,6 +90,7 @@ class _RsyncWin:
             FileNotFoundError: If 'rsync-win.exe' (or the specified path) is not found.
             subprocess.CalledProcessError: If rsync-win returns a non-zero exit code
                                            and 'check' is True.
+            subprocess.TimeoutExpired: If ``timeout`` is set and elapsed.
         """
         # Start building the command list
         cmd = [self.executable_path]
@@ -141,7 +148,8 @@ class _RsyncWin:
                 capture_output=capture_output,
                 text=True,
                 check=check,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=timeout,
             )
             return result
         except FileNotFoundError:
@@ -200,7 +208,8 @@ class _RsyncPosix:
             ipv6: bool = False,
             ssh_port: Optional[int] = None,
             capture_output: bool = True,
-            check: bool = True
+            check: bool = True,
+            timeout: Optional[float] = None,
     ) -> subprocess.CompletedProcess:
         """
         Executes the standard rsync command with the specified options.
@@ -224,6 +233,9 @@ class _RsyncPosix:
             ssh_port (Optional[int]): Specify the SSH port.
             capture_output (bool): If True (default), capture stdout and stderr.
             check (bool): If True (default), raise CalledProcessError on non-zero exit.
+            timeout (Optional[float]): Wall-clock seconds before the rsync
+                                       subprocess is killed and ``subprocess.TimeoutExpired``
+                                       is raised.
 
         Returns:
             subprocess.CompletedProcess: The result of the command execution.
@@ -232,6 +244,7 @@ class _RsyncPosix:
             FileNotFoundError: If 'rsync' (or the specified path) is not found.
             subprocess.CalledProcessError: If rsync returns a non-zero exit code
                                            and 'check' is True.
+            subprocess.TimeoutExpired: If ``timeout`` is set and elapsed.
         """
         # Start building the command list
         cmd = [self.executable_path]
@@ -266,7 +279,9 @@ class _RsyncPosix:
                 cmd.append(f"--exclude={item}")
 
         # --- SSH Options (Remote Shell) ---
-        # Build the '-e' argument string if ssh_port or identity is provided
+        # Build the '-e' argument string if ssh_port or identity is provided.
+        # ConnectTimeout bounds the TCP handshake; BatchMode disables interactive
+        # password prompting (without it, key-auth failure hangs on a closed stdin).
         e_str_parts = ["ssh"]
         if ssh_port:
             e_str_parts.extend(["-p", str(ssh_port)])
@@ -274,6 +289,8 @@ class _RsyncPosix:
             e_str_parts.extend(["-i", identity])
 
         if len(e_str_parts) > 1:
+            e_str_parts.extend(["-o", "ConnectTimeout=15"])
+            e_str_parts.extend(["-o", "BatchMode=yes"])
             cmd.extend(["-e", " ".join(e_str_parts)])
 
         # --- Required Arguments ---
@@ -290,7 +307,8 @@ class _RsyncPosix:
                 capture_output=capture_output,
                 text=True,
                 check=check,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=timeout,
             )
             return result
         except FileNotFoundError:
@@ -367,7 +385,8 @@ class Rsync:
             ipv6: bool = False,
             ssh_port: Optional[int] = None,
             capture_output: bool = True,
-            check: bool = True
+            check: bool = True,
+            timeout: Optional[float] = None,
     ) -> subprocess.CompletedProcess:
         """
         Executes the rsync command with the specified options using
@@ -394,6 +413,9 @@ class Rsync:
                                    If False, output streams to the parent process
                                    (useful for seeing live --progress).
             check (bool): If True (default), raise CalledProcessError on non-zero exit.
+            timeout (Optional[float]): Wall-clock seconds before the rsync
+                                       subprocess is killed and ``subprocess.TimeoutExpired``
+                                       is raised. Callers handle the exception.
 
         Returns:
             subprocess.CompletedProcess: The result of the command execution.
@@ -402,6 +424,7 @@ class Rsync:
             FileNotFoundError: If the rsync executable is not found.
             subprocess.CalledProcessError: If rsync returns a non-zero exit code
                                            and 'check' is True.
+            subprocess.TimeoutExpired: If ``timeout`` is set and elapsed.
         """
         # Just delegate the call to the chosen wrapper
         return self._wrapper.sync(
@@ -422,7 +445,8 @@ class Rsync:
             ipv6=ipv6,
             ssh_port=ssh_port,
             capture_output=capture_output,
-            check=check
+            check=check,
+            timeout=timeout,
         )
 
 

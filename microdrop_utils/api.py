@@ -223,22 +223,29 @@ class SSHTopics:
 
     class Requests:
         """Requests accepted by the SSH controls backend."""
-        GENERATE_KEYPAIR    = _ssh.GENERATE_KEYPAIR
-        KEY_UPLOAD          = _ssh.KEY_UPLOAD
+        GENERATE_KEYPAIR            = _ssh.GENERATE_KEYPAIR
+        KEY_UPLOAD                  = _ssh.KEY_UPLOAD
+        SYNC_EXPERIMENTS            = _ssh.SYNC_EXPERIMENTS_REQUEST
+
+    class Started:
+        """Progress signals published by the SSH controls service."""
+        SYNC_EXPERIMENTS_STARTED    = _ssh.SYNC_EXPERIMENTS_STARTED
 
     class Success:
         """Success signals published by the SSH controls backend."""
-        SSH_KEYGEN_SUCCESS      = _ssh.SSH_KEYGEN_SUCCESS
-        SSH_KEY_UPLOAD_SUCCESS  = _ssh.SSH_KEY_UPLOAD_SUCCESS
+        SSH_KEYGEN_SUCCESS          = _ssh.SSH_KEYGEN_SUCCESS
+        SSH_KEY_UPLOAD_SUCCESS      = _ssh.SSH_KEY_UPLOAD_SUCCESS
+        SYNC_EXPERIMENTS_SUCCESS    = _ssh.SYNC_EXPERIMENTS_SUCCESS
 
     class Warnings:
         """Warning signals published by the SSH controls backend."""
-        SSH_KEYGEN_WARNING  = _ssh.SSH_KEYGEN_WARNING
+        SSH_KEYGEN_WARNING          = _ssh.SSH_KEYGEN_WARNING
 
     class Errors:
         """Error signals published by the SSH controls backend."""
-        SSH_KEYGEN_ERROR        = _ssh.SSH_KEYGEN_ERROR
-        SSH_KEY_UPLOAD_ERROR    = _ssh.SSH_KEY_UPLOAD_ERROR
+        SSH_KEYGEN_ERROR            = _ssh.SSH_KEYGEN_ERROR
+        SSH_KEY_UPLOAD_ERROR        = _ssh.SSH_KEY_UPLOAD_ERROR
+        SYNC_EXPERIMENTS_ERROR      = _ssh.SYNC_EXPERIMENTS_ERROR
 
 
 # ---------------------------------------------------------------------------
