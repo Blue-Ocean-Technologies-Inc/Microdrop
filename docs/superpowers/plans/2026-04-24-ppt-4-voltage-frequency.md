@@ -301,8 +301,11 @@ git -C src commit -m "[PPT-4] Add on_protocol_set_frequency_request handler"
 """Smoke tests for the dropbot_protocol_controls package shell."""
 
 def test_can_import_plugin():
+    """Envisage Plugin.id is a Trait — accessible on an instance, not the
+    class. (Class-level access raises AttributeError.)"""
     from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
-    assert DropbotProtocolControlsPlugin.id.endswith(".plugin")
+    p = DropbotProtocolControlsPlugin()
+    assert p.id.endswith(".plugin")
 
 
 def test_plugin_instantiates_with_no_columns_yet():
