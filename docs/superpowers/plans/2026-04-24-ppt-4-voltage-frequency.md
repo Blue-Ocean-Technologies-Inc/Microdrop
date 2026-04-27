@@ -207,17 +207,20 @@ def test_on_protocol_set_frequency_request_bypasses_realtime_mode():
 
 
 def test_on_protocol_set_frequency_request_does_not_persist_prefs():
+    """Sentinel pre-set on prefs.last_frequency must survive the call.
+    Plain MagicMock doesn't track attribute writes via mock_calls, so a
+    sentinel-comparison is the only reliable way to assert no-write."""
     svc = _make_service()
+    svc.preferences.last_frequency = 99999  # sentinel
     with patch(
         "dropbot_controller.services.dropbot_states_setting_mixin_service.publish_message",
     ):
         svc.on_protocol_set_frequency_request("8000")
 
-    setattr_calls = [
-        c for c in svc.preferences.mock_calls
-        if "last_frequency" in str(c)
-    ]
-    assert setattr_calls == []
+    assert svc.preferences.last_frequency == 99999, (
+        "Handler must not write to preferences.last_frequency; "
+        f"sentinel 99999 was overwritten with {svc.preferences.last_frequency}"
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify the new ones fail**
@@ -247,12 +250,20 @@ def on_protocol_set_frequency_request(self, message):
 
     Symmetric to on_set_frequency_request but bypasses the realtime-mode
     gate and does NOT persist to DropbotPreferences.last_frequency.
-    Publishes FREQUENCY_APPLIED ack on RPC return.
+    Publishes FREQUENCY_APPLIED ack on RPC return. On hardware error,
+    the ack is NOT published — the executor's wait_for times out and
+    the protocol step fails.
     """
-    v = int(message)
-    with self.proxy.transaction_lock:
-        self.proxy.update_state(frequency=v)
-    publish_message(topic=FREQUENCY_APPLIED, message=str(v))
+    try:
+        v = int(message)
+        with self.proxy.transaction_lock:
+            self.proxy.update_state(frequency=v)
+        publish_message(topic=FREQUENCY_APPLIED, message=str(v))
+    except (TimeoutError, RuntimeError) as e:
+        logger.error(f"Proxy error setting protocol frequency: {e}")
+    except Exception as e:
+        logger.error(f"Error setting protocol frequency: {e}")
+        raise
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
