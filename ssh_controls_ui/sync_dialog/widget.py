@@ -158,3 +158,19 @@ class SyncDialogView(QWidget):
         window = self.window()
         if window is not None:
             window.close()
+
+    def closeEvent(self, event):
+        """Tear down ViewModel bindings before Qt deletes our slots.
+
+        Triggered for every dismissal path (X button, programmatic close,
+        parent-window close). Calling ``shutdown`` here makes the dialog's
+        signal-slot bindings unreachable, so a Dramatiq response that
+        arrives after the dialog is gone cannot drive a deleted Qt
+        widget. ``shutdown`` is idempotent — Quit-button path already
+        called it via ``quit_command``.
+        """
+        try:
+            self.view_model.shutdown()
+        except Exception:
+            logger.exception("SyncDialogView shutdown raised during closeEvent")
+        super().closeEvent(event)
