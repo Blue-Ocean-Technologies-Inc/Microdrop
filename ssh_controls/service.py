@@ -1,4 +1,6 @@
 import json
+import re
+import subprocess
 import warnings
 
 import dramatiq
@@ -17,12 +19,49 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_sync_helpers import Rsync
 
 
-from .consts import listener_name, SSH_KEYGEN_SUCCESS, \
+from .consts import listener_name, SYNC_EXCEPTIONS_TO_PASS, SSH_KEYGEN_SUCCESS, \
     SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR, SSH_KEY_UPLOAD_ERROR, SSH_KEY_UPLOAD_SUCCESS, \
     SYNC_EXPERIMENTS_STARTED, SYNC_EXPERIMENTS_SUCCESS, SYNC_EXPERIMENTS_ERROR
 from .models import ExperimentsSyncRequest
 
 logger = get_logger(__name__)
+
+# Wall-clock budget for the entire rsync subprocess. Comfortably above the 15 s
+# SSH ConnectTimeout so a slow-but-progressing transfer is not killed, while
+# still bounding a stalled session so the UI is told within a reasonable window.
+RSYNC_TIMEOUT_S = 120
+
+# rsync exit code 255 == SSH transport failure. The patterns below classify the
+# stderr tail into a user-actionable title.
+_AUTH_FAIL_PATTERN = re.compile(r"permission denied", re.IGNORECASE)
+_UNREACHABLE_PATTERN = re.compile(
+    r"connection timed out|connection refused|no route to host|"
+    r"could not resolve hostname|network is unreachable",
+    re.IGNORECASE,
+)
+
+
+def _classify_rsync_stderr(returncode: int, stderr_tail: str) -> tuple[str, str]:
+    """Map an rsync failure into a user-facing (title, text) pair.
+
+    The frontend's error dialog renders the title prominently and the text
+    below it, so the title is what the user reads first.
+    """
+    if _AUTH_FAIL_PATTERN.search(stderr_tail):
+        return (
+            "SSH authentication failed",
+            "The remote host rejected the SSH key. Re-upload your public "
+            "key via the SSH Key Portal, or verify the Key Name preference "
+            "matches a key the remote host trusts.\n\n" + stderr_tail,
+        )
+    if _UNREACHABLE_PATTERN.search(stderr_tail):
+        return (
+            "Could not reach remote host",
+            "The remote host did not accept the SSH connection. Check that "
+            "the host is online, the IP/hostname is correct, and the SSH "
+            "port is reachable.\n\n" + stderr_tail,
+        )
+    return (f"rsync exit {returncode}", stderr_tail)
 
 
 @provides(IDramatiqControllerBase)
@@ -149,6 +188,7 @@ class SSHService(HasTraits):
         try:
             model = ExperimentsSyncRequest.model_validate_json(message)
         except ValidationError as e:
+            logger.error(e, exc_info=True)
             publish_message(
                 json.dumps({"title": "Invalid sync request", "text": str(e)}),
                 SYNC_EXPERIMENTS_ERROR,
@@ -171,28 +211,51 @@ class SSHService(HasTraits):
                 verbose=True,
                 capture_output=True,
                 check=False,
+                timeout=RSYNC_TIMEOUT_S,
             )
-            if result.returncode == 0:
-                publish_message(
-                    json.dumps({"message": "Sync complete."}),
-                    SYNC_EXPERIMENTS_SUCCESS,
-                )
-            else:
+            if result.returncode != 0 or result.stderr:
                 tail = (result.stderr or "")[-500:]
-                publish_message(
-                    json.dumps({
-                        "title": f"rsync exit {result.returncode}",
-                        "text": tail,
-                    }),
-                    SYNC_EXPERIMENTS_ERROR,
-                )
+                logger.error(f"Rsync Exit: {result.returncode}; {tail}")
+
+                if tail not in SYNC_EXCEPTIONS_TO_PASS:
+                    title, text = _classify_rsync_stderr(result.returncode, tail)
+                    publish_message(
+                        json.dumps({"title": title, "text": text}),
+                        SYNC_EXPERIMENTS_ERROR,
+                    )
+                    return
+
+                else:
+                    logger.warning(f"This Exception is set to be ignored: {tail}")
+
+
+            logger.info("Sync succeeded")
+            publish_message(
+                json.dumps({"message": "Sync complete."}),
+                SYNC_EXPERIMENTS_SUCCESS,
+            )
+
+        except subprocess.TimeoutExpired:
+            logger.error("Remote sync timed out after %s s", RSYNC_TIMEOUT_S)
+            publish_message(
+                json.dumps({
+                    "title": "Connection timed out",
+                    "text": (
+                        f"Could not reach {model.username}@{model.host}:{model.port} "
+                        f"within {RSYNC_TIMEOUT_S}s. Check that the host is online "
+                        "and the SSH port is correct."
+                    ),
+                }),
+                SYNC_EXPERIMENTS_ERROR,
+            )
         except FileNotFoundError as e:
+            logger.error(e, exc_info=True)
             publish_message(
                 json.dumps({"title": "rsync executable not found", "text": str(e)}),
                 SYNC_EXPERIMENTS_ERROR,
             )
         except Exception as e:
-            logger.exception("Remote sync failed")
+            logger.error("Remote sync failed")
             publish_message(
                 json.dumps({"title": "Unexpected error", "text": str(e)}),
                 SYNC_EXPERIMENTS_ERROR,
