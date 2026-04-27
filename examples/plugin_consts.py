@@ -41,8 +41,8 @@ FRONTEND_PLUGINS = [
     DeviceViewerPlugin,
     PeripheralUiPlugin,
     UserHelpPlugin,
-    PluggableProtocolTreePlugin,
-    DropbotProtocolControlsPlugin
+    # PluggableProtocolTreePlugin,
+    # DropbotProtocolControlsPlugin
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
