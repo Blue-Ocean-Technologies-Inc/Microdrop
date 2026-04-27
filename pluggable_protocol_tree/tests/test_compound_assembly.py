@@ -101,3 +101,28 @@ def test_existing_single_cell_columns_still_assemble_unchanged():
     assert "type" in ids
     assert "duration_s" in ids
     assert "electrodes" in ids
+
+
+def test_compound_wait_for_topics_only_on_owner_field():
+    """C1 regression: only the owner field advertises wait_for_topics
+    so that bucketing in ProtocolExecutor._build_step_ctx doesn't see
+    multiple columns at the same priority with the same topic."""
+    h = BaseCompoundColumnHandler()
+    h.priority = 25
+    h.wait_for_topics = ["x/applied"]
+    cc = CompoundColumn(
+        model=_TwoFieldModel(),
+        view=DictCompoundColumnView(cell_views={
+            "ec_enabled": CheckboxColumnView(),
+            "ec_count":   IntSpinBoxColumnView(low=0, high=999),
+        }),
+        handler=h,
+    )
+    p = PluggableProtocolTreePlugin()
+    p.contributed_columns = [cc]
+    cols = [c for c in p._assemble_columns()
+            if isinstance(c.handler, _CompoundFieldHandlerAdapter)]
+    owner = next(c for c in cols if c.handler.is_owner)
+    followers = [c for c in cols if not c.handler.is_owner]
+    assert owner.handler.wait_for_topics == ["x/applied"]
+    assert all(f.handler.wait_for_topics == [] for f in followers)

@@ -115,7 +115,8 @@ def _expand_compound(c: ICompoundColumn) -> list:
             field_id=spec.field_id,
             is_owner=(idx == 0),
             priority=c.handler.priority,
-            wait_for_topics=list(c.handler.wait_for_topics or []),
+            wait_for_topics=(list(c.handler.wait_for_topics or [])
+                             if idx == 0 else []),
         )
         view = c.view.cell_view_for_field(spec.field_id)
         expanded.append(Column(
