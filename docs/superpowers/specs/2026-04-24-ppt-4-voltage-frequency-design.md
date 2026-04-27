@@ -1,16 +1,18 @@
-# PPT-4 — Voltage + Frequency columns (dropbot_controller contribution)
+# PPT-4 — Voltage + Frequency columns (`dropbot_protocol_controls` plugin)
 
-**Status:** WORK-IN-PROGRESS — design draft, not yet finalised. Sections 2-4 + spec self-review + user approval still pending. See "Open Questions / TODO" at the bottom.
+**Status:** READY FOR REVIEW — all four sections confirmed by the user. Pending spec self-review pass + user sign-off, then transition to writing-plans.
 
 **Issue:** [#366](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/366) (umbrella [#361](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/361))
 
-**Brainstorming session (paused):** 2026-04-24, in conversation with the user. All decisions captured below were confirmed by the user one at a time. Sections marked DRAFT have not yet been presented for approval.
+**Brainstorming session:** started 2026-04-24, paused, resumed 2026-04-27. All decisions captured below were confirmed by the user one at a time.
 
 ---
 
 ## Section 1 — Architecture & Topics ✅ CONFIRMED
 
-Two new columns (`voltage` Float V, `frequency` Float Hz) **contributed by the dropbot_controller plugin** through the existing `PROTOCOL_COLUMNS` extension point. They appear after the PPT-3 builtins in the assembled column list. dropbot_controller becomes the first non-core plugin to contribute columns — sets the template for any future hardware contributions.
+Two new columns (`voltage` **Int V**, `frequency` **Int Hz**) **contributed by a new sibling plugin `dropbot_protocol_controls`** through the existing `PROTOCOL_COLUMNS` extension point. They appear after the PPT-3 builtins in the assembled column list. `dropbot_protocol_controls` is the first plugin to contribute through this extension point and **establishes the pattern** for future hardware controllers (each gets its own `<hw>_protocol_controls` sibling plugin — see Section 3 for the full rationale).
+
+> **Type policy:** voltage and frequency are **Ints** end-to-end — column trait, payload, ack value, preference. Avoids float precision drift, matches the existing `on_set_voltage_request` which already writes `int(self.voltage)` to `DropbotPreferences.last_voltage`. dropbot.py's `proxy.update_state(voltage=...)` accepts ints transparently.
 
 ### New topics for protocol-driven hardware writes
 
@@ -18,22 +20,22 @@ Separate from the existing UI-driven `SET_VOLTAGE`/`SET_FREQUENCY` so the realti
 
 | Direction | Topic | Payload |
 |---|---|---|
-| Protocol → DropBot | `dropbot/requests/protocol_set_voltage` | `"100.0"` |
-| Protocol → DropBot | `dropbot/requests/protocol_set_frequency` | `"10000.0"` |
-| DropBot → Protocol | `dropbot/signals/voltage_applied` | `"100.0"` (echo) |
-| DropBot → Protocol | `dropbot/signals/frequency_applied` | `"10000.0"` (echo) |
+| Protocol → DropBot | `dropbot/requests/protocol_set_voltage` | `"100"` |
+| Protocol → DropBot | `dropbot/requests/protocol_set_frequency` | `"10000"` |
+| DropBot → Protocol | `dropbot/signals/voltage_applied` | `"100"` (echo) |
+| DropBot → Protocol | `dropbot/signals/frequency_applied` | `"10000"` (echo) |
 
 ### New request handlers in `DropbotStatesSettingMixinService`
 
 ```python
 def on_protocol_set_voltage_request(self, message):
-    v = float(message)
+    v = int(message)
     with self.proxy.transaction_lock:
         self.proxy.update_state(voltage=v)
     publish_message(topic=VOLTAGE_APPLIED, message=str(v))
 
 def on_protocol_set_frequency_request(self, message):
-    # symmetric
+    # symmetric — int(message), update_state(frequency=...), publish FREQUENCY_APPLIED
 ```
 
 No realtime-mode gate, no prefs write — protocol writes are unconditional and transient. Existing `on_set_voltage_request` / `on_set_frequency_request` stay untouched (UI path unchanged).
@@ -48,7 +50,7 @@ Both `VoltageHandler` and `FrequencyHandler` at `priority = 20`. Same bucket →
 
 ---
 
-## Section 2 — Column factories, defaults, and per-edit side effects ✅ CONFIRMED (decisions made; spec text DRAFT)
+## Section 2 — Column factories, defaults, and per-edit side effects ✅ CONFIRMED
 
 ### Default values
 
@@ -68,85 +70,155 @@ When the user edits a Voltage / Frequency cell in the protocol tree, the column'
 
 ---
 
-## Section 3 — File layout & plugin contribution 🟡 DRAFT (not yet presented to user)
+## Section 3 — File layout & plugin contribution ✅ CONFIRMED
 
-Tentative layout — to be confirmed in section presentation:
+### New sibling plugin: `dropbot_protocol_controls/`
+
+A new plugin package, sibling to `dropbot_controller/` and `pluggable_protocol_tree/`, that contributes hardware-coupled protocol columns. **Establishes the pattern:** any hardware-controller plugin that wants to expose protocol-tree columns gets a sibling `<hw>_protocol_controls` plugin. Keeps the runtime hardware controller (`dropbot_controller`) cleanly focused on USB/RPC, and keeps the protocol-tree extension code in its own package.
 
 ```
-dropbot_controller/
-├── plugin.py                                  # extend with contributed_protocol_columns
-├── consts.py                                  # add 4 new topics + ACTOR_TOPIC_DICT entries
-├── services/
-│   └── dropbot_states_setting_mixin_service.py  # add 2 new on_*_request handlers
-└── protocol_columns/
-    ├── __init__.py
-    ├── voltage_column.py                      # VoltageColumnModel + VoltageHandler + factory
-    └── frequency_column.py                    # symmetric
+dropbot_protocol_controls/
+├── __init__.py
+├── plugin.py                            # DropbotProtocolControlsPlugin
+├── consts.py                            # PKG only; topic constants live in dropbot_controller/consts.py
+├── protocol_columns/
+│   ├── __init__.py
+│   ├── voltage_column.py                # VoltageColumnModel + spinner view + VoltageHandler + factory
+│   └── frequency_column.py              # symmetric
+└── tests/
+    ├── test_voltage_column.py
+    ├── test_frequency_column.py
+    └── tests_with_redis_server_need/
+        └── test_protocol_round_trip.py
 ```
 
-`dropbot_controller/plugin.py` gets:
+### Edits to existing `dropbot_controller/`
+
+| File | Change |
+|---|---|
+| `consts.py` | Add 4 topic constants: `PROTOCOL_SET_VOLTAGE`, `PROTOCOL_SET_FREQUENCY`, `VOLTAGE_APPLIED`, `FREQUENCY_APPLIED`. **No `ACTOR_TOPIC_DICT` changes** — existing `dropbot/requests/#` wildcard auto-routes the new request topics. |
+| `services/dropbot_states_setting_mixin_service.py` | Add 2 new handlers `on_protocol_set_voltage_request` / `on_protocol_set_frequency_request` — symmetric to the existing UI handlers but **without** the realtime-mode gate and **without** the prefs persistence. Publish ack on RPC return. |
+
+### `dropbot_protocol_controls/plugin.py`
 
 ```python
+from envisage.plugin import Plugin
 from traits.api import List, Instance
+
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+
+from .consts import PKG, PKG_name
 from .protocol_columns.voltage_column import make_voltage_column
 from .protocol_columns.frequency_column import make_frequency_column
 
-contributed_protocol_columns = List(
-    Instance(IColumn), contributes_to=PROTOCOL_COLUMNS,
-)
 
-def _contributed_protocol_columns_default(self):
-    return [make_voltage_column(), make_frequency_column()]
+class DropbotProtocolControlsPlugin(Plugin):
+    id = PKG + '.plugin'
+    name = f'{PKG_name} Plugin'
+
+    contributed_protocol_columns = List(
+        Instance(IColumn), contributes_to=PROTOCOL_COLUMNS,
+    )
+
+    def _contributed_protocol_columns_default(self):
+        return [make_voltage_column(), make_frequency_column()]
 ```
+
+### Run-script wiring
+
+Append `DropbotProtocolControlsPlugin` to whatever bundle already loads `DropbotControllerPlugin` (concretely: the backend / full-app entries in `examples/plugin_consts.py`). Pure-frontend bundles don't load it — they don't drive hardware.
+
+### Topic ownership rationale
+
+The 4 new topics are **dropbot-namespaced** (`dropbot/...`) and live in `dropbot_controller/consts.py`, even though one consumer (`VoltageHandler.wait_for(VOLTAGE_APPLIED)`) is in the new sibling plugin. This keeps topic constants colocated with the hardware controller that publishes them — `dropbot_protocol_controls` imports them. If we put topics in the sibling plugin, dropbot_controller would have to import from a plugin that depends on it, creating a back-edge.
 
 ---
 
-## Section 4 — Tests, demo wiring, persistence 🟡 DRAFT (not yet presented to user)
+## Section 4 — Tests, demo wiring, persistence ✅ CONFIRMED
 
-### Unit tests
+### Unit tests (no Redis)
 
-- `dropbot_controller/tests/test_protocol_columns.py` — VoltageHandler / FrequencyHandler behaviour with mocked broker (publish + wait_for sequence; ack flows; no-prefs-write under run; prefs-write under interact).
-- Test that the column factories instantiate cleanly and read prefs correctly.
+| File | Covers |
+|---|---|
+| `dropbot_protocol_controls/tests/test_voltage_column.py` | `VoltageHandler.on_step` publishes `PROTOCOL_SET_VOLTAGE` and waits for `VOLTAGE_APPLIED` (mocked broker); `on_step` does **not** touch prefs; `on_interact` writes `int(value)` to `DropbotPreferences.last_voltage`; factory instantiates cleanly; default reads from prefs. |
+| `dropbot_protocol_controls/tests/test_frequency_column.py` | symmetric. |
+| `dropbot_protocol_controls/tests/test_persistence.py` | Int traits round-trip through JSON via `RowManager.to_json` / `from_json`. (Confirms model.serialize/deserialize defaults are identity for Int; no custom code expected.) |
+| `dropbot_controller/tests/test_protocol_set_handlers.py` | `on_protocol_set_voltage_request` / `..._frequency_request` call `proxy.update_state` and publish their ack topic; do **not** check `realtime_mode`; do **not** write prefs. Mock proxy + broker. |
 
 ### Integration test (Redis required)
 
-- `dropbot_controller/tests/tests_with_redis_server_need/test_voltage_frequency_protocol_round_trip.py` — full end-to-end: subscribe a stand-in voltage/frequency responder, build a protocol with voltage=120, frequency=5000, run executor, assert the responder received both setpoints and that the ack arrived before any actuation publish.
+`dropbot_protocol_controls/tests/tests_with_redis_server_need/test_voltage_frequency_protocol_round_trip.py` — full end-to-end:
+- subscribe a stand-in voltage/frequency responder actor,
+- build a protocol with `voltage=120`, `frequency=5000` on Step 1,
+- run executor,
+- assert the responder received both setpoints,
+- assert both `_APPLIED` acks arrived **before** any `ELECTRODES_STATE_CHANGE` publish from priority-30 RoutesHandler.
 
-### Demo wiring
+### Demo responder
 
-Extend `pluggable_protocol_tree/demos/run_widget.py`, `run_widget_auto.py`, `run_session_demo.py`, `run_headless.py` so:
+`dropbot_protocol_controls/demos/voltage_frequency_responder.py` — dramatiq actor that subscribes to `PROTOCOL_SET_VOLTAGE` / `PROTOCOL_SET_FREQUENCY`, sleeps a few ms, and publishes the matching `_APPLIED` ack. Mirrors `pluggable_protocol_tree/demos/electrode_responder.py`.
 
-- A voltage/frequency stand-in responder actor (similar to `electrode_responder`) is registered when `with_demo_hardware=True`.
-- The auto-demo's sample protocol sets voltage + frequency on at least one step so the chain is exercised end-to-end.
+Also exports a small helper:
+
+```python
+def subscribe_demo_responder(router) -> None:
+    """Subscribe the in-process voltage/frequency responder to its
+    request topics on the given MessageRouterActor. Use after a
+    ProtocolSession has been built with with_demo_hardware=True."""
+    router.message_router_data.add_subscriber_to_topic(
+        topic=PROTOCOL_SET_VOLTAGE,
+        subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
+    )
+    router.message_router_data.add_subscriber_to_topic(
+        topic=PROTOCOL_SET_FREQUENCY,
+        subscribing_actor_name=DEMO_VF_RESPONDER_ACTOR_NAME,
+    )
+```
+
+### ProtocolSession is oblivious
+
+**No changes** to `pluggable_protocol_tree/session.py`. Layering stays clean — `pluggable_protocol_tree` has zero knowledge of `dropbot_protocol_controls`. Any demo that wants the voltage/frequency demo path opts in explicitly:
+
+```python
+session = ProtocolSession.from_file(path, with_demo_hardware=True)
+from dropbot_protocol_controls.demos.voltage_frequency_responder import (
+    subscribe_demo_responder,
+)
+subscribe_demo_responder(session._router)
+```
+
+### Auto-demo
+
+`dropbot_protocol_controls/demos/run_voltage_frequency_demo.py` (NEW) is the dropbot-protocol-controls counterpart of `pluggable_protocol_tree/demos/run_session_demo.py`. Builds a sample protocol with all PPT-3 columns + the new voltage/frequency columns, opens a session with demo hardware, calls `subscribe_demo_responder`, runs end-to-end. This is the script someone runs to verify the new plugin works in isolation.
+
+The existing `pluggable_protocol_tree/demos/*.py` are **not** modified — they stay pure to PPT-3.
 
 ### Persistence
 
-`Float` traits round-trip through the existing JSON persistence with no changes (model.serialize/deserialize defaults to identity for Float). Confirm in a unit test.
+`Int` traits round-trip through the existing JSON persistence with no changes (model.serialize/deserialize defaults to identity for Int). Confirm in `test_persistence.py` above.
 
 ---
 
-## Open Questions / TODO
+## Backwards compatibility
 
-1. **Section 3 + 4 not yet presented** — present them to the user for sign-off before writing the impl plan.
-2. **Where exactly does `handler.on_interact` write the preference?** Confirm the column's `BaseColumnHandler.on_interact` signature lets it reach a singleton DropbotPreferences instance, or pass it via factory closure.
-3. **What about the legacy `protocol_grid`?** Same approach as PPT-3: leave it alone, let it keep using its own voltage/frequency code path. Confirm this with user.
-4. **Backwards compat for old protocol files** — old saves won't have voltage/frequency columns. ProtocolSession.from_file resolves columns from the file, so old files would load without these columns and run with no voltage/frequency setpoint. The full app uses `_assemble_columns` (all columns), so opening an old file in the GUI fills voltage/frequency from defaults. Worth a one-paragraph callout in the spec; no code change needed.
-5. **Spec self-review** — placeholder scan, internal consistency, scope check (per the brainstorming skill checklist).
-6. **User reviews written spec** — gate before invoking writing-plans.
-7. **Then writing-plans** — once approved, generate `docs/superpowers/plans/2026-04-24-ppt-4-voltage-frequency.md`.
+Old protocol JSON files saved before PPT-4 won't have `voltage` / `frequency` columns recorded. Behaviour:
+- **`ProtocolSession.from_file(path)`** resolves columns from the file's `cls` qualnames, so an old file loads with **no** voltage/frequency columns and runs with no setpoint write. (DropBot keeps whatever voltage/frequency it last had — typically the UI's `last_voltage` / `last_frequency`.)
+- **Full GUI app** uses `_assemble_columns` to build the union of all contributed columns, so opening an old file fills voltage/frequency cells from `DropbotPreferences` defaults. Saving re-emits with the new columns present.
 
-## Resumption checklist
+No migration code needed.
 
-When picking this back up:
+## Resolved during brainstorming
 
-1. Re-read this spec to refresh decisions.
-2. Open the brainstorming dialog at "Section 3 (File layout & plugin contribution) — does this look right?".
-3. After Section 3 approval, ask about Section 4.
-4. Resolve open questions 2-4.
-5. Run spec self-review.
-6. Get user sign-off.
-7. Invoke `superpowers:writing-plans`.
+| Question | Resolution |
+|---|---|
+| Where does `handler.on_interact` write the preference? | `DropbotPreferences()` — `PreferencesHelper` attaches to the global preferences object set during envisage startup, so a no-arg construct in the handler is fine. Same pattern used in `dropbot_controller/preferences.py:22-25`. |
+| What about the legacy `protocol_grid`? | Same approach as PPT-3: leave it alone. It keeps its existing voltage/frequency code path. The new columns are pluggable-protocol-tree-only. |
+| Type for voltage/frequency? | **Int** end-to-end. See "Type policy" callout in Section 1. |
+
+## Remaining TODO
+
+1. **User reviews written spec** — gate before invoking writing-plans.
+2. **Invoke `superpowers:writing-plans`** — once approved, generate `docs/superpowers/plans/2026-04-24-ppt-4-voltage-frequency.md`.
 
 The PPT-3 plan/spec are good templates: see `2026-04-23-ppt-3-electrodes-routes-design.md` and the corresponding plan file for tone, level of detail, and task structure.
