@@ -297,3 +297,7 @@ class SyncDialogViewModel(HasTraits):
         self.model.in_progress = False
         self.view_signals.show_in_progress.emit(False)
         self.view_signals.enable_sync_button.emit(True)
+        # Restore the initial label so the dialog reads as "Idle" again
+        # once an error dialog is dismissed (success path closes the
+        # dialog, so the value here is moot in that case).
+        self.view_signals.status_changed.emit("Idle")
