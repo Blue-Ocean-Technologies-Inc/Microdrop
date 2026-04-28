@@ -182,3 +182,61 @@ def test_window_has_router_attribute_after_construction(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
     assert hasattr(w, "_router")
+
+
+def test_window_has_status_bar_with_step_label(qapp):
+    """Status bar exists with the step counter label."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    sb = w.statusBar()
+    assert sb is not None
+    # Step label and row label should be there.
+    assert w._status_step_label.text() == "Idle"
+    assert w._status_row_label.text() == ""
+
+
+def test_window_status_step_elapsed_label_exists(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_step_time_label is not None
+
+
+def test_window_executor_step_started_connected_to_tree_highlight(qapp):
+    """The executor's step_started signal must connect to the tree
+    widget's highlight_active_row slot — verifies the active-row
+    highlight wiring is in place."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Indirect check: emit step_started with a fake row, watch tree's
+    # highlight_active_row receive it.
+    received = []
+    orig = w.widget.highlight_active_row
+    w.widget.highlight_active_row = lambda r: received.append(r)
+    try:
+        w.executor.qsignals.step_started.emit("fake-row")
+        assert received == ["fake-row"]
+    finally:
+        w.widget.highlight_active_row = orig
+
+
+def test_window_tick_timer_runs_at_10_hz(qapp):
+    """Tick timer interval should be 100 ms (10 Hz)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._tick_timer.interval() == 100

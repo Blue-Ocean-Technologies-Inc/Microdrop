@@ -109,10 +109,11 @@ def _slug(label: str) -> str:
 
 
 import threading
+import time
 
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
-    QApplication, QMainWindow, QSplitter,
+    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar,
 )
 
 from pluggable_protocol_tree.execution.events import PauseEvent
@@ -157,6 +158,20 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             # standard chain so the demo can rely on it being in place.
             config.routing_setup(self._router)
 
+        # Per-step / per-phase timing state. Mutated from GUI thread only.
+        self._step_index = 0
+        self._step_total = 0
+        self._step_started_at: float | None = None
+        self._phase_started_at: float | None = None
+        self._phase_target: float | None = None
+        self._current_row = None
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(100)   # 10 Hz
+        self._tick_timer.timeout.connect(self._refresh_status)
+
+        self._build_status_bar()
+        self._wire_executor_signals()
+
     def _setup_dramatiq_routing_internal(self):
         """Wires the standard PPT-3 electrode actuation chain
         (electrode_responder + executor listener for ELECTRODES_STATE_APPLIED).
@@ -196,6 +211,52 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 "Demo Dramatiq routing setup failed (Redis not running?): %s",
                 e,
             )
+
+    def _build_status_bar(self):
+        sb = QStatusBar()
+        self.setStatusBar(sb)
+        self._status_step_label = QLabel("Idle")
+        self._status_row_label = QLabel("")
+        self._status_step_time_label = QLabel("")
+        sb.addWidget(self._status_step_label)
+        sb.addWidget(self._status_row_label, stretch=1)
+        sb.addPermanentWidget(self._status_step_time_label)
+
+    def _wire_executor_signals(self):
+        # Active-row highlight on each step start.
+        self.executor.qsignals.step_started.connect(
+            self.widget.highlight_active_row
+        )
+        # Status bar updates.
+        self.executor.qsignals.step_started.connect(self._on_step_started)
+        self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
+
+    def _on_protocol_started(self):
+        try:
+            self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
+        except Exception:
+            self._step_total = 0
+        self._step_index = 0
+        self._status_step_label.setText(f"Step 0 / {self._step_total}")
+
+    def _on_step_started(self, row):
+        self._step_index += 1
+        self._current_row = row
+        self._step_started_at = time.monotonic()
+        path = ".".join(str(i + 1) for i in row.path) if row.path else ""
+        path_str = f" (path {path})" if path else ""
+        self._status_step_label.setText(
+            f"Step {self._step_index} / {self._step_total}"
+        )
+        self._status_row_label.setText(f"{row.name}{path_str}")
+        if not self._tick_timer.isActive():
+            self._tick_timer.start()
+
+    def _refresh_status(self):
+        if self._step_started_at is None:
+            return
+        elapsed = time.monotonic() - self._step_started_at
+        self._status_step_time_label.setText(f"Step {elapsed:5.2f}s")
 
     def closeEvent(self, event):
         if self._dramatiq_worker is not None:
