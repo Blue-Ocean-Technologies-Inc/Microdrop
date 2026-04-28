@@ -32,8 +32,10 @@ from dropbot_controller.consts import (
 from peripheral_controller.preferences import PeripheralPreferences
 
 from logger.logger_service import get_logger
-
 logger = get_logger(__name__, "DEBUG")
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class ProtocolRunnerSignals(QObject):
@@ -761,7 +763,14 @@ class ProtocolRunnerController(QObject):
         schedule (handling START/END capture timing), and computing the start delay.
         """
         # 1. Initialize hardware states
-        publish_message(topic=SET_REALTIME_MODE, message=str(True))
+        ## Set realtime mode; keep old state in memory. Reset to this on protocol end.
+        self._restore_realtime_mode = app_globals.get("microdrop.realtime_mode", False)
+        logger.info(f"Realtime mode state is {self._restore_realtime_mode} before protocol start")
+
+        # turn on realtime mode in case it is not already on.
+        if not self._restore_realtime_mode:
+            logger.info(f"Realtime mode was off before protocol start; turning it on...")
+            publish_message(topic=SET_REALTIME_MODE, message=str(True))
 
         # Get the fully calculated camera schedule
         video_on_mask, offset_seconds_arr = self._prepare_camera_schedule()
@@ -1146,7 +1155,9 @@ class ProtocolRunnerController(QObject):
     def _shutdown_hardware_and_services(self) -> None:
         """Disables realtime hardware control and stops monitoring services."""
 
-        publish_message(topic=SET_REALTIME_MODE, message=str(False))
+        # turn off realtime mode only if it was off prior to protocol start.
+        if not self._restore_realtime_mode:
+            publish_message(topic=SET_REALTIME_MODE, message=str(False))
 
         # Cleanup camera recordings
         _stop_step_recording()
