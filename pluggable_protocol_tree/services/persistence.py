@@ -17,6 +17,19 @@ from typing import Iterator, List
 
 from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+from pluggable_protocol_tree.models._compound_adapters import _CompoundFieldAdapter
+
+
+def _persisted_cls_qualname(model) -> str:
+    """The 'cls' qualname stored in column entries. For compound-field
+    adapters, returns the compound MODEL class's qualname (importable);
+    for ordinary single-cell models, returns the model's own class
+    qualname."""
+    if isinstance(model, _CompoundFieldAdapter):
+        target = model.compound_model
+    else:
+        target = model
+    return f"{type(target).__module__}.{type(target).__name__}"
 
 
 def serialize_tree(root: GroupRow, columns: list, protocol_metadata=None) -> dict:
@@ -26,13 +39,16 @@ def serialize_tree(root: GroupRow, columns: list, protocol_metadata=None) -> dic
     'electrode_to_channel'). Optional for backward compat with
     PPT-1/PPT-2 callers that don't pass it.
     """
-    col_specs = [
-        {
+    col_specs = []
+    for c in columns:
+        spec = {
             "id": c.model.col_id,
-            "cls": f"{type(c.model).__module__}.{type(c.model).__name__}",
+            "cls": _persisted_cls_qualname(c.model),
         }
-        for c in columns
-    ]
+        if isinstance(c.model, _CompoundFieldAdapter):
+            spec["compound_id"] = c.model.compound_base_id
+            spec["compound_field_id"] = c.model.field_id
+        col_specs.append(spec)
     fields = ["depth", "uuid", "type", "name"] + [c["id"] for c in col_specs]
 
     rows_out = list(_walk_with_depth(root, columns, depth=0, skip_root=True))
