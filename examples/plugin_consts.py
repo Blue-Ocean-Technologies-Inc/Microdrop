@@ -20,6 +20,7 @@ from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
+from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
@@ -66,7 +67,8 @@ FRONTEND_PLUGINS = [
     UserHelpPlugin,
     SSHUIPlugin,
     # PluggableProtocolTreePlugin,
-    # DropbotProtocolControlsPlugin
+    # DropbotProtocolControlsPlugin,
+    # PeripheralProtocolControlsPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
