@@ -53,7 +53,7 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
     def handle_escape(self, info: UIInfo):
         """Swallows the Escape key press so the table doesn't hide."""
 
-        if hasattr(info.object, "selected_layer"):
+        if hasattr(info.object.routes, "selected_layer"):
             info.object.routes.selected_layer = None
 
         super().handle_escape(info)
