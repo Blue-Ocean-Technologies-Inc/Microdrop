@@ -110,3 +110,75 @@ def test_window_columns_match_factory_output(qapp):
     w = BasePluggableProtocolDemoWindow(cfg)
     ids = [c.model.col_id for c in w.manager.columns]
     assert ids == ["type", "id", "name"]
+
+
+def test_pre_populate_runs_after_manager_construction(qapp):
+    """The pre_populate callback receives the live RowManager and
+    rows added there are present after window construction."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    def populate(rm):
+        rm.add_step(values={"name": "S1", "duration_s": 0.1})
+        rm.add_step(values={"name": "S2", "duration_s": 0.2})
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(),
+        ],
+        pre_populate=populate,
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert len(w.manager.root.children) == 2
+    assert w.manager.root.children[0].name == "S1"
+    assert w.manager.root.children[1].name == "S2"
+
+
+def test_routing_setup_called_after_standard_chain(qapp, monkeypatch):
+    """The routing_setup callback receives the router AFTER the base
+    wires the PPT-3 electrode chain. Verify by recording the order."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    call_log = []
+
+    def fake_router_setup_inner(self):
+        # Replace the real broker setup with a recording fake.
+        call_log.append("base_routing_setup")
+        # Need to set self._router so routing_setup can be called with it.
+        self._router = "fake-router"
+
+    monkeypatch.setattr(
+        BasePluggableProtocolDemoWindow,
+        "_setup_dramatiq_routing_internal",
+        fake_router_setup_inner,
+    )
+
+    def my_routing(router):
+        call_log.append(("routing_setup", router))
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        routing_setup=my_routing,
+    )
+    BasePluggableProtocolDemoWindow(cfg)
+    assert call_log == ["base_routing_setup", ("routing_setup", "fake-router")]
+
+
+def test_window_has_router_attribute_after_construction(qapp):
+    """self._router exists (may be None if Redis unavailable, that's fine)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert hasattr(w, "_router")

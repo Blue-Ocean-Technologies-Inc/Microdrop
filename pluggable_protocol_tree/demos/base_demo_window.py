@@ -14,11 +14,33 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from pluggable_protocol_tree.consts import ELECTRODES_STATE_APPLIED
+import dramatiq
+
+from microdrop_utils.broker_server_helpers import (
+    remove_middleware_from_dramatiq_broker,
+)
+from pluggable_protocol_tree.consts import (
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+)
+from pluggable_protocol_tree.demos.electrode_responder import (
+    DEMO_RESPONDER_ACTOR_NAME,
+)
+
+
+logger = logging.getLogger(__name__)
+
+
+# Strip Prometheus middleware once at module import time — every
+# downstream demo needs this and the stripping is idempotent.
+remove_middleware_from_dramatiq_broker(
+    middleware_name="dramatiq.middleware.prometheus",
+    broker=dramatiq.get_broker(),
+)
 
 
 @dataclass
@@ -117,9 +139,68 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
         self.setCentralWidget(self.widget)
 
+        # Pre-populate sample steps BEFORE the executor is built.
+        config.pre_populate(self.manager)
+
         self.executor = ProtocolExecutor(
             row_manager=self.manager,
             qsignals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
+
+        self._router = None
+        self._dramatiq_worker = None
+        self._setup_dramatiq_routing_internal()
+        if self._router is not None:
+            # Demo-specific responders / listeners — called AFTER the
+            # standard chain so the demo can rely on it being in place.
+            config.routing_setup(self._router)
+
+    def _setup_dramatiq_routing_internal(self):
+        """Wires the standard PPT-3 electrode actuation chain
+        (electrode_responder + executor listener for ELECTRODES_STATE_APPLIED).
+
+        Best-effort: if Redis isn't reachable, sets self._router = None
+        and logs a warning. Runtime calls to ctx.wait_for() will then
+        time out at protocol-run time and surface as protocol_error.
+        """
+        try:
+            from microdrop_utils.dramatiq_pub_sub_helpers import (
+                MessageRouterActor,
+            )
+            from dramatiq import Worker
+
+            broker = dramatiq.get_broker()
+            broker.flush_all()
+            router = MessageRouterActor()
+
+            # Standard PPT-3 electrode chain.
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_CHANGE,
+                subscribing_actor_name=DEMO_RESPONDER_ACTOR_NAME,
+            )
+            router.message_router_data.add_subscriber_to_topic(
+                topic=ELECTRODES_STATE_APPLIED,
+                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+            )
+
+            self._router = router
+            self._dramatiq_worker = Worker(broker, worker_timeout=100)
+            self._dramatiq_worker.start()
+        except ValueError as e:
+            if "already registered" not in str(e):
+                logger.warning("Demo Dramatiq routing setup failed: %s", e)
+        except Exception as e:
+            logger.warning(
+                "Demo Dramatiq routing setup failed (Redis not running?): %s",
+                e,
+            )
+
+    def closeEvent(self, event):
+        if self._dramatiq_worker is not None:
+            try:
+                self._dramatiq_worker.stop()
+            except Exception:
+                logger.exception("Error stopping demo dramatiq worker")
+        super().closeEvent(event)
