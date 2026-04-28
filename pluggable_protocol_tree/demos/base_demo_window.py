@@ -203,7 +203,23 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self.manager = RowManager(columns=config.columns_factory())
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
-        self.setCentralWidget(self.widget)
+
+        # Central layout: just the tree, OR a splitter with tree + side panel.
+        if self.config.side_panel_factory is not None:
+            side = self.config.side_panel_factory(self.manager)
+            if side is not None:
+                splitter = QSplitter(Qt.Horizontal)
+                splitter.addWidget(self.widget)
+                splitter.addWidget(side)
+                splitter.setSizes([
+                    int(self.config.window_size[0] * 0.65),
+                    int(self.config.window_size[0] * 0.35),
+                ])
+                self.setCentralWidget(splitter)
+            else:
+                self.setCentralWidget(self.widget)
+        else:
+            self.setCentralWidget(self.widget)
 
         # Pre-populate sample steps BEFORE the executor is built.
         config.pre_populate(self.manager)

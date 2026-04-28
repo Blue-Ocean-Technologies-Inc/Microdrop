@@ -483,3 +483,32 @@ def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
     w2._load()
     assert len(w2.manager.root.children) == 1
     assert w2.manager.root.children[0].name == "Saved Step"
+
+
+def test_window_no_side_panel_uses_tree_as_central(qapp):
+    """When side_panel_factory is None, the central widget IS the tree."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.centralWidget() is w.widget
+
+
+def test_window_side_panel_uses_splitter(qapp):
+    """When side_panel_factory returns a widget, central is a splitter
+    holding tree + side panel."""
+    from pyface.qt.QtWidgets import QLabel, QSplitter
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        side_panel_factory=lambda rm: QLabel("side"),
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    central = w.centralWidget()
+    assert isinstance(central, QSplitter)
+    assert central.count() == 2   # tree + side panel
