@@ -372,7 +372,7 @@ def test_toolbar_has_standard_actions(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    actions = [a.text() for a in w.findChildren(__import__("pyface.qt.QtWidgets", fromlist=["QToolBar"]).QToolBar)[0].actions()]
+    actions = [a.text() for a in w._toolbar.actions()]
     assert "Add Step" in actions
     assert "Add Group" in actions
     assert "Run" in actions

@@ -444,6 +444,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._run_action = tb.addAction("Run", self.executor.start)
         self._pause_action = tb.addAction("Pause", self._toggle_pause)
         self._stop_action = tb.addAction("Stop", self.executor.stop)
+        self._toolbar = tb
 
     def _wire_button_state_machine(self):
         self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
