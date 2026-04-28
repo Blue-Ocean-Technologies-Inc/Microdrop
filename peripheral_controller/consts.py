@@ -21,6 +21,12 @@ SET_POSITION = f"{DEVICE_NAME}/requests/set_position"
 RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
 UPDATE_CONFIG = f"{DEVICE_NAME}/requests/update_config"
 
+# Protocol-driven magnet engage/retract (separate from existing
+# MOVE_UP/MOVE_DOWN/SET_POSITION/GO_HOME so the protocol-side gets
+# one publish + one wait_for; backend owns the retract sequence).
+PROTOCOL_SET_MAGNET = f"{DEVICE_NAME}/requests/protocol_set_magnet"
+MAGNET_APPLIED = f"{DEVICE_NAME}/signals/magnet_applied"
+
 # Error Topics
 ERROR = f'{DEVICE_NAME}/error'
 
