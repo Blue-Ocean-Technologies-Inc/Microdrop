@@ -284,3 +284,63 @@ def test_phase_acked_signal_resets_phase_timer(qapp):
     assert w._phase_started_at != before
     # First ack also sets step_started_at if it was None.
     assert w._step_started_at is not None
+
+
+def test_status_readout_creates_label_with_initial_text(qapp):
+    """Each StatusReadout adds a QLabel with `<label>: <initial>` text."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+            StatusReadout("Frequency", "f/applied", lambda m: f"{int(m)} Hz"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    labels = list(w._readout_labels.values())
+    assert len(labels) == 2
+    assert labels[0].text() == "Voltage: --"
+    assert labels[1].text() == "Frequency: --"
+
+
+def test_status_readout_label_updates_on_signal(qapp):
+    """Emitting the per-readout Qt signal updates the label text."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._readout_signals["voltage"].emit("100")
+    assert w._readout_labels["voltage"].text() == "Voltage: 100 V"
+
+
+def test_status_readout_actor_names_are_slug_prefixed(qapp):
+    """Each readout's auto-registered Dramatiq actor uses the slug-based
+    naming convention. Verify by inspecting the broker's registered actors."""
+    import dramatiq
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Magnet Height (mm)", "m/applied",
+                          lambda m: f"{m} mm"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Actor name = ppt12_demo_<slug>_listener
+    expected_name = "ppt12_demo_magnet_height_mm_listener"
+    broker = dramatiq.get_broker()
+    # Should not raise
+    broker.get_actor(expected_name)

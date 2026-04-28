@@ -108,6 +108,19 @@ def _slug(label: str) -> str:
     return _SLUG_RE.sub("_", label.lower()).strip("_")
 
 
+class _PerSlugEmitter:
+    """Tiny shim that exposes .emit(message) and forwards to the
+    window's per-instance readout_acked signal with a fixed slug."""
+    __slots__ = ("_signal", "_slug")
+
+    def __init__(self, signal, slug):
+        self._signal = signal
+        self._slug = slug
+
+    def emit(self, message):
+        self._signal.emit(self._slug, message)
+
+
 # Module-level target for the phase-ack listener actor. The actor runs
 # on a Dramatiq worker thread; it emits a Qt signal that auto-connection
 # delivers on the GUI thread.
@@ -120,6 +133,33 @@ def _phase_ack_listener(message: str, topic: str, timestamp: float = None):
     if window is None:
         return
     window.phase_acked.emit()
+
+
+# Module-level target for status-readout listeners. Each actor reads
+# its own message and forwards (slug, message) to the bound window.
+_readout_target = {"window": None}
+
+
+def _make_readout_actor(slug: str):
+    """Register a Dramatiq actor named ppt12_demo_<slug>_listener that
+    emits the window's readout_acked signal on every message received.
+    Idempotent — safe to call repeatedly with the same slug."""
+    actor_name = f"ppt12_demo_{slug}_listener"
+    broker = dramatiq.get_broker()
+    try:
+        broker.get_actor(actor_name)
+        return actor_name   # already registered
+    except Exception:
+        pass
+
+    @dramatiq.actor(actor_name=actor_name, queue_name="default")
+    def _listener(message: str, topic: str, timestamp: float = None):
+        window = _readout_target.get("window")
+        if window is None:
+            return
+        window.readout_acked.emit(slug, message)
+
+    return actor_name
 
 
 import threading
@@ -148,6 +188,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     # listener (registered when phase_ack_topic is set); auto-connection
     # delivers _on_phase_ack on the GUI thread.
     phase_acked = Signal()
+
+    # Cross-thread signal for status-readout updates: (slug, message)
+    readout_acked = Signal(str, str)
 
     def __init__(self, config: DemoConfig):
         super().__init__()
@@ -190,7 +233,30 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._status_phase_time_label = None
 
+        # Per-readout state — populated below in _build_status_bar.
+        self._readout_labels: dict[str, "QLabel"] = {}
+        self._readout_signals: dict[str, _PerSlugEmitter] = {}
+
         self._build_status_bar()
+
+        # Wire readout updates: one signal-emit handler per slug → label update.
+        self._readout_fmts = {
+            _slug(r.label): (r.label, r.fmt) for r in self.config.status_readouts
+        }
+        # Per-slug Signal accessors that just emit on the shared readout_acked.
+        # Tests can do w._readout_signals[slug].emit(msg).
+        self._readout_signals = {
+            slug: _PerSlugEmitter(self.readout_acked, slug)
+            for slug in self._readout_fmts
+        }
+        self.readout_acked.connect(self._on_readout_ack)
+
+        # Register Dramatiq actors for each readout unconditionally — actor
+        # registration is in-memory and broker-agnostic (no Redis required).
+        _readout_target["window"] = self
+        for readout in self.config.status_readouts:
+            _make_readout_actor(_slug(readout.label))
+
         self._wire_executor_signals()
 
     def _setup_dramatiq_routing_internal(self):
@@ -228,6 +294,16 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                     subscribing_actor_name="ppt12_demo_phase_ack_listener",
                 )
 
+            # StatusReadout listeners — auto-named actor per readout.
+            _readout_target["window"] = self
+            for readout in self.config.status_readouts:
+                slug = _slug(readout.label)
+                actor_name = _make_readout_actor(slug)
+                router.message_router_data.add_subscriber_to_topic(
+                    topic=readout.topic,
+                    subscribing_actor_name=actor_name,
+                )
+
             self._router = router
             self._dramatiq_worker = Worker(broker, worker_timeout=100)
             self._dramatiq_worker.start()
@@ -252,6 +328,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if self.config.phase_ack_topic is not None:
             self._status_phase_time_label = QLabel("")
             sb.addPermanentWidget(self._status_phase_time_label)
+        # StatusReadout labels.
+        for readout in self.config.status_readouts:
+            slug = _slug(readout.label)
+            label = QLabel(f"{readout.label}: {readout.initial}")
+            sb.addPermanentWidget(label)
+            self._readout_labels[slug] = label
 
     def _wire_executor_signals(self):
         # Active-row highlight on each step start.
@@ -301,6 +383,20 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if self._step_started_at is None:
             self._step_started_at = now
         self._phase_started_at = now
+
+    def _on_readout_ack(self, slug: str, message: str):
+        spec = self._readout_fmts.get(slug)
+        if spec is None:
+            return
+        label_prefix, fmt = spec
+        label_widget = self._readout_labels.get(slug)
+        if label_widget is None:
+            return
+        try:
+            text = fmt(message)
+        except Exception as e:
+            text = f"<error: {e}>"
+        label_widget.setText(f"{label_prefix}: {text}")
 
     def _refresh_status(self):
         if self._step_started_at is None:
