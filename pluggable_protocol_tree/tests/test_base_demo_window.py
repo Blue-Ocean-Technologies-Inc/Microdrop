@@ -512,3 +512,66 @@ def test_window_side_panel_uses_splitter(qapp):
     central = w.centralWidget()
     assert isinstance(central, QSplitter)
     assert central.count() == 2   # tree + side panel
+
+
+def test_clear_all_highlights_resets_status(qapp):
+    """After protocol terminates, status labels reset and step counters cleared."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Simulate state mid-run.
+    w._step_index = 2
+    w._step_total = 3
+    w._step_started_at = 100.0
+    w._readout_labels["voltage"].setText("Voltage: 99 V")
+    w._status_step_label.setText("Step 2 / 3")
+    # Terminate.
+    w._on_protocol_terminated()
+    assert w._status_step_label.text() == "Idle"
+    assert w._step_started_at is None
+    assert w._readout_labels["voltage"].text() == "Voltage: --"
+
+
+def test_purge_stale_subscribers_only_touches_demo_prefixes(qapp):
+    """The purger should ONLY consider actor names with demo prefixes
+    (ppt_demo_, ppt4_demo_, ppt5_demo_, ppt11_demo_, ppt12_demo_,
+    ppt_vf_demo_). Real listeners are NEVER touched."""
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        _is_purgable_demo_actor_name,
+    )
+    assert _is_purgable_demo_actor_name("ppt_demo_electrode_responder")
+    assert _is_purgable_demo_actor_name("ppt4_demo_voltage_applied_listener")
+    assert _is_purgable_demo_actor_name("ppt5_demo_magnet_responder")
+    assert _is_purgable_demo_actor_name("ppt12_demo_voltage_listener")
+    assert _is_purgable_demo_actor_name("ppt_vf_demo_spy")
+    # Real listeners — must NOT be purgable.
+    assert not _is_purgable_demo_actor_name("dropbot_controller_listener")
+    assert not _is_purgable_demo_actor_name(
+        "dropbot_status_and_controls_listener",
+    )
+    assert not _is_purgable_demo_actor_name(
+        "pluggable_protocol_tree_executor_listener",
+    )
+
+
+def test_run_classmethod_returns_int(qapp, monkeypatch):
+    """The .run(config) classmethod calls app.exec() and returns its int result."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    from pyface.qt.QtWidgets import QApplication
+
+    # Patch QApplication.exec to return 0 immediately.
+    monkeypatch.setattr(QApplication, "exec", lambda self: 0)
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    rc = BasePluggableProtocolDemoWindow.run(cfg)
+    assert rc == 0

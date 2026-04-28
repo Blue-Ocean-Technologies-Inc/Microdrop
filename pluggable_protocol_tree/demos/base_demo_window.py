@@ -110,6 +110,18 @@ def _slug(label: str) -> str:
     return _SLUG_RE.sub("_", label.lower()).strip("_")
 
 
+_DEMO_PREFIXES = (
+    "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt11_demo_",
+    "ppt12_demo_", "ppt_vf_demo_",
+)
+
+
+def _is_purgable_demo_actor_name(name: str) -> bool:
+    """True if an actor name matches a known demo-prefix convention.
+    Used by the stale-subscriber purger to leave real listeners alone."""
+    return name.startswith(_DEMO_PREFIXES)
+
+
 class _PerSlugEmitter:
     """Tiny shim that exposes .emit(message) and forwards to the
     window's per-instance readout_acked signal with a fixed slug."""
@@ -308,6 +320,48 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             broker = dramatiq.get_broker()
             broker.flush_all()
             router = MessageRouterActor()
+
+            # Purge stale demo subscribers — actor names recorded in
+            # Redis by prior demo processes whose actors aren't
+            # registered in this process. Without this, a previous
+            # demo's spy/listener leaves behind a subscription that
+            # fires ActorNotFound on every publish to its topic.
+            #
+            # Only touch demo-prefixed names — leave real listeners
+            # belonging to other processes alone.
+            broker_topics_to_check = (
+                ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED,
+            )
+            extra_topics = []
+            if self.config.phase_ack_topic is not None:
+                extra_topics.append(self.config.phase_ack_topic)
+            for r in self.config.status_readouts:
+                extra_topics.append(r.topic)
+            for topic in (*broker_topics_to_check, *extra_topics):
+                try:
+                    subs = router.message_router_data.get_subscribers_for_topic(topic)
+                except Exception:
+                    continue
+                for entry in subs:
+                    actor_name = entry[0] if isinstance(entry, tuple) else entry
+                    if not _is_purgable_demo_actor_name(actor_name):
+                        continue
+                    try:
+                        broker.get_actor(actor_name)
+                    except Exception:
+                        try:
+                            router.message_router_data.remove_subscriber_from_topic(
+                                topic=topic,
+                                subscribing_actor_name=actor_name,
+                            )
+                            logger.info("purged stale demo subscriber %s on %s",
+                                        actor_name, topic)
+                        except Exception:
+                            logger.warning(
+                                "failed to purge %s on %s (likely wrong "
+                                "listener_queue from another router)",
+                                actor_name, topic,
+                            )
 
             # Standard PPT-3 electrode chain.
             router.message_router_data.add_subscriber_to_topic(
@@ -531,8 +585,46 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self._tick_timer.start()
 
     def _on_protocol_terminated(self):
+        self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
+
+    def _clear_all_highlights(self):
+        """Restore an idle visual state at protocol end."""
+        from pyface.qt.QtCore import QModelIndex
+
+        self.widget.highlight_active_row(None)
+        self.widget.tree.clearSelection()
+        self.widget.tree.setCurrentIndex(QModelIndex())
+
+        # Reset step / row / timer state.
+        self._step_index = 0
+        self._step_total = 0
+        self._step_started_at = None
+        self._phase_started_at = None
+        self._phase_target = None
+        self._current_row = None
+        self._status_step_label.setText("Idle")
+        self._status_row_label.setText("")
+        self._status_step_time_label.setText("")
+        if self._status_phase_time_label is not None:
+            self._status_phase_time_label.setText("")
+
+        # Reset readout labels to initial text.
+        for readout in self.config.status_readouts:
+            slug = _slug(readout.label)
+            label = self._readout_labels.get(slug)
+            if label is not None:
+                label.setText(f"{readout.label}: {readout.initial}")
+
+    @classmethod
+    def run(cls, config: DemoConfig) -> int:
+        """One-shot main(): build the window, show it, run app.exec().
+        Reuses an existing QApplication if one is already running."""
+        app = QApplication.instance() or QApplication([])
+        w = cls(config)
+        w.show()
+        return app.exec()
 
     def closeEvent(self, event):
         if self._dramatiq_worker is not None:
