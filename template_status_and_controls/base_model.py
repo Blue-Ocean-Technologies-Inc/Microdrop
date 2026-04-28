@@ -24,6 +24,11 @@ from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GR
 
 from .interfaces import IStatusModel
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 @provides(IStatusModel)
 class BaseStatusModel(HasTraits):
@@ -90,9 +95,20 @@ class BaseStatusModel(HasTraits):
 
     def _icon_color_default(self):
         return self.DISCONNECTED_COLOR
+
+    def traits_init(self):
+        # push initial app globals based on model values
+        self._realtime_mode_updated()
+
     # ------------------------------------------------------------------ #
     # Observers
     # ------------------------------------------------------------------ #
+
+    @observe("realtime_mode")
+    def _realtime_mode_updated(self, event=None):
+        logger.info(f"Realtime mode status has changed to {self.realtime_mode}; updated in the app globals")
+        app_globals["microdrop.realtime_mode"] = self.realtime_mode
+
     @observe("halted")
     def _on_halted_changed(self, event):
         if event.new:
