@@ -456,8 +456,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         )
         if not path:
             return
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.manager.to_json(), f, indent=2)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.manager.to_json(), f, indent=2)
+        except Exception as e:
+            QMessageBox.critical(self, "Save error", str(e))
 
     def _load(self):
         path, _ = QFileDialog.getOpenFileName(
