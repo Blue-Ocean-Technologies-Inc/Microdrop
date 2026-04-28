@@ -302,6 +302,7 @@ def test_status_readout_creates_label_with_initial_text(qapp):
     w = BasePluggableProtocolDemoWindow(cfg)
     labels = list(w._readout_labels.values())
     assert len(labels) == 2
+    # Assertion order matches status_readouts declaration order (Python 3.7+ dict guarantee).
     assert labels[0].text() == "Voltage: --"
     assert labels[1].text() == "Frequency: --"
 
@@ -344,3 +345,21 @@ def test_status_readout_actor_names_are_slug_prefixed(qapp):
     broker = dramatiq.get_broker()
     # Should not raise
     broker.get_actor(expected_name)
+
+
+def test_status_readout_format_error_shows_inline_error(qapp):
+    """When the format function raises, the label shows '<error: ...>'."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._readout_signals["voltage"].emit("not-a-number")
+    text = w._readout_labels["voltage"].text()
+    assert text.startswith("Voltage: <error:")

@@ -14,7 +14,6 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -32,7 +31,9 @@ from pluggable_protocol_tree.demos.electrode_responder import (
 )
 
 
-logger = logging.getLogger(__name__)
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 # Strip Prometheus middleware once at module import time — every
@@ -149,7 +150,7 @@ def _make_readout_actor(slug: str):
     try:
         broker.get_actor(actor_name)
         return actor_name   # already registered
-    except Exception:
+    except dramatiq.errors.ActorNotFound:
         pass
 
     @dramatiq.actor(actor_name=actor_name, queue_name="default")
@@ -214,11 +215,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._router = None
         self._dramatiq_worker = None
-        self._setup_dramatiq_routing_internal()
-        if self._router is not None:
-            # Demo-specific responders / listeners — called AFTER the
-            # standard chain so the demo can rely on it being in place.
-            config.routing_setup(self._router)
 
         # Per-step / per-phase timing state. Mutated from GUI thread only.
         self._step_index = 0
@@ -233,9 +229,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._status_phase_time_label = None
 
-        # Per-readout state — populated below in _build_status_bar.
-        self._readout_labels: dict[str, "QLabel"] = {}
-        self._readout_signals: dict[str, _PerSlugEmitter] = {}
+        # Per-readout state — _readout_labels is populated by _build_status_bar;
+        # _readout_signals is populated afterwards from _readout_fmts.
+        self._readout_labels: dict[str, QLabel] = {}
 
         self._build_status_bar()
 
@@ -245,17 +241,32 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         }
         # Per-slug Signal accessors that just emit on the shared readout_acked.
         # Tests can do w._readout_signals[slug].emit(msg).
-        self._readout_signals = {
+        self._readout_signals: dict[str, _PerSlugEmitter] = {
             slug: _PerSlugEmitter(self.readout_acked, slug)
             for slug in self._readout_fmts
         }
         self.readout_acked.connect(self._on_readout_ack)
 
-        # Register Dramatiq actors for each readout unconditionally — actor
-        # registration is in-memory and broker-agnostic (no Redis required).
+        # Bind the module-level target so readout actor callbacks reach this window.
+        # Warn if a previous live window will be displaced (multi-window collision).
+        existing = _readout_target.get("window")
+        if existing is not None and existing is not self:
+            logger.warning(
+                "Multiple live BasePluggableProtocolDemoWindow instances detected. "
+                "Only the most recent window will receive readout messages."
+            )
         _readout_target["window"] = self
+
+        # Actor registration is broker-agnostic; topic subscription happens in
+        # _setup_dramatiq_routing_internal.
         for readout in self.config.status_readouts:
             _make_readout_actor(_slug(readout.label))
+
+        self._setup_dramatiq_routing_internal()
+        if self._router is not None:
+            # Demo-specific responders / listeners — called AFTER the
+            # standard chain so the demo can rely on it being in place.
+            config.routing_setup(self._router)
 
         self._wire_executor_signals()
 
@@ -288,17 +299,24 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             )
 
             if self.config.phase_ack_topic is not None:
+                existing_phase = _phase_ack_target.get("window")
+                if existing_phase is not None and existing_phase is not self:
+                    logger.warning(
+                        "Multiple live BasePluggableProtocolDemoWindow instances "
+                        "detected. Only the most recent window will receive "
+                        "phase-ack messages."
+                    )
                 _phase_ack_target["window"] = self
                 router.message_router_data.add_subscriber_to_topic(
                     topic=self.config.phase_ack_topic,
                     subscribing_actor_name="ppt12_demo_phase_ack_listener",
                 )
 
-            # StatusReadout listeners — auto-named actor per readout.
-            _readout_target["window"] = self
+            # StatusReadout listeners — actors already registered in __init__;
+            # here we only add the topic subscription.
             for readout in self.config.status_readouts:
                 slug = _slug(readout.label)
-                actor_name = _make_readout_actor(slug)
+                actor_name = f"ppt12_demo_{slug}_listener"
                 router.message_router_data.add_subscriber_to_topic(
                     topic=readout.topic,
                     subscribing_actor_name=actor_name,
