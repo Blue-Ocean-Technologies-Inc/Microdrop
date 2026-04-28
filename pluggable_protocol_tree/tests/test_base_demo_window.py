@@ -421,3 +421,65 @@ def test_protocol_terminated_returns_to_idle(qapp):
     assert not w._pause_action.isEnabled()
     assert not w._stop_action.isEnabled()
     assert w._pause_action.text() == "Pause"
+
+
+def test_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
+    """Save button writes manager.to_json() to the chosen file."""
+    from pyface.qt.QtWidgets import QFileDialog
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(),
+        ],
+        pre_populate=lambda rm: rm.add_step(values={"name": "S1", "duration_s": 0.1}),
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    save_path = tmp_path / "out.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        lambda *a, **kw: (str(save_path), ""))
+    w._save()
+    import json
+    payload = json.loads(save_path.read_text())
+    assert payload["columns"][0]["id"] == "type"
+    assert any(r[3] == "S1" for r in payload["rows"])
+
+
+def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
+    """Load button reads JSON and applies via manager.set_state_from_json."""
+    from pyface.qt.QtWidgets import QFileDialog
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    import json
+
+    cfg = DemoConfig(columns_factory=lambda: [
+        make_type_column(), make_id_column(), make_name_column(),
+        make_duration_column(),
+    ])
+
+    # Build a window once, save its empty state, then load it back.
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.manager.add_step(values={"name": "Saved Step", "duration_s": 0.5})
+    save_path = tmp_path / "in.json"
+    save_path.write_text(json.dumps(w.manager.to_json()))
+
+    # Fresh window with empty state.
+    w2 = BasePluggableProtocolDemoWindow(cfg)
+    assert len(w2.manager.root.children) == 0
+    monkeypatch.setattr(QFileDialog, "getOpenFileName",
+                        lambda *a, **kw: (str(save_path), ""))
+    w2._load()
+    assert len(w2.manager.root.children) == 1
+    assert w2.manager.root.children[0].name == "Saved Step"

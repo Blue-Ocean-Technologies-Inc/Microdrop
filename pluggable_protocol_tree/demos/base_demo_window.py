@@ -14,6 +14,7 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -168,7 +169,8 @@ import time
 
 from pyface.qt.QtCore import Qt, QTimer, Signal
 from pyface.qt.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar, QToolBar,
+    QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox,
+    QSplitter, QStatusBar, QToolBar,
 )
 
 from pluggable_protocol_tree.execution.events import PauseEvent
@@ -440,11 +442,37 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         tb.addAction("Add Step", lambda: self.manager.add_step())
         tb.addAction("Add Group", lambda: self.manager.add_group())
         tb.addSeparator()
-        # Save/Load added in Task 8.
+        tb.addAction("Save…", self._save)
+        tb.addAction("Load…", self._load)
+        tb.addSeparator()
         self._run_action = tb.addAction("Run", self.executor.start)
         self._pause_action = tb.addAction("Pause", self._toggle_pause)
         self._stop_action = tb.addAction("Stop", self.executor.stop)
         self._toolbar = tb
+
+    def _save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Protocol", "", "Protocol JSON (*.json)",
+        )
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.manager.to_json(), f, indent=2)
+
+    def _load(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Protocol", "", "Protocol JSON (*.json)",
+        )
+        if not path:
+            return
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        try:
+            self.manager.set_state_from_json(
+                data, columns=self.config.columns_factory(),
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Load error", str(e))
 
     def _wire_button_state_machine(self):
         self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
