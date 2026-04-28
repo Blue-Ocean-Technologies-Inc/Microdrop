@@ -37,6 +37,8 @@ logger = get_logger(__name__, "DEBUG")
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES
+
 
 class ProtocolRunnerSignals(QObject):
     highlight_step = Signal(object)  # path (list of ints)
@@ -771,6 +773,21 @@ class ProtocolRunnerController(QObject):
         if not self._restore_realtime_mode:
             logger.info(f"Realtime mode was off before protocol start; turning it on...")
             publish_message(topic=SET_REALTIME_MODE, message=str(True))
+
+        else:
+            user_choice = confirm(
+                None,
+                title="Keep Realtime Mode Enabled Post-Protocol?",
+                message="<b>Realtime mode is currently ON.</b><br><br>Would you like to keep it enabled after the protocol finishes?",
+                cancel=False
+            )
+
+            if user_choice == YES:
+                logger.warning("Keeping Realtime Mode Enabled Post-Protocol.")
+
+            elif user_choice == NO:
+                logger.info("Realtime Mode Disabled Post-Protocol.")
+                self._restore_realtime_mode = False # user wants realtime restoration changed to False
 
         # Get the fully calculated camera schedule
         video_on_mask, offset_seconds_arr = self._prepare_camera_schedule()
