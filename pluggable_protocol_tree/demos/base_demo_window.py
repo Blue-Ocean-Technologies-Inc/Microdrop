@@ -84,3 +84,42 @@ def _slug(label: str) -> str:
     'Magnet Height (mm)' -> 'magnet_height_mm'
     """
     return _SLUG_RE.sub("_", label.lower()).strip("_")
+
+
+import threading
+
+from pyface.qt.QtCore import Qt
+from pyface.qt.QtWidgets import (
+    QApplication, QMainWindow, QSplitter,
+)
+
+from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+from pluggable_protocol_tree.execution.signals import ExecutorSignals
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
+
+
+class BasePluggableProtocolDemoWindow(QMainWindow):
+    """Hosts a ProtocolTreeWidget + ProtocolExecutor with the standard
+    UX scaffolding. See PPT-12 spec for the full feature list.
+
+    Construct with a DemoConfig; call .show() and .exec() OR use the
+    .run(config) classmethod for one-shot main() convenience."""
+
+    def __init__(self, config: DemoConfig):
+        super().__init__()
+        self.config = config
+        self.setWindowTitle(config.title)
+        self.resize(*config.window_size)
+
+        self.manager = RowManager(columns=config.columns_factory())
+        self.widget = ProtocolTreeWidget(self.manager, parent=self)
+        self.setCentralWidget(self.widget)
+
+        self.executor = ProtocolExecutor(
+            row_manager=self.manager,
+            qsignals=ExecutorSignals(),
+            pause_event=PauseEvent(),
+            stop_event=threading.Event(),
+        )

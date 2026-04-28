@@ -56,3 +56,57 @@ def test_slug_lowercases_and_strips_punctuation():
 
 def test_slug_handles_empty_string():
     assert _slug("") == ""
+
+
+def test_window_constructs_with_minimum_config(qapp):
+    """Window builds successfully with just a columns_factory."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.windowTitle() == "Pluggable Protocol Tree Demo"
+    # Has the manager + executor + tree widget wired
+    assert w.manager is not None
+    assert w.executor is not None
+    assert w.widget is not None
+    # Window size matches default
+    assert (w.width(), w.height()) == (1100, 650)
+
+
+def test_window_applies_custom_title_and_size(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        title="My Demo",
+        window_size=(800, 500),
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.windowTitle() == "My Demo"
+    assert (w.width(), w.height()) == (800, 500)
+
+
+def test_window_columns_match_factory_output(qapp):
+    """RowManager has the columns returned by columns_factory."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [
+        make_type_column(), make_id_column(), make_name_column(),
+    ])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    ids = [c.model.col_id for c in w.manager.columns]
+    assert ids == ["type", "id", "name"]
