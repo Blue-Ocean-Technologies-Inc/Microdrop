@@ -1,3 +1,5 @@
+import json
+import time
 from functools import wraps
 from pydantic import ValidationError
 
@@ -8,7 +10,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_peripheral_control_mixin_service import IPeripheralControlMixinService
 from ..datamodels import ZStageConfigData
-from ..consts import ZSTAGE_POSITION_UPDATED
+from ..consts import ZSTAGE_POSITION_UPDATED, MIN_ZSTAGE_HEIGHT_MM, MAGNET_APPLIED
+from ..preferences import PeripheralPreferences
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -131,6 +134,43 @@ class ZStageStatesSetterMixinService(HasTraits):
         Move z stage to position.
         """
         self.proxy.zstage.position = float(message)
+
+    @thread_lock_with_error_handling
+    @zstage_motor_context
+    @publish_position_update
+    def on_protocol_set_magnet_request(self, message):
+        """Protocol-driven magnet engage/retract. Atomic: handles the
+        retract sequence (MOVE_DOWN + 0.3s settle + GO_HOME) on the
+        backend so the protocol handler only does one publish + one
+        wait_for. On hardware error, ack is NOT published — protocol's
+        wait_for times out and the step fails (consistent with PPT-4's
+        protocol handler pattern).
+        """
+        try:
+            payload = json.loads(message)
+            on = bool(payload["on"])
+            height_mm = float(payload["height_mm"])
+
+            if not on:
+                # Retract sequence — matches legacy publish_magnet_home()
+                self.proxy.zstage.down()
+                time.sleep(0.3)   # settling time before next command
+                self.proxy.zstage.home()
+            elif height_mm < MIN_ZSTAGE_HEIGHT_MM:
+                # Sentinel = "use live pref" (preserves legacy 'Default'
+                # behaviour: pref changes affect 'Default' steps without
+                # re-editing the protocol).
+                target = PeripheralPreferences().up_height_mm
+                self.proxy.zstage.position = float(target)
+            else:
+                self.proxy.zstage.position = float(height_mm)
+
+            publish_message(topic=MAGNET_APPLIED, message=str(int(on)))
+        except (TimeoutError, RuntimeError) as e:
+            logger.error(f"Proxy error on protocol_set_magnet: {e}")
+        except Exception as e:
+            logger.error(f"Error on protocol_set_magnet: {e}")
+            raise
 
     @thread_lock_with_error_handling
     def on_update_config_request(self, message):
