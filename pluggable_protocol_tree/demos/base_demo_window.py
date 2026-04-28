@@ -110,6 +110,11 @@ def _slug(label: str) -> str:
     return _SLUG_RE.sub("_", label.lower()).strip("_")
 
 
+# Actor-name prefixes used by demo processes. The purge loop only touches
+# subscribers matching one of these — real listeners (other processes'
+# controllers, etc.) are never purged. New demos with their own actors
+# must add their prefix here. ``ppt11_demo_`` is forward-declared for the
+# planned PPT-11 demo refactor; no actors with that prefix exist yet.
 _DEMO_PREFIXES = (
     "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt11_demo_",
     "ppt12_demo_", "ppt_vf_demo_",
@@ -179,7 +184,7 @@ def _make_readout_actor(slug: str):
 import threading
 import time
 
-from pyface.qt.QtCore import Qt, QTimer, Signal
+from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox,
     QSplitter, QStatusBar, QToolBar,
@@ -337,7 +342,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 extra_topics.append(self.config.phase_ack_topic)
             for r in self.config.status_readouts:
                 extra_topics.append(r.topic)
-            for topic in (*broker_topics_to_check, *extra_topics):
+            # Dedupe — phase_ack_topic often equals one of the standard
+            # electrode topics (default is ELECTRODES_STATE_APPLIED).
+            topics_to_check = {*broker_topics_to_check, *extra_topics}
+            for topic in topics_to_check:
                 try:
                     subs = router.message_router_data.get_subscribers_for_topic(topic)
                 except Exception:
@@ -348,7 +356,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                         continue
                     try:
                         broker.get_actor(actor_name)
-                    except Exception:
+                    except dramatiq.errors.ActorNotFound:
                         try:
                             router.message_router_data.remove_subscriber_from_topic(
                                 topic=topic,
@@ -591,8 +599,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     def _clear_all_highlights(self):
         """Restore an idle visual state at protocol end."""
-        from pyface.qt.QtCore import QModelIndex
-
         self.widget.highlight_active_row(None)
         self.widget.tree.clearSelection()
         self.widget.tree.setCurrentIndex(QModelIndex())
