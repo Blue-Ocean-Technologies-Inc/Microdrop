@@ -240,3 +240,47 @@ def test_window_tick_timer_runs_at_10_hz(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
     assert w._tick_timer.interval() == 100
+
+
+def test_phase_ack_topic_none_hides_phase_timer(qapp):
+    """When phase_ack_topic=None, no phase elapsed label in status bar."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic=None)
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_phase_time_label is None
+
+
+def test_phase_ack_topic_set_creates_phase_label(qapp):
+    """When phase_ack_topic set, phase elapsed label is in status bar."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic="x/applied")
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_phase_time_label is not None
+
+
+def test_phase_acked_signal_resets_phase_timer(qapp):
+    """Emitting the phase_acked signal sets _phase_started_at = monotonic()."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic="x/applied")
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Set the current row so phase ack handler doesn't early-return.
+    w._current_row = object()
+    w._step_started_at = None
+    before = w._phase_started_at
+    w.phase_acked.emit()
+    assert w._phase_started_at is not None
+    assert w._phase_started_at != before
+    # First ack also sets step_started_at if it was None.
+    assert w._step_started_at is not None

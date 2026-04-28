@@ -108,10 +108,24 @@ def _slug(label: str) -> str:
     return _SLUG_RE.sub("_", label.lower()).strip("_")
 
 
+# Module-level target for the phase-ack listener actor. The actor runs
+# on a Dramatiq worker thread; it emits a Qt signal that auto-connection
+# delivers on the GUI thread.
+_phase_ack_target = {"window": None}
+
+
+@dramatiq.actor(actor_name="ppt12_demo_phase_ack_listener", queue_name="default")
+def _phase_ack_listener(message: str, topic: str, timestamp: float = None):
+    window = _phase_ack_target.get("window")
+    if window is None:
+        return
+    window.phase_acked.emit()
+
+
 import threading
 import time
 
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QLabel, QMainWindow, QSplitter, QStatusBar,
 )
@@ -129,6 +143,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     Construct with a DemoConfig; call .show() and .exec() OR use the
     .run(config) classmethod for one-shot main() convenience."""
+
+    # Cross-thread signal — Dramatiq actor emits via the module-level
+    # listener (registered when phase_ack_topic is set); auto-connection
+    # delivers _on_phase_ack on the GUI thread.
+    phase_acked = Signal()
 
     def __init__(self, config: DemoConfig):
         super().__init__()
@@ -169,6 +188,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._tick_timer.setInterval(100)   # 10 Hz
         self._tick_timer.timeout.connect(self._refresh_status)
 
+        self._status_phase_time_label = None
+
         self._build_status_bar()
         self._wire_executor_signals()
 
@@ -200,6 +221,13 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 subscribing_actor_name="pluggable_protocol_tree_executor_listener",
             )
 
+            if self.config.phase_ack_topic is not None:
+                _phase_ack_target["window"] = self
+                router.message_router_data.add_subscriber_to_topic(
+                    topic=self.config.phase_ack_topic,
+                    subscribing_actor_name="ppt12_demo_phase_ack_listener",
+                )
+
             self._router = router
             self._dramatiq_worker = Worker(broker, worker_timeout=100)
             self._dramatiq_worker.start()
@@ -221,6 +249,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         sb.addWidget(self._status_step_label)
         sb.addWidget(self._status_row_label, stretch=1)
         sb.addPermanentWidget(self._status_step_time_label)
+        if self.config.phase_ack_topic is not None:
+            self._status_phase_time_label = QLabel("")
+            sb.addPermanentWidget(self._status_phase_time_label)
 
     def _wire_executor_signals(self):
         # Active-row highlight on each step start.
@@ -230,6 +261,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # Status bar updates.
         self.executor.qsignals.step_started.connect(self._on_step_started)
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
+        if self.config.phase_ack_topic is not None:
+            self.phase_acked.connect(self._on_phase_ack)
 
     def _on_protocol_started(self):
         try:
@@ -242,7 +275,13 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     def _on_step_started(self, row):
         self._step_index += 1
         self._current_row = row
+        # Reset phase timestamps; the phase ack handler restarts them.
         self._step_started_at = time.monotonic()
+        self._phase_started_at = None
+        try:
+            self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self._phase_target = None
         path = ".".join(str(i + 1) for i in row.path) if row.path else ""
         path_str = f" (path {path})" if path else ""
         self._status_step_label.setText(
@@ -252,11 +291,31 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if not self._tick_timer.isActive():
             self._tick_timer.start()
 
+    def _on_phase_ack(self):
+        """Each ack restarts the per-phase timer. The first ack of a step
+        also starts the per-step timer (overrides the time.monotonic()
+        set in _on_step_started so timers run from the actual ack moment)."""
+        if self._current_row is None:
+            return
+        now = time.monotonic()
+        if self._step_started_at is None:
+            self._step_started_at = now
+        self._phase_started_at = now
+
     def _refresh_status(self):
         if self._step_started_at is None:
             return
-        elapsed = time.monotonic() - self._step_started_at
-        self._status_step_time_label.setText(f"Step {elapsed:5.2f}s")
+        step_elapsed = time.monotonic() - self._step_started_at
+        self._status_step_time_label.setText(f"Step {step_elapsed:5.2f}s")
+        if self._status_phase_time_label is not None:
+            phase_elapsed = (
+                0.0 if self._phase_started_at is None
+                else time.monotonic() - self._phase_started_at
+            )
+            target = self._phase_target if self._phase_target is not None else 0.0
+            self._status_phase_time_label.setText(
+                f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
+            )
 
     def closeEvent(self, event):
         if self._dramatiq_worker is not None:
