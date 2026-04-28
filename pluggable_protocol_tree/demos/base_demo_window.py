@@ -168,7 +168,7 @@ import time
 
 from pyface.qt.QtCore import Qt, QTimer, Signal
 from pyface.qt.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar,
+    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar, QToolBar,
 )
 
 from pluggable_protocol_tree.execution.events import PauseEvent
@@ -269,6 +269,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             config.routing_setup(self._router)
 
         self._wire_executor_signals()
+        self._build_toolbar()
+        self._wire_button_state_machine()
+        self._set_idle_button_state()
 
     def _setup_dramatiq_routing_internal(self):
         """Wires the standard PPT-3 electrode actuation chain
@@ -430,6 +433,58 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self._status_phase_time_label.setText(
                 f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
             )
+
+    def _build_toolbar(self):
+        tb = QToolBar("Protocol")
+        self.addToolBar(tb)
+        tb.addAction("Add Step", lambda: self.manager.add_step())
+        tb.addAction("Add Group", lambda: self.manager.add_group())
+        tb.addSeparator()
+        # Save/Load added in Task 8.
+        self._run_action = tb.addAction("Run", self.executor.start)
+        self._pause_action = tb.addAction("Pause", self._toggle_pause)
+        self._stop_action = tb.addAction("Stop", self.executor.stop)
+
+    def _wire_button_state_machine(self):
+        self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
+        self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
+        self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
+        for sig in (
+            self.executor.qsignals.protocol_finished,
+            self.executor.qsignals.protocol_aborted,
+        ):
+            sig.connect(self._on_protocol_terminated)
+
+    def _set_idle_button_state(self):
+        self._run_action.setEnabled(True)
+        self._pause_action.setEnabled(False)
+        self._pause_action.setText("Pause")
+        self._stop_action.setEnabled(False)
+
+    def _set_running_button_state(self):
+        self._run_action.setEnabled(False)
+        self._pause_action.setEnabled(True)
+        self._pause_action.setText("Pause")
+        self._stop_action.setEnabled(True)
+
+    def _toggle_pause(self):
+        if self.executor.pause_event.is_set():
+            self.executor.resume()
+        else:
+            self.executor.pause()
+
+    def _on_protocol_paused(self):
+        self._pause_action.setText("Resume")
+        self._tick_timer.stop()
+
+    def _on_protocol_resumed(self):
+        self._pause_action.setText("Pause")
+        if self._current_row is not None:
+            self._tick_timer.start()
+
+    def _on_protocol_terminated(self):
+        self._set_idle_button_state()
+        self._tick_timer.stop()
 
     def closeEvent(self, event):
         if self._dramatiq_worker is not None:

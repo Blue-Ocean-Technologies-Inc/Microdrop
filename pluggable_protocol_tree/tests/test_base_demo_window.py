@@ -363,3 +363,61 @@ def test_status_readout_format_error_shows_inline_error(qapp):
     w._readout_signals["voltage"].emit("not-a-number")
     text = w._readout_labels["voltage"].text()
     assert text.startswith("Voltage: <error:")
+
+
+def test_toolbar_has_standard_actions(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    actions = [a.text() for a in w.findChildren(__import__("pyface.qt.QtWidgets", fromlist=["QToolBar"]).QToolBar)[0].actions()]
+    assert "Add Step" in actions
+    assert "Add Group" in actions
+    assert "Run" in actions
+    assert "Pause" in actions
+    assert "Stop" in actions
+
+
+def test_idle_button_state(qapp):
+    """Initially: Run enabled; Pause + Stop disabled."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+
+
+def test_protocol_started_swaps_buttons(qapp):
+    """When protocol_started fires: Run disabled; Pause + Stop enabled."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.protocol_started.emit()
+    assert not w._run_action.isEnabled()
+    assert w._pause_action.isEnabled()
+    assert w._stop_action.isEnabled()
+
+
+def test_protocol_terminated_returns_to_idle(qapp):
+    """When protocol_finished fires: back to idle button state."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.protocol_started.emit()
+    w.executor.qsignals.protocol_finished.emit()
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+    assert w._pause_action.text() == "Pause"
