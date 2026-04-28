@@ -9,11 +9,15 @@ when it sees a sub-MIN value. Preserves legacy behaviour where pref
 changes affect 'Default' steps without re-editing the protocol.
 """
 
+import json
+
 from pyface.qt.QtCore import Qt
 from traits.api import Bool, Float
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from peripheral_controller.consts import (
     MAX_ZSTAGE_HEIGHT_MM, MIN_ZSTAGE_HEIGHT_MM,
+    PROTOCOL_SET_MAGNET, MAGNET_APPLIED,
 )
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
@@ -78,10 +82,33 @@ class MagnetHeightSpinBoxView(DoubleSpinBoxColumnView):
         return flags
 
 
+class MagnetHandler(BaseCompoundColumnHandler):
+    """Publishes the row's magnet state and waits for the dropbot ack.
+
+    Priority 20 — parallel with VoltageHandler / FrequencyHandler in the
+    same bucket; runs strictly before RoutesHandler at priority 30. The
+    10s timeout is longer than v/f's 5s because physical magnet
+    movement is slower than RPC writes.
+
+    No on_interact override — magnet column does NOT persist user
+    cell-edits to PeripheralPreferences. The user changes up_height_mm
+    via the peripherals_ui status panel, not via protocol cells.
+    """
+    priority = 20
+    wait_for_topics = [MAGNET_APPLIED]
+
+    def on_step(self, row, ctx):
+        payload = json.dumps({
+            "on": bool(row.magnet_on),
+            "height_mm": float(row.magnet_height_mm),
+        })
+        publish_message(topic=PROTOCOL_SET_MAGNET, message=payload)
+        ctx.wait_for(MAGNET_APPLIED, timeout=10.0)
+
+
 def make_magnet_column():
-    """Factory — returns a fresh CompoundColumn with the placeholder
-    BaseCompoundColumnHandler. Task 5 swaps in MagnetHandler with
-    real publish/wait_for behaviour."""
+    """Factory — returns a fresh CompoundColumn with MagnetHandler for
+    publishing magnet state and waiting for acknowledgement."""
     return CompoundColumn(
         model=MagnetCompoundModel(),
         view=DictCompoundColumnView(cell_views={
@@ -92,5 +119,5 @@ def make_magnet_column():
                 decimals=2, single_step=0.1,
             ),
         }),
-        handler=BaseCompoundColumnHandler(),  # replaced in task 5
+        handler=MagnetHandler(),
     )

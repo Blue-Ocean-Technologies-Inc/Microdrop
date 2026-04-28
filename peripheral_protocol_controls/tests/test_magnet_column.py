@@ -92,3 +92,101 @@ def test_make_magnet_column_returns_compound_with_two_fields():
     assert isinstance(cc, CompoundColumn)
     ids = [s.field_id for s in cc.model.field_specs()]
     assert ids == ["magnet_on", "magnet_height_mm"]
+
+
+import json
+from unittest.mock import MagicMock
+
+from peripheral_controller.consts import (
+    PROTOCOL_SET_MAGNET, MAGNET_APPLIED,
+)
+
+
+def test_magnet_handler_priority_20():
+    from peripheral_protocol_controls.protocol_columns.magnet_column import (
+        MagnetHandler,
+    )
+    handler = MagnetHandler()
+    assert handler.priority == 20
+
+
+def test_magnet_handler_wait_for_topics_includes_magnet_applied():
+    from peripheral_protocol_controls.protocol_columns.magnet_column import (
+        MagnetHandler,
+    )
+    handler = MagnetHandler()
+    assert MAGNET_APPLIED in handler.wait_for_topics
+
+
+def test_magnet_handler_on_step_publishes_engage_payload():
+    """magnet_on=True, magnet_height_mm=5.0 -> JSON
+    {'on': True, 'height_mm': 5.0}; wait_for(MAGNET_APPLIED, timeout=10.0)."""
+    from peripheral_protocol_controls.protocol_columns.magnet_column import (
+        MagnetHandler,
+    )
+    handler = MagnetHandler()
+    row = MagicMock()
+    row.magnet_on = True
+    row.magnet_height_mm = 5.0
+    ctx = MagicMock()
+
+    published = []
+    with patch(
+        "peripheral_protocol_controls.protocol_columns.magnet_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
+        handler.on_step(row, ctx)
+
+    assert len(published) == 1
+    assert published[0]["topic"] == PROTOCOL_SET_MAGNET
+    payload = json.loads(published[0]["message"])
+    assert payload == {"on": True, "height_mm": 5.0}
+    ctx.wait_for.assert_called_once_with(MAGNET_APPLIED, timeout=10.0)
+
+
+def test_magnet_handler_on_step_publishes_retract_payload():
+    """magnet_on=False -> JSON {'on': False, 'height_mm': X} (height
+    included but ignored backend-side)."""
+    from peripheral_protocol_controls.protocol_columns.magnet_column import (
+        MagnetHandler,
+    )
+    handler = MagnetHandler()
+    row = MagicMock()
+    row.magnet_on = False
+    row.magnet_height_mm = 0.0
+    ctx = MagicMock()
+
+    published = []
+    with patch(
+        "peripheral_protocol_controls.protocol_columns.magnet_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
+        handler.on_step(row, ctx)
+
+    payload = json.loads(published[0]["message"])
+    assert payload == {"on": False, "height_mm": 0.0}
+
+
+def test_magnet_handler_on_step_publishes_default_sentinel_payload():
+    """magnet_on=True with sentinel height -> JSON has the sentinel
+    value verbatim; backend interprets it (handler does NOT pre-resolve
+    to the live pref)."""
+    from peripheral_protocol_controls.protocol_columns.magnet_column import (
+        MagnetHandler,
+    )
+    handler = MagnetHandler()
+    row = MagicMock()
+    row.magnet_on = True
+    row.magnet_height_mm = float(MIN_ZSTAGE_HEIGHT_MM - 0.5)
+    ctx = MagicMock()
+
+    published = []
+    with patch(
+        "peripheral_protocol_controls.protocol_columns.magnet_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
+        handler.on_step(row, ctx)
+
+    payload = json.loads(published[0]["message"])
+    assert payload["on"] is True
+    assert payload["height_mm"] == float(MIN_ZSTAGE_HEIGHT_MM - 0.5)
