@@ -15,7 +15,10 @@ from pluggable_protocol_tree.demos.base_demo_window import (
 )
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
-from peripheral_controller.consts import MAGNET_APPLIED, PROTOCOL_SET_MAGNET
+from peripheral_controller.consts import (
+    MAGNET_APPLIED, MIN_ZSTAGE_HEIGHT_MM, PROTOCOL_SET_MAGNET,
+)
+from peripheral_controller.preferences import PeripheralPreferences
 from peripheral_protocol_controls.demos.magnet_responder import (
     subscribe_demo_responder,
 )
@@ -25,19 +28,26 @@ from peripheral_protocol_controls.protocol_columns.magnet_column import (
 
 
 def _fmt_magnet_height(message: str) -> str:
-    """Parse the PROTOCOL_SET_MAGNET request payload and render the
-    requested height. The MAGNET_APPLIED ack itself is just '0'/'1'
-    (production wire format), so we read the height from the request
-    topic — under the demo responder the two arrive within ~50 ms."""
+    """Render the actual physical zstage height the production
+    zstage_state_setter_service would move to for this request:
+      - retract  → PeripheralPreferences().down_height_mm
+      - engage at sentinel (height < MIN_ZSTAGE_HEIGHT_MM)
+                 → PeripheralPreferences().up_height_mm  (live pref)
+      - engage at explicit height → that height
+
+    Reads height from the PROTOCOL_SET_MAGNET request payload — the
+    MAGNET_APPLIED ack itself is just '0'/'1' on the wire (production
+    wire format pinned by test_protocol_set_magnet)."""
     try:
         payload = json.loads(message)
     except (TypeError, ValueError):
         return "—"
+    prefs = PeripheralPreferences()
     if not payload.get("on"):
-        return "—"
+        return f"{prefs.down_height_mm:.1f} mm"
     height = payload.get("height_mm", 0.0)
-    if height == 0.0:
-        return "Default"   # sentinel meaning "use live pref"
+    if height < MIN_ZSTAGE_HEIGHT_MM:
+        return f"{prefs.up_height_mm:.1f} mm"
     return f"{height:.1f} mm"
 
 
