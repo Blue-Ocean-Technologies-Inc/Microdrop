@@ -125,7 +125,7 @@ def _slug(label: str) -> str:
 # must add their prefix here. ``ppt11_demo_`` is forward-declared for the
 # planned PPT-11 demo refactor; no actors with that prefix exist yet.
 _DEMO_PREFIXES = (
-    "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt11_demo_",
+    "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt6_demo_", "ppt11_demo_",
     "ppt12_demo_", "ppt_vf_demo_", "integration_demo_",
 )
 
