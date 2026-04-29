@@ -629,3 +629,17 @@ Incremental, one PR per sub-issue:
 - Exact pandas dtype handling for object-typed columns (list-of-lists). Likely `object` dtype with per-column accessors; to validate during PPT-1 testing.
 - Whether the `executor` should run on its own `QThread` or re-use existing worker thread infrastructure from `protocol_grid`. Decided during PPT-2 when concrete constraints surface.
 - UI treatment of hidden columns (header right-click menu vs. preferences pane vs. view submenu). Decided during PPT-1.
+
+## 20. Demo lifecycle gotchas
+
+These bit us during PPT-12 (base demo window extraction) and are easy to repeat. Capture here so future demo work avoids them.
+
+### Don't instantiate `dramatiq.Worker(...)` inside demo windows
+
+Demo `__main__` blocks already wrap `main()` with `with dramatiq_workers_context():`. That context manager owns the worker lifecycle (start, stop, signal handling). If demo / window code separately constructs `dramatiq.Worker(broker, ...).start()` — as the original `run_widget_with_vf.py` did, and as `BasePluggableProtocolDemoWindow._setup_dramatiq_routing_internal` did until cleaned up — Dramatiq registers two worker instances against the same broker and emits a "workers added twice" warning. Shutdown also gets messy because the in-window worker isn't part of the context manager's cleanup.
+
+**Rule:** in any code that runs under `with dramatiq_workers_context():`, the only Dramatiq setup the demo window should do is router / topic state (`MessageRouterActor()`, `add_subscriber_to_topic(...)`). Worker lifetime stays with the context manager.
+
+### Use `microdrop_application.dialogs.pyface_wrapper`, never raw `QMessageBox`
+
+The application has a styled `BaseMessageDialog` system. `pyface_wrapper` exposes `error`, `warning`, `information`, `confirm`, `success`, `disclaimer`, `file_dialog` with a Pyface-compatible signature. Raw `QMessageBox` and direct `pyface.api` calls bypass the styling and produce visually inconsistent dialogs. The base demo window's `_save` / `_load` / `_on_error` all use `pyface_wrapper.error`; downstream demos should follow suit.

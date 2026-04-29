@@ -1,0 +1,705 @@
+"""Tests for the demo base window + DemoConfig + StatusReadout."""
+
+import pytest
+
+from pluggable_protocol_tree.consts import ELECTRODES_STATE_APPLIED
+from pluggable_protocol_tree.demos.base_demo_window import (
+    DemoConfig, StatusReadout, _slug,
+)
+
+
+def test_status_readout_required_fields():
+    r = StatusReadout(label="Voltage", topic="dropbot/signals/voltage_applied",
+                      fmt=lambda m: f"{int(m)} V")
+    assert r.label == "Voltage"
+    assert r.topic == "dropbot/signals/voltage_applied"
+    assert r.fmt("100") == "100 V"
+    assert r.initial == "--"   # default
+
+
+def test_status_readout_initial_overridable():
+    r = StatusReadout(label="Magnet", topic="x/applied",
+                      fmt=lambda m: m, initial="idle")
+    assert r.initial == "idle"
+
+
+def test_demo_config_minimum_required_fields():
+    cfg = DemoConfig(columns_factory=lambda: [])
+    assert cfg.title == "Pluggable Protocol Tree Demo"
+    assert cfg.window_size == (1100, 650)
+    assert cfg.phase_ack_topic == ELECTRODES_STATE_APPLIED   # default
+    assert cfg.status_readouts == []
+    assert cfg.side_panel_factory is None
+
+
+def test_demo_config_pre_populate_default_is_no_op():
+    cfg = DemoConfig(columns_factory=lambda: [])
+    cfg.pre_populate(None)   # must not raise
+
+
+def test_demo_config_routing_setup_default_is_no_op():
+    cfg = DemoConfig(columns_factory=lambda: [])
+    cfg.routing_setup(None)
+
+
+def test_demo_config_phase_ack_can_be_none():
+    cfg = DemoConfig(columns_factory=lambda: [], phase_ack_topic=None)
+    assert cfg.phase_ack_topic is None
+
+
+def test_slug_lowercases_and_strips_punctuation():
+    """slug('Voltage')='voltage'; slug('Magnet Height (mm)')='magnet_height_mm'."""
+    assert _slug("Voltage") == "voltage"
+    assert _slug("Magnet Height (mm)") == "magnet_height_mm"
+    assert _slug("Step Time") == "step_time"
+
+
+def test_slug_handles_empty_string():
+    assert _slug("") == ""
+
+
+def test_window_constructs_with_minimum_config(qapp):
+    """Window builds successfully with just a columns_factory."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.windowTitle() == "Pluggable Protocol Tree Demo"
+    # Has the manager + executor + tree widget wired
+    assert w.manager is not None
+    assert w.executor is not None
+    assert w.widget is not None
+    # Window size matches default
+    assert (w.width(), w.height()) == (1100, 650)
+
+
+def test_window_applies_custom_title_and_size(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        title="My Demo",
+        window_size=(800, 500),
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.windowTitle() == "My Demo"
+    assert (w.width(), w.height()) == (800, 500)
+
+
+def test_window_columns_match_factory_output(qapp):
+    """RowManager has the columns returned by columns_factory."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [
+        make_type_column(), make_id_column(), make_name_column(),
+    ])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    ids = [c.model.col_id for c in w.manager.columns]
+    assert ids == ["type", "id", "name"]
+
+
+def test_pre_populate_runs_after_manager_construction(qapp):
+    """The pre_populate callback receives the live RowManager and
+    rows added there are present after window construction."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    def populate(rm):
+        rm.add_step(values={"name": "S1", "duration_s": 0.1})
+        rm.add_step(values={"name": "S2", "duration_s": 0.2})
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(),
+        ],
+        pre_populate=populate,
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert len(w.manager.root.children) == 2
+    assert w.manager.root.children[0].name == "S1"
+    assert w.manager.root.children[1].name == "S2"
+
+
+def test_routing_setup_called_after_standard_chain(qapp, monkeypatch):
+    """The routing_setup callback receives the router AFTER the base
+    wires the PPT-3 electrode chain. Verify by recording the order."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    call_log = []
+
+    def fake_router_setup_inner(self):
+        # Replace the real broker setup with a recording fake.
+        call_log.append("base_routing_setup")
+        # Need to set self._router so routing_setup can be called with it.
+        self._router = "fake-router"
+
+    monkeypatch.setattr(
+        BasePluggableProtocolDemoWindow,
+        "_setup_dramatiq_routing_internal",
+        fake_router_setup_inner,
+    )
+
+    def my_routing(router):
+        call_log.append(("routing_setup", router))
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        routing_setup=my_routing,
+    )
+    BasePluggableProtocolDemoWindow(cfg)
+    assert call_log == ["base_routing_setup", ("routing_setup", "fake-router")]
+
+
+def test_window_has_router_attribute_after_construction(qapp):
+    """self._router exists (may be None if Redis unavailable, that's fine)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert hasattr(w, "_router")
+
+
+def test_window_has_status_bar_with_step_label(qapp):
+    """Status bar exists with the step counter label."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    sb = w.statusBar()
+    assert sb is not None
+    # Step label and row label should be there.
+    assert w._status_step_label.text() == "Idle"
+    assert w._status_row_label.text() == ""
+
+
+def test_window_status_step_elapsed_label_exists(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_step_time_label is not None
+
+
+def test_window_executor_step_started_connected_to_tree_highlight(qapp):
+    """The executor's step_started signal must connect to the tree
+    widget's highlight_active_row slot — verifies the active-row
+    highlight wiring is in place."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Indirect check: emit step_started with a fake row, watch tree's
+    # highlight_active_row receive it.
+    received = []
+    orig = w.widget.highlight_active_row
+    w.widget.highlight_active_row = lambda r: received.append(r)
+    try:
+        w.executor.qsignals.step_started.emit("fake-row")
+        assert received == ["fake-row"]
+    finally:
+        w.widget.highlight_active_row = orig
+
+
+def test_window_tick_timer_runs_at_10_hz(qapp):
+    """Tick timer interval should be 100 ms (10 Hz)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._tick_timer.interval() == 100
+
+
+def test_phase_ack_topic_none_hides_phase_timer(qapp):
+    """When phase_ack_topic=None, no phase elapsed label in status bar."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic=None)
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_phase_time_label is None
+
+
+def test_phase_ack_topic_set_creates_phase_label(qapp):
+    """When phase_ack_topic set, phase elapsed label is in status bar."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic="x/applied")
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_phase_time_label is not None
+
+
+def test_phase_acked_signal_resets_phase_timer(qapp):
+    """Emitting the phase_acked signal sets _phase_started_at = monotonic()."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
+                     phase_ack_topic="x/applied")
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Set the current row so phase ack handler doesn't early-return.
+    w._current_row = object()
+    w._step_started_at = None
+    before = w._phase_started_at
+    w.phase_acked.emit()
+    assert w._phase_started_at is not None
+    assert w._phase_started_at != before
+    # First ack also sets step_started_at if it was None.
+    assert w._step_started_at is not None
+
+
+def test_status_readout_creates_label_with_initial_text(qapp):
+    """Each StatusReadout adds a QLabel with `<label>: <initial>` text."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+            StatusReadout("Frequency", "f/applied", lambda m: f"{int(m)} Hz"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    labels = list(w._readout_labels.values())
+    assert len(labels) == 2
+    # Assertion order matches status_readouts declaration order (Python 3.7+ dict guarantee).
+    assert labels[0].text() == "Voltage: --"
+    assert labels[1].text() == "Frequency: --"
+
+
+def test_status_readout_label_updates_on_signal(qapp):
+    """Emitting the per-readout Qt signal updates the label text."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._readout_signals["voltage"].emit("100")
+    assert w._readout_labels["voltage"].text() == "Voltage: 100 V"
+
+
+def test_status_readout_actor_names_are_slug_prefixed(qapp):
+    """Each readout's auto-registered Dramatiq actor uses the slug-based
+    naming convention. Verify by inspecting the broker's registered actors."""
+    import dramatiq
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Magnet Height (mm)", "m/applied",
+                          lambda m: f"{m} mm"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Actor name = ppt12_demo_<slug>_listener
+    expected_name = "ppt12_demo_magnet_height_mm_listener"
+    broker = dramatiq.get_broker()
+    # Should not raise
+    broker.get_actor(expected_name)
+
+
+def test_status_readout_format_error_shows_inline_error(qapp):
+    """When the format function raises, the label shows '<error: ...>'."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._readout_signals["voltage"].emit("not-a-number")
+    text = w._readout_labels["voltage"].text()
+    assert text.startswith("Voltage: <error:")
+
+
+def test_toolbar_has_standard_actions(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    actions = [a.text() for a in w._toolbar.actions()]
+    assert "Add Step" in actions
+    assert "Add Group" in actions
+    assert "Run" in actions
+    assert "Pause" in actions
+    assert "Stop" in actions
+
+
+def test_idle_button_state(qapp):
+    """Initially: Run enabled; Pause + Stop disabled."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+
+
+def test_protocol_started_swaps_buttons(qapp):
+    """When protocol_started fires: Run disabled; Pause + Stop enabled."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.protocol_started.emit()
+    assert not w._run_action.isEnabled()
+    assert w._pause_action.isEnabled()
+    assert w._stop_action.isEnabled()
+
+
+def test_protocol_terminated_returns_to_idle(qapp):
+    """When protocol_finished fires: back to idle button state."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.protocol_started.emit()
+    w.executor.qsignals.protocol_finished.emit()
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+    assert w._pause_action.text() == "Pause"
+
+
+def test_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
+    """Save button writes manager.to_json() to the chosen file."""
+    from pyface.qt.QtWidgets import QFileDialog
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [
+            make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(),
+        ],
+        pre_populate=lambda rm: rm.add_step(values={"name": "S1", "duration_s": 0.1}),
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    save_path = tmp_path / "out.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        lambda *a, **kw: (str(save_path), ""))
+    w._save()
+    import json
+    payload = json.loads(save_path.read_text())
+    assert payload["columns"][0]["id"] == "type"
+    assert any(r[3] == "S1" for r in payload["rows"])
+
+
+def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
+    """Load button reads JSON and applies via manager.set_state_from_json."""
+    from pyface.qt.QtWidgets import QFileDialog
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    import json
+
+    cfg = DemoConfig(columns_factory=lambda: [
+        make_type_column(), make_id_column(), make_name_column(),
+        make_duration_column(),
+    ])
+
+    # Build a window once, save its empty state, then load it back.
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.manager.add_step(values={"name": "Saved Step", "duration_s": 0.5})
+    save_path = tmp_path / "in.json"
+    save_path.write_text(json.dumps(w.manager.to_json()))
+
+    # Fresh window with empty state.
+    w2 = BasePluggableProtocolDemoWindow(cfg)
+    assert len(w2.manager.root.children) == 0
+    monkeypatch.setattr(QFileDialog, "getOpenFileName",
+                        lambda *a, **kw: (str(save_path), ""))
+    w2._load()
+    assert len(w2.manager.root.children) == 1
+    assert w2.manager.root.children[0].name == "Saved Step"
+
+
+def test_window_no_side_panel_uses_tree_as_central(qapp):
+    """When side_panel_factory is None, the central widget IS the tree
+    and _side_panel is None."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w.centralWidget() is w.widget
+    assert w._side_panel is None
+
+
+def test_window_side_panel_uses_splitter(qapp):
+    """When side_panel_factory returns a widget, central is a splitter
+    holding tree + side panel, AND the side widget is exposed at
+    w._side_panel for post_build_setup callbacks."""
+    from pyface.qt.QtWidgets import QLabel, QSplitter
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    side_widget = QLabel("side")
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        side_panel_factory=lambda rm: side_widget,
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    central = w.centralWidget()
+    assert isinstance(central, QSplitter)
+    assert central.count() == 2   # tree + side panel
+    assert w._side_panel is side_widget
+
+
+def test_clear_all_highlights_resets_status(qapp):
+    """After protocol terminates, status labels reset and step counters cleared."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        status_readouts=[
+            StatusReadout("Voltage", "v/applied", lambda m: f"{int(m)} V"),
+        ],
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Simulate state mid-run.
+    w._step_index = 2
+    w._step_total = 3
+    w._step_started_at = 100.0
+    w._readout_labels["voltage"].setText("Voltage: 99 V")
+    w._status_step_label.setText("Step 2 / 3")
+    # Terminate.
+    w._on_protocol_terminated()
+    assert w._status_step_label.text() == "Idle"
+    assert w._step_started_at is None
+    assert w._readout_labels["voltage"].text() == "Voltage: --"
+
+
+def test_purge_stale_subscribers_only_touches_demo_prefixes(qapp):
+    """The purger should ONLY consider actor names with demo prefixes
+    (ppt_demo_, ppt4_demo_, ppt5_demo_, ppt11_demo_, ppt12_demo_,
+    ppt_vf_demo_). Real listeners are NEVER touched."""
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        _is_purgable_demo_actor_name,
+    )
+    assert _is_purgable_demo_actor_name("ppt_demo_electrode_responder")
+    assert _is_purgable_demo_actor_name("ppt4_demo_voltage_applied_listener")
+    assert _is_purgable_demo_actor_name("ppt5_demo_magnet_responder")
+    assert _is_purgable_demo_actor_name("ppt12_demo_voltage_listener")
+    assert _is_purgable_demo_actor_name("ppt_vf_demo_spy")
+    assert _is_purgable_demo_actor_name("integration_demo_overlay_listener")
+    # Real listeners — must NOT be purgable.
+    assert not _is_purgable_demo_actor_name("dropbot_controller_listener")
+    assert not _is_purgable_demo_actor_name(
+        "dropbot_status_and_controls_listener",
+    )
+    assert not _is_purgable_demo_actor_name(
+        "pluggable_protocol_tree_executor_listener",
+    )
+
+
+def test_run_classmethod_returns_int(qapp, monkeypatch):
+    """The .run(config) classmethod calls app.exec() and returns its int result."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    from pyface.qt.QtWidgets import QApplication
+
+    # Patch QApplication.exec to return 0 immediately.
+    monkeypatch.setattr(QApplication, "exec", lambda self: 0)
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    rc = BasePluggableProtocolDemoWindow.run(cfg)
+    assert rc == 0
+
+
+def test_post_build_setup_called_with_window(qapp):
+    """post_build_setup runs as the final step of __init__ and receives
+    the constructed window. All scaffolding (executor, status bar, toolbar)
+    is already in place at the time it runs."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    captured = {}
+
+    def my_post_build(window):
+        captured["window"] = window
+        # Verify the scaffolding the hook is supposed to be able to use.
+        captured["has_executor"] = window.executor is not None
+        captured["has_toolbar"] = window._toolbar is not None
+        captured["has_status_bar"] = window.statusBar() is not None
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        post_build_setup=my_post_build,
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert captured["window"] is w
+    assert captured["has_executor"]
+    assert captured["has_toolbar"]
+    assert captured["has_status_bar"]
+
+
+def test_post_build_setup_default_is_no_op(qapp):
+    """Demos that don't need post-build wiring don't have to specify one."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    # Must not raise.
+    BasePluggableProtocolDemoWindow(cfg)
+
+
+def test_status_bar_has_reps_label(qapp):
+    """The status bar exposes _status_reps_label, initially empty."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_reps_label.text() == ""
+
+
+def test_step_repetition_renders_chain(qapp):
+    """step_repetition with a non-empty chain renders 'rep i/n of name'."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.step_repetition.emit([("Wash", 2, 3)])
+    assert w._status_reps_label.text() == "rep 2/3 of 'Wash'"
+
+
+def test_step_repetition_empty_chain_clears(qapp):
+    """An empty rep chain clears the reps label."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._status_reps_label.setText("rep 1/3 of 'Wash'")
+    w.executor.qsignals.step_repetition.emit([])
+    assert w._status_reps_label.text() == ""
+
+
+def test_step_finished_freezes_step_elapsed_label(qapp):
+    """step_finished calls _refresh_status, which paints the final
+    elapsed value into _status_step_time_label."""
+    import time
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Simulate mid-step state: started a known duration ago.
+    w._step_started_at = time.monotonic() - 1.5
+    w.executor.qsignals.step_finished.emit(None)
+    text = w._status_step_time_label.text()
+    assert text.startswith("Step ")
+    assert "1." in text or "1.5" in text   # close enough — within tick window
+
+
+def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
+    """protocol_error → idle button state, tick timer stopped, dialog
+    shown via the styled pyface_wrapper.error helper (NOT raw QMessageBox)."""
+    import pluggable_protocol_tree.demos.base_demo_window as bdw
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    calls = []
+
+    def fake_error_dialog(parent=None, title="", message="", **kwargs):
+        calls.append((title, message))
+
+    monkeypatch.setattr(bdw, "error_dialog", fake_error_dialog)
+
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = bdw.BasePluggableProtocolDemoWindow(cfg)
+    # Simulate a running state, then fire the error.
+    w.executor.qsignals.protocol_started.emit()
+    assert not w._run_action.isEnabled()
+    w.executor.qsignals.protocol_error.emit("kaboom")
+    # Idle state restored.
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+    assert not w._tick_timer.isActive()
+    # Dialog called via the styled wrapper, with the error message.
+    assert calls == [("Protocol error", "kaboom")]

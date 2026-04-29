@@ -1,13 +1,16 @@
-"""PPT-3 demo — protocol tree + electrodes/routes + device viewer +
-PPT-2 ack-roundtrip column.
+"""Full-stack integration demo: PPT-3 electrodes/routes + PPT-4 voltage/
+frequency + PPT-5 magnet, all in one window. Verifies priority bucketing
+in practice (priority 20 V/F/magnet bucket completes before priority 30
+RoutesHandler publishes electrodes).
 
-Run: pixi run python -m pluggable_protocol_tree.demos.run_widget
+Run: pixi run python -m examples.demos.run_full_integration_demo
 """
 
 import json
 import logging
 
 import dramatiq
+from pyface.qt.QtCore import Qt
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
@@ -31,28 +34,45 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
-from pluggable_protocol_tree.demos.ack_roundtrip_column import (
-    DEMO_APPLIED_TOPIC, DEMO_REQUEST_TOPIC, RESPONDER_ACTOR_NAME,
-    make_ack_roundtrip_column,
-)
 from pluggable_protocol_tree.demos.base_demo_window import (
-    BasePluggableProtocolDemoWindow, DemoConfig,
+    BasePluggableProtocolDemoWindow, DemoConfig, StatusReadout,
 )
-from pluggable_protocol_tree.demos.message_column import make_message_column
 from pluggable_protocol_tree.demos.simple_device_viewer import (
     GRID_H, GRID_W, SimpleDeviceViewer,
 )
-from pyface.qt.QtCore import Qt
+from pluggable_protocol_tree.models._compound_adapters import _expand_compound
+
+from dropbot_controller.consts import VOLTAGE_APPLIED, FREQUENCY_APPLIED
+from dropbot_protocol_controls.demos.voltage_frequency_responder import (
+    subscribe_demo_responder as subscribe_vf_responder,
+)
+from dropbot_protocol_controls.protocol_columns.frequency_column import (
+    make_frequency_column,
+)
+from dropbot_protocol_controls.protocol_columns.voltage_column import (
+    make_voltage_column,
+)
+
+from peripheral_controller.consts import MAGNET_APPLIED, PROTOCOL_SET_MAGNET
+from peripheral_protocol_controls.demos.run_widget_magnet_demo import (
+    _fmt_magnet_height,
+)
+from peripheral_protocol_controls.demos.magnet_responder import (
+    subscribe_demo_responder as subscribe_magnet_responder,
+)
+from peripheral_protocol_controls.protocol_columns.magnet_column import (
+    make_magnet_column,
+)
 
 
 # Module-level overlay listener — captures the device viewer via a
-# global hook set by the post_build_setup callback. Keeping the actor
-# at module level avoids duplicate-registration errors when the demo
-# is reloaded in the same process.
+# global hook set by the post_build_setup callback. The actor name uses
+# the dedicated `integration_demo_*` slot in `_DEMO_PREFIXES` so the
+# stale-subscriber purger handles leftover entries correctly.
 _overlay_target = {"viewer": None}
 
 
-@dramatiq.actor(actor_name="ppt_demo_actuation_overlay_listener",
+@dramatiq.actor(actor_name="integration_demo_overlay_listener",
                 queue_name="default")
 def _overlay_listener(message: str, topic: str, timestamp: float = None):
     viewer = _overlay_target["viewer"]
@@ -74,43 +94,54 @@ def _columns():
         make_trail_length_column(), make_trail_overlay_column(),
         make_soft_start_column(), make_soft_end_column(),
         make_repeat_duration_column(), make_linear_repeats_column(),
-        make_message_column(), make_ack_roundtrip_column(),
+        # PPT-4
+        make_voltage_column(), make_frequency_column(),
+        # PPT-5 (compound, expanded)
+        *_expand_compound(make_magnet_column()),
     ]
 
 
 def _pre_populate(rm):
-    """Seed the electrode→channel mapping. e00..e24 → channels 0..24."""
     rm.protocol_metadata["electrode_to_channel"] = {
         f"e{i:02d}": i for i in range(GRID_W * GRID_H)
     }
+    rm.add_step(values={
+        "name": "Step 1: 100V/10kHz, magnet=Default, route top row",
+        "duration_s": 0.3,
+        "voltage": 100, "frequency": 10000,
+        "magnet_on": True, "magnet_height_mm": 0.0,   # sentinel = Default
+        "routes": [["e00", "e01", "e02", "e03", "e04"]],
+        "trail_length": 1,
+    })
+    rm.add_step(values={
+        "name": "Step 2: 120V/5kHz, magnet=12mm, diagonal",
+        "duration_s": 0.3,
+        "voltage": 120, "frequency": 5000,
+        "magnet_on": True, "magnet_height_mm": 12.0,
+        "routes": [["e00", "e06", "e12", "e18", "e24"]],
+        "trail_length": 1,
+    })
+    rm.add_step(values={
+        "name": "Step 3: 75V/1kHz cooldown, retract magnet",
+        "duration_s": 0.3,
+        "voltage": 75, "frequency": 1000,
+        "magnet_on": False, "magnet_height_mm": 0.0,
+    })
 
 
 def _routing_setup(router):
-    """PPT-2 ack-roundtrip column responder + actuation-overlay listener
-    subscription. The overlay actor itself is registered at module import."""
-    router.message_router_data.add_subscriber_to_topic(
-        topic=DEMO_REQUEST_TOPIC,
-        subscribing_actor_name=RESPONDER_ACTOR_NAME,
-    )
-    router.message_router_data.add_subscriber_to_topic(
-        topic=DEMO_APPLIED_TOPIC,
-        subscribing_actor_name="pluggable_protocol_tree_executor_listener",
-    )
+    """All three demo responders + the integration overlay listener."""
+    subscribe_vf_responder(router)
+    subscribe_magnet_responder(router)
     router.message_router_data.add_subscriber_to_topic(
         topic=ELECTRODES_STATE_CHANGE,
-        subscribing_actor_name="ppt_demo_actuation_overlay_listener",
+        subscribing_actor_name="integration_demo_overlay_listener",
     )
-
-
-def _make_side_panel(rm):
-    return SimpleDeviceViewer(rm)
 
 
 def _post_build(window):
-    """Wire the PPT-3-specific side-panel signals: device viewer follows
-    the tree's current selection AND the executor's currently-running step.
-    Also bind the module-level overlay listener target to this window's
-    device viewer."""
+    """Wire the side-panel: device viewer follows the tree's current
+    selection AND the executor's currently-running step."""
     device_view = window._side_panel
     _overlay_target["viewer"] = device_view
 
@@ -125,12 +156,19 @@ def _post_build(window):
 
 config = DemoConfig(
     columns_factory=_columns,
-    title="Pluggable Protocol Tree — PPT-3 Demo",
-    window_size=(1100, 650),
+    title="Full Integration Demo — PPT-3 routes + PPT-4 V/F + PPT-5 magnet",
+    window_size=(1300, 700),
     pre_populate=_pre_populate,
     routing_setup=_routing_setup,
     phase_ack_topic=ELECTRODES_STATE_APPLIED,
-    side_panel_factory=_make_side_panel,
+    status_readouts=[
+        StatusReadout("Voltage",   VOLTAGE_APPLIED,   lambda m: f"{int(m)} V"),
+        StatusReadout("Frequency", FREQUENCY_APPLIED, lambda m: f"{int(m)} Hz"),
+        StatusReadout("Magnet",    MAGNET_APPLIED,
+                      lambda m: "engaged" if m == "1" else "retracted"),
+        StatusReadout("Magnet Height", PROTOCOL_SET_MAGNET, _fmt_magnet_height),
+    ],
+    side_panel_factory=lambda rm: SimpleDeviceViewer(rm),
     post_build_setup=_post_build,
 )
 
