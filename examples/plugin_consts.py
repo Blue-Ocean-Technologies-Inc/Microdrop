@@ -21,6 +21,7 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
+from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
@@ -69,6 +70,7 @@ FRONTEND_PLUGINS = [
     # PluggableProtocolTreePlugin,
     # DropbotProtocolControlsPlugin,
     # PeripheralProtocolControlsPlugin,
+    # VideoProtocolControlsPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
