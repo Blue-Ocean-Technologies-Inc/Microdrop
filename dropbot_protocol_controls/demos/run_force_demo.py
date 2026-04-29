@@ -7,6 +7,10 @@ published; this propagates calibration_data_listener -> CalibrationCache
 -> cache_changed -> Qt model dataChanged, and all 3 Force cells
 transition from blank to numeric values.
 
+The Tools menu also has a "Publish Calibration..." item that opens a
+small dialog with editable liquid/filler spinboxes and an Apply button,
+so you can re-publish at runtime to watch the cells repaint.
+
 Run: pixi run python -m dropbot_protocol_controls.demos.run_force_demo
 """
 
@@ -14,6 +18,10 @@ import json
 import logging
 
 from pyface.qt.QtCore import QTimer
+from pyface.qt.QtWidgets import (
+    QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
+    QPushButton, QVBoxLayout,
+)
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
@@ -119,10 +127,86 @@ def _publish_demo_calibration():
     publish_message(message=_DEMO_CALIBRATION_PAYLOAD, topic=CALIBRATION_DATA)
 
 
+class CalibrationPublishDialog(QDialog):
+    """Editable form for the two calibration parameters + an Apply
+    button that publishes CALIBRATION_DATA. Stays open after Apply so
+    the user can iterate (tweak values, hit Apply, watch Force cells
+    repaint, repeat)."""
+
+    def __init__(self, parent=None,
+                 initial_liquid: float = 2.0,
+                 initial_filler: float = 0.5):
+        super().__init__(parent)
+        self.setWindowTitle("Publish Calibration")
+        self.setModal(False)
+
+        self._liquid = QDoubleSpinBox()
+        self._liquid.setRange(0.0, 100.0)
+        self._liquid.setDecimals(3)
+        self._liquid.setSingleStep(0.1)
+        self._liquid.setSuffix(" pF/mm²")
+        self._liquid.setValue(initial_liquid)
+
+        self._filler = QDoubleSpinBox()
+        self._filler.setRange(0.0, 100.0)
+        self._filler.setDecimals(3)
+        self._filler.setSingleStep(0.1)
+        self._filler.setSuffix(" pF/mm²")
+        self._filler.setValue(initial_filler)
+
+        form = QFormLayout()
+        form.addRow("Liquid C/A:", self._liquid)
+        form.addRow("Filler C/A:", self._filler)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        apply_button = QPushButton("Apply")
+        apply_button.setDefault(True)
+        apply_button.clicked.connect(self._on_apply)
+        buttons.addButton(apply_button, QDialogButtonBox.ApplyRole)
+        buttons.rejected.connect(self.close)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+
+    def _on_apply(self):
+        payload = json.dumps({
+            "liquid_capacitance_over_area": float(self._liquid.value()),
+            "filler_capacitance_over_area": float(self._filler.value()),
+        })
+        logging.getLogger(__name__).info(
+            "[force-demo] Tools->Publish Calibration: %s", payload,
+        )
+        publish_message(message=payload, topic=CALIBRATION_DATA)
+
+
+def _open_calibration_dialog(window):
+    """Re-uses a single dialog instance so closing+reopening doesn't
+    discard the user's last-edited values mid-session."""
+    dlg = getattr(window, "_force_demo_calibration_dialog", None)
+    if dlg is None:
+        dlg = CalibrationPublishDialog(parent=window)
+        window._force_demo_calibration_dialog = dlg
+    dlg.show()
+    dlg.raise_()
+    dlg.activateWindow()
+
+
+def _install_tools_menu(window):
+    menu_bar = window.menuBar()
+    tools_menu = menu_bar.addMenu("Tools")
+    tools_menu.addAction(
+        "Publish Calibration…",
+        lambda: _open_calibration_dialog(window),
+    )
+
+
 def _post_build(window):
-    """Schedule the one-shot calibration publish after the window is
-    constructed. QTimer.singleShot defers to the GUI event loop, so the
-    publish only runs after .show() has actually painted the cells."""
+    """Install the Tools menu, then schedule the one-shot auto-publish
+    after the window is constructed. QTimer.singleShot defers to the
+    GUI event loop, so the publish only runs after .show() has actually
+    painted the cells."""
+    _install_tools_menu(window)
     QTimer.singleShot(_CALIBRATION_PUBLISH_DELAY_MS, _publish_demo_calibration)
 
 
