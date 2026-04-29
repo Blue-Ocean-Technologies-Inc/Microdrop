@@ -40,6 +40,13 @@ class VideoHandler(BaseColumnHandler):
     Cross-step state is held in ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY]
     so the change-detection survives across multiple steps of the same
     protocol run, and is reset cleanly between runs (scratch is per-run).
+
+    Note on hook ordering at protocol end: this handler shares priority 10
+    with RecordHandler. on_protocol_end hooks at the same priority run in
+    parallel inside the executor's thread pool. The race is benign because
+    each cleanup publishes to an independent topic (camera vs recording);
+    if you add a hook at priority 10 that needs to run before/after this
+    one, give it a different priority rather than relying on dict order.
     """
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).

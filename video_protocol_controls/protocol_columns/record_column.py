@@ -56,6 +56,15 @@ class RecordHandler(BaseColumnHandler):
     Cross-step state is held in ctx.protocol.scratch[RECORDING_ACTIVE_KEY]
     so the change-detection survives across multiple steps of the same
     protocol run, and is reset cleanly between runs (scratch is per-run).
+
+    Note on hook ordering at protocol end: this handler shares priority 10
+    with VideoHandler, which means their on_protocol_end hooks run in
+    parallel inside the executor's thread pool (executor.py groups same-
+    priority columns into one bucket). That race is benign here because
+    the two cleanups publish to independent topics
+    (DEVICE_VIEWER_SCREEN_RECORDING vs DEVICE_VIEWER_CAMERA_ACTIVE) — if
+    a future hook at this priority needs to run before or after recording
+    stops, give it a different priority rather than relying on dict order.
     """
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
