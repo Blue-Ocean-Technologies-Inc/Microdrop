@@ -77,6 +77,7 @@ from microdrop_utils.dramatiq_controller_base import (  # noqa: E402
 from dropbot_controller import consts as _dropbot
 from electrode_controller import consts as _electrode
 from protocol_grid import consts as _protocol
+from device_viewer import consts as _device_viewer
 from microdrop_application import consts as _app
 from peripheral_controller import consts as _peripheral
 from ssh_controls import consts as _ssh
@@ -162,13 +163,13 @@ class HardwareTopics:
 class UITopics:
     """Topics for UI state synchronisation between frontend plugins."""
 
-    DEVICE_VIEWER_STATE_CHANGED     = _protocol.DEVICE_VIEWER_STATE_CHANGED
+    DEVICE_VIEWER_STATE_CHANGED     = _device_viewer.DEVICE_VIEWER_STATE_CHANGED
     PROTOCOL_GRID_DISPLAY_STATE     = _protocol.PROTOCOL_GRID_DISPLAY_STATE
     CALIBRATION_DATA                = _protocol.CALIBRATION_DATA
-    DEVICE_VIEWER_SCREEN_CAPTURE    = _protocol.DEVICE_VIEWER_SCREEN_CAPTURE
-    DEVICE_VIEWER_SCREEN_RECORDING  = _protocol.DEVICE_VIEWER_SCREEN_RECORDING
-    DEVICE_VIEWER_CAMERA_ACTIVE     = _protocol.DEVICE_VIEWER_CAMERA_ACTIVE
-    DEVICE_VIEWER_MEDIA_CAPTURED    = _protocol.DEVICE_VIEWER_MEDIA_CAPTURED
+    DEVICE_VIEWER_SCREEN_CAPTURE    = _device_viewer.DEVICE_VIEWER_SCREEN_CAPTURE
+    DEVICE_VIEWER_SCREEN_RECORDING  = _device_viewer.DEVICE_VIEWER_SCREEN_RECORDING
+    DEVICE_VIEWER_CAMERA_ACTIVE     = _device_viewer.DEVICE_VIEWER_CAMERA_ACTIVE
+    DEVICE_VIEWER_MEDIA_CAPTURED    = _device_viewer.DEVICE_VIEWER_MEDIA_CAPTURED
     DEVICE_VIEWER_RECORDING_STATE   = _protocol.DEVICE_VIEWER_RECORDING_STATE
     ROUTES_EXECUTING                = _protocol.ROUTES_EXECUTING
     VOLTAGE_FREQUENCY_RANGE_CHANGED = _prefs_ui.VOLTAGE_FREQUENCY_RANGE_CHANGED

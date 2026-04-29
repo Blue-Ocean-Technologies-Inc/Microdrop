@@ -12,8 +12,9 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
+from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
-                                  CALIBRATION_DATA, DEVICE_VIEWER_MEDIA_CAPTURED,
+                                  CALIBRATION_DATA,
                                   DEVICE_VIEWER_RECORDING_STATE, ROUTES_EXECUTING,
                                   VOLTAGE_FREQUENCY_RANGE_CHANGED, STEP_PARAMS_COMMIT)
 from protocol_grid.models.step_params_commit import StepParamsCommitMessage
