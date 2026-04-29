@@ -166,6 +166,11 @@ def information(
 ):
     """
     Pyface-compatible information dialog using styled BaseMessageDialog.
+
+        If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
     """
 
     def create_dialog(**opts):
@@ -197,6 +202,11 @@ def success(
 ):
     """
     Pyface-compatible success dialog using styled BaseMessageDialog.
+
+        If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
     """
 
     def create_dialog(**opts):
@@ -227,6 +237,11 @@ def warning(
 ):
     """
     Pyface-compatible warning dialog using styled BaseMessageDialog.
+
+        If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
     """
 
     def create_dialog(**opts):
@@ -250,6 +265,15 @@ def disclaimer(
         ack_button_text: str = "I Understand",
         **kwargs,
 ):
+    """
+    Pyface-compatible disclaimer dialog using styled BaseMessageDialog.
+
+        If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
+    """
+
     dialog = DisclaimerDialog(parent, title, message, ack_button_text, **kwargs)
 
     result = dialog.exec()
@@ -269,6 +293,11 @@ def error(
 ):
     """
     Pyface-compatible error dialog using styled BaseMessageDialog.
+
+        If *checkbox_text* is provided (via kwargs), a checkbox is added to the
+    dialog and the return value becomes a ``(result, checked)`` tuple.
+    Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
+    full backward compatibility.
     """
 
     def create_dialog(**opts):

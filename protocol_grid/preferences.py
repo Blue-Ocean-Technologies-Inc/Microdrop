@@ -3,7 +3,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import List, Enum, Directory
+from traits.api import List, Enum, Directory, Bool
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import View, Item
 from envisage.ui.tasks.api import PreferencesCategory
@@ -58,6 +58,9 @@ class ProtocolPreferences(PreferencesHelper):
         desc="Time to allow logs post protocol end"
     )
 
+    prompt_to_restore_realtime_mode = Bool(True)
+    keep_realtime_mode_after_protocol = Bool(True)
+
     capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
 
     PROTOCOL_REPO_DIR = Directory()
@@ -111,9 +114,19 @@ class ProtocolPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    realtime_mode_settings_grid = create_grid_group(
+        items=["prompt_to_restore_realtime_mode", "keep_realtime_mode_after_protocol"],
+        label_text = ["Prompt to keep Realtime Mode?", "Keep Realtime Mode active?"],
+        group_label="Realtime Mode Persistence",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
     view = View(
         Item("_"),  # Separator
         general_protocol_settings_grid,
+        Item("_"),
+        realtime_mode_settings_grid,
         Item("_"),
         camera_settings_grid,
         Item("_"),  # Separator to space this out from further contributions to the pane.
