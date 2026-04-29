@@ -6,6 +6,8 @@ coarse (layoutChanged on structural mutations) in PPT-1; finer-grained
 rowsInserted/dataChanged can be added when performance matters.
 """
 
+from functools import partial
+
 from pyface.qt.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
 from pyface.qt.QtGui import QBrush, QColor
 
@@ -38,8 +40,19 @@ class MvcTreeModel(QAbstractItemModel):
         # here costs O(rows-ever-shown) memory but is bulletproof.
         self._owned_rows = set()
 
+        # Per-row trait observers wired by _wire_row_observers; tracked
+        # by row id() so we can deregister on rebuild without holding
+        # a hard ref to detached rows.
+        self._row_observer_handles: dict = {}
+        # Cache-event observers wired in __init__; kept so callers (or
+        # tests) can deterministically tear down the model.
+        self._event_observer_handles: list = []
+
         # Rebroadcast manager changes as layoutChanged
         row_manager.observe(self._on_rows_changed, "rows_changed")
+
+        self._wire_event_observers()
+        self._wire_row_observers()
 
     # ------------ Qt structural API ------------
 
@@ -132,3 +145,101 @@ class MvcTreeModel(QAbstractItemModel):
     def _on_rows_changed(self, event):
         self.layoutChanged.emit()
         self.structure_changed.emit()
+        # Row set may have changed structurally (add/remove/move); rewire
+        # per-row observers so newcomers participate and detached rows
+        # stop emitting against a stale column index.
+        self._wire_row_observers()
+
+    # ------------ reactive wiring for derived columns ------------
+
+    def _iter_all_rows(self):
+        def walk(group):
+            for child in group.children:
+                yield child
+                if isinstance(child, GroupRow):
+                    yield from walk(child)
+        yield from walk(self._manager.root)
+
+    def _wire_event_observers(self):
+        for col_idx, col in enumerate(self._manager.columns):
+            view = col.view
+            source = getattr(view, "depends_on_event_source", None)
+            trait_name = getattr(view, "depends_on_event_trait_name", None)
+            if source is None or not trait_name:
+                continue
+            handler = partial(self._on_event_dependency_fired, col_idx)
+            source.observe(handler, trait_name)
+            self._event_observer_handles.append((source, trait_name, handler))
+
+    def _on_event_dependency_fired(self, col_idx, event):
+        self._emit_column_changed(col_idx)
+
+    def _emit_column_changed(self, col_idx):
+        # Coarse but correct: layoutChanged forces Qt to repaint the
+        # entire visible area, which covers nested rows for free.
+        # cache_changed is low-frequency (calibration updates), so the
+        # perf cost is negligible compared to walking every (parent,
+        # child) pair to emit per-cell dataChanged.
+        if col_idx < 0 or col_idx >= self.columnCount():
+            return
+        self.layoutChanged.emit()
+
+    def _wire_row_observers(self):
+        # Identify per-column row-trait dependencies once.
+        col_trait_pairs: list = []
+        for col_idx, col in enumerate(self._manager.columns):
+            traits = list(getattr(col.view, "depends_on_row_traits", []) or [])
+            for trait_name in traits:
+                col_trait_pairs.append((col_idx, trait_name))
+        if not col_trait_pairs:
+            self._row_observer_handles.clear()
+            return
+
+        live_rows = list(self._iter_all_rows())
+        live_ids = {id(r) for r in live_rows}
+
+        # Tear down handles for rows that are no longer in the tree.
+        for row_id in list(self._row_observer_handles.keys()):
+            if row_id in live_ids:
+                continue
+            row, handles = self._row_observer_handles.pop(row_id)
+            for trait_name, handler in handles:
+                try:
+                    row.observe(handler, trait_name, remove=True)
+                except Exception:
+                    pass
+
+        # Wire newcomers; skip rows already wired (Traits' observe is
+        # idempotent on identical (handler, trait) but only if the
+        # callable identity matches — partial() makes a new object each
+        # call, so we MUST guard ourselves).
+        for row in live_rows:
+            if id(row) in self._row_observer_handles:
+                continue
+            handles: list = []
+            for col_idx, trait_name in col_trait_pairs:
+                if trait_name not in row.trait_names():
+                    continue
+                handler = partial(self._on_row_trait_changed, row, col_idx)
+                row.observe(handler, trait_name)
+                handles.append((trait_name, handler))
+            if handles:
+                self._row_observer_handles[id(row)] = (row, handles)
+
+    def _on_row_trait_changed(self, row, col_idx, event):
+        idx = self._index_for_cell(row, col_idx)
+        if idx.isValid():
+            self.dataChanged.emit(idx, idx)
+
+    def _index_for_cell(self, row, col_idx) -> QModelIndex:
+        parent = row.parent
+        if parent is None:
+            return QModelIndex()
+        try:
+            row_in_parent = parent.children.index(row)
+        except ValueError:
+            return QModelIndex()
+        if parent is self._manager.root:
+            return self.index(row_in_parent, col_idx, QModelIndex())
+        qparent = self._index_for_cell(parent, 0)
+        return self.index(row_in_parent, col_idx, qparent)
