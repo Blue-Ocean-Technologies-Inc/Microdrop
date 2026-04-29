@@ -17,6 +17,7 @@ DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+CALIBRATION_DATA               = "ui/calibration_data"
 
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
 # imported from protocol_grid.consts) to avoid the circular import that would otherwise form

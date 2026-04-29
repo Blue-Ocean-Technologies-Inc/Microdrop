@@ -29,12 +29,12 @@ from device_viewer.consts import (
     DEVICE_VIEWER_SCREEN_RECORDING,
     DEVICE_VIEWER_CAMERA_ACTIVE,
     DEVICE_VIEWER_MEDIA_CAPTURED,
+    CALIBRATION_DATA,
 )
 
 DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
-CALIBRATION_DATA = "ui/calibration_data"
 PROTOCOL_RUNNING = "microdrop/protocol_running"
 ROUTES_EXECUTING = "ui/device_viewer/routes_executing"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"

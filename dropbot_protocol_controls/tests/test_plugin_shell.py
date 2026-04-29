@@ -35,3 +35,19 @@ def test_plugin_contributes_voltage_and_frequency_columns():
 
     assert "voltage" in col_ids
     assert "frequency" in col_ids
+
+
+def test_actor_topic_routing_contributes_calibration_listener():
+    """The plugin contributes ACTOR_TOPIC_DICT routing the
+    calibration_data_listener actor to the CALIBRATION_DATA topic, so
+    MessageRouterPlugin.start() wires the subscription automatically."""
+    from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
+    from dropbot_protocol_controls.consts import (
+        ACTOR_TOPIC_DICT, CALIBRATION_LISTENER_ACTOR_NAME,
+    )
+    from device_viewer.consts import CALIBRATION_DATA
+
+    p = DropbotProtocolControlsPlugin()
+    assert p.actor_topic_routing == [ACTOR_TOPIC_DICT]
+    assert ACTOR_TOPIC_DICT[CALIBRATION_LISTENER_ACTOR_NAME] == [CALIBRATION_DATA]
+    assert CALIBRATION_LISTENER_ACTOR_NAME == "calibration_data_listener"
