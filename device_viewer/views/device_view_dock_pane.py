@@ -66,7 +66,8 @@ from microdrop_utils.pyside_helpers import (
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from protocol_grid.consts import CALIBRATION_DATA, DEVICE_VIEWER_STATE_CHANGED, STEP_PARAMS_COMMIT
+from protocol_grid.consts import CALIBRATION_DATA, STEP_PARAMS_COMMIT
+from ..consts import DEVICE_VIEWER_STATE_CHANGED
 from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (

@@ -11,14 +11,17 @@ from dropbot_controller.consts import (
     SHORTS_DETECTED, HALTED,
 )
 # Device-viewer topics — canonical home (re-exported by protocol_grid.consts for back-compat).
+# Once protocol_grid is deleted in PPT-9, these stay; the re-exports go away.
 DEVICE_VIEWER_STATE_CHANGED    = "ui/device_viewer/state_changed"
 DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
 
-# Shared topics used by device_viewer actor subscriptions (defined here to avoid circular imports
-# with protocol_grid.consts, which re-exports the device_viewer topics above).
+# Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
+# imported from protocol_grid.consts) to avoid the circular import that would otherwise form
+# now that protocol_grid.consts re-exports the device_viewer topics above. Duplicated as literals
+# in protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
 PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
 PROTOCOL_RUNNING               = "microdrop/protocol_running"
 
