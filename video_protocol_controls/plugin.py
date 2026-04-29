@@ -1,10 +1,9 @@
 """VideoProtocolControlsPlugin — contributes video/capture/record
 columns to the pluggable protocol tree.
 
-Sibling plugin to device_viewer; depends on device_viewer for topic
-constants (DEVICE_VIEWER_* topics). Loaded as part of FRONTEND_PLUGINS
-in examples/plugin_consts.py (column declarations are a UI concern;
-backend handlers stay in device_viewer).
+Loaded as part of FRONTEND_PLUGINS in examples/plugin_consts.py.
+Tasks 3-5 will fill in the columns and add the device_viewer.consts
+topic-import dependency; until then this is a pure scaffold.
 """
 
 from envisage.plugin import Plugin

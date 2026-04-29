@@ -9,13 +9,6 @@ def test_can_import_plugin():
     assert p.id.endswith(".plugin")
 
 
-def test_plugin_instantiates_with_no_columns_yet():
-    from video_protocol_controls.plugin import VideoProtocolControlsPlugin
-    p = VideoProtocolControlsPlugin()
-    assert hasattr(p, "id")
-    assert hasattr(p, "name")
-
-
 def test_plugin_contributes_zero_columns():
     """The plugin's contributed_protocol_columns default factory yields
     an empty list. Column count will grow as Tasks 3/4/5 land."""
