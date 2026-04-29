@@ -3,8 +3,8 @@ import json
 import dramatiq
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from protocol_grid.consts import DEVICE_VIEWER_CAMERA_ACTIVE, DEVICE_VIEWER_SCREEN_CAPTURE, \
-    DEVICE_VIEWER_SCREEN_RECORDING
+from device_viewer.consts import (DEVICE_VIEWER_CAMERA_ACTIVE, DEVICE_VIEWER_SCREEN_CAPTURE,
+                                   DEVICE_VIEWER_SCREEN_RECORDING)
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__, 'DEBUG')

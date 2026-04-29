@@ -10,8 +10,17 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     SHORTS_DETECTED, HALTED,
 )
-from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_SCREEN_CAPTURE, DEVICE_VIEWER_CAMERA_ACTIVE, DEVICE_VIEWER_SCREEN_RECORDING, \
-    PROTOCOL_RUNNING
+# Device-viewer topics — canonical home (re-exported by protocol_grid.consts for back-compat).
+DEVICE_VIEWER_STATE_CHANGED    = "ui/device_viewer/state_changed"
+DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
+DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
+DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
+DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+
+# Shared topics used by device_viewer actor subscriptions (defined here to avoid circular imports
+# with protocol_grid.consts, which re-exports the device_viewer topics above).
+PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
+PROTOCOL_RUNNING               = "microdrop/protocol_running"
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
