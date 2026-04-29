@@ -266,7 +266,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         )
 
         self._router = None
-        self._dramatiq_worker = None
 
         # Per-step / per-phase timing state. Mutated from GUI thread only.
         self._step_index = 0
@@ -340,7 +339,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             from microdrop_utils.dramatiq_pub_sub_helpers import (
                 MessageRouterActor,
             )
-            from dramatiq import Worker
 
             broker = dramatiq.get_broker()
             broker.flush_all()
@@ -426,8 +424,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 )
 
             self._router = router
-            self._dramatiq_worker = Worker(broker, worker_timeout=100)
-            self._dramatiq_worker.start()
         except ValueError as e:
             if "already registered" not in str(e):
                 logger.warning("Demo Dramatiq routing setup failed: %s", e)
@@ -680,11 +676,3 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         w = cls(config)
         w.show()
         return app.exec()
-
-    def closeEvent(self, event):
-        if self._dramatiq_worker is not None:
-            try:
-                self._dramatiq_worker.stop()
-            except Exception:
-                logger.exception("Error stopping demo dramatiq worker")
-        super().closeEvent(event)
