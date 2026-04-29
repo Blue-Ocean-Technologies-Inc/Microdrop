@@ -98,14 +98,14 @@ def test_view_class_attributes_are_set():
     assert view.hidden_by_default is False
 
 
-def test_serialize_and_deserialize_are_identity_none():
+def test_serialize_drops_value_to_none_and_deserialize_returns_float_placeholder():
     model = ForceColumnModel(
         col_id="force", col_name="Force (mN/m)", default_value=0.0,
     )
     assert model.serialize(123.4) is None
-    assert model.deserialize("anything") is None
     assert model.serialize(None) is None
-    assert model.deserialize(None) is None
+    assert model.deserialize("anything") == 0.0
+    assert model.deserialize(None) == 0.0
 
 
 def test_view_dependency_declarations_are_present():
