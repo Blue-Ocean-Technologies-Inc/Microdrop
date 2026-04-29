@@ -126,7 +126,7 @@ def _slug(label: str) -> str:
 # planned PPT-11 demo refactor; no actors with that prefix exist yet.
 _DEMO_PREFIXES = (
     "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt11_demo_",
-    "ppt12_demo_", "ppt_vf_demo_",
+    "ppt12_demo_", "ppt_vf_demo_", "integration_demo_",
 )
 
 
@@ -232,10 +232,16 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.manager = RowManager(columns=config.columns_factory())
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
+        # Side panel widget if side_panel_factory yielded one, else None.
+        # post_build_setup callbacks should reach the side panel via this
+        # attribute rather than walking the central widget's children.
+        self._side_panel = None
+
         # Central layout: just the tree, OR a splitter with tree + side panel.
         if self.config.side_panel_factory is not None:
             side = self.config.side_panel_factory(self.manager)
             if side is not None:
+                self._side_panel = side
                 splitter = QSplitter(Qt.Horizontal)
                 splitter.addWidget(self.widget)
                 splitter.addWidget(side)

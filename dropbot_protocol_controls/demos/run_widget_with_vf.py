@@ -118,8 +118,7 @@ def _post_build(window):
     """Wire the side-panel: device viewer follows the tree's current
     selection AND the executor's currently-running step. Bind the
     module-level overlay target to this window's device viewer."""
-    central = window.centralWidget()
-    device_view = central.widget(1)
+    device_view = window._side_panel
     _overlay_target["viewer"] = device_view
 
     sel_model = window.widget.tree.selectionModel()

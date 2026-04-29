@@ -486,7 +486,8 @@ def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
 
 
 def test_window_no_side_panel_uses_tree_as_central(qapp):
-    """When side_panel_factory is None, the central widget IS the tree."""
+    """When side_panel_factory is None, the central widget IS the tree
+    and _side_panel is None."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -494,24 +495,28 @@ def test_window_no_side_panel_uses_tree_as_central(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
     assert w.centralWidget() is w.widget
+    assert w._side_panel is None
 
 
 def test_window_side_panel_uses_splitter(qapp):
     """When side_panel_factory returns a widget, central is a splitter
-    holding tree + side panel."""
+    holding tree + side panel, AND the side widget is exposed at
+    w._side_panel for post_build_setup callbacks."""
     from pyface.qt.QtWidgets import QLabel, QSplitter
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
+    side_widget = QLabel("side")
     cfg = DemoConfig(
         columns_factory=lambda: [make_type_column()],
-        side_panel_factory=lambda rm: QLabel("side"),
+        side_panel_factory=lambda rm: side_widget,
     )
     w = BasePluggableProtocolDemoWindow(cfg)
     central = w.centralWidget()
     assert isinstance(central, QSplitter)
     assert central.count() == 2   # tree + side panel
+    assert w._side_panel is side_widget
 
 
 def test_clear_all_highlights_resets_status(qapp):
@@ -552,6 +557,7 @@ def test_purge_stale_subscribers_only_touches_demo_prefixes(qapp):
     assert _is_purgable_demo_actor_name("ppt5_demo_magnet_responder")
     assert _is_purgable_demo_actor_name("ppt12_demo_voltage_listener")
     assert _is_purgable_demo_actor_name("ppt_vf_demo_spy")
+    assert _is_purgable_demo_actor_name("integration_demo_overlay_listener")
     # Real listeners — must NOT be purgable.
     assert not _is_purgable_demo_actor_name("dropbot_controller_listener")
     assert not _is_purgable_demo_actor_name(

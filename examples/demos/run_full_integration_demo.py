@@ -64,12 +64,12 @@ from peripheral_protocol_controls.protocol_columns.magnet_column import (
 
 # Module-level overlay listener — captures the device viewer via a
 # global hook set by the post_build_setup callback. The actor name uses
-# the integration demo's own slot in _DEMO_PREFIXES (ppt12_demo_*) so the
-# stale-subscriber purger handles it correctly.
+# the dedicated `integration_demo_*` slot in `_DEMO_PREFIXES` so the
+# stale-subscriber purger handles leftover entries correctly.
 _overlay_target = {"viewer": None}
 
 
-@dramatiq.actor(actor_name="ppt12_demo_integration_overlay_listener",
+@dramatiq.actor(actor_name="integration_demo_overlay_listener",
                 queue_name="default")
 def _overlay_listener(message: str, topic: str, timestamp: float = None):
     viewer = _overlay_target["viewer"]
@@ -132,15 +132,14 @@ def _routing_setup(router):
     subscribe_magnet_responder(router)
     router.message_router_data.add_subscriber_to_topic(
         topic=ELECTRODES_STATE_CHANGE,
-        subscribing_actor_name="ppt12_demo_integration_overlay_listener",
+        subscribing_actor_name="integration_demo_overlay_listener",
     )
 
 
 def _post_build(window):
     """Wire the side-panel: device viewer follows the tree's current
     selection AND the executor's currently-running step."""
-    central = window.centralWidget()
-    device_view = central.widget(1)
+    device_view = window._side_panel
     _overlay_target["viewer"] = device_view
 
     sel_model = window.widget.tree.selectionModel()

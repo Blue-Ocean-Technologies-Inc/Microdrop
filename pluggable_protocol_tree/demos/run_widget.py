@@ -111,11 +111,7 @@ def _post_build(window):
     the tree's current selection AND the executor's currently-running step.
     Also bind the module-level overlay listener target to this window's
     device viewer."""
-    # Find the device viewer in the splitter (it's the right widget).
-    central = window.centralWidget()
-    # The base wraps tree + side panel in a QSplitter when side_panel_factory
-    # is provided. The side panel is the second widget.
-    device_view = central.widget(1)
+    device_view = window._side_panel
     _overlay_target["viewer"] = device_view
 
     sel_model = window.widget.tree.selectionModel()
