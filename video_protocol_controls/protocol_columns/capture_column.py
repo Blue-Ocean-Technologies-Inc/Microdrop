@@ -29,6 +29,11 @@ from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
+# TODO(PPT-9): ProtocolPreferences / StepTime currently live in protocol_grid;
+# when PPT-9 deletes that plugin they will move to a shared module
+# (likely microdrop_utils or a new protocol_prefs package). Update this
+# import then — this is the only backwards reach into protocol_grid from
+# video_protocol_controls.
 from protocol_grid.preferences import ProtocolPreferences, StepTime
 
 
@@ -49,9 +54,10 @@ class CaptureHandler(BaseColumnHandler):
 
     Fire timing is fixed at handler construction by reading
     ProtocolPreferences().capture_time. Mid-protocol pref edits do NOT take
-    effect — matches PPT-4's voltage column which similarly snapshots the
-    last_voltage pref at factory time. To pick up a new pref, recreate the
-    column (which happens on plugin re-load).
+    effect — to pick up a new pref, recreate the column (which happens on
+    plugin re-load). Conceptually similar to how PPT-4's make_voltage_column
+    reads ProtocolPreferences.last_voltage at factory time, though that
+    column stores the value as a model default rather than a handler trait.
 
     This handler has no cross-step state (no scratch key). Each step is
     fully independent — if row.capture is True, the event fires; if False,
