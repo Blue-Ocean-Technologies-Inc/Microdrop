@@ -15,7 +15,7 @@ from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 
 from .consts import PKG, PKG_name
-from .protocol_columns import make_video_column
+from .protocol_columns import make_video_column, make_record_column
 
 
 logger = get_logger(__name__)
@@ -30,4 +30,4 @@ class VideoProtocolControlsPlugin(Plugin):
     )
 
     def _contributed_protocol_columns_default(self):
-        return [make_video_column()]
+        return [make_video_column(), make_record_column()]
