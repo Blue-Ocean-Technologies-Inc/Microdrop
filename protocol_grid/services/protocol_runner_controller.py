@@ -774,20 +774,32 @@ class ProtocolRunnerController(QObject):
             logger.info(f"Realtime mode was off before protocol start; turning it on...")
             publish_message(topic=SET_REALTIME_MODE, message=str(True))
 
-        else:
-            user_choice = confirm(
+        elif self.protocol_preferences.prompt_to_restore_realtime_mode:
+            user_choice, remember = confirm(
                 None,
                 title="Keep Realtime Mode Enabled Post-Protocol?",
                 message="<b>Realtime mode is currently ON.</b><br><br>Would you like to keep it enabled after the protocol finishes?",
-                cancel=False
+                cancel=False,
+                checkbox_text="Don't ask again (can be changed in preferences)"
             )
 
             if user_choice == YES:
                 logger.warning("Keeping Realtime Mode Enabled Post-Protocol.")
-
-            elif user_choice == NO:
+                self._restore_realtime_mode = True
+            else:
                 logger.info("Realtime Mode Disabled Post-Protocol.")
-                self._restore_realtime_mode = False # user wants realtime restoration changed to False
+                self._restore_realtime_mode = False
+
+            if remember:
+                self.protocol_preferences.prompt_to_restore_realtime_mode = False
+                self.protocol_preferences.keep_realtime_mode_after_protocol = self._restore_realtime_mode
+        else:
+            # Use the saved preference if prompt is disabled
+            self._restore_realtime_mode = self.protocol_preferences.keep_realtime_mode_after_protocol
+            if self._restore_realtime_mode:
+                logger.info("Automatically keeping Realtime Mode Enabled (per user preference).")
+            else:
+                logger.info("Automatically disabling Realtime Mode after protocol (per user preference).")
 
         # Get the fully calculated camera schedule
         video_on_mask, offset_seconds_arr = self._prepare_camera_schedule()
