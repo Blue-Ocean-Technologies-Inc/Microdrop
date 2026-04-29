@@ -53,7 +53,10 @@ from dropbot_protocol_controls.protocol_columns.voltage_column import (
     make_voltage_column,
 )
 
-from peripheral_controller.consts import MAGNET_APPLIED
+from peripheral_controller.consts import MAGNET_APPLIED, PROTOCOL_SET_MAGNET
+from peripheral_protocol_controls.demos.run_widget_magnet_demo import (
+    _fmt_magnet_height,
+)
 from peripheral_protocol_controls.demos.magnet_responder import (
     subscribe_demo_responder as subscribe_magnet_responder,
 )
@@ -163,6 +166,7 @@ config = DemoConfig(
         StatusReadout("Frequency", FREQUENCY_APPLIED, lambda m: f"{int(m)} Hz"),
         StatusReadout("Magnet",    MAGNET_APPLIED,
                       lambda m: "engaged" if m == "1" else "retracted"),
+        StatusReadout("Magnet Height", PROTOCOL_SET_MAGNET, _fmt_magnet_height),
     ],
     side_panel_factory=lambda rm: SimpleDeviceViewer(rm),
     post_build_setup=_post_build,

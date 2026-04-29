@@ -3,6 +3,7 @@
 Run: pixi run python -m peripheral_protocol_controls.demos.run_widget_magnet_demo
 """
 
+import json
 import logging
 
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
@@ -14,13 +15,30 @@ from pluggable_protocol_tree.demos.base_demo_window import (
 )
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
-from peripheral_controller.consts import MAGNET_APPLIED
+from peripheral_controller.consts import MAGNET_APPLIED, PROTOCOL_SET_MAGNET
 from peripheral_protocol_controls.demos.magnet_responder import (
     subscribe_demo_responder,
 )
 from peripheral_protocol_controls.protocol_columns.magnet_column import (
     make_magnet_column,
 )
+
+
+def _fmt_magnet_height(message: str) -> str:
+    """Parse the PROTOCOL_SET_MAGNET request payload and render the
+    requested height. The MAGNET_APPLIED ack itself is just '0'/'1'
+    (production wire format), so we read the height from the request
+    topic — under the demo responder the two arrive within ~50 ms."""
+    try:
+        payload = json.loads(message)
+    except (TypeError, ValueError):
+        return "—"
+    if not payload.get("on"):
+        return "—"
+    height = payload.get("height_mm", 0.0)
+    if height == 0.0:
+        return "Default"   # sentinel meaning "use live pref"
+    return f"{height:.1f} mm"
 
 
 def _columns():
@@ -58,6 +76,7 @@ config = DemoConfig(
     status_readouts=[
         StatusReadout("Magnet", MAGNET_APPLIED,
                       lambda m: "engaged" if m == "1" else "retracted"),
+        StatusReadout("Magnet Height", PROTOCOL_SET_MAGNET, _fmt_magnet_height),
     ],
 )
 
