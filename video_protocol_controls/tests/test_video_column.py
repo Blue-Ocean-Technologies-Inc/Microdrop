@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from traits.api import HasTraits
 
 from video_protocol_controls.protocol_columns.video_column import (
-    VideoColumnModel, VideoHandler, make_video_column, _SCRATCH_KEY,
+    VideoColumnModel, VideoHandler, make_video_column, VIDEO_CAMERA_ON_KEY,
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from device_viewer.consts import DEVICE_VIEWER_CAMERA_ACTIVE
@@ -86,7 +86,7 @@ def test_on_pre_step_no_publish_when_state_unchanged_false():
     row.video = False
 
     ctx = MagicMock()
-    ctx.protocol.scratch = {_SCRATCH_KEY: False}
+    ctx.protocol.scratch = {VIDEO_CAMERA_ON_KEY: False}
 
     with patch(
         "video_protocol_controls.protocol_columns.video_column.publish_message"
@@ -94,7 +94,25 @@ def test_on_pre_step_no_publish_when_state_unchanged_false():
         handler.on_pre_step(row, ctx)
 
     mock_pub.assert_not_called()
-    assert ctx.protocol.scratch[_SCRATCH_KEY] is False
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is False
+
+
+def test_on_pre_step_no_publish_when_state_unchanged_true():
+    """video=True and last=True → no publish (symmetric to the False case)."""
+    handler = VideoHandler()
+    row = MagicMock()
+    row.video = True
+
+    ctx = MagicMock()
+    ctx.protocol.scratch = {VIDEO_CAMERA_ON_KEY: True}
+
+    with patch(
+        "video_protocol_controls.protocol_columns.video_column.publish_message"
+    ) as mock_pub:
+        handler.on_pre_step(row, ctx)
+
+    mock_pub.assert_not_called()
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is True
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +126,7 @@ def test_on_pre_step_publishes_true_on_flip_on():
     row.video = True
 
     ctx = MagicMock()
-    ctx.protocol.scratch = {_SCRATCH_KEY: False}
+    ctx.protocol.scratch = {VIDEO_CAMERA_ON_KEY: False}
 
     published = []
     with patch(
@@ -118,7 +136,7 @@ def test_on_pre_step_publishes_true_on_flip_on():
         handler.on_pre_step(row, ctx)
 
     assert published == [{"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "true"}]
-    assert ctx.protocol.scratch[_SCRATCH_KEY] is True
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is True
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +150,7 @@ def test_on_pre_step_publishes_false_on_flip_off():
     row.video = False
 
     ctx = MagicMock()
-    ctx.protocol.scratch = {_SCRATCH_KEY: True}
+    ctx.protocol.scratch = {VIDEO_CAMERA_ON_KEY: True}
 
     published = []
     with patch(
@@ -142,7 +160,7 @@ def test_on_pre_step_publishes_false_on_flip_off():
         handler.on_pre_step(row, ctx)
 
     assert published == [{"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "false"}]
-    assert ctx.protocol.scratch[_SCRATCH_KEY] is False
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is False
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +196,7 @@ def test_on_pre_step_rearming_across_three_calls():
     assert published[0] == {"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "true"}
     assert published[1] == {"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "false"}
     assert published[2] == {"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "true"}
-    assert ctx.protocol.scratch[_SCRATCH_KEY] is True
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is True
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +209,7 @@ def test_on_protocol_end_publishes_false_when_camera_was_on():
 
     # on_protocol_end receives a ProtocolContext; scratch is ctx.scratch directly.
     ctx = MagicMock()
-    ctx.scratch = {_SCRATCH_KEY: True}
+    ctx.scratch = {VIDEO_CAMERA_ON_KEY: True}
 
     published = []
     with patch(
@@ -201,7 +219,7 @@ def test_on_protocol_end_publishes_false_when_camera_was_on():
         handler.on_protocol_end(ctx)
 
     assert published == [{"topic": DEVICE_VIEWER_CAMERA_ACTIVE, "message": "false"}]
-    assert ctx.scratch[_SCRATCH_KEY] is False
+    assert ctx.scratch[VIDEO_CAMERA_ON_KEY] is False
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +231,7 @@ def test_on_protocol_end_noop_when_camera_was_off():
     handler = VideoHandler()
 
     ctx = MagicMock()
-    ctx.scratch = {_SCRATCH_KEY: False}
+    ctx.scratch = {VIDEO_CAMERA_ON_KEY: False}
 
     with patch(
         "video_protocol_controls.protocol_columns.video_column.publish_message"
