@@ -13,7 +13,7 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
 from microdrop_utils.ureg_helpers import ureg
 
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
-from protocol_grid.services.force_calculation_service import ForceCalculationService
+from dropbot_protocol_controls.services.force_math import force_for_step
 from template_status_and_controls.base_model import BaseStatusModel
 
 from logger.logger_service import get_logger
@@ -150,7 +150,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
         if math.isnan(self.voltage_readback.magnitude) or math.isnan(self.c_device.magnitude):
             self.force = ureg("nan mN/m")
             return
-        force = ForceCalculationService.calculate_force_for_step(
+        force = force_for_step(
             self.voltage_readback.magnitude, self.c_device.magnitude
         )
         self.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
