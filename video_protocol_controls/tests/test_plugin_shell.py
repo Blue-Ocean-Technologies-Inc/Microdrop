@@ -9,11 +9,11 @@ def test_can_import_plugin():
     assert p.id.endswith(".plugin")
 
 
-def test_plugin_contributes_zero_columns():
-    """The plugin's contributed_protocol_columns default factory yields
-    an empty list. Column count will grow as Tasks 3/4/5 land."""
+def test_plugin_contributes_one_column():
+    """Task 3 added the Video column — the default factory now yields one entry.
+    Tasks 4 and 5 will bump this to 2 then 3."""
     from video_protocol_controls.plugin import VideoProtocolControlsPlugin
     p = VideoProtocolControlsPlugin()
     cols = p._contributed_protocol_columns_default()
-    assert cols == []
-    assert len(p.contributed_protocol_columns) == 0
+    assert len(cols) == 1
+    assert cols[0].model.col_id == "video"
