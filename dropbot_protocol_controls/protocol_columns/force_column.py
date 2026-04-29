@@ -39,7 +39,12 @@ class ForceColumnModel(BaseColumnModel):
         return None
 
     def deserialize(self, raw):
-        return None
+        # The trait Float(0.0) rejects None; persistence calls
+        # setattr(row, 'force', deserialize(raw)) unconditionally. Return
+        # a valid Float placeholder — the value is meaningless (get_value
+        # always recomputes from cache + row.voltage) but it must satisfy
+        # the trait validator.
+        return 0.0
 
 
 class ForceColumnView(ReadOnlyLabelColumnView):

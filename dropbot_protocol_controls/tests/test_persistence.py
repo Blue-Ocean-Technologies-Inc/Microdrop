@@ -157,23 +157,6 @@ def test_calibration_values_not_in_json_anywhere():
     assert "filler_capacitance_over_area" not in serialized
 
 
-# The two round-trip tests below exercise the from_json path. They expose a
-# soft contract gap between ForceColumnModel.deserialize() returning None and
-# trait_for_row() declaring a strict Float (which rejects None). The persisted
-# value is None per design (serialize() returns None), so deserialize_tree's
-# unconditional `setattr(row, 'force', None)` raises TraitError. Resolving this
-# requires a source change (either accept-None trait or skip-None setattr) and
-# is out of scope for Task 7 (test-only). Xfailed with strict=True so the
-# reveal doesn't silently pass once that fix lands.
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "ForceColumnModel.trait_for_row() returns Float(0.0) which rejects "
-        "the None that deserialize() returns; deserialize_tree unconditionally "
-        "setattrs. Source-side fix needed (accept-None trait or skip None)."
-    ),
-)
 def test_force_round_trip_recomputes_from_voltage_and_cache():
     cache.trait_set(
         liquid_capacitance_over_area=2.0,
@@ -199,13 +182,6 @@ def test_force_round_trip_recomputes_from_voltage_and_cache():
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Same trait/None mismatch as the prior xfail — from_json blows up "
-        "before we can re-set the cache and probe staleness."
-    ),
-)
 def test_force_recomputes_when_cache_set_after_load():
     cache.trait_set(
         liquid_capacitance_over_area=2.0,
