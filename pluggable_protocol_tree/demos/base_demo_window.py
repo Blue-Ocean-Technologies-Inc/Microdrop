@@ -97,6 +97,15 @@ class DemoConfig:
     # Returns a QWidget or None. Called once during window setup.
     side_panel_factory: Callable[[Any], Any] | None = None
 
+    # Demo-specific wiring that needs the constructed window (e.g. wiring
+    # a side-panel widget's set_active_row to the executor's step_started,
+    # or installing a dramatiq actor that captures a window attribute).
+    # Called as the FINAL step of __init__ — all base scaffolding (executor,
+    # status bar, toolbar, routing) is already in place.
+    post_build_setup: Callable[[Any], None] = field(
+        default_factory=lambda: (lambda window: None)
+    )
+
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -186,9 +195,11 @@ import time
 
 from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtWidgets import (
-    QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox,
+    QApplication, QFileDialog, QLabel, QMainWindow,
     QSplitter, QStatusBar, QToolBar,
 )
+
+from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
@@ -308,6 +319,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._wire_button_state_machine()
         self._set_idle_button_state()
 
+        # Final: demo-specific wiring that needs the constructed window.
+        config.post_build_setup(self)
+
     def _setup_dramatiq_routing_internal(self):
         """Wires the standard PPT-3 electrode actuation chain
         (electrode_responder + executor listener for ELECTRODES_STATE_APPLIED).
@@ -422,9 +436,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.setStatusBar(sb)
         self._status_step_label = QLabel("Idle")
         self._status_row_label = QLabel("")
+        self._status_reps_label = QLabel("")
         self._status_step_time_label = QLabel("")
         sb.addWidget(self._status_step_label)
         sb.addWidget(self._status_row_label, stretch=1)
+        sb.addPermanentWidget(self._status_reps_label)
         sb.addPermanentWidget(self._status_step_time_label)
         if self.config.phase_ack_topic is not None:
             self._status_phase_time_label = QLabel("")
@@ -443,7 +459,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         )
         # Status bar updates.
         self.executor.qsignals.step_started.connect(self._on_step_started)
+        self.executor.qsignals.step_finished.connect(self._on_step_finished)
+        self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
+        self.executor.qsignals.protocol_error.connect(self._on_error)
         if self.config.phase_ack_topic is not None:
             self.phase_acked.connect(self._on_phase_ack)
 
@@ -499,6 +518,29 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             text = f"<error: {e}>"
         label_widget.setText(f"{label_prefix}: {text}")
 
+    def _on_step_repetition(self, rep_chain):
+        """Render the active rep context (e.g. "rep 2/3 of 'Wash'") into
+        the status bar. Empty chain (no repeating ancestor) clears."""
+        if not rep_chain:
+            self._status_reps_label.setText("")
+            return
+        parts = [
+            f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
+        ]
+        self._status_reps_label.setText(" · ".join(parts))
+
+    def _on_step_finished(self, _row):
+        # Freeze the elapsed-time labels at the step's actual elapsed.
+        # They stay visible until the next step_started resets to 0.00s.
+        self._refresh_status()
+
+    def _on_error(self, msg):
+        """protocol_error → reset to idle and show a styled error dialog."""
+        self._clear_all_highlights()
+        self._set_idle_button_state()
+        self._tick_timer.stop()
+        error_dialog(parent=self, title="Protocol error", message=str(msg))
+
     def _refresh_status(self):
         if self._step_started_at is None:
             return
@@ -538,7 +580,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.manager.to_json(), f, indent=2)
         except Exception as e:
-            QMessageBox.critical(self, "Save error", str(e))
+            error_dialog(parent=self, title="Save error", message=str(e))
 
     def _load(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -553,7 +595,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 data, columns=self.config.columns_factory(),
             )
         except Exception as e:
-            QMessageBox.critical(self, "Load error", str(e))
+            error_dialog(parent=self, title="Load error", message=str(e))
 
     def _wire_button_state_machine(self):
         self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
@@ -612,6 +654,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._current_row = None
         self._status_step_label.setText("Idle")
         self._status_row_label.setText("")
+        self._status_reps_label.setText("")
         self._status_step_time_label.setText("")
         if self._status_phase_time_label is not None:
             self._status_phase_time_label.setText("")

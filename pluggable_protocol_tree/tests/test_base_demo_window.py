@@ -575,3 +575,125 @@ def test_run_classmethod_returns_int(qapp, monkeypatch):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     rc = BasePluggableProtocolDemoWindow.run(cfg)
     assert rc == 0
+
+
+def test_post_build_setup_called_with_window(qapp):
+    """post_build_setup runs as the final step of __init__ and receives
+    the constructed window. All scaffolding (executor, status bar, toolbar)
+    is already in place at the time it runs."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+
+    captured = {}
+
+    def my_post_build(window):
+        captured["window"] = window
+        # Verify the scaffolding the hook is supposed to be able to use.
+        captured["has_executor"] = window.executor is not None
+        captured["has_toolbar"] = window._toolbar is not None
+        captured["has_status_bar"] = window.statusBar() is not None
+
+    cfg = DemoConfig(
+        columns_factory=lambda: [make_type_column()],
+        post_build_setup=my_post_build,
+    )
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert captured["window"] is w
+    assert captured["has_executor"]
+    assert captured["has_toolbar"]
+    assert captured["has_status_bar"]
+
+
+def test_post_build_setup_default_is_no_op(qapp):
+    """Demos that don't need post-build wiring don't have to specify one."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    # Must not raise.
+    BasePluggableProtocolDemoWindow(cfg)
+
+
+def test_status_bar_has_reps_label(qapp):
+    """The status bar exposes _status_reps_label, initially empty."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert w._status_reps_label.text() == ""
+
+
+def test_step_repetition_renders_chain(qapp):
+    """step_repetition with a non-empty chain renders 'rep i/n of name'."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w.executor.qsignals.step_repetition.emit([("Wash", 2, 3)])
+    assert w._status_reps_label.text() == "rep 2/3 of 'Wash'"
+
+
+def test_step_repetition_empty_chain_clears(qapp):
+    """An empty rep chain clears the reps label."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    w._status_reps_label.setText("rep 1/3 of 'Wash'")
+    w.executor.qsignals.step_repetition.emit([])
+    assert w._status_reps_label.text() == ""
+
+
+def test_step_finished_freezes_step_elapsed_label(qapp):
+    """step_finished calls _refresh_status, which paints the final
+    elapsed value into _status_step_time_label."""
+    import time
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    # Simulate mid-step state: started a known duration ago.
+    w._step_started_at = time.monotonic() - 1.5
+    w.executor.qsignals.step_finished.emit(None)
+    text = w._status_step_time_label.text()
+    assert text.startswith("Step ")
+    assert "1." in text or "1.5" in text   # close enough — within tick window
+
+
+def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
+    """protocol_error → idle button state, tick timer stopped, dialog
+    shown via the styled pyface_wrapper.error helper (NOT raw QMessageBox)."""
+    import pluggable_protocol_tree.demos.base_demo_window as bdw
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    calls = []
+
+    def fake_error_dialog(parent=None, title="", message="", **kwargs):
+        calls.append((title, message))
+
+    monkeypatch.setattr(bdw, "error_dialog", fake_error_dialog)
+
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = bdw.BasePluggableProtocolDemoWindow(cfg)
+    # Simulate a running state, then fire the error.
+    w.executor.qsignals.protocol_started.emit()
+    assert not w._run_action.isEnabled()
+    w.executor.qsignals.protocol_error.emit("kaboom")
+    # Idle state restored.
+    assert w._run_action.isEnabled()
+    assert not w._pause_action.isEnabled()
+    assert not w._stop_action.isEnabled()
+    assert not w._tick_timer.isActive()
+    # Dialog called via the styled wrapper, with the error message.
+    assert calls == [("Protocol error", "kaboom")]
