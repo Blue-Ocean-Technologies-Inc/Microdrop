@@ -204,7 +204,6 @@ class AutoDemoWindow(QMainWindow):
         self._phase_started_at = None
         self._phase_target = None
 
-        self._dramatiq_worker = None
         self._setup_dramatiq_routing()
 
         self._build_status_bar()
@@ -287,7 +286,6 @@ class AutoDemoWindow(QMainWindow):
 
     def _setup_dramatiq_routing(self):
         try:
-            from dramatiq import Worker
             broker = dramatiq.get_broker()
             # Drop any stale messages from a previous crashed run that
             # could be parked on the queue.
@@ -312,8 +310,6 @@ class AutoDemoWindow(QMainWindow):
                 router.message_router_data.add_subscriber_to_topic(
                     topic=topic, subscribing_actor_name=actor,
                 )
-            self._dramatiq_worker = Worker(broker, worker_timeout=100)
-            self._dramatiq_worker.start()
             print("[AUTO ROUTING] dramatiq worker + subscriptions ready",
                   flush=True)
         except Exception as e:
@@ -490,15 +486,7 @@ class AutoDemoWindow(QMainWindow):
             except Exception as e:
                 print(f"[AUTO SHUTDOWN] subscription cleanup failed: {e}",
                       flush=True)
-        # Stop the worker before quitting so the process can exit
-        # cleanly (worker threads aren't daemons).
-        if self._dramatiq_worker is not None:
-            try:
-                self._dramatiq_worker.stop()
-                print("[AUTO SHUTDOWN] dramatiq worker stopped", flush=True)
-            except Exception as e:
-                print(f"[AUTO SHUTDOWN] worker stop failed: {e}", flush=True)
-            self._dramatiq_worker = None
+
         QApplication.instance().setProperty("auto_exit_code", exit_code)
         QTimer.singleShot(self.POST_DONE_QUIT_MS, QApplication.instance().quit)
 
