@@ -17,9 +17,9 @@ def test_plugin_instantiates_with_no_columns_yet():
 from unittest.mock import patch
 
 
-def test_plugin_contributes_voltage_and_frequency_columns():
+def test_plugin_contributes_voltage_frequency_and_force_columns():
     """The plugin's contributed_protocol_columns default factory yields
-    a list containing both voltage and frequency Column instances."""
+    a list containing voltage, frequency, and force Column instances."""
     from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
 
     with patch(
@@ -35,6 +35,7 @@ def test_plugin_contributes_voltage_and_frequency_columns():
 
     assert "voltage" in col_ids
     assert "frequency" in col_ids
+    assert "force" in col_ids
 
 
 def test_actor_topic_routing_contributes_calibration_listener():

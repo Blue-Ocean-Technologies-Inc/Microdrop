@@ -14,6 +14,7 @@ from pluggable_protocol_tree.interfaces.i_column import IColumn
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .protocol_columns.voltage_column import make_voltage_column
 from .protocol_columns.frequency_column import make_frequency_column
+from .protocol_columns.force_column import make_force_column
 
 
 logger = get_logger(__name__)
@@ -30,4 +31,4 @@ class DropbotProtocolControlsPlugin(Plugin):
     )
 
     def _contributed_protocol_columns_default(self):
-        return [make_voltage_column(), make_frequency_column()]
+        return [make_voltage_column(), make_frequency_column(), make_force_column()]
