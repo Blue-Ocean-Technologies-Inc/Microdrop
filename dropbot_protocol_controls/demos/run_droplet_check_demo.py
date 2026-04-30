@@ -41,6 +41,15 @@ from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
 from dropbot_protocol_controls.demos.droplet_detection_responder import (
     DropletDetectionResponder,
 )
+# Side-effect import: instantiates the module-level _dialog_actor_singleton,
+# which registers the @dramatiq.actor for `droplet_check_decision_listener`.
+# In production this happens via DropbotProtocolControlsPlugin's own
+# side-effect import; demos run without the plugin lifecycle, so the
+# import has to be wired here. Without this, the failure dialog's
+# DECISION_REQUEST publishes get DLQ'd with ActorNotFound.
+from dropbot_protocol_controls.services import (  # noqa: F401
+    droplet_check_decision_dialog_actor as _ddialog_actor,
+)
 
 
 # Module-level so the Tools menu can flip its `mode` at runtime and the
