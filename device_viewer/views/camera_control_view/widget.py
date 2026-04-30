@@ -59,12 +59,16 @@ class CameraControlWidget(QWidget):
         video_item: QGraphicsVideoItem,
         scene: ElectrodeScene,
         preferences: Preferences,
+        status_bar_manager=None,
     ):
         super().__init__()
         self.model = model
         self.video_item = video_item
         self.scene = scene
         self.preferences = CameraPreferences(preferences=preferences)
+        # May be None at construction time — the dock pane re-pushes this
+        # once the trait fires `task:window:status_bar_manager`.
+        self.status_bar_manager = status_bar_manager
 
         self.preferences.observe(
             self._preferred_video_format_change, "preferred_video_format"
@@ -587,7 +591,7 @@ class CameraControlWidget(QWidget):
         def _post_image_capture():
             _cache_media_capture(MediaType.IMAGE, str(save_path))
             if show_dialog:
-                _show_media_capture_dialog(MediaType.IMAGE, str(save_path))
+                _show_media_capture_dialog(MediaType.IMAGE, str(save_path), self.status_bar_manager)
 
         worker.signals.save_complete.connect(_post_image_capture)
 
@@ -763,5 +767,5 @@ class CameraControlWidget(QWidget):
         # Show Result
         if recording_output_path and self.show_media_capture_dialog_for_video:
             _show_media_capture_dialog(
-                MediaType.VIDEO, recording_output_path
+                MediaType.VIDEO, recording_output_path, self.status_bar_manager
             )

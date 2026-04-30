@@ -754,11 +754,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
 
         # camera_control_widget code
+        # status_bar_manager is typically None at create_contents time (the
+        # MicrodropTask creates it in activated(), which runs after dock pane
+        # creation). _setup_app_statusbar below re-pushes the manager once
+        # the trait fires.
         self.camera_control_widget = CameraControlWidget(
             self.model,
             self.video_item,
             self.scene,
             self.app_preferences,
+            status_bar_manager=self.task.window.status_bar_manager,
         )
 
         # keep the camera toggled button in sync with the alpha map.
@@ -1204,6 +1209,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
+        # Push the manager to the camera widget now that it exists, so
+        # media-capture notifications can use it directly.
+        self.camera_control_widget.status_bar_manager = event.new
+
         # --- Initialize widgets ---
         self.recording_icon = PulsingLabel(
             icon_str="album",

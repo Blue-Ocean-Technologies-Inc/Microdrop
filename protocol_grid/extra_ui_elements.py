@@ -733,7 +733,7 @@ class DropbotDisconnectedBeforeRunDialog(QDialog):
         layout = QVBoxLayout(self)
         self.setLayout(layout)
 
-        img_path = Path(__file__).parent.parent / "dropbot_status" / "images" / "dropbot-power-usb.png"
+        img_path = Path(__file__).parent.parent / "dropbot_status_and_controls" / "images" / "dropbot-power-usb.png"
 
         html_content = f"""
         <html>
