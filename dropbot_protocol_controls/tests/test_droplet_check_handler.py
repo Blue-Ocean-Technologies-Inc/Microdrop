@@ -151,3 +151,42 @@ def test_detect_payload_is_list_of_int_channels_not_electrode_ids(published):
     sent = json.loads(published[0][1])
     assert sent == [1, 3]                   # sorted, ints
     assert all(isinstance(c, int) for c in sent)
+
+
+# ---------- timeout / error paths ----------
+
+def test_backend_error_response_logs_and_returns(published, caplog):
+    handler = DropletCheckHandler()
+    row = _FakeRow(check_droplets=True, activated_electrodes=["e1"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
+    ctx._wait_responses = [(
+        "dropbot/signals/drops_detected",
+        json.dumps({"success": False, "detected_channels": [], "error": "no proxy"}),
+    )]
+
+    with caplog.at_level("WARNING"):
+        result = handler.on_post_step(row, ctx)
+
+    assert result is None
+    assert any("backend error" in r.message.lower() or "no proxy" in r.message.lower()
+               for r in caplog.records), \
+        f"expected a warning log; got: {[r.message for r in caplog.records]}"
+
+
+def test_wait_for_timeout_logs_and_returns(published, caplog):
+    handler = DropletCheckHandler()
+    row = _FakeRow(check_droplets=True, activated_electrodes=["e1"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
+    ctx._wait_responses = [(
+        "dropbot/signals/drops_detected",
+        TimeoutError("simulated 12s timeout"),
+    )]
+
+    with caplog.at_level("WARNING"):
+        result = handler.on_post_step(row, ctx)
+
+    assert result is None
+    # The detect was published before the wait timed out.
+    assert len(published) == 1
+    assert any("timed out" in r.message.lower() for r in caplog.records), \
+        f"expected timeout log; got: {[r.message for r in caplog.records]}"

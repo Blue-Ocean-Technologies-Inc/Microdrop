@@ -92,7 +92,15 @@ class DropletCheckHandler(BaseColumnHandler):
             return                               # nothing to check
 
         publish_message(topic=DETECT_DROPLETS, message=json.dumps(expected))
-        ack_raw = ctx.wait_for(DROPLETS_DETECTED, timeout=12.0)
+        try:
+            ack_raw = ctx.wait_for(DROPLETS_DETECTED, timeout=12.0)
+        except TimeoutError:
+            logger.warning(
+                "Droplet detection timed out for step %s; proceeding "
+                "(backend handles its own retries internally)",
+                row.uuid,
+            )
+            return                                 # legacy parity
         ack = json.loads(ack_raw)
         if not ack.get("success"):
             logger.warning(
