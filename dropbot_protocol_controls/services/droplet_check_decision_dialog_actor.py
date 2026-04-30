@@ -114,3 +114,8 @@ class DropletCheckDecisionDialogActor(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine,
         )
+
+
+# Module-level singleton — instantiating registers the actor with Dramatiq.
+# Plugin import (above) brings this module in and the actor wakes up.
+_dialog_actor_singleton = DropletCheckDecisionDialogActor()

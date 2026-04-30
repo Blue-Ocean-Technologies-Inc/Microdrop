@@ -75,6 +75,7 @@ from microdrop_utils.dramatiq_controller_base import (  # noqa: E402
 # Source imports — all topic values come from plugin consts.py modules
 # ---------------------------------------------------------------------------
 from dropbot_controller import consts as _dropbot
+from dropbot_protocol_controls import consts as _dpc
 from electrode_controller import consts as _electrode
 from protocol_grid import consts as _protocol
 from device_viewer import consts as _device_viewer
@@ -166,6 +167,9 @@ class UITopics:
     DEVICE_VIEWER_STATE_CHANGED     = _device_viewer.DEVICE_VIEWER_STATE_CHANGED
     PROTOCOL_GRID_DISPLAY_STATE     = _protocol.PROTOCOL_GRID_DISPLAY_STATE
     CALIBRATION_DATA                = _device_viewer.CALIBRATION_DATA
+    # PPT-8 — droplet check decision dialog round-trip
+    DROPLET_CHECK_DECISION_REQUEST  = _dpc.DROPLET_CHECK_DECISION_REQUEST
+    DROPLET_CHECK_DECISION_RESPONSE = _dpc.DROPLET_CHECK_DECISION_RESPONSE
     DEVICE_VIEWER_SCREEN_CAPTURE    = _device_viewer.DEVICE_VIEWER_SCREEN_CAPTURE
     DEVICE_VIEWER_SCREEN_RECORDING  = _device_viewer.DEVICE_VIEWER_SCREEN_RECORDING
     DEVICE_VIEWER_CAMERA_ACTIVE     = _device_viewer.DEVICE_VIEWER_CAMERA_ACTIVE
