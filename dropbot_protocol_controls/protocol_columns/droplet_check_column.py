@@ -8,7 +8,10 @@ Splitting them across files would just spread cohesive logic; see PPT-7's
 force_column.py for the same single-file convention.
 """
 
+import json
+
 from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 logger = get_logger(__name__)
 
@@ -74,15 +77,20 @@ class DropletCheckColumnView(CheckboxColumnView):
 
 
 class DropletCheckHandler(BaseColumnHandler):
-    """Skeleton — Tasks 4–7 fill in on_post_step body."""
+    """Per-step droplet detection handler. Tasks 5–7 add the wait_for and failure flow."""
 
     priority        = 80
     wait_for_topics = [DROPLETS_DETECTED, DROPLET_CHECK_DECISION_RESPONSE]
 
     def on_post_step(self, row, ctx):
-        # Body added in Tasks 4–7. Empty here so column-shape tests
-        # (Task 3) can run without pulling in handler integration tests.
-        return None
+        if not row.check_droplets:
+            return                               # column off → skip silently
+
+        electrode_to_channel = ctx.protocol.scratch.get("electrode_to_channel", {})
+        expected = expected_channels_for_step(row, electrode_to_channel)
+        if not expected:
+            return                               # nothing to check
+        # Tasks 5–7 add publish + wait_for + failure path here.
 
 
 def make_droplet_check_column() -> Column:
