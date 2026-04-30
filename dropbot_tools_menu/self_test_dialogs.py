@@ -400,7 +400,7 @@ class DropbotDisconnectedDialog(QDialog):
 
         img_path = (
             Path(__file__).parent.parent
-            / "dropbot_status"
+            / "dropbot_status_and_controls"
             / "images"
             / "dropbot-power-usb.png"
         )
