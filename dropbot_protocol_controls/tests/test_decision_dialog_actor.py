@@ -1,10 +1,15 @@
 """Tests for DropletCheckDecisionDialogActor.
 
-We patch QTimer.singleShot to invoke immediately (no Qt event loop in
-tests) and patch pyface_wrapper.confirm to return a controllable bool."""
+The actor uses a Qt Signal + QueuedConnection to marshal from the
+Dramatiq worker thread to the main thread. Tests bypass that hop by
+patching the dispatcher's `request_dialog.emit` to invoke the slot
+directly (synchronously, on the test thread). This keeps tests off
+the Qt event loop while still exercising the real
+`_on_request_dialog` slot logic (confirm + publish).
+"""
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -30,17 +35,28 @@ def captured_publishes(monkeypatch):
 
 
 @pytest.fixture
-def immediate_singleshot(monkeypatch):
-    """Replace QTimer.singleShot(delay, fn) with an immediate fn() call so
-    tests don't need a running Qt event loop."""
+def synchronous_dispatch(monkeypatch):
+    """Replace `_dispatch_to_main_thread` with a direct call into the
+    dispatcher's slot, so tests can read captured_publishes /
+    patched_confirm immediately after listener_actor_routine returns
+    without needing a Qt event loop. (PySide6 Signal.emit is read-only,
+    so we hook one level above the signal instead of patching emit.)"""
+    from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
+        DropletCheckDecisionDialogActor,
+    )
+
+    def _direct_dispatch(self, payload):
+        self.dispatcher._on_request_dialog(payload)
+
     monkeypatch.setattr(
-        "dropbot_protocol_controls.services.droplet_check_decision_dialog_actor.QTimer",
-        MagicMock(singleShot=lambda delay, fn: fn()),
+        DropletCheckDecisionDialogActor,
+        "_dispatch_to_main_thread",
+        _direct_dispatch,
     )
 
 
 def test_confirm_returning_true_publishes_continue(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
@@ -61,7 +77,7 @@ def test_confirm_returning_true_publishes_continue(
 
 
 def test_confirm_returning_false_publishes_pause(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
@@ -80,7 +96,7 @@ def test_confirm_returning_false_publishes_pause(
 
 
 def test_dialog_message_includes_expected_detected_missing(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
@@ -100,7 +116,7 @@ def test_dialog_message_includes_expected_detected_missing(
 
 
 def test_step_uuid_round_trips_through_dialog(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
@@ -127,7 +143,7 @@ def test_listener_name_is_pptN_free():
 
 
 def test_payload_missing_step_uuid_is_dropped_no_dialog_shown(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     """Schema guard: a JSON-valid payload missing 'step_uuid' must be
     dropped (warning logged, no dialog, no response published). Otherwise
@@ -150,7 +166,7 @@ def test_payload_missing_step_uuid_is_dropped_no_dialog_shown(
 
 
 def test_payload_missing_other_required_key_is_dropped(
-    patched_confirm, captured_publishes, immediate_singleshot, caplog,
+    patched_confirm, captured_publishes, synchronous_dispatch, caplog,
 ):
     """Same guard for other required keys (expected/detected/missing).
     Verifies the warning log mentions which key is missing."""
@@ -176,7 +192,7 @@ def test_payload_missing_other_required_key_is_dropped(
 
 
 def test_malformed_json_is_dropped_no_dialog_shown(
-    patched_confirm, captured_publishes, immediate_singleshot,
+    patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     """Pre-existing JSON guard verified end-to-end: not just no crash,
     but no Qt scheduling and no response."""
