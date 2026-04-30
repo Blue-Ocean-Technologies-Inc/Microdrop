@@ -105,3 +105,49 @@ def test_missing_electrode_to_channel_in_scratch_treated_as_empty(published):
     # 'e1' can't map to a channel → expected is empty → short-circuit.
     assert result is None
     assert published == []
+
+
+# ---------- happy path ----------
+
+def test_happy_path_publishes_detect_and_returns_on_success_match(published):
+    handler = DropletCheckHandler()
+    row = _FakeRow(
+        check_droplets=True,
+        activated_electrodes=["e1", "e2"],
+    )
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
+    ctx._wait_responses = [(
+        # backend returns BOTH expected channels → no failure path
+        "dropbot/signals/drops_detected",
+        json.dumps({"success": True, "detected_channels": [1, 2], "error": ""}),
+    )]
+
+    result = handler.on_post_step(row, ctx)
+
+    assert result is None
+    # one publish: the DETECT_DROPLETS request
+    assert len(published) == 1
+    topic, payload = published[0]
+    assert topic == "dropbot/requests/detect_droplets"
+    assert json.loads(payload) == [1, 2]
+    # one wait_for, on the response topic, with backend timeout
+    assert ctx.wait_for_calls == [(
+        "dropbot/signals/drops_detected", 12.0, None
+    )]
+
+
+def test_detect_payload_is_list_of_int_channels_not_electrode_ids(published):
+    # Critical wire-format check: backend expects List[int].
+    handler = DropletCheckHandler()
+    row = _FakeRow(check_droplets=True, activated_electrodes=["e3", "e1"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e3": 3}))
+    ctx._wait_responses = [(
+        "dropbot/signals/drops_detected",
+        json.dumps({"success": True, "detected_channels": [1, 3], "error": ""}),
+    )]
+
+    handler.on_post_step(row, ctx)
+
+    sent = json.loads(published[0][1])
+    assert sent == [1, 3]                   # sorted, ints
+    assert all(isinstance(c, int) for c in sent)

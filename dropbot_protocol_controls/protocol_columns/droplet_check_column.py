@@ -90,7 +90,22 @@ class DropletCheckHandler(BaseColumnHandler):
         expected = expected_channels_for_step(row, electrode_to_channel)
         if not expected:
             return                               # nothing to check
-        # Tasks 5–7 add publish + wait_for + failure path here.
+
+        publish_message(topic=DETECT_DROPLETS, message=json.dumps(expected))
+        ack_raw = ctx.wait_for(DROPLETS_DETECTED, timeout=12.0)
+        ack = json.loads(ack_raw)
+        if not ack.get("success"):
+            logger.warning(
+                "Droplet detection backend error on step %s: %s; proceeding",
+                row.uuid, ack.get("error"),
+            )
+            return                                 # legacy parity
+
+        detected = [int(c) for c in ack.get("detected_channels", [])]
+        missing  = sorted(set(expected) - set(detected))
+        if not missing:
+            return                                 # all expected → happy path
+        # Failure path comes in Task 7.
 
 
 def make_droplet_check_column() -> Column:
