@@ -115,6 +115,15 @@ class DropletCheckHandler(BaseColumnHandler):
             return                                 # all expected → happy path
 
         # ---- failure path: ask the user via UI round-trip ----
+        # Emit protocol_paused BEFORE the wait_for so the UI freezes
+        # its step/phase timers immediately when missing droplets are
+        # detected — without this, the timer keeps incrementing while
+        # the dialog is up because step_finished hasn't fired yet.
+        # Qt signals are thread-safe to emit from worker threads.
+        qsignals = getattr(ctx.protocol, "qsignals", None)
+        if qsignals is not None:
+            qsignals.protocol_paused.emit()
+
         publish_message(
             topic=DROPLET_CHECK_DECISION_REQUEST,
             message=json.dumps({
@@ -131,23 +140,27 @@ class DropletCheckHandler(BaseColumnHandler):
         )
         decision = json.loads(decision_raw).get("choice")
         if decision == "pause":
-            # Set the executor's pause_event. Effective at the next step
-            # boundary — the executor's main loop sees pause_event.is_set()
-            # before it picks up the next step, emits protocol_paused, and
-            # blocks on wait_cleared() until the user clicks Resume.
-            # Returning normally (instead of raising AbortError) keeps the
-            # current step's lifecycle clean: post_step finishes, the row
-            # is marked done, then the executor pauses BEFORE the next
-            # step. AbortError would tear down the protocol entirely.
+            # Set the executor's pause_event. The executor's main loop
+            # sees pause_event.is_set() at the top of the next iteration
+            # and blocks on wait_cleared() until the user clicks Resume.
+            # We deliberately do NOT emit protocol_resumed here — the UI
+            # stays in the paused state set above.
             logger.info(
                 "User chose to pause after droplet check on step %s; "
-                "pause_event set, executor will stop at next step boundary",
+                "pause_event set, executor will block at next step boundary",
                 row.uuid,
             )
             if ctx.protocol.pause_event is not None:
                 ctx.protocol.pause_event.set()
             return
-        # else "continue" → fall through, executor moves to next step
+        # "continue" → emit resumed so the UI unfreezes timers, then
+        # return; the executor will run the next step.
+        if qsignals is not None:
+            qsignals.protocol_resumed.emit()
+        logger.info(
+            "User chose to continue after droplet check on step %s",
+            row.uuid,
+        )
 
 
 def make_droplet_check_column() -> Column:

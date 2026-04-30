@@ -130,6 +130,14 @@ class ProtocolContext(HasTraits):
     stop_event  = Instance(threading.Event)
     pause_event = Instance("pluggable_protocol_tree.execution.events.PauseEvent")
 
+    # Hooks may emit UI signals (e.g. droplet check publishing
+    # protocol_paused while it waits on a user dialog so the step
+    # timer freezes). Qt signals are thread-safe to emit from worker
+    # threads; the slot runs on the GUI thread via QueuedConnection.
+    qsignals    = Any(desc="ExecutorSignals (QObject) — hooks may emit "
+                           "protocol_paused / protocol_resumed for "
+                           "in-hook waits the UI should reflect")
+
 
 class StepContext(HasTraits):
     """Spans one row's execution.

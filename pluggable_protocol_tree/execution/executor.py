@@ -151,6 +151,7 @@ class ProtocolExecutor(HasTraits):
             columns=cols,
             stop_event=self.stop_event,
             pause_event=self.pause_event,
+            qsignals=self.qsignals,
         )
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
         # into the context's scratch so handlers can reach it without
