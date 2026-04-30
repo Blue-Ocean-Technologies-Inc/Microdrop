@@ -265,10 +265,12 @@ class DropletCheckDecisionDialogActor(HasTraits):
 
 Built on `BasePluggableProtocolDemoWindow` (PPT-12 base), same shape as `run_force_demo.py`. Three steps, each with different activated electrodes, exercising:
 
-| Step | activated_electrodes | check_droplets | Expected behavior |
+The demo's responder defaults to `mode="drop_one"` so the failure path is visible on first run without any menu interaction. Steps:
+
+| Step | activated_electrodes | check_droplets | Expected behavior (default `drop_one` mode) |
 |---|---|---|---|
-| S1 | `["e1", "e2"]` | True | Backend returns `[1, 2]` → all expected present → step passes silently |
-| S2 | `["e3", "e4", "e5"]` | True | Backend returns `[3, 5]` (missing `4`) → dialog appears → user picks |
+| S1 | `["e1", "e2"]` | True | Responder returns `[2]` (missing `1`) → dialog appears → user picks |
+| S2 | `["e3", "e4", "e5"]` | True | Responder returns `[4, 5]` (missing `3`) → dialog appears → user picks |
 | S3 | `["e6"]` | False | Column off → handler short-circuits, no detect/response traffic |
 
 The window seeds `electrode_to_channel = {"e1": 1, "e2": 2, ..., "e6": 6}` into `RowManager.protocol_metadata`.
@@ -284,7 +286,7 @@ Tools
 └── Re-run Protocol               (Ctrl+R)
 ```
 
-Switching the mode re-configures the in-process responder. "Re-run" pokes the executor to start over.
+Switching the mode re-configures the in-process responder. "Re-run" calls `executor.run()` again from step 0 (same protocol, fresh state) so the user can iterate: tweak mode → run → watch dialog → tweak mode → run.
 
 ### `demos/droplet_detection_responder.py`
 
@@ -321,10 +323,12 @@ Wired into the demo via `routing_setup=lambda router: responder.subscribe(router
 ### Demo walkthrough
 
 1. Window opens with 3 steps. Force/Frequency/Voltage columns visible. **Check Droplets column is hidden by default** — header right-click to show it (this exercises hidden-column UI from PPT-3).
-2. Click "Run". S1 passes silently. S2 triggers the dialog: *"Droplet detection failed at the end of the step. Expected: 3, 4, 5. Detected: 3, 5. Missing: 4. Continue?"*
-3. **Continue** → S3 starts immediately, skips droplet check (column off), protocol completes.
-4. **Stay Paused** → executor aborts, `protocol_aborted` signal fires, status bar reflects aborted state.
-5. Tools → Responder Mode → "Always succeed" → Re-run → all three steps pass cleanly.
+2. Click "Run". S1 triggers the dialog (default `drop_one` mode): *"Droplet detection failed at the end of the step. Expected: 1, 2. Detected: 2. Missing: 1. Continue?"*
+3. **Continue** → S2 runs, triggers the dialog again with `Expected: 3, 4, 5. Detected: 4, 5. Missing: 3.` Continue again → S3 starts (skips droplet check, column off), protocol completes.
+4. **Stay Paused** (at any dialog) → executor aborts, `protocol_aborted` signal fires, no further steps run, status bar reflects aborted state.
+5. Tools → Responder Mode → "Always succeed" → Re-run → all three steps pass silently, no dialog. Protocol completes cleanly.
+6. Tools → Responder Mode → "Drop all channels" → Re-run → S1 dialog says `Detected: none. Missing: 1, 2.`; S2 dialog says `Detected: none. Missing: 3, 4, 5.`
+7. Tools → Responder Mode → "Error reply" → Re-run → no dialogs (handler logs the backend error and proceeds); all three steps complete.
 
 ## 7. Tests
 
@@ -379,8 +383,8 @@ Both pipes (legacy and new) will subscribe to `DROPLETS_DETECTED` simultaneously
 
 - [ ] `pixi run python -m dropbot_protocol_controls.demos.run_droplet_check_demo` opens the window with 3 steps and the new column hidden.
 - [ ] Header right-click → "Show Check Droplets" surfaces the column with the expected default values (T, T, F).
-- [ ] Run → S1 passes silently; S2 shows the failure dialog with correct Expected/Detected/Missing values; S3 skips check entirely.
-- [ ] Continue from dialog → S3 runs and protocol completes; Stay Paused → executor aborts.
+- [ ] Run with default `drop_one` responder → S1 and S2 each show the failure dialog with correct Expected/Detected/Missing values; S3 skips check entirely (column off).
+- [ ] Continue through both dialogs → protocol completes after S3; Stay Paused at any dialog → executor aborts, no later steps run.
 - [ ] Tools → Responder Mode → "Always succeed" → Re-run → all 3 steps pass; protocol completes.
 - [ ] All ~41 new unit tests pass + ~3 Redis integration tests pass.
 - [ ] Full PPT-3/4/5/6/7/8 regression sweep is green (one pre-existing flaky `test_run_hooks_fans_same_priority_in_parallel` excepted, confirmed not a regression).
