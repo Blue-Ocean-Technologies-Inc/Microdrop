@@ -153,7 +153,9 @@ class DropletCheckHandler(BaseColumnHandler):
         )
         decision_raw = ctx.wait_for(
             DROPLET_CHECK_DECISION_RESPONSE,
-            timeout=None,                          # block until user answers; stop_event interrupts
+            timeout=86_400.0,                      # 24h — effectively infinite for a user-facing dialog;
+                                                    # stop_event is the real cancellation path. (wait_for
+                                                    # requires a finite float; None would crash deadline math.)
             predicate=lambda payload: json.loads(payload).get("step_uuid") == row.uuid,
         )
         decision = json.loads(decision_raw)["choice"]
@@ -347,7 +349,7 @@ Six new test files in `dropbot_protocol_controls/tests/`:
 
 1. **Mock dialog in unit tests** — `test_decision_dialog_actor.py` patches `microdrop_application.dialogs.pyface_wrapper.confirm` so no actual GUI fires. The Redis integration test does the same — replaces the actor's `_show_dialog_and_respond` with a stub that publishes a pre-decided choice.
 
-2. **`stop_event` interrupts `wait_for(timeout=None)`** — the handler's `wait_for(DROPLET_CHECK_DECISION_RESPONSE, timeout=None)` blocks indefinitely waiting for the user. Tests verify that setting the executor's `stop_event` unblocks it (parent design §10), so a stuck dialog can't wedge the protocol if the user hits Stop.
+2. **`stop_event` interrupts the user-decision wait** — the handler's `wait_for(DROPLET_CHECK_DECISION_RESPONSE, timeout=86_400.0)` is "effectively infinite" for a user-facing dialog. Tests verify that setting the executor's `stop_event` unblocks it via `drain_one`'s stop_event check, so a stuck dialog can't wedge the protocol if the user hits Stop. (Future cleanup: add `timeout=None` support to `wait_for` itself — out of scope here.)
 
 ## 8. What we don't touch
 
