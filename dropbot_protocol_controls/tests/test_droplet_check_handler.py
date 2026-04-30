@@ -190,3 +190,116 @@ def test_wait_for_timeout_logs_and_returns(published, caplog):
     assert len(published) == 1
     assert any("timed out" in r.message.lower() for r in caplog.records), \
         f"expected timeout log; got: {[r.message for r in caplog.records]}"
+
+
+# ---------- failure path: UI round-trip ----------
+
+import pytest
+from pluggable_protocol_tree.execution.exceptions import AbortError
+from dropbot_protocol_controls.consts import (
+    DROPLET_CHECK_DECISION_REQUEST,
+    DROPLET_CHECK_DECISION_RESPONSE,
+)
+
+
+def test_missing_channels_publishes_decision_request_with_payload(published):
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="abc", check_droplets=True,
+                   activated_electrodes=["e1", "e2", "e3"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2, "e3": 3}))
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [1, 3], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "continue"})),
+    ]
+
+    handler.on_post_step(row, ctx)
+
+    assert len(published) == 2
+    detect_topic, _      = published[0]
+    request_topic, body  = published[1]
+    assert detect_topic  == "dropbot/requests/detect_droplets"
+    assert request_topic == DROPLET_CHECK_DECISION_REQUEST
+
+    parsed = json.loads(body)
+    assert parsed["step_uuid"] == "abc"
+    assert parsed["expected"]  == [1, 2, 3]
+    assert parsed["detected"]  == [1, 3]
+    assert parsed["missing"]   == [2]
+
+
+def test_user_chooses_continue_returns_normally(published):
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="abc", check_droplets=True,
+                   activated_electrodes=["e1", "e2"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [1], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "continue"})),
+    ]
+
+    result = handler.on_post_step(row, ctx)
+
+    assert result is None                       # no exception, no return value
+    assert len(ctx.wait_for_calls) == 2         # one for ack, one for decision
+
+
+def test_user_chooses_pause_raises_abort_error(published):
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="abc", check_droplets=True,
+                   activated_electrodes=["e1", "e2"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [1], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "pause"})),
+    ]
+
+    with pytest.raises(AbortError) as exc_info:
+        handler.on_post_step(row, ctx)
+
+    assert "abc" in str(exc_info.value)         # mentions the step uuid
+
+
+def test_decision_wait_uses_predicate_filtering_by_step_uuid(published):
+    # Confirm the predicate accepts matching step_uuid and rejects others.
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="THIS_STEP", check_droplets=True,
+                   activated_electrodes=["e1"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "THIS_STEP", "choice": "continue"})),
+    ]
+
+    handler.on_post_step(row, ctx)
+
+    # Inspect the predicate used for the second wait_for call.
+    _, _, predicate = ctx.wait_for_calls[1]
+    assert predicate is not None
+    # Matching uuid → True; mismatched → False.
+    assert predicate(json.dumps({"step_uuid": "THIS_STEP", "choice": "x"})) is True
+    assert predicate(json.dumps({"step_uuid": "OTHER_STEP", "choice": "x"})) is False
+
+
+def test_decision_wait_uses_24h_timeout(published):
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="abc", check_droplets=True, activated_electrodes=["e1"])
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "continue"})),
+    ]
+
+    handler.on_post_step(row, ctx)
+
+    _, timeout, _ = ctx.wait_for_calls[1]
+    assert timeout == 86_400.0                  # spec § 4 design note

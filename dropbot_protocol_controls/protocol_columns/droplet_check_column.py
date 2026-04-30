@@ -12,6 +12,7 @@ import json
 
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from pluggable_protocol_tree.execution.exceptions import AbortError
 
 logger = get_logger(__name__)
 
@@ -113,7 +114,28 @@ class DropletCheckHandler(BaseColumnHandler):
         missing  = sorted(set(expected) - set(detected))
         if not missing:
             return                                 # all expected → happy path
-        # Failure path comes in Task 7.
+
+        # ---- failure path: ask the user via UI round-trip ----
+        publish_message(
+            topic=DROPLET_CHECK_DECISION_REQUEST,
+            message=json.dumps({
+                "step_uuid": row.uuid,
+                "expected":  expected,
+                "detected":  detected,
+                "missing":   missing,
+            }),
+        )
+        decision_raw = ctx.wait_for(
+            DROPLET_CHECK_DECISION_RESPONSE,
+            timeout=86_400.0,                    # 24h "effectively infinite"; stop_event interrupts
+            predicate=lambda payload: json.loads(payload).get("step_uuid") == row.uuid,
+        )
+        decision = json.loads(decision_raw).get("choice")
+        if decision == "pause":
+            raise AbortError(
+                f"User chose to pause after droplet check on step {row.uuid}"
+            )
+        # else "continue" → fall through, executor moves to next step
 
 
 def make_droplet_check_column() -> Column:
