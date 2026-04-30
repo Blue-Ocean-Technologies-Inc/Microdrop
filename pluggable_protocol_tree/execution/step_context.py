@@ -116,11 +116,19 @@ class ProtocolContext(HasTraits):
     ``stop_event`` lets long-running CPU hooks check for Stop without
     going through ctx.wait_for; e.g.
     ``while not ctx.protocol.stop_event.is_set(): ...``.
+
+    The ``pause_event`` lets a hook request a pause that takes effect
+    at the next step boundary (executor checks it between steps and
+    blocks until cleared). Setting it directly is equivalent to the
+    user clicking Pause in the UI; the executor's main loop emits the
+    protocol_paused / protocol_resumed signals from a single place so
+    UI state stays consistent regardless of who set the event.
     """
-    columns    = List(Instance(IColumn))
-    scratch    = Dict(Str, Any,
-                      desc="protocol-scoped scratch (cleared on each run)")
-    stop_event = Instance(threading.Event)
+    columns     = List(Instance(IColumn))
+    scratch     = Dict(Str, Any,
+                       desc="protocol-scoped scratch (cleared on each run)")
+    stop_event  = Instance(threading.Event)
+    pause_event = Instance("pluggable_protocol_tree.execution.events.PauseEvent")
 
 
 class StepContext(HasTraits):

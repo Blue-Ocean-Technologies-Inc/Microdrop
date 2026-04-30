@@ -11,7 +11,7 @@ from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
 
 
 class _FakeRow(HasTraits):
-    activated_electrodes = List(Str)
+    electrodes = List(Str)
     routes               = List  # List[List[Str]]
 
 
@@ -23,8 +23,8 @@ def test_empty_step_returns_empty_list():
     assert expected_channels_for_step(_FakeRow(), MAP) == []
 
 
-def test_only_activated_electrodes():
-    row = _FakeRow(activated_electrodes=["e1", "e2"])
+def test_only_electrodes():
+    row = _FakeRow(electrodes=["e1", "e2"])
     assert expected_channels_for_step(row, MAP) == [1, 2]
 
 
@@ -35,7 +35,7 @@ def test_only_routes_takes_last_electrode_of_each():
 
 def test_activated_and_routes_are_unioned():
     row = _FakeRow(
-        activated_electrodes=["e1"],
+        electrodes=["e1"],
         routes=[["e2", "e3"]],
     )
     assert expected_channels_for_step(row, MAP) == [1, 3]
@@ -44,20 +44,20 @@ def test_activated_and_routes_are_unioned():
 def test_duplicate_channels_are_deduplicated():
     # Activated includes e3, route also ends at e3.
     row = _FakeRow(
-        activated_electrodes=["e1", "e3"],
+        electrodes=["e1", "e3"],
         routes=[["e2", "e3"]],
     )
     assert expected_channels_for_step(row, MAP) == [1, 3]
 
 
 def test_result_is_sorted():
-    row = _FakeRow(activated_electrodes=["e5", "e2", "e4", "e1"])
+    row = _FakeRow(electrodes=["e5", "e2", "e4", "e1"])
     assert expected_channels_for_step(row, MAP) == [1, 2, 4, 5]
 
 
 def test_unknown_electrode_id_is_silently_dropped():
     # 'e99' isn't in the mapping — drop it, don't crash.
-    row = _FakeRow(activated_electrodes=["e1", "e99", "e2"])
+    row = _FakeRow(electrodes=["e1", "e99", "e2"])
     assert expected_channels_for_step(row, MAP) == [1, 2]
 
 
@@ -74,5 +74,5 @@ def test_empty_route_inside_routes_list_is_skipped():
 
 
 def test_empty_mapping_returns_empty_list_even_with_inputs():
-    row = _FakeRow(activated_electrodes=["e1"], routes=[["e2", "e3"]])
+    row = _FakeRow(electrodes=["e1"], routes=[["e2", "e3"]])
     assert expected_channels_for_step(row, {}) == []

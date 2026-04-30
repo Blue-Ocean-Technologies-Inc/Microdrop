@@ -148,7 +148,9 @@ class ProtocolExecutor(HasTraits):
         import time as _time
         cols = list(self.row_manager.columns)
         proto_ctx = ProtocolContext(
-            columns=cols, stop_event=self.stop_event,
+            columns=cols,
+            stop_event=self.stop_event,
+            pause_event=self.pause_event,
         )
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
         # into the context's scratch so handlers can reach it without
@@ -169,9 +171,16 @@ class ProtocolExecutor(HasTraits):
                     break
                 if self.pause_event.is_set():
                     logger.info("Protocol paused at step %d", step_index + 1)
+                    # Emit signal here so EVERY pause path (UI button via
+                    # executor.pause(), hook via ctx.protocol.pause_event.set(),
+                    # etc.) updates the UI consistently. executor.pause()
+                    # also emits, so UI button paths emit twice, which is
+                    # harmless (idempotent state transition).
+                    self.qsignals.protocol_paused.emit()
                     self.pause_event.wait_cleared()
                     if self.stop_event.is_set():
                         break
+                    self.qsignals.protocol_resumed.emit()
                     logger.info("Protocol resumed")
 
                 step_index += 1

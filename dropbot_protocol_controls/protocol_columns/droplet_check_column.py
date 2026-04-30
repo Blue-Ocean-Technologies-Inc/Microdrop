@@ -12,7 +12,6 @@ import json
 
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from pluggable_protocol_tree.execution.exceptions import AbortError
 
 logger = get_logger(__name__)
 
@@ -28,7 +27,7 @@ def expected_channels_for_step(row, electrode_to_channel: dict) -> list:
     rather than raising — same behavior as legacy.
     """
     expected = set()
-    for eid in (row.activated_electrodes or []):
+    for eid in (row.electrodes or []):
         ch = electrode_to_channel.get(eid)
         if ch is not None:
             expected.add(int(ch))
@@ -132,9 +131,22 @@ class DropletCheckHandler(BaseColumnHandler):
         )
         decision = json.loads(decision_raw).get("choice")
         if decision == "pause":
-            raise AbortError(
-                f"User chose to pause after droplet check on step {row.uuid}"
+            # Set the executor's pause_event. Effective at the next step
+            # boundary — the executor's main loop sees pause_event.is_set()
+            # before it picks up the next step, emits protocol_paused, and
+            # blocks on wait_cleared() until the user clicks Resume.
+            # Returning normally (instead of raising AbortError) keeps the
+            # current step's lifecycle clean: post_step finishes, the row
+            # is marked done, then the executor pauses BEFORE the next
+            # step. AbortError would tear down the protocol entirely.
+            logger.info(
+                "User chose to pause after droplet check on step %s; "
+                "pause_event set, executor will stop at next step boundary",
+                row.uuid,
             )
+            if ctx.protocol.pause_event is not None:
+                ctx.protocol.pause_event.set()
+            return
         # else "continue" → fall through, executor moves to next step
 
 

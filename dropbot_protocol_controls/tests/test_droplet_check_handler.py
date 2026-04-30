@@ -21,13 +21,25 @@ from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
 class _FakeRow(HasTraits):
     uuid                 = Str("step-uuid-1")
     check_droplets       = Bool(True)
-    activated_electrodes = List(Str)
+    electrodes = List(Str)
     routes               = List
 
 
+class _FakePauseEvent:
+    """Stand-in for pluggable_protocol_tree.execution.events.PauseEvent."""
+    def __init__(self):
+        self._set = False
+    def set(self): self._set = True
+    def is_set(self): return self._set
+    def clear(self): self._set = False
+
+
 class _FakeProtocolCtx:
-    def __init__(self, electrode_to_channel=None):
+    def __init__(self, electrode_to_channel=None, pause_event=None):
         self.scratch = {"electrode_to_channel": electrode_to_channel or {}}
+        # Mirrors the real ProtocolContext.pause_event trait the executor
+        # populates from its own pause_event.
+        self.pause_event = pause_event if pause_event is not None else _FakePauseEvent()
 
 
 class _FakeStepCtx:
@@ -73,7 +85,7 @@ def published(monkeypatch):
 
 def test_column_off_short_circuits_without_publishing(published):
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=False, activated_electrodes=["e1"])
+    row = _FakeRow(check_droplets=False, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
 
     result = handler.on_post_step(row, ctx)
@@ -97,7 +109,7 @@ def test_no_expected_channels_short_circuits_without_publishing(published):
 
 def test_missing_electrode_to_channel_in_scratch_treated_as_empty(published):
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=True, activated_electrodes=["e1"])
+    row = _FakeRow(check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx())  # no scratch entry
 
     result = handler.on_post_step(row, ctx)
@@ -113,7 +125,7 @@ def test_happy_path_publishes_detect_and_returns_on_success_match(published):
     handler = DropletCheckHandler()
     row = _FakeRow(
         check_droplets=True,
-        activated_electrodes=["e1", "e2"],
+        electrodes=["e1", "e2"],
     )
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
     ctx._wait_responses = [(
@@ -139,7 +151,7 @@ def test_happy_path_publishes_detect_and_returns_on_success_match(published):
 def test_detect_payload_is_list_of_int_channels_not_electrode_ids(published):
     # Critical wire-format check: backend expects List[int].
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=True, activated_electrodes=["e3", "e1"])
+    row = _FakeRow(check_droplets=True, electrodes=["e3", "e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e3": 3}))
     ctx._wait_responses = [(
         "dropbot/signals/drops_detected",
@@ -157,7 +169,7 @@ def test_detect_payload_is_list_of_int_channels_not_electrode_ids(published):
 
 def test_backend_error_response_logs_and_returns(published, caplog):
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=True, activated_electrodes=["e1"])
+    row = _FakeRow(check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
     ctx._wait_responses = [(
         "dropbot/signals/drops_detected",
@@ -175,7 +187,7 @@ def test_backend_error_response_logs_and_returns(published, caplog):
 
 def test_wait_for_timeout_logs_and_returns(published, caplog):
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=True, activated_electrodes=["e1"])
+    row = _FakeRow(check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
     ctx._wait_responses = [(
         "dropbot/signals/drops_detected",
@@ -195,7 +207,6 @@ def test_wait_for_timeout_logs_and_returns(published, caplog):
 # ---------- failure path: UI round-trip ----------
 
 import pytest
-from pluggable_protocol_tree.execution.exceptions import AbortError
 from dropbot_protocol_controls.consts import (
     DROPLET_CHECK_DECISION_REQUEST,
     DROPLET_CHECK_DECISION_RESPONSE,
@@ -205,7 +216,7 @@ from dropbot_protocol_controls.consts import (
 def test_missing_channels_publishes_decision_request_with_payload(published):
     handler = DropletCheckHandler()
     row = _FakeRow(uuid="abc", check_droplets=True,
-                   activated_electrodes=["e1", "e2", "e3"])
+                   electrodes=["e1", "e2", "e3"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2, "e3": 3}))
     ctx._wait_responses = [
         ("dropbot/signals/drops_detected",
@@ -232,7 +243,7 @@ def test_missing_channels_publishes_decision_request_with_payload(published):
 def test_user_chooses_continue_returns_normally(published):
     handler = DropletCheckHandler()
     row = _FakeRow(uuid="abc", check_droplets=True,
-                   activated_electrodes=["e1", "e2"])
+                   electrodes=["e1", "e2"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
     ctx._wait_responses = [
         ("dropbot/signals/drops_detected",
@@ -247,11 +258,17 @@ def test_user_chooses_continue_returns_normally(published):
     assert len(ctx.wait_for_calls) == 2         # one for ack, one for decision
 
 
-def test_user_chooses_pause_raises_abort_error(published):
+def test_user_chooses_pause_sets_pause_event_and_returns(published):
+    """'pause' must set the executor's pause_event (effective at the
+    next step boundary) and return normally — NOT raise AbortError,
+    which would tear down the protocol entirely. This step's lifecycle
+    completes cleanly; the next step is what gets blocked."""
     handler = DropletCheckHandler()
     row = _FakeRow(uuid="abc", check_droplets=True,
-                   activated_electrodes=["e1", "e2"])
-    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2}))
+                   electrodes=["e1", "e2"])
+    pause_event = _FakePauseEvent()
+    ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1, "e2": 2},
+                                         pause_event=pause_event))
     ctx._wait_responses = [
         ("dropbot/signals/drops_detected",
          json.dumps({"success": True, "detected_channels": [1], "error": ""})),
@@ -259,17 +276,39 @@ def test_user_chooses_pause_raises_abort_error(published):
          json.dumps({"step_uuid": "abc", "choice": "pause"})),
     ]
 
-    with pytest.raises(AbortError) as exc_info:
-        handler.on_post_step(row, ctx)
+    # Returns normally (no exception).
+    result = handler.on_post_step(row, ctx)
+    assert result is None
+    # pause_event was set — the executor will block at the next step.
+    assert pause_event.is_set() is True
 
-    assert "abc" in str(exc_info.value)         # mentions the step uuid
+
+def test_user_chooses_pause_with_no_pause_event_returns_silently(published):
+    """Defensive: if pause_event isn't on the protocol context (older
+    framework version, custom test fixture), 'pause' just returns
+    without crashing. Better to over-continue than to crash mid-protocol."""
+    handler = DropletCheckHandler()
+    row = _FakeRow(uuid="abc", check_droplets=True,
+                   electrodes=["e1", "e2"])
+    proto_ctx = _FakeProtocolCtx({"e1": 1, "e2": 2})
+    proto_ctx.pause_event = None  # explicitly absent
+    ctx = _FakeStepCtx(proto_ctx)
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": True, "detected_channels": [1], "error": ""})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "pause"})),
+    ]
+
+    result = handler.on_post_step(row, ctx)
+    assert result is None
 
 
 def test_decision_wait_uses_predicate_filtering_by_step_uuid(published):
     # Confirm the predicate accepts matching step_uuid and rejects others.
     handler = DropletCheckHandler()
     row = _FakeRow(uuid="THIS_STEP", check_droplets=True,
-                   activated_electrodes=["e1"])
+                   electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
     ctx._wait_responses = [
         ("dropbot/signals/drops_detected",
@@ -290,7 +329,7 @@ def test_decision_wait_uses_predicate_filtering_by_step_uuid(published):
 
 def test_decision_wait_uses_24h_timeout(published):
     handler = DropletCheckHandler()
-    row = _FakeRow(uuid="abc", check_droplets=True, activated_electrodes=["e1"])
+    row = _FakeRow(uuid="abc", check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
     ctx._wait_responses = [
         ("dropbot/signals/drops_detected",

@@ -107,17 +107,17 @@ def _pre_populate(rm):
     rm.protocol_metadata["electrode_to_channel"] = dict(_ELECTRODE_TO_CHANNEL)
     rm.add_step(values={
         "name": "S1", "duration_s": 0.3,
-        "activated_electrodes": ["e00", "e01"],
+        "electrodes": ["e00", "e01"],
         "check_droplets": True,
     })
     rm.add_step(values={
         "name": "S2", "duration_s": 0.3,
-        "activated_electrodes": ["e02", "e03", "e04"],
+        "electrodes": ["e02", "e03", "e04"],
         "check_droplets": True,
     })
     rm.add_step(values={
         "name": "S3", "duration_s": 0.3,
-        "activated_electrodes": ["e05"],
+        "electrodes": ["e05"],
         "check_droplets": False,
     })
 
