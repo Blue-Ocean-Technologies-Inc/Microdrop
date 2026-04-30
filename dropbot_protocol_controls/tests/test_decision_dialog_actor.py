@@ -124,3 +124,68 @@ def test_listener_name_is_pptN_free():
     )
     actor = DropletCheckDecisionDialogActor()
     assert actor.listener_name == "droplet_check_decision_listener"
+
+
+def test_payload_missing_step_uuid_is_dropped_no_dialog_shown(
+    patched_confirm, captured_publishes, immediate_singleshot,
+):
+    """Schema guard: a JSON-valid payload missing 'step_uuid' must be
+    dropped (warning logged, no dialog, no response published). Otherwise
+    the worker would crash on payload['step_uuid'] and the column
+    handler's wait_for would hang for 24h."""
+    from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
+        DropletCheckDecisionDialogActor,
+    )
+
+    actor = DropletCheckDecisionDialogActor()
+    # Valid JSON, but no 'step_uuid' key.
+    actor.listener_actor_routine(
+        json.dumps({"expected": [1, 2], "detected": [], "missing": [1, 2]}),
+        topic="ignored",
+    )
+
+    # No dialog opened, no response published.
+    patched_confirm.assert_not_called()
+    assert captured_publishes == []
+
+
+def test_payload_missing_other_required_key_is_dropped(
+    patched_confirm, captured_publishes, immediate_singleshot, caplog,
+):
+    """Same guard for other required keys (expected/detected/missing).
+    Verifies the warning log mentions which key is missing."""
+    from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
+        DropletCheckDecisionDialogActor,
+    )
+    import logging
+
+    actor = DropletCheckDecisionDialogActor()
+    with caplog.at_level(logging.WARNING):
+        # Valid JSON, has step_uuid but missing 'missing'.
+        actor.listener_actor_routine(
+            json.dumps({"step_uuid": "abc", "expected": [1], "detected": []}),
+            topic="ignored",
+        )
+
+    patched_confirm.assert_not_called()
+    assert captured_publishes == []
+    # Warning should mention the missing key.
+    assert any("missing" in r.message for r in caplog.records), (
+        f"expected log to mention missing key; got: {[r.message for r in caplog.records]}"
+    )
+
+
+def test_malformed_json_is_dropped_no_dialog_shown(
+    patched_confirm, captured_publishes, immediate_singleshot,
+):
+    """Pre-existing JSON guard verified end-to-end: not just no crash,
+    but no Qt scheduling and no response."""
+    from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
+        DropletCheckDecisionDialogActor,
+    )
+
+    actor = DropletCheckDecisionDialogActor()
+    actor.listener_actor_routine("{not valid json", topic="ignored")
+
+    patched_confirm.assert_not_called()
+    assert captured_publishes == []

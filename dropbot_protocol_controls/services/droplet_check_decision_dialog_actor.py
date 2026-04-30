@@ -45,15 +45,34 @@ class DropletCheckDecisionDialogActor(HasTraits):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     def listener_actor_routine(self, message, topic):
-        """Worker thread: parse payload, marshal to Qt thread to show dialog."""
+        """Worker thread: parse payload, validate required keys, marshal to
+        Qt thread to show dialog. Bad input (malformed JSON OR missing required
+        keys) is logged + dropped — never crashes the worker, never schedules
+        a Qt-thread call with a payload the dialog code can't handle.
+
+        Dropping the message means the column handler's wait_for will time out
+        on its 24h decision timeout (or on stop_event), surfacing the bug
+        rather than wedging silently. Don't try to publish a synthetic 'pause'
+        response on bad input — that would mask publisher bugs.
+        """
         try:
             payload = json.loads(message)
         except (ValueError, TypeError) as exc:
             logger.warning(
-                "droplet_check_decision_listener: rejecting malformed message %r (%s)",
+                "droplet_check_decision_listener: rejecting malformed JSON %r (%s)",
                 message, exc,
             )
             return
+
+        required_keys = ("step_uuid", "expected", "detected", "missing")
+        missing = [k for k in required_keys if k not in payload]
+        if missing:
+            logger.warning(
+                "droplet_check_decision_listener: dropping payload missing keys %r: %r",
+                missing, payload,
+            )
+            return
+
         QTimer.singleShot(0, lambda: self._show_dialog_and_respond(payload))
 
     def _show_dialog_and_respond(self, payload):
