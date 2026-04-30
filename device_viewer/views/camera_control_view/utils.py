@@ -4,7 +4,6 @@ import dramatiq
 from PySide6.QtCore import QUrl
 
 from device_viewer.models.media_capture_model import MediaType, MediaCaptureMessageModel
-from microdrop_application.dialogs.pyface_wrapper import success
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -30,19 +29,20 @@ def _cache_media_capture(name: MediaType, save_path: str):
     logger.info(app_globals["media_captures"])
 
 def _show_media_capture_dialog(
-    name: MediaType, save_path: str
+    name: MediaType, save_path: str, status_bar_manager=None
 ):
 
     if name.lower() not in MediaType.get_media_types():
         raise ValueError(f"Invalid media type: {name}")
 
     file_url = QUrl.fromLocalFile(save_path).toString()
-    formatted_message = f"File saved to:<br><a href='{file_url}' style='color: #0078d7;'>{save_path}</a><br><br>"
-
-        # Create a non-modal popup (doesn't block the rest of the UI)
-    success(
-        None, formatted_message, title=f"{name.name.title()} Captured", modal=False, timeout=5000
+    formatted_message = (
+        f"{name.name.title()} Captured: "
+        f"<a href='{file_url}' style='color: #0078d7;'>{save_path}</a>"
     )
+
+    if status_bar_manager is not None:
+        status_bar_manager.show_center_message(formatted_message, timeout=5000)
 
     logger.info(f"Saved {name} media to {save_path}.")
     return True
