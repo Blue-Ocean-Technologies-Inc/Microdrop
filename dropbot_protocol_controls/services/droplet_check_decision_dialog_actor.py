@@ -11,9 +11,13 @@ The actor instance is created at plugin start (see
 dropbot_protocol_controls/plugin.py); the @dramatiq.actor registration
 happens at module import time via generate_class_method_dramatiq_listener_actor.
 
-Signature note: pyface_wrapper.confirm returns YES (int=1) on confirm,
-NO (int=0) on cancel — both are truthy/falsy as expected, so the
-``"continue" if user_continue else "pause"`` branch works correctly.
+Signature note: pyface_wrapper.confirm returns pyface integer
+constants — YES=30, NO=40, CANCEL=20 — NOT YES=1, NO=0 as the
+earlier version of this code assumed. Every non-zero return is
+truthy in Python, so a `bool(result)` check would treat NO and
+CANCEL as "continue" (the user-reported "Stay Paused doesn't pause"
+bug). Compare against YES explicitly: anything else (NO, CANCEL,
+dialog-closed-with-X) maps to "pause", which is the safe default.
 
 Threading note: an earlier version used QTimer.singleShot(0, lambda: ...)
 to marshal to the GUI thread. This silently failed when called from a
@@ -33,7 +37,7 @@ from PySide6.QtWidgets import QApplication
 from traits.api import HasTraits, Instance, Str
 
 from logger.logger_service import get_logger
-from microdrop_application.dialogs.pyface_wrapper import confirm
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )
@@ -71,7 +75,7 @@ class _DialogDispatcher(QObject):
     def _on_request_dialog(self, payload: dict) -> None:
         message = _format_message(payload)
         try:
-            user_continue = confirm(
+            result = confirm(
                 parent=QApplication.activeWindow(),
                 message=message,
                 title="Droplet Detection Failed",
@@ -82,11 +86,16 @@ class _DialogDispatcher(QObject):
             logger.exception(
                 "droplet_check dialog raised; defaulting to pause"
             )
-            user_continue = False
-        choice = "continue" if user_continue else "pause"
+            result = None
+        # Compare against YES (=30 in pyface). Any other value — NO (40),
+        # CANCEL (20), or None from a raised exception — is treated as
+        # "pause". DON'T use `bool(result)`: NO=40 is truthy in Python,
+        # so `if result:` would treat Stay Paused as Continue. (See
+        # module docstring "Signature note".)
+        choice = "continue" if result == YES else "pause"
         logger.info(
-            "[droplet-dialog] step %s — confirm() returned %r (truthy=%s) → choice=%r",
-            payload["step_uuid"], user_continue, bool(user_continue), choice,
+            "[droplet-dialog] step %s — confirm() returned %r (YES=%r) → choice=%r",
+            payload["step_uuid"], result, YES, choice,
         )
         publish_message(
             topic=DROPLET_CHECK_DECISION_RESPONSE,

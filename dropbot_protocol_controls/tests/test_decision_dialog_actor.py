@@ -55,15 +55,18 @@ def synchronous_dispatch(monkeypatch):
     )
 
 
-def test_confirm_returning_true_publishes_continue(
+def test_confirm_returning_yes_publishes_continue(
     patched_confirm, captured_publishes, synchronous_dispatch,
 ):
+    """confirm() returns pyface YES (=30) when user clicks the
+    Continue button. Choice should be 'continue'."""
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
     )
     from dropbot_protocol_controls.consts import DROPLET_CHECK_DECISION_RESPONSE
+    from microdrop_application.dialogs.pyface_wrapper import YES
 
-    patched_confirm.return_value = True
+    patched_confirm.return_value = YES
 
     actor = DropletCheckDecisionDialogActor()
     payload = {"step_uuid": "abc", "expected": [1, 2], "detected": [1], "missing": [2]}
@@ -76,15 +79,20 @@ def test_confirm_returning_true_publishes_continue(
     assert parsed == {"step_uuid": "abc", "choice": "continue"}
 
 
-def test_confirm_returning_false_publishes_pause(
+def test_confirm_returning_no_publishes_pause(
     patched_confirm, captured_publishes, synchronous_dispatch,
 ):
+    """confirm() returns pyface NO (=40) when user clicks Stay Paused.
+    NO is *truthy* in Python (bool(40) is True) — this test catches
+    the regression where we used `bool(result)` and treated NO as
+    Continue. Must use explicit `result == YES` comparison."""
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
     )
     from dropbot_protocol_controls.consts import DROPLET_CHECK_DECISION_RESPONSE
+    from microdrop_application.dialogs.pyface_wrapper import NO
 
-    patched_confirm.return_value = False
+    patched_confirm.return_value = NO
 
     actor = DropletCheckDecisionDialogActor()
     payload = {"step_uuid": "abc", "expected": [1, 2], "detected": [], "missing": [1, 2]}
@@ -95,13 +103,36 @@ def test_confirm_returning_false_publishes_pause(
     assert parsed == {"step_uuid": "abc", "choice": "pause"}
 
 
+def test_confirm_returning_cancel_publishes_pause(
+    patched_confirm, captured_publishes, synchronous_dispatch,
+):
+    """confirm() returns pyface CANCEL (=20) if user dismisses the
+    dialog (X button or escape). Safe default: treat as 'pause' so
+    the protocol doesn't blindly continue past missing droplets."""
+    from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
+        DropletCheckDecisionDialogActor,
+    )
+    from dropbot_protocol_controls.consts import DROPLET_CHECK_DECISION_RESPONSE
+    from microdrop_application.dialogs.pyface_wrapper import CANCEL
+
+    patched_confirm.return_value = CANCEL
+
+    actor = DropletCheckDecisionDialogActor()
+    payload = {"step_uuid": "abc", "expected": [1, 2], "detected": [], "missing": [1, 2]}
+    actor.listener_actor_routine(json.dumps(payload), topic="ignored")
+
+    parsed = json.loads(captured_publishes[0][1])
+    assert parsed == {"step_uuid": "abc", "choice": "pause"}
+
+
 def test_dialog_message_includes_expected_detected_missing(
     patched_confirm, captured_publishes, synchronous_dispatch,
 ):
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
     )
-    patched_confirm.return_value = True
+    from microdrop_application.dialogs.pyface_wrapper import YES
+    patched_confirm.return_value = YES
 
     actor = DropletCheckDecisionDialogActor()
     payload = {"step_uuid": "abc", "expected": [1, 2, 3], "detected": [1, 3], "missing": [2]}
@@ -121,7 +152,8 @@ def test_step_uuid_round_trips_through_dialog(
     from dropbot_protocol_controls.services.droplet_check_decision_dialog_actor import (
         DropletCheckDecisionDialogActor,
     )
-    patched_confirm.return_value = True
+    from microdrop_application.dialogs.pyface_wrapper import YES
+    patched_confirm.return_value = YES
 
     actor = DropletCheckDecisionDialogActor()
     actor.listener_actor_routine(
