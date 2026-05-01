@@ -92,20 +92,28 @@ class DropletCheckHandler(BaseColumnHandler):
             # Backend handles its own internal retries; log + proceed
             # mirrors legacy behavior on the timeout path.
             logger.warning(
-                "Droplet detection timed out for step %s; proceeding",
-                row.uuid,
+                f"Droplet detection timed out for step {row.uuid}; proceeding"
             )
             return
         ack = json.loads(ack_raw)
-        if not ack.get("success"):
-            logger.warning(
-                "Droplet detection backend error on step %s: %s; proceeding",
-                row.uuid, ack.get("error"),
-            )
-            return
 
-        detected = [int(c) for c in ack.get("detected_channels", [])]
-        missing  = sorted(set(expected) - set(detected))
+        if not ack.get("success"):
+            # Surface backend errors (no proxy, hardware fault, etc.) to
+            # the user via the same failure dialog as missing channels —
+            # `detected` becomes a single error string, which is set-
+            # disjoint from `expected` (ints) so every expected channel
+            # ends up in `missing`. The dialog formatter renders the
+            # string in the Detected row so the user sees what went wrong
+            # and can choose Continue or Stay Paused.
+            logger.warning(
+                f"Droplet detection backend error on step {row.uuid}: "
+                f"{ack.get('error')}"
+            )
+            detected = [f"<b>ERROR!</b> \n\n {ack.get('error')}"]
+        else:
+            detected = [int(c) for c in ack.get("detected_channels", [])]
+
+        missing = sorted(set(expected) - set(detected))
         if not missing:
             return
 
@@ -136,7 +144,7 @@ class DropletCheckHandler(BaseColumnHandler):
             predicate=lambda payload: json.loads(payload).get("step_uuid") == row.uuid,
         )
         decision = json.loads(decision_raw).get("choice")
-        logger.info("[droplet-check] step %s decision=%r", row.uuid, decision)
+        logger.info(f"[droplet-check] step {row.uuid} decision={decision!r}")
         if decision == "pause":
             # Set pause_event; the executor's main loop sees it at the
             # next step boundary and blocks on wait_cleared(). Do NOT

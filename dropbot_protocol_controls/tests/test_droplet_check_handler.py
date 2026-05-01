@@ -168,22 +168,34 @@ def test_detect_payload_is_list_of_int_channels_not_electrode_ids(published):
 
 # ---------- timeout / error paths ----------
 
-def test_backend_error_response_logs_and_returns(published, caplog):
+def test_backend_error_surfaces_through_failure_dialog(published, caplog):
+    """Backend success=False is surfaced to the user via the same
+    decision dialog as a missing-channel failure: the error message
+    becomes the `detected` payload entry so it shows up in the dialog
+    body. The user can then choose Continue or Stay Paused. (Earlier
+    behavior was to silently log + return; user-visible was preferred.)"""
+    from dropbot_protocol_controls.consts import DROPLET_CHECK_DECISION_RESPONSE
     handler = DropletCheckHandler()
-    row = _FakeRow(check_droplets=True, electrodes=["e1"])
+    row = _FakeRow(uuid="abc", check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
-    ctx._wait_responses = [(
-        "dropbot/signals/drops_detected",
-        json.dumps({"success": False, "detected_channels": [], "error": "no proxy"}),
-    )]
+    ctx._wait_responses = [
+        ("dropbot/signals/drops_detected",
+         json.dumps({"success": False, "detected_channels": [], "error": "no proxy"})),
+        (DROPLET_CHECK_DECISION_RESPONSE,
+         json.dumps({"step_uuid": "abc", "choice": "continue"})),
+    ]
 
     with caplog.at_level("WARNING"):
-        result = handler.on_post_step(row, ctx)
+        handler.on_post_step(row, ctx)
 
-    assert result is None
-    assert any("backend error" in r.message.lower() or "no proxy" in r.message.lower()
-               for r in caplog.records), \
-        f"expected a warning log; got: {[r.message for r in caplog.records]}"
+    # Logs the error.
+    assert any("no proxy" in r.message.lower() for r in caplog.records), \
+        f"expected error in log; got: {[r.message for r in caplog.records]}"
+    # Publishes DETECT_DROPLETS and DECISION_REQUEST (with error in `detected`).
+    assert len(published) == 2
+    request_body = json.loads(published[1][1])
+    assert any("no proxy" in str(d) for d in request_body["detected"]), \
+        f"expected backend error in dialog payload's `detected`; got {request_body['detected']!r}"
 
 
 def test_wait_for_timeout_logs_and_returns(published, caplog):

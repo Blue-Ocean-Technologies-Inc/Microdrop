@@ -37,13 +37,19 @@ _REQUIRED_PAYLOAD_KEYS = ("step_uuid", "expected", "detected", "missing")
 
 
 def _format_message(payload):
+    """Render the dialog body. HTML markup (bold labels, <br> line
+    breaks) renders correctly in BaseMessageDialog's QLabel; the handler
+    can also embed HTML in `detected` entries (e.g. the bolded ERROR
+    string used for backend-error surfaces) and it flows through here
+    unmodified — `_fmt`'s newline-to-<br> swap keeps multi-line error
+    strings readable."""
     def _fmt(seq):
-        return ", ".join(str(c) for c in seq) if seq else "none"
+        return ", ".join(str(c) for c in seq).replace("\n", "<br>") if seq else "none"
     return (
-        "Droplet detection failed at the end of the step.\n\n"
-        f"Expected: {_fmt(payload.get('expected', []))}\n"
-        f"Detected: {_fmt(payload.get('detected', []))}\n"
-        f"Missing:  {_fmt(payload.get('missing', []))}\n\n"
+        "Droplet detection failed at the end of the step.<br><br>"
+        f"<b>Expected</b>: {_fmt(payload.get('expected', []))}<br><br>"
+        f"<b>Detected</b>: {_fmt(payload.get('detected', []))}<br><br>"
+        f"<b>Missing</b>:  {_fmt(payload.get('missing', []))}<br><br>"
         "Continue with the protocol anyway?"
     )
 
@@ -62,8 +68,12 @@ class _DialogDispatcher(QObject):
 
     def _on_request_dialog(self, payload: dict) -> None:
         try:
+            # parent=None makes the dialog top-level (independent
+            # window) rather than parented to the active window —
+            # avoids the dialog being hidden behind / clipped by the
+            # main window during a protocol run.
             result = confirm(
-                parent=QApplication.activeWindow(),
+                parent=None,
                 message=_format_message(payload),
                 title="Droplet Detection Failed",
                 yes_label="Continue",
