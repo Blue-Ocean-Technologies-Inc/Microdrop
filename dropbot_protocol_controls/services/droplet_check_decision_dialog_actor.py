@@ -83,11 +83,16 @@ class _DialogDispatcher(QObject):
                 "droplet_check dialog raised; defaulting to pause"
             )
             user_continue = False
+        choice = "continue" if user_continue else "pause"
+        logger.info(
+            "[droplet-dialog] step %s — confirm() returned %r (truthy=%s) → choice=%r",
+            payload["step_uuid"], user_continue, bool(user_continue), choice,
+        )
         publish_message(
             topic=DROPLET_CHECK_DECISION_RESPONSE,
             message=json.dumps({
                 "step_uuid": payload["step_uuid"],
-                "choice":    "continue" if user_continue else "pause",
+                "choice":    choice,
             }),
         )
 

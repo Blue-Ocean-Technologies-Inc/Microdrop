@@ -139,27 +139,38 @@ class DropletCheckHandler(BaseColumnHandler):
             predicate=lambda payload: json.loads(payload).get("step_uuid") == row.uuid,
         )
         decision = json.loads(decision_raw).get("choice")
+        logger.info(
+            "[droplet-check] step %s — user decision: %r (raw payload: %s)",
+            row.uuid, decision, decision_raw,
+        )
         if decision == "pause":
             # Set the executor's pause_event. The executor's main loop
             # sees pause_event.is_set() at the top of the next iteration
             # and blocks on wait_cleared() until the user clicks Resume.
             # We deliberately do NOT emit protocol_resumed here — the UI
             # stays in the paused state set above.
-            logger.info(
-                "User chose to pause after droplet check on step %s; "
-                "pause_event set, executor will block at next step boundary",
-                row.uuid,
-            )
-            if ctx.protocol.pause_event is not None:
-                ctx.protocol.pause_event.set()
+            pe = ctx.protocol.pause_event
+            if pe is not None:
+                pe.set()
+                logger.info(
+                    "[droplet-check] PAUSE chosen — pause_event.set() done; "
+                    "is_set=%s, executor will block at next step boundary",
+                    pe.is_set(),
+                )
+            else:
+                logger.warning(
+                    "[droplet-check] PAUSE chosen but ctx.protocol.pause_event "
+                    "is None — protocol will NOT actually pause. This is a "
+                    "framework integration bug."
+                )
             return
         # "continue" → emit resumed so the UI unfreezes timers, then
         # return; the executor will run the next step.
         if qsignals is not None:
             qsignals.protocol_resumed.emit()
         logger.info(
-            "User chose to continue after droplet check on step %s",
-            row.uuid,
+            "[droplet-check] CONTINUE chosen — emitted protocol_resumed; "
+            "executor will run next step",
         )
 
 
