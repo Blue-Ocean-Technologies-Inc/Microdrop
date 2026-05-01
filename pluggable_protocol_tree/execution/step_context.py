@@ -104,6 +104,7 @@ class Mailbox:
 
 from traits.api import Any, Dict, HasTraits, Instance, Str, List
 
+from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow
 
@@ -128,7 +129,7 @@ class ProtocolContext(HasTraits):
     scratch     = Dict(Str, Any,
                        desc="protocol-scoped scratch (cleared on each run)")
     stop_event  = Instance(threading.Event)
-    pause_event = Instance("pluggable_protocol_tree.execution.events.PauseEvent")
+    pause_event = Instance(PauseEvent)
 
     # Hooks may emit UI signals (e.g. droplet check publishing
     # protocol_paused while it waits on a user dialog so the step

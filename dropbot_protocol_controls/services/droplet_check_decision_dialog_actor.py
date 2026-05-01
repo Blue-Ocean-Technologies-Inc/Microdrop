@@ -2,31 +2,13 @@
 
 Subscribes to DROPLET_CHECK_DECISION_REQUEST. When fired on a Dramatiq
 worker thread, marshals to the Qt main thread via a Qt Signal with
-Qt.QueuedConnection (the QObject is created at module-import time on
-the main thread, so the connection's auto-queueing across threads
-works), shows a styled confirm dialog via the pyface_wrapper, and
-publishes the user's choice on DROPLET_CHECK_DECISION_RESPONSE.
+QueuedConnection (the QObject is constructed at module-import time on
+the main thread), shows a styled confirm dialog via the pyface_wrapper,
+and publishes the user's choice on DROPLET_CHECK_DECISION_RESPONSE.
 
-The actor instance is created at plugin start (see
-dropbot_protocol_controls/plugin.py); the @dramatiq.actor registration
-happens at module import time via generate_class_method_dramatiq_listener_actor.
-
-Signature note: pyface_wrapper.confirm returns pyface integer
-constants — YES=30, NO=40, CANCEL=20 — NOT YES=1, NO=0 as the
-earlier version of this code assumed. Every non-zero return is
-truthy in Python, so a `bool(result)` check would treat NO and
-CANCEL as "continue" (the user-reported "Stay Paused doesn't pause"
-bug). Compare against YES explicitly: anything else (NO, CANCEL,
-dialog-closed-with-X) maps to "pause", which is the safe default.
-
-Threading note: an earlier version used QTimer.singleShot(0, lambda: ...)
-to marshal to the GUI thread. This silently failed when called from a
-Dramatiq worker thread — QTimer.singleShot(msec, callable) creates the
-timer in the calling thread, and worker threads have no Qt event loop,
-so the dialog never showed and the column handler's wait_for hung for
-24h. The Signal+QueuedConnection pattern below correctly bridges
-threads and is the same shape PPT-3's actuation overlay uses
-(SimpleDeviceViewer.actuation_changed).
+The module-level singleton at the bottom registers the @dramatiq.actor
+at import time. In production the plugin imports this module; demos
+import it directly.
 """
 
 import json
@@ -51,59 +33,7 @@ from ..consts import (
 
 logger = get_logger(__name__)
 
-
-class _DialogDispatcher(QObject):
-    """Cross-thread bridge: Dramatiq worker emits ``request_dialog`` with
-    the validated payload; the slot runs on the QObject's home thread
-    (the main thread, since this is constructed at module import) via
-    Qt.QueuedConnection. The slot then shows the confirm dialog and
-    publishes the user's choice."""
-
-    request_dialog = Signal(dict)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # Explicit QueuedConnection so the slot ALWAYS runs on this
-        # QObject's home thread, even when emit() is called from the
-        # main thread itself. Auto would work too (Qt picks Direct for
-        # same-thread, Queued for cross-thread), but Queued is more
-        # predictable for code that uses synchronous wait_for on the
-        # other side of the round-trip.
-        self.request_dialog.connect(self._on_request_dialog,
-                                    Qt.QueuedConnection)
-
-    def _on_request_dialog(self, payload: dict) -> None:
-        message = _format_message(payload)
-        try:
-            result = confirm(
-                parent=QApplication.activeWindow(),
-                message=message,
-                title="Droplet Detection Failed",
-                yes_label="Continue",
-                no_label="Stay Paused",
-            )
-        except Exception:
-            logger.exception(
-                "droplet_check dialog raised; defaulting to pause"
-            )
-            result = None
-        # Compare against YES (=30 in pyface). Any other value — NO (40),
-        # CANCEL (20), or None from a raised exception — is treated as
-        # "pause". DON'T use `bool(result)`: NO=40 is truthy in Python,
-        # so `if result:` would treat Stay Paused as Continue. (See
-        # module docstring "Signature note".)
-        choice = "continue" if result == YES else "pause"
-        logger.info(
-            "[droplet-dialog] step %s — confirm() returned %r (YES=%r) → choice=%r",
-            payload["step_uuid"], result, YES, choice,
-        )
-        publish_message(
-            topic=DROPLET_CHECK_DECISION_RESPONSE,
-            message=json.dumps({
-                "step_uuid": payload["step_uuid"],
-                "choice":    choice,
-            }),
-        )
+_REQUIRED_PAYLOAD_KEYS = ("step_uuid", "expected", "detected", "missing")
 
 
 def _format_message(payload):
@@ -118,29 +48,66 @@ def _format_message(payload):
     )
 
 
+class _DialogDispatcher(QObject):
+    """Cross-thread bridge: emit `request_dialog` from any thread; the
+    slot runs on the QObject's home thread (the main thread, since this
+    is constructed at module import) via Qt.QueuedConnection."""
+
+    request_dialog = Signal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.request_dialog.connect(self._on_request_dialog,
+                                    Qt.QueuedConnection)
+
+    def _on_request_dialog(self, payload: dict) -> None:
+        try:
+            result = confirm(
+                parent=QApplication.activeWindow(),
+                message=_format_message(payload),
+                title="Droplet Detection Failed",
+                yes_label="Continue",
+                no_label="Stay Paused",
+            )
+        except Exception:
+            logger.exception(
+                "droplet_check dialog raised; defaulting to pause"
+            )
+            result = None
+        # pyface returns YES=30 / NO=40 / CANCEL=20 — all integer
+        # constants, all truthy. Compare to YES explicitly; anything
+        # else (NO, CANCEL, exception → None) is "pause", the safe
+        # default. `bool(result)` would treat NO=40 as Continue.
+        choice = "continue" if result == YES else "pause"
+        logger.info(
+            "[droplet-dialog] step %s — confirm()=%r (YES=%r) → %s",
+            payload["step_uuid"], result, YES, choice,
+        )
+        publish_message(
+            topic=DROPLET_CHECK_DECISION_RESPONSE,
+            message=json.dumps({
+                "step_uuid": payload["step_uuid"],
+                "choice":    choice,
+            }),
+        )
+
+
 class DropletCheckDecisionDialogActor(HasTraits):
     """Receives DROPLET_CHECK_DECISION_REQUEST, marshals to the Qt main
     thread via _DialogDispatcher, shows the confirm dialog, publishes
-    the user's choice."""
+    the user's choice.
+
+    Bad input (malformed JSON OR missing required keys) is logged and
+    dropped. The column handler's wait_for then times out on its 24h
+    decision timeout (or stop_event) — surfacing publisher bugs rather
+    than masking them with a synthetic response.
+    """
 
     listener_name = Str(DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     dispatcher = Instance(_DialogDispatcher)
 
     def listener_actor_routine(self, message, topic):
-        """Worker thread: parse payload, validate required keys, emit the
-        Qt signal that runs the dialog on the main thread.
-
-        Bad input (malformed JSON OR missing required keys) is logged +
-        dropped — never crashes the worker, never schedules a Qt-thread
-        call with a payload the dialog code can't handle.
-
-        Dropping the message means the column handler's wait_for will
-        time out on its 24h decision timeout (or on stop_event),
-        surfacing the bug rather than wedging silently. Don't try to
-        publish a synthetic 'pause' response on bad input — that would
-        mask publisher bugs.
-        """
         try:
             payload = json.loads(message)
         except (ValueError, TypeError) as exc:
@@ -150,8 +117,7 @@ class DropletCheckDecisionDialogActor(HasTraits):
             )
             return
 
-        required_keys = ("step_uuid", "expected", "detected", "missing")
-        missing = [k for k in required_keys if k not in payload]
+        missing = [k for k in _REQUIRED_PAYLOAD_KEYS if k not in payload]
         if missing:
             logger.warning(
                 "droplet_check_decision_listener: dropping payload missing keys %r: %r",
@@ -162,19 +128,15 @@ class DropletCheckDecisionDialogActor(HasTraits):
         self._dispatch_to_main_thread(payload)
 
     def _dispatch_to_main_thread(self, payload):
-        """Hand the validated payload to the main-thread dispatcher.
-
-        Wrapped in its own method so tests can patch it to run the slot
-        synchronously without touching PySide's read-only Signal.emit.
-        """
+        # Test seam: tests patch this to invoke the slot synchronously
+        # since PySide6's Signal.emit is read-only.
         self.dispatcher.request_dialog.emit(payload)
 
     def traits_init(self):
-        # The QObject must be constructed on the thread that owns the
-        # main event loop. Since this class is instantiated at module
-        # import time (singleton at the bottom of this file), and the
-        # demo / app imports happen on the main thread, the dispatcher
-        # ends up correctly bound to the main thread.
+        # _DialogDispatcher must be constructed on the main thread so
+        # its QueuedConnection slot dispatches there. This class is
+        # instantiated at module import time (singleton below), which
+        # runs on the main thread in both production and demos.
         self.dispatcher = _DialogDispatcher()
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.listener_name,
@@ -182,6 +144,5 @@ class DropletCheckDecisionDialogActor(HasTraits):
         )
 
 
-# Module-level singleton — instantiating registers the actor with Dramatiq.
-# Plugin import (above) brings this module in and the actor wakes up.
+# Module-import side effect: registers the @dramatiq.actor with the broker.
 _dialog_actor_singleton = DropletCheckDecisionDialogActor()

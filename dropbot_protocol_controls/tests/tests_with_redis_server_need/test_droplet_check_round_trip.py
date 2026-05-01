@@ -94,15 +94,9 @@ def responder_subscription(router_actor):
     broker.flush_all()
 
     responder = DropletDetectionResponder(mode="succeed")
-    # subscribe() wires DETECT_DROPLETS → responder and also wires the
-    # executor listener topics — we're testing only the responder here so
-    # that's fine; extra subscriptions don't hurt.
     responder.subscribe(router_actor)
-
-    # Spy on DROPLETS_DETECTED so we can assert on the response.
     router_actor.message_router_data.add_subscriber_to_topic(
-        topic=DROPLETS_DETECTED,
-        subscribing_actor_name=SPY_ACTOR_NAME,
+        topic=DROPLETS_DETECTED, subscribing_actor_name=SPY_ACTOR_NAME,
     )
 
     worker = Worker(broker, worker_timeout=100)
@@ -111,25 +105,12 @@ def responder_subscription(router_actor):
         yield router_actor
     finally:
         worker.stop()
-        # Remove spy subscription.
         router_actor.message_router_data.remove_subscriber_from_topic(
-            topic=DROPLETS_DETECTED,
-            subscribing_actor_name=SPY_ACTOR_NAME,
+            topic=DROPLETS_DETECTED, subscribing_actor_name=SPY_ACTOR_NAME,
         )
-        # Remove responder subscription (mirrors calibration cleanup).
         router_actor.message_router_data.remove_subscriber_from_topic(
             topic=DETECT_DROPLETS,
             subscribing_actor_name=DEMO_DROPLET_RESPONDER_ACTOR_NAME,
-        )
-        from dropbot_protocol_controls.consts import DROPLET_CHECK_DECISION_RESPONSE
-        for topic in (DROPLETS_DETECTED, DROPLET_CHECK_DECISION_RESPONSE):
-            router_actor.message_router_data.remove_subscriber_from_topic(
-                topic=topic,
-                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
-            )
-        router_actor.message_router_data.remove_subscriber_from_topic(
-            topic=DROPLET_CHECK_DECISION_REQUEST,
-            subscribing_actor_name=DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME,
         )
 
 
@@ -203,30 +184,42 @@ def test_responder_replies_to_detect_droplets_with_succeed_mode(responder_subscr
 # Test B
 # ---------------------------------------------------------------------------
 
-def test_decision_round_trip_continue(decision_subscription):
-    """Publish DROPLET_CHECK_DECISION_REQUEST → mock confirm → True →
-    verify DROPLET_CHECK_DECISION_RESPONSE arrives with choice='continue'."""
-    with patch(
-        "dropbot_protocol_controls.services.droplet_check_decision_dialog_actor.confirm",
-        return_value=True,
-    ), patch(
-        "dropbot_protocol_controls.services.droplet_check_decision_dialog_actor.QTimer.singleShot",
-        side_effect=lambda delay, fn: fn(),
-    ):
-        publish_message(
-            topic=DROPLET_CHECK_DECISION_REQUEST,
-            message=json.dumps({
-                "step_uuid": "test-uuid-42",
-                "expected": [1, 2],
-                "detected": [1],
-                "missing": [2],
-            }),
-        )
+def test_decision_round_trip_continue(decision_subscription, monkeypatch):
+    """Publish DROPLET_CHECK_DECISION_REQUEST → mock confirm to return YES →
+    verify DROPLET_CHECK_DECISION_RESPONSE arrives with choice='continue'.
 
-        assert _wait_for(
-            lambda: any(t == DROPLET_CHECK_DECISION_RESPONSE for t, _ in RECEIVED_EVENTS),
-            timeout=5.0,
-        ), "DROPLET_CHECK_DECISION_RESPONSE never arrived within 5s"
+    Two patches:
+    - `confirm` returns pyface YES (=30); the actor's `result == YES` check
+      maps that to "continue". (Returning Python True/1 would map to "pause"
+      since 1 != 30 — the pyface integer constants are not booleans.)
+    - `_dispatch_to_main_thread` is replaced to invoke the dispatcher slot
+      synchronously; the production path uses Signal+Qt.QueuedConnection
+      which requires a Qt event loop the test process doesn't have.
+    """
+    from microdrop_application.dialogs.pyface_wrapper import YES
+    from dropbot_protocol_controls.services import (
+        droplet_check_decision_dialog_actor as _actor_mod,
+    )
+    monkeypatch.setattr(_actor_mod, "confirm", lambda **kw: YES)
+    monkeypatch.setattr(
+        _actor_mod.DropletCheckDecisionDialogActor,
+        "_dispatch_to_main_thread",
+        lambda self, payload: self.dispatcher._on_request_dialog(payload),
+    )
+    publish_message(
+        topic=DROPLET_CHECK_DECISION_REQUEST,
+        message=json.dumps({
+            "step_uuid": "test-uuid-42",
+            "expected": [1, 2],
+            "detected": [1],
+            "missing": [2],
+        }),
+    )
+
+    assert _wait_for(
+        lambda: any(t == DROPLET_CHECK_DECISION_RESPONSE for t, _ in RECEIVED_EVENTS),
+        timeout=5.0,
+    ), "DROPLET_CHECK_DECISION_RESPONSE never arrived within 5s"
 
     with RECEIVED_LOCK:
         matches = [(t, m) for t, m in RECEIVED_EVENTS

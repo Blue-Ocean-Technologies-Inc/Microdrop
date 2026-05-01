@@ -25,6 +25,7 @@ from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
+from dropbot_controller.consts import DROPLETS_DETECTED
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
@@ -35,6 +36,11 @@ from pluggable_protocol_tree.demos.simple_device_viewer import (
     GRID_H, GRID_W, SimpleDeviceViewer,
 )
 
+from dropbot_protocol_controls.consts import (
+    DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME,
+    DROPLET_CHECK_DECISION_REQUEST,
+    DROPLET_CHECK_DECISION_RESPONSE,
+)
 from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
     make_droplet_check_column,
 )
@@ -122,14 +128,25 @@ def _pre_populate(rm):
     })
 
 
+_EXECUTOR_LISTENER_ACTOR_NAME = "pluggable_protocol_tree_executor_listener"
+
+
 def _routing_setup(router):
     _responder.subscribe(router)
-    # Wire the actuation-overlay listener so the device viewer shows live
-    # green cells while the protocol runs.
-    router.message_router_data.add_subscriber_to_topic(
-        topic=ELECTRODES_STATE_CHANGE,
-        subscribing_actor_name="ppt8_droplet_demo_actuation_overlay_listener",
-    )
+    # Demo-environment wiring. Production uses MessageRouterPlugin +
+    # ACTOR_TOPIC_DICT contributions for these; demos run without that
+    # lifecycle so we add subscribers directly.
+    sub = router.message_router_data.add_subscriber_to_topic
+    # Executor listener: handler.wait_for() needs both droplets-detected
+    # acks and dialog-decision responses.
+    for topic in (DROPLETS_DETECTED, DROPLET_CHECK_DECISION_RESPONSE):
+        sub(topic=topic, subscribing_actor_name=_EXECUTOR_LISTENER_ACTOR_NAME)
+    # Dialog actor: receives requests, shows confirm dialog, publishes choice.
+    sub(topic=DROPLET_CHECK_DECISION_REQUEST,
+        subscribing_actor_name=DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME)
+    # Actuation overlay (green cells on the device viewer).
+    sub(topic=ELECTRODES_STATE_CHANGE,
+        subscribing_actor_name="ppt8_droplet_demo_actuation_overlay_listener")
 
 
 def _make_side_panel(rm):

@@ -3,9 +3,8 @@ in demos. Subscribes to DETECT_DROPLETS, publishes DROPLETS_DETECTED with
 a configurable response shape so the demo can exercise success / missing /
 error paths without hardware.
 
-Mirrors voltage_frequency_responder.py shape, but with class-method state
-for the switchable mode (so the Tools menu can flip between scenarios at
-runtime)."""
+Mirrors voltage_frequency_responder.py shape, but as a HasTraits class
+so the Tools menu can flip the `mode` enum at runtime."""
 
 import json
 import logging
@@ -23,8 +22,6 @@ from dropbot_controller.consts import DETECT_DROPLETS, DROPLETS_DETECTED
 logger = logging.getLogger(__name__)
 
 DEMO_DROPLET_RESPONDER_ACTOR_NAME = "demo_droplet_detection_responder"
-EXECUTOR_LISTENER_ACTOR_NAME = "pluggable_protocol_tree_executor_listener"
-"""Reference: matches what voltage_frequency_responder.py uses."""
 
 
 class DropletDetectionResponder(HasTraits):
@@ -52,8 +49,8 @@ class DropletDetectionResponder(HasTraits):
         elif self.mode == "drop_all":
             payload = {"success": True, "detected_channels": [], "error": ""}
         elif self.mode == "drop_one":
-            # Drop the FIRST channel (responder is deterministic; demo's
-            # walkthrough in the spec uses this convention).
+            # Drop the FIRST channel — deterministic, matches the spec
+            # walkthrough's "drop_one" convention.
             payload = {"success": True, "detected_channels": requested[1:],
                        "error": ""}
         else:  # "succeed"
@@ -71,31 +68,14 @@ class DropletDetectionResponder(HasTraits):
         )
 
     def subscribe(self, router):
-        """Wire the responder + executor listener for the round-trip on
-        ``router``. Must be called from the demo's routing_setup."""
-        # 1. Responder subscribes to DETECT_DROPLETS so it sees the request.
+        """Wire only the responder's own subscription to DETECT_DROPLETS.
+
+        The executor listener and dialog actor subscriptions for the
+        round-trip are demo-environment wiring (production handles them
+        via MessageRouterPlugin + ACTOR_TOPIC_DICT) and live in the
+        demo's `_routing_setup`.
+        """
         router.message_router_data.add_subscriber_to_topic(
             topic=DETECT_DROPLETS,
             subscribing_actor_name=self.listener_name,
-        )
-        # 2. Executor's listener subscribes to DROPLETS_DETECTED + the
-        # decision-response topic so the handler's wait_for unblocks.
-        from dropbot_protocol_controls.consts import (
-            DROPLET_CHECK_DECISION_RESPONSE,
-        )
-        for topic in (DROPLETS_DETECTED, DROPLET_CHECK_DECISION_RESPONSE):
-            router.message_router_data.add_subscriber_to_topic(
-                topic=topic,
-                subscribing_actor_name=EXECUTOR_LISTENER_ACTOR_NAME,
-            )
-        # 3. The dialog actor subscribes to DROPLET_CHECK_DECISION_REQUEST
-        # via ACTOR_TOPIC_DICT in production. In the demo we manually wire
-        # it (no MessageRouterPlugin lifecycle in demos).
-        from dropbot_protocol_controls.consts import (
-            DROPLET_CHECK_DECISION_REQUEST,
-            DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME,
-        )
-        router.message_router_data.add_subscriber_to_topic(
-            topic=DROPLET_CHECK_DECISION_REQUEST,
-            subscribing_actor_name=DROPLET_CHECK_DECISION_LISTENER_ACTOR_NAME,
         )

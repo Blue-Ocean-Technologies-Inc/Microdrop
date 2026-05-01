@@ -172,11 +172,11 @@ class ProtocolExecutor(HasTraits):
                     break
                 if self.pause_event.is_set():
                     logger.info("Protocol paused at step %d", step_index + 1)
-                    # Emit signal here so EVERY pause path (UI button via
-                    # executor.pause(), hook via ctx.protocol.pause_event.set(),
-                    # etc.) updates the UI consistently. executor.pause()
-                    # also emits, so UI button paths emit twice, which is
-                    # harmless (idempotent state transition).
+                    # Emitted here so a hook setting pause_event still
+                    # surfaces to the UI. The toolbar's executor.pause()
+                    # also emits — slots that toggle UI state on each
+                    # signal must be idempotent. Worth promoting to a
+                    # single emission point if this proves brittle.
                     self.qsignals.protocol_paused.emit()
                     self.pause_event.wait_cleared()
                     if self.stop_event.is_set():
