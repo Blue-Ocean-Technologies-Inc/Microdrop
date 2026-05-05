@@ -43,6 +43,11 @@ class NavigationBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        # Bar should hug its sizeHint vertically — only stretch
+        # horizontally — so the tree fills the rest of the window
+        # rather than the bar growing into empty space.
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -50,7 +55,9 @@ class NavigationBar(QWidget):
         # Top row: navigation buttons.
         self.nav_container = QWidget()
         nav_layout = QHBoxLayout(self.nav_container)
-        nav_layout.setContentsMargins(5, 5, 5, 5)
+        # Horizontal padding keeps the buttons off the edges; vertical
+        # padding is zero so the bar doesn't add bands above/below.
+        nav_layout.setContentsMargins(5, 0, 5, 0)
         nav_layout.setSpacing(BUTTON_SPACING)
 
         self.btn_first = QPushButton(ICON_FIRST)
@@ -115,7 +122,8 @@ class NavigationBar(QWidget):
         # Bottom row: plugin-fillable left slot.
         self.bottom_container = QWidget()
         bottom_layout = QHBoxLayout(self.bottom_container)
-        bottom_layout.setContentsMargins(5, 5, 5, 5)
+        # Same horizontal-only padding as the nav row.
+        bottom_layout.setContentsMargins(5, 0, 5, 0)
         bottom_layout.setSpacing(10)
 
         self.left_slot_container = QWidget()
