@@ -650,7 +650,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     def _set_idle_button_state(self):
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)
-        nb.btn_play.setToolTip("Play Protocol")
+        nb.show_play_state()
         nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
@@ -658,18 +658,34 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     def _set_running_button_state(self):
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)         # acts as Pause while running
-        nb.btn_play.setToolTip("Pause Protocol")
+        nb.show_pause_state()
         nb.btn_stop.setEnabled(True)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
 
     def _on_play_clicked(self):
-        """While idle: start the protocol. While running/paused: toggle
-        pause. Mirrors the legacy protocol_grid play-button behaviour."""
+        """While idle: start the protocol from the currently-selected
+        step (or from the beginning if nothing is selected). While
+        running/paused: toggle pause. Mirrors the legacy
+        protocol_grid play-button behaviour."""
         if self._is_protocol_active():
             self._toggle_pause()
         else:
-            self.executor.start()
+            self.executor.start(start_step_path=self._selected_step_path())
+
+    def _selected_step_path(self):
+        """Return the path tuple of the currently-selected row, but only
+        if it's a step row that actually appears in execution order;
+        else None (which causes the executor to start from the
+        beginning)."""
+        idx = self.widget.tree.currentIndex()
+        if not idx.isValid():
+            return None
+        path = self.widget._index_to_path(idx)
+        for row in self.manager.iter_execution_steps():
+            if tuple(row.path) == path:
+                return path
+        return None
 
     def _is_protocol_active(self):
         """True iff the executor is currently running or paused. The
@@ -685,11 +701,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self.executor.pause()
 
     def _on_protocol_paused(self):
-        self.navigation_bar.btn_play.setToolTip("Resume Protocol")
+        self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
 
     def _on_protocol_resumed(self):
-        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
+        self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
 
@@ -731,6 +747,31 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             return
         if cur < len(steps) - 1:
             self._select_step(steps[cur + 1])
+            return
+        # At end of execution order — clone the currently-selected step
+        # and insert it after, at the same parent level. Mirrors the
+        # legacy protocol_grid Next-button behaviour where pressing
+        # Next at the end of the protocol creates a new step.
+        self._duplicate_step_after(steps[cur])
+
+    def _duplicate_step_after(self, row):
+        """Insert a copy of ``row`` immediately after it under the same
+        parent. Column values are read off the source row via each
+        column's model.col_id and round-tripped through the same
+        add_step API the toolbar uses."""
+        path = tuple(row.path)
+        parent_path = path[:-1]
+        insert_idx = path[-1] + 1
+        values = {}
+        for col in self.manager.columns:
+            cid = col.model.col_id
+            if hasattr(row, cid):
+                values[cid] = getattr(row, cid)
+        new_path = self.manager.add_step(
+            parent_path=parent_path, index=insert_idx, values=values,
+        )
+        new_row = self.manager.get_row(new_path)
+        self._select_step(new_row)
 
     def _current_step_in(self, steps):
         """Index of the tree's current row inside ``steps``, or None if

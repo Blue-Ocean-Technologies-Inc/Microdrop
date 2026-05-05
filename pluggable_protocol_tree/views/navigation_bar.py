@@ -18,8 +18,8 @@ from microdrop_style.button_styles import (
 from microdrop_style.colors import BLACK, WHITE
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_style.icons.icons import (
-    ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PLAY,
-    ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
+    ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PAUSE,
+    ICON_PLAY, ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
 )
 
 
@@ -129,6 +129,11 @@ class NavigationBar(QWidget):
         main_layout.addWidget(self.nav_container)
         main_layout.addWidget(self.bottom_container)
 
+        # The bottom row is dead space until a plugin contributes a
+        # widget via add_widget_to_left_slot — keep it hidden so the
+        # nav buttons sit flush against the tree.
+        self.bottom_container.setVisible(False)
+
         # Apply the legacy protocol_grid stylesheet and re-apply on
         # OS theme changes.
         self.apply_styling()
@@ -185,8 +190,28 @@ class NavigationBar(QWidget):
         return self._phase_navigation_active
 
     def add_widget_to_left_slot(self, widget):
-        """Helper for plugin-contributed widgets in the bottom-left area."""
+        """Helper for plugin-contributed widgets in the bottom-left area.
+        Reveals the bottom container — it's hidden by default to avoid
+        an empty band between the nav buttons and the tree."""
         self.left_slot_layout.addWidget(widget)
+        self.bottom_container.setVisible(True)
+
+    # --- play-button visual state -----------------------------------------
+
+    def show_play_state(self):
+        """Idle: ▶ icon, 'Play Protocol' tooltip."""
+        self.btn_play.setText(ICON_PLAY)
+        self.btn_play.setToolTip("Play Protocol")
+
+    def show_pause_state(self):
+        """Running: ⏸ icon, 'Pause Protocol' tooltip."""
+        self.btn_play.setText(ICON_PAUSE)
+        self.btn_play.setToolTip("Pause Protocol")
+
+    def show_resume_state(self):
+        """Paused: ▶▶ icon, 'Resume Protocol' tooltip."""
+        self.btn_play.setText(ICON_RESUME)
+        self.btn_play.setToolTip("Resume Protocol")
 
 
 class StatusBar(QScrollArea):

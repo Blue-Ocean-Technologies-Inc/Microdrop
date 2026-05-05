@@ -57,6 +57,10 @@ class ProtocolExecutor(HasTraits):
     # Internal — set by start() / cleared by run()'s finally.
     _thread = Any
     _error  = Any
+    # Optional row.path tuple — when set, run() skips frames until it
+    # encounters this path, then proceeds normally. Cleared on every
+    # start() so a previous "play from selected" doesn't carry over.
+    _start_step_path = Any
 
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
@@ -99,14 +103,22 @@ class ProtocolExecutor(HasTraits):
 
     # ------- public control API (called from the GUI thread) -------
 
-    def start(self) -> None:
+    def start(self, start_step_path: Optional[tuple] = None) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
-        a second call while already running is ignored."""
+        a second call while already running is ignored.
+
+        If ``start_step_path`` is given, run() skips frames in execution
+        order until it encounters a row whose ``path`` equals it, then
+        proceeds normally. Useful for "play from currently-selected step".
+        """
         if self._thread is not None and self._thread.is_alive():
             return
         self.pause_event.clear()
         self.stop_event.clear()
         self._error = None
+        self._start_step_path = (
+            tuple(start_step_path) if start_step_path is not None else None
+        )
         self._thread = threading.Thread(
             target=self.run,
             name="pluggable_protocol_tree_executor",
@@ -167,9 +179,16 @@ class ProtocolExecutor(HasTraits):
             logger.info("Protocol started")
 
             step_index = 0
+            # Pop into a local — once we've found the start path, the
+            # rest of the loop runs without the per-frame check.
+            skip_until = self._start_step_path
             for row, rep_chain in self.row_manager.iter_execution_frames():
                 if self.stop_event.is_set():
                     break
+                if skip_until is not None:
+                    if tuple(row.path) != skip_until:
+                        continue
+                    skip_until = None
                 if self.pause_event.is_set():
                     logger.info("Protocol paused at step %d", step_index + 1)
                     # Emitted here so a hook setting pause_event still
