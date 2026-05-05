@@ -8,8 +8,8 @@ location going forward.
 
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+    QSizePolicy, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from microdrop_style.button_styles import (
@@ -268,8 +268,13 @@ class StatusBar(QScrollArea):
         self.lbl_repeat_protocol_status.setAlignment(
             Qt.AlignRight | Qt.AlignVCenter,
         )
-        self.edit_repeat_protocol = QLineEdit("1")
-        self.edit_repeat_protocol.setFixedWidth(30)
+        # Bounded integer input — replaces the legacy QLineEdit("1")
+        # which let users type arbitrary text. SpinBox enforces the
+        # int range and avoids needing a try/except on .text().
+        self.edit_repeat_protocol = QSpinBox()
+        self.edit_repeat_protocol.setRange(1, 999)
+        self.edit_repeat_protocol.setValue(1)
+        self.edit_repeat_protocol.setFixedWidth(50)
         self.edit_repeat_protocol.setAlignment(Qt.AlignCenter)
         self.edit_repeat_protocol.setFixedHeight(20)
 
@@ -279,7 +284,7 @@ class StatusBar(QScrollArea):
 
         repeat_widget = QWidget()
         repeat_widget.setLayout(repeat_layout)
-        repeat_widget.setFixedWidth(170)
+        repeat_widget.setFixedWidth(190)
         repeat_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         repeat_widget.setFixedHeight(20)
 
@@ -330,7 +335,7 @@ class StatusBar(QScrollArea):
         if is_dark_mode():
             text_color = WHITE
             input_style = f"""
-                QLineEdit {{
+                QSpinBox {{
                     color: {WHITE};
                     background-color: #2d2d2d;
                     border: 1px solid #555555;
@@ -341,7 +346,7 @@ class StatusBar(QScrollArea):
         else:
             text_color = BLACK
             input_style = f"""
-                QLineEdit {{
+                QSpinBox {{
                     color: {BLACK};
                     background-color: white;
                     border: 1px solid #cccccc;

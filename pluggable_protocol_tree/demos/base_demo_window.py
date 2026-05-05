@@ -280,6 +280,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._phase_started_at: float | None = None
         self._phase_target: float | None = None
         self._current_row = None
+        # Auto-repeat state. Driven by the StatusBar's
+        # edit_repeat_protocol spinbox at play-button time.
+        self._repeats_total = 1
+        self._repeats_completed = 0
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(100)   # 10 Hz
         self._tick_timer.timeout.connect(self._refresh_status)
@@ -510,8 +514,30 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
+        # Recent / next-step labels — show the actual step name of the
+        # currently-running row plus the upcoming one. Walking
+        # iter_execution_steps once per step is fine; protocols stay
+        # under a few hundred steps.
+        self.status_bar.lbl_recent_step.setText(
+            f"Most Recent Step: {row.name}"
+        )
+        self.status_bar.lbl_next_step.setText(
+            f"Next Step: {self._next_step_name(row)}"
+        )
         if not self._tick_timer.isActive():
             self._tick_timer.start()
+
+    def _next_step_name(self, current):
+        """Return the display name of the step that follows ``current`` in
+        execution order, or "-" if ``current`` is the last step."""
+        steps = self.manager.iter_execution_steps()
+        cur_path = tuple(current.path)
+        # Advance past the current row, return the next one.
+        for row in steps:
+            if tuple(row.path) == cur_path:
+                next_row = next(steps, None)
+                return next_row.name if next_row is not None else "-"
+        return "-"
 
     def _on_phase_ack(self):
         """Each ack restarts the per-phase timer. The first ack of a step
@@ -555,7 +581,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._refresh_status()
 
     def _on_error(self, msg):
-        """protocol_error → reset to idle and show a styled error dialog."""
+        """protocol_error → reset to idle and show a styled error dialog.
+        Repeat state is cleared so a half-finished run doesn't auto-rerun."""
+        self._repeats_total = 0
+        self._repeats_completed = 0
+        self._update_repeat_status_label()
         self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
@@ -656,11 +686,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
         self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
         self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
-        for sig in (
-            self.executor.qsignals.protocol_finished,
-            self.executor.qsignals.protocol_aborted,
-        ):
-            sig.connect(self._on_protocol_terminated)
+        # Split protocol_finished from protocol_aborted so the auto-repeat
+        # logic only fires on natural completion (not user Stop).
+        self.executor.qsignals.protocol_finished.connect(self._on_protocol_finished)
+        self.executor.qsignals.protocol_aborted.connect(self._on_protocol_aborted)
 
     def _set_idle_button_state(self):
         nb = self.navigation_bar
@@ -680,13 +709,24 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     def _on_play_clicked(self):
         """While idle: start the protocol from the currently-selected
-        step (or from the beginning if nothing is selected). While
+        step (or from the beginning if nothing is selected), and prime
+        the auto-repeat counter from the StatusBar's spinbox. While
         running/paused: toggle pause. Mirrors the legacy
         protocol_grid play-button behaviour."""
         if self._is_protocol_active():
             self._toggle_pause()
-        else:
-            self.executor.start(start_step_path=self._selected_step_path())
+            return
+        self._repeats_total = self.status_bar.edit_repeat_protocol.value()
+        self._repeats_completed = 0
+        self._update_repeat_status_label()
+        self.executor.start(start_step_path=self._selected_step_path())
+
+    def _update_repeat_status_label(self):
+        """Reflect the current repeat counter into 'X/' (the X in
+        'X/<total>' shown on the status bar)."""
+        self.status_bar.lbl_repeat_protocol_status.setText(
+            f"{self._repeats_completed}/"
+        )
 
     def _selected_step_path(self):
         """Return the path tuple of the currently-selected row, but only
@@ -723,6 +763,31 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
+
+    def _on_protocol_finished(self):
+        """Natural completion. Bump the repeat counter; if more reps
+        remain, re-queue executor.start() on the next event-loop tick
+        (the worker thread emits protocol_finished from inside its
+        finally block — calling start() now would no-op against
+        ``_thread.is_alive()``)."""
+        self._repeats_completed += 1
+        self._update_repeat_status_label()
+        if self._repeats_completed < self._repeats_total:
+            QTimer.singleShot(50, self._restart_for_next_rep)
+            return
+        self._on_protocol_terminated()
+
+    def _restart_for_next_rep(self):
+        # Each repeat runs the protocol from the beginning — start_step_path
+        # is intentionally None.
+        self.executor.start()
+
+    def _on_protocol_aborted(self):
+        """User pressed Stop. Clear the repeat state (no auto-restart)."""
+        self._repeats_total = 0
+        self._repeats_completed = 0
+        self._update_repeat_status_label()
+        self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
         self._clear_all_highlights()
@@ -831,6 +896,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._status_step_label.setText("Step 0/0")
         self._status_step_time_label.setText("Step Time: 0 s")
         self._status_reps_label.setText("Repetition 0/0")
+        self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
+        self.status_bar.lbl_next_step.setText("Next Step: -")
         if self._status_phase_time_label is not None:
             self._status_phase_time_label.setText("Phase 0.00s / 0.00s")
 
