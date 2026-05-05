@@ -6,15 +6,17 @@ until PPT-9 deletes ``protocol_grid``; this module is the canonical
 location going forward.
 """
 
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
-    QApplication, QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from microdrop_style.button_styles import BUTTON_SPACING
+from microdrop_style.button_styles import (
+    BUTTON_SPACING, get_button_style,
+)
 from microdrop_style.colors import BLACK, WHITE
-from microdrop_style.helpers import is_dark_mode
+from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_style.icons.icons import (
     ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PLAY,
     ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
@@ -22,12 +24,20 @@ from microdrop_style.icons.icons import (
 
 
 class NavigationBar(QWidget):
-    """Two-row toolbar: playback/step/phase buttons on top, left-slot +
-    mode-toggle checkboxes on bottom.
+    """Two-row toolbar: playback/step/phase buttons on top, plugin-fillable
+    left slot on bottom.
 
     The play button can be split into a Prev-phase / Resume / Next-phase
     cluster via ``split_play_button_to_phase_controls`` for protocols
     being driven phase-by-phase.
+
+    Styling matches the legacy ``protocol_grid`` NavigationBar exactly:
+    ``nav_container`` gets the full app stylesheet (so the icon font and
+    button look match the rest of MicroDrop), ``left_slot_container``
+    gets the tool-button stylesheet. Both are re-applied on
+    ``colorSchemeChanged`` via a deferred QTimer.singleShot — the OS
+    palette flag is briefly stale at signal time, so we let the event
+    loop drain before re-reading ``is_dark_mode()``.
     """
 
     def __init__(self, parent=None):
@@ -102,7 +112,7 @@ class NavigationBar(QWidget):
 
         self._phase_navigation_active = False
 
-        # Bottom row: left slot + mode-toggle checkboxes.
+        # Bottom row: plugin-fillable left slot.
         self.bottom_container = QWidget()
         bottom_layout = QHBoxLayout(self.bottom_container)
         bottom_layout.setContentsMargins(5, 5, 5, 5)
@@ -113,43 +123,37 @@ class NavigationBar(QWidget):
         self.left_slot_layout.setContentsMargins(0, 0, 0, 0)
         self.left_slot_layout.setSpacing(5)
 
-        self.right_slot_container = QWidget()
-        self.right_slot_layout = QHBoxLayout(self.right_slot_container)
-        self.right_slot_layout.setContentsMargins(0, 0, 0, 0)
-        self.right_slot_layout.setSpacing(10)
-
-        self.droplet_check_checkbox = QCheckBox("Droplet Check")
-        self.droplet_check_checkbox.setToolTip("Droplet Detection on step end")
-
-        self.preview_mode_checkbox = QCheckBox("Preview Mode")
-        preview_msg = (
-            "Send no hardware messages on protocol run and do not trigger errors."
-        )
-        self.preview_mode_checkbox.setToolTip(
-            f"<div style='width: 150px;'>{preview_msg}</div>"
-        )
-
-        self.right_slot_layout.addWidget(self.preview_mode_checkbox)
-        self.right_slot_layout.addWidget(self.droplet_check_checkbox)
-
         bottom_layout.addWidget(self.left_slot_container)
         bottom_layout.addStretch()
-        bottom_layout.addWidget(self.right_slot_container)
 
         main_layout.addWidget(self.nav_container)
         main_layout.addWidget(self.bottom_container)
 
-    def is_droplet_check_enabled(self):
-        return self.droplet_check_checkbox.isChecked()
+        # Apply the legacy protocol_grid stylesheet and re-apply on
+        # OS theme changes.
+        self.apply_styling()
+        QApplication.styleHints().colorSchemeChanged.connect(
+            self._on_color_scheme_changed,
+        )
 
-    def is_preview_mode(self):
-        return self.preview_mode_checkbox.isChecked()
+    def apply_styling(self):
+        """Apply the same stylesheet the legacy protocol_grid uses for
+        its NavigationBar: full app sheet on the nav button row, tool
+        button sheet on the left-slot row."""
+        theme = "dark" if is_dark_mode() else "light"
+        self.nav_container.setStyleSheet(
+            get_complete_stylesheet(theme, "default"),
+        )
+        self.left_slot_container.setStyleSheet(
+            get_button_style(theme, "tool"),
+        )
 
-    def set_droplet_check_enabled(self, enabled):
-        self.droplet_check_checkbox.setEnabled(enabled)
-
-    def set_preview_mode_enabled(self, enabled):
-        self.preview_mode_checkbox.setEnabled(enabled)
+    def _on_color_scheme_changed(self, *_):
+        """Defer the re-style by one event-loop tick — when this signal
+        first fires, ``is_dark_mode()`` may still report the previous
+        theme. A 0 ms timer pushes the work to after the OS flags
+        settle. Mirrors the legacy widget.py:497 pattern verbatim."""
+        QTimer.singleShot(0, self.apply_styling)
 
     def split_play_button_to_phase_controls(self):
         if self._phase_navigation_active:

@@ -654,8 +654,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
-        nb.set_droplet_check_enabled(True)
-        nb.set_preview_mode_enabled(True)
 
     def _set_running_button_state(self):
         nb = self.navigation_bar
@@ -664,8 +662,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(True)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
-        nb.set_droplet_check_enabled(False)
-        nb.set_preview_mode_enabled(False)
 
     def _on_play_clicked(self):
         """While idle: start the protocol. While running/paused: toggle
@@ -791,8 +787,15 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     @classmethod
     def run(cls, config: DemoConfig) -> int:
         """One-shot main(): build the window, show it, run app.exec().
-        Reuses an existing QApplication if one is already running."""
+        Reuses an existing QApplication if one is already running.
+
+        Calls ``style_app`` so the Material Symbols icon font (used by
+        the NavigationBar buttons) is registered before the window
+        is built — without it the icon glyphs render as boxes."""
+        from microdrop_style.helpers import style_app
+
         app = QApplication.instance() or QApplication([])
+        style_app(app)
         w = cls(config)
         w.show()
         return app.exec()
