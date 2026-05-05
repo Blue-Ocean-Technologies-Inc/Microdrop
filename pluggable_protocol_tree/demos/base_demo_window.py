@@ -206,7 +206,7 @@ from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.navigation_bar import (
-    NavigationBar, make_separator,
+    NavigationBar, StatusBar, make_separator,
 )
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
@@ -441,20 +441,34 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             )
 
     def _build_status_bar(self):
+        """Build the legacy-style StatusBar widget (mounted under the nav
+        bar in _build_navigation_bar) plus a thin bottom QStatusBar that
+        only hosts demo-specific per-readout labels.
+
+        Old single-attribute names (``_status_step_label`` etc.) are
+        retained as aliases onto the StatusBar widget's labels so test
+        coverage and demo subclasses keep working.
+        """
+        self.status_bar = StatusBar()
+        # Reveal the phase time slot only when the demo cares about
+        # per-phase acks; otherwise it stays hidden so the top bar
+        # doesn't show a frozen "Phase 0.00s / 0.00s" forever.
+        phase_enabled = self.config.phase_ack_topic is not None
+        self.status_bar.lbl_phase_time.setVisible(phase_enabled)
+
+        # Aliases for backward compat with tests + demo subclasses.
+        # _status_row_label is intentionally dropped — the new layout
+        # has no row-name slot (per design discussion).
+        self._status_step_label = self.status_bar.lbl_step_progress
+        self._status_step_time_label = self.status_bar.lbl_step_time
+        self._status_reps_label = self.status_bar.lbl_step_repetition
+        self._status_phase_time_label = (
+            self.status_bar.lbl_phase_time if phase_enabled else None
+        )
+
+        # Bottom QStatusBar — only readouts live here now.
         sb = QStatusBar()
         self.setStatusBar(sb)
-        self._status_step_label = QLabel("Idle")
-        self._status_row_label = QLabel("")
-        self._status_reps_label = QLabel("")
-        self._status_step_time_label = QLabel("")
-        sb.addWidget(self._status_step_label)
-        sb.addWidget(self._status_row_label, stretch=1)
-        sb.addPermanentWidget(self._status_reps_label)
-        sb.addPermanentWidget(self._status_step_time_label)
-        if self.config.phase_ack_topic is not None:
-            self._status_phase_time_label = QLabel("")
-            sb.addPermanentWidget(self._status_phase_time_label)
-        # StatusReadout labels.
         for readout in self.config.status_readouts:
             slug = _slug(readout.label)
             label = QLabel(f"{readout.label}: {readout.initial}")
@@ -493,12 +507,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
             self._phase_target = None
-        path = ".".join(str(i + 1) for i in row.path) if row.path else ""
-        path_str = f" (path {path})" if path else ""
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
-        self._status_row_label.setText(f"{row.name}{path_str}")
         if not self._tick_timer.isActive():
             self._tick_timer.start()
 
@@ -600,12 +611,16 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # the phase cursor arrives.
         self.navigation_bar.set_phase_navigation_enabled(False, False)
 
-        # Wrap navigation bar + existing central content in a vertical layout.
+        # Wrap navigation bar + status bar + existing central content
+        # in a vertical layout. The status bar (legacy-style) sits
+        # directly under the nav bar, mirroring the old protocol_grid
+        # layout — separator between status and tree only.
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.navigation_bar)
+        layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self._central_content)
         self.setCentralWidget(container)
@@ -811,12 +826,13 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._phase_started_at = None
         self._phase_target = None
         self._current_row = None
-        self._status_step_label.setText("Idle")
-        self._status_row_label.setText("")
-        self._status_reps_label.setText("")
-        self._status_step_time_label.setText("")
+        # Reset to the StatusBar widget's initial label texts so the
+        # idle visual state matches a freshly-constructed window.
+        self._status_step_label.setText("Step 0/0")
+        self._status_step_time_label.setText("Step Time: 0 s")
+        self._status_reps_label.setText("Repetition 0/0")
         if self._status_phase_time_label is not None:
-            self._status_phase_time_label.setText("")
+            self._status_phase_time_label.setText("Phase 0.00s / 0.00s")
 
         # Reset readout labels to initial text.
         for readout in self.config.status_readouts:

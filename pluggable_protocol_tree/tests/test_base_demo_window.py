@@ -185,18 +185,21 @@ def test_window_has_router_attribute_after_construction(qapp):
 
 
 def test_window_has_status_bar_with_step_label(qapp):
-    """Status bar exists with the step counter label."""
+    """Status bar exists with the step counter label.
+
+    The legacy-style top StatusBar starts at "Step 0/0" instead of the
+    old "Idle" sentinel — matches the legacy protocol_grid look. The
+    bottom QStatusBar still exists but only hosts demo readout labels.
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    sb = w.statusBar()
-    assert sb is not None
-    # Step label and row label should be there.
-    assert w._status_step_label.text() == "Idle"
-    assert w._status_row_label.text() == ""
+    assert w.statusBar() is not None        # bottom (readouts only)
+    assert w.status_bar is not None         # top (legacy-look StatusBar)
+    assert w._status_step_label.text() == "Step 0/0"
 
 
 def test_window_status_step_elapsed_label_exists(qapp):
@@ -547,7 +550,7 @@ def test_clear_all_highlights_resets_status(qapp):
     w._status_step_label.setText("Step 2 / 3")
     # Terminate.
     w._on_protocol_terminated()
-    assert w._status_step_label.text() == "Idle"
+    assert w._status_step_label.text() == "Step 0/0"
     assert w._step_started_at is None
     assert w._readout_labels["voltage"].text() == "Voltage: --"
 
@@ -631,14 +634,19 @@ def test_post_build_setup_default_is_no_op(qapp):
 
 
 def test_status_bar_has_reps_label(qapp):
-    """The status bar exposes _status_reps_label, initially empty."""
+    """The status bar exposes _status_reps_label.
+
+    Initial text is the StatusBar widget's "Repetition 0/0" placeholder
+    (legacy protocol_grid look) — was the empty string when the label
+    was a permanent widget on the bottom QStatusBar.
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_reps_label.text() == ""
+    assert w._status_reps_label.text() == "Repetition 0/0"
 
 
 def test_step_repetition_renders_chain(qapp):

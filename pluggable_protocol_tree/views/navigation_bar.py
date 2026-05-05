@@ -246,6 +246,15 @@ class StatusBar(QScrollArea):
         self.lbl_step_time.setFixedWidth(115)
         self.lbl_step_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
+        # Phase time slot — not in the legacy StatusBar layout, but
+        # callers (BasePluggableProtocolDemoWindow) want to surface
+        # the per-phase ack timer here. Hidden by default; the demo
+        # window reveals it iff DemoConfig.phase_ack_topic is set.
+        self.lbl_phase_time = QLabel("Phase 0.00s / 0.00s")
+        self.lbl_phase_time.setFixedWidth(170)
+        self.lbl_phase_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_phase_time.setVisible(False)
+
         repeat_layout = QHBoxLayout()
         repeat_layout.setContentsMargins(0, 0, 0, 0)
         repeat_layout.setSpacing(2)
@@ -291,14 +300,16 @@ class StatusBar(QScrollArea):
         self.lbl_next_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         for w in (
-            self.lbl_total_time, self.lbl_step_time, self.lbl_step_progress,
-            self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step,
+            self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
+            self.lbl_step_progress, self.lbl_step_repetition,
+            self.lbl_recent_step, self.lbl_next_step,
         ):
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             w.setFixedHeight(20)
 
         layout.addWidget(self.lbl_total_time)
         layout.addWidget(self.lbl_step_time)
+        layout.addWidget(self.lbl_phase_time)
         layout.addWidget(repeat_widget)
         layout.addWidget(self.lbl_step_progress)
         layout.addWidget(self.lbl_step_repetition)
@@ -341,9 +352,10 @@ class StatusBar(QScrollArea):
 
         label_style = f"QLabel {{ color: {text_color}; }}"
         for label in (
-            self.lbl_total_time, self.lbl_step_time, self.lbl_repeat_protocol,
-            self.lbl_repeat_protocol_status, self.lbl_step_progress,
-            self.lbl_step_repetition, self.lbl_recent_step, self.lbl_next_step,
+            self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
+            self.lbl_repeat_protocol, self.lbl_repeat_protocol_status,
+            self.lbl_step_progress, self.lbl_step_repetition,
+            self.lbl_recent_step, self.lbl_next_step,
         ):
             label.setStyleSheet(label_style)
         self.edit_repeat_protocol.setStyleSheet(input_style)
