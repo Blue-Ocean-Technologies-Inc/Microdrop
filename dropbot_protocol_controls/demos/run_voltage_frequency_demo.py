@@ -156,4 +156,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from microdrop_utils.broker_server_helpers import (
+        redis_server_context, dramatiq_workers_context,
+    )
+
+    with redis_server_context():
+        with dramatiq_workers_context():
+            main()
