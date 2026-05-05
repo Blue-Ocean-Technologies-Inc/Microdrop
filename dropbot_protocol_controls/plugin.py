@@ -1,5 +1,6 @@
-"""DropbotProtocolControlsPlugin — contributes voltage/frequency
-columns to the pluggable protocol tree.
+"""DropbotProtocolControlsPlugin — contributes voltage/frequency/force/
+droplet-check columns to the pluggable protocol tree, plus the
+GUI-side actor for the droplet-check failure dialog (PPT-8).
 """
 
 from envisage.plugin import Plugin
@@ -15,6 +16,10 @@ from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .protocol_columns.voltage_column import make_voltage_column
 from .protocol_columns.frequency_column import make_frequency_column
 from .protocol_columns.force_column import make_force_column
+from .protocol_columns.droplet_check_column import make_droplet_check_column
+# Importing the actor module registers its @dramatiq.actor at import time;
+# subscription is wired automatically via ACTOR_TOPIC_DICT below.
+from .services import droplet_check_decision_dialog_actor as _ddialog_actor  # noqa: F401
 
 
 logger = get_logger(__name__)
@@ -31,4 +36,9 @@ class DropbotProtocolControlsPlugin(Plugin):
     )
 
     def _contributed_protocol_columns_default(self):
-        return [make_voltage_column(), make_frequency_column(), make_force_column()]
+        return [
+            make_voltage_column(),
+            make_frequency_column(),
+            make_force_column(),
+            make_droplet_check_column(),
+        ]

@@ -211,3 +211,73 @@ def test_force_recomputes_when_cache_set_after_load():
                               cache.capacitance_per_unit_area())
     assert force_col.model.get_value(first_step) == expected
     assert expected is not None
+
+
+# ---------------------------------------------------------------------------
+# PPT-8 — check_droplets Bool column persistence (added in Task 3)
+# ---------------------------------------------------------------------------
+
+def _build_eight_columns():
+    """7-column set from PPT-7 + check_droplets."""
+    from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
+        make_droplet_check_column,
+    )
+    with patch(
+        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+    ) as MockV, patch(
+        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+    ) as MockF:
+        MockV.return_value.last_voltage = 100
+        MockF.return_value.last_frequency = 10000
+        return [
+            make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(),
+            make_voltage_column(), make_frequency_column(),
+            make_force_column(),
+            make_droplet_check_column(),
+        ]
+
+
+def test_check_droplets_per_row_round_trip_through_json():
+    cols = _build_eight_columns()
+    rm = RowManager(columns=cols)
+    rm.add_step(values={"name": "S1", "check_droplets": True})
+    rm.add_step(values={"name": "S2", "check_droplets": False})
+    rm.add_step(values={"name": "S3"})  # default → True
+
+    payload = rm.to_json()
+    parsed = json.loads(json.dumps(payload))
+
+    rm2 = RowManager.from_json(parsed, columns=_build_eight_columns())
+    steps = rm2.root.children
+    assert [s.check_droplets for s in steps] == [True, False, True]
+    assert all(isinstance(s.check_droplets, bool) for s in steps)
+
+
+def test_check_droplets_column_metadata_in_json_payload():
+    rm = RowManager(columns=_build_eight_columns())
+    rm.add_step(values={"name": "S1"})
+    payload = rm.to_json()
+
+    entries = [c for c in payload["columns"] if c["id"] == "check_droplets"]
+    assert len(entries) == 1
+    assert entries[0]["cls"] == (
+        "dropbot_protocol_controls.protocol_columns.droplet_check_column.DropletCheckColumnModel"
+    )
+
+
+def test_legacy_load_without_check_droplets_field_defaults_to_true():
+    # Build a JSON payload as if check_droplets had never existed (i.e.
+    # a protocol saved before PPT-8). After load, all rows should have
+    # check_droplets=True (the column default).
+    cols_no_check = [c for c in _build_eight_columns()
+                     if c.model.col_id != "check_droplets"]
+    rm = RowManager(columns=cols_no_check)
+    rm.add_step(values={"name": "S1"})
+    rm.add_step(values={"name": "S2"})
+    payload = rm.to_json()                # no check_droplets in payload
+
+    rm2 = RowManager.from_json(json.loads(json.dumps(payload)),
+                                columns=_build_eight_columns())
+    for step in rm2.root.children:
+        assert step.check_droplets is True
