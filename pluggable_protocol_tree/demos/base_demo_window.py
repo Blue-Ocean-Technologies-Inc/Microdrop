@@ -196,7 +196,7 @@ import time
 from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow,
-    QSplitter, QStatusBar, QToolBar,
+    QSplitter, QStatusBar, QToolBar, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
@@ -205,6 +205,9 @@ from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.navigation_bar import (
+    NavigationBar, make_separator,
+)
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 
@@ -237,7 +240,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # attribute rather than walking the central widget's children.
         self._side_panel = None
 
-        # Central layout: just the tree, OR a splitter with tree + side panel.
+        # Tree-or-splitter goes inside a vertical container with the
+        # NavigationBar (built later in __init__) sitting above it. The
+        # nav bar is created after the executor so its button slots can
+        # bind directly to executor.start / .stop / pause-toggle.
         if self.config.side_panel_factory is not None:
             side = self.config.side_panel_factory(self.manager)
             if side is not None:
@@ -249,11 +255,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                     int(self.config.window_size[0] * 0.65),
                     int(self.config.window_size[0] * 0.35),
                 ])
-                self.setCentralWidget(splitter)
+                self._central_content = splitter
             else:
-                self.setCentralWidget(self.widget)
+                self._central_content = self.widget
         else:
-            self.setCentralWidget(self.widget)
+            self._central_content = self.widget
 
         # Pre-populate sample steps BEFORE the executor is built.
         config.pre_populate(self.manager)
@@ -321,6 +327,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._wire_executor_signals()
         self._build_toolbar()
+        self._build_navigation_bar()
         self._wire_button_state_machine()
         self._set_idle_button_state()
 
@@ -559,6 +566,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             )
 
     def _build_toolbar(self):
+        """Top QToolBar holds the Add/Save/Load utility actions; the
+        playback + step-navigation buttons live on the NavigationBar
+        below the toolbar (built next in ``_build_navigation_bar``)."""
         tb = QToolBar("Protocol")
         self.addToolBar(tb)
         tb.addAction("Add Step", lambda: self.manager.add_step())
@@ -566,11 +576,39 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction("Save…", self._save)
         tb.addAction("Load…", self._load)
-        tb.addSeparator()
-        self._run_action = tb.addAction("Run", self.executor.start)
-        self._pause_action = tb.addAction("Pause", self._toggle_pause)
-        self._stop_action = tb.addAction("Stop", self.executor.stop)
         self._toolbar = tb
+
+    def _build_navigation_bar(self):
+        """Build the NavigationBar (ported from protocol_grid) and wire
+        each button to the executor / step-cursor navigation. Mounts the
+        bar above the central content (tree or tree+side-panel splitter)."""
+        self.navigation_bar = NavigationBar()
+
+        # Playback.
+        self.navigation_bar.btn_play.clicked.connect(self._on_play_clicked)
+        self.navigation_bar.btn_resume.clicked.connect(self._toggle_pause)
+        self.navigation_bar.btn_stop.clicked.connect(self.executor.stop)
+
+        # Step navigation (cursor only — no protocol mutation).
+        self.navigation_bar.btn_first.clicked.connect(self._navigate_to_first_step)
+        self.navigation_bar.btn_prev.clicked.connect(self._navigate_to_previous_step)
+        self.navigation_bar.btn_next.clicked.connect(self._navigate_to_next_step)
+        self.navigation_bar.btn_last.clicked.connect(self._navigate_to_last_step)
+
+        # Phase navigation: per-phase cursor isn't implemented yet (PPT-10
+        # scope item). Buttons stay visually present but disabled until
+        # the phase cursor arrives.
+        self.navigation_bar.set_phase_navigation_enabled(False, False)
+
+        # Wrap navigation bar + existing central content in a vertical layout.
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.navigation_bar)
+        layout.addWidget(make_separator())
+        layout.addWidget(self._central_content)
+        self.setCentralWidget(container)
 
     def _save(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -610,16 +648,39 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             sig.connect(self._on_protocol_terminated)
 
     def _set_idle_button_state(self):
-        self._run_action.setEnabled(True)
-        self._pause_action.setEnabled(False)
-        self._pause_action.setText("Pause")
-        self._stop_action.setEnabled(False)
+        nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)
+        nb.btn_play.setToolTip("Play Protocol")
+        nb.btn_stop.setEnabled(False)
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(True)
+        nb.set_droplet_check_enabled(True)
+        nb.set_preview_mode_enabled(True)
 
     def _set_running_button_state(self):
-        self._run_action.setEnabled(False)
-        self._pause_action.setEnabled(True)
-        self._pause_action.setText("Pause")
-        self._stop_action.setEnabled(True)
+        nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)         # acts as Pause while running
+        nb.btn_play.setToolTip("Pause Protocol")
+        nb.btn_stop.setEnabled(True)
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(False)
+        nb.set_droplet_check_enabled(False)
+        nb.set_preview_mode_enabled(False)
+
+    def _on_play_clicked(self):
+        """While idle: start the protocol. While running/paused: toggle
+        pause. Mirrors the legacy protocol_grid play-button behaviour."""
+        if self._is_protocol_active():
+            self._toggle_pause()
+        else:
+            self.executor.start()
+
+    def _is_protocol_active(self):
+        """True iff the executor is currently running or paused. The
+        Stop button's enabled state tracks this exactly (via the
+        protocol_started / protocol_finished / protocol_aborted signal
+        chain), so use it as the source of truth."""
+        return self.navigation_bar.btn_stop.isEnabled()
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
@@ -628,11 +689,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self.executor.pause()
 
     def _on_protocol_paused(self):
-        self._pause_action.setText("Resume")
+        self.navigation_bar.btn_play.setToolTip("Resume Protocol")
         self._tick_timer.stop()
 
     def _on_protocol_resumed(self):
-        self._pause_action.setText("Pause")
+        self.navigation_bar.btn_play.setToolTip("Pause Protocol")
         if self._current_row is not None:
             self._tick_timer.start()
 
@@ -640,6 +701,65 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
+
+    # --- step-cursor navigation ----------------------------------------
+
+    def _navigate_to_first_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[0])
+
+    def _navigate_to_last_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[-1])
+
+    def _navigate_to_previous_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur > 0:
+            self._select_step(steps[cur - 1])
+
+    def _navigate_to_next_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur < len(steps) - 1:
+            self._select_step(steps[cur + 1])
+
+    def _current_step_in(self, steps):
+        """Index of the tree's current row inside ``steps``, or None if
+        the current row isn't a step (e.g. a group is selected)."""
+        idx = self.widget.tree.currentIndex()
+        if not idx.isValid():
+            return None
+        # Walk the QModelIndex chain back to a path tuple.
+        path = self.widget._index_to_path(idx)
+        for i, row in enumerate(steps):
+            if tuple(row.path) == path:
+                return i
+        return None
+
+    def _select_step(self, row):
+        idx = self.widget._node_to_index(row)
+        if not idx.isValid():
+            return
+        # Expand any collapsed ancestor groups so the row is visible.
+        parent = idx.parent()
+        while parent.isValid():
+            self.widget.tree.expand(parent)
+            parent = parent.parent()
+        self.widget.tree.setCurrentIndex(idx)
+        self.widget.tree.scrollTo(idx)
 
     def _clear_all_highlights(self):
         """Restore an idle visual state at protocol end."""
