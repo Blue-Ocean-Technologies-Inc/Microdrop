@@ -895,9 +895,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     def _publish_paused_phase(self):
         """Publish ELECTRODES_STATE_CHANGE for the currently-pointed
         phase so the device viewer overlays it. The ``preview`` flag
-        is set so any hardware-driving consumer (real DropBot, etc.)
-        ignores the message — we don't want pause-time exploration to
-        actuate the chip."""
+        on the payload mirrors the current run's mode — pause-time
+        phase navigation during a real Run actuates hardware just like
+        the route playback would have; during a Preview run it stays
+        gated."""
         from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
         if not self._pause_phases:
@@ -908,14 +909,16 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         )
         electrodes = sorted(phase)
         channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        payload = {
+            "electrodes": electrodes,
+            "channels": channels,
+        }
+        if self._current_run_preview_mode:
+            payload["preview"] = True
         try:
             publish_message(
                 topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps({
-                    "electrodes": electrodes,
-                    "channels": channels,
-                    "preview": True,
-                }),
+                message=json.dumps(payload),
             )
         except Exception as e:
             logger.warning(f"phase navigation publish failed: {e}")
