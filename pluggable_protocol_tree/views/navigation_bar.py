@@ -8,8 +8,8 @@ location going forward.
 
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-    QSizePolicy, QSpinBox, QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
 from microdrop_style.button_styles import (
@@ -222,28 +222,38 @@ class NavigationBar(QWidget):
         self.btn_play.setToolTip("Resume Protocol")
 
 
-class StatusBar(QScrollArea):
-    """Horizontal scrollable status row: total/step time, repeat counter,
-    step progress, repetition counter, recent/next-step labels.
+class StatusBar(QWidget):
+    """Horizontal status row: total/step time, repeat counter, step
+    progress, repetition counter, recent/next-step labels.
 
     All labels are exposed as public attributes so callers can update
     text directly (matches the legacy ``protocol_grid`` API).
+
+    Sized to the sum of its labels' content widths — pushing the bar
+    wider when step names get long — so callers should size the
+    enclosing window accordingly. Vertically Fixed at the row height.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        scroll_content = QWidget()
-        layout = QHBoxLayout(scroll_content)
+        # Horizontal: take whatever the layout asks for (so the bar
+        # grows with content); Vertical: hug the 20 px label row.
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 0, 5, 0)
         layout.setSpacing(10)
 
+        # Data-bearing labels use minimum widths (sensible defaults for
+        # the placeholder text) but are free to grow with content. Fixed
+        # widths previously truncated longer step names / counters.
         self.lbl_total_time = QLabel("Total Time: 0 s")
-        self.lbl_total_time.setFixedWidth(120)
+        self.lbl_total_time.setMinimumWidth(120)
         self.lbl_total_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.lbl_step_time = QLabel("Step Time: 0 s")
-        self.lbl_step_time.setFixedWidth(115)
+        self.lbl_step_time.setMinimumWidth(115)
         self.lbl_step_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         # Phase time slot — not in the legacy StatusBar layout, but
@@ -251,7 +261,7 @@ class StatusBar(QScrollArea):
         # the per-phase ack timer here. Hidden by default; the demo
         # window reveals it iff DemoConfig.phase_ack_topic is set.
         self.lbl_phase_time = QLabel("Phase 0.00s / 0.00s")
-        self.lbl_phase_time.setFixedWidth(170)
+        self.lbl_phase_time.setMinimumWidth(170)
         self.lbl_phase_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_phase_time.setVisible(False)
 
@@ -289,27 +299,29 @@ class StatusBar(QScrollArea):
         repeat_widget.setFixedHeight(20)
 
         self.lbl_step_progress = QLabel("Step 0/0")
-        self.lbl_step_progress.setFixedWidth(80)
+        self.lbl_step_progress.setMinimumWidth(80)
         self.lbl_step_progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.lbl_step_repetition = QLabel("Repetition 0/0")
-        self.lbl_step_repetition.setFixedWidth(100)
+        self.lbl_step_repetition.setMinimumWidth(100)
         self.lbl_step_repetition.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.lbl_recent_step = QLabel("Most Recent Step: -")
-        self.lbl_recent_step.setFixedWidth(200)
+        self.lbl_recent_step.setMinimumWidth(200)
         self.lbl_recent_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.lbl_next_step = QLabel("Next Step: -")
-        self.lbl_next_step.setFixedWidth(180)
+        self.lbl_next_step.setMinimumWidth(180)
         self.lbl_next_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
+        # Preferred horizontally so labels grow with their text content;
+        # Fixed vertically + 20 px height keeps the bar a single row.
         for w in (
             self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
             self.lbl_step_progress, self.lbl_step_repetition,
             self.lbl_recent_step, self.lbl_next_step,
         ):
-            w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             w.setFixedHeight(20)
 
         layout.addWidget(self.lbl_total_time)
@@ -320,13 +332,12 @@ class StatusBar(QScrollArea):
         layout.addWidget(self.lbl_step_repetition)
         layout.addWidget(self.lbl_recent_step)
         layout.addWidget(self.lbl_next_step)
+        # Trailing stretch absorbs any extra horizontal space when the
+        # window is wider than the bar's content — keeps labels packed
+        # to the left rather than spreading across the bar.
         layout.addStretch()
 
-        self.setWidget(scroll_content)
-        self.setWidgetResizable(True)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setFixedHeight(40)
+        self.setFixedHeight(28)
 
         self._apply_styling()
         QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)

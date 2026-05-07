@@ -126,7 +126,7 @@ def _post_build(window):
 config = DemoConfig(
     columns_factory=_columns,
     title="Pluggable Protocol Tree — PPT-3 Demo",
-    window_size=(1100, 650),
+    window_size=(1500, 650),
     pre_populate=_pre_populate,
     routing_setup=_routing_setup,
     phase_ack_topic=ELECTRODES_STATE_APPLIED,

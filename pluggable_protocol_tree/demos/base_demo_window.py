@@ -71,7 +71,11 @@ class DemoConfig:
 
     # Cosmetic.
     title: str = "Pluggable Protocol Tree Demo"
-    window_size: tuple[int, int] = (1100, 650)
+    # Default width sized so the legacy-style StatusBar's full label
+    # row (Total Time / Step Time / Phase Time / Repeat Protocol /
+    # Step X/Y / Repetition X/Y / Most Recent Step / Next Step) fits
+    # without horizontal clipping at moderate step-name lengths.
+    window_size: tuple[int, int] = (1500, 650)
 
     # Optional sample steps populated after RowManager construction.
     pre_populate: Callable[[Any], None] = field(
