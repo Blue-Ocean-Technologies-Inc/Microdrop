@@ -7,7 +7,6 @@ location going forward.
 """
 
 from pyface.qt.QtCore import Qt, QTimer
-from pyface.qt.QtGui import QPainter
 from pyface.qt.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QSizePolicy, QSpinBox, QVBoxLayout, QWidget,
@@ -22,6 +21,7 @@ from microdrop_style.icons.icons import (
     ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PAUSE,
     ICON_PLAY, ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
 )
+from microdrop_utils.pyside_helpers import MarqueeLabel
 
 
 class NavigationBar(QWidget):
@@ -221,84 +221,6 @@ class NavigationBar(QWidget):
         """Paused: ▶▶ icon, 'Resume Protocol' tooltip."""
         self.btn_play.setText(ICON_RESUME)
         self.btn_play.setToolTip("Resume Protocol")
-
-
-class MarqueeLabel(QLabel):
-    """QLabel that horizontally scrolls its text on mouse hover when the
-    text is too wide to fit the widget — useful for fixed-width status
-    labels showing variable-length values like step names.
-
-    On enterEvent: starts a 20 Hz timer that increments a horizontal
-    pixel offset; the paint event draws the text at -offset, plus a
-    second copy ``_GAP_PX`` px after the first, so the scroll loops
-    seamlessly. On leaveEvent: stops the timer and resets to offset=0,
-    so the label returns to its initial truncated appearance.
-
-    If the text already fits inside the widget, marquee animation is
-    skipped and the label paints with the default QLabel rendering.
-    """
-
-    _GAP_PX = 30      # space between the text and its repeat
-    _TICK_MS = 30     # ~33 Hz update
-    _STEP_PX = 3      # offset increment per tick
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._offset = 0
-        self._scrolling = False
-        self._timer = QTimer(self)
-        self._timer.setInterval(self._TICK_MS)
-        self._timer.timeout.connect(self._tick)
-
-    def setText(self, text):
-        super().setText(text)
-        # New text → cancel any in-flight scroll. The next hover will
-        # restart it if the new text overflows.
-        self._stop_scroll()
-
-    def enterEvent(self, event):
-        if self._text_overflows():
-            self._scrolling = True
-            self._timer.start()
-            self.update()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._stop_scroll()
-        super().leaveEvent(event)
-
-    def _stop_scroll(self):
-        self._scrolling = False
-        self._timer.stop()
-        self._offset = 0
-        self.update()
-
-    def _text_overflows(self):
-        fm = self.fontMetrics()
-        # 4 px tolerance for the label's content margin.
-        return fm.horizontalAdvance(self.text()) > self.width() - 4
-
-    def _tick(self):
-        fm = self.fontMetrics()
-        period = fm.horizontalAdvance(self.text()) + self._GAP_PX
-        self._offset = (self._offset + self._STEP_PX) % period
-        self.update()
-
-    def paintEvent(self, event):
-        if not self._scrolling:
-            super().paintEvent(event)
-            return
-        painter = QPainter(self)
-        painter.setPen(self.palette().color(self.foregroundRole()))
-        fm = self.fontMetrics()
-        text_w = fm.horizontalAdvance(self.text())
-        period = text_w + self._GAP_PX
-        baseline = (self.height() + fm.ascent() - fm.descent()) // 2
-        x = -self._offset
-        # Two copies — when the first scrolls past the right edge, the
-        # second is already entering from the right, no visible seam.
-        painter.drawText(x, baseline, self.text())
-        painter.drawText(x + period, baseline, self.text())
 
 
 class StatusBar(QScrollArea):

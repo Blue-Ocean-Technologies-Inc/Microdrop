@@ -683,6 +683,79 @@ class MarqueeComboBox(QtWidgets.QComboBox):
         )
 
 
+class MarqueeLabel(QLabel):
+    """QLabel that marquee-scrolls overflow text on hover.
+
+    Behavior: when the rendered text is wider than the label's content
+    rect, hovering scrolls the text leftward at ~40 fps until its tail
+    is visible, then holds that position until the mouse leaves — at
+    which point the offset resets to the start. If the text already
+    fits, hover does nothing.
+
+    Mirrors the scroll-then-hold pattern used by MarqueeComboBox above.
+    """
+
+    SCROLL_INTERVAL_MS = 25   # ~40 fps
+    SCROLL_STEP_PX = 2
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._offset = 0
+        self._timer = QtCore.QTimer(self)
+        self._timer.setInterval(self.SCROLL_INTERVAL_MS)
+        self._timer.timeout.connect(self._tick)
+
+    def setText(self, text):
+        super().setText(text)
+        self._reset_scroll()
+
+    def _max_offset(self):
+        """Pixels the text must travel so its tail reaches the right edge."""
+        text_w = self.fontMetrics().horizontalAdvance(self.text())
+        # 4 px margin matches MarqueeComboBox so chrome alignment is consistent.
+        return max(0, text_w - (self.width() - 4))
+
+    def _reset_scroll(self):
+        self._timer.stop()
+        self._offset = 0
+        self.update()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self._max_offset() > 0 and not self._timer.isActive():
+            self._offset = 0
+            self._timer.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._reset_scroll()
+
+    def _tick(self):
+        max_offset = self._max_offset()
+        self._offset = min(self._offset + self.SCROLL_STEP_PX, max_offset)
+        if self._offset >= max_offset:
+            # Tail reached; hold position until leaveEvent resets us.
+            self._timer.stop()
+        self.update()
+
+    def paintEvent(self, event):
+        # No active scroll AND no held offset → default QLabel rendering
+        # (preserves stylesheet/foreground role/alignment behaviour).
+        if self._offset == 0 and not self._timer.isActive():
+            super().paintEvent(event)
+            return
+        painter = QPainter(self)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        rect = self.contentsRect()
+        painter.setClipRect(rect)
+        text_w = painter.fontMetrics().horizontalAdvance(self.text())
+        painter.drawText(
+            rect.x() - self._offset, rect.y(),
+            text_w + self._offset, rect.height(),
+            self.alignment(), self.text(),
+        )
+
+
 class _ScalingPixmapLabel(QLabel):
     """QLabel that auto-scales its pixmap to fill available space on resize.
 
