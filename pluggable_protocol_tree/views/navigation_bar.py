@@ -319,7 +319,7 @@ class StatusBar(QScrollArea):
         scroll_content = QWidget()
         layout = QHBoxLayout(scroll_content)
         layout.setContentsMargins(5, 0, 5, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(5)
 
         self.lbl_total_time = QLabel("Total Time: 0 s")
         self.lbl_total_time.setFixedWidth(120)
