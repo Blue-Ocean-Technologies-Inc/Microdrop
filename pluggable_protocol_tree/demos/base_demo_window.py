@@ -289,6 +289,14 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # button machine uses it to disable the dropdown so a user
         # can't switch modes mid-run.
         self._current_run_preview_mode = False
+        # Phase-navigation state: while paused mid-step the demo
+        # window splits the play button into prev/resume/next phase
+        # controls and lets the user step through the paused row's
+        # phase list (for visualization only — the worker thread's
+        # actual phase position is independent and resumes from
+        # wherever it was when paused).
+        self._pause_phases: list = []
+        self._pause_phase_idx: int = 0
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(100)   # 10 Hz
         self._tick_timer.timeout.connect(self._refresh_status)
@@ -649,9 +657,14 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.navigation_bar.btn_next.clicked.connect(self._navigate_to_next_step)
         self.navigation_bar.btn_last.clicked.connect(self._navigate_to_last_step)
 
-        # Phase navigation: per-phase cursor isn't implemented yet (PPT-10
-        # scope item). Buttons stay visually present but disabled until
-        # the phase cursor arrives.
+        # Phase navigation — only useful while the protocol is paused
+        # mid-step. The handlers compute the paused step's phase list
+        # locally (no coordination with the worker thread) and publish
+        # ELECTRODES_STATE_CHANGE for the requested phase so the
+        # visualizer overlays it; the ``preview`` flag in the payload
+        # keeps the hardware driver from actuating.
+        self.navigation_bar.btn_prev_phase.clicked.connect(self._on_prev_phase)
+        self.navigation_bar.btn_next_phase.clicked.connect(self._on_next_phase)
         self.navigation_bar.set_phase_navigation_enabled(False, False)
 
         # Wrap navigation bar + status bar + existing central content
@@ -788,11 +801,21 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     def _on_protocol_paused(self):
         self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
+        # Swap to the prev / resume / next-phase trio so the user can
+        # explore the paused row's phases visually. Computed locally —
+        # the worker thread's iter_phases position isn't reachable
+        # from the GUI thread without thread-safe shared state.
+        if self._current_row is not None:
+            self._compute_pause_phase_state(self._current_row)
+            self.navigation_bar.split_play_button_to_phase_controls()
+            self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
         self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
+        # Restore the unified play button.
+        self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
         """Natural completion. Bump the repeat counter; if more reps
@@ -823,6 +846,89 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
+        # If the protocol terminated while paused, the play button is
+        # still split into the phase-nav trio — merge it back so the
+        # idle UI is the unified play button again.
+        self.navigation_bar.merge_phase_controls_to_play_button()
+        self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    # --- pause-time phase navigation ------------------------------------
+
+    def _compute_pause_phase_state(self, row):
+        """Build the paused row's phase list locally so prev/next phase
+        can step through it without touching the worker thread. Index
+        starts at 0 — we don't know the worker's actual phase position,
+        so the user explores from the start of the step."""
+        from pluggable_protocol_tree.services.phase_math import iter_phases
+        try:
+            self._pause_phases = list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+        except Exception as e:
+            logger.warning(f"phase navigation: iter_phases failed: {e}")
+            self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    def _on_prev_phase(self):
+        if self._pause_phases and self._pause_phase_idx > 0:
+            self._pause_phase_idx -= 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _on_next_phase(self):
+        if (self._pause_phases
+                and self._pause_phase_idx < len(self._pause_phases) - 1):
+            self._pause_phase_idx += 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _publish_paused_phase(self):
+        """Publish ELECTRODES_STATE_CHANGE for the currently-pointed
+        phase so the device viewer overlays it. The ``preview`` flag
+        is set so any hardware-driving consumer (real DropBot, etc.)
+        ignores the message — we don't want pause-time exploration to
+        actuate the chip."""
+        from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+        if not self._pause_phases:
+            return
+        phase = self._pause_phases[self._pause_phase_idx]
+        mapping = self.manager.protocol_metadata.get(
+            "electrode_to_channel", {},
+        )
+        electrodes = sorted(phase)
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        try:
+            publish_message(
+                topic=ELECTRODES_STATE_CHANGE,
+                message=json.dumps({
+                    "electrodes": electrodes,
+                    "channels": channels,
+                    "preview": True,
+                }),
+            )
+        except Exception as e:
+            logger.warning(f"phase navigation publish failed: {e}")
+
+    def _update_phase_nav_buttons(self):
+        prev_enabled = self._pause_phase_idx > 0
+        next_enabled = (
+            bool(self._pause_phases)
+            and self._pause_phase_idx < len(self._pause_phases) - 1
+        )
+        self.navigation_bar.set_phase_navigation_enabled(
+            prev_enabled, next_enabled,
+        )
 
     # --- step-cursor navigation ----------------------------------------
 
