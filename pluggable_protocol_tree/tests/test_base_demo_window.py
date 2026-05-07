@@ -26,7 +26,7 @@ def test_status_readout_initial_overridable():
 def test_demo_config_minimum_required_fields():
     cfg = DemoConfig(columns_factory=lambda: [])
     assert cfg.title == "Pluggable Protocol Tree Demo"
-    assert cfg.window_size == (1500, 650)
+    assert cfg.window_size == (1100, 650)
     assert cfg.phase_ack_topic == ELECTRODES_STATE_APPLIED   # default
     assert cfg.status_readouts == []
     assert cfg.side_panel_factory is None
@@ -78,7 +78,7 @@ def test_window_constructs_with_minimum_config(qapp):
     assert w.executor is not None
     assert w.widget is not None
     # Window size matches default
-    assert (w.width(), w.height()) == (1500, 650)
+    assert (w.width(), w.height()) == (1100, 650)
 
 
 def test_window_applies_custom_title_and_size(qapp):
