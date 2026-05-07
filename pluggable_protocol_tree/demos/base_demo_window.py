@@ -639,9 +639,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.navigation_bar.btn_play.clicked.connect(self._on_play_clicked)
         self.navigation_bar.btn_resume.clicked.connect(self._toggle_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.executor.stop)
-        # Preview Mode / Droplet Check are persistent toggles on the
-        # play dropdown — the Run click reads them via
-        # is_preview_mode() / is_droplet_check_enabled(); no extra
+        # Preview Mode is a persistent toggle on the play dropdown —
+        # the Run click reads it via is_preview_mode(); no extra
         # signal wiring needed here.
 
         # Step navigation (cursor only — no protocol mutation).
@@ -712,9 +711,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
-        # Re-enable the persistent run-mode toggles on the play dropdown.
+        # Re-enable the Preview-Mode toggle on the play dropdown.
         nb.action_preview.setEnabled(True)
-        nb.action_droplet_check.setEnabled(True)
 
     def _set_running_button_state(self):
         nb = self.navigation_bar
@@ -723,10 +721,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(True)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
-        # Modes are locked once a run is in progress — don't let the
-        # user re-arm Preview / toggle Droplet Check mid-run.
+        # Mode is locked once a run is in progress — don't let the
+        # user re-arm Preview mid-run.
         nb.action_preview.setEnabled(False)
-        nb.action_droplet_check.setEnabled(False)
 
     def _on_play_clicked(self):
         """While idle: start the protocol from the currently-selected

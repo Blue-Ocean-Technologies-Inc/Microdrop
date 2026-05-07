@@ -81,10 +81,9 @@ class NavigationBar(QWidget):
         # Play is a QToolButton with a menu-button split: the main face
         # behaves like before (click → start/pause/resume the protocol),
         # while the dropdown arrow exposes the persistent run-mode
-        # toggles that used to live as checkboxes on the legacy
-        # protocol_grid bottom row — Preview Mode and Droplet Check.
-        # Both are checkable QActions; main-button click reads their
-        # state via is_preview_mode() / is_droplet_check_enabled().
+        # toggle Preview Mode (the legacy protocol_grid checkbox).
+        # Droplet detection is owned by its own column now, so it
+        # doesn't need a slot here.
         self.btn_play = QToolButton()
         self.btn_play.setPopupMode(QToolButton.MenuButtonPopup)
         self.btn_play.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -100,14 +99,7 @@ class NavigationBar(QWidget):
             "(useful when no DropBot is connected)"
         )
 
-        self.action_droplet_check = QAction("Droplet Check", self.play_menu)
-        self.action_droplet_check.setCheckable(True)
-        self.action_droplet_check.setToolTip(
-            "Run droplet detection at the end of each step"
-        )
-
         self.play_menu.addAction(self.action_preview)
-        self.play_menu.addAction(self.action_droplet_check)
         self.btn_play.setMenu(self.play_menu)
 
         # Toggling Preview re-applies the play-button stylesheet so the
@@ -272,11 +264,6 @@ class NavigationBar(QWidget):
         """True when the user has armed Preview Mode in the play
         dropdown — the legacy ``preview_mode_checkbox.isChecked()``."""
         return self.action_preview.isChecked()
-
-    def is_droplet_check_enabled(self):
-        """True when the user has enabled Droplet Check in the play
-        dropdown — the legacy ``droplet_check_checkbox.isChecked()``."""
-        return self.action_droplet_check.isChecked()
 
     def _on_color_scheme_changed(self, *_):
         """Defer the re-style by one event-loop tick — when this signal
