@@ -239,8 +239,8 @@ class MarqueeLabel(QLabel):
     """
 
     _GAP_PX = 30      # space between the text and its repeat
-    _TICK_MS = 50     # 20 Hz update
-    _STEP_PX = 1      # offset increment per tick
+    _TICK_MS = 30     # ~33 Hz update
+    _STEP_PX = 3      # offset increment per tick
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
