@@ -22,6 +22,11 @@ from microdrop_style.icons.icons import (
     ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PAUSE,
     ICON_PLAY, ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
 )
+
+# Material Symbols ligature used while Preview Mode is armed —
+# replaces the play-arrow glyph so the button reads as a "preview"
+# action at a glance.
+ICON_PREVIEW = "video_search"
 from microdrop_utils.pyside_helpers import MarqueeLabel
 
 
@@ -102,9 +107,11 @@ class NavigationBar(QWidget):
         self.play_menu.addAction(self.action_preview)
         self.btn_play.setMenu(self.play_menu)
 
-        # Toggling Preview re-applies the play-button stylesheet so the
-        # button background flips to yellow while preview is armed.
-        self.action_preview.toggled.connect(lambda _: self.apply_styling())
+        # Toggling Preview re-applies the play-button stylesheet (so
+        # background + hover flip to yellow) and refreshes the play
+        # state so the icon swaps to ``video_search`` and the tooltip
+        # picks up the "Preview" wording.
+        self.action_preview.toggled.connect(lambda _: self._on_preview_toggled())
 
         self.btn_prev_phase = QPushButton(ICON_PREVIOUS_PHASE)
         self.btn_prev_phase.setToolTip("Previous Phase")
@@ -211,19 +218,31 @@ class NavigationBar(QWidget):
             bg_disabled = BLACK
             fg_disabled = GREY['light']
             border_disabled = GREY['dark']
-            preview_bg = "#a68f00"
-            preview_border = "#ffd54f"
-            preview_fg = BLACK
+            preview_bg, preview_border, preview_fg = "#a68f00", "#ffd54f", BLACK
+            preview_hover_bg, preview_hover_border = "#bfa200", "#ffe082"
+            normal_hover_bg = GREY['light']
+            normal_hover_border = SECONDARY_SHADE[300]
+            normal_hover_fg = SECONDARY_SHADE[700]
         else:
             bg, fg, border = WHITE, BLACK, GREY['light']
             bg_disabled = GREY['light']
             fg_disabled = GREY['dark']
             border_disabled = GREY['lighter']
-            preview_bg = "#fff59d"
-            preview_border = "#fbc02d"
-            preview_fg = BLACK
+            preview_bg, preview_border, preview_fg = "#fff59d", "#fbc02d", BLACK
+            preview_hover_bg, preview_hover_border = "#ffe082", "#fb8c00"
+            normal_hover_bg = GREY['light']
+            normal_hover_border = SECONDARY_SHADE[300]
+            normal_hover_fg = SECONDARY_SHADE[700]
+
         if self.action_preview.isChecked():
             bg, fg, border = preview_bg, preview_fg, preview_border
+            hover_bg, hover_border, hover_fg = (
+                preview_hover_bg, preview_hover_border, preview_fg,
+            )
+        else:
+            hover_bg, hover_border, hover_fg = (
+                normal_hover_bg, normal_hover_border, normal_hover_fg,
+            )
         return f"""
             QToolButton {{
                 font-family: "{ICON_FONT_FAMILY}";
@@ -237,9 +256,9 @@ class NavigationBar(QWidget):
                 color: {fg};
             }}
             QToolButton:hover {{
-                color: {SECONDARY_SHADE[700]};
-                background-color: {GREY['light']};
-                border-color: {SECONDARY_SHADE[300]};
+                color: {hover_fg};
+                background-color: {hover_bg};
+                border-color: {hover_border};
             }}
             QToolButton:pressed {{
                 background-color: {GREY['dark']};
@@ -264,6 +283,22 @@ class NavigationBar(QWidget):
         """True when the user has armed Preview Mode in the play
         dropdown — the legacy ``preview_mode_checkbox.isChecked()``."""
         return self.action_preview.isChecked()
+
+    def _on_preview_toggled(self):
+        """Re-apply styling and refresh whichever play-button state is
+        currently showing so the icon + tooltip flip to / from the
+        preview variant. The pause/resume icons themselves don't need
+        a per-toggle rewrite — only their tooltips read different text
+        in preview — so reading the button's current text decides
+        which show_* helper re-runs."""
+        self.apply_styling()
+        current_text = self.btn_play.text()
+        if current_text == ICON_PAUSE:
+            self.show_pause_state()
+        elif current_text == ICON_RESUME:
+            self.show_resume_state()
+        else:
+            self.show_play_state()
 
     def _on_color_scheme_changed(self, *_):
         """Defer the re-style by one event-loop tick — when this signal
@@ -309,21 +344,39 @@ class NavigationBar(QWidget):
         self.bottom_container.setVisible(True)
 
     # --- play-button visual state -----------------------------------------
+    #
+    # Each show_*_state() reads ``action_preview.isChecked()`` and picks
+    # the matching icon + tooltip — so toggling Preview Mode while the
+    # button is in any state correctly relabels it. A "Preview" prefix
+    # in the tooltip and the ``video_search`` glyph signal that the
+    # next click won't drive hardware.
+
+    def _preview_armed(self):
+        return self.action_preview.isChecked()
 
     def show_play_state(self):
-        """Idle: ▶ icon, 'Play Protocol' tooltip."""
-        self.btn_play.setText(ICON_PLAY)
-        self.btn_play.setToolTip("Play Protocol")
+        """Idle: video_search + 'Preview Protocol' if armed, else
+        play_arrow + 'Play Protocol'."""
+        if self._preview_armed():
+            self.btn_play.setText(ICON_PREVIEW)
+            self.btn_play.setToolTip("Preview Protocol")
+        else:
+            self.btn_play.setText(ICON_PLAY)
+            self.btn_play.setToolTip("Play Protocol")
 
     def show_pause_state(self):
-        """Running: ⏸ icon, 'Pause Protocol' tooltip."""
+        """Running: ⏸ icon. Tooltip notes preview state when armed."""
         self.btn_play.setText(ICON_PAUSE)
-        self.btn_play.setToolTip("Pause Protocol")
+        self.btn_play.setToolTip(
+            "Pause Preview" if self._preview_armed() else "Pause Protocol"
+        )
 
     def show_resume_state(self):
-        """Paused: ▶▶ icon, 'Resume Protocol' tooltip."""
+        """Paused: ▶▶ icon. Tooltip notes preview state when armed."""
         self.btn_play.setText(ICON_RESUME)
-        self.btn_play.setToolTip("Resume Protocol")
+        self.btn_play.setToolTip(
+            "Resume Preview" if self._preview_armed() else "Resume Protocol"
+        )
 
 
 class StatusBar(QScrollArea):
