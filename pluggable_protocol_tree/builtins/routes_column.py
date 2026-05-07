@@ -85,6 +85,11 @@ class RoutesHandler(BaseColumnHandler):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
         per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
         stop_event = ctx.protocol.stop_event
+        # Preview mode: walk the same phase iteration and dwell
+        # accordingly, but skip the broker publish and the ack-wait —
+        # the protocol logic and timing still execute, just without
+        # touching hardware. Mirrors legacy protocol_grid preview.
+        preview_mode = bool(getattr(ctx.protocol, "preview_mode", False))
         for phase in iter_phases(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
             routes=list(getattr(row, "routes", []) or []),
@@ -107,20 +112,22 @@ class RoutesHandler(BaseColumnHandler):
                         "electrode %r has no channel mapping; "
                         "actuation channel skipped", e,
                     )
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps({
-                    "electrodes": electrodes,
-                    "channels": channels,
-                }),
-            )
-            # 5.0s matches ack_roundtrip_column. Keeps headroom for the
-            # first publish in a process (cold broker pays ~1-2s) and
-            # for queue contention when other handlers in the same
-            # priority bucket publish in parallel and serialize through
-            # the single dramatiq worker queue. Hardware controllers
-            # typically ack in <100ms.
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            if not preview_mode:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps({
+                        "electrodes": electrodes,
+                        "channels": channels,
+                    }),
+                )
+                # 5.0s matches ack_roundtrip_column. Keeps headroom
+                # for the first publish in a process (cold broker
+                # pays ~1-2s) and for queue contention when other
+                # handlers in the same priority bucket publish in
+                # parallel and serialize through the single dramatiq
+                # worker queue. Hardware controllers typically ack
+                # in <100ms.
+                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
             _cooperative_sleep(per_phase_dwell, stop_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True

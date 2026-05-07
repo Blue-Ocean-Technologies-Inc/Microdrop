@@ -284,6 +284,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # edit_repeat_protocol spinbox at play-button time.
         self._repeats_total = 1
         self._repeats_completed = 0
+        # Whichever mode (Run / Preview) the user picked for this run
+        # — auto-repeats reuse the same mode, and the running-state
+        # button machine uses it to disable the dropdown so a user
+        # can't switch modes mid-run.
+        self._current_run_preview_mode = False
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(100)   # 10 Hz
         self._tick_timer.timeout.connect(self._refresh_status)
@@ -634,6 +639,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.navigation_bar.btn_play.clicked.connect(self._on_play_clicked)
         self.navigation_bar.btn_resume.clicked.connect(self._toggle_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.executor.stop)
+        # Preview entry on the play button's dropdown menu — starts the
+        # protocol with preview_mode=True so hardware-publishing hooks
+        # skip their broker writes.
+        self.navigation_bar.action_run_preview.triggered.connect(
+            self._on_preview_clicked
+        )
 
         # Step navigation (cursor only — no protocol mutation).
         self.navigation_bar.btn_first.clicked.connect(self._navigate_to_first_step)
@@ -703,6 +714,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
+        # Re-enable mode-switching options on the play dropdown.
+        nb.action_run_preview.setEnabled(True)
 
     def _set_running_button_state(self):
         nb = self.navigation_bar
@@ -711,6 +724,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(True)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
+        # Mode is locked once a run is in progress — don't let the
+        # user pick Preview from the dropdown mid-run.
+        nb.action_run_preview.setEnabled(False)
 
     def _on_play_clicked(self):
         """While idle: start the protocol from the currently-selected
@@ -721,10 +737,28 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if self._is_protocol_active():
             self._toggle_pause()
             return
+        self._start_protocol_run(preview_mode=False)
+
+    def _on_preview_clicked(self):
+        """Dropdown 'Preview' entry — start the protocol in preview
+        mode (no hardware writes). Ignored while a run is already in
+        progress."""
+        if self._is_protocol_active():
+            return
+        self._start_protocol_run(preview_mode=True)
+
+    def _start_protocol_run(self, preview_mode: bool):
+        """Common entry point for both Run and Preview: prime the repeat
+        counter, remember the chosen mode for auto-repeat continuations,
+        then start the executor."""
         self._repeats_total = self.status_bar.edit_repeat_protocol.value()
         self._repeats_completed = 0
+        self._current_run_preview_mode = preview_mode
         self._update_repeat_status_label()
-        self.executor.start(start_step_path=self._selected_step_path())
+        self.executor.start(
+            start_step_path=self._selected_step_path(),
+            preview_mode=preview_mode,
+        )
 
     def _update_repeat_status_label(self):
         """Reflect the current repeat counter into 'X/' (the X in
@@ -784,8 +818,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     def _restart_for_next_rep(self):
         # Each repeat runs the protocol from the beginning — start_step_path
-        # is intentionally None.
-        self.executor.start()
+        # is intentionally None. Carry the original Run/Preview mode forward.
+        self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
         """User pressed Stop. Clear the repeat state (no auto-restart)."""

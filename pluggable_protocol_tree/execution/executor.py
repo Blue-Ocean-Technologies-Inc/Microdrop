@@ -61,6 +61,10 @@ class ProtocolExecutor(HasTraits):
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
     _start_step_path = Any
+    # When True, the next run() builds the ProtocolContext with
+    # preview_mode=True so hardware-publishing hooks skip their
+    # broker writes (legacy protocol_grid "Preview Mode" semantics).
+    _preview_mode = Any
 
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
@@ -103,13 +107,25 @@ class ProtocolExecutor(HasTraits):
 
     # ------- public control API (called from the GUI thread) -------
 
-    def start(self, start_step_path: Optional[tuple] = None) -> None:
+    def start(
+        self,
+        start_step_path: Optional[tuple] = None,
+        preview_mode: bool = False,
+    ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
         a second call while already running is ignored.
 
         If ``start_step_path`` is given, run() skips frames in execution
         order until it encounters a row whose ``path`` equals it, then
         proceeds normally. Useful for "play from currently-selected step".
+
+        If ``preview_mode`` is True, the ProtocolContext built by run()
+        carries ``preview_mode=True``; hardware-publishing hooks (e.g.
+        the routes column's electrode-state publishes) check this flag
+        and skip their broker writes. Step iteration, dwells, signals
+        and column logic all run normally — only the hardware-touching
+        side effects are gated. Mirrors the legacy protocol_grid
+        "Preview Mode" checkbox semantics.
         """
         if self._thread is not None and self._thread.is_alive():
             return
@@ -119,6 +135,7 @@ class ProtocolExecutor(HasTraits):
         self._start_step_path = (
             tuple(start_step_path) if start_step_path is not None else None
         )
+        self._preview_mode = bool(preview_mode)
         self._thread = threading.Thread(
             target=self.run,
             name="pluggable_protocol_tree_executor",
@@ -164,6 +181,7 @@ class ProtocolExecutor(HasTraits):
             stop_event=self.stop_event,
             pause_event=self.pause_event,
             qsignals=self.qsignals,
+            preview_mode=bool(self._preview_mode),
         )
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
         # into the context's scratch so handlers can reach it without

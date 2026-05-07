@@ -7,15 +7,16 @@ location going forward.
 """
 
 from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtGui import QAction
 from pyface.qt.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-    QSizePolicy, QSpinBox, QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton,
+    QScrollArea, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_style.button_styles import (
-    BUTTON_SPACING, get_button_style,
+    BUTTON_SPACING, ICON_FONT_FAMILY, get_button_style,
 )
-from microdrop_style.colors import BLACK, WHITE
+from microdrop_style.colors import BLACK, GREY, SECONDARY_SHADE, WHITE
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_style.icons.icons import (
     ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PAUSE,
@@ -77,8 +78,25 @@ class NavigationBar(QWidget):
         self.btn_last = QPushButton(ICON_LAST)
         self.btn_last.setToolTip("Last Step")
 
-        self.btn_play = QPushButton(ICON_PLAY)
+        # Play is a QToolButton with a menu-button split: the main face
+        # behaves like before (click → start/pause/resume the protocol),
+        # while the dropdown arrow exposes alternate run modes — currently
+        # only "Preview" (skip hardware writes). Plugins can add more
+        # via ``play_menu``.
+        self.btn_play = QToolButton()
+        self.btn_play.setPopupMode(QToolButton.MenuButtonPopup)
+        self.btn_play.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.btn_play.setText(ICON_PLAY)
         self.btn_play.setToolTip("Play Protocol")
+
+        self.play_menu = QMenu(self.btn_play)
+        self.action_run_preview = QAction("Preview", self.play_menu)
+        self.action_run_preview.setToolTip(
+            "Run the protocol without sending any hardware messages "
+            "(useful when no DropBot is connected)"
+        )
+        self.play_menu.addAction(self.action_run_preview)
+        self.btn_play.setMenu(self.play_menu)
 
         self.btn_prev_phase = QPushButton(ICON_PREVIOUS_PHASE)
         self.btn_prev_phase.setToolTip("Previous Phase")
@@ -153,7 +171,15 @@ class NavigationBar(QWidget):
     def apply_styling(self):
         """Apply the same stylesheet the legacy protocol_grid uses for
         its NavigationBar: full app sheet on the nav button row, tool
-        button sheet on the left-slot row."""
+        button sheet on the left-slot row.
+
+        The play button is a QToolButton, which the default stylesheet
+        only targets via its ``QPushButton`` rules — leaving the play
+        button without the Material Symbols font (so the glyph name
+        ``play_arrow`` renders as literal text). _play_btn_stylesheet
+        applies a QToolButton-targeting equivalent so the icon font,
+        colours, and hover behaviour all match its QPushButton siblings.
+        """
         theme = "dark" if is_dark_mode() else "light"
         self.nav_container.setStyleSheet(
             get_complete_stylesheet(theme, "default"),
@@ -161,6 +187,54 @@ class NavigationBar(QWidget):
         self.left_slot_container.setStyleSheet(
             get_button_style(theme, "tool"),
         )
+        self.btn_play.setStyleSheet(self._play_btn_stylesheet(theme))
+
+    @staticmethod
+    def _play_btn_stylesheet(theme):
+        """QToolButton stylesheet mirroring the default QPushButton look
+        (icon font + theme-aware colours) plus a ``::menu-button``
+        sub-control rule so the dropdown arrow has a clean separator
+        instead of inheriting the main face's borders."""
+        if theme == "dark":
+            bg, fg, border = GREY['dark'], WHITE, GREY['lighter']
+            bg_disabled = BLACK
+            fg_disabled = GREY['light']
+            border_disabled = GREY['dark']
+        else:
+            bg, fg, border = WHITE, BLACK, GREY['light']
+            bg_disabled = GREY['light']
+            fg_disabled = GREY['dark']
+            border_disabled = GREY['lighter']
+        return f"""
+            QToolButton {{
+                font-family: "{ICON_FONT_FAMILY}";
+                font-size: 22px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                min-width: 60px;
+                min-height: 26px;
+                border: 1px solid {border};
+                background-color: {bg};
+                color: {fg};
+            }}
+            QToolButton:hover {{
+                color: {SECONDARY_SHADE[700]};
+                background-color: {GREY['light']};
+                border-color: {SECONDARY_SHADE[300]};
+            }}
+            QToolButton:pressed {{
+                background-color: {GREY['dark']};
+            }}
+            QToolButton:disabled {{
+                color: {fg_disabled};
+                background-color: {bg_disabled};
+                border-color: {border_disabled};
+            }}
+            QToolButton::menu-button {{
+                border-left: 1px solid {border};
+                width: 16px;
+            }}
+        """
 
     def _on_color_scheme_changed(self, *_):
         """Defer the re-style by one event-loop tick — when this signal
