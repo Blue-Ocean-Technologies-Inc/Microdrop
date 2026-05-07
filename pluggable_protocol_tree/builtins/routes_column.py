@@ -85,6 +85,7 @@ class RoutesHandler(BaseColumnHandler):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
         per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
         stop_event = ctx.protocol.stop_event
+        pause_event = ctx.protocol.pause_event
         # Preview mode publishes the electrode-state-change message AND
         # waits for the ack just like a real run, so the device viewer's
         # overlay listener still highlights each phase's electrodes —
@@ -107,6 +108,15 @@ class RoutesHandler(BaseColumnHandler):
         ):
             if stop_event.is_set():
                 break
+            # Pause check at the phase boundary — block here so the
+            # next phase's actuation doesn't fire until the user
+            # resumes. The executor's between-step pause check
+            # doesn't reach inside on_step's phase loop, so without
+            # this the routes keep playing through a Pause click.
+            if pause_event.is_set():
+                pause_event.wait_cleared()
+                if stop_event.is_set():
+                    break
             electrodes = sorted(phase)
             channels = sorted(mapping[e] for e in electrodes if e in mapping)
             for e in electrodes:
@@ -134,19 +144,26 @@ class RoutesHandler(BaseColumnHandler):
             # the single dramatiq worker queue. Hardware controllers
             # typically ack in <100ms.
             ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
-            _cooperative_sleep(per_phase_dwell, stop_event)
+            _cooperative_sleep(per_phase_dwell, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
 
 
-def _cooperative_sleep(seconds: float, stop_event) -> None:
-    """Sleep for ``seconds``, waking every _SLICE_S to check stop_event.
-    Used so a Stop press lands within ~50ms even mid-dwell. Returns
-    early on stop or when seconds reaches 0."""
+def _cooperative_sleep(seconds: float, stop_event, pause_event=None) -> None:
+    """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
+    (and pause_event if provided). Used so a Stop or Pause press lands
+    within ~50ms even mid-dwell. On pause: block in
+    ``pause_event.wait_cleared()`` until the user resumes, then
+    continue with the remaining dwell. Returns early on stop or when
+    seconds reaches 0."""
     remaining = seconds
     while remaining > 0:
         if stop_event.is_set():
             return
+        if pause_event is not None and pause_event.is_set():
+            pause_event.wait_cleared()
+            if stop_event.is_set():
+                return
         slice_dur = min(_SLICE_S, remaining)
         time.sleep(slice_dur)
         remaining -= slice_dur

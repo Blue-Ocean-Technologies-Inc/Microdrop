@@ -134,8 +134,9 @@ def _overlay_listener(message: str, topic: str, timestamp: float = None):
     except (TypeError, ValueError):
         return
     electrodes = payload.get("electrodes", []) or []
+    preview = bool(payload.get("preview", False))
     print(f"[OVERLAY] painting cells: {electrodes}", flush=True)
-    viewer.actuation_changed.emit(list(electrodes))
+    viewer.actuation_changed.emit(list(electrodes), preview)
 
 
 def _columns():
