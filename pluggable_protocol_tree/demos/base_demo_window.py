@@ -566,14 +566,19 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     def _on_step_repetition(self, rep_chain):
         """Render the active rep context (e.g. "rep 2/3 of 'Wash'") into
-        the status bar. Empty chain (no repeating ancestor) clears."""
+        the status bar. Empty chain (no repeating ancestor) hides the
+        label so the layout collapses the slot — otherwise its
+        fixed-width box would leave a blank 100 px gap between the
+        Step counter and the Most-Recent-Step label."""
         if not rep_chain:
             self._status_reps_label.setText("")
+            self._status_reps_label.setVisible(False)
             return
         parts = [
             f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
         ]
         self._status_reps_label.setText(" · ".join(parts))
+        self._status_reps_label.setVisible(True)
 
     def _on_step_finished(self, _row):
         # Freeze the elapsed-time labels at the step's actual elapsed.
@@ -896,6 +901,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._status_step_label.setText("Step 0/0")
         self._status_step_time_label.setText("Step Time: 0 s")
         self._status_reps_label.setText("Repetition 0/0")
+        # _on_step_repetition may have hidden this slot during the run;
+        # restore visibility for the idle layout.
+        self._status_reps_label.setVisible(True)
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         if self._status_phase_time_label is not None:
