@@ -80,9 +80,11 @@ class NavigationBar(QWidget):
 
         # Play is a QToolButton with a menu-button split: the main face
         # behaves like before (click → start/pause/resume the protocol),
-        # while the dropdown arrow exposes alternate run modes — currently
-        # only "Preview" (skip hardware writes). Plugins can add more
-        # via ``play_menu``.
+        # while the dropdown arrow exposes the persistent run-mode
+        # toggles that used to live as checkboxes on the legacy
+        # protocol_grid bottom row — Preview Mode and Droplet Check.
+        # Both are checkable QActions; main-button click reads their
+        # state via is_preview_mode() / is_droplet_check_enabled().
         self.btn_play = QToolButton()
         self.btn_play.setPopupMode(QToolButton.MenuButtonPopup)
         self.btn_play.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -90,13 +92,27 @@ class NavigationBar(QWidget):
         self.btn_play.setToolTip("Play Protocol")
 
         self.play_menu = QMenu(self.btn_play)
-        self.action_run_preview = QAction("Preview", self.play_menu)
-        self.action_run_preview.setToolTip(
+
+        self.action_preview = QAction("Preview Mode", self.play_menu)
+        self.action_preview.setCheckable(True)
+        self.action_preview.setToolTip(
             "Run the protocol without sending any hardware messages "
             "(useful when no DropBot is connected)"
         )
-        self.play_menu.addAction(self.action_run_preview)
+
+        self.action_droplet_check = QAction("Droplet Check", self.play_menu)
+        self.action_droplet_check.setCheckable(True)
+        self.action_droplet_check.setToolTip(
+            "Run droplet detection at the end of each step"
+        )
+
+        self.play_menu.addAction(self.action_preview)
+        self.play_menu.addAction(self.action_droplet_check)
         self.btn_play.setMenu(self.play_menu)
+
+        # Toggling Preview re-applies the play-button stylesheet so the
+        # button background flips to yellow while preview is armed.
+        self.action_preview.toggled.connect(lambda _: self.apply_styling())
 
         self.btn_prev_phase = QPushButton(ICON_PREVIOUS_PHASE)
         self.btn_prev_phase.setToolTip("Previous Phase")
@@ -189,22 +205,33 @@ class NavigationBar(QWidget):
         )
         self.btn_play.setStyleSheet(self._play_btn_stylesheet(theme))
 
-    @staticmethod
-    def _play_btn_stylesheet(theme):
+    def _play_btn_stylesheet(self, theme):
         """QToolButton stylesheet mirroring the default QPushButton look
-        (icon font + theme-aware colours) plus a ``::menu-button``
-        sub-control rule so the dropdown arrow has a clean separator
-        instead of inheriting the main face's borders."""
+        (icon font + theme-aware colours). When ``action_preview`` is
+        checked the main face flips to a soft yellow so it's obvious
+        at a glance that the next click won't touch hardware. The
+        ``::menu-button`` arrow is kept deliberately subtle — no
+        separator border, narrower width — so it doesn't compete
+        visually with the main play face.
+        """
         if theme == "dark":
             bg, fg, border = GREY['dark'], WHITE, GREY['lighter']
             bg_disabled = BLACK
             fg_disabled = GREY['light']
             border_disabled = GREY['dark']
+            preview_bg = "#a68f00"
+            preview_border = "#ffd54f"
+            preview_fg = BLACK
         else:
             bg, fg, border = WHITE, BLACK, GREY['light']
             bg_disabled = GREY['light']
             fg_disabled = GREY['dark']
             border_disabled = GREY['lighter']
+            preview_bg = "#fff59d"
+            preview_border = "#fbc02d"
+            preview_fg = BLACK
+        if self.action_preview.isChecked():
+            bg, fg, border = preview_bg, preview_fg, preview_border
         return f"""
             QToolButton {{
                 font-family: "{ICON_FONT_FAMILY}";
@@ -231,10 +258,25 @@ class NavigationBar(QWidget):
                 border-color: {border_disabled};
             }}
             QToolButton::menu-button {{
-                border-left: 1px solid {border};
-                width: 16px;
+                border: none;
+                background: transparent;
+                width: 12px;
+            }}
+            QToolButton::menu-arrow {{
+                width: 6px;
+                height: 6px;
             }}
         """
+
+    def is_preview_mode(self):
+        """True when the user has armed Preview Mode in the play
+        dropdown — the legacy ``preview_mode_checkbox.isChecked()``."""
+        return self.action_preview.isChecked()
+
+    def is_droplet_check_enabled(self):
+        """True when the user has enabled Droplet Check in the play
+        dropdown — the legacy ``droplet_check_checkbox.isChecked()``."""
+        return self.action_droplet_check.isChecked()
 
     def _on_color_scheme_changed(self, *_):
         """Defer the re-style by one event-loop tick — when this signal

@@ -639,12 +639,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.navigation_bar.btn_play.clicked.connect(self._on_play_clicked)
         self.navigation_bar.btn_resume.clicked.connect(self._toggle_pause)
         self.navigation_bar.btn_stop.clicked.connect(self.executor.stop)
-        # Preview entry on the play button's dropdown menu — starts the
-        # protocol with preview_mode=True so hardware-publishing hooks
-        # skip their broker writes.
-        self.navigation_bar.action_run_preview.triggered.connect(
-            self._on_preview_clicked
-        )
+        # Preview Mode / Droplet Check are persistent toggles on the
+        # play dropdown — the Run click reads them via
+        # is_preview_mode() / is_droplet_check_enabled(); no extra
+        # signal wiring needed here.
 
         # Step navigation (cursor only — no protocol mutation).
         self.navigation_bar.btn_first.clicked.connect(self._navigate_to_first_step)
@@ -714,8 +712,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
-        # Re-enable mode-switching options on the play dropdown.
-        nb.action_run_preview.setEnabled(True)
+        # Re-enable the persistent run-mode toggles on the play dropdown.
+        nb.action_preview.setEnabled(True)
+        nb.action_droplet_check.setEnabled(True)
 
     def _set_running_button_state(self):
         nb = self.navigation_bar
@@ -724,28 +723,23 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         nb.btn_stop.setEnabled(True)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
-        # Mode is locked once a run is in progress — don't let the
-        # user pick Preview from the dropdown mid-run.
-        nb.action_run_preview.setEnabled(False)
+        # Modes are locked once a run is in progress — don't let the
+        # user re-arm Preview / toggle Droplet Check mid-run.
+        nb.action_preview.setEnabled(False)
+        nb.action_droplet_check.setEnabled(False)
 
     def _on_play_clicked(self):
         """While idle: start the protocol from the currently-selected
-        step (or from the beginning if nothing is selected), and prime
-        the auto-repeat counter from the StatusBar's spinbox. While
-        running/paused: toggle pause. Mirrors the legacy
+        step (or from the beginning if nothing is selected), reading
+        Preview / Droplet Check state from the play dropdown.
+        While running/paused: toggle pause. Mirrors the legacy
         protocol_grid play-button behaviour."""
         if self._is_protocol_active():
             self._toggle_pause()
             return
-        self._start_protocol_run(preview_mode=False)
-
-    def _on_preview_clicked(self):
-        """Dropdown 'Preview' entry — start the protocol in preview
-        mode (no hardware writes). Ignored while a run is already in
-        progress."""
-        if self._is_protocol_active():
-            return
-        self._start_protocol_run(preview_mode=True)
+        self._start_protocol_run(
+            preview_mode=self.navigation_bar.is_preview_mode(),
+        )
 
     def _start_protocol_run(self, preview_mode: bool):
         """Common entry point for both Run and Preview: prime the repeat
