@@ -345,6 +345,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._wire_executor_signals()
         self._build_toolbar()
         self._build_navigation_bar()
+        self._build_experiment_bar()
         self._wire_button_state_machine()
         self._set_idle_button_state()
 
@@ -680,6 +681,68 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         layout.addWidget(make_separator())
         layout.addWidget(self._central_content)
         self.setCentralWidget(container)
+
+    def _build_experiment_bar(self):
+        """Populate the navigation bar's left slot with the legacy
+        protocol_grid trio: New Experiment button, Experiment label,
+        New Note button. The buttons are exposed as attributes
+        (``btn_new_exp``, ``btn_new_note``, ``experiment_label``) so
+        external plugins / demo subclasses can connect their own
+        slots; the base provides only stub click handlers that log.
+
+        ``add_widget_to_left_slot`` reveals the bar's bottom row
+        (hidden by default), so the experiment row appears below
+        the playback buttons.
+        """
+        from microdrop_style.button_styles import ICON_FONT_FAMILY
+        from pyface.qt.QtGui import QFont
+        from pyface.qt.QtWidgets import QToolButton
+
+        icon_font = QFont(ICON_FONT_FAMILY)
+        icon_font.setPixelSize(20)
+
+        self.btn_new_exp = QToolButton()
+        self.btn_new_exp.setText("note_add")
+        self.btn_new_exp.setFont(icon_font)
+        self.btn_new_exp.setToolTip("New Experiment")
+        self.btn_new_exp.setCursor(Qt.PointingHandCursor)
+        self.btn_new_exp.clicked.connect(self._on_new_experiment)
+
+        self.experiment_label = QLabel(
+            "<b>Experiment:</b> <i>(not set)</i>"
+        )
+        self.experiment_label.setToolTip("Active experiment")
+        self.experiment_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse,
+        )
+
+        self.btn_new_note = QToolButton()
+        self.btn_new_note.setText("sticky_note")
+        self.btn_new_note.setFont(icon_font)
+        self.btn_new_note.setToolTip("New Note")
+        self.btn_new_note.setCursor(Qt.PointingHandCursor)
+        self.btn_new_note.clicked.connect(self._on_new_note)
+
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_exp)
+        self.navigation_bar.add_widget_to_left_slot(self.experiment_label)
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
+
+    def set_experiment_id(self, experiment_id: str):
+        """Update the experiment label text. Demos / plugins call this
+        when the active experiment changes."""
+        self.experiment_label.setText(
+            f"<b>Experiment:</b> {experiment_id}"
+        )
+
+    def _on_new_experiment(self):
+        """Stub — log only. Demo subclasses or plugins should override
+        or reconnect ``btn_new_exp.clicked`` for real behaviour."""
+        logger.info("New Experiment requested")
+
+    def _on_new_note(self):
+        """Stub — log only. Demo subclasses or plugins should override
+        or reconnect ``btn_new_note.clicked`` for real behaviour."""
+        logger.info("New Note requested")
 
     def _save(self):
         path, _ = QFileDialog.getSaveFileName(
