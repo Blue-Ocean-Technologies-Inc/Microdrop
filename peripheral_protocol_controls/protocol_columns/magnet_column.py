@@ -98,6 +98,11 @@ class MagnetHandler(BaseCompoundColumnHandler):
     wait_for_topics = [MAGNET_APPLIED]
 
     def on_step(self, row, ctx):
+        # Preview mode: skip the hardware-publish + ack-wait. The
+        # magnet stage doesn't move and no MAGNET_APPLIED comes
+        # back. Mirrors the legacy protocol_grid Preview Mode.
+        if getattr(ctx.protocol, "preview_mode", False):
+            return
         payload = json.dumps({
             "on": bool(row.magnet_on),
             "height_mm": float(row.magnet_height_mm),

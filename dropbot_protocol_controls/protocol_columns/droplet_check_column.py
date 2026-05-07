@@ -79,6 +79,10 @@ class DropletCheckHandler(BaseColumnHandler):
     def on_post_step(self, row, ctx):
         if not row.check_droplets:
             return
+        # Preview mode: skip the detection RPC + ack-wait. With no
+        # hardware actuation in preview, there's nothing to detect.
+        if getattr(ctx.protocol, "preview_mode", False):
+            return
 
         electrode_to_channel = ctx.protocol.scratch.get("electrode_to_channel", {})
         expected = expected_channels_for_step(row, electrode_to_channel)

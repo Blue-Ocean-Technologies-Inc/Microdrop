@@ -82,6 +82,7 @@ def test_frequency_handler_on_step_publishes_and_waits():
     row = MagicMock()
     row.frequency = 8000
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(
@@ -102,6 +103,7 @@ def test_frequency_handler_on_step_publishes_int_payload():
     row = MagicMock()
     row.frequency = 5000.9  # float — should be coerced
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(

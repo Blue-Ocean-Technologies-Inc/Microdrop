@@ -252,11 +252,11 @@ class NavigationBar(QWidget):
             QToolButton::menu-button {{
                 border: none;
                 background: transparent;
-                width: 12px;
+                width: 18px;
             }}
             QToolButton::menu-arrow {{
-                width: 6px;
-                height: 6px;
+                width: 10px;
+                height: 10px;
             }}
         """
 
