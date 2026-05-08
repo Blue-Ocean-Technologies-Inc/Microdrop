@@ -14,7 +14,6 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -195,8 +194,6 @@ from pyface.qt.QtWidgets import (
     QApplication, QLabel, QMainWindow, QSplitter, QStatusBar, QToolBar,
 )
 
-from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
-
 
 class BasePluggableProtocolDemoWindow(QMainWindow):
     """Hosts a ProtocolTreePane + the demo-only toolbar / readouts /
@@ -230,15 +227,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if config.phase_ack_topic is not None:
             self.phase_acked.connect(self.pane._on_phase_ack)
 
-        # Re-route the pane's protocol_error → our own handler so that
-        # monkeypatching ``bdw.error_dialog`` from tests still gets the
-        # dialog call (the pane's _on_error uses its own module-level
-        # import; replacing it here gives us a single, predictable site).
-        self.pane.executor.qsignals.protocol_error.disconnect(
-            self.pane._on_error,
-        )
-        self.pane.executor.qsignals.protocol_error.connect(self._on_error)
-
         self._side_panel = None
         if config.side_panel_factory is not None:
             side = config.side_panel_factory(self.pane.manager)
@@ -251,21 +239,13 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                     int(config.window_size[0] * 0.65),
                     int(config.window_size[0] * 0.35),
                 ])
-                self.setCentralWidget(splitter)
-                # Test-visible bookkeeping: the legacy attribute name
-                # used to be the inner content (tree-or-splitter). With
-                # the pane refactor, the splitter still holds 2 widgets
-                # so the existing test_window_side_panel_uses_splitter
-                # assertions keep working.
                 self._central_content = splitter
             else:
-                self.setCentralWidget(self.pane)
-                # Legacy compat: tests assert
-                # ``w._central_content is w.widget`` (the bare tree).
-                self._central_content = self.pane.widget
+                self._central_content = self.pane
         else:
-            self.setCentralWidget(self.pane)
-            self._central_content = self.pane.widget
+            self._central_content = self.pane
+
+        self.setCentralWidget(self._central_content)
 
         # Pre-populate after manager is built; before executor starts.
         config.pre_populate(self.pane.manager)
@@ -344,18 +324,6 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         except Exception as e:
             text = f"<error: {e}>"
         label_widget.setText(f"{label_prefix}: {text}")
-
-    def _on_error(self, msg):
-        """protocol_error → reset to idle, show error dialog. Mirrors the
-        pane's _on_error but routes through this module's ``error_dialog``
-        so tests can monkeypatch it via ``bdw.error_dialog``."""
-        self.pane._repeats_total = 0
-        self.pane._repeats_completed = 0
-        self.pane._update_repeat_status_label()
-        self.pane.clear_highlights()
-        self.pane._set_idle_button_state()
-        self.pane._tick_timer.stop()
-        error_dialog(parent=self, title="Protocol error", message=str(msg))
 
     # --- Dramatiq routing (unchanged behavior, just lives here) -----
 

@@ -495,8 +495,8 @@ def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
 
 
 def test_window_no_side_panel_uses_tree_as_central(qapp):
-    """When side_panel_factory is None, the inner central content IS the
-    tree (now wrapped in a NavigationBar+content container) and
+    """When side_panel_factory is None, the inner central content IS
+    the pane (which itself wraps the tree + nav + status bars), and
     _side_panel is None."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
@@ -504,7 +504,7 @@ def test_window_no_side_panel_uses_tree_as_central(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._central_content is w.widget
+    assert w._central_content is w.pane
     assert w._side_panel is None
 
 
@@ -694,7 +694,11 @@ def test_step_finished_freezes_step_elapsed_label(qapp):
 
 def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     """protocol_error → idle button state, tick timer stopped, dialog
-    shown via the styled pyface_wrapper.error helper (NOT raw QMessageBox)."""
+    shown via the styled pyface_wrapper.error helper.
+
+    The pane is the owner of the error path now (post-PPT-10.1
+    delegation), so we patch the pane module's error_dialog."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     import pluggable_protocol_tree.demos.base_demo_window as bdw
     from pluggable_protocol_tree.builtins.type_column import make_type_column
 
@@ -703,18 +707,15 @@ def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     def fake_error_dialog(parent=None, title="", message="", **kwargs):
         calls.append((title, message))
 
-    monkeypatch.setattr(bdw, "error_dialog", fake_error_dialog)
+    monkeypatch.setattr(ptp, "error_dialog", fake_error_dialog)
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = bdw.BasePluggableProtocolDemoWindow(cfg)
     nb = w.navigation_bar
-    # Simulate a running state, then fire the error.
     w.executor.qsignals.protocol_started.emit()
     assert nb.btn_stop.isEnabled()
     w.executor.qsignals.protocol_error.emit("kaboom")
-    # Idle state restored.
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
     assert not w._tick_timer.isActive()
-    # Dialog called via the styled wrapper, with the error message.
     assert calls == [("Protocol error", "kaboom")]
