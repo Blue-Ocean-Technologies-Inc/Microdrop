@@ -7,7 +7,7 @@ plugin class."""
 
 from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.task_extension import TaskExtension
-from traits.api import Instance, List, Str
+from traits.api import List, Str, Either
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -32,6 +32,9 @@ from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
 
 class PluggableProtocolTreePlugin(Plugin):
     id = f"{PKG}.plugin"
@@ -50,7 +53,7 @@ class PluggableProtocolTreePlugin(Plugin):
     #: on ``isinstance(c, ICompoundColumn)`` to expand compounds and
     #: keep plain columns as-is.
     _column_extension_point = ExtensionPoint(
-        List, id=PROTOCOL_COLUMNS,
+        List(Either(IColumn, ICompoundColumn)), id=PROTOCOL_COLUMNS,
         desc="Columns contributed by other plugins (IColumn or ICompoundColumn).",
     )
 

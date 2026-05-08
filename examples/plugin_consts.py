@@ -1,6 +1,5 @@
-import os
-
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
+from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from logger.plugin import LoggerPlugin
 from logger_ui.plugin import LoggerUIPlugin
@@ -68,10 +67,14 @@ FRONTEND_PLUGINS = [
     PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
+
+]
+
+EXPERIMENTAl_PLUGINS = [
     PluggableProtocolTreePlugin,
-    # DropbotProtocolControlsPlugin,
-    # PeripheralProtocolControlsPlugin,
-    # VideoProtocolControlsPlugin,
+    DropbotProtocolControlsPlugin,
+    PeripheralProtocolControlsPlugin,
+    VideoProtocolControlsPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
