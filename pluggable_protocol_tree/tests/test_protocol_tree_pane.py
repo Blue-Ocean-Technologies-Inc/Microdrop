@@ -279,3 +279,68 @@ def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
     assert captured  # something was published
     topic, _ = captured[0]
     assert topic == ptp.ELECTRODES_STATE_CHANGE
+
+
+def test_pane_navigate_to_first_step_selects_first_row(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import (
+        make_duration_column,
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([
+        make_type_column(), make_id_column(), make_name_column(),
+        make_duration_column(),
+    ])
+    pane.manager.add_step(values={"name": "A", "duration_s": 0.1})
+    pane.manager.add_step(values={"name": "B", "duration_s": 0.1})
+    pane.navigate_to_first_step()
+    idx = pane.widget.tree.currentIndex()
+    assert idx.isValid()
+
+
+def test_pane_navigate_to_next_at_end_duplicates_step(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import (
+        make_duration_column,
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([
+        make_type_column(), make_id_column(), make_name_column(),
+        make_duration_column(),
+    ])
+    pane.manager.add_step(values={"name": "A", "duration_s": 0.1})
+    pane.navigate_to_last_step()
+    pane.navigate_to_next_step()
+    assert len(pane.manager.root.children) == 2
+
+
+def test_pane_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
+    from pyface.qt.QtWidgets import QFileDialog
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import (
+        make_duration_column,
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    import json
+
+    pane = ProtocolTreePane([
+        make_type_column(), make_id_column(), make_name_column(),
+        make_duration_column(),
+    ])
+    pane.manager.add_step(values={"name": "S1", "duration_s": 0.1})
+
+    save_path = tmp_path / "out.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        lambda *a, **kw: (str(save_path), ""))
+    pane.save_to_dialog()
+    payload = json.loads(save_path.read_text())
+    assert payload["columns"][0]["id"] == "type"

@@ -17,10 +17,10 @@ from __future__ import annotations
 import threading
 import time
 
-from pyface.qt.QtCore import Qt, QTimer, Signal
+from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
-    QLabel, QToolButton, QVBoxLayout, QWidget,
+    QFileDialog, QLabel, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
@@ -209,6 +209,10 @@ class ProtocolTreePane(QWidget):
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
         nb.btn_stop.clicked.connect(self.executor.stop)
+        nb.btn_first.clicked.connect(self.navigate_to_first_step)
+        nb.btn_prev.clicked.connect(self.navigate_to_previous_step)
+        nb.btn_next.clicked.connect(self.navigate_to_next_step)
+        nb.btn_last.clicked.connect(self.navigate_to_last_step)
         nb.btn_prev_phase.clicked.connect(self._on_prev_phase)
         nb.btn_next_phase.clicked.connect(self._on_next_phase)
         nb.set_phase_navigation_enabled(False, False)
@@ -277,8 +281,9 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._tick_timer.stop()
+        self.clear_highlights()
         self._set_idle_button_state()
+        self._tick_timer.stop()
         error_dialog(parent=self, title="Protocol error", message=str(msg))
 
     def _refresh_status(self):
@@ -390,6 +395,7 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
+        self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self.navigation_bar.merge_phase_controls_to_play_button()
@@ -459,6 +465,136 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.set_phase_navigation_enabled(
             prev_enabled, next_enabled,
         )
+
+    # --- step-cursor navigation -------------------------------------
+
+    def navigate_to_first_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[0])
+
+    def navigate_to_last_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[-1])
+
+    def navigate_to_previous_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur > 0:
+            self._select_step(steps[cur - 1])
+
+    def navigate_to_next_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur < len(steps) - 1:
+            self._select_step(steps[cur + 1])
+            return
+        self._duplicate_step_after(steps[cur])
+
+    def _duplicate_step_after(self, row):
+        path = tuple(row.path)
+        parent_path = path[:-1]
+        insert_idx = path[-1] + 1
+        values = {}
+        for col in self.manager.columns:
+            cid = col.model.col_id
+            if hasattr(row, cid):
+                values[cid] = getattr(row, cid)
+        new_path = self.manager.add_step(
+            parent_path=parent_path, index=insert_idx, values=values,
+        )
+        new_row = self.manager.get_row(new_path)
+        self._select_step(new_row)
+
+    def _current_step_in(self, steps):
+        idx = self.widget.tree.currentIndex()
+        if not idx.isValid():
+            return None
+        path = self.widget._index_to_path(idx)
+        for i, row in enumerate(steps):
+            if tuple(row.path) == path:
+                return i
+        return None
+
+    def _select_step(self, row):
+        idx = self.widget._node_to_index(row)
+        if not idx.isValid():
+            return
+        parent = idx.parent()
+        while parent.isValid():
+            self.widget.tree.expand(parent)
+            parent = parent.parent()
+        self.widget.tree.setCurrentIndex(idx)
+        self.widget.tree.scrollTo(idx)
+
+    def clear_highlights(self):
+        """Reset the tree's selection + active-row highlight + per-step
+        labels to the idle visual state."""
+        self.widget.highlight_active_row(None)
+        self.widget.tree.clearSelection()
+        self.widget.tree.setCurrentIndex(QModelIndex())
+
+        self._step_index = 0
+        self._step_total = 0
+        self._step_started_at = None
+        self._phase_started_at = None
+        self._phase_target = None
+        self._current_row = None
+
+        self._status_step_label.setText("Step 0/0")
+        self._status_step_time_label.setText("Step Time: 0 s")
+        self._status_reps_label.setText("Repetition 0/0")
+        self._status_reps_label.setVisible(True)
+        self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
+        self.status_bar.lbl_next_step.setText("Next Step: -")
+        if self._status_phase_time_label is not None:
+            self._status_phase_time_label.setText("Phase 0.00s / 0.00s")
+
+    # --- save / load -----------------------------------------------
+
+    def save_to_dialog(self, parent=None):
+        """Open a file dialog and persist the manager's JSON state."""
+        path, _ = QFileDialog.getSaveFileName(
+            parent or self, "Save Protocol", "", "Protocol JSON (*.json)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.manager.to_json(), f, indent=2)
+        except Exception as e:
+            error_dialog(parent=parent or self,
+                         title="Save error", message=str(e))
+
+    def load_from_dialog(self, columns_factory, parent=None):
+        """Open a file dialog and replace the manager's state from JSON.
+
+        ``columns_factory`` rebuilds the column list (consumed by
+        ``set_state_from_json``); the dock pane and demo window each
+        own a different source of truth for it."""
+        path, _ = QFileDialog.getOpenFileName(
+            parent or self, "Load Protocol", "", "Protocol JSON (*.json)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.manager.set_state_from_json(data, columns=columns_factory())
+        except Exception as e:
+            error_dialog(parent=parent or self,
+                         title="Load error", message=str(e))
 
     # --- experiment-bar stubs (Task 6 wires real services) -------------
 
