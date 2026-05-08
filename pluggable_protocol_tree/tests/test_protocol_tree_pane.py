@@ -344,3 +344,125 @@ def test_pane_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
     pane.save_to_dialog()
     payload = json.loads(save_path.read_text())
     assert payload["columns"][0]["id"] == "type"
+
+
+def test_pane_stub_mode_buttons_log_only(qapp):
+    """Without injected services, button clicks log and never raise."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane.btn_new_exp.click()
+    pane.btn_new_note.click()
+    pane.experiment_label.clicked.emit()
+
+
+def test_pane_real_mode_new_experiment_calls_service(qapp):
+    """With an experiment_manager + application, New Experiment dispatches."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    new_dir = Path("/tmp/new-exp-id")
+    exp_mgr = MagicMock()
+    exp_mgr.initialize_new_experiment.return_value = new_dir
+    exp_mgr.get_experiment_directory.return_value = new_dir
+
+    app = MagicMock()
+    app.current_experiment_directory = Path("/tmp/old-exp-id")
+
+    pane = ProtocolTreePane(
+        [make_type_column()],
+        application=app,
+        experiment_manager=exp_mgr,
+    )
+    pane.btn_new_exp.click()
+    exp_mgr.initialize_new_experiment.assert_called_once()
+    assert app.current_experiment_directory == new_dir
+
+
+def test_pane_real_mode_new_experiment_returning_none_does_not_overwrite(qapp):
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    exp_mgr = MagicMock()
+    exp_mgr.initialize_new_experiment.return_value = None
+    app = MagicMock()
+    app.current_experiment_directory = Path("/tmp/old-exp-id")
+
+    pane = ProtocolTreePane(
+        [make_type_column()],
+        application=app,
+        experiment_manager=exp_mgr,
+    )
+    pane.btn_new_exp.click()
+    assert app.current_experiment_directory == Path("/tmp/old-exp-id")
+
+
+def test_pane_real_mode_new_note_calls_sticky_manager(qapp):
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    base_dir = Path("/tmp/exp-1")
+    exp_mgr = MagicMock()
+    exp_mgr.get_experiment_directory.return_value = base_dir
+    sticky_mgr = MagicMock()
+
+    pane = ProtocolTreePane(
+        [make_type_column()],
+        experiment_manager=exp_mgr,
+        sticky_manager=sticky_mgr,
+    )
+    pane.btn_new_note.click()
+    sticky_mgr.request_new_note.assert_called_once_with(base_dir, "exp-1")
+
+
+def test_pane_real_mode_label_click_opens_experiment_directory(qapp):
+    from unittest.mock import MagicMock
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    exp_mgr = MagicMock()
+    pane = ProtocolTreePane(
+        [make_type_column()],
+        experiment_manager=exp_mgr,
+    )
+    pane.experiment_label.clicked.emit()
+    exp_mgr.open_experiment_directory.assert_called_once()
+
+
+def test_pane_observes_experiment_changed_event_to_update_label(qapp):
+    """When application.experiment_changed fires, the label re-reads
+    application.current_experiment_directory and updates."""
+    from pathlib import Path
+
+    from traits.api import Directory, Event, HasTraits, Property
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeApp(HasTraits):
+        current_experiment_directory = Property(Directory)
+        experiment_changed = Event()
+        _value = Path("/tmp/initial")
+
+        def _get_current_experiment_directory(self):
+            return self._value
+
+        def _set_current_experiment_directory(self, value):
+            self._value = Path(value)
+            self.experiment_changed = True
+
+    app = FakeApp()
+    pane = ProtocolTreePane([make_type_column()], application=app)
+    app.current_experiment_directory = "/tmp/2026-05-08T12-00-00Z"
+    assert "2026-05-08T12-00-00Z" in pane.experiment_label.text()

@@ -122,6 +122,17 @@ class ProtocolTreePane(QWidget):
         self._wire_navigation_buttons()
         self._set_idle_button_state()
 
+        if self.application is not None:
+            self.application.observe(
+                self._on_experiment_changed, "experiment_changed",
+            )
+            try:
+                cur = self.application.current_experiment_directory
+                if cur is not None:
+                    self.experiment_label.update_experiment_id(cur.stem)
+            except Exception as e:
+                logger.warning(f"could not read initial experiment dir: {e}")
+
     def _build_status_bar(self):
         self.status_bar = StatusBar()
         phase_enabled = self.phase_ack_topic is not None
@@ -596,13 +607,40 @@ class ProtocolTreePane(QWidget):
             error_dialog(parent=parent or self,
                          title="Load error", message=str(e))
 
-    # --- experiment-bar stubs (Task 6 wires real services) -------------
+    # --- experiment-bar handlers ------------------------------------
 
     def _on_new_experiment(self):
-        logger.info("New Experiment requested")
+        if self.experiment_manager is None or self.application is None:
+            logger.info("New Experiment requested (stub: no services injected)")
+            return
+        new_dir = self.experiment_manager.initialize_new_experiment()
+        if new_dir is None:
+            logger.warning("initialize_new_experiment returned None; label unchanged")
+            return
+        self.application.current_experiment_directory = new_dir
+        self.experiment_label.update_experiment_id(new_dir.stem)
+        logger.info(f"Started new experiment: {new_dir.stem}")
 
     def _on_new_note(self):
-        logger.info("New Note requested")
+        if self.sticky_manager is None or self.experiment_manager is None:
+            logger.info("New Note requested (stub: no services injected)")
+            return
+        base_dir = self.experiment_manager.get_experiment_directory()
+        experiment_name = base_dir.stem
+        self.sticky_manager.request_new_note(base_dir, experiment_name)
 
     def _on_experiment_label_clicked(self):
-        logger.info("Experiment label clicked")
+        if self.experiment_manager is None:
+            logger.info("Experiment label clicked (stub: no service injected)")
+            return
+        self.experiment_manager.open_experiment_directory()
+
+    def _on_experiment_changed(self, _event):
+        try:
+            cur = self.application.current_experiment_directory
+        except Exception as e:
+            logger.warning(f"experiment_changed: failed to read dir: {e}")
+            return
+        if cur is None:
+            return
+        self.experiment_label.update_experiment_id(cur.stem)
