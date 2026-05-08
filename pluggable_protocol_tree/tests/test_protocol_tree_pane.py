@@ -505,3 +505,43 @@ def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
     pane.btn_new_exp.click()
     assert app.current_experiment_directory == new_dir
     assert "2026-05-08T13-37-00Z" in pane.experiment_label.text()
+
+
+def test_pane_closeEvent_detaches_experiment_changed_observer(qapp):
+    """After closeEvent, the experiment_changed observer is unsubscribed
+    so a subsequent fire doesn't dispatch to a deleted widget."""
+    from pathlib import Path
+
+    from traits.api import Directory, Event, HasTraits, Property
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeApp(HasTraits):
+        current_experiment_directory = Property(Directory)
+        experiment_changed = Event()
+        _value = Path("/tmp/initial")
+
+        def _get_current_experiment_directory(self):
+            return self._value
+
+        def _set_current_experiment_directory(self, value):
+            self._value = Path(value)
+            self.experiment_changed = True
+
+    app = FakeApp()
+    pane = ProtocolTreePane([make_type_column()], application=app)
+
+    # Verify observer is wired pre-close.
+    app.current_experiment_directory = "/tmp/before-close"
+    assert "before-close" in pane.experiment_label.text()
+
+    # Trigger close — observer must detach.
+    from pyface.qt.QtGui import QCloseEvent
+    pane.closeEvent(QCloseEvent())
+
+    # Now firing should NOT update the label any more.
+    pane.experiment_label.update_experiment_id("sentinel")
+    app.current_experiment_directory = "/tmp/after-close"
+    assert "after-close" not in pane.experiment_label.text()
+    assert "sentinel" in pane.experiment_label.text()

@@ -14,19 +14,18 @@ PPT-10.1 for the full wiring rules.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 
 from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
-    QFileDialog, QLabel, QToolButton, QVBoxLayout, QWidget,
+    QFileDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-
-import json
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -607,6 +606,21 @@ class ProtocolTreePane(QWidget):
             error_dialog(parent=parent or self,
                          title="Load error", message=str(e))
 
+    def closeEvent(self, event):
+        """Detach Traits observers before the underlying QWidget is
+        destroyed. Without this, application.experiment_changed firing
+        after pane destruction dispatches to a deleted Qt object."""
+        if self.application is not None:
+            try:
+                self.application.observe(
+                    self._on_experiment_changed,
+                    "experiment_changed",
+                    remove=True,
+                )
+            except Exception as e:
+                logger.warning(f"failed to detach experiment_changed observer: {e}")
+        super().closeEvent(event)
+
     # --- experiment-bar handlers ------------------------------------
 
     def _on_new_experiment(self):
@@ -637,6 +651,8 @@ class ProtocolTreePane(QWidget):
         self.experiment_manager.open_experiment_directory()
 
     def _on_experiment_changed(self, _event):
+        if self.experiment_label is None:
+            return
         try:
             cur = self.application.current_experiment_directory
         except Exception as e:
