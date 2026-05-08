@@ -78,7 +78,7 @@ Rule: when a service is `None`, the corresponding button keeps the demo's log-on
 | `btn_new_exp.clicked` | `logger.info("New Experiment requested")` | `experiment_manager.initialize_new_experiment()` → write to `application.current_experiment_directory` → `experiment_label.update_experiment_id(new_dir.stem)` |
 | `experiment_label.clicked` | non-clickable `QLabel` | `experiment_manager.open_experiment_directory()` |
 | `btn_new_note.clicked` | `logger.info("New Note requested")` | `sticky_manager.request_new_note(base_dir, experiment_name)` |
-| `application.current_experiment_directory` change | n/a | `experiment_label.update_experiment_id(new_dir.stem)` (Traits `@observe`) |
+| `application.experiment_changed` Event fires | n/a | re-read `application.current_experiment_directory`; `experiment_label.update_experiment_id(new_dir.stem)` |
 
 The pane uses the legacy promoted `ExperimentLabel` (clickable, theme-aware link colour, tooltip-toggle context menu) — ported to `pluggable_protocol_tree/views/experiment_label.py`. It stays clickable in stub mode (the disconnected click is a harmless no-op), so demos get the same visual UX.
 
@@ -238,6 +238,6 @@ Tests live under `pluggable_protocol_tree/tests/` (no Redis or hardware dependen
 
 - **`StickyWindowManager()` is a singleton-ish manager.** Creating one in the dock pane while the legacy widget creates another is harmless — both manage independent windows. After PPT-9 deletion, only the new one remains.
 - **`ExperimentManager._register_cleanup_on_exit`** connects to `app.aboutToQuit`. Two managers register two cleanup hooks pointing at the same parent dir; the underlying `shutil.rmtree` of an empty dir is idempotent so this is harmless until PPT-9 unifies them.
-- **`application.current_experiment_directory` is a Traits `Property`, not a regular Trait** (`microdrop_application/application.py:105`). `@observe` works on Properties because the setter writes to an underlying trait; verify in tests with a mock application that exposes both the Property and its underlying private trait.
+- **`application.current_experiment_directory` is a Traits `Property`** (`microdrop_application/application.py:105`), but the application also exposes a sibling `experiment_changed = Event()` trait (line 106) that the setter `_set_current_experiment_directory` fires (line 185). The pane observes `experiment_changed` instead of the Property directly — Property notifications are unreliable, the Event is what the application explicitly publishes for this purpose. After receiving the event, the pane re-reads `application.current_experiment_directory` to get the new value.
 - **Coexistence of two panes during transition** means a user could click Play on both. The existing executor design starts work on a worker thread, and clicking Play on the legacy pane while the new one is running will fire its own ELECTRODES_STATE_CHANGE messages on top — UX issue but not a data-corruption issue. We will not add cross-pane locking; legacy will be removed in #371.
 - **Issue #411 wording uses `experiment_manager.setup_new_experiment(...)`.** The actual API on `ExperimentManager` is `initialize_new_experiment()` (`protocol_grid/services/experiment_manager.py:97`). The spec follows the actual API.
