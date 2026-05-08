@@ -81,3 +81,118 @@ def test_pane_phase_ack_topic_can_be_none(qapp):
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic=None)
     assert pane.phase_ack_topic is None
     assert pane.status_bar.lbl_phase_time.isVisible() is False
+
+
+def test_pane_has_executor_and_pause_event(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    assert isinstance(pane.executor, ProtocolExecutor)
+    assert pane.executor.pause_event is not None
+    assert pane.executor.stop_event is not None
+
+
+def test_pane_executor_factory_can_be_overridden(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    sentinel = object()
+
+    def fake_factory(row_manager, qsignals, pause_event, stop_event):
+        return sentinel
+
+    pane = ProtocolTreePane([make_type_column()], executor_factory=fake_factory)
+    assert pane.executor is sentinel
+
+
+def test_pane_idle_button_state(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    nb = pane.navigation_bar
+    assert nb.btn_play.isEnabled()
+    assert not nb.btn_stop.isEnabled()
+    for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+        assert btn.isEnabled()
+
+
+def test_pane_running_button_state_after_protocol_started(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane.executor.qsignals.protocol_started.emit()
+    nb = pane.navigation_bar
+    assert nb.btn_stop.isEnabled()
+    for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+        assert not btn.isEnabled()
+
+
+def test_pane_returns_to_idle_after_protocol_finished(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane.executor.qsignals.protocol_started.emit()
+    pane.executor.qsignals.protocol_finished.emit()
+    nb = pane.navigation_bar
+    assert not nb.btn_stop.isEnabled()
+
+
+def test_pane_step_started_updates_status_label(qapp):
+    """Emitting step_started increments the step counter label."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeRow:
+        path = []
+        name = "Step A"
+        duration_s = 0.0
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane._step_total = 3
+    pane.executor.qsignals.step_started.emit(FakeRow())
+    assert pane._status_step_label.text() == "Step 1 / 3"
+
+
+def test_pane_tick_timer_runs_at_10_hz(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()])
+    assert pane._tick_timer.interval() == 100
+
+
+def test_pane_phase_acked_signal_resets_phase_timer(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
+    pane._current_row = object()
+    pane._step_started_at = None
+    pane.phase_acked.emit()
+    assert pane._phase_started_at is not None
+    assert pane._step_started_at is not None
+
+
+def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+
+    calls = []
+
+    def fake_error_dialog(parent=None, title="", message="", **kwargs):
+        calls.append((title, message))
+
+    monkeypatch.setattr(ptp, "error_dialog", fake_error_dialog)
+
+    pane = ptp.ProtocolTreePane([make_type_column()])
+    pane.executor.qsignals.protocol_started.emit()
+    assert pane.navigation_bar.btn_stop.isEnabled()
+    pane.executor.qsignals.protocol_error.emit("kaboom")
+    assert not pane.navigation_bar.btn_stop.isEnabled()
+    assert not pane._tick_timer.isActive()
+    assert calls == [("Protocol error", "kaboom")]
