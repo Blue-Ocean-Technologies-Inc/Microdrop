@@ -8,7 +8,9 @@ from pyface.qt.QtCore import QPointF
 def test_label_default_text_when_no_experiment(qapp):
     from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
     lbl = ExperimentLabel()
-    assert "Experiment" in lbl.text()
+    text = lbl.text()
+    assert "Experiment" in text
+    assert "None" not in text
 
 
 def test_update_experiment_id_renders_id(qapp):

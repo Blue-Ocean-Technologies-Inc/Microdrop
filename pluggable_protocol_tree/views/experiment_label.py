@@ -56,7 +56,9 @@ class ExperimentLabel(QLabel):
     def update_experiment_id(self, experiment_id=None):
         if experiment_id is None:
             experiment_id = self._experiment_id
-
+        if experiment_id is None:
+            self.setText("<b>Experiment: </b>")
+            return
         link_color = "#82B1FF" if is_dark_mode() else "#0066CC"
         self.setText(
             f"<b>Experiment: </b> "
