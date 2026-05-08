@@ -205,3 +205,77 @@ def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
     assert not pane.navigation_bar.btn_stop.isEnabled()
     assert not pane._tick_timer.isActive()
     assert calls == [("Protocol error", "kaboom")]
+
+
+def test_pane_pause_splits_play_button_into_phase_nav(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeRow:
+        path = [0]
+        name = "S"
+        duration_s = 1.0
+        electrodes = []
+        routes = []
+        trail_length = 1
+        trail_overlay = 0
+        soft_start = False
+        soft_end = False
+        repeat_duration = 0.0
+        linear_repeats = False
+        repetitions = 1
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane._current_row = FakeRow()
+    pane.executor.qsignals.protocol_started.emit()
+    pane.executor.qsignals.protocol_paused.emit()
+    assert pane.navigation_bar.is_phase_navigation_active()
+
+
+def test_pane_resume_merges_phase_nav_back_to_play_button(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeRow:
+        path = [0]
+        name = "S"
+        duration_s = 1.0
+        electrodes = []
+        routes = []
+        trail_length = 1
+        trail_overlay = 0
+        soft_start = False
+        soft_end = False
+        repeat_duration = 0.0
+        linear_repeats = False
+        repetitions = 1
+
+    pane = ProtocolTreePane([make_type_column()])
+    pane._current_row = FakeRow()
+    pane.executor.qsignals.protocol_started.emit()
+    pane.executor.qsignals.protocol_paused.emit()
+    assert pane.navigation_bar.is_phase_navigation_active()
+    pane.executor.qsignals.protocol_resumed.emit()
+    assert not pane.navigation_bar.is_phase_navigation_active()
+
+
+def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
+    """next_phase click publishes ELECTRODES_STATE_CHANGE for the targeted phase."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    captured = []
+
+    def fake_publish(topic, message, **kwargs):
+        captured.append((topic, message))
+
+    monkeypatch.setattr(ptp, "publish_message", fake_publish)
+
+    pane = ptp.ProtocolTreePane([make_type_column()])
+    pane._pause_phases = [{"e1"}, {"e1", "e2"}]
+    pane._pause_phase_idx = 0
+    pane.manager.protocol_metadata["electrode_to_channel"] = {"e1": 1, "e2": 2}
+    pane._on_next_phase()
+    assert captured  # something was published
+    topic, _ = captured[0]
+    assert topic == ptp.ELECTRODES_STATE_CHANGE

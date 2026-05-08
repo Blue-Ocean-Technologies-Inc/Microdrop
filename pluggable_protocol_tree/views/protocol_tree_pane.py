@@ -26,7 +26,14 @@ from pyface.qt.QtWidgets import (
 from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
-from pluggable_protocol_tree.consts import ELECTRODES_STATE_APPLIED
+import json
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+from pluggable_protocol_tree.consts import (
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+)
+from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -95,6 +102,8 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 1
         self._repeats_completed = 0
         self._current_run_preview_mode = False
+        self._pause_phases: list = []
+        self._pause_phase_idx: int = 0
 
         self._status_step_label = self.status_bar.lbl_step_progress
         self._status_step_time_label = self.status_bar.lbl_step_time
@@ -200,6 +209,9 @@ class ProtocolTreePane(QWidget):
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
         nb.btn_stop.clicked.connect(self.executor.stop)
+        nb.btn_prev_phase.clicked.connect(self._on_prev_phase)
+        nb.btn_next_phase.clicked.connect(self._on_next_phase)
+        nb.set_phase_navigation_enabled(False, False)
 
     # --- step lifecycle handlers --------------------------------------
 
@@ -349,11 +361,16 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_paused(self):
         self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
+        if self._current_row is not None:
+            self._compute_pause_phase_state(self._current_row)
+            self.navigation_bar.split_play_button_to_phase_controls()
+            self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
         self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
+        self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
         self._repeats_completed += 1
@@ -375,6 +392,73 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_terminated(self):
         self._set_idle_button_state()
         self._tick_timer.stop()
+        self.navigation_bar.merge_phase_controls_to_play_button()
+        self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    # --- pause-time phase navigation ---------------------------------
+
+    def _compute_pause_phase_state(self, row):
+        try:
+            self._pause_phases = list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+        except Exception as e:
+            logger.warning(f"phase navigation: iter_phases failed: {e}")
+            self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    def _on_prev_phase(self):
+        if self._pause_phases and self._pause_phase_idx > 0:
+            self._pause_phase_idx -= 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _on_next_phase(self):
+        if (self._pause_phases
+                and self._pause_phase_idx < len(self._pause_phases) - 1):
+            self._pause_phase_idx += 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _publish_paused_phase(self):
+        if not self._pause_phases:
+            return
+        phase = self._pause_phases[self._pause_phase_idx]
+        mapping = self.manager.protocol_metadata.get(
+            "electrode_to_channel", {},
+        )
+        electrodes = sorted(phase)
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        payload = {"electrodes": electrodes, "channels": channels}
+        if self._current_run_preview_mode:
+            payload["preview"] = True
+        try:
+            publish_message(
+                topic=ELECTRODES_STATE_CHANGE,
+                message=json.dumps(payload),
+            )
+        except Exception as e:
+            logger.warning(f"phase navigation publish failed: {e}")
+
+    def _update_phase_nav_buttons(self):
+        prev_enabled = self._pause_phase_idx > 0
+        next_enabled = (
+            bool(self._pause_phases)
+            and self._pause_phase_idx < len(self._pause_phases) - 1
+        )
+        self.navigation_bar.set_phase_navigation_enabled(
+            prev_enabled, next_enabled,
+        )
 
     # --- experiment-bar stubs (Task 6 wires real services) -------------
 
