@@ -95,16 +95,25 @@ def test_pane_has_executor_and_pause_event(qapp):
 
 
 def test_pane_executor_factory_can_be_overridden(qapp):
+    """The executor_factory kwarg lets tests substitute the executor.
+    The factory's return value must satisfy the wiring contract — a
+    bare object() would break _wire_executor_signals — so use a
+    MagicMock that exposes the attributes the wiring touches."""
+    from unittest.mock import MagicMock
+
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    sentinel = object()
+    fake_executor = MagicMock()
+    captured = {}
 
     def fake_factory(row_manager, qsignals, pause_event, stop_event):
-        return sentinel
+        captured["called"] = True
+        return fake_executor
 
     pane = ProtocolTreePane([make_type_column()], executor_factory=fake_factory)
-    assert pane.executor is sentinel
+    assert captured["called"] is True
+    assert pane.executor is fake_executor
 
 
 def test_pane_idle_button_state(qapp):

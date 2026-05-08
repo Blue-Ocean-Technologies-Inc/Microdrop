@@ -108,12 +108,9 @@ class ProtocolTreePane(QWidget):
         self._tick_timer.setInterval(100)
         self._tick_timer.timeout.connect(self._refresh_status)
 
-        # Skip wiring if the factory returned a stub without qsignals
-        # (lets tests inject a sentinel executor for override checks).
-        if hasattr(self.executor, "qsignals"):
-            self._wire_executor_signals()
-            self._wire_button_state_machine()
-            self._wire_navigation_buttons()
+        self._wire_executor_signals()
+        self._wire_button_state_machine()
+        self._wire_navigation_buttons()
         self._set_idle_button_state()
 
     def _build_status_bar(self):
