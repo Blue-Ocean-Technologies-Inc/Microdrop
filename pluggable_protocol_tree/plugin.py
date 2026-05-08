@@ -41,9 +41,17 @@ class PluggableProtocolTreePlugin(Plugin):
     #: ICompoundColumn instances here. Named with a leading underscore so
     #: tests can inject contributions directly via `contributed_columns`
     #: (a plain List) without needing a full Envisage application registry.
+    #:
+    #: The element type is untyped (plain ``List``) on purpose:
+    #: ``ICompoundColumn`` is parallel to (not a subtype of) ``IColumn``,
+    #: so a typed ``List(Instance(IColumn))`` would raise TraitError
+    #: whenever any plugin contributes a compound column, dropping every
+    #: other contribution along with it. ``_assemble_columns`` dispatches
+    #: on ``isinstance(c, ICompoundColumn)`` to expand compounds and
+    #: keep plain columns as-is.
     _column_extension_point = ExtensionPoint(
-        List(Instance(IColumn)), id=PROTOCOL_COLUMNS,
-        desc="Columns contributed by other plugins",
+        List, id=PROTOCOL_COLUMNS,
+        desc="Columns contributed by other plugins (IColumn or ICompoundColumn).",
     )
 
     #: Plain list — set directly in tests; populated from the extension
@@ -107,8 +115,13 @@ class PluggableProtocolTreePlugin(Plugin):
         # plain contributed_columns list so _assemble_columns sees them.
         try:
             self.contributed_columns = list(self._column_extension_point)
-        except Exception:
-            pass
+        except Exception as e:
+            # Don't swallow silently — a TraitError here used to drop
+            # every contribution from every plugin and surface only as
+            # an empty dock pane. Log it so the developer sees it.
+            logger.warning(
+                f"failed to read PROTOCOL_COLUMNS extension point: {e}"
+            )
         try:
             from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterData
         except ImportError:
@@ -116,15 +129,26 @@ class PluggableProtocolTreePlugin(Plugin):
             # construction must not require Redis; a missing broker is
             # only a problem at the moment a protocol actually runs.
             return
-        topics = sorted({
-            t for c in self._assemble_columns()
-            for t in (c.handler.wait_for_topics or [])
-        })
-        if not topics:
-            return
-        router_data = MessageRouterData()
-        for topic in topics:
-            router_data.add_subscriber_to_topic(
-                topic=topic,
-                subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+        try:
+            topics = sorted({
+                t for c in self._assemble_columns()
+                for t in (c.handler.wait_for_topics or [])
+            })
+            if not topics:
+                return
+            router_data = MessageRouterData()
+            for topic in topics:
+                router_data.add_subscriber_to_topic(
+                    topic=topic,
+                    subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+                )
+        except Exception as e:
+            # Redis briefly unreachable at startup shouldn't block the
+            # plugin from contributing its dock pane. The protocol
+            # itself can't run without Redis but the UI should still
+            # mount so the user gets a meaningful error on play, not
+            # a missing pane.
+            logger.warning(
+                f"failed to wire executor listener subscriptions "
+                f"(Redis unreachable?): {e}"
             )
