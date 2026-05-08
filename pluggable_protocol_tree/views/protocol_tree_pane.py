@@ -617,8 +617,9 @@ class ProtocolTreePane(QWidget):
         if new_dir is None:
             logger.warning("initialize_new_experiment returned None; label unchanged")
             return
+        # The setter fires application.experiment_changed; the
+        # _on_experiment_changed observer updates the label.
         self.application.current_experiment_directory = new_dir
-        self.experiment_label.update_experiment_id(new_dir.stem)
         logger.info(f"Started new experiment: {new_dir.stem}")
 
     def _on_new_note(self):

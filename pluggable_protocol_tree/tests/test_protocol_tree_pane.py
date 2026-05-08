@@ -466,3 +466,42 @@ def test_pane_observes_experiment_changed_event_to_update_label(qapp):
     pane = ProtocolTreePane([make_type_column()], application=app)
     app.current_experiment_directory = "/tmp/2026-05-08T12-00-00Z"
     assert "2026-05-08T12-00-00Z" in pane.experiment_label.text()
+
+
+def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
+    """Clicking New Experiment with a real Traits-backed application
+    triggers the experiment_changed observer, which updates the label
+    — no explicit label update needed in the click handler."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from traits.api import Directory, Event, HasTraits, Property
+
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    class FakeApp(HasTraits):
+        current_experiment_directory = Property(Directory)
+        experiment_changed = Event()
+        _value = Path("/tmp/initial")
+
+        def _get_current_experiment_directory(self):
+            return self._value
+
+        def _set_current_experiment_directory(self, value):
+            self._value = Path(value)
+            self.experiment_changed = True
+
+    app = FakeApp()
+    new_dir = Path("/tmp/2026-05-08T13-37-00Z")
+    exp_mgr = MagicMock()
+    exp_mgr.initialize_new_experiment.return_value = new_dir
+
+    pane = ProtocolTreePane(
+        [make_type_column()],
+        application=app,
+        experiment_manager=exp_mgr,
+    )
+    pane.btn_new_exp.click()
+    assert app.current_experiment_directory == new_dir
+    assert "2026-05-08T13-37-00Z" in pane.experiment_label.text()
