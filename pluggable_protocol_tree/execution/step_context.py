@@ -102,7 +102,7 @@ class Mailbox:
 
 # --- contexts ---
 
-from traits.api import Any, Dict, HasTraits, Instance, Str, List
+from traits.api import Any, Bool, Dict, HasTraits, Instance, Str, List
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -138,6 +138,13 @@ class ProtocolContext(HasTraits):
     qsignals    = Any(desc="ExecutorSignals (QObject) — hooks may emit "
                            "protocol_paused / protocol_resumed for "
                            "in-hook waits the UI should reflect")
+
+    # When True, hooks that drive hardware (e.g. publishing electrode
+    # actuation requests) must skip their broker publishes and any
+    # ack-waiting tied to them — the protocol runs through its step
+    # iteration, dwells, signals, etc., but does not touch hardware.
+    # Mirrors the legacy protocol_grid "Preview Mode" checkbox.
+    preview_mode = Bool(False)
 
 
 class StepContext(HasTraits):

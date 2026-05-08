@@ -41,13 +41,18 @@ class SimpleDeviceViewer(QWidget):
     # thread emits this; auto-connection delivers it on the GUI thread
     # via the Qt event loop. Avoids QMetaObject.invokeMethod, which under
     # PySide6 cannot find a QMetaType for "object" / generic Python types.
-    actuation_changed = Signal(list)
+    #
+    # Second arg is a preview flag — actuated cells paint yellow instead
+    # of the normal bright green when the run is in preview mode, so
+    # users get a clear visual cue that no hardware is being driven.
+    actuation_changed = Signal(list, bool)
 
     def __init__(self, manager, parent=None):
         super().__init__(parent)
         self._manager = manager
         self._active_row = None
         self._actuated: Set[str] = set()
+        self._actuated_preview = False
         self._mode = "static"
         self._in_progress_route: list = []
         self.actuation_changed.connect(self.set_actuated)
@@ -101,11 +106,13 @@ class SimpleDeviceViewer(QWidget):
         self._update_route_button_state()
         self.update()
 
-    def set_actuated(self, electrode_ids: Iterable[str]):
+    def set_actuated(self, electrode_ids: Iterable[str], preview: bool = False):
         """Called by the actuation subscription with the current phase's
         electrode set. Paints those cells green on top of the static /
-        route layers."""
+        route layers — or gold yellow if ``preview`` is True, signalling
+        a route playback that isn't actually driving hardware."""
         self._actuated = set(electrode_ids or [])
+        self._actuated_preview = bool(preview)
         self.update()
 
     # ---------- mode ----------
@@ -190,7 +197,12 @@ class SimpleDeviceViewer(QWidget):
             eid = _electrode_id(i)
             r = self._cell_rect(i)
             if eid in self._actuated:
-                p.setBrush(QBrush(QColor(40, 220, 80)))    # bright green
+                if self._actuated_preview:
+                    # Gold yellow — distinguishable from the pale
+                    # static-electrode yellow (255, 230, 90).
+                    p.setBrush(QBrush(QColor(255, 200, 0)))
+                else:
+                    p.setBrush(QBrush(QColor(40, 220, 80)))    # bright green
             elif eid in statics:
                 p.setBrush(QBrush(QColor(255, 230, 90)))   # yellow
             else:

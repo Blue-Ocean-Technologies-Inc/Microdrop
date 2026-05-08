@@ -196,7 +196,7 @@ import time
 from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtWidgets import (
     QApplication, QFileDialog, QLabel, QMainWindow,
-    QSplitter, QStatusBar, QToolBar,
+    QSplitter, QStatusBar, QToolBar, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
@@ -205,6 +205,9 @@ from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.navigation_bar import (
+    NavigationBar, StatusBar, make_separator,
+)
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 
@@ -237,7 +240,10 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         # attribute rather than walking the central widget's children.
         self._side_panel = None
 
-        # Central layout: just the tree, OR a splitter with tree + side panel.
+        # Tree-or-splitter goes inside a vertical container with the
+        # NavigationBar (built later in __init__) sitting above it. The
+        # nav bar is created after the executor so its button slots can
+        # bind directly to executor.start / .stop / pause-toggle.
         if self.config.side_panel_factory is not None:
             side = self.config.side_panel_factory(self.manager)
             if side is not None:
@@ -249,11 +255,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                     int(self.config.window_size[0] * 0.65),
                     int(self.config.window_size[0] * 0.35),
                 ])
-                self.setCentralWidget(splitter)
+                self._central_content = splitter
             else:
-                self.setCentralWidget(self.widget)
+                self._central_content = self.widget
         else:
-            self.setCentralWidget(self.widget)
+            self._central_content = self.widget
 
         # Pre-populate sample steps BEFORE the executor is built.
         config.pre_populate(self.manager)
@@ -274,6 +280,23 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._phase_started_at: float | None = None
         self._phase_target: float | None = None
         self._current_row = None
+        # Auto-repeat state. Driven by the StatusBar's
+        # edit_repeat_protocol spinbox at play-button time.
+        self._repeats_total = 1
+        self._repeats_completed = 0
+        # Whichever mode (Run / Preview) the user picked for this run
+        # — auto-repeats reuse the same mode, and the running-state
+        # button machine uses it to disable the dropdown so a user
+        # can't switch modes mid-run.
+        self._current_run_preview_mode = False
+        # Phase-navigation state: while paused mid-step the demo
+        # window splits the play button into prev/resume/next phase
+        # controls and lets the user step through the paused row's
+        # phase list (for visualization only — the worker thread's
+        # actual phase position is independent and resumes from
+        # wherever it was when paused).
+        self._pause_phases: list = []
+        self._pause_phase_idx: int = 0
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(100)   # 10 Hz
         self._tick_timer.timeout.connect(self._refresh_status)
@@ -321,6 +344,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._wire_executor_signals()
         self._build_toolbar()
+        self._build_navigation_bar()
+        self._build_experiment_bar()
         self._wire_button_state_machine()
         self._set_idle_button_state()
 
@@ -434,20 +459,34 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             )
 
     def _build_status_bar(self):
+        """Build the legacy-style StatusBar widget (mounted under the nav
+        bar in _build_navigation_bar) plus a thin bottom QStatusBar that
+        only hosts demo-specific per-readout labels.
+
+        Old single-attribute names (``_status_step_label`` etc.) are
+        retained as aliases onto the StatusBar widget's labels so test
+        coverage and demo subclasses keep working.
+        """
+        self.status_bar = StatusBar()
+        # Reveal the phase time slot only when the demo cares about
+        # per-phase acks; otherwise it stays hidden so the top bar
+        # doesn't show a frozen "Phase 0.00s / 0.00s" forever.
+        phase_enabled = self.config.phase_ack_topic is not None
+        self.status_bar.lbl_phase_time.setVisible(phase_enabled)
+
+        # Aliases for backward compat with tests + demo subclasses.
+        # _status_row_label is intentionally dropped — the new layout
+        # has no row-name slot (per design discussion).
+        self._status_step_label = self.status_bar.lbl_step_progress
+        self._status_step_time_label = self.status_bar.lbl_step_time
+        self._status_reps_label = self.status_bar.lbl_step_repetition
+        self._status_phase_time_label = (
+            self.status_bar.lbl_phase_time if phase_enabled else None
+        )
+
+        # Bottom QStatusBar — only readouts live here now.
         sb = QStatusBar()
         self.setStatusBar(sb)
-        self._status_step_label = QLabel("Idle")
-        self._status_row_label = QLabel("")
-        self._status_reps_label = QLabel("")
-        self._status_step_time_label = QLabel("")
-        sb.addWidget(self._status_step_label)
-        sb.addWidget(self._status_row_label, stretch=1)
-        sb.addPermanentWidget(self._status_reps_label)
-        sb.addPermanentWidget(self._status_step_time_label)
-        if self.config.phase_ack_topic is not None:
-            self._status_phase_time_label = QLabel("")
-            sb.addPermanentWidget(self._status_phase_time_label)
-        # StatusReadout labels.
         for readout in self.config.status_readouts:
             slug = _slug(readout.label)
             label = QLabel(f"{readout.label}: {readout.initial}")
@@ -486,14 +525,33 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
             self._phase_target = None
-        path = ".".join(str(i + 1) for i in row.path) if row.path else ""
-        path_str = f" (path {path})" if path else ""
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
-        self._status_row_label.setText(f"{row.name}{path_str}")
+        # Recent / next-step labels — show the actual step name of the
+        # currently-running row plus the upcoming one. Walking
+        # iter_execution_steps once per step is fine; protocols stay
+        # under a few hundred steps.
+        self.status_bar.lbl_recent_step.setText(
+            f"Most Recent Step: {row.name}"
+        )
+        self.status_bar.lbl_next_step.setText(
+            f"Next Step: {self._next_step_name(row)}"
+        )
         if not self._tick_timer.isActive():
             self._tick_timer.start()
+
+    def _next_step_name(self, current):
+        """Return the display name of the step that follows ``current`` in
+        execution order, or "-" if ``current`` is the last step."""
+        steps = self.manager.iter_execution_steps()
+        cur_path = tuple(current.path)
+        # Advance past the current row, return the next one.
+        for row in steps:
+            if tuple(row.path) == cur_path:
+                next_row = next(steps, None)
+                return next_row.name if next_row is not None else "-"
+        return "-"
 
     def _on_phase_ack(self):
         """Each ack restarts the per-phase timer. The first ack of a step
@@ -522,14 +580,19 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     def _on_step_repetition(self, rep_chain):
         """Render the active rep context (e.g. "rep 2/3 of 'Wash'") into
-        the status bar. Empty chain (no repeating ancestor) clears."""
+        the status bar. Empty chain (no repeating ancestor) hides the
+        label so the layout collapses the slot — otherwise its
+        fixed-width box would leave a blank 100 px gap between the
+        Step counter and the Most-Recent-Step label."""
         if not rep_chain:
             self._status_reps_label.setText("")
+            self._status_reps_label.setVisible(False)
             return
         parts = [
             f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
         ]
         self._status_reps_label.setText(" · ".join(parts))
+        self._status_reps_label.setVisible(True)
 
     def _on_step_finished(self, _row):
         # Freeze the elapsed-time labels at the step's actual elapsed.
@@ -537,7 +600,11 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._refresh_status()
 
     def _on_error(self, msg):
-        """protocol_error → reset to idle and show a styled error dialog."""
+        """protocol_error → reset to idle and show a styled error dialog.
+        Repeat state is cleared so a half-finished run doesn't auto-rerun."""
+        self._repeats_total = 0
+        self._repeats_completed = 0
+        self._update_repeat_status_label()
         self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
@@ -559,6 +626,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             )
 
     def _build_toolbar(self):
+        """Top QToolBar holds the Add/Save/Load utility actions; the
+        playback + step-navigation buttons live on the NavigationBar
+        below the toolbar (built next in ``_build_navigation_bar``)."""
         tb = QToolBar("Protocol")
         self.addToolBar(tb)
         tb.addAction("Add Step", lambda: self.manager.add_step())
@@ -566,11 +636,113 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction("Save…", self._save)
         tb.addAction("Load…", self._load)
-        tb.addSeparator()
-        self._run_action = tb.addAction("Run", self.executor.start)
-        self._pause_action = tb.addAction("Pause", self._toggle_pause)
-        self._stop_action = tb.addAction("Stop", self.executor.stop)
         self._toolbar = tb
+
+    def _build_navigation_bar(self):
+        """Build the NavigationBar (ported from protocol_grid) and wire
+        each button to the executor / step-cursor navigation. Mounts the
+        bar above the central content (tree or tree+side-panel splitter)."""
+        self.navigation_bar = NavigationBar()
+
+        # Playback.
+        self.navigation_bar.btn_play.clicked.connect(self._on_play_clicked)
+        self.navigation_bar.btn_resume.clicked.connect(self._toggle_pause)
+        self.navigation_bar.btn_stop.clicked.connect(self.executor.stop)
+        # Preview Mode is a persistent toggle on the play dropdown —
+        # the Run click reads it via is_preview_mode(); no extra
+        # signal wiring needed here.
+
+        # Step navigation (cursor only — no protocol mutation).
+        self.navigation_bar.btn_first.clicked.connect(self._navigate_to_first_step)
+        self.navigation_bar.btn_prev.clicked.connect(self._navigate_to_previous_step)
+        self.navigation_bar.btn_next.clicked.connect(self._navigate_to_next_step)
+        self.navigation_bar.btn_last.clicked.connect(self._navigate_to_last_step)
+
+        # Phase navigation — only useful while the protocol is paused
+        # mid-step. The handlers compute the paused step's phase list
+        # locally (no coordination with the worker thread) and publish
+        # ELECTRODES_STATE_CHANGE for the requested phase so the
+        # visualizer overlays it; the ``preview`` flag in the payload
+        # keeps the hardware driver from actuating.
+        self.navigation_bar.btn_prev_phase.clicked.connect(self._on_prev_phase)
+        self.navigation_bar.btn_next_phase.clicked.connect(self._on_next_phase)
+        self.navigation_bar.set_phase_navigation_enabled(False, False)
+
+        # Wrap navigation bar + status bar + existing central content
+        # in a vertical layout. The status bar (legacy-style) sits
+        # directly under the nav bar, mirroring the old protocol_grid
+        # layout — separator between status and tree only.
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.navigation_bar)
+        layout.addWidget(self.status_bar)
+        layout.addWidget(make_separator())
+        layout.addWidget(self._central_content)
+        self.setCentralWidget(container)
+
+    def _build_experiment_bar(self):
+        """Populate the navigation bar's left slot with the legacy
+        protocol_grid trio: New Experiment button, Experiment label,
+        New Note button. The buttons are exposed as attributes
+        (``btn_new_exp``, ``btn_new_note``, ``experiment_label``) so
+        external plugins / demo subclasses can connect their own
+        slots; the base provides only stub click handlers that log.
+
+        ``add_widget_to_left_slot`` reveals the bar's bottom row
+        (hidden by default), so the experiment row appears below
+        the playback buttons.
+        """
+        from microdrop_style.button_styles import ICON_FONT_FAMILY
+        from pyface.qt.QtGui import QFont
+        from pyface.qt.QtWidgets import QToolButton
+
+        icon_font = QFont(ICON_FONT_FAMILY)
+        icon_font.setPixelSize(20)
+
+        self.btn_new_exp = QToolButton()
+        self.btn_new_exp.setText("note_add")
+        self.btn_new_exp.setFont(icon_font)
+        self.btn_new_exp.setToolTip("New Experiment")
+        self.btn_new_exp.setCursor(Qt.PointingHandCursor)
+        self.btn_new_exp.clicked.connect(self._on_new_experiment)
+
+        self.experiment_label = QLabel(
+            "<b>Experiment:</b> <i>(not set)</i>"
+        )
+        self.experiment_label.setToolTip("Active experiment")
+        self.experiment_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse,
+        )
+
+        self.btn_new_note = QToolButton()
+        self.btn_new_note.setText("sticky_note")
+        self.btn_new_note.setFont(icon_font)
+        self.btn_new_note.setToolTip("New Note")
+        self.btn_new_note.setCursor(Qt.PointingHandCursor)
+        self.btn_new_note.clicked.connect(self._on_new_note)
+
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_exp)
+        self.navigation_bar.add_widget_to_left_slot(self.experiment_label)
+        self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
+
+    def set_experiment_id(self, experiment_id: str):
+        """Update the experiment label text. Demos / plugins call this
+        when the active experiment changes."""
+        self.experiment_label.setText(
+            f"<b>Experiment:</b> {experiment_id}"
+        )
+
+    def _on_new_experiment(self):
+        """Stub — log only. Demo subclasses or plugins should override
+        or reconnect ``btn_new_exp.clicked`` for real behaviour."""
+        logger.info("New Experiment requested")
+
+    def _on_new_note(self):
+        """Stub — log only. Demo subclasses or plugins should override
+        or reconnect ``btn_new_note.clicked`` for real behaviour."""
+        logger.info("New Note requested")
 
     def _save(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -603,23 +775,85 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.executor.qsignals.protocol_started.connect(self._set_running_button_state)
         self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
         self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
-        for sig in (
-            self.executor.qsignals.protocol_finished,
-            self.executor.qsignals.protocol_aborted,
-        ):
-            sig.connect(self._on_protocol_terminated)
+        # Split protocol_finished from protocol_aborted so the auto-repeat
+        # logic only fires on natural completion (not user Stop).
+        self.executor.qsignals.protocol_finished.connect(self._on_protocol_finished)
+        self.executor.qsignals.protocol_aborted.connect(self._on_protocol_aborted)
 
     def _set_idle_button_state(self):
-        self._run_action.setEnabled(True)
-        self._pause_action.setEnabled(False)
-        self._pause_action.setText("Pause")
-        self._stop_action.setEnabled(False)
+        nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)
+        nb.show_play_state()
+        nb.btn_stop.setEnabled(False)
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(True)
+        # Re-enable the Preview-Mode toggle on the play dropdown.
+        nb.action_preview.setEnabled(True)
 
     def _set_running_button_state(self):
-        self._run_action.setEnabled(False)
-        self._pause_action.setEnabled(True)
-        self._pause_action.setText("Pause")
-        self._stop_action.setEnabled(True)
+        nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)         # acts as Pause while running
+        nb.show_pause_state()
+        nb.btn_stop.setEnabled(True)
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(False)
+        # Mode is locked once a run is in progress — don't let the
+        # user re-arm Preview mid-run.
+        nb.action_preview.setEnabled(False)
+
+    def _on_play_clicked(self):
+        """While idle: start the protocol from the currently-selected
+        step (or from the beginning if nothing is selected), reading
+        Preview / Droplet Check state from the play dropdown.
+        While running/paused: toggle pause. Mirrors the legacy
+        protocol_grid play-button behaviour."""
+        if self._is_protocol_active():
+            self._toggle_pause()
+            return
+        self._start_protocol_run(
+            preview_mode=self.navigation_bar.is_preview_mode(),
+        )
+
+    def _start_protocol_run(self, preview_mode: bool):
+        """Common entry point for both Run and Preview: prime the repeat
+        counter, remember the chosen mode for auto-repeat continuations,
+        then start the executor."""
+        self._repeats_total = self.status_bar.edit_repeat_protocol.value()
+        self._repeats_completed = 0
+        self._current_run_preview_mode = preview_mode
+        self._update_repeat_status_label()
+        self.executor.start(
+            start_step_path=self._selected_step_path(),
+            preview_mode=preview_mode,
+        )
+
+    def _update_repeat_status_label(self):
+        """Reflect the current repeat counter into 'X/' (the X in
+        'X/<total>' shown on the status bar)."""
+        self.status_bar.lbl_repeat_protocol_status.setText(
+            f"{self._repeats_completed}/"
+        )
+
+    def _selected_step_path(self):
+        """Return the path tuple of the currently-selected row, but only
+        if it's a step row that actually appears in execution order;
+        else None (which causes the executor to start from the
+        beginning)."""
+        idx = self.widget.tree.currentIndex()
+        if not idx.isValid():
+            return None
+        path = self.widget._index_to_path(idx)
+        for row in self.manager.iter_execution_steps():
+            if tuple(row.path) == path:
+                return path
+        return None
+
+    def _is_protocol_active(self):
+        """True iff the executor is currently running or paused. The
+        Stop button's enabled state tracks this exactly (via the
+        protocol_started / protocol_finished / protocol_aborted signal
+        chain), so use it as the source of truth."""
+        return self.navigation_bar.btn_stop.isEnabled()
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
@@ -628,18 +862,223 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             self.executor.pause()
 
     def _on_protocol_paused(self):
-        self._pause_action.setText("Resume")
+        self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
+        # Swap to the prev / resume / next-phase trio so the user can
+        # explore the paused row's phases visually. Computed locally —
+        # the worker thread's iter_phases position isn't reachable
+        # from the GUI thread without thread-safe shared state.
+        if self._current_row is not None:
+            self._compute_pause_phase_state(self._current_row)
+            self.navigation_bar.split_play_button_to_phase_controls()
+            self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
-        self._pause_action.setText("Pause")
+        self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
+        # Restore the unified play button.
+        self.navigation_bar.merge_phase_controls_to_play_button()
+
+    def _on_protocol_finished(self):
+        """Natural completion. Bump the repeat counter; if more reps
+        remain, re-queue executor.start() on the next event-loop tick
+        (the worker thread emits protocol_finished from inside its
+        finally block — calling start() now would no-op against
+        ``_thread.is_alive()``)."""
+        self._repeats_completed += 1
+        self._update_repeat_status_label()
+        if self._repeats_completed < self._repeats_total:
+            QTimer.singleShot(50, self._restart_for_next_rep)
+            return
+        self._on_protocol_terminated()
+
+    def _restart_for_next_rep(self):
+        # Each repeat runs the protocol from the beginning — start_step_path
+        # is intentionally None. Carry the original Run/Preview mode forward.
+        self.executor.start(preview_mode=self._current_run_preview_mode)
+
+    def _on_protocol_aborted(self):
+        """User pressed Stop. Clear the repeat state (no auto-restart)."""
+        self._repeats_total = 0
+        self._repeats_completed = 0
+        self._update_repeat_status_label()
+        self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
         self._clear_all_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
+        # If the protocol terminated while paused, the play button is
+        # still split into the phase-nav trio — merge it back so the
+        # idle UI is the unified play button again.
+        self.navigation_bar.merge_phase_controls_to_play_button()
+        self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    # --- pause-time phase navigation ------------------------------------
+
+    def _compute_pause_phase_state(self, row):
+        """Build the paused row's phase list locally so prev/next phase
+        can step through it without touching the worker thread. Index
+        starts at 0 — we don't know the worker's actual phase position,
+        so the user explores from the start of the step."""
+        from pluggable_protocol_tree.services.phase_math import iter_phases
+        try:
+            self._pause_phases = list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+        except Exception as e:
+            logger.warning(f"phase navigation: iter_phases failed: {e}")
+            self._pause_phases = []
+        self._pause_phase_idx = 0
+
+    def _on_prev_phase(self):
+        if self._pause_phases and self._pause_phase_idx > 0:
+            self._pause_phase_idx -= 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _on_next_phase(self):
+        if (self._pause_phases
+                and self._pause_phase_idx < len(self._pause_phases) - 1):
+            self._pause_phase_idx += 1
+            self._publish_paused_phase()
+            self._update_phase_nav_buttons()
+
+    def _publish_paused_phase(self):
+        """Publish ELECTRODES_STATE_CHANGE for the currently-pointed
+        phase so the device viewer overlays it. The ``preview`` flag
+        on the payload mirrors the current run's mode — pause-time
+        phase navigation during a real Run actuates hardware just like
+        the route playback would have; during a Preview run it stays
+        gated."""
+        from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+        if not self._pause_phases:
+            return
+        phase = self._pause_phases[self._pause_phase_idx]
+        mapping = self.manager.protocol_metadata.get(
+            "electrode_to_channel", {},
+        )
+        electrodes = sorted(phase)
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        payload = {
+            "electrodes": electrodes,
+            "channels": channels,
+        }
+        if self._current_run_preview_mode:
+            payload["preview"] = True
+        try:
+            publish_message(
+                topic=ELECTRODES_STATE_CHANGE,
+                message=json.dumps(payload),
+            )
+        except Exception as e:
+            logger.warning(f"phase navigation publish failed: {e}")
+
+    def _update_phase_nav_buttons(self):
+        prev_enabled = self._pause_phase_idx > 0
+        next_enabled = (
+            bool(self._pause_phases)
+            and self._pause_phase_idx < len(self._pause_phases) - 1
+        )
+        self.navigation_bar.set_phase_navigation_enabled(
+            prev_enabled, next_enabled,
+        )
+
+    # --- step-cursor navigation ----------------------------------------
+
+    def _navigate_to_first_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[0])
+
+    def _navigate_to_last_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if steps:
+            self._select_step(steps[-1])
+
+    def _navigate_to_previous_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur > 0:
+            self._select_step(steps[cur - 1])
+
+    def _navigate_to_next_step(self):
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        cur = self._current_step_in(steps)
+        if cur is None:
+            self._select_step(steps[0])
+            return
+        if cur < len(steps) - 1:
+            self._select_step(steps[cur + 1])
+            return
+        # At end of execution order — clone the currently-selected step
+        # and insert it after, at the same parent level. Mirrors the
+        # legacy protocol_grid Next-button behaviour where pressing
+        # Next at the end of the protocol creates a new step.
+        self._duplicate_step_after(steps[cur])
+
+    def _duplicate_step_after(self, row):
+        """Insert a copy of ``row`` immediately after it under the same
+        parent. Column values are read off the source row via each
+        column's model.col_id and round-tripped through the same
+        add_step API the toolbar uses."""
+        path = tuple(row.path)
+        parent_path = path[:-1]
+        insert_idx = path[-1] + 1
+        values = {}
+        for col in self.manager.columns:
+            cid = col.model.col_id
+            if hasattr(row, cid):
+                values[cid] = getattr(row, cid)
+        new_path = self.manager.add_step(
+            parent_path=parent_path, index=insert_idx, values=values,
+        )
+        new_row = self.manager.get_row(new_path)
+        self._select_step(new_row)
+
+    def _current_step_in(self, steps):
+        """Index of the tree's current row inside ``steps``, or None if
+        the current row isn't a step (e.g. a group is selected)."""
+        idx = self.widget.tree.currentIndex()
+        if not idx.isValid():
+            return None
+        # Walk the QModelIndex chain back to a path tuple.
+        path = self.widget._index_to_path(idx)
+        for i, row in enumerate(steps):
+            if tuple(row.path) == path:
+                return i
+        return None
+
+    def _select_step(self, row):
+        idx = self.widget._node_to_index(row)
+        if not idx.isValid():
+            return
+        # Expand any collapsed ancestor groups so the row is visible.
+        parent = idx.parent()
+        while parent.isValid():
+            self.widget.tree.expand(parent)
+            parent = parent.parent()
+        self.widget.tree.setCurrentIndex(idx)
+        self.widget.tree.scrollTo(idx)
 
     def _clear_all_highlights(self):
         """Restore an idle visual state at protocol end."""
@@ -654,12 +1093,18 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self._phase_started_at = None
         self._phase_target = None
         self._current_row = None
-        self._status_step_label.setText("Idle")
-        self._status_row_label.setText("")
-        self._status_reps_label.setText("")
-        self._status_step_time_label.setText("")
+        # Reset to the StatusBar widget's initial label texts so the
+        # idle visual state matches a freshly-constructed window.
+        self._status_step_label.setText("Step 0/0")
+        self._status_step_time_label.setText("Step Time: 0 s")
+        self._status_reps_label.setText("Repetition 0/0")
+        # _on_step_repetition may have hidden this slot during the run;
+        # restore visibility for the idle layout.
+        self._status_reps_label.setVisible(True)
+        self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
+        self.status_bar.lbl_next_step.setText("Next Step: -")
         if self._status_phase_time_label is not None:
-            self._status_phase_time_label.setText("")
+            self._status_phase_time_label.setText("Phase 0.00s / 0.00s")
 
         # Reset readout labels to initial text.
         for readout in self.config.status_readouts:
@@ -671,8 +1116,15 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
     @classmethod
     def run(cls, config: DemoConfig) -> int:
         """One-shot main(): build the window, show it, run app.exec().
-        Reuses an existing QApplication if one is already running."""
+        Reuses an existing QApplication if one is already running.
+
+        Calls ``style_app`` so the Material Symbols icon font (used by
+        the NavigationBar buttons) is registered before the window
+        is built — without it the icon glyphs render as boxes."""
+        from microdrop_style.helpers import style_app
+
         app = QApplication.instance() or QApplication([])
+        style_app(app)
         w = cls(config)
         w.show()
         return app.exec()

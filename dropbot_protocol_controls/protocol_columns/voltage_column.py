@@ -56,6 +56,11 @@ class VoltageHandler(BaseColumnHandler):
         DropbotPreferences().last_voltage = int(value)
 
     def on_step(self, row, ctx):
+        # Preview mode: skip the hardware-publish + ack-wait. The
+        # DropBot voltage RPC isn't sent and no VOLTAGE_APPLIED comes
+        # back. Mirrors the legacy protocol_grid Preview Mode.
+        if getattr(ctx.protocol, "preview_mode", False):
+            return
         v = int(row.voltage)
         publish_message(topic=PROTOCOL_SET_VOLTAGE, message=str(v))
         ctx.wait_for(VOLTAGE_APPLIED, timeout=5.0)

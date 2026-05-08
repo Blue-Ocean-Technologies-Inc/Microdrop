@@ -185,18 +185,21 @@ def test_window_has_router_attribute_after_construction(qapp):
 
 
 def test_window_has_status_bar_with_step_label(qapp):
-    """Status bar exists with the step counter label."""
+    """Status bar exists with the step counter label.
+
+    The legacy-style top StatusBar starts at "Step 0/0" instead of the
+    old "Idle" sentinel — matches the legacy protocol_grid look. The
+    bottom QStatusBar still exists but only hosts demo readout labels.
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    sb = w.statusBar()
-    assert sb is not None
-    # Step label and row label should be there.
-    assert w._status_step_label.text() == "Idle"
-    assert w._status_row_label.text() == ""
+    assert w.statusBar() is not None        # bottom (readouts only)
+    assert w.status_bar is not None         # top (legacy-look StatusBar)
+    assert w._status_step_label.text() == "Step 0/0"
 
 
 def test_window_status_step_elapsed_label_exists(qapp):
@@ -375,26 +378,29 @@ def test_toolbar_has_standard_actions(qapp):
     actions = [a.text() for a in w._toolbar.actions()]
     assert "Add Step" in actions
     assert "Add Group" in actions
-    assert "Run" in actions
-    assert "Pause" in actions
-    assert "Stop" in actions
+    # Playback buttons live on the NavigationBar, not the QToolBar.
+    nb = w.navigation_bar
+    assert nb.btn_play is not None
+    assert nb.btn_stop is not None
 
 
 def test_idle_button_state(qapp):
-    """Initially: Run enabled; Pause + Stop disabled."""
+    """Initially: Play + step-nav enabled; Stop disabled."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._run_action.isEnabled()
-    assert not w._pause_action.isEnabled()
-    assert not w._stop_action.isEnabled()
+    nb = w.navigation_bar
+    assert nb.btn_play.isEnabled()
+    assert not nb.btn_stop.isEnabled()
+    for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+        assert btn.isEnabled()
 
 
 def test_protocol_started_swaps_buttons(qapp):
-    """When protocol_started fires: Run disabled; Pause + Stop enabled."""
+    """When protocol_started fires: step-nav disabled; Stop enabled."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -402,9 +408,11 @@ def test_protocol_started_swaps_buttons(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
     w.executor.qsignals.protocol_started.emit()
-    assert not w._run_action.isEnabled()
-    assert w._pause_action.isEnabled()
-    assert w._stop_action.isEnabled()
+    nb = w.navigation_bar
+    assert nb.btn_play.isEnabled()       # toggles to pause while running
+    assert nb.btn_stop.isEnabled()
+    for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+        assert not btn.isEnabled()
 
 
 def test_protocol_terminated_returns_to_idle(qapp):
@@ -417,10 +425,11 @@ def test_protocol_terminated_returns_to_idle(qapp):
     w = BasePluggableProtocolDemoWindow(cfg)
     w.executor.qsignals.protocol_started.emit()
     w.executor.qsignals.protocol_finished.emit()
-    assert w._run_action.isEnabled()
-    assert not w._pause_action.isEnabled()
-    assert not w._stop_action.isEnabled()
-    assert w._pause_action.text() == "Pause"
+    nb = w.navigation_bar
+    assert nb.btn_play.isEnabled()
+    assert not nb.btn_stop.isEnabled()
+    for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+        assert btn.isEnabled()
 
 
 def test_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
@@ -486,22 +495,23 @@ def test_load_replaces_manager_state(qapp, tmp_path, monkeypatch):
 
 
 def test_window_no_side_panel_uses_tree_as_central(qapp):
-    """When side_panel_factory is None, the central widget IS the tree
-    and _side_panel is None."""
+    """When side_panel_factory is None, the inner central content IS the
+    tree (now wrapped in a NavigationBar+content container) and
+    _side_panel is None."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w.centralWidget() is w.widget
+    assert w._central_content is w.widget
     assert w._side_panel is None
 
 
 def test_window_side_panel_uses_splitter(qapp):
-    """When side_panel_factory returns a widget, central is a splitter
-    holding tree + side panel, AND the side widget is exposed at
-    w._side_panel for post_build_setup callbacks."""
+    """When side_panel_factory returns a widget, the inner central
+    content is a splitter holding tree + side panel, AND the side
+    widget is exposed at w._side_panel for post_build_setup callbacks."""
     from pyface.qt.QtWidgets import QLabel, QSplitter
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
@@ -513,7 +523,7 @@ def test_window_side_panel_uses_splitter(qapp):
         side_panel_factory=lambda rm: side_widget,
     )
     w = BasePluggableProtocolDemoWindow(cfg)
-    central = w.centralWidget()
+    central = w._central_content
     assert isinstance(central, QSplitter)
     assert central.count() == 2   # tree + side panel
     assert w._side_panel is side_widget
@@ -540,7 +550,7 @@ def test_clear_all_highlights_resets_status(qapp):
     w._status_step_label.setText("Step 2 / 3")
     # Terminate.
     w._on_protocol_terminated()
-    assert w._status_step_label.text() == "Idle"
+    assert w._status_step_label.text() == "Step 0/0"
     assert w._step_started_at is None
     assert w._readout_labels["voltage"].text() == "Voltage: --"
 
@@ -624,14 +634,19 @@ def test_post_build_setup_default_is_no_op(qapp):
 
 
 def test_status_bar_has_reps_label(qapp):
-    """The status bar exposes _status_reps_label, initially empty."""
+    """The status bar exposes _status_reps_label.
+
+    Initial text is the StatusBar widget's "Repetition 0/0" placeholder
+    (legacy protocol_grid look) — was the empty string when the label
+    was a permanent widget on the bottom QStatusBar.
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_reps_label.text() == ""
+    assert w._status_reps_label.text() == "Repetition 0/0"
 
 
 def test_step_repetition_renders_chain(qapp):
@@ -692,14 +707,14 @@ def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = bdw.BasePluggableProtocolDemoWindow(cfg)
+    nb = w.navigation_bar
     # Simulate a running state, then fire the error.
     w.executor.qsignals.protocol_started.emit()
-    assert not w._run_action.isEnabled()
+    assert nb.btn_stop.isEnabled()
     w.executor.qsignals.protocol_error.emit("kaboom")
     # Idle state restored.
-    assert w._run_action.isEnabled()
-    assert not w._pause_action.isEnabled()
-    assert not w._stop_action.isEnabled()
+    assert nb.btn_play.isEnabled()
+    assert not nb.btn_stop.isEnabled()
     assert not w._tick_timer.isActive()
     # Dialog called via the styled wrapper, with the error message.
     assert calls == [("Protocol error", "kaboom")]

@@ -94,7 +94,8 @@ def _overlay_listener(message: str, topic: str, timestamp: float = None):
     except (TypeError, ValueError):
         return
     electrodes = payload.get("electrodes", []) or []
-    viewer.actuation_changed.emit(list(electrodes))
+    preview = bool(payload.get("preview", False))
+    viewer.actuation_changed.emit(list(electrodes), preview)
 
 
 def _columns():

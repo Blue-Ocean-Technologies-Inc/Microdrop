@@ -40,6 +40,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.consts import CALIBRATION_DATA
 
 from dropbot_protocol_controls.consts import CALIBRATION_LISTENER_ACTOR_NAME
+from dropbot_protocol_controls.demos.voltage_frequency_responder import (
+    subscribe_demo_responder,
+)
 from dropbot_protocol_controls.protocol_columns.force_column import (
     make_force_column,
 )
@@ -111,8 +114,11 @@ def _pre_populate(rm):
 
 def _routing_setup(router):
     """Wire the calibration listener so the published CALIBRATION_DATA
-    message reaches the actor that updates the cache."""
+    message reaches the actor that updates the cache, plus the V/F
+    demo responder so FrequencyHandler/VoltageHandler wait_for() acks
+    arrive (without it, on_step times out at 5s)."""
     subscribe_calibration_listener(router)
+    subscribe_demo_responder(router)
 
 
 def _publish_demo_calibration():

@@ -48,6 +48,10 @@ class FrequencyHandler(BaseColumnHandler):
         DropbotPreferences().last_frequency = int(value)
 
     def on_step(self, row, ctx):
+        # Preview mode: skip the hardware-publish + ack-wait.
+        # Mirrors the legacy protocol_grid Preview Mode.
+        if getattr(ctx.protocol, "preview_mode", False):
+            return
         v = int(row.frequency)
         publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(v))
         ctx.wait_for(FREQUENCY_APPLIED, timeout=5.0)

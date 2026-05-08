@@ -85,6 +85,7 @@ def test_voltage_handler_on_step_publishes_and_waits():
     row = MagicMock()
     row.voltage = 120
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
     ctx.protocol.stop_event.is_set.return_value = False
 
     published = []
@@ -107,6 +108,7 @@ def test_voltage_handler_on_step_publishes_int_payload():
     row = MagicMock()
     row.voltage = 99.7  # float — should be coerced to int
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(

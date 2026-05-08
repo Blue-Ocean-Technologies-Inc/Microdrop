@@ -129,6 +129,7 @@ def test_magnet_handler_on_step_publishes_engage_payload():
     row.magnet_on = True
     row.magnet_height_mm = 5.0
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(
@@ -155,6 +156,7 @@ def test_magnet_handler_on_step_publishes_retract_payload():
     row.magnet_on = False
     row.magnet_height_mm = 0.0
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(
@@ -179,6 +181,7 @@ def test_magnet_handler_on_step_publishes_default_sentinel_payload():
     row.magnet_on = True
     row.magnet_height_mm = float(MIN_ZSTAGE_HEIGHT_MM - 0.5)
     ctx = MagicMock()
+    ctx.protocol.preview_mode = False
 
     published = []
     with patch(
