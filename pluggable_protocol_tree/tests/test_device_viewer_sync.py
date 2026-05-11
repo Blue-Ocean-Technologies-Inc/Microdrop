@@ -327,7 +327,10 @@ def test_step_click_with_stash_yes_inserts_step(qapp, monkeypatch):
     assert new_row.electrodes == ["e00", "e01"]
     assert new_row.routes == [["e02"]]
     assert ctrl._free_mode_stash is None
-    # Exactly one publish (regression for add_step reentrancy)
+    # _publish_for_row publishes once. The reentrancy guard
+    # (_suppress_publish around add_step) only matters in production
+    # where a Qt selection model fires currentChanged on row insert;
+    # this test does not wire one, so it cannot exercise the guard.
     assert len(publishes) == 1
 
 
