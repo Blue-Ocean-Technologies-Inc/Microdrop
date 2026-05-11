@@ -68,7 +68,9 @@ class DeviceViewerSyncController(HasTraits):
     listener_name            = Str(SYNC_LISTENER_NAME)
 
     _free_mode_stash         = Instance(dict, allow_none=True)
-    _last_selected_uuid      = Str(allow_none=True)
+    # "" = no row selected; we never expose this trait, so the empty
+    # string sentinel is fine and keeps comparisons simple.
+    _last_selected_uuid      = Str()
     _protocol_running        = Bool(False)
     _suppress_publish        = Bool(False)
     # Inverted view of protocol_metadata["electrode_to_channel"]; built
@@ -76,10 +78,12 @@ class DeviceViewerSyncController(HasTraits):
     # row_manager.protocol_metadata - this dict is just an inverted
     # cache for fast free-mode reverse-lookup.
     _channel_to_id_cache     = Dict(Int, Str)
+    _tree_widget             = Instance(object, allow_none=True)
+
+    def _bridge_default(self) -> _Bridge:
+        return _Bridge()
 
     def traits_init(self):
-        if self.bridge is None:
-            self.bridge = _Bridge()
         if self.dramatiq_actor is None:
             self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
                 listener_name=self.listener_name,
