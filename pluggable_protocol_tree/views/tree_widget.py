@@ -154,7 +154,6 @@ class ProtocolTreeWidget(QWidget):
         return tuple(parts)
 
     def index_to_path(self, index):
-        """Public alias for `_index_to_path` (kept for backward compat)."""
         return self._index_to_path(index)
 
     # --- context menu actions ---
