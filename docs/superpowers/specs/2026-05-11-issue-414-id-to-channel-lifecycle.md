@@ -332,7 +332,7 @@ Worth tracing because this is where stale geometry could matter most. The user t
 
 The fix for stale geometry is the geometry topic itself: chip insert publishes the new mapping, controller updates `protocol_metadata`, all subsequent reverse-lookups use it. The very first geometry publish after chip insert resolves the divergence.
 
-### 8. Phase-2 evolution (deferred to PPT-9)
+### 8. Phase-2 evolution (tracked at [#415](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/415), blocked on PPT-9 / [#371](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/371))
 
 Today the DV still puts `id_to_channel` in every `DEVICE_VIEWER_STATE_CHANGED` because legacy `protocol_grid` consumes it from there in 30+ places. Once `protocol_grid` is deleted, Phase 2 makes that field `Optional[dict] = None` and `gui_models_to_message_model` stops populating it.
 
