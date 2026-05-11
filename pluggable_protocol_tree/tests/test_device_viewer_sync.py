@@ -66,3 +66,64 @@ def test_actor_subscribes_to_three_topics():
         DEVICE_VIEWER_GEOMETRY_CHANGED,
         PROTOCOL_RUNNING,
     }
+
+
+def test_geometry_message_writes_to_protocol_metadata(qapp):
+    from device_viewer.models.messages import GeometryChangedMessage
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    msg = GeometryChangedMessage(
+        id_to_channel={"e00": 0, "e01": 1, "e02": None}
+    )
+    ctrl._on_geometry_qt(msg.serialize())
+    assert ctrl.row_manager.protocol_metadata["electrode_to_channel"] == {
+        "e00": 0, "e01": 1, "e02": None,
+    }
+    assert ctrl._channel_to_id_cache == {0: "e00", 1: "e01"}
+
+
+def test_geometry_replace_overwrites_metadata_and_rebuilds_cache(qapp):
+    from device_viewer.models.messages import GeometryChangedMessage
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(id_to_channel={"e00": 0}).serialize()
+    )
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(
+            id_to_channel={"e00": 5, "e01": 6}
+        ).serialize()
+    )
+    assert ctrl.row_manager.protocol_metadata["electrode_to_channel"] == {
+        "e00": 5, "e01": 6,
+    }
+    assert ctrl._channel_to_id_cache == {5: "e00", 6: "e01"}
+
+
+def test_no_per_step_id_to_channel_storage(qapp):
+    """Invariant: id_to_channel lives ONLY in protocol_metadata; never
+    on individual rows. Legacy protocol_grid duplicated on each step;
+    we deliberately do not."""
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1"})
+    manager.add_step(values={"name": "S2"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(id_to_channel={"e00": 0}).serialize()
+    )
+    for path, row in manager._walk():
+        assert not hasattr(row, "id_to_channel")
+
+
+def test_protocol_metadata_round_trip(qapp):
+    """Mapping persists through to_json / from_json without per-step
+    duplication."""
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(id_to_channel={"e00": 0}).serialize()
+    )
+    data = manager.to_json()
+    restored = RowManager.from_json(data, columns=list(manager.columns))
+    assert restored.protocol_metadata["electrode_to_channel"] == {"e00": 0}

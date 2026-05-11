@@ -29,6 +29,7 @@ from device_viewer.consts import (
     DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_RUNNING,
 )
+from device_viewer.models.messages import GeometryChangedMessage
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
@@ -95,12 +96,17 @@ class DeviceViewerSyncController(HasTraits):
     def attach(self, tree_widget) -> None:
         """Bind the controller to a ProtocolTreeWidget instance."""
         self._tree_widget = tree_widget
+        self.bridge.geometry_changed.connect(self._on_geometry_qt)
         # selection wiring (Task 8)
-        # bridge connections (Tasks 6, 7, 10)
+        # bridge connections (Tasks 7, 10)
 
     def detach(self) -> None:
         """Disconnect Qt signal bindings. Dramatiq broker shutdown
         handles actor teardown."""
+        try:
+            self.bridge.geometry_changed.disconnect(self._on_geometry_qt)
+        except (RuntimeError, TypeError):
+            pass
         self._tree_widget = None
 
     # --- single source of truth ----------------------------------------
@@ -122,3 +128,23 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.protocol_running_changed.emit(
                 message.casefold() == "true"
             )
+
+    # --- Qt-thread handlers --------------------------------------------
+
+    def _on_geometry_qt(self, payload: str) -> None:
+        """Receive DEVICE_VIEWER_GEOMETRY_CHANGED on the Qt thread. Single
+        write site for the electrode-to-channel mapping in protocol-tree
+        land."""
+        try:
+            msg = GeometryChangedMessage.deserialize(payload)
+        except Exception as e:
+            logger.warning(f"failed to parse geometry payload: {e}")
+            return
+        self.row_manager.protocol_metadata["electrode_to_channel"] = (
+            dict(msg.id_to_channel)
+        )
+        self._channel_to_id_cache = {
+            chan: eid
+            for eid, chan in msg.id_to_channel.items()
+            if chan is not None
+        }
