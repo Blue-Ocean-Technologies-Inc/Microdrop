@@ -1,37 +1,11 @@
 """Tests for DV-side DEVICE_VIEWER_GEOMETRY_CHANGED publishing."""
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from device_viewer.consts import DEVICE_VIEWER_GEOMETRY_CHANGED
 from device_viewer.models.messages import GeometryChangedMessage
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _mock_redis_for_dock_pane_import():
-    """Patch the Redis-backed app_globals so importing device_view_dock_pane
-    doesn't fail when no Redis server is running."""
-    # Stub out the redis_manager so that the module-level is_advanced_mode()
-    # call inside microdrop_application.menus does not attempt to connect.
-    fake_redis_manager = MagicMock()
-    fake_redis_manager.get.return_value = False
-    fake_redis_manager.__getitem__ = MagicMock(return_value=None)
-
-    with patch.dict(
-        "sys.modules",
-        {
-            "microdrop_utils.redis_manager": MagicMock(
-                RedisManager=MagicMock(return_value=fake_redis_manager)
-            ),
-        },
-    ):
-        # Force re-import of modules that cached redis at import time.
-        for mod in list(sys.modules.keys()):
-            if "microdrop_application.menus" in mod or "app_globals" in mod:
-                del sys.modules[mod]
-        yield
 
 
 @pytest.fixture

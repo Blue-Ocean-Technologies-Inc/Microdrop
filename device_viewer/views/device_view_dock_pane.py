@@ -1105,6 +1105,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_electrode_channel_changed(self, event=None):
         """Re-publish geometry whenever any electrode's channel assignment changes
         (e.g., via channel-edit mode). Gated by _publish_geometry_if_changed."""
+        if self._disable_state_messages:
+            return
         self._publish_geometry_if_changed()
 
     @observe("model:electrodes:svg_model.svg_error_paths")
