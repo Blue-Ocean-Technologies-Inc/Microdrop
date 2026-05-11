@@ -45,3 +45,4 @@ def test_free_mode_payload_round_trip():
     assert rt.electrodes == []
     assert rt.routes == []
     assert rt.step_id is None
+    assert rt.step_label is None

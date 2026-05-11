@@ -7,16 +7,14 @@ only the fields the DV actually needs from us. Channel resolution is
 left to the DV (it owns electrode->channel geometry via its own model).
 """
 
-from typing import Optional
-
 from pydantic import BaseModel
 
 
 class ProtocolTreeDisplayMessage(BaseModel):
     electrodes: list[str] = []
     routes: list[list[str]] = []
-    step_id: Optional[str] = None
-    step_label: Optional[str] = None
+    step_id: str | None = None
+    step_label: str | None = None
     free_mode: bool = False
     editable: bool = True
 
