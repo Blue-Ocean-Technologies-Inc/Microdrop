@@ -235,13 +235,16 @@ class DeviceViewerSyncController(HasTraits):
         QModelIndex to a row, then delegates to _publish_for_row."""
         if self._suppress_publish or self._protocol_running:
             return
+        # Race guard: signal can fire after detach() clears _tree_widget.
+        if self._tree_widget is None:
+            return
         if not current.isValid():
             self._publish_for_row(None)
             return
         path = self._tree_widget.index_to_path(current)
         try:
             row = self.row_manager.get_row(path)
-        except (IndexError, KeyError):
+        except IndexError:
             self._publish_for_row(None)
             return
         self._publish_for_row(row)

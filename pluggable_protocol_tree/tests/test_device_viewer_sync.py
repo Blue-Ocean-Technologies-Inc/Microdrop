@@ -250,6 +250,27 @@ def test_group_click_emits_free_mode_payload(qapp, monkeypatch):
     assert msg.step_id is None
 
 
+def test_group_row_emits_free_mode_payload(qapp, monkeypatch):
+    """Same handling for an actual GroupRow instance, not just None."""
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    group_path = manager.add_group(name="Group A")
+    group = manager.get_row(group_path)
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._publish_for_row(group)
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.free_mode is True
+    assert msg.electrodes == []
+    assert msg.step_id is None
+
+
 def test_protocol_running_blocks_publish(qapp, monkeypatch):
     publishes = []
     monkeypatch.setattr(
