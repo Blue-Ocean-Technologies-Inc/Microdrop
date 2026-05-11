@@ -35,6 +35,8 @@ This is the `device_viewer_state_changed` row of issue #414's listener table —
 | 4 | Insert location for free-mode capture | Append at end of root | Matches legacy (`state.sequence.append`); predictable; avoids ambiguity inside groups. |
 | 5 | Dialog buttons | YES (Insert as New Step) / NO (Discard); no Cancel | Matches legacy `confirm` usage; Cancel would create an in-between state where the click happened but selection didn't move. |
 | 6 | Architectural shape | Dedicated `DeviceViewerSyncController` service | Matches existing `application` / `experiment_manager` / `sticky_manager` injection pattern; pane stays focused; controller is independently testable; natural place to grow when remaining #414 listeners land. |
+| 7 | Tree-mutation API for free-mode capture | Use existing `RowManager.add_step / add_group / remove / move` | These are already public, already cover what we need (and more). No new RowManager API is added by this spec. Free-mode capture calls `add_step(parent_path=(), index=None, values={...})`. |
+| 8 | Lean `id_to_channel` publishing | Two-phase: introduce `DEVICE_VIEWER_GEOMETRY_CHANGED` now, lean the state payload later (PPT-9 timing) | DV publishes the ~120-entry mapping on every state message today. Splitting it onto its own topic published only on geometry change (chip insert / SVG load) is the right shape. But `protocol_grid` consumes `id_to_channel` from the state topic in 30+ places, so removing the field from state messages now would require touching code that's about to be deleted. Phase 1 (this spec): add the new topic, our controller caches from it. Phase 2 (PPT-9 or its own spec): flip the state publisher to omit the mapping. |
 
 ## 2. File layout
 
@@ -58,9 +60,15 @@ microdrop-py/src/pluggable_protocol_tree/
         └── test_device_viewer_sync_redis.py             # NEW
 
 microdrop-py/src/device_viewer/
-├── consts.py                                            # MODIFIED — add PROTOCOL_TREE_DISPLAY_STATE to ACTOR_TOPIC_DICT
+├── consts.py                                            # MODIFIED — add PROTOCOL_TREE_DISPLAY_STATE
+│                                                        #            and DEVICE_VIEWER_GEOMETRY_CHANGED;
+│                                                        #            add the latter to ACTOR_TOPIC_DICT
+├── models/
+│   └── messages.py                                      # NEW model: GeometryChangedMessage (small Pydantic)
 └── views/
-    └── device_view_dock_pane.py                         # MODIFIED — add _on_protocol_tree_display_state_triggered
+    └── device_view_dock_pane.py                         # MODIFIED — add _on_protocol_tree_display_state_triggered;
+                                                         #            publish DEVICE_VIEWER_GEOMETRY_CHANGED on
+                                                         #            chip insert / SVG load
 
 docs/superpowers/specs/
 └── 2026-05-11-issue-414-protocol-tree-device-viewer-sync-design.md   # this file
@@ -77,9 +85,10 @@ docs/superpowers/specs/
         ┌──────────────────────────────────────────────────────────┐
         │  DeviceViewerSyncController                              │
         │                                                          │
-        │  in:   DEVICE_VIEWER_STATE_CHANGED  (dramatiq actor)     │
-        │  in:   tree.selectionModel().currentChanged  (Qt)        │
-        │  in:   PROTOCOL_RUNNING            (dramatiq actor)      │
+        │  in:   DEVICE_VIEWER_STATE_CHANGED       (actor)         │
+        │  in:   DEVICE_VIEWER_GEOMETRY_CHANGED    (actor) ── caches
+        │  in:   PROTOCOL_RUNNING                  (actor)         │
+        │  in:   tree.selectionModel().currentChanged   (Qt)       │
         │                                                          │
         │  out:  PROTOCOL_TREE_DISPLAY_STATE  (publish_message)    │
         │  out:  RowManager.add_step(...)     (insert-as-new-step) │
@@ -92,6 +101,11 @@ docs/superpowers/specs/
                           │   DeviceViewDockPane       │
                           │  _on_protocol_tree_        │
                           │   display_state_triggered  │
+                          │                            │
+                          │  publishes                 │
+                          │  DEVICE_VIEWER_GEOMETRY_   │
+                          │  CHANGED on chip insert /  │
+                          │  SVG load                  │
                           └────────────────────────────┘
 
                 ProtocolTreePane (separately, not via the controller)
@@ -126,7 +140,15 @@ The controller is the **only** module that knows about both the tree and the DV.
    - Parse with `DeviceViewerMessageModel.deserialize`.
    - If `dv_msg.step_id` is set → `_free_mode_stash = None` (DV thinks it's editing a specific step).
    - If neither channels nor routes → `_free_mode_stash = None`.
-   - Otherwise: reverse-lookup channels → electrode IDs via `dv_msg.id_to_channel`, store `{"electrodes": sorted([...]), "routes": [list(ids) for ids, _color in dv_msg.routes]}` as `_free_mode_stash`.
+   - Otherwise: reverse-lookup channels → electrode IDs using `_id_to_channel_cache` (preferred) with fallback to `dv_msg.id_to_channel` if the cache is empty. Store `{"electrodes": sorted([...]), "routes": [list(ids) for ids, _color in dv_msg.routes]}` as `_free_mode_stash`.
+
+### B') Device Viewer → Tree (geometry caching)
+
+1. DV publishes `DEVICE_VIEWER_GEOMETRY_CHANGED` on chip insert / SVG load with a small payload: `{"id_to_channel": {...}}`.
+2. Controller's dramatiq actor receives → emits `bridge.geometry_changed` Qt signal.
+3. `_on_geometry_qt(payload)` parses and updates `_id_to_channel_cache`. No other state changes — this is a pure cache update.
+
+The cache is also seeded on the first `DEVICE_VIEWER_STATE_CHANGED` we see (whose payload still carries the mapping in Phase 1). That covers the cold-start case where the DV had already initialized before our controller subscribed.
 
 ### C) The free-mode prompt (resolution of B's stash on next selection)
 
@@ -171,7 +193,7 @@ Dialog uses `microdrop_application.dialogs.pyface_wrapper.confirm` (per project 
 
 ## 5. Topic + message schema
 
-### New constant
+### New constants
 
 `pluggable_protocol_tree/consts.py`:
 
@@ -180,6 +202,14 @@ PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree/display_state"
 ```
 
 Naming mirrors legacy `PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"` — same namespace, only the middle segment changes. Self-explanatory once `protocol_grid` is deleted in PPT-9.
+
+`device_viewer/consts.py`:
+
+```python
+DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
+```
+
+Published only when `id_to_channel` actually changes (chip insert, SVG file load). Listeners cache and reuse — saves a ~120-entry dict on every state-change publish.
 
 ### New model
 
@@ -211,6 +241,27 @@ class ProtocolTreeDisplayMessage(BaseModel):
 
     @classmethod
     def deserialize(cls, json_str: str) -> "ProtocolTreeDisplayMessage":
+        return cls.model_validate_json(json_str)
+```
+
+### Geometry-changed model
+
+`device_viewer/models/messages.py` (new class added alongside `DeviceViewerMessageModel`):
+
+```python
+class GeometryChangedMessage(BaseModel):
+    """Payload for `DEVICE_VIEWER_GEOMETRY_CHANGED`. Published whenever
+    the electrode-to-channel mapping changes (chip insert, SVG load) so
+    listeners can cache it once instead of receiving it on every state
+    update."""
+
+    id_to_channel: dict[str, int | None]
+
+    def serialize(self) -> str:
+        return self.model_dump_json()
+
+    @classmethod
+    def deserialize(cls, json_str: str) -> "GeometryChangedMessage":
         return cls.model_validate_json(json_str)
 ```
 
@@ -263,6 +314,32 @@ def _on_protocol_tree_display_state_triggered(self, message_serial: str):
 
 `device_viewer/consts.py:ACTOR_TOPIC_DICT[listener_name]` gains one entry: `PROTOCOL_TREE_DISPLAY_STATE`.
 
+### DV-side geometry publishing
+
+`device_view_dock_pane.py` gets a small helper:
+
+```python
+def _publish_geometry_if_changed(self):
+    """Publish DEVICE_VIEWER_GEOMETRY_CHANGED if id_to_channel differs
+    from the last-published mapping. No-op otherwise. Called from chip-
+    insert and SVG-load handlers."""
+    current = {
+        eid: e.channel
+        for eid, e in self.model.electrodes.electrodes.items()
+    }
+    if current == self._last_published_id_to_channel:
+        return
+    self._last_published_id_to_channel = dict(current)
+    msg = GeometryChangedMessage(id_to_channel=current)
+    publish_message.send(
+        topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
+    )
+```
+
+Called from the existing chip-insert handler and from `apply_message_model` (which loads SVG geometry). One-time publish on first model initialization too. The `_last_published_id_to_channel` instance attribute starts as `None`.
+
+**Phase 1 explicitly does NOT** strip `id_to_channel` from `DEVICE_VIEWER_STATE_CHANGED` — legacy `protocol_grid` still consumes it from there. Phase 2 (PPT-9 / its own spec) does the strip-down once legacy is deleted.
+
 ### Why a new model instead of reusing `DeviceViewerMessageModel`
 
 Direct reuse couples the new tree to a legacy schema that lives in `device_viewer.models.messages` but encodes legacy assumptions (color tuples, `execution_params` dict). Slim model gives us:
@@ -281,21 +358,23 @@ Trade-off: one adapter method on the DV side. Acceptable.
 class _Bridge(QObject):
     """Qt signal bridge — Dramatiq actor runs on a worker thread,
     Qt mutations must happen on the GUI thread."""
-    dv_state_received = Signal(str)
+    dv_state_received        = Signal(str)
+    geometry_changed         = Signal(str)
     protocol_running_changed = Signal(bool)
 
 
 class DeviceViewerSyncController(HasTraits):
-    row_manager           = Instance(RowManager)
-    parent_widget         = Instance(QWidget)
-    bridge                = Instance(_Bridge)
-    dramatiq_actor        = Instance(dramatiq.Actor)
-    listener_name         = "protocol_tree_dv_sync_listener"
+    row_manager              = Instance(RowManager)
+    parent_widget            = Instance(QWidget)
+    bridge                   = Instance(_Bridge)
+    dramatiq_actor           = Instance(dramatiq.Actor)
+    listener_name            = "protocol_tree_dv_sync_listener"
 
-    _free_mode_stash      = Instance(dict, allow_none=True)
-    _last_selected_uuid   = Str(allow_none=True)
-    _protocol_running     = Bool(False)
-    _suppress_publish     = Bool(False)
+    _free_mode_stash         = Instance(dict, allow_none=True)
+    _last_selected_uuid      = Str(allow_none=True)
+    _protocol_running        = Bool(False)
+    _suppress_publish        = Bool(False)
+    _id_to_channel_cache     = Dict(Str, AnyTrait)         # cached geometry
 
     def attach(self, tree_widget): ...
     def detach(self): ...
@@ -323,6 +402,7 @@ if self.device_viewer_sync is not None:
 ```python
 ACTOR_TOPIC_DICT[self.listener_name] = [
     DEVICE_VIEWER_STATE_CHANGED,
+    DEVICE_VIEWER_GEOMETRY_CHANGED,
     PROTOCOL_RUNNING,
 ]
 self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
@@ -341,6 +421,8 @@ self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
 def _listener_routine(self, message: str, topic: str) -> None:
     if topic == DEVICE_VIEWER_STATE_CHANGED:
         self.bridge.dv_state_received.emit(message)
+    elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
+        self.bridge.geometry_changed.emit(message)
     elif topic == PROTOCOL_RUNNING:
         self.bridge.protocol_running_changed.emit(
             message.casefold() == "true"
@@ -394,6 +476,9 @@ Programmatic-move call sites: `_select_step`, `clear_highlights`, the executor-d
 | `test_suppress_publish_during_programmatic_select` | `_suppress_publish=True` + `_on_current_changed` | No publish |
 | `test_listener_routine_emits_correct_bridge_signal` | Call `_listener_routine("True", PROTOCOL_RUNNING)` | Bridge `protocol_running_changed` emitted with True |
 | `test_insert_new_step_does_not_publish_twice` | Stash set + step click → YES | Exactly one `publish_message` call (regression for the `add_step` reentrancy concern) |
+| `test_geometry_message_populates_cache` | `_listener_routine` with `DEVICE_VIEWER_GEOMETRY_CHANGED` payload | `_id_to_channel_cache == {"e00": 0, "e01": 1, ...}` |
+| `test_dv_state_uses_cache_for_reverse_lookup` | Pre-seed cache + state msg with channels=[1,2] but empty id_to_channel | Stash uses cached mapping → electrodes=["e01","e02"] |
+| `test_dv_state_falls_back_to_inline_mapping_when_cache_empty` | Empty cache + state msg with id_to_channel populated | Stash resolves correctly; cache also populated as a side-effect |
 
 Dialog mocking: monkeypatch `pyface_wrapper.confirm` to return YES/NO. Same pattern as existing `tests/test_protocol_tree_pane.py`.
 
@@ -404,6 +489,7 @@ Dialog mocking: monkeypatch `pyface_wrapper.confirm` to return YES/NO. Same patt
 | `test_dv_state_to_stash_roundtrip` | Publish synthetic `DEVICE_VIEWER_STATE_CHANGED` JSON → wait briefly → assert controller's stash populated |
 | `test_step_click_to_publish_roundtrip` | Subscribe a spy actor to `PROTOCOL_TREE_DISPLAY_STATE` → drive a selection change → assert spy receives correct payload |
 | `test_protocol_running_publish_on_executor_start` | Spy on `PROTOCOL_RUNNING` → run minimal protocol on pane → assert "True" published on start, "False" on finish |
+| `test_geometry_publish_on_chip_insert` | Spy on `DEVICE_VIEWER_GEOMETRY_CHANGED` → trigger chip-insert flow on DV → assert one publish with the expected mapping; trigger again with same mapping → assert no second publish |
 
 Pattern matches existing `test_executor_redis_integration.py` (uses `tests_with_redis_server_need/conftest.py` fixtures).
 
@@ -421,10 +507,16 @@ Pattern matches existing `test_executor_redis_integration.py` (uses `tests_with_
 - [ ] `pluggable_protocol_tree.services.device_viewer_sync.DeviceViewerSyncController` exists, with `attach` / `detach` plus the handlers above.
 - [ ] `pluggable_protocol_tree.models.display_state.ProtocolTreeDisplayMessage` exists with the schema in §5.
 - [ ] `PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree/display_state"` exported from `pluggable_protocol_tree.consts`.
+- [ ] `DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"` exported from `device_viewer.consts`; included in DV's `ACTOR_TOPIC_DICT[listener_name]`.
+- [ ] `device_viewer.models.messages.GeometryChangedMessage` exists with the schema in §5.
+- [ ] `device_view_dock_pane.py` publishes `DEVICE_VIEWER_GEOMETRY_CHANGED` on chip insert / SVG load / first model init, gated on actual change vs `_last_published_id_to_channel`.
 - [ ] `ProtocolTreePane` accepts `device_viewer_sync=None`, attaches in `__init__`, detaches in `closeEvent`, publishes `PROTOCOL_RUNNING` on start/finish/abort, and wraps programmatic selection moves with `_suppress_publish`.
 - [ ] `PluggableProtocolDockPane` constructs the controller and passes it to the pane.
 - [ ] `device_view_dock_pane.py` has `_on_protocol_tree_display_state_triggered`; `device_viewer.consts.ACTOR_TOPIC_DICT` includes `PROTOCOL_TREE_DISPLAY_STATE`.
+- [ ] `DeviceViewerSyncController` caches `id_to_channel` from geometry-changed messages and uses the cache for reverse-lookup; falls back to inline mapping when cache is empty.
 - [ ] `widget.index_to_path` is public (private `_index_to_path` retained as a one-line alias).
+- [ ] No new RowManager API is added (existing `add_step` / `add_group` / `remove` / `move` are sufficient and used directly by the controller).
+- [ ] Legacy `protocol_grid` widget continues to work unchanged — `DEVICE_VIEWER_STATE_CHANGED` payload still includes `id_to_channel` in Phase 1.
 - [ ] All unit tests in §7 pass.
 - [ ] All Redis-dependent tests in §7 pass against a running Redis.
 - [ ] Manual smoke checklist (§7) passes against `examples/run_device_viewer_pluggable.py` with `MockDropbotControllerPlugin`.
@@ -446,3 +538,16 @@ This spec deliberately does NOT cover:
 - Voltage/frequency-range preferences, calibration data, step-params commit, advanced-mode, z-stage position, media-captured logging.
 
 These remain in issue #414 and will be addressed in follow-up specs/PRs.
+
+## 11. Phase-2 follow-up: lean state payload (deferred)
+
+Phase 1 (this spec) introduces `DEVICE_VIEWER_GEOMETRY_CHANGED` and our controller caches from it, but `DEVICE_VIEWER_STATE_CHANGED` still carries the full `id_to_channel` mapping for legacy compatibility.
+
+Phase 2 (deferred to PPT-9 cleanup or its own spec) is the actual byte-saving step:
+
+1. Make `DeviceViewerMessageModel.id_to_channel` `Optional[dict[str, int | None]] = None`.
+2. `gui_models_to_message_model` stops populating it (or sets it to `None`).
+3. Any remaining listener that reads `dv_msg.id_to_channel` is updated to subscribe to `DEVICE_VIEWER_GEOMETRY_CHANGED` and cache, or read from a shared registry.
+4. Legacy `protocol_grid` is the largest blocker today — Phase 2 lands cleanly once it's deleted in PPT-9 (#371).
+
+Estimated payload reduction: a 90-pin chip's `id_to_channel` is ~90 entries × ~15 bytes serialized = ~1.4 KB per state-change publish. With state-change publishes happening per-electrode-toggle during free-mode interaction, this measurably reduces broker traffic and listener parse time.
