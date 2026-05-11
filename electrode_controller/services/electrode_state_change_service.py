@@ -7,8 +7,9 @@ from dropbot_controller.interfaces.i_dropbot_control_mixin_service import IDropb
 
 from dropbot.threshold import actuate_channels
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..models import ElectrodeChannelsRequest
-from ..consts import disabled_channels_changed_publisher
+from ..consts import disabled_channels_changed_publisher, ELECTRODES_STATE_APPLIED
 # microdrop utils imports
 from logger.logger_service import get_logger
 
@@ -76,6 +77,9 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     mask = np.array(self.proxy.disabled_channels_mask)
                     disabled_indices = set(int(i) for i in np.where(mask != 0)[0])
                     disabled_channels_changed_publisher.publish(disabled_indices)
+
+            # sending ack
+            publish_message(str(len(actuated_channels)), topic=ELECTRODES_STATE_APPLIED)
 
         except TimeoutError:
             logger.error("Timeout waiting for proxy access for electrode state change", exc_info=True)

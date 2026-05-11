@@ -1589,7 +1589,6 @@ from dropbot_protocol_controls.demos.voltage_frequency_responder import (
     subscribe_demo_responder,
 )
 
-
 logger = logging.getLogger(__name__)
 
 # Spy that prints every voltage/frequency publish + ack so the demo
@@ -1786,7 +1785,6 @@ from dropbot_protocol_controls.protocol_columns.voltage_column import (
 from dropbot_protocol_controls.protocol_columns.frequency_column import (
     make_frequency_column,
 )
-
 
 # Recording spy actor — captures every relevant topic with timestamps
 # so we can assert on ordering.
