@@ -6,6 +6,7 @@ from datetime import datetime, UTC
 import dramatiq
 from traits.api import HasTraits, Instance, Bool, Str, Float, Int, Set, Dict
 
+from dropbot_controller.consts import VOLTAGE_APPLIED, FREQUENCY_APPLIED
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
     invoke_class_method,
@@ -29,6 +30,7 @@ from .consts import (
     MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
     MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
     MOCK_ACTUATED_CHANNELS_UPDATED, MOCK_STREAM_STATUS_UPDATED,
+    ELECTRODES_STATE_APPLIED
 )
 
 logger = get_logger(__name__, level="INFO")
@@ -146,6 +148,19 @@ class MockDropbotController(HasTraits):
         except (ValueError, TypeError) as e:
             logger.error(f"Mock: Invalid voltage: {e}")
 
+    def on_protocol_set_voltage_request(self, message):
+        """Set voltage on the dropbot for protocol-driven writes.
+
+        Symmetric to on_set_voltage_request but bypasses the realtime-mode
+        gate and does NOT persist to DropbotPreferences.last_voltage —
+        protocol writes are unconditional and transient. Publishes
+        VOLTAGE_APPLIED ack on RPC return so the protocol executor's
+        wait_for unblocks. On hardware error, the ack is NOT published —
+        the executor's wait_for times out and the protocol step fails.
+        """
+        self.on_set_voltage_request(message)
+        publish_message(topic=VOLTAGE_APPLIED, message=str(self.voltage))
+
     def on_set_frequency_request(self, message):
         try:
             f = float(message)
@@ -156,6 +171,19 @@ class MockDropbotController(HasTraits):
                 logger.error("Mock: Frequency must be between 100 and 20000 Hz")
         except (ValueError, TypeError) as e:
             logger.error(f"Mock: Invalid frequency: {e}")
+
+    def on_protocol_set_frequency_request(self, message):
+        """Set frequency on the dropbot for protocol-driven writes.
+
+        Symmetric to on_set_frequency_request but bypasses the realtime-mode
+        gate and does NOT persist to DropbotPreferences.last_frequency —
+        protocol writes are unconditional and transient. Publishes
+        FREQUENCY_APPLIED ack on RPC return so the protocol executor's
+        wait_for unblocks. On hardware error, the ack is NOT published —
+        the executor's wait_for times out and the protocol step fails.
+        """
+        self.on_set_frequency_request(message)
+        publish_message(topic=FREQUENCY_APPLIED, message=str(self.frequency))
 
     def on_set_realtime_mode_request(self, message):
         if message == "True":
@@ -187,6 +215,8 @@ class MockDropbotController(HasTraits):
             logger.info(f"Mock: {len(channels)} channels actuated: {sorted(channels)}")
         except (json.JSONDecodeError, TypeError) as e:
             logger.error(f"Mock: Invalid electrode state message: {e}")
+
+        publish_message(str(len(self.actuated_channels)), topic=ELECTRODES_STATE_APPLIED)
 
     def on_detect_shorts_request(self, message):
         publish_message(

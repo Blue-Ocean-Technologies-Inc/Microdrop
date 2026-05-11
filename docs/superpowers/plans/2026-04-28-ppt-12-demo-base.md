@@ -472,9 +472,7 @@ from pluggable_protocol_tree.demos.electrode_responder import (
     DEMO_RESPONDER_ACTOR_NAME,
 )
 
-
 logger = logging.getLogger(__name__)
-
 
 # Strip Prometheus middleware once at module import time — every
 # downstream demo needs this and the stripping is idempotent.

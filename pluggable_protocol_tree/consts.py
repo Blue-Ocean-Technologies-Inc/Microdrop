@@ -5,6 +5,10 @@ defined here, ACTOR_TOPIC_DICT aggregating the listener→topic map."""
 
 import os
 
+from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
+
+from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED
+
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
@@ -22,10 +26,6 @@ PERSISTENCE_SCHEMA_VERSION = 1
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:
 PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
-
-# PPT-3: per-phase electrode actuation
-ELECTRODES_STATE_CHANGE  = f"{PROTOCOL_TOPIC_PREFIX}/electrodes_state_change"
-ELECTRODES_STATE_APPLIED = f"{PROTOCOL_TOPIC_PREFIX}/electrodes_state_applied"
 
 # No ACTOR_TOPIC_DICT entries yet — no listener in PPT-1.
 ACTOR_TOPIC_DICT: dict[str, list[str]] = {}

@@ -12,8 +12,10 @@ from dropbot_controller.consts import (
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, TEST_SHORTS, TEST_CHANNELS,
     CHIP_CHECK, SELF_TEST_CANCEL, DETECT_DROPLETS, CHANGE_SETTINGS,
     HARDWARE_DEFAULT_VOLTAGE, HARDWARE_DEFAULT_FREQUENCY, TestEvent,
-    create_test_progress_message,
+    create_test_progress_message
 )
+
+from electrode_controller.consts import ELECTRODES_STATE_APPLIED
 
 # Mock-specific request topics (frontend → backend via pub/sub)
 MOCK_CHANGE_SIM_SETTINGS = "mock_dropbot/requests/change_simulation_settings"

@@ -130,8 +130,7 @@ class RoutesHandler(BaseColumnHandler):
                 "channels": channels,
             }
             if preview_mode:
-                # Tell hardware-driving consumers to skip actuation;
-                # visualizers (device viewer overlay) ignore the flag.
+                # Tell hardware-driving consumers to skip actuation.
                 payload["preview"] = True
             publish_message(
                 topic=ELECTRODES_STATE_CHANGE,

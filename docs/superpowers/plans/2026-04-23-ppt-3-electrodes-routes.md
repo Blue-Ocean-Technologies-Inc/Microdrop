@@ -1693,12 +1693,12 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
-
 logger = logging.getLogger(__name__)
 
 
 class RoutesColumnModel(BaseColumnModel):
     """List[List[str]] trait. Default = empty list."""
+
     def trait_for_row(self):
         return List(List(Str), value=list(self.default_value or []),
                     desc="Per-step list of routes; each route is an "
@@ -1727,16 +1727,16 @@ class RoutesHandler(BaseColumnHandler):
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
         for phase in iter_phases(
-            static_electrodes=list(getattr(row, "electrodes", []) or []),
-            routes=list(getattr(row, "routes", []) or []),
-            trail_length=int(getattr(row, "trail_length", 1)),
-            trail_overlay=int(getattr(row, "trail_overlay", 0)),
-            soft_start=bool(getattr(row, "soft_start", False)),
-            soft_end=bool(getattr(row, "soft_end", False)),
-            repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
-            linear_repeats=bool(getattr(row, "linear_repeats", False)),
-            n_repeats=int(getattr(row, "repetitions", 1)),
-            step_duration_s=float(getattr(row, "duration_s", 1.0)),
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
         ):
             electrodes = sorted(phase)
             channels = sorted(mapping[e] for e in electrodes if e in mapping)
@@ -2810,7 +2810,6 @@ from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.execution import listener as _listener  # noqa
 from pluggable_protocol_tree.models.row_manager import RowManager
 
-
 PHASE_SPY_ACTOR_NAME = "ppt_test_phase_spy"
 _phase_spy_log: list = []
 
@@ -2866,7 +2865,7 @@ def test_routes_handler_publishes_phases_and_unblocks_on_ack(router_actor):
         }
         rm.add_step(values={
             "name": "S",
-            "duration_s": 0.1,    # short dwell so total test stays fast
+            "duration_s": 0.1,  # short dwell so total test stays fast
             "electrodes": ["e00", "e01"],
             "routes": [["e02", "e03", "e04"]],
             "trail_length": 1,
@@ -2888,30 +2887,31 @@ def test_routes_handler_publishes_phases_and_unblocks_on_ack(router_actor):
         worker.start()
         try:
             ex.start()
-            assert finished.wait(timeout=15.0), \
-                "protocol_finished did not fire within 15s"
-            ex.wait(timeout=2.0)
-        finally:
-            worker.stop()
-
-        # 3 phases — one per route position.
-        assert len(_phase_spy_log) == 3, f"phases: {_phase_spy_log!r}"
-        # Each phase = static ∪ {single route electrode}.
-        assert _phase_spy_log[0]["electrodes"] == ["e00", "e01", "e02"]
-        assert _phase_spy_log[1]["electrodes"] == ["e00", "e01", "e03"]
-        assert _phase_spy_log[2]["electrodes"] == ["e00", "e01", "e04"]
-        # Channel resolution from the seeded mapping.
-        assert _phase_spy_log[0]["channels"] == [0, 1, 2]
-        assert _phase_spy_log[1]["channels"] == [0, 1, 3]
-        assert _phase_spy_log[2]["channels"] == [0, 1, 4]
+            assert finished.wait(timeout=15.0),
+            "protocol_finished did not fire within 15s"
+        ex.wait(timeout=2.0)
     finally:
-        for topic, actor_name in subs:
-            try:
-                router_actor.message_router_data.remove_subscriber_from_topic(
-                    topic=topic, subscribing_actor_name=actor_name,
-                )
-            except Exception:
-                pass
+        worker.stop()
+
+    # 3 phases — one per route position.
+    assert len(_phase_spy_log) == 3, f"phases: {_phase_spy_log!r}"
+    # Each phase = static ∪ {single route electrode}.
+    assert _phase_spy_log[0]["electrodes"] == ["e00", "e01", "e02"]
+    assert _phase_spy_log[1]["electrodes"] == ["e00", "e01", "e03"]
+    assert _phase_spy_log[2]["electrodes"] == ["e00", "e01", "e04"]
+    # Channel resolution from the seeded mapping.
+    assert _phase_spy_log[0]["channels"] == [0, 1, 2]
+    assert _phase_spy_log[1]["channels"] == [0, 1, 3]
+    assert _phase_spy_log[2]["channels"] == [0, 1, 4]
+
+finally:
+for topic, actor_name in subs:
+    try:
+        router_actor.message_router_data.remove_subscriber_from_topic(
+            topic=topic, subscribing_actor_name=actor_name,
+        )
+    except Exception:
+        pass
 ```
 
 - [ ] **Step 2: Run the test (Redis must be up)**
