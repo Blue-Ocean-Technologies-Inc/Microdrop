@@ -29,7 +29,9 @@ from device_viewer.consts import (
     DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_RUNNING,
 )
-from device_viewer.models.messages import GeometryChangedMessage
+from device_viewer.models.messages import (
+    DeviceViewerMessageModel, GeometryChangedMessage,
+)
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
@@ -135,26 +137,29 @@ class DeviceViewerSyncController(HasTraits):
 
     # --- Qt-thread handlers --------------------------------------------
 
-    def _on_geometry_qt(self, payload: str) -> None:
-        """Receive DEVICE_VIEWER_GEOMETRY_CHANGED on the Qt thread. Single
-        write site for the electrode-to-channel mapping in protocol-tree
-        land."""
-        try:
-            msg = GeometryChangedMessage.deserialize(payload)
-        except Exception as e:
-            logger.warning(f"failed to parse geometry payload {payload!r}: {e}")
-            return
-        stored = dict(msg.id_to_channel)
+    def _apply_geometry(self, id_to_channel: dict) -> None:
+        """Single write site for the electrode-to-channel mapping in
+        protocol-tree land. Stores a copy in protocol_metadata and
+        rebuilds the inverted reverse-lookup cache."""
+        stored = dict(id_to_channel)
         self.row_manager.protocol_metadata["electrode_to_channel"] = stored
         self._channel_to_id_cache = {
             chan: eid for eid, chan in stored.items() if chan is not None
         }
 
+    def _on_geometry_qt(self, payload: str) -> None:
+        """Receive DEVICE_VIEWER_GEOMETRY_CHANGED on the Qt thread."""
+        try:
+            msg = GeometryChangedMessage.deserialize(payload)
+        except Exception as e:
+            logger.warning(f"failed to parse geometry payload {payload!r}: {e}")
+            return
+        self._apply_geometry(msg.id_to_channel)
+
     def _on_dv_state_qt(self, payload: str) -> None:
         """Receive DEVICE_VIEWER_STATE_CHANGED on the Qt thread. Captures
         free-mode toggles into _free_mode_stash; clears stash for any
         step-scoped or empty message."""
-        from device_viewer.models.messages import DeviceViewerMessageModel
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
         except Exception as e:
@@ -169,14 +174,12 @@ class DeviceViewerSyncController(HasTraits):
             self._free_mode_stash = None
             return
 
-        # Cold-start seed: populate metadata if empty so reverse-lookup works.
+        # Cold-start seed: populate metadata if empty so reverse-lookup
+        # works. Non-empty metadata comes from GEOMETRY_CHANGED, which
+        # is authoritative; state msgs only fill the gap at cold-start.
         if (not self.row_manager.protocol_metadata.get("electrode_to_channel")
                 and dv_msg.id_to_channel):
-            stored = dict(dv_msg.id_to_channel)
-            self.row_manager.protocol_metadata["electrode_to_channel"] = stored
-            self._channel_to_id_cache = {
-                chan: eid for eid, chan in stored.items() if chan is not None
-            }
+            self._apply_geometry(dv_msg.id_to_channel)
 
         electrodes = sorted(
             self._channel_to_id_cache[c]
