@@ -127,3 +127,76 @@ def test_protocol_metadata_round_trip(qapp):
     data = manager.to_json()
     restored = RowManager.from_json(data, columns=list(manager.columns))
     assert restored.protocol_metadata["electrode_to_channel"] == {"e00": 0}
+
+
+def _make_dv_msg(channels=(), routes=(), step_id=None, id_to_channel=None):
+    from device_viewer.models.messages import DeviceViewerMessageModel
+    return DeviceViewerMessageModel(
+        channels_activated=set(channels),
+        routes=list(routes),
+        id_to_channel=id_to_channel or {},
+        step_info={"step_id": step_id, "step_label": None,
+                   "free_mode": step_id is None},
+    )
+
+
+def test_free_mode_message_stashes_electrodes(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    # Pre-seed metadata so reverse-lookup works
+    from device_viewer.models.messages import GeometryChangedMessage
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(
+            id_to_channel={"e00": 0, "e01": 1, "e02": 2}
+        ).serialize()
+    )
+    dv_msg = _make_dv_msg(channels=[1, 2])
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl._free_mode_stash == {
+        "electrodes": ["e01", "e02"], "routes": [],
+    }
+
+
+def test_step_scoped_message_clears_stash(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    ctrl._free_mode_stash = {"electrodes": ["x"], "routes": []}
+    dv_msg = _make_dv_msg(channels=[1], step_id="abc")
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl._free_mode_stash is None
+
+
+def test_empty_message_clears_stash(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    ctrl._free_mode_stash = {"electrodes": ["x"], "routes": []}
+    dv_msg = _make_dv_msg(channels=[], routes=[])
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl._free_mode_stash is None
+
+
+def test_state_seeds_metadata_when_empty_cold_start(qapp):
+    """Phase-1 cold start: if no GEOMETRY_CHANGED seen yet, take the
+    inline mapping from the first state message."""
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    assert ctrl.id_to_channel == {}
+    dv_msg = _make_dv_msg(
+        channels=[0], id_to_channel={"e00": 0, "e01": 1}
+    )
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl.row_manager.protocol_metadata["electrode_to_channel"] == {
+        "e00": 0, "e01": 1,
+    }
+    assert ctrl._free_mode_stash == {"electrodes": ["e00"], "routes": []}
+
+
+def test_state_uses_metadata_for_reverse_lookup(qapp):
+    """Once metadata is populated, reverse-lookup uses it - state msgs
+    that omit id_to_channel still resolve correctly."""
+    from device_viewer.models.messages import GeometryChangedMessage
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(id_to_channel={"e00": 0, "e01": 1}).serialize()
+    )
+    dv_msg = _make_dv_msg(channels=[0, 1], id_to_channel={})
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl._free_mode_stash == {
+        "electrodes": ["e00", "e01"], "routes": [],
+    }

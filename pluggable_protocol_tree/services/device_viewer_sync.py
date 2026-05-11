@@ -97,14 +97,18 @@ class DeviceViewerSyncController(HasTraits):
         """Bind the controller to a ProtocolTreeWidget instance."""
         self._tree_widget = tree_widget
         self.bridge.geometry_changed.connect(self._on_geometry_qt)
+        self.bridge.dv_state_received.connect(self._on_dv_state_qt)
         # selection wiring (Task 8)
-        # bridge connections (Tasks 7, 10)
 
     def detach(self) -> None:
         """Disconnect Qt signal bindings. Dramatiq broker shutdown
         handles actor teardown."""
         try:
             self.bridge.geometry_changed.disconnect(self._on_geometry_qt)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.bridge.dv_state_received.disconnect(self._on_dv_state_qt)
         except (RuntimeError, TypeError):
             pass
         self._tree_widget = None
@@ -145,3 +149,39 @@ class DeviceViewerSyncController(HasTraits):
         self._channel_to_id_cache = {
             chan: eid for eid, chan in stored.items() if chan is not None
         }
+
+    def _on_dv_state_qt(self, payload: str) -> None:
+        """Receive DEVICE_VIEWER_STATE_CHANGED on the Qt thread. Captures
+        free-mode toggles into _free_mode_stash; clears stash for any
+        step-scoped or empty message."""
+        from device_viewer.models.messages import DeviceViewerMessageModel
+        try:
+            dv_msg = DeviceViewerMessageModel.deserialize(payload)
+        except Exception as e:
+            logger.warning(f"failed to parse DV state: {e}")
+            return
+
+        if dv_msg.step_id:
+            self._free_mode_stash = None
+            return
+
+        if not dv_msg.channels_activated and not dv_msg.routes:
+            self._free_mode_stash = None
+            return
+
+        # Cold-start seed: populate metadata if empty so reverse-lookup works.
+        if (not self.row_manager.protocol_metadata.get("electrode_to_channel")
+                and dv_msg.id_to_channel):
+            stored = dict(dv_msg.id_to_channel)
+            self.row_manager.protocol_metadata["electrode_to_channel"] = stored
+            self._channel_to_id_cache = {
+                chan: eid for eid, chan in stored.items() if chan is not None
+            }
+
+        electrodes = sorted(
+            self._channel_to_id_cache[c]
+            for c in dv_msg.channels_activated
+            if c in self._channel_to_id_cache
+        )
+        routes = [list(ids) for ids, _color in dv_msg.routes]
+        self._free_mode_stash = {"electrodes": electrodes, "routes": routes}
