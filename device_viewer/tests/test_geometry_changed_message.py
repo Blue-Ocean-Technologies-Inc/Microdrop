@@ -12,8 +12,12 @@ def test_topic_constant_value():
     assert DEVICE_VIEWER_GEOMETRY_CHANGED == "ui/device_viewer/geometry_changed"
 
 
-def test_topic_in_actor_topic_dict():
-    assert DEVICE_VIEWER_GEOMETRY_CHANGED in ACTOR_TOPIC_DICT[listener_name]
+def test_dv_does_not_subscribe_to_its_own_geometry_publishes():
+    """The DV publishes DEVICE_VIEWER_GEOMETRY_CHANGED but does not
+    consume it. Subscribing would create a no-op handler-not-found
+    log on every chip-insert. The pluggable_protocol_tree controller
+    is the only consumer (via SYNC_ACTOR_TOPIC_DICT)."""
+    assert DEVICE_VIEWER_GEOMETRY_CHANGED not in ACTOR_TOPIC_DICT[listener_name]
 
 
 def test_round_trip():

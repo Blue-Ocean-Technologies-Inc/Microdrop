@@ -28,7 +28,7 @@ PERSISTENCE_SCHEMA_VERSION = 1
 PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
 
 # PPT-10.2: tree -> DV slim display message
-PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree/display_state"
+PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
 # No ACTOR_TOPIC_DICT entries yet — no listener in PPT-1.
 ACTOR_TOPIC_DICT: dict[str, list[str]] = {}

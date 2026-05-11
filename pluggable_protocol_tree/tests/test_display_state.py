@@ -7,7 +7,18 @@ from pluggable_protocol_tree.models.display_state import (
 
 
 def test_topic_constant_value():
-    assert PROTOCOL_TREE_DISPLAY_STATE == "ui/protocol_tree/display_state"
+    assert PROTOCOL_TREE_DISPLAY_STATE == "ui/protocol_tree_display_state"
+
+
+def test_topic_last_segment_unique_vs_protocol_grid():
+    """Regression: dramatiq listener dispatches by topic.split('/')[-1].
+    If two topics share a last segment, the second one's handler is
+    silently shadowed. PROTOCOL_GRID_DISPLAY_STATE ends in
+    'display_state'; PROTOCOL_TREE_DISPLAY_STATE must NOT."""
+    from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE
+    grid_last = PROTOCOL_GRID_DISPLAY_STATE.split("/")[-1]
+    tree_last = PROTOCOL_TREE_DISPLAY_STATE.split("/")[-1]
+    assert grid_last != tree_last
 
 
 def test_default_construction_is_free_mode_empty():

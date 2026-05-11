@@ -27,7 +27,10 @@ CALIBRATION_DATA               = "ui/calibration_data"
 PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
 PROTOCOL_RUNNING               = "microdrop/protocol_running"
 # Literal here to avoid circular import: pluggable_protocol_tree.consts imports from this module.
-PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree/display_state"
+# NB: last segment must be unique vs PROTOCOL_GRID_DISPLAY_STATE — the dramatiq listener base
+# dispatches by topic.split("/")[-1], so two topics ending in "display_state" collide on the
+# same handler. Underscore-joined keeps dispatch routed to _on_protocol_tree_display_state_triggered.
+PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree_display_state"
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -53,8 +56,10 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_CONNECTED,
         DISABLED_CHANNELS_CHANGED,
         HALTED,
-        DEVICE_VIEWER_GEOMETRY_CHANGED,
         PROTOCOL_TREE_DISPLAY_STATE,
+        # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
+        # the DV does not consume it. The pluggable_protocol_tree
+        # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
     ]
 }
 
