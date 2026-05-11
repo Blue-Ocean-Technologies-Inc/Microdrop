@@ -289,6 +289,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             for eid in msg.electrodes
             if id_to_channel.get(eid) is not None
         }
+        # execution_params intentionally omitted — tree steps carry no
+        # sidebar params, so apply_message_model will fire
+        # clear_committed_baseline() in its else branch. Matches legacy
+        # behavior when a step (not free mode) is the message source.
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
             routes=[(route, "blue") for route in msg.routes],
