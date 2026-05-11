@@ -221,10 +221,10 @@ class DeviceViewerSyncController(HasTraits):
         if self._suppress_publish or self._protocol_running:
             return
 
-        # Resolve the unsaved free-mode stash before changing display.
-        if (self._free_mode_stash is not None
-                and row is not None
-                and not isinstance(row, GroupRow)):
+        # Resolve the unsaved free-mode stash on any selection change
+        # (step, group, or deselect) — spec §4.D requires the prompt
+        # to fire whenever we leave free mode.
+        if self._free_mode_stash is not None:
             choice = confirm(
                 self.parent_widget,
                 "You have unsaved changes from free mode.",

@@ -379,6 +379,31 @@ def test_no_prompt_when_stash_empty(qapp, monkeypatch):
     assert len(publishes) == 1
 
 
+def test_deselect_with_stash_also_prompts(qapp, monkeypatch):
+    """Spec §4.D: deselect / group click should also resolve the
+    free-mode stash via the prompt, not just step clicks."""
+    from microdrop_application.dialogs.pyface_wrapper import YES
+    publishes = []
+    confirm_calls = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.confirm",
+        lambda *a, **kw: (confirm_calls.append(1), YES)[1],
+    )
+    manager = _make_manager()
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._free_mode_stash = {"electrodes": ["e00"], "routes": []}
+    ctrl._publish_for_row(None)         # deselect
+    assert confirm_calls == [1]         # prompt fired
+    assert len(manager.root.children) == 1   # YES => insert-as-new-step
+    assert ctrl._free_mode_stash is None
+    # Free-mode publish still happens after the resolution
+    assert len(publishes) == 1
+
+
 def test_protocol_running_signal_updates_flag(qapp):
     ctrl = DeviceViewerSyncController(row_manager=_make_manager())
     ctrl._on_protocol_running_qt(True)
