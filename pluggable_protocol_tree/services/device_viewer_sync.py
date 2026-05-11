@@ -36,6 +36,7 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
 from pluggable_protocol_tree.models.display_state import (
@@ -212,6 +213,27 @@ class DeviceViewerSyncController(HasTraits):
         flag and protocol_running."""
         if self._suppress_publish or self._protocol_running:
             return
+
+        # Resolve the unsaved free-mode stash before changing display.
+        if (self._free_mode_stash is not None
+                and row is not None
+                and not isinstance(row, GroupRow)):
+            choice = confirm(
+                self.parent_widget,
+                "You have unsaved changes from free mode.",
+                title="Unsaved Free Mode Changes",
+                informative=(
+                    "There are electrode actuations or routes from free "
+                    "mode that have not been saved to a protocol step."
+                    "<br><br>Would you like to insert them as a new step?"
+                ),
+                yes_label="Insert as New Step",
+                no_label="Discard Changes",
+            )
+            if choice == YES:
+                self._insert_free_mode_as_new_step()
+            self._free_mode_stash = None
+
         if row is None or isinstance(row, GroupRow):
             msg = ProtocolTreeDisplayMessage(free_mode=True)
             self._last_selected_uuid = ""
@@ -229,6 +251,28 @@ class DeviceViewerSyncController(HasTraits):
             topic=PROTOCOL_TREE_DISPLAY_STATE,
             message=msg.serialize(),
         )
+
+    def _insert_free_mode_as_new_step(self) -> None:
+        """Reentrancy-guarded RowManager.add_step for the free-mode capture.
+        Sets _suppress_publish around the mutation so the model-change
+        cascade (which can fire selectionModel.currentChanged) does not
+        trigger a duplicate publish from this same click."""
+        stash = self._free_mode_stash
+        if stash is None:
+            return
+        self._suppress_publish = True
+        try:
+            self.row_manager.add_step(
+                parent_path=(),
+                index=None,
+                values={
+                    "name": "Step (free-mode capture)",
+                    "electrodes": stash["electrodes"],
+                    "routes": stash["routes"],
+                },
+            )
+        finally:
+            self._suppress_publish = False
 
     def _on_current_changed(self, current, _previous) -> None:
         """Qt slot wired to selectionModel().currentChanged. Resolves the

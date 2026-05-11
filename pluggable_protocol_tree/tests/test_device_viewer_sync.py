@@ -299,3 +299,78 @@ def test_suppress_publish_blocks_publish(qapp, monkeypatch):
     row = manager.get_row((0,))
     ctrl._publish_for_row(row)
     assert publishes == []
+
+
+def test_step_click_with_stash_yes_inserts_step(qapp, monkeypatch):
+    from microdrop_application.dialogs.pyface_wrapper import YES
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.confirm",
+        lambda *a, **kw: YES,
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._free_mode_stash = {
+        "electrodes": ["e00", "e01"], "routes": [["e02"]],
+    }
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+
+    # New step appended at end of root with the stashed values
+    assert len(manager.root.children) == 2
+    new_row = manager.root.children[1]
+    assert new_row.electrodes == ["e00", "e01"]
+    assert new_row.routes == [["e02"]]
+    assert ctrl._free_mode_stash is None
+    # Exactly one publish (regression for add_step reentrancy)
+    assert len(publishes) == 1
+
+
+def test_step_click_with_stash_no_discards(qapp, monkeypatch):
+    from microdrop_application.dialogs.pyface_wrapper import NO
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.confirm",
+        lambda *a, **kw: NO,
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._free_mode_stash = {
+        "electrodes": ["e00"], "routes": [],
+    }
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+
+    assert len(manager.root.children) == 1   # no add_step
+    assert ctrl._free_mode_stash is None
+    assert len(publishes) == 1
+
+
+def test_no_prompt_when_stash_empty(qapp, monkeypatch):
+    publishes = []
+    confirms = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.confirm",
+        lambda *a, **kw: confirms.append(1),
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+    assert confirms == []                    # dialog never shown
+    assert len(publishes) == 1
