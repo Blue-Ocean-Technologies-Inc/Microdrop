@@ -1,0 +1,120 @@
+"""DeviceViewerSyncController - bidirectional electrode sync between
+the protocol tree pane and the device viewer.
+
+Owns:
+  - subscription to DEVICE_VIEWER_STATE_CHANGED (free-mode capture)
+  - subscription to DEVICE_VIEWER_GEOMETRY_CHANGED (electrode->channel
+    mapping cache, written to row_manager.protocol_metadata)
+  - subscription to PROTOCOL_RUNNING (gate selection-driven publishes)
+  - tree.selectionModel().currentChanged (selection -> DV publish)
+  - publishes PROTOCOL_TREE_DISPLAY_STATE
+  - the unsaved-free-mode confirm dialog and the
+    'Insert as new step' RowManager.add_step call
+
+This file is the skeleton: traits, bridge, actor, listener_routine.
+Per-handler logic is added in subsequent PPT-10.2 plan tasks.
+"""
+
+from __future__ import annotations
+
+import dramatiq
+
+from pyface.qt.QtCore import QObject, Signal
+from pyface.qt.QtWidgets import QWidget
+
+from traits.api import Bool, Dict, HasTraits, Instance, Int, Str
+
+from device_viewer.consts import (
+    DEVICE_VIEWER_GEOMETRY_CHANGED,
+    DEVICE_VIEWER_STATE_CHANGED,
+    PROTOCOL_RUNNING,
+)
+from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_controller_base import (
+    generate_class_method_dramatiq_listener_actor,
+)
+from pluggable_protocol_tree.models.row_manager import RowManager
+
+logger = get_logger(__name__)
+
+
+SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
+
+# Module-level so plugin start-up code can include it in the global
+# actor->topic routing without instantiating a controller first.
+SYNC_ACTOR_TOPIC_DICT = {
+    SYNC_LISTENER_NAME: [
+        DEVICE_VIEWER_STATE_CHANGED,
+        DEVICE_VIEWER_GEOMETRY_CHANGED,
+        PROTOCOL_RUNNING,
+    ]
+}
+
+
+class _Bridge(QObject):
+    """Qt signal bridge - Dramatiq actor runs on a worker thread, Qt
+    mutations must happen on the GUI thread."""
+
+    dv_state_received        = Signal(str)
+    geometry_changed         = Signal(str)
+    protocol_running_changed = Signal(bool)
+
+
+class DeviceViewerSyncController(HasTraits):
+    row_manager              = Instance(RowManager)
+    parent_widget            = Instance(QWidget, allow_none=True)
+    bridge                   = Instance(_Bridge)
+    dramatiq_actor           = Instance(dramatiq.Actor, allow_none=True)
+    listener_name            = Str(SYNC_LISTENER_NAME)
+
+    _free_mode_stash         = Instance(dict, allow_none=True)
+    _last_selected_uuid      = Str(allow_none=True)
+    _protocol_running        = Bool(False)
+    _suppress_publish        = Bool(False)
+    # Inverted view of protocol_metadata["electrode_to_channel"]; built
+    # on geometry change. The forward mapping itself lives ONLY in
+    # row_manager.protocol_metadata - this dict is just an inverted
+    # cache for fast free-mode reverse-lookup.
+    _channel_to_id_cache     = Dict(Int, Str)
+
+    def traits_init(self):
+        if self.bridge is None:
+            self.bridge = _Bridge()
+        if self.dramatiq_actor is None:
+            self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
+                listener_name=self.listener_name,
+                class_method=self._listener_routine,
+            )
+
+    # --- public lifecycle ----------------------------------------------
+
+    def attach(self, tree_widget) -> None:
+        """Bind the controller to a ProtocolTreeWidget instance."""
+        self._tree_widget = tree_widget
+        # selection wiring (Task 8)
+        # bridge connections (Tasks 6, 7, 10)
+
+    def detach(self) -> None:
+        """Disconnect Qt signal bindings. Dramatiq broker shutdown
+        handles actor teardown."""
+        self._tree_widget = None
+
+    # --- single source of truth ----------------------------------------
+
+    @property
+    def id_to_channel(self) -> dict[str, int | None]:
+        return self.row_manager.protocol_metadata.get(
+            "electrode_to_channel", {},
+        )
+
+    # --- worker-thread dispatch (no Qt / RowManager mutation here) -----
+
+    def _listener_routine(self, message: str, topic: str) -> None:
+        if topic == DEVICE_VIEWER_STATE_CHANGED:
+            self.bridge.dv_state_received.emit(message)
+        elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
+            self.bridge.geometry_changed.emit(message)
+        elif topic == PROTOCOL_RUNNING:
+            self.bridge.protocol_running_changed.emit(
+                message.casefold() == "true"
+            )
