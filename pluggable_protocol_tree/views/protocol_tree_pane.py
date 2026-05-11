@@ -235,8 +235,14 @@ class ProtocolTreePane(QWidget):
 
     # --- step lifecycle handlers --------------------------------------
 
+    def _publish_protocol_running(self, value: str) -> None:
+        try:
+            publish_message(topic=PROTOCOL_RUNNING, message=value)
+        except Exception as e:
+            logger.warning(f"PROTOCOL_RUNNING publish failed: {e}")
+
     def _on_protocol_started(self):
-        publish_message(topic=PROTOCOL_RUNNING, message="True")
+        self._publish_protocol_running("True")
         try:
             self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
         except Exception:
@@ -395,7 +401,7 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
-        publish_message(topic=PROTOCOL_RUNNING, message="False")
+        self._publish_protocol_running("False")
         self._repeats_completed += 1
         self._update_repeat_status_label()
         if self._repeats_completed < self._repeats_total:
@@ -407,7 +413,7 @@ class ProtocolTreePane(QWidget):
         self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
-        publish_message(topic=PROTOCOL_RUNNING, message="False")
+        self._publish_protocol_running("False")
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
