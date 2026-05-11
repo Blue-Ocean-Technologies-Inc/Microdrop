@@ -37,6 +37,7 @@ This is the `device_viewer_state_changed` row of issue #414's listener table —
 | 6 | Architectural shape | Dedicated `DeviceViewerSyncController` service | Matches existing `application` / `experiment_manager` / `sticky_manager` injection pattern; pane stays focused; controller is independently testable; natural place to grow when remaining #414 listeners land. |
 | 7 | Tree-mutation API for free-mode capture | Use existing `RowManager.add_step / add_group / remove / move` | These are already public, already cover what we need (and more). No new RowManager API is added by this spec. Free-mode capture calls `add_step(parent_path=(), index=None, values={...})`. |
 | 8 | Lean `id_to_channel` publishing | Two-phase: introduce `DEVICE_VIEWER_GEOMETRY_CHANGED` now, lean the state payload later (PPT-9 timing) | DV publishes the ~120-entry mapping on every state message today. Splitting it onto its own topic published only on geometry change (chip insert / SVG load) is the right shape. But `protocol_grid` consumes `id_to_channel` from the state topic in 30+ places, so removing the field from state messages now would require touching code that's about to be deleted. Phase 1 (this spec): add the new topic, our controller caches from it. Phase 2 (PPT-9 or its own spec): flip the state publisher to omit the mapping. |
+| 9 | Where the mapping lives in the protocol | Single source of truth: `RowManager.protocol_metadata["electrode_to_channel"]` | This trait already exists for exactly this purpose ("Per-protocol scratch persisted in the JSON header. Keys are namespaced by feature ('electrode_to_channel', etc.)"). The executor already hydrates it into `ProtocolContext.scratch`. NO per-step or per-row storage — that was a legacy quirk in `protocol_grid.state.device_state.id_to_channel` that this spec deliberately does not reproduce. Controller writes to `protocol_metadata["electrode_to_channel"]` on geometry-changed; persistence is automatic via `to_json()`. |
 
 ## 2. File layout
 
@@ -140,15 +141,19 @@ The controller is the **only** module that knows about both the tree and the DV.
    - Parse with `DeviceViewerMessageModel.deserialize`.
    - If `dv_msg.step_id` is set → `_free_mode_stash = None` (DV thinks it's editing a specific step).
    - If neither channels nor routes → `_free_mode_stash = None`.
-   - Otherwise: reverse-lookup channels → electrode IDs using `_id_to_channel_cache` (preferred) with fallback to `dv_msg.id_to_channel` if the cache is empty. Store `{"electrodes": sorted([...]), "routes": [list(ids) for ids, _color in dv_msg.routes]}` as `_free_mode_stash`.
+   - Otherwise: reverse-lookup channels → electrode IDs using `_channel_to_id_cache` (built from `protocol_metadata["electrode_to_channel"]`). If the metadata is empty (cold start, no geometry message seen yet), seed it from `dv_msg.id_to_channel` and continue. Store `{"electrodes": sorted([...]), "routes": [list(ids) for ids, _color in dv_msg.routes]}` as `_free_mode_stash`.
 
-### B') Device Viewer → Tree (geometry caching)
+### B') Device Viewer → Tree (geometry as protocol metadata)
 
 1. DV publishes `DEVICE_VIEWER_GEOMETRY_CHANGED` on chip insert / SVG load with a small payload: `{"id_to_channel": {...}}`.
 2. Controller's dramatiq actor receives → emits `bridge.geometry_changed` Qt signal.
-3. `_on_geometry_qt(payload)` parses and updates `_id_to_channel_cache`. No other state changes — this is a pure cache update.
+3. `_on_geometry_qt(payload)` parses and writes the mapping to `row_manager.protocol_metadata["electrode_to_channel"]` — the single source of truth for the entire protocol. The reverse-lookup cache (`_channel_to_id_cache`) is rebuilt as an inverted view.
 
-The cache is also seeded on the first `DEVICE_VIEWER_STATE_CHANGED` we see (whose payload still carries the mapping in Phase 1). That covers the cold-start case where the DV had already initialized before our controller subscribed.
+The metadata dict is also seeded on the first `DEVICE_VIEWER_STATE_CHANGED` we see (whose payload still carries the mapping in Phase 1). That covers the cold-start case where the DV had already initialized before our controller subscribed.
+
+**Persistence:** because the mapping lives in `protocol_metadata`, it's automatically included in `RowManager.to_json()` and restored by `from_json` / `set_state_from_json`. No per-step duplication, no separate serialization path.
+
+**Sharing:** the executor already reads from the same dict (via `ProtocolContext.scratch["electrode_to_channel"]`) for `routes_column.py:122`'s electrode→channel resolution during phase publishing. Both consumers (executor + controller) see the same up-to-date mapping with no synchronization code.
 
 ### C) The free-mode prompt (resolution of B's stash on next selection)
 
@@ -374,10 +379,21 @@ class DeviceViewerSyncController(HasTraits):
     _last_selected_uuid      = Str(allow_none=True)
     _protocol_running        = Bool(False)
     _suppress_publish        = Bool(False)
-    _id_to_channel_cache     = Dict(Str, AnyTrait)         # cached geometry
+    # Reverse-lookup cache (channel -> electrode_id), invalidated on
+    # geometry change. The forward mapping itself lives ONLY in
+    # row_manager.protocol_metadata["electrode_to_channel"] — this
+    # cache is just an inverted view for fast free-mode resolution.
+    _channel_to_id_cache     = Dict(Int, Str)
 
     def attach(self, tree_widget): ...
     def detach(self): ...
+
+    @property
+    def id_to_channel(self) -> dict[str, int | None]:
+        """Single source of truth — read from protocol metadata."""
+        return self.row_manager.protocol_metadata.get(
+            "electrode_to_channel", {}
+        )
 ```
 
 ### Lifecycle
@@ -476,9 +492,11 @@ Programmatic-move call sites: `_select_step`, `clear_highlights`, the executor-d
 | `test_suppress_publish_during_programmatic_select` | `_suppress_publish=True` + `_on_current_changed` | No publish |
 | `test_listener_routine_emits_correct_bridge_signal` | Call `_listener_routine("True", PROTOCOL_RUNNING)` | Bridge `protocol_running_changed` emitted with True |
 | `test_insert_new_step_does_not_publish_twice` | Stash set + step click → YES | Exactly one `publish_message` call (regression for the `add_step` reentrancy concern) |
-| `test_geometry_message_populates_cache` | `_listener_routine` with `DEVICE_VIEWER_GEOMETRY_CHANGED` payload | `_id_to_channel_cache == {"e00": 0, "e01": 1, ...}` |
-| `test_dv_state_uses_cache_for_reverse_lookup` | Pre-seed cache + state msg with channels=[1,2] but empty id_to_channel | Stash uses cached mapping → electrodes=["e01","e02"] |
-| `test_dv_state_falls_back_to_inline_mapping_when_cache_empty` | Empty cache + state msg with id_to_channel populated | Stash resolves correctly; cache also populated as a side-effect |
+| `test_geometry_message_writes_to_protocol_metadata` | `_listener_routine` with `DEVICE_VIEWER_GEOMETRY_CHANGED` payload | `row_manager.protocol_metadata["electrode_to_channel"] == {"e00": 0, "e01": 1, ...}`; `_channel_to_id_cache` is the inverted view |
+| `test_dv_state_uses_metadata_for_reverse_lookup` | Pre-seed `protocol_metadata["electrode_to_channel"]` + state msg with channels=[1,2] but empty id_to_channel | Stash uses metadata mapping → electrodes=["e01","e02"] |
+| `test_dv_state_seeds_metadata_when_empty` | Empty metadata + state msg with id_to_channel populated | Stash resolves correctly; `protocol_metadata["electrode_to_channel"]` is now populated (cold-start seed) |
+| `test_no_per_step_id_to_channel_storage` | Add several steps; trigger geometry change | Each row has no `id_to_channel` attribute / value; mapping exists ONLY in `protocol_metadata` |
+| `test_protocol_metadata_persists_round_trip` | Set `protocol_metadata["electrode_to_channel"]` → `to_json` → `from_json` | Reconstructed manager has the same mapping under the same key |
 
 Dialog mocking: monkeypatch `pyface_wrapper.confirm` to return YES/NO. Same pattern as existing `tests/test_protocol_tree_pane.py`.
 
@@ -513,7 +531,8 @@ Pattern matches existing `test_executor_redis_integration.py` (uses `tests_with_
 - [ ] `ProtocolTreePane` accepts `device_viewer_sync=None`, attaches in `__init__`, detaches in `closeEvent`, publishes `PROTOCOL_RUNNING` on start/finish/abort, and wraps programmatic selection moves with `_suppress_publish`.
 - [ ] `PluggableProtocolDockPane` constructs the controller and passes it to the pane.
 - [ ] `device_view_dock_pane.py` has `_on_protocol_tree_display_state_triggered`; `device_viewer.consts.ACTOR_TOPIC_DICT` includes `PROTOCOL_TREE_DISPLAY_STATE`.
-- [ ] `DeviceViewerSyncController` caches `id_to_channel` from geometry-changed messages and uses the cache for reverse-lookup; falls back to inline mapping when cache is empty.
+- [ ] `DeviceViewerSyncController` writes `id_to_channel` from geometry-changed messages to `row_manager.protocol_metadata["electrode_to_channel"]` (single source of truth); maintains an inverted `_channel_to_id_cache` for reverse-lookup; cold-starts by seeding the metadata from `DEVICE_VIEWER_STATE_CHANGED` if no geometry message has arrived yet.
+- [ ] No per-step / per-row storage of `id_to_channel` anywhere — the mapping lives ONLY in `RowManager.protocol_metadata["electrode_to_channel"]`. `to_json` / `from_json` round-trip preserves it. The executor (`routes_column.py`) continues to read it via `ProtocolContext.scratch["electrode_to_channel"]`.
 - [ ] `widget.index_to_path` is public (private `_index_to_path` retained as a one-line alias).
 - [ ] No new RowManager API is added (existing `add_step` / `add_group` / `remove` / `move` are sufficient and used directly by the controller).
 - [ ] Legacy `protocol_grid` widget continues to work unchanged — `DEVICE_VIEWER_STATE_CHANGED` payload still includes `id_to_channel` in Phase 1.
