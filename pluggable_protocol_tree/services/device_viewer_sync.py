@@ -36,6 +36,12 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+from pluggable_protocol_tree.models.display_state import (
+    ProtocolTreeDisplayMessage,
+)
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 
 logger = get_logger(__name__)
@@ -82,6 +88,7 @@ class DeviceViewerSyncController(HasTraits):
     # cache for fast free-mode reverse-lookup.
     _channel_to_id_cache     = Dict(Int, Str)
     _tree_widget             = Instance(object, allow_none=True)
+    _selection_model         = Instance(QObject, allow_none=True)
 
     def _bridge_default(self) -> _Bridge:
         return _Bridge()
@@ -100,7 +107,9 @@ class DeviceViewerSyncController(HasTraits):
         self._tree_widget = tree_widget
         self.bridge.geometry_changed.connect(self._on_geometry_qt)
         self.bridge.dv_state_received.connect(self._on_dv_state_qt)
-        # selection wiring (Task 8)
+        selection_model = tree_widget.tree.selectionModel()
+        selection_model.currentChanged.connect(self._on_current_changed)
+        self._selection_model = selection_model
 
     def detach(self) -> None:
         """Disconnect Qt signal bindings. Dramatiq broker shutdown
@@ -113,6 +122,14 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.dv_state_received.disconnect(self._on_dv_state_qt)
         except (RuntimeError, TypeError):
             pass
+        try:
+            if self._selection_model is not None:
+                self._selection_model.currentChanged.disconnect(
+                    self._on_current_changed,
+                )
+        except (RuntimeError, TypeError):
+            pass
+        self._selection_model = None
         self._tree_widget = None
 
     # --- single source of truth ----------------------------------------
@@ -188,3 +205,43 @@ class DeviceViewerSyncController(HasTraits):
         )
         routes = [list(ids) for ids, _color in dv_msg.routes]
         self._free_mode_stash = {"electrodes": electrodes, "routes": routes}
+
+    def _publish_for_row(self, row) -> None:
+        """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
+        free-mode payload if row is None / a group). Gated on suppress
+        flag and protocol_running."""
+        if self._suppress_publish or self._protocol_running:
+            return
+        if row is None or isinstance(row, GroupRow):
+            msg = ProtocolTreeDisplayMessage(free_mode=True)
+            self._last_selected_uuid = ""
+        else:
+            msg = ProtocolTreeDisplayMessage(
+                electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                step_id=row.uuid,
+                step_label=row.name,
+                free_mode=False,
+                editable=True,
+            )
+            self._last_selected_uuid = row.uuid
+        publish_message(
+            topic=PROTOCOL_TREE_DISPLAY_STATE,
+            message=msg.serialize(),
+        )
+
+    def _on_current_changed(self, current, _previous) -> None:
+        """Qt slot wired to selectionModel().currentChanged. Resolves the
+        QModelIndex to a row, then delegates to _publish_for_row."""
+        if self._suppress_publish or self._protocol_running:
+            return
+        if not current.isValid():
+            self._publish_for_row(None)
+            return
+        path = self._tree_widget.index_to_path(current)
+        try:
+            row = self.row_manager.get_row(path)
+        except (IndexError, KeyError):
+            self._publish_for_row(None)
+            return
+        self._publish_for_row(row)

@@ -200,3 +200,81 @@ def test_state_uses_metadata_for_reverse_lookup(qapp):
     assert ctrl._free_mode_stash == {
         "electrodes": ["e00", "e01"], "routes": [],
     }
+
+
+def test_step_click_publishes_display_state(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    manager.add_step(values={
+        "name": "S1", "electrodes": ["e00", "e01"], "routes": [["e02"]],
+    })
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+
+    assert len(publishes) == 1
+    from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    topic, payload = publishes[0]
+    assert topic == PROTOCOL_TREE_DISPLAY_STATE
+    msg = ProtocolTreeDisplayMessage.deserialize(payload)
+    assert msg.electrodes == ["e00", "e01"]
+    assert msg.routes == [["e02"]]
+    assert msg.step_id == row.uuid
+    assert msg.step_label == "S1"
+    assert msg.free_mode is False
+
+
+def test_group_click_emits_free_mode_payload(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._publish_for_row(None)        # treats None as deselect/group
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.free_mode is True
+    assert msg.electrodes == []
+    assert msg.routes == []
+    assert msg.step_id is None
+
+
+def test_protocol_running_blocks_publish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1", "electrodes": ["e00"]})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._protocol_running = True
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+    assert publishes == []
+
+
+def test_suppress_publish_blocks_publish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1", "electrodes": ["e00"]})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._suppress_publish = True
+    row = manager.get_row((0,))
+    ctrl._publish_for_row(row)
+    assert publishes == []
