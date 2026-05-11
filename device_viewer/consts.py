@@ -26,6 +26,8 @@ CALIBRATION_DATA               = "ui/calibration_data"
 # in protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
 PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
 PROTOCOL_RUNNING               = "microdrop/protocol_running"
+# Literal here to avoid circular import: pluggable_protocol_tree.consts imports from this module.
+PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree/display_state"
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -52,6 +54,7 @@ ACTOR_TOPIC_DICT = {
         DISABLED_CHANNELS_CHANGED,
         HALTED,
         DEVICE_VIEWER_GEOMETRY_CHANGED,
+        PROTOCOL_TREE_DISPLAY_STATE,
     ]
 }
 

@@ -275,6 +275,33 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Which has weird side effects on QtGraphicsObject calls
         self.device_view.display_state_signal.emit(message_model_serial)
 
+    def _on_protocol_tree_display_state_triggered(self, message_serial: str):
+        """Adapter for ProtocolTreeDisplayMessage -> DeviceViewerMessageModel.
+        The downstream display_state_signal pipeline reuses what already
+        works for the legacy widget."""
+        from pluggable_protocol_tree.models.display_state import (
+            ProtocolTreeDisplayMessage,
+        )
+        msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
+        id_to_channel = self.model.electrodes.id_to_channel
+        channels_activated = {
+            id_to_channel[eid]
+            for eid in msg.electrodes
+            if id_to_channel.get(eid) is not None
+        }
+        rich = DeviceViewerMessageModel(
+            channels_activated=channels_activated,
+            routes=[(route, "blue") for route in msg.routes],
+            id_to_channel=id_to_channel,
+            step_info={
+                "step_id": msg.step_id,
+                "step_label": msg.step_label,
+                "free_mode": msg.free_mode,
+            },
+            editable=msg.editable,
+        )
+        self.device_view.display_state_signal.emit(rich.serialize())
+
     def _on_protocol_running_triggered(self, message: TimestampedMessage):
 
         logger.debug(f"Protocol running is {message}")
