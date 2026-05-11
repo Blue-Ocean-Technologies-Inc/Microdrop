@@ -38,7 +38,7 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
@@ -46,20 +46,6 @@ from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 
 logger = get_logger(__name__)
-
-
-SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
-
-# Module-level so plugin start-up code can include it in the global
-# actor->topic routing without instantiating a controller first.
-SYNC_ACTOR_TOPIC_DICT = {
-    SYNC_LISTENER_NAME: [
-        DEVICE_VIEWER_STATE_CHANGED,
-        DEVICE_VIEWER_GEOMETRY_CHANGED,
-        PROTOCOL_RUNNING,
-    ]
-}
-
 
 class _Bridge(QObject):
     """Qt signal bridge - Dramatiq actor runs on a worker thread, Qt
@@ -95,11 +81,11 @@ class DeviceViewerSyncController(HasTraits):
         return _Bridge()
 
     def traits_init(self):
-        if self.dramatiq_actor is None:
-            self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
-                listener_name=self.listener_name,
-                class_method=self._listener_routine,
-            )
+        logger.info(f"Starting Protocol Tree Device View Sync Controller listener")
+        self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=self.listener_name,
+            class_method=self._listener_routine,
+        )
 
     # --- public lifecycle ----------------------------------------------
 
@@ -187,16 +173,10 @@ class DeviceViewerSyncController(HasTraits):
         step-scoped or empty message."""
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
+            print(dv_msg)
+            logger.info(f"Protocol Tree: Device View Sync recieved message - {dv_msg}")
         except Exception as e:
             logger.warning(f"failed to parse DV state: {e}")
-            return
-
-        if dv_msg.step_id:
-            self._free_mode_stash = None
-            return
-
-        if not dv_msg.channels_activated and not dv_msg.routes:
-            self._free_mode_stash = None
             return
 
         # Cold-start seed: populate metadata if empty so reverse-lookup
@@ -212,6 +192,25 @@ class DeviceViewerSyncController(HasTraits):
             if c in self._channel_to_id_cache
         )
         routes = [list(ids) for ids, _color in dv_msg.routes]
+
+        if dv_msg.step_id:
+            # Step-scoped edit: write electrodes/routes back to the
+            # matching row's columns. Mirrors the legacy protocol_grid
+            # 'edit step electrodes via DV' behavior.
+            self._free_mode_stash = None
+            row = self.row_manager.get_row_by_uuid(dv_msg.step_id)
+            if row is None or isinstance(row, GroupRow):
+                return
+            if list(getattr(row, "electrodes", []) or []) != electrodes:
+                row.electrodes = electrodes
+            if list(getattr(row, "routes", []) or []) != routes:
+                row.routes = routes
+            return
+
+        if not electrodes and not routes:
+            self._free_mode_stash = None
+            return
+
         self._free_mode_stash = {"electrodes": electrodes, "routes": routes}
 
     def _publish_for_row(self, row) -> None:

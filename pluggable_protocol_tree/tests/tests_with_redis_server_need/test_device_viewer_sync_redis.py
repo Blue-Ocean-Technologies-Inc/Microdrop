@@ -30,10 +30,12 @@ from pluggable_protocol_tree.builtins.electrodes_column import (
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.consts import (
+    ACTOR_TOPIC_DICT as SYNC_ACTOR_TOPIC_DICT,
+    SYNC_LISTENER_NAME,
+)
 from pluggable_protocol_tree.services.device_viewer_sync import (
     DeviceViewerSyncController,
-    SYNC_ACTOR_TOPIC_DICT,
-    SYNC_LISTENER_NAME,
 )
 
 
@@ -94,7 +96,14 @@ def worker():
     """Start a Dramatiq worker for the duration of each test so that
     messages published to Redis are actually consumed and dispatched to
     the registered actors."""
+    from microdrop_utils.broker_server_helpers import (
+        remove_middleware_from_dramatiq_broker,
+    )
     broker = dramatiq.get_broker()
+    # Strip Prometheus middleware (project convention) — its message-
+    # processing hooks fail in the test broker because Prometheus state
+    # is initialized lazily in a side process, never spawned in tests.
+    remove_middleware_from_dramatiq_broker("Prometheus", broker)
     broker.flush_all()
     w = Worker(broker, worker_timeout=100)
     w.start()

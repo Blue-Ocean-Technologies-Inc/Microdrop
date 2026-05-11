@@ -57,10 +57,8 @@ def test_listener_routine_emits_protocol_running_bool(qapp):
 
 def test_actor_subscribes_to_three_topics():
     ctrl = DeviceViewerSyncController(row_manager=_make_manager())
-    from pluggable_protocol_tree.services.device_viewer_sync import (
-        SYNC_ACTOR_TOPIC_DICT,
-    )
-    topics = SYNC_ACTOR_TOPIC_DICT[ctrl.listener_name]
+    from pluggable_protocol_tree.consts import ACTOR_TOPIC_DICT
+    topics = ACTOR_TOPIC_DICT[ctrl.listener_name]
     assert set(topics) == {
         DEVICE_VIEWER_STATE_CHANGED,
         DEVICE_VIEWER_GEOMETRY_CHANGED,
@@ -377,6 +375,61 @@ def test_no_prompt_when_stash_empty(qapp, monkeypatch):
     ctrl._publish_for_row(row)
     assert confirms == []                    # dialog never shown
     assert len(publishes) == 1
+
+
+def test_step_scoped_message_writes_back_to_row(qapp):
+    """When the user toggles electrodes on the DV with a step selected,
+    the channel/route changes are written back to that row's electrodes
+    and routes columns. Mirrors the legacy protocol_grid edit behavior."""
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    path = manager.add_step(values={
+        "name": "S1", "electrodes": ["e00"], "routes": [],
+    })
+    row = manager.get_row(path)
+
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(
+            id_to_channel={"e00": 0, "e01": 1, "e02": 2}
+        ).serialize()
+    )
+
+    # DV reports step_id matching this row, with channels [0, 1, 2] and one route
+    dv_msg = _make_dv_msg(
+        channels=[0, 1, 2],
+        routes=[(["e01", "e02"], "blue")],
+        step_id=row.uuid,
+    )
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+
+    assert row.electrodes == ["e00", "e01", "e02"]
+    assert row.routes == [["e01", "e02"]]
+    # Stash stays clear (we are not in free mode)
+    assert ctrl._free_mode_stash is None
+
+
+def test_step_scoped_message_with_unknown_step_id_is_noop(qapp):
+    """If the DV's step_id doesn't match any row in our tree (e.g. the
+    legacy grid is still publishing), don't crash and don't mutate."""
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    manager.add_step(values={"name": "S1", "electrodes": ["e00"]})
+    row = manager.get_row((0,))
+    original_electrodes = list(row.electrodes)
+
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(id_to_channel={"e00": 0, "e01": 1}).serialize()
+    )
+
+    dv_msg = _make_dv_msg(
+        channels=[1], step_id="nonexistent-uuid",
+    )
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+
+    assert row.electrodes == original_electrodes   # unchanged
+    assert ctrl._free_mode_stash is None
 
 
 def test_deselect_with_stash_also_prompts(qapp, monkeypatch):
