@@ -108,6 +108,7 @@ class DeviceViewerSyncController(HasTraits):
         self._tree_widget = tree_widget
         self.bridge.geometry_changed.connect(self._on_geometry_qt)
         self.bridge.dv_state_received.connect(self._on_dv_state_qt)
+        self.bridge.protocol_running_changed.connect(self._on_protocol_running_qt)
         selection_model = tree_widget.tree.selectionModel()
         selection_model.currentChanged.connect(self._on_current_changed)
         self._selection_model = selection_model
@@ -121,6 +122,12 @@ class DeviceViewerSyncController(HasTraits):
             pass
         try:
             self.bridge.dv_state_received.disconnect(self._on_dv_state_qt)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.bridge.protocol_running_changed.disconnect(
+                self._on_protocol_running_qt,
+            )
         except (RuntimeError, TypeError):
             pass
         try:
@@ -273,6 +280,9 @@ class DeviceViewerSyncController(HasTraits):
             )
         finally:
             self._suppress_publish = False
+
+    def _on_protocol_running_qt(self, running: bool) -> None:
+        self._protocol_running = bool(running)
 
     def _on_current_changed(self, current, _previous) -> None:
         """Qt slot wired to selectionModel().currentChanged. Resolves the

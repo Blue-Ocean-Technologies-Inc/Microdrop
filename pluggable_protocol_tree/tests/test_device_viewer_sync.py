@@ -377,3 +377,11 @@ def test_no_prompt_when_stash_empty(qapp, monkeypatch):
     ctrl._publish_for_row(row)
     assert confirms == []                    # dialog never shown
     assert len(publishes) == 1
+
+
+def test_protocol_running_signal_updates_flag(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_manager())
+    ctrl._on_protocol_running_qt(True)
+    assert ctrl._protocol_running is True
+    ctrl._on_protocol_running_qt(False)
+    assert ctrl._protocol_running is False
