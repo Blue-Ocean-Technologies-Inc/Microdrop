@@ -17,6 +17,7 @@ DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
 
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
@@ -49,7 +50,8 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_DISCONNECTED,
         DROPBOT_CONNECTED,
         DISABLED_CHANNELS_CHANGED,
-        HALTED
+        HALTED,
+        DEVICE_VIEWER_GEOMETRY_CHANGED,
     ]
 }
 

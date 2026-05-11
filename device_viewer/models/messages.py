@@ -63,6 +63,22 @@ class DeviceViewerMessageModel(BaseModel):
         return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} activated={count}>"
 
 
+class GeometryChangedMessage(BaseModel):
+    """Payload for `DEVICE_VIEWER_GEOMETRY_CHANGED`. Published whenever
+    the electrode-to-channel mapping changes (chip insert, SVG load) so
+    listeners can cache it once instead of receiving it on every state
+    update."""
+
+    id_to_channel: dict[str, int | None]
+
+    def serialize(self) -> str:
+        return self.model_dump_json()
+
+    @classmethod
+    def deserialize(cls, json_str: str) -> "GeometryChangedMessage":
+        return cls.model_validate_json(json_str)
+
+
 if __name__ == "__main__":
     import uuid
 
