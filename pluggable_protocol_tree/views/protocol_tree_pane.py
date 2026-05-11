@@ -200,9 +200,10 @@ class ProtocolTreePane(QWidget):
         )
 
     def _wire_executor_signals(self):
-        self.executor.qsignals.step_started.connect(
-            self.widget.highlight_active_row,
-        )
+        def _highlight_active_row_safe(row):
+            with self._suppress_sync_publish():
+                self.widget.highlight_active_row(row)
+        self.executor.qsignals.step_started.connect(_highlight_active_row_safe)
         self.executor.qsignals.step_started.connect(self._on_step_started)
         self.executor.qsignals.step_finished.connect(self._on_step_finished)
         self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
@@ -552,23 +553,38 @@ class ProtocolTreePane(QWidget):
                 return i
         return None
 
+    def _suppress_sync_publish(self):
+        """Context manager wrapping a programmatic selection move so the
+        sync controller's currentChanged slot does not trigger a publish."""
+        pane = self
+        class _Guard:
+            def __enter__(self_):
+                if pane.device_viewer_sync is not None:
+                    pane.device_viewer_sync._suppress_publish = True
+            def __exit__(self_, *exc):
+                if pane.device_viewer_sync is not None:
+                    pane.device_viewer_sync._suppress_publish = False
+        return _Guard()
+
     def _select_step(self, row):
-        idx = self.widget._node_to_index(row)
-        if not idx.isValid():
-            return
-        parent = idx.parent()
-        while parent.isValid():
-            self.widget.tree.expand(parent)
-            parent = parent.parent()
-        self.widget.tree.setCurrentIndex(idx)
-        self.widget.tree.scrollTo(idx)
+        with self._suppress_sync_publish():
+            idx = self.widget._node_to_index(row)
+            if not idx.isValid():
+                return
+            parent = idx.parent()
+            while parent.isValid():
+                self.widget.tree.expand(parent)
+                parent = parent.parent()
+            self.widget.tree.setCurrentIndex(idx)
+            self.widget.tree.scrollTo(idx)
 
     def clear_highlights(self):
         """Reset the tree's selection + active-row highlight + per-step
         labels to the idle visual state."""
-        self.widget.highlight_active_row(None)
-        self.widget.tree.clearSelection()
-        self.widget.tree.setCurrentIndex(QModelIndex())
+        with self._suppress_sync_publish():
+            self.widget.highlight_active_row(None)
+            self.widget.tree.clearSelection()
+            self.widget.tree.setCurrentIndex(QModelIndex())
 
         self._step_index = 0
         self._step_total = 0

@@ -645,3 +645,59 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
     pane = ProtocolTreePane([make_name_column()])
     pane._on_protocol_aborted()
     assert (PROTOCOL_RUNNING, "False") in publishes
+
+
+def test_select_step_suppresses_sync_publish(qapp):
+    """During a programmatic _select_step, the suppress flag must be
+    True at the moment setCurrentIndex fires (so the sync controller's
+    currentChanged slot does not publish), and restored to False after."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    row = pane.manager.get_row((0,))
+
+    # Capture the suppress flag's value at the moment of programmatic move
+    seen_states = []
+    original = pane.widget.tree.setCurrentIndex
+    def capturing(idx):
+        seen_states.append(sync._suppress_publish)
+        return original(idx)
+    pane.widget.tree.setCurrentIndex = capturing
+    pane._select_step(row)
+
+    assert seen_states == [True]
+    assert sync._suppress_publish is False    # restored
+
+
+def test_clear_highlights_suppresses_sync_publish(qapp):
+    """clear_highlights also moves selection programmatically; same
+    guard requirement."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+
+    seen_states = []
+    original = pane.widget.tree.clearSelection
+    def capturing():
+        seen_states.append(sync._suppress_publish)
+        return original()
+    pane.widget.tree.clearSelection = capturing
+    pane.clear_highlights()
+
+    assert seen_states == [True]
+    assert sync._suppress_publish is False    # restored
