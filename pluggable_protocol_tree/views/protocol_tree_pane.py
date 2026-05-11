@@ -67,6 +67,7 @@ class ProtocolTreePane(QWidget):
         application=None,
         experiment_manager=None,
         sticky_manager=None,
+        device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         parent=None,
@@ -84,6 +85,10 @@ class ProtocolTreePane(QWidget):
         self.phase_ack_topic = phase_ack_topic
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
+
+        self.device_viewer_sync = device_viewer_sync
+        if self.device_viewer_sync is not None:
+            self.device_viewer_sync.attach(self.widget)
 
         self._build_status_bar()
         self._build_navigation_bar()
@@ -619,6 +624,11 @@ class ProtocolTreePane(QWidget):
                 )
             except Exception as e:
                 logger.warning(f"failed to detach experiment_changed observer: {e}")
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync.detach()
+            except Exception as e:
+                logger.warning(f"failed to detach device_viewer_sync: {e}")
         super().closeEvent(event)
 
     # --- experiment-bar handlers ------------------------------------

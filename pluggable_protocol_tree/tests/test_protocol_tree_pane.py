@@ -545,3 +545,46 @@ def test_pane_closeEvent_detaches_experiment_changed_observer(qapp):
     app.current_experiment_directory = "/tmp/after-close"
     assert "after-close" not in pane.experiment_label.text()
     assert "sentinel" in pane.experiment_label.text()
+
+
+def test_pane_accepts_device_viewer_sync_kwarg(qapp):
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    pane = ProtocolTreePane(
+        [make_name_column()], device_viewer_sync=sync,
+    )
+    sync.attach.assert_called_once_with(pane.widget)
+
+
+def test_pane_detaches_sync_on_close(qapp):
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    pane = ProtocolTreePane(
+        [make_name_column()], device_viewer_sync=sync,
+    )
+    pane.close()
+    sync.detach.assert_called_once()
+
+
+def test_pane_without_sync_works(qapp):
+    """Demo windows pass None - the pane stays usable."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    assert pane.device_viewer_sync is None
