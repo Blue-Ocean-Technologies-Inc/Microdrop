@@ -138,13 +138,10 @@ class DeviceViewerSyncController(HasTraits):
         try:
             msg = GeometryChangedMessage.deserialize(payload)
         except Exception as e:
-            logger.warning(f"failed to parse geometry payload: {e}")
+            logger.warning(f"failed to parse geometry payload {payload!r}: {e}")
             return
-        self.row_manager.protocol_metadata["electrode_to_channel"] = (
-            dict(msg.id_to_channel)
-        )
+        stored = dict(msg.id_to_channel)
+        self.row_manager.protocol_metadata["electrode_to_channel"] = stored
         self._channel_to_id_cache = {
-            chan: eid
-            for eid, chan in msg.id_to_channel.items()
-            if chan is not None
+            chan: eid for eid, chan in stored.items() if chan is not None
         }
