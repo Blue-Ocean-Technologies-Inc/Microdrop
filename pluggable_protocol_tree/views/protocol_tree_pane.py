@@ -29,6 +29,7 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
@@ -235,6 +236,7 @@ class ProtocolTreePane(QWidget):
     # --- step lifecycle handlers --------------------------------------
 
     def _on_protocol_started(self):
+        publish_message(topic=PROTOCOL_RUNNING, message="True")
         try:
             self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
         except Exception:
@@ -393,6 +395,7 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
+        publish_message(topic=PROTOCOL_RUNNING, message="False")
         self._repeats_completed += 1
         self._update_repeat_status_label()
         if self._repeats_completed < self._repeats_total:
@@ -404,6 +407,7 @@ class ProtocolTreePane(QWidget):
         self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
+        publish_message(topic=PROTOCOL_RUNNING, message="False")
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()

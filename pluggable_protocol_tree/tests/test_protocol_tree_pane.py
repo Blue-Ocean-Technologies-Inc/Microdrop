@@ -140,11 +140,14 @@ def test_pane_running_button_state_after_protocol_started(qapp):
         assert not btn.isEnabled()
 
 
-def test_pane_returns_to_idle_after_protocol_finished(qapp):
+def test_pane_returns_to_idle_after_protocol_finished(qapp, monkeypatch):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    pane = ProtocolTreePane([make_type_column()])
+    # Monkeypatch publish_message to avoid Redis connection
+    monkeypatch.setattr(ptp, "publish_message", lambda **kwargs: None)
+
+    pane = ptp.ProtocolTreePane([make_type_column()])
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_finished.emit()
     nb = pane.navigation_bar
@@ -588,3 +591,57 @@ def test_pane_without_sync_works(qapp):
     )
     pane = ProtocolTreePane([make_name_column()])
     assert pane.device_viewer_sync is None
+
+
+def test_pane_publishes_protocol_running_true_on_start(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_started()
+    assert (PROTOCOL_RUNNING, "True") in publishes
+
+
+def test_pane_publishes_protocol_running_false_on_finish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_finished()
+    assert (PROTOCOL_RUNNING, "False") in publishes
+
+
+def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_aborted()
+    assert (PROTOCOL_RUNNING, "False") in publishes
