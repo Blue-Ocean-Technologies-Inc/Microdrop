@@ -28,6 +28,7 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT, PKG, PKG_name, PROTOCOL_COLUMNS,
 )
+from pluggable_protocol_tree.services.device_viewer_sync import SYNC_ACTOR_TOPIC_DICT
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
@@ -62,7 +63,7 @@ class PluggableProtocolTreePlugin(Plugin):
     contributed_columns = List(desc="Columns contributed by other plugins")
 
     # Standard plumbing
-    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+    actor_topic_routing = List([ACTOR_TOPIC_DICT, SYNC_ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     task_id_to_contribute_view = Str(f"{microdrop_application_PKG}.task")
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
