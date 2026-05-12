@@ -283,7 +283,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             ProtocolTreeDisplayMessage,
         )
         msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
-        id_to_channel = self.model.electrodes.id_to_channel
+        id_to_channel = self.model.electrodes.electrode_ids_channels_map
         channels_activated = {
             id_to_channel[eid]
             for eid in msg.electrodes
