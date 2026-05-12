@@ -292,7 +292,7 @@ class ProtocolTreePane(QWidget):
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
-        self.status_bar.lbl_recent_step.setText(f"Most Recent Step: {row.name!r}")
+        self.status_bar.lbl_recent_step.setText(f"Most Recent Step: {row.name}")
         self.status_bar.lbl_next_step.setText(
             f"Next Step: {self._next_step_name(row)}"
         )
