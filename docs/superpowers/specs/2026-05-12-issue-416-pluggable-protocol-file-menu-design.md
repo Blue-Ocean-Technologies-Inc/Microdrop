@@ -30,7 +30,7 @@ This spec covers:
 | 1 | Where does "dirty" come from? | Observe `RowManager.rows_changed` event | It already fires on every mutation path (add_step, add_group, remove, move, paste, set_value(s), apply, set_state_from_json). Single observer. No per-callsite `_mark_modified` plumbing like legacy widget.py. |
 | 2 | How to avoid marking dirty during load/new? | Post-event reset: helper explicitly sets `is_modified = False` after `set_state_from_json`/root-reset returns | `set_state_from_json` fires `rows_changed`, which would flip the tracker dirty. Trait observers are synchronous — by the time the helper returns, the flip has already happened. Resetting after the fact is clean and avoids a `_loading_from_file` boolean. |
 | 3 | Tracker owns dock_pane reference? | Yes — direct rewrite of `dock_pane.name` from observer | Matches legacy `ProtocolStateTracker`. Tracker accepts `dock_pane=None` so unit tests can construct it headlessly. The pane wires the reference when mounting. |
-| 4 | Menu location | Top-level `&Protocol` in MenuBar | Issue wording: "the `&Protocol` menu in the main menubar." Legacy buries it under File / before-Exit, which is awkward. Top-level matches the issue and is cleaner. (If the user prefers File-submenu placement we can flip the SchemaAddition `path` in one line.) |
+| 4 | Menu location | `&Protocol` submenu under File / before-Exit, plus `New Experiment` at File / first | Matches legacy `protocol_grid` layout exactly. Users have muscle memory for the legacy placement and the spec's earlier top-level choice was rejected in review. The two SchemaAdditions live next to each other in the plugin's `_contributed_task_extensions_default`. |
 | 5 | Guard decorator vs inline check | Inline `_confirm_proceed_or_abort()` helper called at the top of `new_protocol` / `load_protocol_dialog` | Legacy `@ensure_protocol_saved` decorator coupled the dirty check to method signatures. Pane methods are short enough that a 2-line inline call is clearer than reaching through `self` for the tracker inside a closure-style decorator. Save / Save-As skip the guard (they don't risk losing data). |
 | 6 | App-exit guard | Observe `application_exiting` Vetoable event; on dirty + NO, set `event.veto = True` | New behavior beyond legacy (legacy only saves column settings on exit). Veto is the right primitive — keeps the app open so the user can save. |
 | 7 | "New protocol" reset mechanism | Direct `manager.root = GroupRow(name="Root")` + `protocol_metadata = {}` + `selection = []` + fire `rows_changed` | Simpler than round-tripping an empty payload through `set_state_from_json`. RowManager already exposes the necessary traits. |
@@ -42,7 +42,7 @@ This spec covers:
 
 ```
 microdrop-py/src/pluggable_protocol_tree/
-├── menus.py                                            # NEW — 4 DockPaneAction factories + protocol_menu_factory()
+├── menus.py                                            # NEW — 4 SMenu DockPaneAction factories + new_experiment_factory() + protocol_menu_factory()
 ├── services/
 │   └── protocol_state_tracker.py                       # NEW — PluggableProtocolStateTracker(HasTraits)
 ├── views/
@@ -143,15 +143,20 @@ TaskExtension(
     dock_pane_factories=[self._make_dock_pane],
     actions=[
         SchemaAddition(
+            factory=new_experiment_factory,
+            path="MenuBar/File",
+            absolute_position="first",
+        ),
+        SchemaAddition(
             factory=protocol_menu_factory,
-            path="MenuBar",
-            after="File",
+            path="MenuBar/File",
+            before="Exit",
         ),
     ],
 )
 ```
 
-`path="MenuBar"` + `after="File"` slots the menu in the top menubar right after `&File` (matches the issue's "main menubar" phrasing).
+`path="MenuBar/File"` + `before="Exit"` slots the `&Protocol` submenu inside File just above Exit; the `New Experiment` action lives at the top of File. Both match the legacy `protocol_grid` layout so user muscle memory carries over.
 
 ## 4. Behaviors / acceptance criteria mapping
 
