@@ -38,6 +38,34 @@ def test_mutation_marks_dirty(qapp):
     assert pane.protocol_state_tracker.is_modified is True
 
 
+def test_user_cell_edit_marks_dirty(qapp):
+    """Regression: editing a cell value through the UI (the path the
+    QTreeView delegate uses on commit) must fire the dirty flag. The
+    column handler's default ``on_interact`` writes directly to the row
+    trait, bypassing ``RowManager.set_value``, so the manager-level
+    ``rows_changed`` event must be re-fired from inside ``setData``.
+    """
+    from pyface.qt.QtCore import Qt
+
+    pane = _build_pane(qapp)
+    pane.manager.add_step(values={"name": "before"})
+    # Clear the dirty flag so we measure only the cell-edit's effect.
+    pane.protocol_state_tracker.is_modified = False
+
+    qt_model = pane.widget.tree.model()
+    # Find the "name" column index dynamically — its position depends
+    # on how the pane was constructed.
+    name_col = next(
+        i for i, c in enumerate(pane.manager.columns)
+        if c.model.col_id == "name"
+    )
+    index = qt_model.index(0, name_col)
+    assert qt_model.setData(index, "after", Qt.EditRole) is True
+
+    assert pane.protocol_state_tracker.is_modified is True
+    assert pane.manager.root.children[0].name == "after"
+
+
 def test_save_as_clears_dirty_and_sets_path(qapp, tmp_path):
     pane = _build_pane(qapp)
     pane.manager.add_step()

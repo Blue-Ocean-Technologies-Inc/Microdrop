@@ -122,6 +122,13 @@ class MvcTreeModel(QAbstractItemModel):
                 value = value == Qt.Checked or value == 2 or value is True
             if col.handler.on_interact(node, col.model, value):
                 self.dataChanged.emit(index, index, [role])
+                # on_interact writes directly to the row trait, bypassing
+                # RowManager.set_value, so the manager's rows_changed
+                # event would never fire on user cell edits. Fire it
+                # here so dirty-state observers (e.g. the protocol state
+                # tracker) match the documented semantics: "Fires on
+                # structure or value changes."
+                self._manager.rows_changed = True
                 return True
         return False
 
