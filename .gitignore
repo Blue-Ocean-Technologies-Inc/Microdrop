@@ -11,6 +11,7 @@
 **/results.txt
 **/*.log
 **/*test*.html
+**/plotly_*.html
 *.svg
 *.json
 demo*.png
