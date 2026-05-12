@@ -470,7 +470,7 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
-        logger.info("Protocol terminated → free mode")
+        logger.info("Protocol terminated --> free mode")
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
@@ -571,11 +571,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: previous (no current) → [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: previous (no current) --> [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur > 0:
-            logger.info(f"Nav: previous step → [{_dotted_path(steps[cur - 1])}]")
+            logger.info(f"Nav: previous step --> [{_dotted_path(steps[cur - 1])}]")
             self._select_step(steps[cur - 1])
 
     def navigate_to_next_step(self):
@@ -584,11 +584,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: next (no current) → [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: next (no current) --> [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur < len(steps) - 1:
-            logger.info(f"Nav: next step → [{_dotted_path(steps[cur + 1])}]")
+            logger.info(f"Nav: next step --> [{_dotted_path(steps[cur + 1])}]")
             self._select_step(steps[cur + 1])
             return
         logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")

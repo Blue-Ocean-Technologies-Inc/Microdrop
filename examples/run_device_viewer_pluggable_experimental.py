@@ -9,6 +9,8 @@ from envisage.ui.tasks.tasks_application import TasksApplication
 from pyface.qt.QtWidgets import QApplication
 
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+from protocol_grid.plugin import ProtocolGridControllerUIPlugin
+
 microdrop_runner_setup()
 
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
@@ -91,7 +93,7 @@ if __name__ == "__main__":
         help="Specify the device to use: 'dropbot' or 'opendrop'"
     )
 
-    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + SERVICE_PLUGINS + BACKEND_PLUGINS + EXPERIMENTAl_PLUGINS
+    plugins = REQUIRED_PLUGINS + [el for el in FRONTEND_PLUGINS if el != ProtocolGridControllerUIPlugin] + SERVICE_PLUGINS + BACKEND_PLUGINS + EXPERIMENTAl_PLUGINS
 
     args = parser.parse_args()
 

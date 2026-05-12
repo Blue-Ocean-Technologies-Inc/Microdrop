@@ -22,6 +22,15 @@ def new_protocol_factory():
     )
 
 
+def new_experiment_factory():
+    return DockPaneAction(
+        id=f"{PKG}.create_new_experiment",
+        dock_pane_id=_DOCK_PANE_ID,
+        name="New &Experiment",
+        method="setup_new_experiment",
+    )
+
+
 def load_dialog_factory():
     return DockPaneAction(
         id=f"{PKG}.load_protocol_dialog",

@@ -63,3 +63,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     def save_as_protocol_dialog(self):
         self._pane().save_as_protocol_dialog()
+
+    def setup_new_experiment(self):
+        # Reuses the same handler the experiment-bar button drives so
+        # the menu and the toolbutton stay consistent.
+        self._pane()._on_new_experiment()

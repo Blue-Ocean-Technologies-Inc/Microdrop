@@ -69,16 +69,23 @@ class PluggableProtocolTreePlugin(Plugin):
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
     def _contributed_task_extensions_default(self):
-        from pluggable_protocol_tree.menus import protocol_menu_factory
+        from pluggable_protocol_tree.menus import (
+            new_experiment_factory, protocol_menu_factory,
+        )
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
                 dock_pane_factories=[self._make_dock_pane],
                 actions=[
                     SchemaAddition(
+                        factory=new_experiment_factory,
+                        path='MenuBar/File',
+                        absolute_position="first",
+                    ),
+                    SchemaAddition(
                         factory=protocol_menu_factory,
-                        path="MenuBar",
-                        after="File",
+                        path="MenuBar/File",
+                        before="Exit",
                     ),
                 ],
             ),

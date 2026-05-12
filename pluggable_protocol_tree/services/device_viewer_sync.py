@@ -173,7 +173,7 @@ class DeviceViewerSyncController(HasTraits):
         step-scoped or empty message."""
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
-            logger.critical(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
+            logger.info(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
         except Exception as e:
             logger.warning(f"failed to parse DV state: {e}")
             return
@@ -247,7 +247,7 @@ class DeviceViewerSyncController(HasTraits):
             msg = ProtocolTreeDisplayMessage(free_mode=True)
             self._last_selected_uuid = ""
             if prev_uuid:
-                logger.info("DV display → free mode")
+                logger.info("DV display --> free mode")
         else:
             # 1-indexed dotted-path id (matches the ID column display)
             # so the DV's status bar shows e.g. "Editing: Step 1.2"
@@ -263,7 +263,7 @@ class DeviceViewerSyncController(HasTraits):
             )
             if row.uuid != prev_uuid:
                 logger.info(
-                    f"DV display → Step {dotted_id} {row.name!r} "
+                    f"DV display  Step {dotted_id} {row.name} "
                     f"({len(msg.electrodes)} electrodes, "
                     f"{len(msg.routes)} routes)"
                 )
