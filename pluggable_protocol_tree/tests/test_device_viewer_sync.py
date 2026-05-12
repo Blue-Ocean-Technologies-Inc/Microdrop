@@ -225,7 +225,7 @@ def test_step_click_publishes_display_state(qapp, monkeypatch):
     assert msg.electrodes == ["e00", "e01"]
     assert msg.routes == [["e02"]]
     assert msg.step_id == row.uuid
-    assert msg.step_label == "S1"
+    assert msg.step_label == "Step 1"   # dotted-path id
     assert msg.free_mode is False
 
 
@@ -458,6 +458,28 @@ def test_deselect_with_stash_also_prompts(qapp, monkeypatch):
     assert ctrl._free_mode_stash is None
     # Free-mode publish still happens after the resolution
     assert len(publishes) == 1
+
+
+def test_step_label_uses_dotted_step_id(qapp, monkeypatch):
+    """The DV's status bar shows 'Editing: <step_label>' — make the
+    label informative ('Step 1', 'Step 2.3') instead of the bare
+    row name (which defaults to 'Step')."""
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_manager()
+    manager.add_step(values={"name": "Step"})
+    manager.add_step(values={"name": "Step"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._publish_for_row(manager.get_row((1,)))   # second step, path (1,)
+
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.step_label == "Step 2"   # 1-indexed dotted-path id
 
 
 def test_protocol_running_signal_updates_flag(qapp):

@@ -676,6 +676,71 @@ def test_select_step_does_not_suppress_sync_publish(qapp):
     assert sync._suppress_publish is False
 
 
+def test_protocol_terminated_publishes_free_mode_to_dv(qapp):
+    """When a protocol ends (finished or aborted), the pane should
+    clear the selection AND push a free-mode payload to the DV so
+    the user is back in free mode."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    pane._on_protocol_terminated()
+    sync._publish_for_row.assert_any_call(None)
+
+
+def test_delete_selection_picks_alternative_step(qapp):
+    """When the currently-selected step is deleted, an alternative step
+    must be selected (whatever step is left). DV gets updated via the
+    new selection's currentChanged."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    pane.manager.add_step(values={"name": "S1"})
+    pane.manager.add_step(values={"name": "S2"})
+    pane.manager.add_step(values={"name": "S3"})
+
+    # Select S2, then delete it.
+    pane._select_step(pane.manager.get_row((1,)))
+    pane.manager.select([(1,)], mode="set")
+    pane.widget._delete_selection()
+
+    assert len(pane.manager.root.children) == 2
+    cur_idx = pane.widget.tree.currentIndex()
+    assert cur_idx.isValid()
+    cur_path = pane.widget.index_to_path(cur_idx)
+    assert cur_path == (0,) or cur_path == (1,)   # one of the surviving steps
+
+
+def test_delete_all_steps_goes_to_free_mode(qapp):
+    """Deleting the last step leaves no selection — free mode."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    pane.manager.add_step(values={"name": "S1"})
+    pane._select_step(pane.manager.get_row((0,)))
+    pane.manager.select([(0,)], mode="set")
+    pane.widget._delete_selection()
+
+    assert len(pane.manager.root.children) == 0
+    assert not pane.widget.tree.currentIndex().isValid()
+
+
 def test_on_step_started_publishes_to_dv(qapp):
     """During execution, the executor's step_started callback should
     push the running step's electrodes/routes to the DV so it tracks

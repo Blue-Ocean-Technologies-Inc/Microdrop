@@ -436,6 +436,15 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.merge_phase_controls_to_play_button()
         self._pause_phases = []
         self._pause_phase_idx = 0
+        # Push free-mode payload to DV: clear_highlights cleared the
+        # tree selection but did so with _suppress_publish active, so
+        # the controller's currentChanged slot was gated. Explicit
+        # publish here puts the DV back in free mode after the run.
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync._publish_for_row(None)
+            except Exception as e:
+                logger.warning(f"protocol-terminated DV publish failed: {e}")
 
     # --- pause-time phase navigation ---------------------------------
 

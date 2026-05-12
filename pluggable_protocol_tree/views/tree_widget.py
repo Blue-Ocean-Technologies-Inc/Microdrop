@@ -232,7 +232,13 @@ class ProtocolTreeWidget(QWidget):
         """Remove the currently-selected rows. Defensive: stale paths
         (rows already removed by a previous action) are silently
         skipped rather than propagating IndexError, which under
-        PySide6 6.x terminates the QApplication."""
+        PySide6 6.x terminates the QApplication.
+
+        After removal: pick a sensible alternative selection so the
+        downstream sync (DV display, status bar, etc.) doesn't get
+        stuck on the deleted row. If any rows remain at the root, fall
+        back to the first one; if the tree is empty, clear the
+        selection entirely (free mode)."""
         try:
             paths = [tuple(p) for p in self._manager.selection]
             valid = []
@@ -242,7 +248,32 @@ class ProtocolTreeWidget(QWidget):
                 except (IndexError, KeyError):
                     continue
                 valid.append(p)
-            if valid:
-                self._manager.remove(valid)
+            if not valid:
+                return
+            self._manager.remove(valid)
+
+            # Post-removal: ensure a sensible selection state.
+            from pyface.qt.QtCore import QItemSelectionModel
+            sm = self.tree.selectionModel()
+            if not self._manager.root.children:
+                # Empty tree → free mode.
+                sm.clearSelection()
+                sm.setCurrentIndex(
+                    QModelIndex(),
+                    QItemSelectionModel.SelectionFlag.NoUpdate,
+                )
+                return
+            cur = sm.currentIndex()
+            if cur.isValid():
+                # Qt already picked a survivor — leave it alone.
+                return
+            # Fall back to the first remaining row at the root.
+            first = self.model.index(0, 0)
+            if first.isValid():
+                sm.setCurrentIndex(
+                    first,
+                    (QItemSelectionModel.SelectionFlag.ClearAndSelect
+                     | QItemSelectionModel.SelectionFlag.Rows),
+                )
         except Exception:
             logger.exception("Delete failed")
