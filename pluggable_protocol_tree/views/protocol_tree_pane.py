@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from pathlib import Path
 
 from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
 from pyface.qt.QtGui import QFont
@@ -24,7 +25,9 @@ from pyface.qt.QtWidgets import (
     QFileDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
-from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
+from microdrop_application.dialogs.pyface_wrapper import (
+    NO, confirm, error as error_dialog,
+)
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -33,7 +36,11 @@ from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.protocol_state_tracker import (
+    PluggableProtocolStateTracker,
+)
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -96,6 +103,9 @@ class ProtocolTreePane(QWidget):
         if self.device_viewer_sync is not None:
             self.device_viewer_sync.attach(self.widget)
 
+        self.protocol_state_tracker = PluggableProtocolStateTracker()
+        self.manager.observe(self._on_manager_rows_changed, "rows_changed")
+
         self._build_status_bar()
         self._build_navigation_bar()
         self._build_experiment_bar()
@@ -135,6 +145,9 @@ class ProtocolTreePane(QWidget):
         if self.application is not None:
             self.application.observe(
                 self._on_experiment_changed, "experiment_changed",
+            )
+            self.application.observe(
+                self._on_application_exiting, "application_exiting",
             )
             try:
                 cur = self.application.current_experiment_directory
@@ -656,30 +669,38 @@ class ProtocolTreePane(QWidget):
     # --- save / load -----------------------------------------------
 
     def save_to_dialog(self, parent=None):
-        """Open a file dialog and persist the manager's JSON state."""
+        """Open a file dialog and persist the manager's JSON state.
+
+        Returns the saved path on success, ``None`` if the user cancels
+        or the write fails.
+        """
         path, _ = QFileDialog.getSaveFileName(
             parent or self, "Save Protocol", "", "Protocol JSON (*.json)",
         )
         if not path:
-            return
+            return None
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.manager.to_json(), f, indent=2)
         except Exception as e:
             error_dialog(parent=parent or self,
                          title="Save error", message=str(e))
+            return None
+        return path
 
     def load_from_dialog(self, columns_factory, parent=None):
         """Open a file dialog and replace the manager's state from JSON.
 
         ``columns_factory`` rebuilds the column list (consumed by
         ``set_state_from_json``); the dock pane and demo window each
-        own a different source of truth for it."""
+        own a different source of truth for it. Returns the loaded path
+        on success, ``None`` otherwise.
+        """
         path, _ = QFileDialog.getOpenFileName(
             parent or self, "Load Protocol", "", "Protocol JSON (*.json)",
         )
         if not path:
-            return
+            return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -687,6 +708,8 @@ class ProtocolTreePane(QWidget):
         except Exception as e:
             error_dialog(parent=parent or self,
                          title="Load error", message=str(e))
+            return None
+        return path
 
     def closeEvent(self, event):
         """Detach Traits observers before the underlying QWidget is
@@ -701,12 +724,131 @@ class ProtocolTreePane(QWidget):
                 )
             except Exception as e:
                 logger.warning(f"failed to detach experiment_changed observer: {e}")
+            try:
+                self.application.observe(
+                    self._on_application_exiting,
+                    "application_exiting",
+                    remove=True,
+                )
+            except Exception as e:
+                logger.warning(f"failed to detach application_exiting observer: {e}")
+        try:
+            self.manager.observe(
+                self._on_manager_rows_changed, "rows_changed", remove=True,
+            )
+        except Exception as e:
+            logger.warning(f"failed to detach rows_changed observer: {e}")
         if self.device_viewer_sync is not None:
             try:
                 self.device_viewer_sync.detach()
             except Exception as e:
                 logger.warning(f"failed to detach device_viewer_sync: {e}")
         super().closeEvent(event)
+
+    # --- file menu actions ------------------------------------------
+
+    def _on_manager_rows_changed(self, event):
+        """Any structure or value mutation flips the dirty flag.
+
+        Load / Save / New helpers explicitly reset the tracker after the
+        manager finishes mutating, so this observer can be unconditional.
+        """
+        self.protocol_state_tracker.mark_modified()
+
+    def _confirm_proceed_or_abort(self) -> bool:
+        """Returns True if the action should proceed.
+
+        Shows a confirm dialog when the protocol is dirty, or when the
+        loaded file no longer exists on disk. Returns False if the user
+        picks NO.
+        """
+        tracker = self.protocol_state_tracker
+        if tracker.is_modified:
+            logger.warning("Attempting to overwrite unsaved protocol.")
+            user_choice = confirm(
+                self,
+                "Current protocol has unsaved changes.\n"
+                "Proceed without saving?",
+                title="Unsaved Protocol Changes",
+                cancel=False,
+            )
+            if user_choice == NO:
+                logger.info("Action cancelled due to unsaved changes.")
+                return False
+        elif (tracker.loaded_protocol_path
+              and not Path(tracker.loaded_protocol_path).exists()):
+            logger.warning("Loaded protocol file no longer exists on disk.")
+            user_choice = confirm(
+                self,
+                "Current protocol file has been deleted.\n"
+                "Proceed without saving?",
+                title="Protocol File Not Found",
+                cancel=False,
+            )
+            if user_choice == NO:
+                logger.info("Action cancelled due to missing protocol file.")
+                return False
+        return True
+
+    def new_protocol(self):
+        if not self._confirm_proceed_or_abort():
+            return
+        self.manager.root = GroupRow(name="Root")
+        self.manager.protocol_metadata = {}
+        self.manager.selection = []
+        self.manager.rows_changed = True
+        self.protocol_state_tracker.reset()
+
+    def save_protocol_dialog(self):
+        known_path = self.protocol_state_tracker.loaded_protocol_path
+        if not known_path:
+            self.save_as_protocol_dialog()
+            return
+        try:
+            with open(known_path, "w", encoding="utf-8") as f:
+                json.dump(self.manager.to_json(), f, indent=2)
+        except Exception as e:
+            error_dialog(parent=self, title="Save error", message=str(e))
+            return
+        self.protocol_state_tracker.set_saved(known_path)
+
+    def save_as_protocol_dialog(self):
+        path = self.save_to_dialog(parent=self)
+        if path:
+            self.protocol_state_tracker.set_saved(path)
+
+    def load_protocol_dialog(self, columns_factory=None):
+        if not self._confirm_proceed_or_abort():
+            return
+        factory = (columns_factory
+                   if columns_factory is not None
+                   else (lambda: list(self.manager.columns)))
+        path = self.load_from_dialog(factory, parent=self)
+        if path:
+            self.protocol_state_tracker.set_loaded(path)
+
+    def _on_application_exiting(self, event):
+        """Veto application exit when the protocol is dirty and the user
+        elects to keep it open.
+
+        ``event`` is a Pyface Vetoable event — setting ``event.veto = True``
+        cancels the exit. Falls back to a non-fatal log if veto plumbing
+        isn't available.
+        """
+        if not self.protocol_state_tracker.is_modified:
+            return
+        user_choice = confirm(
+            self,
+            "Current protocol has unsaved changes.\n"
+            "Exit without saving?",
+            title="Unsaved Protocol Changes",
+            cancel=False,
+        )
+        if user_choice == NO:
+            try:
+                event.veto = True
+            except Exception as e:
+                logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
 

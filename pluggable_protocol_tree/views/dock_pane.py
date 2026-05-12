@@ -36,7 +36,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         manager = RowManager(columns=list(self.columns))
         sync = DeviceViewerSyncController(row_manager=manager)
 
-        return ProtocolTreePane(
+        pane = ProtocolTreePane(
             manager,
             application=app,
             experiment_manager=experiment_manager,
@@ -44,3 +44,22 @@ class PluggableProtocolDockPane(TraitsDockPane):
             device_viewer_sync=sync,
             parent=parent,
         )
+        pane.protocol_state_tracker.dock_pane = self
+        return pane
+
+    # --- &Protocol menu action delegates ----------------------------
+
+    def _pane(self):
+        return self.control.widget()
+
+    def new_protocol(self):
+        self._pane().new_protocol()
+
+    def load_protocol_dialog(self):
+        self._pane().load_protocol_dialog()
+
+    def save_protocol_dialog(self):
+        self._pane().save_protocol_dialog()
+
+    def save_as_protocol_dialog(self):
+        self._pane().save_as_protocol_dialog()
