@@ -10,8 +10,7 @@ in headless tests it stays ``None`` and the observers are no-ops.
 
 from pathlib import Path
 
-from pyface.tasks.dock_pane import DockPane
-from traits.api import Bool, File, HasTraits, Instance, Str, observe
+from traits.api import Any, Bool, File, HasTraits, Str, observe
 
 from logger.logger_service import get_logger
 from pluggable_protocol_tree.consts import PKG_name
@@ -27,7 +26,10 @@ class PluggableProtocolStateTracker(HasTraits):
     modified_tag = Str(" [modified]")
     pkg_display_name = Str(PKG_name)
 
-    dock_pane = Instance(DockPane)
+    # Duck-typed: anything with a writable `name` attribute. Avoids
+    # importing pyface.DockPane just for an Instance() validator and
+    # keeps the tracker headlessly testable with a plain stub.
+    dock_pane = Any()
 
     def display_name(self) -> str:
         tag = self.modified_tag if self.is_modified else ""

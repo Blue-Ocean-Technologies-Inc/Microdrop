@@ -146,9 +146,14 @@ class ProtocolTreePane(QWidget):
             self.application.observe(
                 self._on_experiment_changed, "experiment_changed",
             )
-            self.application.observe(
-                self._on_application_exiting, "application_exiting",
-            )
+            try:
+                self.application.observe(
+                    self._on_application_exiting, "application_exiting",
+                )
+            except ValueError as e:
+                # Bare HasTraits test stubs may not declare the trait;
+                # production Envisage apps always do.
+                logger.debug(f"application_exiting observer skipped: {e}")
             try:
                 cur = self.application.current_experiment_directory
                 if cur is not None:
