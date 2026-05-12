@@ -49,6 +49,11 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
+def _dotted_path(row) -> str:
+    """1-indexed dotted-path id (matches the IdColumnView display)."""
+    return ".".join(str(i + 1) for i in row.path)
+
+
 class ProtocolTreePane(QWidget):
     """Hosts the pluggable protocol tree with full UX scaffolding.
 
@@ -251,6 +256,7 @@ class ProtocolTreePane(QWidget):
             self._step_total = 0
         self._step_index = 0
         self._status_step_label.setText(f"Step 0 / {self._step_total}")
+        logger.info(f"Protocol started ({self._step_total} steps)")
 
     def _on_step_started(self, row):
         self._step_index += 1
@@ -261,6 +267,10 @@ class ProtocolTreePane(QWidget):
             self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
             self._phase_target = None
+        logger.info(
+            f"Step started: {self._step_index}/{self._step_total} "
+            f"[{_dotted_path(row)}] {row.name!r}"
+        )
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
@@ -367,8 +377,13 @@ class ProtocolTreePane(QWidget):
         self._repeats_completed = 0
         self._current_run_preview_mode = preview_mode
         self._update_repeat_status_label()
+        start_path = self._selected_step_path()
+        logger.info(
+            f"Protocol run starting: {self._repeats_total} rep(s), "
+            f"preview={preview_mode}, start_step={start_path}"
+        )
         self.executor.start(
-            start_step_path=self._selected_step_path(),
+            start_step_path=start_path,
             preview_mode=preview_mode,
         )
 
@@ -397,6 +412,7 @@ class ProtocolTreePane(QWidget):
             self.executor.pause()
 
     def _on_protocol_paused(self):
+        logger.info("Protocol paused")
         self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
         if self._current_row is not None:
@@ -405,6 +421,7 @@ class ProtocolTreePane(QWidget):
             self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
+        logger.info("Protocol resumed")
         self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
@@ -413,6 +430,10 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_finished(self):
         self._publish_protocol_running("False")
         self._repeats_completed += 1
+        logger.info(
+            f"Protocol finished (rep {self._repeats_completed}/"
+            f"{self._repeats_total})"
+        )
         self._update_repeat_status_label()
         if self._repeats_completed < self._repeats_total:
             QTimer.singleShot(50, self._restart_for_next_rep)
@@ -423,6 +444,7 @@ class ProtocolTreePane(QWidget):
         self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
+        logger.info("Protocol aborted by user")
         self._publish_protocol_running("False")
         self._repeats_total = 0
         self._repeats_completed = 0
@@ -430,6 +452,7 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
+        logger.info("Protocol terminated → free mode")
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
@@ -515,11 +538,13 @@ class ProtocolTreePane(QWidget):
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
+            logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
 
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
+            logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
             self._select_step(steps[-1])
 
     def navigate_to_previous_step(self):
@@ -528,9 +553,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
+            logger.info(f"Nav: previous (no current) → [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur > 0:
+            logger.info(f"Nav: previous step → [{_dotted_path(steps[cur - 1])}]")
             self._select_step(steps[cur - 1])
 
     def navigate_to_next_step(self):
@@ -539,11 +566,14 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
+            logger.info(f"Nav: next (no current) → [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur < len(steps) - 1:
+            logger.info(f"Nav: next step → [{_dotted_path(steps[cur + 1])}]")
             self._select_step(steps[cur + 1])
             return
+        logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")
         self._duplicate_step_after(steps[cur])
 
     def _duplicate_step_after(self, row):

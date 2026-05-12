@@ -242,9 +242,12 @@ class DeviceViewerSyncController(HasTraits):
                 self._insert_free_mode_as_new_step()
             self._free_mode_stash = None
 
+        prev_uuid = self._last_selected_uuid
         if row is None or isinstance(row, GroupRow):
             msg = ProtocolTreeDisplayMessage(free_mode=True)
             self._last_selected_uuid = ""
+            if prev_uuid:
+                logger.info("DV display → free mode")
         else:
             # 1-indexed dotted-path id (matches the ID column display)
             # so the DV's status bar shows e.g. "Editing: Step 1.2"
@@ -258,6 +261,12 @@ class DeviceViewerSyncController(HasTraits):
                 free_mode=False,
                 editable=True,
             )
+            if row.uuid != prev_uuid:
+                logger.info(
+                    f"DV display → Step {dotted_id} {row.name!r} "
+                    f"({len(msg.electrodes)} electrodes, "
+                    f"{len(msg.routes)} routes)"
+                )
             self._last_selected_uuid = row.uuid
         publish_message(
             topic=PROTOCOL_TREE_DISPLAY_STATE,
