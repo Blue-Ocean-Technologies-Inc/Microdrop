@@ -263,7 +263,7 @@ class DeviceViewerSyncController(HasTraits):
             )
             if row.uuid != prev_uuid:
                 logger.info(
-                    f"DV display  Step {dotted_id} {row.name} "
+                    f"DV display  Step {dotted_id} {row.name!r} "
                     f"({len(msg.electrodes)} electrodes, "
                     f"{len(msg.routes)} routes)"
                 )
