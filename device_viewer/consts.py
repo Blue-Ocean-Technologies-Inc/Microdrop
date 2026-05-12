@@ -17,6 +17,7 @@ DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
 
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
@@ -25,6 +26,11 @@ CALIBRATION_DATA               = "ui/calibration_data"
 # in protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
 PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
 PROTOCOL_RUNNING               = "microdrop/protocol_running"
+# Literal here to avoid circular import: pluggable_protocol_tree.consts imports from this module.
+# NB: last segment must be unique vs PROTOCOL_GRID_DISPLAY_STATE — the dramatiq listener base
+# dispatches by topic.split("/")[-1], so two topics ending in "display_state" collide on the
+# same handler. Underscore-joined keeps dispatch routed to _on_protocol_tree_display_state_triggered.
+PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree_display_state"
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -49,7 +55,11 @@ ACTOR_TOPIC_DICT = {
         DROPBOT_DISCONNECTED,
         DROPBOT_CONNECTED,
         DISABLED_CHANNELS_CHANGED,
-        HALTED
+        HALTED,
+        PROTOCOL_TREE_DISPLAY_STATE,
+        # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
+        # the DV does not consume it. The pluggable_protocol_tree
+        # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
     ]
 }
 

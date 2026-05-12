@@ -140,11 +140,14 @@ def test_pane_running_button_state_after_protocol_started(qapp):
         assert not btn.isEnabled()
 
 
-def test_pane_returns_to_idle_after_protocol_finished(qapp):
+def test_pane_returns_to_idle_after_protocol_finished(qapp, monkeypatch):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    pane = ProtocolTreePane([make_type_column()])
+    # Monkeypatch publish_message to avoid Redis connection
+    monkeypatch.setattr(ptp, "publish_message", lambda **kwargs: None)
+
+    pane = ptp.ProtocolTreePane([make_type_column()])
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_finished.emit()
     nb = pane.navigation_bar
@@ -545,3 +548,240 @@ def test_pane_closeEvent_detaches_experiment_changed_observer(qapp):
     app.current_experiment_directory = "/tmp/after-close"
     assert "after-close" not in pane.experiment_label.text()
     assert "sentinel" in pane.experiment_label.text()
+
+
+def test_pane_accepts_device_viewer_sync_kwarg(qapp):
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    pane = ProtocolTreePane(
+        [make_name_column()], device_viewer_sync=sync,
+    )
+    sync.attach.assert_called_once_with(pane.widget)
+
+
+def test_pane_detaches_sync_on_close(qapp):
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    pane = ProtocolTreePane(
+        [make_name_column()], device_viewer_sync=sync,
+    )
+    pane.close()
+    sync.detach.assert_called_once()
+
+
+def test_pane_without_sync_works(qapp):
+    """Demo windows pass None - the pane stays usable."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    assert pane.device_viewer_sync is None
+
+
+def test_pane_publishes_protocol_running_true_on_start(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_started()
+    assert (PROTOCOL_RUNNING, "True") in publishes
+
+
+def test_pane_publishes_protocol_running_false_on_finish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_finished()
+    assert (PROTOCOL_RUNNING, "False") in publishes
+
+
+def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from device_viewer.consts import PROTOCOL_RUNNING
+    pane = ProtocolTreePane([make_name_column()])
+    pane._on_protocol_aborted()
+    assert (PROTOCOL_RUNNING, "False") in publishes
+
+
+def test_select_step_does_not_suppress_sync_publish(qapp):
+    """Nav buttons (next/prev/first/last) call _select_step. The user
+    expects the DV to update on those clicks just as on a direct row
+    click, so _select_step must NOT suppress the sync controller."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    row = pane.manager.get_row((0,))
+
+    seen_states = []
+    original = pane.widget.tree.setCurrentIndex
+    def capturing(idx):
+        seen_states.append(sync._suppress_publish)
+        return original(idx)
+    pane.widget.tree.setCurrentIndex = capturing
+    pane._select_step(row)
+
+    assert seen_states == [False]
+    assert sync._suppress_publish is False
+
+
+def test_protocol_terminated_publishes_free_mode_to_dv(qapp):
+    """When a protocol ends (finished or aborted), the pane should
+    clear the selection AND push a free-mode payload to the DV so
+    the user is back in free mode."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    pane._on_protocol_terminated()
+    sync._publish_for_row.assert_any_call(None)
+
+
+def test_delete_selection_picks_alternative_step(qapp):
+    """When the currently-selected step is deleted, an alternative step
+    must be selected (whatever step is left). DV gets updated via the
+    new selection's currentChanged."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    pane.manager.add_step(values={"name": "S1"})
+    pane.manager.add_step(values={"name": "S2"})
+    pane.manager.add_step(values={"name": "S3"})
+
+    # Select S2, then delete it.
+    pane._select_step(pane.manager.get_row((1,)))
+    pane.manager.select([(1,)], mode="set")
+    pane.widget._delete_selection()
+
+    assert len(pane.manager.root.children) == 2
+    cur_idx = pane.widget.tree.currentIndex()
+    assert cur_idx.isValid()
+    cur_path = pane.widget.index_to_path(cur_idx)
+    assert cur_path == (0,) or cur_path == (1,)   # one of the surviving steps
+
+
+def test_delete_all_steps_goes_to_free_mode(qapp):
+    """Deleting the last step leaves no selection — free mode."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    pane.manager.add_step(values={"name": "S1"})
+    pane._select_step(pane.manager.get_row((0,)))
+    pane.manager.select([(0,)], mode="set")
+    pane.widget._delete_selection()
+
+    assert len(pane.manager.root.children) == 0
+    assert not pane.widget.tree.currentIndex().isValid()
+
+
+def test_on_step_started_publishes_to_dv(qapp):
+    """During execution, the executor's step_started callback should
+    push the running step's electrodes/routes to the DV so it tracks
+    the executor (mirrors legacy protocol_grid behavior)."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    row = pane.manager.get_row((0,))
+    pane._on_step_started(row)
+    sync._publish_for_row.assert_called_once_with(row)
+
+
+def test_clear_highlights_suppresses_sync_publish(qapp):
+    """clear_highlights also moves selection programmatically; same
+    guard requirement."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+
+    seen_states = []
+    original = pane.widget.tree.clearSelection
+    def capturing():
+        seen_states.append(sync._suppress_publish)
+        return original()
+    pane.widget.tree.clearSelection = capturing
+    pane.clear_highlights()
+
+    assert seen_states == [True]
+    assert sync._suppress_publish is False    # restored

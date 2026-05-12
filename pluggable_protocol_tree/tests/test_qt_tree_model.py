@@ -54,3 +54,21 @@ def test_header_data(manager):
     qm = MvcTreeModel(manager)
     for col_idx, col in enumerate(manager.columns):
         assert qm.headerData(col_idx, Qt.Horizontal, Qt.DisplayRole) == col.model.col_name
+
+
+def test_widget_exposes_public_index_to_path(qapp):
+    """Public alias for the previously-private _index_to_path. PPT-10.2
+    needs this for the device-viewer sync controller to resolve tree
+    selection events without reaching into a private API."""
+    from pluggable_protocol_tree.builtins.electrodes_column import (
+        make_electrodes_column,
+    )
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
+
+    manager = RowManager(columns=[make_name_column(), make_electrodes_column()])
+    manager.add_step(values={"name": "Step A"})
+    widget = ProtocolTreeWidget(manager)
+    idx = widget.tree.model().index(0, 0)
+    assert widget.index_to_path(idx) == widget._index_to_path(idx) == (0,)

@@ -67,7 +67,7 @@ from microdrop_utils.pyside_helpers import (
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
 from protocol_grid.consts import CALIBRATION_DATA, STEP_PARAMS_COMMIT
-from ..consts import DEVICE_VIEWER_STATE_CHANGED
+from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED
 from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
@@ -78,6 +78,7 @@ from ..consts import (
     device_modified_tag,
     listener_name,
 )
+from ..models.messages import GeometryChangedMessage
 
 ##### local imports ######
 from ..default_settings import video_key
@@ -144,6 +145,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
     _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
     _last_applied_step_id = Any()  # Optional[str]; None means no step applied yet
+    _last_published_id_to_channel = Any()  # Optional[dict]; None means geometry never published yet
     message_buffer = (
         Str()
     )  # Buffer to hold the message to be sent when the debounce timer expires
@@ -272,6 +274,37 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
         self.device_view.display_state_signal.emit(message_model_serial)
+
+    def _on_protocol_tree_display_state_triggered(self, message_serial: str):
+        """Adapter for ProtocolTreeDisplayMessage -> DeviceViewerMessageModel.
+        The downstream display_state_signal pipeline reuses what already
+        works for the legacy widget."""
+        from pluggable_protocol_tree.models.display_state import (
+            ProtocolTreeDisplayMessage,
+        )
+        msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
+        id_to_channel = self.model.electrodes.electrode_ids_channels_map
+        channels_activated = {
+            id_to_channel[eid]
+            for eid in msg.electrodes
+            if id_to_channel.get(eid) is not None
+        }
+        # execution_params intentionally omitted — tree steps carry no
+        # sidebar params, so apply_message_model will fire
+        # clear_committed_baseline() in its else branch. Matches legacy
+        # behavior when a step (not free mode) is the message source.
+        rich = DeviceViewerMessageModel(
+            channels_activated=channels_activated,
+            routes=[(route, "blue") for route in msg.routes],
+            id_to_channel=id_to_channel,
+            step_info={
+                "step_id": msg.step_id,
+                "step_label": msg.step_label,
+                "free_mode": msg.free_mode,
+            },
+            editable=msg.editable,
+        )
+        self.device_view.display_state_signal.emit(rich.serialize())
 
     def _on_protocol_running_triggered(self, message: TimestampedMessage):
 
@@ -410,6 +443,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._undoing = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
+        # Publish geometry if the electrode-to-channel mapping changed.
+        self._publish_geometry_if_changed()
+
         QApplication.processEvents()
 
     def _apply_step_transition(self, message_model):
@@ -479,6 +515,22 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"Publishing message for updated viewer state {self.message_buffer}"
         )
         publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
+
+    def _publish_geometry_if_changed(self):
+        """Publish DEVICE_VIEWER_GEOMETRY_CHANGED if id_to_channel differs
+        from the last-published mapping. No-op otherwise. Called from chip-
+        insert and SVG-load handlers."""
+        current = {
+            eid: e.channel
+            for eid, e in self.model.electrodes.electrodes.items()
+        }
+        if current == self._last_published_id_to_channel:
+            return
+        self._last_published_id_to_channel = dict(current)
+        msg = GeometryChangedMessage(id_to_channel=current)
+        publish_message.send(
+            topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
+        )
 
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.realtime_mode")
@@ -636,6 +688,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             name += " (modified)"
 
         self.name = name
+
+        # Publish geometry after SVG is fully loaded and channel mapping is established.
+        self._publish_geometry_if_changed()
 
     def _set_svg_model(self, svg_file):
 
@@ -1076,6 +1131,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         if "modified" not in self.name:
             logger.info("Svg data changed")
             self.name += device_modified_tag
+
+    @observe("model.electrodes.electrodes.items.channel")
+    def _on_electrode_channel_changed(self, event=None):
+        """Re-publish geometry whenever any electrode's channel assignment changes
+        (e.g., via channel-edit mode). Gated by _publish_geometry_if_changed."""
+        if self._disable_state_messages:
+            return
+        self._publish_geometry_if_changed()
 
     @observe("model:electrodes:svg_model.svg_error_paths")
     def _svg_errors_found(self, event):

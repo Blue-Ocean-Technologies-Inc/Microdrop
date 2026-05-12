@@ -29,6 +29,7 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
@@ -46,6 +47,11 @@ from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def _dotted_path(row) -> str:
+    """1-indexed dotted-path id (matches the IdColumnView display)."""
+    return ".".join(str(i + 1) for i in row.path)
 
 
 class ProtocolTreePane(QWidget):
@@ -67,6 +73,7 @@ class ProtocolTreePane(QWidget):
         application=None,
         experiment_manager=None,
         sticky_manager=None,
+        device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         parent=None,
@@ -84,6 +91,10 @@ class ProtocolTreePane(QWidget):
         self.phase_ack_topic = phase_ack_topic
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
+
+        self.device_viewer_sync = device_viewer_sync
+        if self.device_viewer_sync is not None:
+            self.device_viewer_sync.attach(self.widget)
 
         self._build_status_bar()
         self._build_navigation_bar()
@@ -194,6 +205,8 @@ class ProtocolTreePane(QWidget):
         )
 
     def _wire_executor_signals(self):
+        # highlight_active_row is pure visual decoration — no setCurrentIndex,
+        # so it doesn't fire currentChanged and needs no suppress wrap.
         self.executor.qsignals.step_started.connect(
             self.widget.highlight_active_row,
         )
@@ -229,13 +242,21 @@ class ProtocolTreePane(QWidget):
 
     # --- step lifecycle handlers --------------------------------------
 
+    def _publish_protocol_running(self, value: str) -> None:
+        try:
+            publish_message(topic=PROTOCOL_RUNNING, message=value)
+        except Exception as e:
+            logger.warning(f"PROTOCOL_RUNNING publish failed: {e}")
+
     def _on_protocol_started(self):
+        self._publish_protocol_running("True")
         try:
             self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
         except Exception:
             self._step_total = 0
         self._step_index = 0
         self._status_step_label.setText(f"Step 0 / {self._step_total}")
+        logger.info(f"Protocol started ({self._step_total} steps)")
 
     def _on_step_started(self, row):
         self._step_index += 1
@@ -246,6 +267,10 @@ class ProtocolTreePane(QWidget):
             self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
             self._phase_target = None
+        logger.info(
+            f"Step started: {self._step_index}/{self._step_total} "
+            f"[{_dotted_path(row)}] {row.name!r}"
+        )
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
         )
@@ -255,6 +280,14 @@ class ProtocolTreePane(QWidget):
         )
         if not self._tick_timer.isActive():
             self._tick_timer.start()
+
+        # Push the running step's electrodes/routes to the DV so it
+        # tracks the executor (mirrors the legacy protocol_grid behavior).
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync._publish_for_row(row)
+            except Exception as e:
+                logger.warning(f"executor->DV publish failed: {e}")
 
     def _next_step_name(self, current):
         steps = self.manager.iter_execution_steps()
@@ -344,8 +377,13 @@ class ProtocolTreePane(QWidget):
         self._repeats_completed = 0
         self._current_run_preview_mode = preview_mode
         self._update_repeat_status_label()
+        start_path = self._selected_step_path()
+        logger.info(
+            f"Protocol run starting: {self._repeats_total} rep(s), "
+            f"preview={preview_mode}, start_step={start_path}"
+        )
         self.executor.start(
-            start_step_path=self._selected_step_path(),
+            start_step_path=start_path,
             preview_mode=preview_mode,
         )
 
@@ -374,6 +412,7 @@ class ProtocolTreePane(QWidget):
             self.executor.pause()
 
     def _on_protocol_paused(self):
+        logger.info("Protocol paused")
         self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
         if self._current_row is not None:
@@ -382,13 +421,19 @@ class ProtocolTreePane(QWidget):
             self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
+        logger.info("Protocol resumed")
         self.navigation_bar.show_pause_state()
         if self._current_row is not None:
             self._tick_timer.start()
         self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
+        self._publish_protocol_running("False")
         self._repeats_completed += 1
+        logger.info(
+            f"Protocol finished (rep {self._repeats_completed}/"
+            f"{self._repeats_total})"
+        )
         self._update_repeat_status_label()
         if self._repeats_completed < self._repeats_total:
             QTimer.singleShot(50, self._restart_for_next_rep)
@@ -399,18 +444,30 @@ class ProtocolTreePane(QWidget):
         self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
+        logger.info("Protocol aborted by user")
+        self._publish_protocol_running("False")
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
         self._on_protocol_terminated()
 
     def _on_protocol_terminated(self):
+        logger.info("Protocol terminated → free mode")
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
         self.navigation_bar.merge_phase_controls_to_play_button()
         self._pause_phases = []
         self._pause_phase_idx = 0
+        # Push free-mode payload to DV: clear_highlights cleared the
+        # tree selection but did so with _suppress_publish active, so
+        # the controller's currentChanged slot was gated. Explicit
+        # publish here puts the DV back in free mode after the run.
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync._publish_for_row(None)
+            except Exception as e:
+                logger.warning(f"protocol-terminated DV publish failed: {e}")
 
     # --- pause-time phase navigation ---------------------------------
 
@@ -481,11 +538,13 @@ class ProtocolTreePane(QWidget):
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
+            logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
 
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
+            logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
             self._select_step(steps[-1])
 
     def navigate_to_previous_step(self):
@@ -494,9 +553,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
+            logger.info(f"Nav: previous (no current) → [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur > 0:
+            logger.info(f"Nav: previous step → [{_dotted_path(steps[cur - 1])}]")
             self._select_step(steps[cur - 1])
 
     def navigate_to_next_step(self):
@@ -505,11 +566,14 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
+            logger.info(f"Nav: next (no current) → [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
             return
         if cur < len(steps) - 1:
+            logger.info(f"Nav: next step → [{_dotted_path(steps[cur + 1])}]")
             self._select_step(steps[cur + 1])
             return
+        logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")
         self._duplicate_step_after(steps[cur])
 
     def _duplicate_step_after(self, row):
@@ -537,7 +601,24 @@ class ProtocolTreePane(QWidget):
                 return i
         return None
 
+    def _suppress_sync_publish(self):
+        """Context manager wrapping a programmatic selection move so the
+        sync controller's currentChanged slot does not trigger a publish."""
+        pane = self
+        class _Guard:
+            def __enter__(self_):
+                if pane.device_viewer_sync is not None:
+                    pane.device_viewer_sync._suppress_publish = True
+            def __exit__(self_, *exc):
+                if pane.device_viewer_sync is not None:
+                    pane.device_viewer_sync._suppress_publish = False
+        return _Guard()
+
     def _select_step(self, row):
+        # No suppress wrap: nav buttons (next/prev/first/last) call this
+        # path, and the user expects the DV to update on those clicks
+        # just as on a direct row click. Only clear_highlights (transient
+        # state reset) needs to suppress.
         idx = self.widget._node_to_index(row)
         if not idx.isValid():
             return
@@ -551,9 +632,10 @@ class ProtocolTreePane(QWidget):
     def clear_highlights(self):
         """Reset the tree's selection + active-row highlight + per-step
         labels to the idle visual state."""
-        self.widget.highlight_active_row(None)
-        self.widget.tree.clearSelection()
-        self.widget.tree.setCurrentIndex(QModelIndex())
+        with self._suppress_sync_publish():
+            self.widget.highlight_active_row(None)
+            self.widget.tree.clearSelection()
+            self.widget.tree.setCurrentIndex(QModelIndex())
 
         self._step_index = 0
         self._step_total = 0
@@ -619,6 +701,11 @@ class ProtocolTreePane(QWidget):
                 )
             except Exception as e:
                 logger.warning(f"failed to detach experiment_changed observer: {e}")
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync.detach()
+            except Exception as e:
+                logger.warning(f"failed to detach device_viewer_sync: {e}")
         super().closeEvent(event)
 
     # --- experiment-bar handlers ------------------------------------

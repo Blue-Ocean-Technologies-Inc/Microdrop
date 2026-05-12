@@ -20,8 +20,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
     columns = List(Instance(IColumn))
 
     def create_contents(self, parent):
-        # Local import to avoid pulling Qt at plugin-import time —
-        # ProtocolTreePane imports PySide6 widgets eagerly.
+        # Local imports to avoid pulling Qt at plugin-import time.
+        from pluggable_protocol_tree.models.row_manager import RowManager
+        from pluggable_protocol_tree.services.device_viewer_sync import (
+            DeviceViewerSyncController,
+        )
         from pluggable_protocol_tree.views.protocol_tree_pane import (
             ProtocolTreePane,
         )
@@ -30,10 +33,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
         experiment_manager = ExperimentManager(app.current_experiment_directory)
         sticky_manager = StickyWindowManager()
 
+        manager = RowManager(columns=list(self.columns))
+        sync = DeviceViewerSyncController(row_manager=manager)
+
         return ProtocolTreePane(
-            list(self.columns),
+            manager,
             application=app,
             experiment_manager=experiment_manager,
             sticky_manager=sticky_manager,
+            device_viewer_sync=sync,
             parent=parent,
         )

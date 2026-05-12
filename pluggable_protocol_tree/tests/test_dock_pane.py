@@ -67,3 +67,17 @@ def test_dock_pane_passes_application_into_pane(qapp):
     dp, app, _ = _make_dock_pane_with_mocked_app(qapp, [make_type_column()])
     contents = dp.create_contents(parent=None)
     assert contents.application is app
+
+
+def test_dock_pane_passes_device_viewer_sync_to_pane(qapp):
+    """The dock pane in the full app constructs a DeviceViewerSyncController
+    and passes it to the ProtocolTreePane."""
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.services.device_viewer_sync import (
+        DeviceViewerSyncController,
+    )
+
+    dp, _, _ = _make_dock_pane_with_mocked_app(qapp, [make_name_column()])
+    contents = dp.create_contents(parent=None)
+
+    assert isinstance(contents.device_viewer_sync, DeviceViewerSyncController)
