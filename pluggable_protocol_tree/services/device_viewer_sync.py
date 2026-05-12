@@ -173,8 +173,7 @@ class DeviceViewerSyncController(HasTraits):
         step-scoped or empty message."""
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
-            print(dv_msg)
-            logger.info(f"Protocol Tree: Device View Sync recieved message - {dv_msg}")
+            logger.critical(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
         except Exception as e:
             logger.warning(f"failed to parse DV state: {e}")
             return
@@ -184,6 +183,7 @@ class DeviceViewerSyncController(HasTraits):
         # is authoritative; state msgs only fill the gap at cold-start.
         if (not self.row_manager.protocol_metadata.get("electrode_to_channel")
                 and dv_msg.id_to_channel):
+            logger.info(f"Protocol Tree: Applying initial id_to_channel to metadata:  {dv_msg.id_to_channel} ")
             self._apply_geometry(dv_msg.id_to_channel)
 
         electrodes = sorted(
@@ -215,9 +215,11 @@ class DeviceViewerSyncController(HasTraits):
 
     def _publish_for_row(self, row) -> None:
         """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
-        free-mode payload if row is None / a group). Gated on suppress
-        flag and protocol_running."""
-        if self._suppress_publish or self._protocol_running:
+        free-mode payload if row is None / a group). Gated only on the
+        suppress flag — selection-driven publishes happen during a run
+        too (executor advances + nav buttons + user clicks all push the
+        DV to the right step display)."""
+        if self._suppress_publish:
             return
 
         # Resolve the unsaved free-mode stash on any selection change
@@ -286,7 +288,7 @@ class DeviceViewerSyncController(HasTraits):
     def _on_current_changed(self, current, _previous) -> None:
         """Qt slot wired to selectionModel().currentChanged. Resolves the
         QModelIndex to a row, then delegates to _publish_for_row."""
-        if self._suppress_publish or self._protocol_running:
+        if self._suppress_publish:
             return
         # Race guard: signal can fire after detach() clears _tree_widget.
         if self._tree_widget is None:

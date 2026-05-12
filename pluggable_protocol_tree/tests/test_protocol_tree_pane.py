@@ -647,10 +647,10 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
     assert (PROTOCOL_RUNNING, "False") in publishes
 
 
-def test_select_step_suppresses_sync_publish(qapp):
-    """During a programmatic _select_step, the suppress flag must be
-    True at the moment setCurrentIndex fires (so the sync controller's
-    currentChanged slot does not publish), and restored to False after."""
+def test_select_step_does_not_suppress_sync_publish(qapp):
+    """Nav buttons (next/prev/first/last) call _select_step. The user
+    expects the DV to update on those clicks just as on a direct row
+    click, so _select_step must NOT suppress the sync controller."""
     from unittest.mock import MagicMock
     from pluggable_protocol_tree.views.protocol_tree_pane import (
         ProtocolTreePane,
@@ -664,7 +664,6 @@ def test_select_step_suppresses_sync_publish(qapp):
     pane.manager.add_step(values={"name": "S1"})
     row = pane.manager.get_row((0,))
 
-    # Capture the suppress flag's value at the moment of programmatic move
     seen_states = []
     original = pane.widget.tree.setCurrentIndex
     def capturing(idx):
@@ -673,8 +672,28 @@ def test_select_step_suppresses_sync_publish(qapp):
     pane.widget.tree.setCurrentIndex = capturing
     pane._select_step(row)
 
-    assert seen_states == [True]
-    assert sync._suppress_publish is False    # restored
+    assert seen_states == [False]
+    assert sync._suppress_publish is False
+
+
+def test_on_step_started_publishes_to_dv(qapp):
+    """During execution, the executor's step_started callback should
+    push the running step's electrodes/routes to the DV so it tracks
+    the executor (mirrors legacy protocol_grid behavior)."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    sync = MagicMock()
+    sync._suppress_publish = False
+    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
+    pane.manager.add_step(values={"name": "S1"})
+    row = pane.manager.get_row((0,))
+    pane._on_step_started(row)
+    sync._publish_for_row.assert_called_once_with(row)
 
 
 def test_clear_highlights_suppresses_sync_publish(qapp):

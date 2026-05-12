@@ -200,10 +200,11 @@ class ProtocolTreePane(QWidget):
         )
 
     def _wire_executor_signals(self):
-        def _highlight_active_row_safe(row):
-            with self._suppress_sync_publish():
-                self.widget.highlight_active_row(row)
-        self.executor.qsignals.step_started.connect(_highlight_active_row_safe)
+        # highlight_active_row is pure visual decoration — no setCurrentIndex,
+        # so it doesn't fire currentChanged and needs no suppress wrap.
+        self.executor.qsignals.step_started.connect(
+            self.widget.highlight_active_row,
+        )
         self.executor.qsignals.step_started.connect(self._on_step_started)
         self.executor.qsignals.step_finished.connect(self._on_step_finished)
         self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
@@ -269,6 +270,14 @@ class ProtocolTreePane(QWidget):
         )
         if not self._tick_timer.isActive():
             self._tick_timer.start()
+
+        # Push the running step's electrodes/routes to the DV so it
+        # tracks the executor (mirrors the legacy protocol_grid behavior).
+        if self.device_viewer_sync is not None:
+            try:
+                self.device_viewer_sync._publish_for_row(row)
+            except Exception as e:
+                logger.warning(f"executor->DV publish failed: {e}")
 
     def _next_step_name(self, current):
         steps = self.manager.iter_execution_steps()
@@ -567,16 +576,19 @@ class ProtocolTreePane(QWidget):
         return _Guard()
 
     def _select_step(self, row):
-        with self._suppress_sync_publish():
-            idx = self.widget._node_to_index(row)
-            if not idx.isValid():
-                return
-            parent = idx.parent()
-            while parent.isValid():
-                self.widget.tree.expand(parent)
-                parent = parent.parent()
-            self.widget.tree.setCurrentIndex(idx)
-            self.widget.tree.scrollTo(idx)
+        # No suppress wrap: nav buttons (next/prev/first/last) call this
+        # path, and the user expects the DV to update on those clicks
+        # just as on a direct row click. Only clear_highlights (transient
+        # state reset) needs to suppress.
+        idx = self.widget._node_to_index(row)
+        if not idx.isValid():
+            return
+        parent = idx.parent()
+        while parent.isValid():
+            self.widget.tree.expand(parent)
+            parent = parent.parent()
+        self.widget.tree.setCurrentIndex(idx)
+        self.widget.tree.scrollTo(idx)
 
     def clear_highlights(self):
         """Reset the tree's selection + active-row highlight + per-step

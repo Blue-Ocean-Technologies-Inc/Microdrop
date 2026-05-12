@@ -269,7 +269,10 @@ def test_group_row_emits_free_mode_payload(qapp, monkeypatch):
     assert msg.step_id is None
 
 
-def test_protocol_running_blocks_publish(qapp, monkeypatch):
+def test_protocol_running_does_not_block_publish(qapp, monkeypatch):
+    """During a run the executor calls _publish_for_row to update the DV
+    on each step transition; user clicks during a run also publish.
+    The _protocol_running flag is informational, not a publish gate."""
     publishes = []
     monkeypatch.setattr(
         "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
@@ -281,7 +284,7 @@ def test_protocol_running_blocks_publish(qapp, monkeypatch):
     ctrl._protocol_running = True
     row = manager.get_row((0,))
     ctrl._publish_for_row(row)
-    assert publishes == []
+    assert len(publishes) == 1
 
 
 def test_suppress_publish_blocks_publish(qapp, monkeypatch):
