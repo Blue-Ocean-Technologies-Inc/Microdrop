@@ -51,9 +51,14 @@ class VoltageHandler(BaseColumnHandler):
         see dropbot_controller/preferences.py:22-25). Storing here means
         the next session's status-panel boot value matches the last
         cell-edit, just like editing the spinner in the dropbot status panel.
+
+        Must return the super's return value so QtTreeModel.setData
+        signals dataChanged and the manager fires rows_changed — without
+        it the protocol state tracker never sees voltage edits.
         """
-        super().on_interact(row, model, value)
+        result = super().on_interact(row, model, value)
         DropbotPreferences().last_voltage = int(value)
+        return result
 
     def on_step(self, row, ctx):
         # Preview mode: skip the hardware-publish + ack-wait. The

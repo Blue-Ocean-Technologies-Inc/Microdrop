@@ -31,3 +31,10 @@ class ProtocolItemDelegate(QStyledItemDelegate):
         value = col.view.get_editor_data(editor)
         if col.handler.on_interact(node, col.model, value):
             model.dataChanged.emit(index, index)
+            # on_interact writes the trait directly via model.set_value;
+            # the manager's rows_changed event would never fire on user
+            # edits otherwise. Fire it here so dirty-state observers
+            # (e.g. the protocol state tracker) match the documented
+            # rows_changed contract: "Fires on structure or value
+            # changes."
+            self._manager.rows_changed = True

@@ -38,23 +38,22 @@ def test_mutation_marks_dirty(qapp):
     assert pane.protocol_state_tracker.is_modified is True
 
 
-def test_user_cell_edit_marks_dirty(qapp):
-    """Regression: editing a cell value through the UI (the path the
-    QTreeView delegate uses on commit) must fire the dirty flag. The
-    column handler's default ``on_interact`` writes directly to the row
-    trait, bypassing ``RowManager.set_value``, so the manager-level
-    ``rows_changed`` event must be re-fired from inside ``setData``.
+def test_user_cell_edit_via_setData_marks_dirty(qapp):
+    """Regression: edits committed via ``QtTreeModel.setData`` (the path
+    Qt uses for CheckStateRole toggles) must fire the dirty flag.
+
+    The column handler's default ``on_interact`` writes the trait
+    directly via ``model.set_value``, bypassing ``RowManager.set_value``,
+    so the manager-level ``rows_changed`` event must be re-fired from
+    inside ``setData`` for the protocol state tracker to see the edit.
     """
     from pyface.qt.QtCore import Qt
 
     pane = _build_pane(qapp)
     pane.manager.add_step(values={"name": "before"})
-    # Clear the dirty flag so we measure only the cell-edit's effect.
     pane.protocol_state_tracker.is_modified = False
 
     qt_model = pane.widget.tree.model()
-    # Find the "name" column index dynamically — its position depends
-    # on how the pane was constructed.
     name_col = next(
         i for i, c in enumerate(pane.manager.columns)
         if c.model.col_id == "name"
@@ -64,6 +63,39 @@ def test_user_cell_edit_marks_dirty(qapp):
 
     assert pane.protocol_state_tracker.is_modified is True
     assert pane.manager.root.children[0].name == "after"
+
+
+def test_user_cell_edit_via_delegate_marks_dirty(qapp):
+    """Regression: edits committed via the QTreeView delegate (the real
+    path for spinbox / line-edit cells — what every user actually hits)
+    must fire the dirty flag.
+
+    ``ProtocolItemDelegate.setModelData`` calls ``handler.on_interact``
+    and emits ``dataChanged`` directly, bypassing ``QtTreeModel.setData``
+    entirely. Without firing ``rows_changed`` from inside the delegate,
+    the protocol state tracker never sees spinbox/text-edit commits.
+    """
+    from pyface.qt.QtWidgets import QLineEdit
+
+    pane = _build_pane(qapp)
+    pane.manager.add_step(values={"name": "before-delegate"})
+    pane.protocol_state_tracker.is_modified = False
+
+    qt_model = pane.widget.tree.model()
+    name_col = next(
+        i for i, c in enumerate(pane.manager.columns)
+        if c.model.col_id == "name"
+    )
+    index = qt_model.index(0, name_col)
+
+    # Build a real editor populated with the new value, then drive the
+    # delegate's commit path the way QStyledItemDelegate would.
+    editor = QLineEdit()
+    editor.setText("after-delegate")
+    pane.widget.delegate.setModelData(editor, qt_model, index)
+
+    assert pane.manager.root.children[0].name == "after-delegate"
+    assert pane.protocol_state_tracker.is_modified is True
 
 
 def test_save_as_clears_dirty_and_sets_path(qapp, tmp_path):
@@ -198,7 +230,12 @@ def test_new_protocol_resets_manager_and_tracker(qapp, tmp_path):
     pane.protocol_state_tracker.set_saved(str(tmp_path / "x.json"))
     pane.manager.add_step()                   # dirty again
 
-    pane.new_protocol()                       # clean path — no confirm needed
+    # Dirty -> the guard prompts; mock to YES so new_protocol proceeds.
+    with patch(
+        "pluggable_protocol_tree.views.protocol_tree_pane.confirm",
+        return_value=YES,
+    ):
+        pane.new_protocol()
 
     assert len(pane.manager.root.children) == 0
     t = pane.protocol_state_tracker
