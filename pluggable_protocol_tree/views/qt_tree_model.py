@@ -50,6 +50,11 @@ class MvcTreeModel(QAbstractItemModel):
 
         # Rebroadcast manager changes as layoutChanged
         row_manager.observe(self._on_rows_changed, "rows_changed")
+        # Cell value edits get a focused dataChanged for the affected
+        # (path, col_id) — read-only summary columns (electrodes,
+        # routes) don't declare depends_on_row_traits, so this is the
+        # only redraw signal they receive on DV-driven write-backs.
+        row_manager.observe(self._on_cell_changed, "cell_changed")
 
         self._wire_event_observers()
         self._wire_row_observers()
@@ -158,6 +163,37 @@ class MvcTreeModel(QAbstractItemModel):
         # per-row observers so newcomers participate and detached rows
         # stop emitting against a stale column index.
         self._wire_row_observers()
+
+    def _on_cell_changed(self, event):
+        """Focused dataChanged for a single (path, col_id) edit.
+
+        Fires for delegate / setData edits (where dataChanged was
+        already emitted at the call site — this is a redundant but
+        cheap no-op) AND for direct trait writes from
+        DeviceViewerSyncController (where no other refresh signal
+        reaches the model).
+        """
+        payload = event.new
+        if not isinstance(payload, dict):
+            return
+        path = payload.get("path")
+        col_id = payload.get("col_id")
+        if path is None or col_id is None:
+            return
+        try:
+            row = self._manager.get_row(tuple(path))
+        except (IndexError, AttributeError):
+            return
+        col_idx = next(
+            (i for i, c in enumerate(self._manager.columns)
+             if c.model.col_id == col_id),
+            None,
+        )
+        if col_idx is None:
+            return
+        idx = self._index_for_cell(row, col_idx)
+        if idx.isValid():
+            self.dataChanged.emit(idx, idx)
 
     # ------------ reactive wiring for derived columns ------------
 

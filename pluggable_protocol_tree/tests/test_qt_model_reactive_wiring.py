@@ -241,6 +241,51 @@ def test_event_dependency_no_crash_with_zero_rows():
 # Regression — model with no derived columns
 # -----------------------------------------------------------------------------
 
+def test_cell_changed_event_emits_focused_dataChanged():
+    """Regression: read-only summary columns (electrodes, routes) don't
+    declare ``depends_on_row_traits``; their only redraw signal on a
+    direct trait write (e.g. from DeviceViewerSyncController) comes
+    from MvcTreeModel observing ``manager.cell_changed`` and emitting
+    a focused dataChanged for the affected (path, col_id)."""
+    cols = [make_type_column(), make_id_column(), make_name_column()]
+    manager = RowManager(columns=cols)
+    manager.add_step(values={"name": "row-0"})
+    manager.add_step(values={"name": "row-1"})
+
+    qm = MvcTreeModel(manager)
+    name_col = [c.model.col_id for c in manager.columns].index("name")
+
+    received: list = []
+    qm.dataChanged.connect(
+        lambda top, bottom, *_: received.append((top.row(), top.column())),
+    )
+
+    # Simulate a direct trait write + cell_changed (the DV sync path).
+    manager.root.children[1].name = "row-1-renamed"
+    manager.cell_changed = {"path": (1,), "col_id": "name"}
+
+    assert (1, name_col) in received
+    assert (0, name_col) not in received
+
+
+def test_cell_changed_with_bad_payload_is_noop():
+    """Bad / missing payload keys must not crash the observer."""
+    cols = [make_type_column(), make_name_column()]
+    manager = RowManager(columns=cols)
+    manager.add_step()
+    qm = MvcTreeModel(manager)
+
+    received: list = []
+    qm.dataChanged.connect(
+        lambda top, bottom, *_: received.append((top.row(), top.column())),
+    )
+    manager.cell_changed = "not a dict"          # ignored
+    manager.cell_changed = {"path": (99,)}       # bad path, no col_id
+    manager.cell_changed = {"col_id": "name"}    # no path
+
+    assert received == []
+
+
 def test_no_derived_columns_no_extra_signals():
     cols = [make_type_column(), make_id_column(), make_name_column()]
     manager = RowManager(columns=cols)
