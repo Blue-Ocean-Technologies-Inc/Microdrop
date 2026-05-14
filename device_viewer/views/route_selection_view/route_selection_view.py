@@ -5,7 +5,7 @@ from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
 
 from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn, CustomCheckboxColumn, \
-    SafeCancelTableHandler
+    SafeCancelTableHandler, DoubleSpinBoxEditor
 
 from logger.logger_service import get_logger
 
@@ -90,7 +90,7 @@ layer_table_editor = TableEditor(
 
 protocol_execution_settings = (
 UItem('object.routes.duration',
-      editor=RangeEditor(low=0.0, high=10000.0, mode='spinner', format_str='%.1f', is_float=True),
+      editor=DoubleSpinBoxEditor(low=0.0, high=10000.0, decimals=1, step=0.1),
       tooltip="Duration of each step in route (seconds)"),
 UItem('object.routes.trail_length',
       editor=RangeEditor(low=1, high=10000, mode='spinner'),
