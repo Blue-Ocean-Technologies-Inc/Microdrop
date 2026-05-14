@@ -46,6 +46,7 @@ def save_dialog_factory():
         dock_pane_id=_DOCK_PANE_ID,
         name="&Save",
         method="save_protocol_dialog",
+        accelerator = "Ctrl+S"
     )
 
 
