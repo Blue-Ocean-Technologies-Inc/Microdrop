@@ -1,10 +1,9 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
-from PySide6.QtWidgets import QStyledItemDelegate
-
+from pyface.qt.QtCore import Qt
+from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
+from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Range, List, Str, Int, Property
+from traits.api import Instance, Any, Range, List, Str, Int, Property, Float
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_,
                           UIInfo, Handler, RangeEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
@@ -236,6 +235,38 @@ class RangeWithViewHints(Range):
             format_str='%.2f',
             is_float=True
         )
+
+
+class _DoubleSpinBoxEditor(QtEditor):
+    def init(self, parent):
+        """ This method builds the native Qt widget. """
+        self.control = QDoubleSpinBox()
+        self.control.setMinimum(self.factory.low)
+        self.control.setMaximum(self.factory.high)
+        self.control.setDecimals(self.factory.decimals)
+        self.control.setSingleStep(self.factory.step)
+
+        # When the user clicks the arrows, update the Trait
+        self.control.valueChanged.connect(self.update_object)
+
+    def update_object(self, value):
+        """ Sync UI changes back to the Python model. """
+        self.value = value
+
+    def update_editor(self):
+        """ Sync Python model changes back to the UI. """
+        self.control.setValue(self.value)
+
+
+class DoubleSpinBoxEditor(BasicEditorFactory):
+    # Link the factory to the Editor class we just made
+    klass = _DoubleSpinBoxEditor
+
+    # Define the arguments we can pass to the editor in the View
+    low = Float(0.0)
+    high = Float(100.0)
+    decimals = Int(1)
+    step = Float(0.1)  # How much it increments when arrows are clicked
 
 class SafeCancelTableHandler(Handler):
     """

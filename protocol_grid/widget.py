@@ -742,7 +742,7 @@ class PGCWidget(QWidget):
         row = target_item.row()
 
         updates = {
-            "Duration":        f"{commit_msg.duration:.1f}",
+            "Duration":        str(commit_msg.duration),
             "Repetitions":     str(commit_msg.repetitions),
             "Repeat Duration": str(commit_msg.repeat_duration),
             "Trail Length":    str(commit_msg.trail_length),
