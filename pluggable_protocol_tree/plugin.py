@@ -7,6 +7,7 @@ plugin class."""
 
 from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.task_extension import TaskExtension
+from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str, Either
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -68,10 +69,25 @@ class PluggableProtocolTreePlugin(Plugin):
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
     def _contributed_task_extensions_default(self):
+        from pluggable_protocol_tree.menus import (
+            new_experiment_factory, protocol_menu_factory,
+        )
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
                 dock_pane_factories=[self._make_dock_pane],
+                actions=[
+                    SchemaAddition(
+                        factory=new_experiment_factory,
+                        path='MenuBar/File',
+                        absolute_position="first",
+                    ),
+                    SchemaAddition(
+                        factory=protocol_menu_factory,
+                        path="MenuBar/File",
+                        before="Exit",
+                    ),
+                ],
             ),
         ]
 

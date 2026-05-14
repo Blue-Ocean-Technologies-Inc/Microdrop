@@ -412,6 +412,57 @@ def test_step_scoped_message_writes_back_to_row(qapp):
     assert ctrl._free_mode_stash is None
 
 
+def test_step_scoped_write_back_fires_manager_cell_changed(qapp):
+    """Regression: DV-driven electrode/route writes go directly to
+    ``row.electrodes`` / ``row.routes``, bypassing both
+    ``QtTreeModel.setData`` and ``ProtocolItemDelegate.setModelData``.
+    The sync controller must fire ``cell_changed`` (with path + col_id)
+    after each mutation so the protocol state tracker can update its
+    incremental dirty bookkeeping — without this, editing electrodes/
+    routes via the device viewer leaves the "unsaved changes" indicator
+    off.
+    """
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    path = manager.add_step(values={
+        "name": "S1", "electrodes": ["e00"], "routes": [],
+    })
+    row = manager.get_row(path)
+
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(
+            id_to_channel={"e00": 0, "e01": 1, "e02": 2}
+        ).serialize()
+    )
+
+    fired = []
+    manager.observe(lambda ev: fired.append(ev.new), "cell_changed")
+
+    # Electrode-only change.
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], step_id=row.uuid,
+    ).serialize())
+    assert row.electrodes == ["e00", "e01"]
+    assert fired == [{"path": path, "col_id": "electrodes"}]
+
+    # Route-only change (same electrodes).
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], routes=[(["e02"], "blue")], step_id=row.uuid,
+    ).serialize())
+    assert row.routes == [["e02"]]
+    assert fired == [
+        {"path": path, "col_id": "electrodes"},
+        {"path": path, "col_id": "routes"},
+    ]
+
+    # No-op replay: same payload again must NOT re-fire.
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], routes=[(["e02"], "blue")], step_id=row.uuid,
+    ).serialize())
+    assert len(fired) == 2
+
+
 def test_step_scoped_message_with_unknown_step_id_is_noop(qapp):
     """If the DV's step_id doesn't match any row in our tree (e.g. the
     legacy grid is still publishing), don't crash and don't mutate."""

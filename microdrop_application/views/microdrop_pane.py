@@ -61,7 +61,7 @@ class MicrodropCentralCanvas(TaskPane):
              "app_preferences:canvas_background_opacity")
     def _on_canvas_preferences_changed(self, event):
         """Re-style the canvas whenever any of the three canvas prefs change."""
-        logger.debug(f"Canvas preference changed: {event.name} → {event.new}")
+        logger.debug(f"Canvas preference changed: {event.name} --> {event.new}")
         self._apply_background_styling()
 
     def _apply_background_styling(self, *_args):

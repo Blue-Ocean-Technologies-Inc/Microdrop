@@ -31,3 +31,11 @@ class ProtocolItemDelegate(QStyledItemDelegate):
         value = col.view.get_editor_data(editor)
         if col.handler.on_interact(node, col.model, value):
             model.dataChanged.emit(index, index)
+            # on_interact writes the trait directly, bypassing the
+            # manager's set_value path. Fire cell_changed with the
+            # (path, col_id) so the protocol state tracker can update
+            # its incremental dirty bookkeeping in O(1).
+            self._manager.cell_changed = {
+                "path": tuple(node.path),
+                "col_id": col.model.col_id,
+            }

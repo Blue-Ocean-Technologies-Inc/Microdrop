@@ -173,7 +173,7 @@ class DeviceViewerSyncController(HasTraits):
         step-scoped or empty message."""
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
-            logger.critical(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
+            logger.info(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
         except Exception as e:
             logger.warning(f"failed to parse DV state: {e}")
             return
@@ -201,10 +201,21 @@ class DeviceViewerSyncController(HasTraits):
             row = self.row_manager.get_row_by_uuid(dv_msg.step_id)
             if row is None or isinstance(row, GroupRow):
                 return
+            path = tuple(row.path)
+            # Direct trait writes bypass both QtTreeModel.setData and
+            # the delegate, so fire cell_changed for each column the
+            # user actually changed — the protocol state tracker uses
+            # this for O(1) incremental dirty bookkeeping.
             if list(getattr(row, "electrodes", []) or []) != electrodes:
                 row.electrodes = electrodes
+                self.row_manager.cell_changed = {
+                    "path": path, "col_id": "electrodes",
+                }
             if list(getattr(row, "routes", []) or []) != routes:
                 row.routes = routes
+                self.row_manager.cell_changed = {
+                    "path": path, "col_id": "routes",
+                }
             return
 
         if not electrodes and not routes:
@@ -247,7 +258,7 @@ class DeviceViewerSyncController(HasTraits):
             msg = ProtocolTreeDisplayMessage(free_mode=True)
             self._last_selected_uuid = ""
             if prev_uuid:
-                logger.info("DV display → free mode")
+                logger.info("DV display --> free mode")
         else:
             # 1-indexed dotted-path id (matches the ID column display)
             # so the DV's status bar shows e.g. "Editing: Step 1.2"
@@ -263,7 +274,7 @@ class DeviceViewerSyncController(HasTraits):
             )
             if row.uuid != prev_uuid:
                 logger.info(
-                    f"DV display → Step {dotted_id} {row.name!r} "
+                    f"DV display  Step {dotted_id} {row.name!r} "
                     f"({len(msg.electrodes)} electrodes, "
                     f"{len(msg.routes)} routes)"
                 )

@@ -43,9 +43,15 @@ class FrequencyHandler(BaseColumnHandler):
     wait_for_topics = [FREQUENCY_APPLIED]
 
     def on_interact(self, row, model, value):
-        """User edited a frequency cell — write through AND persist to prefs."""
-        super().on_interact(row, model, value)
+        """User edited a frequency cell — write through AND persist to prefs.
+
+        Must return the super's return value so the delegate fires
+        dataChanged and the manager fires rows_changed — without it the
+        protocol state tracker never sees frequency edits.
+        """
+        result = super().on_interact(row, model, value)
         DropbotPreferences().last_frequency = int(value)
+        return result
 
     def on_step(self, row, ctx):
         # Preview mode: skip the hardware-publish + ack-wait.
