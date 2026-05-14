@@ -59,6 +59,11 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
         super().handle_escape(info)
 
 
+class RunColumn(CustomCheckboxColumn):
+    def formatter(self, value):
+        return "play_arrow" if value else "play_disabled"
+
+
 layer_table_editor = TableEditor(
     columns=[
         ObjectColumn(name="name", label="Path", resize_mode="stretch", editable=False),
@@ -69,7 +74,7 @@ layer_table_editor = TableEditor(
             horizontal_alignment="center",
             width=16,
         ),
-        CustomCheckboxColumn(
+        RunColumn(
             name="selected_for_run",
             label="Run",
             editable=False,

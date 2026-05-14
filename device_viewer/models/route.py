@@ -176,7 +176,7 @@ class RouteLayer(HasTraits):
     # set name based on channels for electrodes if needed for UI
     name = Str("")
 
-    selected_for_run = Bool(False)
+    selected_for_run = Bool(True)
 
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
