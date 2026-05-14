@@ -40,18 +40,16 @@ def test_mutation_marks_dirty(qapp):
 
 def test_user_cell_edit_via_setData_marks_dirty(qapp):
     """Regression: edits committed via ``QtTreeModel.setData`` (the path
-    Qt uses for CheckStateRole toggles) must fire the dirty flag.
-
-    The column handler's default ``on_interact`` writes the trait
-    directly via ``model.set_value``, bypassing ``RowManager.set_value``,
-    so the manager-level ``rows_changed`` event must be re-fired from
-    inside ``setData`` for the protocol state tracker to see the edit.
+    Qt uses for CheckStateRole toggles) must fire ``cell_changed`` so
+    the tracker can update its incremental dirty bookkeeping.
     """
     from pyface.qt.QtCore import Qt
 
     pane = _build_pane(qapp)
-    pane.manager.add_step(values={"name": "before"})
-    pane.protocol_state_tracker.is_modified = False
+    path = pane.manager.add_step(values={"name": "before"})
+    # Seed baseline at "before" so the next edit is what marks dirty.
+    pane.protocol_state_tracker.reseed_baseline(pane.manager)
+    assert pane.protocol_state_tracker.is_modified is False
 
     qt_model = pane.widget.tree.model()
     name_col = next(
@@ -62,24 +60,21 @@ def test_user_cell_edit_via_setData_marks_dirty(qapp):
     assert qt_model.setData(index, "after", Qt.EditRole) is True
 
     assert pane.protocol_state_tracker.is_modified is True
+    assert (path, "name") in pane.protocol_state_tracker.dirty_cells
     assert pane.manager.root.children[0].name == "after"
 
 
 def test_user_cell_edit_via_delegate_marks_dirty(qapp):
-    """Regression: edits committed via the QTreeView delegate (the real
-    path for spinbox / line-edit cells — what every user actually hits)
-    must fire the dirty flag.
-
-    ``ProtocolItemDelegate.setModelData`` calls ``handler.on_interact``
-    and emits ``dataChanged`` directly, bypassing ``QtTreeModel.setData``
-    entirely. Without firing ``rows_changed`` from inside the delegate,
-    the protocol state tracker never sees spinbox/text-edit commits.
+    """Regression: edits committed via the QTreeView delegate (spinbox
+    / line-edit cells — what every user actually hits) must fire
+    ``cell_changed`` so the tracker increments dirty_cells in O(1).
     """
     from pyface.qt.QtWidgets import QLineEdit
 
     pane = _build_pane(qapp)
-    pane.manager.add_step(values={"name": "before-delegate"})
-    pane.protocol_state_tracker.is_modified = False
+    path = pane.manager.add_step(values={"name": "before-delegate"})
+    pane.protocol_state_tracker.reseed_baseline(pane.manager)
+    assert pane.protocol_state_tracker.is_modified is False
 
     qt_model = pane.widget.tree.model()
     name_col = next(
@@ -96,6 +91,33 @@ def test_user_cell_edit_via_delegate_marks_dirty(qapp):
 
     assert pane.manager.root.children[0].name == "after-delegate"
     assert pane.protocol_state_tracker.is_modified is True
+    assert (path, "name") in pane.protocol_state_tracker.dirty_cells
+
+
+def test_cell_edit_then_revert_clears_dirty_via_pane(qapp):
+    """End-to-end revert test: edit a cell via the delegate, then
+    edit it back to the baseline value. is_modified must clear."""
+    from pyface.qt.QtWidgets import QLineEdit
+
+    pane = _build_pane(qapp)
+    pane.manager.add_step(values={"name": "saved"})
+    pane.protocol_state_tracker.reseed_baseline(pane.manager)
+
+    qt_model = pane.widget.tree.model()
+    name_col = next(
+        i for i, c in enumerate(pane.manager.columns)
+        if c.model.col_id == "name"
+    )
+    index = qt_model.index(0, name_col)
+
+    editor = QLineEdit()
+    editor.setText("edited")
+    pane.widget.delegate.setModelData(editor, qt_model, index)
+    assert pane.protocol_state_tracker.is_modified is True
+
+    editor.setText("saved")
+    pane.widget.delegate.setModelData(editor, qt_model, index)
+    assert pane.protocol_state_tracker.is_modified is False
 
 
 def test_save_as_clears_dirty_and_sets_path(qapp, tmp_path):

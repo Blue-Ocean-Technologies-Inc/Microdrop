@@ -123,12 +123,14 @@ class MvcTreeModel(QAbstractItemModel):
             if col.handler.on_interact(node, col.model, value):
                 self.dataChanged.emit(index, index, [role])
                 # on_interact writes directly to the row trait, bypassing
-                # RowManager.set_value, so the manager's rows_changed
-                # event would never fire on user cell edits. Fire it
-                # here so dirty-state observers (e.g. the protocol state
-                # tracker) match the documented semantics: "Fires on
-                # structure or value changes."
-                self._manager.rows_changed = True
+                # RowManager.set_value, so the manager would not see
+                # this edit. Fire cell_changed with (path, col_id) so
+                # the protocol state tracker can update its incremental
+                # dirty bookkeeping in O(1).
+                self._manager.cell_changed = {
+                    "path": tuple(node.path),
+                    "col_id": col.model.col_id,
+                }
                 return True
         return False
 

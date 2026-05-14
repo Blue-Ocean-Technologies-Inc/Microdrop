@@ -104,7 +104,13 @@ class ProtocolTreePane(QWidget):
             self.device_viewer_sync.attach(self.widget)
 
         self.protocol_state_tracker = PluggableProtocolStateTracker()
+        # Structural mutations (add/remove/move/paste/new) re-check the
+        # baseline path set and rescan if paths re-aligned (insert+
+        # delete, move+undo).
         self.manager.observe(self._on_manager_rows_changed, "rows_changed")
+        # Cell edits go through cell_changed (carries path + col_id)
+        # so the tracker can update its diff in O(1).
+        self.manager.observe(self._on_manager_cell_changed, "cell_changed")
 
         self._build_status_bar()
         self._build_navigation_bar()
@@ -743,6 +749,12 @@ class ProtocolTreePane(QWidget):
             )
         except Exception as e:
             logger.warning(f"failed to detach rows_changed observer: {e}")
+        try:
+            self.manager.observe(
+                self._on_manager_cell_changed, "cell_changed", remove=True,
+            )
+        except Exception as e:
+            logger.warning(f"failed to detach cell_changed observer: {e}")
         if self.device_viewer_sync is not None:
             try:
                 self.device_viewer_sync.detach()
@@ -753,12 +765,21 @@ class ProtocolTreePane(QWidget):
     # --- file menu actions ------------------------------------------
 
     def _on_manager_rows_changed(self, event):
-        """Any structure or value mutation flips the dirty flag.
+        """Structural mutation — re-check the baseline path set."""
+        self.protocol_state_tracker.on_structure_changed(self.manager)
 
-        Load / Save / New helpers explicitly reset the tracker after the
-        manager finishes mutating, so this observer can be unconditional.
-        """
-        self.protocol_state_tracker.mark_modified()
+    def _on_manager_cell_changed(self, event):
+        """Cell value edit — incremental dirty update for the one cell."""
+        payload = event.new
+        if not isinstance(payload, dict):
+            return
+        path = payload.get("path")
+        col_id = payload.get("col_id")
+        if path is None or col_id is None:
+            return
+        self.protocol_state_tracker.on_cell_changed(
+            path, col_id, self.manager,
+        )
 
     def _confirm_proceed_or_abort(self) -> bool:
         """Returns True if the action should proceed.
@@ -803,6 +824,7 @@ class ProtocolTreePane(QWidget):
         self.manager.selection = []
         self.manager.rows_changed = True
         self.protocol_state_tracker.reset()
+        self.protocol_state_tracker.reseed_baseline(self.manager)
 
     def save_protocol_dialog(self):
         known_path = self.protocol_state_tracker.loaded_protocol_path
@@ -816,11 +838,13 @@ class ProtocolTreePane(QWidget):
             error_dialog(parent=self, title="Save error", message=str(e))
             return
         self.protocol_state_tracker.set_saved(known_path)
+        self.protocol_state_tracker.reseed_baseline(self.manager)
 
     def save_as_protocol_dialog(self):
         path = self.save_to_dialog(parent=self)
         if path:
             self.protocol_state_tracker.set_saved(path)
+            self.protocol_state_tracker.reseed_baseline(self.manager)
 
     def load_protocol_dialog(self, columns_factory=None):
         if not self._confirm_proceed_or_abort():
@@ -831,6 +855,7 @@ class ProtocolTreePane(QWidget):
         path = self.load_from_dialog(factory, parent=self)
         if path:
             self.protocol_state_tracker.set_loaded(path)
+            self.protocol_state_tracker.reseed_baseline(self.manager)
 
     def _on_application_exiting(self, event):
         """Veto application exit when the protocol is dirty and the user

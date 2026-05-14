@@ -201,19 +201,21 @@ class DeviceViewerSyncController(HasTraits):
             row = self.row_manager.get_row_by_uuid(dv_msg.step_id)
             if row is None or isinstance(row, GroupRow):
                 return
-            mutated = False
+            path = tuple(row.path)
+            # Direct trait writes bypass both QtTreeModel.setData and
+            # the delegate, so fire cell_changed for each column the
+            # user actually changed — the protocol state tracker uses
+            # this for O(1) incremental dirty bookkeeping.
             if list(getattr(row, "electrodes", []) or []) != electrodes:
                 row.electrodes = electrodes
-                mutated = True
+                self.row_manager.cell_changed = {
+                    "path": path, "col_id": "electrodes",
+                }
             if list(getattr(row, "routes", []) or []) != routes:
                 row.routes = routes
-                mutated = True
-            # Direct trait writes bypass both QtTreeModel.setData and the
-            # delegate, so fire the manager's rows_changed event here to
-            # honour its "Fires on structure or value changes" contract
-            # — the protocol state tracker observes it for dirty bookkeeping.
-            if mutated:
-                self.row_manager.rows_changed = True
+                self.row_manager.cell_changed = {
+                    "path": path, "col_id": "routes",
+                }
             return
 
         if not electrodes and not routes:

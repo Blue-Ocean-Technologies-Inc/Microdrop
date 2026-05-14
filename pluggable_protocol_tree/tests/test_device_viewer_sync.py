@@ -412,14 +412,15 @@ def test_step_scoped_message_writes_back_to_row(qapp):
     assert ctrl._free_mode_stash is None
 
 
-def test_step_scoped_write_back_fires_manager_rows_changed(qapp):
+def test_step_scoped_write_back_fires_manager_cell_changed(qapp):
     """Regression: DV-driven electrode/route writes go directly to
     ``row.electrodes`` / ``row.routes``, bypassing both
     ``QtTreeModel.setData`` and ``ProtocolItemDelegate.setModelData``.
-    The sync controller must fire ``rows_changed`` after a mutation so
-    the protocol state tracker can mark the protocol dirty — without
-    this, editing electrodes/routes via the device viewer leaves the
-    "unsaved changes" indicator off.
+    The sync controller must fire ``cell_changed`` (with path + col_id)
+    after each mutation so the protocol state tracker can update its
+    incremental dirty bookkeeping — without this, editing electrodes/
+    routes via the device viewer leaves the "unsaved changes" indicator
+    off.
     """
     from device_viewer.models.messages import GeometryChangedMessage
     manager = _make_manager()
@@ -436,21 +437,24 @@ def test_step_scoped_write_back_fires_manager_rows_changed(qapp):
     )
 
     fired = []
-    manager.observe(lambda _ev: fired.append(True), "rows_changed")
+    manager.observe(lambda ev: fired.append(ev.new), "cell_changed")
 
     # Electrode-only change.
     ctrl._on_dv_state_qt(_make_dv_msg(
         channels=[0, 1], step_id=row.uuid,
     ).serialize())
     assert row.electrodes == ["e00", "e01"]
-    assert len(fired) == 1
+    assert fired == [{"path": path, "col_id": "electrodes"}]
 
     # Route-only change (same electrodes).
     ctrl._on_dv_state_qt(_make_dv_msg(
         channels=[0, 1], routes=[(["e02"], "blue")], step_id=row.uuid,
     ).serialize())
     assert row.routes == [["e02"]]
-    assert len(fired) == 2
+    assert fired == [
+        {"path": path, "col_id": "electrodes"},
+        {"path": path, "col_id": "routes"},
+    ]
 
     # No-op replay: same payload again must NOT re-fire.
     ctrl._on_dv_state_qt(_make_dv_msg(

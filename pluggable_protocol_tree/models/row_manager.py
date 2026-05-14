@@ -45,7 +45,15 @@ class RowManager(HasTraits):
              "run start.")
 
     rows_changed = Event(
-        desc="Fires on structure or value changes. Batch-coalesced by UI.")
+        desc="Fires on structural mutations (add/remove/move/paste/"
+             "set_state_from_json/apply). For cell value edits use "
+             "``cell_changed`` instead.")
+
+    cell_changed = Event(
+        desc="Fires on a single cell value edit. Payload is "
+             "``{'path': (i, j, ...), 'col_id': '<col_id>'}``. Enables "
+             "O(1) incremental dirty tracking; the protocol state "
+             "tracker observes this for per-cell diff bookkeeping.")
 
     # --- construction ---
 
@@ -455,15 +463,18 @@ class RowManager(HasTraits):
         col = self._column_by_id(col_id)
         row = self.get_row(path)
         col.model.set_value(row, value)
-        self.rows_changed = True
+        self.cell_changed = {"path": tuple(path), "col_id": col_id}
 
     def set_values(self, paths: List[Path], col_id: str, value) -> None:
         col = self._column_by_id(col_id)
         for p in paths:
             col.model.set_value(self.get_row(p), value)
-        self.rows_changed = True
+            self.cell_changed = {"path": tuple(p), "col_id": col_id}
 
     def apply(self, paths: List[Path], fn) -> None:
+        # `fn` is arbitrary — could touch any column on any row, or
+        # even mutate structure indirectly. Fire rows_changed as the
+        # umbrella signal so the tracker forces a full rescan.
         for p in paths:
             fn(self.get_row(p))
         self.rows_changed = True
