@@ -412,6 +412,53 @@ def test_step_scoped_message_writes_back_to_row(qapp):
     assert ctrl._free_mode_stash is None
 
 
+def test_step_scoped_write_back_fires_manager_rows_changed(qapp):
+    """Regression: DV-driven electrode/route writes go directly to
+    ``row.electrodes`` / ``row.routes``, bypassing both
+    ``QtTreeModel.setData`` and ``ProtocolItemDelegate.setModelData``.
+    The sync controller must fire ``rows_changed`` after a mutation so
+    the protocol state tracker can mark the protocol dirty — without
+    this, editing electrodes/routes via the device viewer leaves the
+    "unsaved changes" indicator off.
+    """
+    from device_viewer.models.messages import GeometryChangedMessage
+    manager = _make_manager()
+    path = manager.add_step(values={
+        "name": "S1", "electrodes": ["e00"], "routes": [],
+    })
+    row = manager.get_row(path)
+
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_geometry_qt(
+        GeometryChangedMessage(
+            id_to_channel={"e00": 0, "e01": 1, "e02": 2}
+        ).serialize()
+    )
+
+    fired = []
+    manager.observe(lambda _ev: fired.append(True), "rows_changed")
+
+    # Electrode-only change.
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], step_id=row.uuid,
+    ).serialize())
+    assert row.electrodes == ["e00", "e01"]
+    assert len(fired) == 1
+
+    # Route-only change (same electrodes).
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], routes=[(["e02"], "blue")], step_id=row.uuid,
+    ).serialize())
+    assert row.routes == [["e02"]]
+    assert len(fired) == 2
+
+    # No-op replay: same payload again must NOT re-fire.
+    ctrl._on_dv_state_qt(_make_dv_msg(
+        channels=[0, 1], routes=[(["e02"], "blue")], step_id=row.uuid,
+    ).serialize())
+    assert len(fired) == 2
+
+
 def test_step_scoped_message_with_unknown_step_id_is_noop(qapp):
     """If the DV's step_id doesn't match any row in our tree (e.g. the
     legacy grid is still publishing), don't crash and don't mutate."""
