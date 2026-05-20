@@ -166,6 +166,15 @@ def test_row_flags_round_trip(manager):
     assert new_mgr.root.children[0].repeat_duration_controls is True
 
 
+def test_row_flags_round_trip_nested_step(manager):
+    g = manager.add_group(name="G")
+    p = manager.add_step(parent_path=g, values={"name": "Inner"})
+    manager.get_row(p).repeat_duration_controls = True
+    data = manager.to_json()
+    new_mgr = RowManager.from_json(data, columns=list(manager.columns))
+    assert new_mgr.root.children[0].children[0].repeat_duration_controls is True
+
+
 def test_load_old_payload_without_row_flags_defaults_false(manager):
     manager.add_step(values={"name": "A"})
     data = manager.to_json()
