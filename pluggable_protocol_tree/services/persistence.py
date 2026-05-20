@@ -52,10 +52,13 @@ def serialize_tree(root: GroupRow, columns: list, protocol_metadata=None) -> dic
     fields = ["depth", "uuid", "type", "name"] + [c["id"] for c in col_specs]
 
     rows_out = list(_walk_with_depth(root, columns, depth=0, skip_root=True))
+    row_flags = {}
+    _collect_row_flags(root, row_flags, skip_root=True)
 
     return {
         "schema_version": PERSISTENCE_SCHEMA_VERSION,
         "protocol_metadata": dict(protocol_metadata or {}),
+        "row_flags": row_flags,
         "columns": col_specs,
         "fields": fields,
         "rows": rows_out,
@@ -73,6 +76,17 @@ def _walk_with_depth(node, columns: list, depth: int, skip_root: bool) -> Iterat
         for child in node.children:
             yield from _walk_with_depth(child, columns, depth + (0 if skip_root else 1),
                                          skip_root=False)
+
+
+def _collect_row_flags(node, out: dict, skip_root: bool) -> None:
+    """Populate ``out`` with {uuid: {"repeat_duration_controls": True}} for
+    every row whose flag is True. False rows are omitted to keep saves
+    compact (load defaults missing entries to False)."""
+    if not skip_root and bool(getattr(node, "repeat_duration_controls", False)):
+        out[node.uuid] = {"repeat_duration_controls": True}
+    if isinstance(node, GroupRow):
+        for child in node.children:
+            _collect_row_flags(child, out, skip_root=False)
 
 
 import importlib
@@ -96,6 +110,7 @@ def deserialize_tree(data: dict, columns: list, step_type, group_type):
     live_by_col_id = {c.model.col_id: c for c in columns}
     col_specs: list = data["columns"]
     fields: list = data["fields"]
+    row_flags: dict = data.get("row_flags") or {}
 
     # Per-saved-column resolution: (col_id, live_col_or_None)
     resolved: list = []
@@ -136,6 +151,9 @@ def deserialize_tree(data: dict, columns: list, step_type, group_type):
 
         row_cls = step_type if row_type == "step" else group_type
         row = row_cls(name=name, uuid=uuid_)
+        row.repeat_duration_controls = bool(
+            row_flags.get(uuid_, {}).get("repeat_duration_controls", False)
+        )
 
         for (col_id, live_col), raw in zip(resolved, values):
             if live_col is None:
