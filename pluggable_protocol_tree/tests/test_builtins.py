@@ -228,3 +228,19 @@ def test_route_reps_handler_cancel_rejects_edit(monkeypatch):
     assert col.handler.on_interact(row, col.model, 9) is False
     assert row.repeat_duration_controls is True          # unchanged
     assert row.route_repetitions == 1                    # edit rejected
+
+
+def test_reps_handler_is_plain_write_through_even_in_duration_mode():
+    """Reps now means 'repeat the whole thing' only; it must NOT prompt or
+    touch repeat_duration_controls. A bare BaseColumnHandler write-through."""
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repetitions_column import (
+        make_repetitions_column,
+    )
+    col = make_repetitions_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = True
+    assert col.handler.on_interact(row, col.model, 4) is True
+    assert row.repetitions == 4
+    assert row.repeat_duration_controls is True   # untouched by Reps edits
