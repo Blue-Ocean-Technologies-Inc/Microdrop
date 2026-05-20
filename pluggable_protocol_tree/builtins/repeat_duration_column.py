@@ -1,10 +1,10 @@
-"""Hidden repeat-duration column. When > 0, caps loop cycles to fit
+"""Route Reps Dur column. When > 0, caps route loop cycles to fit
 within this many seconds of step time.
 
-Edits prompt the user to hand loop-budget control over to Repeat (s)
+Edits prompt the user to hand loop-budget control over to Route Reps Dur
 (matches the legacy protocol_grid dialog flow) when the new value
 diverges from what the auto-estimate would compute given the current
-Reps + Duration + trail config. On confirm, the row's
+Route Reps + Duration + trail config. On confirm, the row's
 ``repeat_duration_controls`` flag flips to True; on cancel, the edit
 is rejected and the column reverts to its previous value.
 """
@@ -19,8 +19,8 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.services.phase_math import (
     estimate_repeat_duration_s,
 )
-from pluggable_protocol_tree.views.columns._hidden_view_mixins import (
-    HiddenDoubleSpinBoxColumnView,
+from pluggable_protocol_tree.views.columns.spinbox import (
+    DoubleSpinBoxColumnView,
 )
 
 
@@ -32,12 +32,12 @@ class RepeatDurationColumnModel(BaseColumnModel):
 
 
 class RepeatDurationHandler(BaseColumnHandler):
-    """Intercepts edits to prompt for the Repetitions → Repeat (s)
+    """Intercepts edits to prompt for the Route Reps → Route Reps Dur
     mode handoff. Read-through writes (no prompt) when:
-      * the row is already in Repeat (s)-controls mode, or
+      * the row is already in Route Reps Dur-controls mode, or
       * the new value matches the auto-estimate (rounding to the
         column's display precision), or
-      * the row has no routes (Repeat (s) has no semantic effect, so
+      * the row has no routes (Route Reps Dur has no semantic effect, so
         treat as a plain write).
     """
 
@@ -55,7 +55,7 @@ class RepeatDurationHandler(BaseColumnHandler):
             routes=routes,
             trail_length=int(getattr(row, "trail_length", 1) or 1),
             trail_overlay=int(getattr(row, "trail_overlay", 0) or 0),
-            n_repeats=int(getattr(row, "repetitions", 1) or 1),
+            n_repeats=int(getattr(row, "route_repetitions", 1) or 1),
             step_duration_s=float(getattr(row, "duration_s", 1.0) or 0.0),
             linear_repeats=bool(getattr(row, "linear_repeats", False)),
             soft_start=bool(getattr(row, "soft_start", False)),
@@ -89,9 +89,10 @@ class RepeatDurationHandler(BaseColumnHandler):
 def make_repeat_duration_column():
     return Column(
         model=RepeatDurationColumnModel(
-            col_id="repeat_duration", col_name="Repeat (s)", default_value=0.0,
+            col_id="repeat_duration", col_name="Route Reps Dur",
+            default_value=0.0,
         ),
-        view=HiddenDoubleSpinBoxColumnView(low=0.0, high=3600.0,
-                                           decimals=2, single_step=0.1),
+        view=DoubleSpinBoxColumnView(low=0.0, high=3600.0,
+                                     decimals=2, single_step=0.1),
         handler=RepeatDurationHandler(),
     )

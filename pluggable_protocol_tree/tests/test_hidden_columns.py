@@ -52,11 +52,12 @@ def test_soft_end_column_metadata_and_hidden():
     assert col.view.hidden_by_default is True
 
 
-def test_repeat_duration_column_metadata_and_hidden():
+def test_repeat_duration_column_metadata_and_visible():
     col = make_repeat_duration_column()
     assert col.model.col_id == "repeat_duration"
+    assert col.model.col_name == "Route Reps Dur"
     assert col.model.default_value == 0.0
-    assert col.view.hidden_by_default is True
+    assert col.view.hidden_by_default is False
     assert col.view.low == 0.0 and col.view.high == 3600.0
 
 
