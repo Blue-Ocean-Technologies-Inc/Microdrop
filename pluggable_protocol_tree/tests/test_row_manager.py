@@ -431,8 +431,13 @@ def test_base_row_has_repeat_duration_controls_flag_default_false():
     assert GroupRow().repeat_duration_controls is False
 
 
-def test_repeat_duration_controls_is_settable():
+def test_repeat_duration_controls_is_a_declared_bool_trait():
+    from traits.api import Bool
     from pluggable_protocol_tree.models.row import BaseRow
+    trait = BaseRow.class_traits().get("repeat_duration_controls")
+    assert trait is not None, "trait not declared on BaseRow"
+    assert isinstance(trait.trait_type, Bool)
+    # round-trip still works
     r = BaseRow()
     r.repeat_duration_controls = True
     assert r.repeat_duration_controls is True
