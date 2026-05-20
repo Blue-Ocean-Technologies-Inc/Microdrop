@@ -247,3 +247,117 @@ def test_routes_handler_unmapped_electrode_logs_warning_and_skips_channel():
     payload = json.loads(hardware_msgs[0]["message"])
     assert payload["electrodes"] == ["unknown_electrode"]
     assert payload["channels"] == []
+
+
+def test_routes_handler_uses_route_repetitions_for_loop_count():
+    """iter_phases must receive n_repeats from route_repetitions, NOT
+    repetitions (which now only drives whole-step expansion)."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.route_repetitions = 3
+    row.repetitions = 7          # must be IGNORED by phase generation
+    row.duration_s = 0.0         # zero dwell so the test is instant
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True     # skip hardware publish + ack wait
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    captured = {}
+    real_iter = None
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    real_iter = mod.iter_phases
+
+    def spy(*args, **kwargs):
+        captured["n_repeats"] = kwargs.get("n_repeats")
+        return real_iter(*args, **kwargs)
+
+    with patch.object(mod, "iter_phases", side_effect=spy), \
+         patch.object(mod, "publish_message", lambda **kw: None):
+        col.handler.on_step(row, ctx)
+
+    assert captured["n_repeats"] == 3
+
+
+def test_routes_handler_hold_pad_in_duration_mode():
+    """In duration mode, after the phase loop the handler holds the last
+    phase by cooperative-sleeping pad_seconds_for_duration(...) WITHOUT a
+    further publish."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    import pluggable_protocol_tree.builtins.routes_column as mod
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.route_repetitions = 1
+    row.duration_s = 0.0
+    row.repeat_duration = 5.0
+    row.repeat_duration_controls = True     # duration mode ON
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    sleeps = []
+    with patch.object(mod, "publish_message", lambda **kw: None), \
+         patch.object(mod, "pad_seconds_for_duration", return_value=2.5), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+        col.handler.on_step(row, ctx)
+
+    # The final cooperative sleep is the hold-pad of 2.5s.
+    assert sleeps and sleeps[-1] == 2.5
+    assert ctx.scratch.get("_routes_consumed_duration") is True
+
+
+def test_routes_handler_no_hold_pad_in_count_mode():
+    """Count mode (repeat_duration_controls False): no extra hold-pad sleep."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    import pluggable_protocol_tree.builtins.routes_column as mod
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.route_repetitions = 1
+    row.duration_s = 0.0
+    row.repeat_duration = 5.0
+    row.repeat_duration_controls = False    # count mode
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    with patch.object(mod, "publish_message", lambda **kw: None), \
+         patch.object(mod, "pad_seconds_for_duration", return_value=2.5) as pad_mock:
+        col.handler.on_step(row, ctx)
+
+    pad_mock.assert_not_called()

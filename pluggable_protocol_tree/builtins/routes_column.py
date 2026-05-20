@@ -46,7 +46,9 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
-from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.phase_math import (
+    iter_phases, pad_seconds_for_duration,
+)
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 
@@ -126,7 +128,7 @@ class RoutesHandler(BaseColumnHandler):
             soft_end=bool(getattr(row, "soft_end", False)),
             repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
             linear_repeats=bool(getattr(row, "linear_repeats", False)),
-            n_repeats=int(getattr(row, "repetitions", 1)),
+            n_repeats=int(getattr(row, "route_repetitions", 1)),
             step_duration_s=float(getattr(row, "duration_s", 1.0)),
         ))
         total_phases = len(phases)
@@ -189,6 +191,21 @@ class RoutesHandler(BaseColumnHandler):
                 ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
 
             _cooperative_sleep(per_phase_dwell, stop_event, pause_event)
+        # Route Reps Dur mode: after the full cycles, hold the last
+        # phase's electrodes (no new publish) for the exact leftover so
+        # total step time lands on the budget precisely.
+        if (bool(getattr(row, "repeat_duration_controls", False))
+                and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
+                and not stop_event.is_set()):
+            pad = pad_seconds_for_duration(
+                list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            )
+            if pad > 0:
+                _cooperative_sleep(pad, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
 
