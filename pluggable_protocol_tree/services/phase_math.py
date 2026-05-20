@@ -115,11 +115,16 @@ def _route_with_repeats(
             cycle_phases = len(cycle)
             cycles = max(1, int(repeat_duration_s
                                 / (cycle_phases * step_duration_s)))
+            for _ in range(cycles):
+                yield from cycle
+            # Duration mode: NO trailing return phase. Total emitted dwell
+            # equals cycles*cycle_time exactly; the RoutesHandler holds the
+            # last phase for the leftover (pad_seconds_for_duration).
         else:
             cycles = max(1, int(n_repeats))
-        for _ in range(cycles):
-            yield from cycle
-        yield cycle[0]
+            for _ in range(cycles):
+                yield from cycle
+            yield cycle[0]
     else:
         passes = max(1, int(n_repeats)) if linear_repeats else 1
         for _ in range(passes):
@@ -229,6 +234,42 @@ def effective_repetitions_for_duration(
     cycle_length = max(loop_lengths)
     n = int(((repeat_duration_s / step_duration_s) - 1) / cycle_length)
     return max(1, n)
+
+
+def pad_seconds_for_duration(
+    routes: List[List[str]],
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    *,
+    repeat_duration_s: float = 0.0,
+    step_duration_s: float = 1.0,
+) -> float:
+    """Leftover hold time for Route Reps Dur mode: the seconds remaining
+    after the maximum number of FULL loop cycles fit inside
+    ``repeat_duration_s``. The RoutesHandler holds the last phase's
+    electrodes for this long so total step time lands on
+    ``repeat_duration_s`` exactly.
+
+    cycle_time = cycle_length * step_duration_s (dominant loop route).
+    cycles = max(1, floor(repeat_duration_s / cycle_time)).
+    pad = max(0.0, repeat_duration_s - cycles * cycle_time).
+
+    Returns 0.0 when there are no loop routes, or either budget is
+    non-positive (matches the max(1,...) overshoot case where T is below
+    one cycle).
+    """
+    loop_lengths = []
+    for r in routes or []:
+        if not _is_loop_route(r):
+            continue
+        cycle = list(_route_windows(r, trail_length, trail_overlay))
+        if cycle:
+            loop_lengths.append(len(cycle))
+    if not loop_lengths or step_duration_s <= 0 or repeat_duration_s <= 0:
+        return 0.0
+    cycle_time = max(loop_lengths) * float(step_duration_s)
+    cycles = max(1, int(repeat_duration_s / cycle_time))
+    return max(0.0, float(repeat_duration_s) - cycles * cycle_time)
 
 
 def iter_phases(

@@ -76,7 +76,9 @@ def test_windows_empty_route_yields_nothing():
 
 # --- _route_with_repeats ---
 
-from pluggable_protocol_tree.services.phase_math import _route_with_repeats
+from pluggable_protocol_tree.services.phase_math import (
+    _route_with_repeats, pad_seconds_for_duration,
+)
 
 
 def test_repeats_open_route_no_linear_repeats_one_pass():
@@ -122,24 +124,26 @@ def test_repeats_loop_route_n_repeats():
 def test_repeats_loop_with_repeat_duration_caps_cycles():
     """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
     cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
-    cycle (always at least one pass). Test: 1 cycle + 1 return."""
+    cycle. Duration mode: 1 cycle, NO return phase (RoutesHandler holds
+    the last phase for leftover time instead)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
         repeat_duration_s=2.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]   # 1 cycle + return
+    assert out == [{"a"}, {"b"}, {"c"}]   # 1 cycle, no return
 
 
 def test_repeats_loop_with_repeat_duration_fits_two_cycles():
     """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles + 1 return."""
+    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles. Duration mode:
+    no return phase (RoutesHandler holds the last phase for leftover)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,
         repeat_duration_s=6.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles, no return
 
 
 def test_repeats_empty_route_yields_nothing():
@@ -318,7 +322,9 @@ def test_iter_phases_soft_end_appends_ramp():
 
 
 def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles + return."""
+    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles.
+    Duration mode drops the trailing return phase; the RoutesHandler
+    holds the last phase for the leftover seconds."""
     out = list(iter_phases(
         static_electrodes=[],
         routes=[["a", "b", "c", "a"]],
@@ -326,7 +332,7 @@ def test_iter_phases_repeat_duration_caps_loop_cycles():
         repeat_duration_s=6.5, step_duration_s=1.0,
         n_repeats=999,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles, no return
 
 
 def test_iter_phases_linear_repeats_replays_open_route():
@@ -337,3 +343,55 @@ def test_iter_phases_linear_repeats_replays_open_route():
         linear_repeats=True, n_repeats=3,
     ))
     assert out == [{"a"}, {"b"}, {"a"}, {"b"}, {"a"}, {"b"}]
+
+
+# --- duration-mode return-phase drop + pad_seconds_for_duration ---
+
+
+def test_duration_mode_omits_trailing_return_phase():
+    """Loop route, 4-window cycle, T fits exactly 2 cycles at dwell=1.0.
+    Count mode yields N*C + 1 (return) phases; duration mode yields N*C
+    (no return) so emitted dwell == cycles*cycle_time exactly."""
+    route = ["a", "b", "c", "d", "a"]   # loop, effective len 4, trail 1 => 4 windows
+    count_mode = list(_route_with_repeats(
+        route, trail_length=1, trail_overlay=0,
+        n_repeats=2, repeat_duration_s=0.0, step_duration_s=1.0))
+    dur_mode = list(_route_with_repeats(
+        route, trail_length=1, trail_overlay=0,
+        n_repeats=2, repeat_duration_s=8.0, step_duration_s=1.0))
+    assert len(count_mode) == 2 * 4 + 1     # cycles + return phase
+    assert len(dur_mode) == 2 * 4           # no return phase
+
+
+def test_pad_seconds_exact_leftover():
+    """T=10s, cycle=4 windows @1.0s => cycle_time=4. floor(10/4)=2 cycles
+    => 8s used, pad = 2.0s held on the last phase."""
+    routes = [["a", "b", "c", "d", "a"]]
+    pad = pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=10.0, step_duration_s=1.0)
+    assert pad == 2.0
+
+
+def test_pad_seconds_zero_when_t_below_one_cycle():
+    """T < cycle_time => max(1, floor)=1 cycle (overshoot), pad clamps to 0."""
+    routes = [["a", "b", "c", "d", "a"]]
+    pad = pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=2.0, step_duration_s=1.0)
+    assert pad == 0.0
+
+
+def test_pad_seconds_zero_without_loop_routes():
+    routes = [["a", "b", "c"]]   # open route, no loop
+    pad = pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=10.0, step_duration_s=1.0)
+    assert pad == 0.0
+
+
+def test_pad_seconds_zero_when_step_duration_nonpositive():
+    routes = [["a", "b", "c", "d", "a"]]
+    assert pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=10.0, step_duration_s=0.0) == 0.0
