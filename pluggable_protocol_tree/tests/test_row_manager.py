@@ -421,3 +421,18 @@ def test_protocol_metadata_holds_arbitrary_payload(manager):
     manager.protocol_metadata["someone_elses_key"] = [1, 2, 3]
     assert manager.protocol_metadata["electrode_to_channel"] == {"e00": 0, "e01": 1}
     assert manager.protocol_metadata["someone_elses_key"] == [1, 2, 3]
+
+
+# --- repeat_duration_controls internal flag (route-reps split) ---
+
+def test_base_row_has_repeat_duration_controls_flag_default_false():
+    from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+    assert BaseRow().repeat_duration_controls is False
+    assert GroupRow().repeat_duration_controls is False
+
+
+def test_repeat_duration_controls_is_settable():
+    from pluggable_protocol_tree.models.row import BaseRow
+    r = BaseRow()
+    r.repeat_duration_controls = True
+    assert r.repeat_duration_controls is True

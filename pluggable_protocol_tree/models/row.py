@@ -11,7 +11,7 @@ and add one trait per column in the active column set.
 
 import uuid as _uuid
 
-from traits.api import HasTraits, Str, List, Instance, Tuple, Property, provides
+from traits.api import HasTraits, Str, List, Instance, Tuple, Property, Bool, provides
 
 from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 
@@ -24,6 +24,11 @@ class BaseRow(HasTraits):
     row_type = Str("step", desc="'step' or 'group' — drives per-column visibility")
     path = Property(Tuple, observe="parent.path, parent.children.items",
                     desc="0-indexed tuple of positions from the root (empty for orphans)")
+    repeat_duration_controls = Bool(
+        False,
+        desc="Internal mode flag: True when Route Reps Dur is the "
+             "authoritative loop knob; False when Route Reps controls. "
+             "Not a column — persisted via the row_flags map.")
 
     def _uuid_default(self):
         return _uuid.uuid4().hex
