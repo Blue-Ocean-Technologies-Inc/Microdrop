@@ -395,3 +395,26 @@ def test_pad_seconds_zero_when_step_duration_nonpositive():
     assert pad_seconds_for_duration(
         routes, trail_length=1, trail_overlay=0,
         repeat_duration_s=10.0, step_duration_s=0.0) == 0.0
+
+
+def test_pad_seconds_zero_on_exact_fit():
+    """T=8, cycle=4 windows @1.0s => 2 full cycles fit exactly, pad 0
+    (legitimate exact fit, distinct from the sub-cycle overshoot case)."""
+    routes = [["a", "b", "c", "d", "a"]]
+    pad = pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=8.0, step_duration_s=1.0)
+    assert pad == 0.0
+
+
+def test_pad_seconds_multiple_loop_routes_uses_longest_running():
+    """Two loop routes: cycle lengths 3 and 4, T=10, step=1.
+    len-3 route runs floor(10/3)=3 cycles = 9 phases (9s);
+    len-4 route runs floor(10/4)=2 cycles = 8 phases (8s).
+    _zip runs until the longest-running (the len-3 route, 9s), so
+    pad = 10 - 9 = 1.0 held on the last phase."""
+    routes = [["a", "b", "c", "a"], ["e", "f", "g", "h", "e"]]
+    pad = pad_seconds_for_duration(
+        routes, trail_length=1, trail_overlay=0,
+        repeat_duration_s=10.0, step_duration_s=1.0)
+    assert pad == 1.0
