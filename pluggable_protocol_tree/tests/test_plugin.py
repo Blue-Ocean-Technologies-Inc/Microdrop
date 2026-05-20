@@ -55,14 +55,14 @@ def test_assemble_columns_canonical_order_after_ppt3():
     p = PluggableProtocolTreePlugin()
     ids = [c.model.col_id for c in p._assemble_columns()
            if c.model.col_id in (
-               "type", "id", "name", "repetitions", "duration_s",
-               "electrodes", "routes",
+               "type", "id", "name", "repetitions", "route_repetitions",
+               "duration_s", "electrodes", "routes",
                "trail_length", "trail_overlay", "soft_start", "soft_end",
                "repeat_duration", "linear_repeats",
            )]
     assert ids == [
-        "type", "id", "name", "repetitions", "duration_s",
-        "electrodes", "routes",
+        "type", "id", "name", "repetitions", "route_repetitions",
+        "duration_s", "electrodes", "routes",
         "trail_length", "trail_overlay", "soft_start", "soft_end",
         "repeat_duration", "linear_repeats",
     ]
