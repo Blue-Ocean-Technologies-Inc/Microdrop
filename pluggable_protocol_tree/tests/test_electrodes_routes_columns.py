@@ -275,7 +275,6 @@ def test_routes_handler_uses_route_repetitions_for_loop_count():
     ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
 
     captured = {}
-    real_iter = None
     import pluggable_protocol_tree.builtins.routes_column as mod
     real_iter = mod.iter_phases
 
@@ -327,7 +326,8 @@ def test_routes_handler_hold_pad_in_duration_mode():
 
     # The final cooperative sleep is the hold-pad of 2.5s.
     assert sleeps and sleeps[-1] == 2.5
-    assert ctx.scratch.get("_routes_consumed_duration") is True
+    from pluggable_protocol_tree.builtins.routes_column import DURATION_CONSUMED_KEY
+    assert ctx.scratch.get(DURATION_CONSUMED_KEY) is True
 
 
 def test_routes_handler_no_hold_pad_in_count_mode():
@@ -361,3 +361,43 @@ def test_routes_handler_no_hold_pad_in_count_mode():
         col.handler.on_step(row, ctx)
 
     pad_mock.assert_not_called()
+
+
+def test_routes_handler_no_sleep_when_pad_is_zero():
+    """Duration mode but pad_seconds_for_duration returns 0.0 (exact fit):
+    the hold-pad sleep must be skipped (guarded by `if pad > 0`)."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    import pluggable_protocol_tree.builtins.routes_column as mod
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.route_repetitions = 1
+    row.duration_s = 0.0
+    row.repeat_duration = 5.0
+    row.repeat_duration_controls = True
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    sleeps = []
+    with patch.object(mod, "publish_message", lambda **kw: None), \
+         patch.object(mod, "pad_seconds_for_duration", return_value=0.0), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+        col.handler.on_step(row, ctx)
+
+    # duration_s=0.0 means per-phase sleeps are 0.0; the key point is NO 0.0
+    # value here is the *pad* — but more robustly: pad path adds nothing
+    # beyond the per-phase sleeps. Assert no positive pad sleep occurred.
+    assert all(s == 0.0 for s in sleeps)

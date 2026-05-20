@@ -198,7 +198,7 @@ class RoutesHandler(BaseColumnHandler):
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
                 and not stop_event.is_set()):
             pad = pad_seconds_for_duration(
-                list(getattr(row, "routes", []) or []),
+                static_routes,
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),
                 repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
