@@ -28,3 +28,8 @@ class ExecutorSignals(QObject):
     # Empty tuple means "no repeating ancestor". Emitted just before
     # each step_started so UI labels can update in lockstep.
     step_repetition    = Signal(object)
+    # Per-phase: (phase_index_1based, phase_total, phase_duration_s).
+    # RoutesHandler emits before publishing each phase so the UI can
+    # update Phase x/y and reset its elapsed-time clock without waiting
+    # for the hardware ack.
+    phase_started      = Signal(int, int, float)

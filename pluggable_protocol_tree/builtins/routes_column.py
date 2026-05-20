@@ -5,10 +5,23 @@ Cell shows a read-only summary; the demo's SimpleDeviceViewer is the
 primary edit path in PPT-3.
 
 The RoutesHandler walks iter_phases() over the row's electrodes /
-routes / trail config, publishes each phase to ELECTRODES_STATE_CHANGE
-(JSON envelope with both electrode IDs and resolved channel numbers),
-then blocks via ctx.wait_for() for the device's
-ELECTRODES_STATE_APPLIED ack before requesting the next phase.
+routes / trail config. For each phase it does TWO things, in the same
+order the legacy protocol_grid did them:
+
+  1. **Display**: publishes ``PROTOCOL_TREE_DISPLAY_STATE`` to the
+     device viewer with the phase's electrode IDs. Synchronous, no
+     ack — the DV's overlay updates immediately. This always fires,
+     including in preview mode.
+  2. **Hardware**: only when ``preview_mode`` is False, publishes
+     ``ELECTRODES_STATE_CHANGE`` (the hardware-actuation topic) and
+     blocks via ``ctx.wait_for(ELECTRODES_STATE_APPLIED)`` for the
+     dropbot's ack. Acts as backpressure so we don't flood the
+     hardware queue.
+
+The hardware-side consumer (dropbot_controller) does NOT know about
+preview mode — preview gating happens entirely on the sender side, by
+not publishing the hardware message at all. Matches the legacy split
+in protocol_grid/services/protocol_runner_controller.py:_execute_next_phase.
 
 Priority 30 keeps this in a strictly earlier bucket than
 DurationColumnHandler (90), so the duration sleep only starts after
@@ -25,9 +38,13 @@ from traits.api import List, Str
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    PROTOCOL_TREE_DISPLAY_STATE,
 )
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
+)
+from pluggable_protocol_tree.models.display_state import (
+    ProtocolTreeDisplayMessage,
 )
 from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
@@ -86,15 +103,21 @@ class RoutesHandler(BaseColumnHandler):
         per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
         stop_event = ctx.protocol.stop_event
         pause_event = ctx.protocol.pause_event
-        # Preview mode publishes the electrode-state-change message AND
-        # waits for the ack just like a real run, so the device viewer's
-        # overlay listener still highlights each phase's electrodes —
-        # only the hardware-driving consumer (dropbot_controller, etc.)
-        # is expected to honour the embedded ``preview`` flag and skip
-        # actuation. This way the user gets a visual route playback
-        # without touching the chip.
         preview_mode = bool(getattr(ctx.protocol, "preview_mode", False))
-        for phase in iter_phases(
+
+        # Cached per-step display message metadata. Routes stay
+        # constant across phases — only the active-electrode set
+        # changes per phase. step_label format matches the dotted-path
+        # convention used elsewhere ("Step 1.2").
+        step_uuid = getattr(row, "uuid", "") or ""
+        dotted_id = ".".join(str(i + 1) for i in row.path)
+        step_label = f"Step {dotted_id}"
+        static_routes = list(getattr(row, "routes", []) or [])
+
+        # Materialize so we know the total upfront for phase_started's
+        # (i, N) emission. Phase counts are bounded by step config and
+        # well within reasonable list sizes; no streaming benefit lost.
+        phases = list(iter_phases(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
             routes=list(getattr(row, "routes", []) or []),
             trail_length=int(getattr(row, "trail_length", 1)),
@@ -105,7 +128,10 @@ class RoutesHandler(BaseColumnHandler):
             linear_repeats=bool(getattr(row, "linear_repeats", False)),
             n_repeats=int(getattr(row, "repetitions", 1)),
             step_duration_s=float(getattr(row, "duration_s", 1.0)),
-        ):
+        ))
+        total_phases = len(phases)
+        qsignals = getattr(ctx.protocol, "qsignals", None)
+        for phase_idx, phase in enumerate(phases, start=1):
             if stop_event.is_set():
                 break
             # Pause check at the phase boundary — block here so the
@@ -117,32 +143,51 @@ class RoutesHandler(BaseColumnHandler):
                 pause_event.wait_cleared()
                 if stop_event.is_set():
                     break
+
             electrodes = sorted(phase)
             channels = sorted(mapping[e] for e in electrodes if e in mapping)
             for e in electrodes:
                 if e not in mapping:
                     logger.warning(
-                        "electrode %r has no channel mapping; "
-                        "actuation channel skipped", e,
+                        f"electrode {e!r} has no channel mapping; "
+                        f"actuation channel skipped"
                     )
-            payload = {
-                "electrodes": electrodes,
-                "channels": channels,
-            }
-            if preview_mode:
-                # Tell hardware-driving consumers to skip actuation.
-                payload["preview"] = True
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps(payload),
+
+            if qsignals is not None:
+                qsignals.phase_started.emit(
+                    phase_idx, total_phases, per_phase_dwell,
+                )
+
+            # 1. Display: synchronous, no ack. editable=False so the DV
+            # won't echo a hardware publish back at us during a run.
+            display_msg = ProtocolTreeDisplayMessage(
+                electrodes=electrodes,
+                routes=static_routes,
+                step_id=step_uuid,
+                step_label=step_label,
+                free_mode=False,
+                editable=False,
             )
-            # 5.0s matches ack_roundtrip_column. Keeps headroom for the
-            # first publish in a process (cold broker pays ~1-2s) and
-            # for queue contention when other handlers in the same
-            # priority bucket publish in parallel and serialize through
-            # the single dramatiq worker queue. Hardware controllers
-            # typically ack in <100ms.
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            publish_message(
+                topic=PROTOCOL_TREE_DISPLAY_STATE,
+                message=display_msg.serialize(),
+            )
+
+            # 2. Hardware: only when not preview. dropbot_controller
+            # has no preview-mode awareness — gating happens here, on
+            # the sender side, by simply not publishing.
+            if not preview_mode:
+                payload = {"electrodes": electrodes, "channels": channels}
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(payload),
+                )
+                # 5.0s timeout matches ack_roundtrip_column. Cold-
+                # broker first publish pays ~1-2s; typical ack <100ms.
+                # In preview we skip this entirely so the user gets a
+                # snappy visual playback with no per-phase 5s stalls.
+                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+
             _cooperative_sleep(per_phase_dwell, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True

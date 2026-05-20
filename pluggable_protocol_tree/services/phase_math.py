@@ -91,10 +91,15 @@ def _route_with_repeats(
     Open route + linear_repeats=False → one pass of _route_windows.
     Open route + linear_repeats=True  → n_repeats passes (the row's
                                         `repetitions` column).
-    Loop route → n_repeats cycles UNLESS repeat_duration_s > 0, in
-                 which case cycles = max(1, floor(repeat_duration_s /
-                 (cycle_phases * step_duration_s))). The minimum of 1
-                 guarantees at least one cycle even on tiny budgets.
+    Loop route → n_repeats cycles plus one return-to-start phase at the
+                 very end (mirrors the legacy device-viewer route
+                 executor: N reps of a C-phase cycle yields N*C + 1
+                 phases, the final one being the window at position 0
+                 so the loop visibly closes). UNLESS repeat_duration_s
+                 > 0, in which case cycles = max(1, floor(
+                 repeat_duration_s / (cycle_phases * step_duration_s))).
+                 The minimum of 1 guarantees at least one cycle even on
+                 tiny budgets.
 
     Empty route yields nothing.
     """
@@ -114,6 +119,7 @@ def _route_with_repeats(
             cycles = max(1, int(n_repeats))
         for _ in range(cycles):
             yield from cycle
+        yield cycle[0]
     else:
         passes = max(1, int(n_repeats)) if linear_repeats else 1
         for _ in range(passes):
@@ -156,6 +162,73 @@ def _ramp_down(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
         ordered = sorted(last)
         for size in range(len(last) - 1, 0, -1):
             yield set(ordered[-size:])
+
+
+def estimate_repeat_duration_s(
+    *,
+    routes: List[List[str]],
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    n_repeats: int = 1,
+    step_duration_s: float = 1.0,
+    linear_repeats: bool = False,
+    soft_start: bool = False,
+    soft_end: bool = False,
+) -> float:
+    """Total wall-clock seconds the step would take in Repetitions-
+    controlled mode (i.e. with ``repeat_duration_s = 0`` so the loop
+    runs exactly ``n_repeats`` cycles + 1 return phase). Equivalent to
+    ``len(iter_phases(...)) * step_duration_s`` — handy for the
+    "auto-estimate" the Repeat (s) column shows when the user hasn't
+    taken manual control of the knob yet.
+
+    Returns 0.0 when there are no routes (nothing to time-budget).
+    """
+    if not routes:
+        return 0.0
+    phases = list(iter_phases(
+        static_electrodes=[],
+        routes=routes,
+        trail_length=trail_length,
+        trail_overlay=trail_overlay,
+        soft_start=soft_start,
+        soft_end=soft_end,
+        repeat_duration_s=0.0,
+        linear_repeats=linear_repeats,
+        n_repeats=n_repeats,
+        step_duration_s=step_duration_s,
+    ))
+    return len(phases) * float(step_duration_s)
+
+
+def effective_repetitions_for_duration(
+    *,
+    routes: List[List[str]],
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    step_duration_s: float = 1.0,
+    repeat_duration_s: float = 0.0,
+) -> int:
+    """How many full loop cycles fit inside ``repeat_duration_s``,
+    given each cycle takes ``cycle_phases * step_duration_s`` seconds
+    plus 1 return phase at the very end. Mirrors the legacy
+    PathExecutionService.calculate_effective_repetitions_for_path
+    formula: N <= (repeat_duration / step_duration - 1) / cycle_length.
+
+    Returns 1 if no loop routes or budget is too small for one cycle.
+    """
+    loop_lengths = []
+    for r in routes or []:
+        if not _is_loop_route(r):
+            continue
+        cycle = list(_route_windows(r, trail_length, trail_overlay))
+        if cycle:
+            loop_lengths.append(len(cycle))
+    if not loop_lengths or step_duration_s <= 0 or repeat_duration_s <= 0:
+        return 1
+    cycle_length = max(loop_lengths)
+    n = int(((repeat_duration_s / step_duration_s) - 1) / cycle_length)
+    return max(1, n)
 
 
 def iter_phases(

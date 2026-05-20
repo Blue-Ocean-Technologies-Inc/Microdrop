@@ -99,44 +99,47 @@ def test_repeats_open_route_linear_repeats_replays_n_times():
 
 
 def test_repeats_loop_route_default_one_cycle():
+    """One cycle of a 3-electrode loop yields 4 phases — the three
+    cycle windows plus a return-to-start phase (matches the legacy
+    device-viewer route executor)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_repeats_loop_route_n_repeats():
-    """Loop route + n_repeats=2 → 2 full cycles."""
+    """Loop route + n_repeats=2 → 2 full cycles + 1 return phase."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=2,
         repeat_duration_s=0.0, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_repeats_loop_with_repeat_duration_caps_cycles():
     """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
     cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
-    cycle (always at least one pass). Test: 1 cycle yielded."""
+    cycle (always at least one pass). Test: 1 cycle + 1 return."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
         repeat_duration_s=2.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]   # 1 cycle
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]   # 1 cycle + return
 
 
 def test_repeats_loop_with_repeat_duration_fits_two_cycles():
     """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles."""
+    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles + 1 return."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,
         repeat_duration_s=6.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_repeats_empty_route_yields_nothing():
@@ -262,11 +265,23 @@ def test_iter_phases_one_open_route_with_static():
 
 
 def test_iter_phases_one_loop_route():
+    """Loop closes with a return-to-start phase."""
     out = list(iter_phases(
         static_electrodes=[], routes=[["a", "b", "c", "a"]],
         trail_length=1, trail_overlay=0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]
+
+
+def test_iter_phases_four_electrode_loop_yields_five_phases():
+    """Loop with 4 unique electrodes, trail=1, one square at a time:
+    A→B→C→D→A. Five phases total (4 forward + 1 return). Mirrors the
+    legacy device-viewer loop execution that the user expects."""
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b", "c", "d", "a"]],
+        trail_length=1, trail_overlay=0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}, {"d"}, {"a"}]
 
 
 def test_iter_phases_two_routes_zip_with_static():
@@ -303,7 +318,7 @@ def test_iter_phases_soft_end_appends_ramp():
 
 
 def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles."""
+    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles + return."""
     out = list(iter_phases(
         static_electrodes=[],
         routes=[["a", "b", "c", "a"]],
@@ -311,7 +326,7 @@ def test_iter_phases_repeat_duration_caps_loop_cycles():
         repeat_duration_s=6.5, step_duration_s=1.0,
         n_repeats=999,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_iter_phases_linear_repeats_replays_open_route():

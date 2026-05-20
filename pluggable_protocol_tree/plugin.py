@@ -19,6 +19,9 @@ from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.linear_repeats_column import make_linear_repeats_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repeat_duration_column import make_repeat_duration_column
+from pluggable_protocol_tree.builtins.repeat_duration_controls_column import (
+    make_repeat_duration_controls_column,
+)
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
@@ -110,6 +113,7 @@ class PluggableProtocolTreePlugin(Plugin):
             make_soft_start_column(),
             make_soft_end_column(),
             make_repeat_duration_column(),
+            make_repeat_duration_controls_column(),
             make_linear_repeats_column(),
         ]
         try:

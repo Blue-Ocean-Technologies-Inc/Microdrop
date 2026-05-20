@@ -1,9 +1,24 @@
 """Hidden repeat-duration column. When > 0, caps loop cycles to fit
-within this many seconds of step time."""
+within this many seconds of step time.
+
+Edits prompt the user to hand loop-budget control over to Repeat (s)
+(matches the legacy protocol_grid dialog flow) when the new value
+diverges from what the auto-estimate would compute given the current
+Reps + Duration + trail config. On confirm, the row's
+``repeat_duration_controls`` flag flips to True; on cancel, the edit
+is rejected and the column reverts to its previous value.
+"""
 
 from traits.api import Float
 
-from pluggable_protocol_tree.models.column import BaseColumnModel, Column
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
+from pluggable_protocol_tree.models.column import (
+    BaseColumnHandler, BaseColumnModel, Column,
+)
+from pluggable_protocol_tree.services.phase_math import (
+    estimate_repeat_duration_s,
+)
 from pluggable_protocol_tree.views.columns._hidden_view_mixins import (
     HiddenDoubleSpinBoxColumnView,
 )
@@ -16,6 +31,61 @@ class RepeatDurationColumnModel(BaseColumnModel):
                           "seconds. 0 disables (use linear n_repeats).")
 
 
+class RepeatDurationHandler(BaseColumnHandler):
+    """Intercepts edits to prompt for the Repetitions → Repeat (s)
+    mode handoff. Read-through writes (no prompt) when:
+      * the row is already in Repeat (s)-controls mode, or
+      * the new value matches the auto-estimate (rounding to the
+        column's display precision), or
+      * the row has no routes (Repeat (s) has no semantic effect, so
+        treat as a plain write).
+    """
+
+    def on_interact(self, row, model, value):
+        new_value = float(value or 0.0)
+        already_controls = bool(getattr(row, "repeat_duration_controls", False))
+        if already_controls:
+            return model.set_value(row, new_value)
+
+        routes = list(getattr(row, "routes", []) or [])
+        if not routes:
+            return model.set_value(row, new_value)
+
+        estimated = estimate_repeat_duration_s(
+            routes=routes,
+            trail_length=int(getattr(row, "trail_length", 1) or 1),
+            trail_overlay=int(getattr(row, "trail_overlay", 0) or 0),
+            n_repeats=int(getattr(row, "repetitions", 1) or 1),
+            step_duration_s=float(getattr(row, "duration_s", 1.0) or 0.0),
+            linear_repeats=bool(getattr(row, "linear_repeats", False)),
+            soft_start=bool(getattr(row, "soft_start", False)),
+            soft_end=bool(getattr(row, "soft_end", False)),
+        )
+        # Compare at 0.01s resolution — matches the column's two-decimal
+        # display so a user-typed value identical to what's shown does
+        # not falsely trigger the dialog.
+        if abs(new_value - round(estimated, 2)) < 0.01:
+            return model.set_value(row, new_value)
+
+        choice = confirm(
+            None,
+            title="Switch to Repeat Duration Control",
+            message=(
+                "Using Repeat Duration will calculate the maximum number of "
+                "complete loops that fit within the specified time. Any "
+                "remaining time will be spent idling.<br><br>"
+                "Repetitions will become read-only while Repeat Duration "
+                "is in control."
+            ),
+            yes_label="Switch",
+            no_label="Cancel",
+        )
+        if choice != YES:
+            return False
+        row.repeat_duration_controls = True
+        return model.set_value(row, new_value)
+
+
 def make_repeat_duration_column():
     return Column(
         model=RepeatDurationColumnModel(
@@ -23,4 +93,5 @@ def make_repeat_duration_column():
         ),
         view=HiddenDoubleSpinBoxColumnView(low=0.0, high=3600.0,
                                            decimals=2, single_step=0.1),
+        handler=RepeatDurationHandler(),
     )
