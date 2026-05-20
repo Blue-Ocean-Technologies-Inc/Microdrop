@@ -90,7 +90,7 @@ def _route_with_repeats(
 
     Open route + linear_repeats=False → one pass of _route_windows.
     Open route + linear_repeats=True  → n_repeats passes (the row's
-                                        `repetitions` column).
+                                        `route_repetitions` column).
     Loop route → n_repeats cycles plus one return-to-start phase at the
                  very end (mirrors the legacy device-viewer route
                  executor: N reps of a C-phase cycle yields N*C + 1
@@ -175,11 +175,11 @@ def estimate_repeat_duration_s(
     soft_start: bool = False,
     soft_end: bool = False,
 ) -> float:
-    """Total wall-clock seconds the step would take in Repetitions-
+    """Total wall-clock seconds the step would take in Route Reps-
     controlled mode (i.e. with ``repeat_duration_s = 0`` so the loop
     runs exactly ``n_repeats`` cycles + 1 return phase). Equivalent to
     ``len(iter_phases(...)) * step_duration_s`` — handy for the
-    "auto-estimate" the Repeat (s) column shows when the user hasn't
+    "auto-estimate" the Route Reps Dur column shows when the user hasn't
     taken manual control of the knob yet.
 
     Returns 0.0 when there are no routes (nothing to time-budget).

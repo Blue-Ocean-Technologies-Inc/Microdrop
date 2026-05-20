@@ -74,7 +74,7 @@ class RepeatDurationHandler(BaseColumnHandler):
                 "Using Repeat Duration will calculate the maximum number of "
                 "complete loops that fit within the specified time. Any "
                 "remaining time will be spent idling.<br><br>"
-                "Repetitions will become read-only while Repeat Duration "
+                "Route Reps will become read-only while Route Reps Dur "
                 "is in control."
             ),
             yes_label="Switch",
