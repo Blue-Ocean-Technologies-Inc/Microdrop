@@ -295,7 +295,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # behavior when a step (not free mode) is the message source.
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
-            routes=[(route, "blue") for route in msg.routes],
+            routes=[(route, self.model.routes.get_available_color())
+                    for route in msg.routes],
             id_to_channel=id_to_channel,
             step_info={
                 "step_id": msg.step_id,
