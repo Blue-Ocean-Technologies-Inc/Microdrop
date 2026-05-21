@@ -506,7 +506,7 @@ class ProtocolTreePane(QWidget):
                 soft_end=bool(getattr(row, "soft_end", False)),
                 repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
                 linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=int(getattr(row, "repetitions", 1)),
+                n_repeats=int(getattr(row, "route_repetitions", 1)),
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
         except Exception as e:
