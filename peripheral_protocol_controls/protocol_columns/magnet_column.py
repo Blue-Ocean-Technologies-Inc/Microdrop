@@ -83,12 +83,14 @@ class MagnetHeightSpinBoxView(DoubleSpinBoxColumnView):
 
 
 class MagnetHandler(BaseCompoundColumnHandler):
-    """Publishes the row's magnet state and waits for the dropbot ack.
+    """Publishes the row's magnet state and (optionally) waits for the ack.
 
     Priority 20 — parallel with VoltageHandler / FrequencyHandler in the
     same bucket; runs strictly before RoutesHandler at priority 30. The
     10s timeout is longer than v/f's 5s because physical magnet
-    movement is slower than RPC writes.
+    movement is slower than RPC writes. The ack-wait is gated on the
+    ``PeripheralPreferences.wait_for_magnet_ack`` preference (default
+    True) so a protocol can run fire-and-forget without a magnet responder.
 
     No on_interact override — magnet column does NOT persist user
     cell-edits to PeripheralPreferences. The user changes up_height_mm
@@ -108,7 +110,14 @@ class MagnetHandler(BaseCompoundColumnHandler):
             "height_mm": float(row.magnet_height_mm),
         })
         publish_message(topic=PROTOCOL_SET_MAGNET, message=payload)
-        ctx.wait_for(MAGNET_APPLIED, timeout=10.0)
+        # Blocking on the hardware ack is opt-out via preference so a
+        # protocol can run fire-and-forget when no magnet responder is
+        # connected (PeripheralPreferences.wait_for_magnet_ack). Imported
+        # lazily so column construction stays free of preference/runtime
+        # imports (matches the "read at runtime" pattern for up_height_mm).
+        from peripheral_controller.preferences import PeripheralPreferences
+        if PeripheralPreferences().wait_for_magnet_ack:
+            ctx.wait_for(MAGNET_APPLIED, timeout=10.0)
 
 
 def make_magnet_column():
