@@ -117,9 +117,10 @@ def _route_with_repeats(
                                 / (cycle_phases * step_duration_s)))
             for _ in range(cycles):
                 yield from cycle
-            # Duration mode: NO trailing return phase. Total emitted dwell
-            # equals cycles*cycle_time exactly; the RoutesHandler holds the
-            # last phase for the leftover (pad_seconds_for_duration).
+            # Duration mode: NO trailing return phase. The RoutesHandler
+            # holds the last phase for the leftover (repeat_duration -
+            # len(phases) * per_phase_dwell) so total step time lands on
+            # the budget exactly.
         else:
             cycles = max(1, int(n_repeats))
             for _ in range(cycles):
