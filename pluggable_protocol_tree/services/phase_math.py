@@ -236,53 +236,6 @@ def effective_repetitions_for_duration(
     return max(1, n)
 
 
-def pad_seconds_for_duration(
-    routes: List[List[str]],
-    trail_length: int = 1,
-    trail_overlay: int = 0,
-    *,
-    repeat_duration_s: float = 0.0,
-    step_duration_s: float = 1.0,
-) -> float:
-    """Leftover hold time for Route Reps Dur mode: the seconds remaining
-    after the longest-running loop route has completed its maximum number
-    of FULL cycles within ``repeat_duration_s``. The RoutesHandler holds
-    the last phase's electrodes for this long so total step time lands on
-    ``repeat_duration_s`` exactly.
-
-    For each loop route, emitted dwell = cycles * cycle_time where
-    cycle_time = cycle_length * step_duration_s and
-    cycles = max(1, floor(repeat_duration_s / cycle_time)). Because
-    ``_zip_with_static`` runs until the LONGEST-running route exhausts,
-    the pad is measured against the max emitted dwell across loop routes
-    (not merely the longest cycle length — a shorter cycle can fit more
-    full repeats and thus run longer).
-
-    pad = max(0.0, repeat_duration_s - max_emitted_dwell).
-
-    Returns 0.0 when there are no loop routes, or either budget is
-    non-positive (matches the max(1,...) overshoot case where T is below
-    one cycle). Open (non-loop) routes are not budgeted here, mirroring
-    ``effective_repetitions_for_duration``; the duration feature is
-    loop-route-centric.
-    """
-    if step_duration_s <= 0 or repeat_duration_s <= 0:
-        return 0.0
-    max_emitted = 0.0
-    for r in routes or []:
-        if not _is_loop_route(r):
-            continue
-        cycle = list(_route_windows(r, trail_length, trail_overlay))
-        if not cycle:
-            continue
-        cycle_time = len(cycle) * float(step_duration_s)
-        cycles = max(1, int(repeat_duration_s / cycle_time))
-        max_emitted = max(max_emitted, cycles * cycle_time)
-    if max_emitted <= 0.0:
-        return 0.0
-    return max(0.0, float(repeat_duration_s) - max_emitted)
-
-
 def iter_phases(
     static_electrodes: List[str],
     routes: List[List[str]],

@@ -77,7 +77,7 @@ def test_windows_empty_route_yields_nothing():
 # --- _route_with_repeats ---
 
 from pluggable_protocol_tree.services.phase_math import (
-    _route_with_repeats, pad_seconds_for_duration,
+    _route_with_repeats,
 )
 
 
@@ -345,7 +345,7 @@ def test_iter_phases_linear_repeats_replays_open_route():
     assert out == [{"a"}, {"b"}, {"a"}, {"b"}, {"a"}, {"b"}]
 
 
-# --- duration-mode return-phase drop + pad_seconds_for_duration ---
+# --- duration-mode return-phase drop ---
 
 
 def test_duration_mode_omits_trailing_return_phase():
@@ -361,60 +361,3 @@ def test_duration_mode_omits_trailing_return_phase():
         n_repeats=2, repeat_duration_s=8.0, step_duration_s=1.0))
     assert len(count_mode) == 2 * 4 + 1     # cycles + return phase
     assert len(dur_mode) == 2 * 4           # no return phase
-
-
-def test_pad_seconds_exact_leftover():
-    """T=10s, cycle=4 windows @1.0s => cycle_time=4. floor(10/4)=2 cycles
-    => 8s used, pad = 2.0s held on the last phase."""
-    routes = [["a", "b", "c", "d", "a"]]
-    pad = pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=10.0, step_duration_s=1.0)
-    assert pad == 2.0
-
-
-def test_pad_seconds_zero_when_t_below_one_cycle():
-    """T < cycle_time => max(1, floor)=1 cycle (overshoot), pad clamps to 0."""
-    routes = [["a", "b", "c", "d", "a"]]
-    pad = pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=2.0, step_duration_s=1.0)
-    assert pad == 0.0
-
-
-def test_pad_seconds_zero_without_loop_routes():
-    routes = [["a", "b", "c"]]   # open route, no loop
-    pad = pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=10.0, step_duration_s=1.0)
-    assert pad == 0.0
-
-
-def test_pad_seconds_zero_when_step_duration_nonpositive():
-    routes = [["a", "b", "c", "d", "a"]]
-    assert pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=10.0, step_duration_s=0.0) == 0.0
-
-
-def test_pad_seconds_zero_on_exact_fit():
-    """T=8, cycle=4 windows @1.0s => 2 full cycles fit exactly, pad 0
-    (legitimate exact fit, distinct from the sub-cycle overshoot case)."""
-    routes = [["a", "b", "c", "d", "a"]]
-    pad = pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=8.0, step_duration_s=1.0)
-    assert pad == 0.0
-
-
-def test_pad_seconds_multiple_loop_routes_uses_longest_running():
-    """Two loop routes: cycle lengths 3 and 4, T=10, step=1.
-    len-3 route runs floor(10/3)=3 cycles = 9 phases (9s);
-    len-4 route runs floor(10/4)=2 cycles = 8 phases (8s).
-    _zip runs until the longest-running (the len-3 route, 9s), so
-    pad = 10 - 9 = 1.0 held on the last phase."""
-    routes = [["a", "b", "c", "a"], ["e", "f", "g", "h", "e"]]
-    pad = pad_seconds_for_duration(
-        routes, trail_length=1, trail_overlay=0,
-        repeat_duration_s=10.0, step_duration_s=1.0)
-    assert pad == 1.0

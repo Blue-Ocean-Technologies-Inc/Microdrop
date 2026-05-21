@@ -289,13 +289,15 @@ def test_routes_handler_uses_route_repetitions_for_loop_count():
     assert captured["n_repeats"] == 3
 
 
-def test_routes_handler_hold_pad_in_duration_mode():
-    """In duration mode, after the phase loop the handler holds the last
-    phase by cooperative-sleeping pad_seconds_for_duration(...) WITHOUT a
-    further publish."""
+def test_routes_handler_hold_pad_uses_total_emitted_phase_count():
+    """Pad = repeat_duration - len(phases)*dwell, based on the ACTUAL
+    emitted phases (so loop cycles + soft ramps + open routes all count).
+    iter_phases is patched to a known 6-phase list; T=10, dwell=1 => pad 4."""
     from unittest.mock import MagicMock, patch
     from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.routes_column import (
+        make_routes_column, DURATION_CONSUMED_KEY,
+    )
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
@@ -305,10 +307,11 @@ def test_routes_handler_hold_pad_in_duration_mode():
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
     row = Row()
     row.routes = [["a", "b", "c", "a"]]
-    row.route_repetitions = 1
-    row.duration_s = 0.0
-    row.repeat_duration = 5.0
-    row.repeat_duration_controls = True     # duration mode ON
+    row.duration_s = 1.0
+    row.repeat_duration = 10.0
+    row.repeat_duration_controls = True
+
+    fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
     ctx = MagicMock()
     ctx.protocol.stop_event.is_set.return_value = False
@@ -319,19 +322,20 @@ def test_routes_handler_hold_pad_in_duration_mode():
 
     sleeps = []
     with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "pad_seconds_for_duration", return_value=2.5), \
+         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
          patch.object(mod, "_cooperative_sleep",
                       side_effect=lambda secs, *a, **k: sleeps.append(secs)):
         col.handler.on_step(row, ctx)
 
-    # The final cooperative sleep is the hold-pad of 2.5s.
-    assert sleeps and sleeps[-1] == 2.5
-    from pluggable_protocol_tree.builtins.routes_column import DURATION_CONSUMED_KEY
+    # 6 per-phase dwells of 1.0, then the pad of 10 - 6*1 = 4.0.
+    assert sleeps[-1] == 4.0
+    assert sum(sleeps) == 10.0          # total lands exactly on the budget
     assert ctx.scratch.get(DURATION_CONSUMED_KEY) is True
 
 
 def test_routes_handler_no_hold_pad_in_count_mode():
-    """Count mode (repeat_duration_controls False): no extra hold-pad sleep."""
+    """Count mode (repeat_duration_controls False): no extra pad sleep —
+    only the per-phase dwells occur."""
     from unittest.mock import MagicMock, patch
     from pluggable_protocol_tree.models.row import build_row_type, BaseRow
     from pluggable_protocol_tree.builtins.routes_column import make_routes_column
@@ -344,44 +348,11 @@ def test_routes_handler_no_hold_pad_in_count_mode():
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
     row = Row()
     row.routes = [["a", "b", "c", "a"]]
-    row.route_repetitions = 1
-    row.duration_s = 0.0
-    row.repeat_duration = 5.0
-    row.repeat_duration_controls = False    # count mode
+    row.duration_s = 1.0
+    row.repeat_duration = 10.0
+    row.repeat_duration_controls = False     # count mode
 
-    ctx = MagicMock()
-    ctx.protocol.stop_event.is_set.return_value = False
-    ctx.protocol.pause_event.is_set.return_value = False
-    ctx.protocol.preview_mode = True
-    ctx.scratch = {}
-    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
-
-    with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "pad_seconds_for_duration", return_value=2.5) as pad_mock:
-        col.handler.on_step(row, ctx)
-
-    pad_mock.assert_not_called()
-
-
-def test_routes_handler_no_sleep_when_pad_is_zero():
-    """Duration mode but pad_seconds_for_duration returns 0.0 (exact fit):
-    the hold-pad sleep must be skipped (guarded by `if pad > 0`)."""
-    from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
-    from pluggable_protocol_tree.builtins.route_repetitions_column import (
-        make_route_repetitions_column,
-    )
-    import pluggable_protocol_tree.builtins.routes_column as mod
-
-    col = make_routes_column()
-    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
-    row = Row()
-    row.routes = [["a", "b", "c", "a"]]
-    row.route_repetitions = 1
-    row.duration_s = 0.0
-    row.repeat_duration = 5.0
-    row.repeat_duration_controls = True
+    fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
     ctx = MagicMock()
     ctx.protocol.stop_event.is_set.return_value = False
@@ -392,12 +363,48 @@ def test_routes_handler_no_sleep_when_pad_is_zero():
 
     sleeps = []
     with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "pad_seconds_for_duration", return_value=0.0), \
+         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
          patch.object(mod, "_cooperative_sleep",
                       side_effect=lambda secs, *a, **k: sleeps.append(secs)):
         col.handler.on_step(row, ctx)
 
-    # duration_s=0.0 means per-phase sleeps are 0.0; the key point is NO 0.0
-    # value here is the *pad* — but more robustly: pad path adds nothing
-    # beyond the per-phase sleeps. Assert no positive pad sleep occurred.
-    assert all(s == 0.0 for s in sleeps)
+    # Exactly one sleep per phase, no trailing pad sleep.
+    assert len(sleeps) == len(fake_phases)
+
+
+def test_routes_handler_no_pad_sleep_when_phases_fill_budget():
+    """Duration mode but len(phases)*dwell == repeat_duration: pad is 0 so
+    no extra sleep is added beyond the per-phase dwells."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    import pluggable_protocol_tree.builtins.routes_column as mod
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.duration_s = 1.0
+    row.repeat_duration = 6.0                # equals 6 phases * 1.0
+    row.repeat_duration_controls = True
+
+    fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    sleeps = []
+    with patch.object(mod, "publish_message", lambda **kw: None), \
+         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+        col.handler.on_step(row, ctx)
+
+    assert len(sleeps) == len(fake_phases)   # no extra pad sleep (pad == 0)

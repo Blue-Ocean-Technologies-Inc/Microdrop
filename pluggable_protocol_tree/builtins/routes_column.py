@@ -46,9 +46,7 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
-from pluggable_protocol_tree.services.phase_math import (
-    iter_phases, pad_seconds_for_duration,
-)
+from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 
@@ -197,13 +195,12 @@ class RoutesHandler(BaseColumnHandler):
         if (bool(getattr(row, "repeat_duration_controls", False))
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
                 and not stop_event.is_set()):
-            pad = pad_seconds_for_duration(
-                static_routes,
-                trail_length=int(getattr(row, "trail_length", 1)),
-                trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
-                step_duration_s=float(getattr(row, "duration_s", 1.0)),
-            )
+            # Hold the last phase for the leftover so total step time lands
+            # on the budget exactly. Based on the ACTUAL emitted phase count
+            # (len(phases)) so it accounts for loop cycles, soft-start/end
+            # ramp phases, and multi/open routes uniformly.
+            pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
+                          - len(phases) * per_phase_dwell)
             if pad > 0:
                 _cooperative_sleep(pad, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
