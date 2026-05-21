@@ -178,16 +178,34 @@ def test_pane_tick_timer_runs_at_10_hz(qapp):
     assert pane._tick_timer.interval() == 100
 
 
-def test_pane_phase_acked_signal_resets_phase_timer(qapp):
+def test_pane_phase_started_signal_sets_phase_timer(qapp):
+    """Phase timing is driven by the executor's phase_started signal
+    (independent of hardware ack), so the status bar tracks the executor
+    regardless of whether an ack arrives."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
     pane._current_row = object()
     pane._step_started_at = None
-    pane.phase_acked.emit()
+    pane.executor.qsignals.phase_started.emit(1, 3, 0.5)
     assert pane._phase_started_at is not None
     assert pane._step_started_at is not None
+    assert pane._phase_index == 1
+    assert pane._phase_total == 3
+
+
+def test_pane_phase_acked_is_noop_for_timer(qapp):
+    """phase_acked no longer sets the phase timer — that moved to
+    phase_started so external acks don't fight the executor-driven clock."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
+    pane._current_row = object()
+    pane._phase_started_at = None
+    pane.phase_acked.emit()
+    assert pane._phase_started_at is None
 
 
 def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):

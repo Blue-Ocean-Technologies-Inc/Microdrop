@@ -411,8 +411,8 @@ class StatusBar(QScrollArea):
         # callers (BasePluggableProtocolDemoWindow) want to surface
         # the per-phase ack timer here. Hidden by default; the demo
         # window reveals it iff DemoConfig.phase_ack_topic is set.
-        self.lbl_phase_time = QLabel("Phase 0.00s / 0.00s")
-        self.lbl_phase_time.setFixedWidth(170)
+        self.lbl_phase_time = QLabel("Phase 0/0  0.00s / 0.00s")
+        self.lbl_phase_time.setFixedWidth(220)
         self.lbl_phase_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_phase_time.setVisible(False)
 

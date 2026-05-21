@@ -124,6 +124,8 @@ class ProtocolTreePane(QWidget):
         self._step_started_at: float | None = None
         self._phase_started_at: float | None = None
         self._phase_target: float | None = None
+        self._phase_index = 0
+        self._phase_total = 0
         self._current_row = None
         self._repeats_total = 1
         self._repeats_completed = 0
@@ -239,6 +241,7 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
         self.executor.qsignals.protocol_error.connect(self._on_error)
+        self.executor.qsignals.phase_started.connect(self._on_phase_started)
         if self.phase_ack_topic is not None:
             self.phase_acked.connect(self._on_phase_ack)
 
@@ -287,6 +290,8 @@ class ProtocolTreePane(QWidget):
         self._current_row = row
         self._step_started_at = time.monotonic()
         self._phase_started_at = None
+        self._phase_index = 0
+        self._phase_total = 0
         try:
             self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
         except (TypeError, ValueError):
@@ -323,12 +328,28 @@ class ProtocolTreePane(QWidget):
         return "-"
 
     def _on_phase_ack(self):
+        # Phase boundary now comes from the executor's phase_started
+        # signal (independent of hardware ack). Kept as a no-op so
+        # external code emitting phase_acked doesn't fight the timer.
+        return
+
+    def _on_phase_started(self, phase_index, phase_total, phase_duration_s):
+        """Executor signal: a new phase has begun. Reset the elapsed
+        clock and update the Phase x/y label so the status bar tracks
+        the executor regardless of whether a hardware ack arrives."""
         if self._current_row is None:
             return
         now = time.monotonic()
         if self._step_started_at is None:
             self._step_started_at = now
         self._phase_started_at = now
+        self._phase_index = int(phase_index)
+        self._phase_total = int(phase_total)
+        try:
+            self._phase_target = float(phase_duration_s)
+        except (TypeError, ValueError):
+            self._phase_target = None
+        self._refresh_status()
 
     def _on_step_repetition(self, rep_chain):
         if not rep_chain:
@@ -345,12 +366,12 @@ class ProtocolTreePane(QWidget):
         self._refresh_status()
 
     def _on_error(self, msg):
+        logger.error(f"Protocol error: {msg}")
+        self._publish_protocol_running("False")
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self.clear_highlights()
-        self._set_idle_button_state()
-        self._tick_timer.stop()
+        self._on_protocol_terminated()
         error_dialog(parent=self, title="Protocol error", message=str(msg))
 
     def _refresh_status(self):
@@ -364,9 +385,15 @@ class ProtocolTreePane(QWidget):
                 else time.monotonic() - self._phase_started_at
             )
             target = self._phase_target if self._phase_target is not None else 0.0
-            self._status_phase_time_label.setText(
-                f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
-            )
+            if self._phase_total > 0:
+                self._status_phase_time_label.setText(
+                    f"Phase {self._phase_index}/{self._phase_total}  "
+                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
+                )
+            else:
+                self._status_phase_time_label.setText(
+                    f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
+                )
 
     # --- button state machine ----------------------------------------
 
@@ -483,6 +510,16 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.merge_phase_controls_to_play_button()
         self._pause_phases = []
         self._pause_phase_idx = 0
+        # Clear hardware actuation: independent of the DV's free-mode
+        # publish below, which can race with PROTOCOL_RUNNING and leave
+        # the last step's channels energized after abort/error.
+        try:
+            publish_message(
+                topic=ELECTRODES_STATE_CHANGE,
+                message=json.dumps({"electrodes": [], "channels": []}),
+            )
+        except Exception as e:
+            logger.warning(f"protocol-terminated electrode clear failed: {e}")
         # Push free-mode payload to DV: clear_highlights cleared the
         # tree selection but did so with _suppress_publish active, so
         # the controller's currentChanged slot was gated. Explicit
@@ -536,16 +573,46 @@ class ProtocolTreePane(QWidget):
         )
         electrodes = sorted(phase)
         channels = sorted(mapping[e] for e in electrodes if e in mapping)
-        payload = {"electrodes": electrodes, "channels": channels}
-        if self._current_run_preview_mode:
-            payload["preview"] = True
-        try:
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps(payload),
+
+        # Display path: always publishes to PROTOCOL_TREE_DISPLAY_STATE
+        # so the DV's overlay tracks Prev/Next phase clicks instantly,
+        # even in preview mode. Cached step metadata from _current_row.
+        row = self._current_row
+        if row is not None:
+            from pluggable_protocol_tree.models.display_state import (
+                ProtocolTreeDisplayMessage,
             )
-        except Exception as e:
-            logger.warning(f"phase navigation publish failed: {e}")
+            from pluggable_protocol_tree.consts import (
+                PROTOCOL_TREE_DISPLAY_STATE,
+            )
+            dotted_id = ".".join(str(i + 1) for i in row.path)
+            display_msg = ProtocolTreeDisplayMessage(
+                electrodes=electrodes,
+                routes=list(getattr(row, "routes", []) or []),
+                step_id=getattr(row, "uuid", "") or "",
+                step_label=f"Step {dotted_id}",
+                free_mode=False,
+                editable=False,
+            )
+            try:
+                publish_message(
+                    topic=PROTOCOL_TREE_DISPLAY_STATE,
+                    message=display_msg.serialize(),
+                )
+            except Exception as e:
+                logger.warning(f"phase navigation display publish failed: {e}")
+
+        # Hardware path: gated on preview. Matches RoutesHandler — the
+        # backend has no preview awareness, we just don't publish.
+        if not self._current_run_preview_mode:
+            payload = {"electrodes": electrodes, "channels": channels}
+            try:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(payload),
+                )
+            except Exception as e:
+                logger.warning(f"phase navigation hardware publish failed: {e}")
 
     def _update_phase_nav_buttons(self):
         prev_enabled = self._pause_phase_idx > 0
@@ -666,6 +733,8 @@ class ProtocolTreePane(QWidget):
         self._step_started_at = None
         self._phase_started_at = None
         self._phase_target = None
+        self._phase_index = 0
+        self._phase_total = 0
         self._current_row = None
 
         self._status_step_label.setText("Step 0/0")
@@ -675,7 +744,7 @@ class ProtocolTreePane(QWidget):
         self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
         self.status_bar.lbl_next_step.setText("Next Step: -")
         if self._status_phase_time_label is not None:
-            self._status_phase_time_label.setText("Phase 0.00s / 0.00s")
+            self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
 
     # --- save / load -----------------------------------------------
 
@@ -780,6 +849,80 @@ class ProtocolTreePane(QWidget):
         self.protocol_state_tracker.on_cell_changed(
             path, col_id, self.manager,
         )
+        self._reconcile_repeat_duration_for_row(path, col_id)
+
+    # Fields whose change should trigger an auto-recalc of Route Reps Dur
+    # while the row is in Route-Reps-controlled mode.
+    _RECALC_TRIGGERS = frozenset({
+        "route_repetitions", "duration_s", "trail_length", "trail_overlay",
+        "routes", "soft_start", "soft_end", "linear_repeats",
+    })
+
+    def _reconcile_repeat_duration_for_row(self, path, col_id):
+        """Mirror the legacy auto-recalc / effective-reps coupling:
+
+          * In Route-Reps-controlled mode (``repeat_duration_controls``
+            False): edits to any geometry/timing knob refresh the
+            Route Reps Dur cell with the new estimate.
+          * In Route-Reps-Dur-controlled mode (flag True): edits to
+            Route Reps Dur refresh the Route Reps cell with the effective
+            number of full cycles that fit.
+
+        Programmatic writes here go via ``setattr`` directly (NOT
+        ``model.set_value`` and NOT through ``on_interact``) so the
+        mode-switch dialog only ever fires for genuine user clicks,
+        never for these reconciliation passes.
+        """
+        if self._is_protocol_active():
+            return
+        try:
+            row = self.manager.get_row(tuple(path))
+        except (IndexError, AttributeError):
+            return
+        routes = list(getattr(row, "routes", []) or [])
+        if not routes:
+            return
+        controls = bool(getattr(row, "repeat_duration_controls", False))
+        duration_s = float(getattr(row, "duration_s", 1.0) or 0.0)
+        trail_length = int(getattr(row, "trail_length", 1) or 1)
+        trail_overlay = int(getattr(row, "trail_overlay", 0) or 0)
+        linear_repeats = bool(getattr(row, "linear_repeats", False))
+        soft_start = bool(getattr(row, "soft_start", False))
+        soft_end = bool(getattr(row, "soft_end", False))
+
+        from pluggable_protocol_tree.services.phase_math import (
+            effective_repetitions_for_duration, estimate_repeat_duration_s,
+        )
+        if not controls and col_id in self._RECALC_TRIGGERS:
+            n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
+            estimated = estimate_repeat_duration_s(
+                routes=routes,
+                trail_length=trail_length, trail_overlay=trail_overlay,
+                n_repeats=n_repeats, step_duration_s=duration_s,
+                linear_repeats=linear_repeats,
+                soft_start=soft_start, soft_end=soft_end,
+            )
+            estimated = round(estimated, 2)
+            if abs(float(getattr(row, "repeat_duration", 0.0)) - estimated) >= 0.01:
+                row.repeat_duration = estimated
+                # Re-entrancy is bounded: see _RECALC_TRIGGERS guard +
+                # mode-check above; "repeat_duration" is not a trigger
+                # in route-reps-controlled mode so the next pass exits cleanly.
+                self.manager.cell_changed = {
+                    "path": tuple(path), "col_id": "repeat_duration",
+                }
+        elif controls and col_id == "repeat_duration":
+            effective = effective_repetitions_for_duration(
+                routes=routes,
+                trail_length=trail_length, trail_overlay=trail_overlay,
+                step_duration_s=duration_s,
+                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0) or 0.0),
+            )
+            if int(getattr(row, "route_repetitions", 1) or 1) != int(effective):
+                row.route_repetitions = int(effective)
+                self.manager.cell_changed = {
+                    "path": tuple(path), "col_id": "route_repetitions",
+                }
 
     def _confirm_proceed_or_abort(self) -> bool:
         """Returns True if the action should proceed.
