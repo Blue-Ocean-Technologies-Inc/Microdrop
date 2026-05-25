@@ -859,3 +859,30 @@ def test_pane_terminated_stops_logging(qapp):
     pane.logging_controller = MagicMock()
     pane._on_protocol_terminated()
     pane.logging_controller.stop_logging.assert_called_once_with(pane._repeats_completed)
+
+
+def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    seen = {}
+    monkeypatch.setattr(ptp, "success", lambda **k: seen.update(k))
+    report = tmp_path / "reports" / "report_x.html"
+    report.parent.mkdir(parents=True)
+    report.write_text("<html></html>", encoding="utf-8")
+
+    pane._on_logging_complete(report)
+    assert "report_x.html" in seen["message"]
+    assert seen["title"] == "Run Summary Generated"
+
+
+def test_on_logging_complete_none_shows_no_dialog(qapp, monkeypatch):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    calls = []
+    monkeypatch.setattr(ptp, "success", lambda **k: calls.append(k))
+    pane._on_logging_complete(None)
+    assert calls == []

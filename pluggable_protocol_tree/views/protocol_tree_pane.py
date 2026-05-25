@@ -19,14 +19,14 @@ import threading
 import time
 from pathlib import Path
 
-from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
+from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal, QUrl
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
     QFileDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, confirm, error as error_dialog,
+    NO, YES, confirm, error as error_dialog, information, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
@@ -124,7 +124,9 @@ class ProtocolTreePane(QWidget):
         from pluggable_protocol_tree.services.logging.controller import (
             ProtocolLoggingController,
         )
-        self.logging_controller = ProtocolLoggingController()
+        self.logging_controller = ProtocolLoggingController(
+            completion_callback=self._on_logging_complete,
+        )
         self.logging_controller.attach(self.executor.qsignals)
 
         self._step_index = 0
@@ -1117,6 +1119,23 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
+
+    def _on_logging_complete(self, report_path):
+        """Controller completion callback (runs on the GUI thread via the
+        QTimer-scheduled flush). Shows the report-link success dialog when a
+        report was generated; silent when it was skipped or the flush failed."""
+        if report_path is None:
+            return
+        try:
+            file_url = QUrl.fromLocalFile(str(report_path)).toString()
+            success(
+                parent=None,
+                message=(f"Report file saved to:<br>"
+                         f"<a href='{file_url}'>{Path(report_path).name}</a>"),
+                title="Run Summary Generated",
+            )
+        except Exception as e:
+            logger.warning(f"run-summary success dialog failed: {e}")
 
     def _on_new_experiment(self):
         if self.experiment_manager is None or self.application is None:
