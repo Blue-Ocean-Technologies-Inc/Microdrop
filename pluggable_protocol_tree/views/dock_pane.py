@@ -7,10 +7,13 @@ application so the experiment-bar buttons drive real handlers."""
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance, List, Str
 
+from logger.logger_service import get_logger
 from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+
+logger = get_logger(__name__)
 
 
 class PluggableProtocolDockPane(TraitsDockPane):
@@ -42,19 +45,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
             )
             channel_areas, svg_path = {}, None
             try:
-                dv_model = (
-                    getattr(sync, "device_view_model", None)
-                    or getattr(getattr(sync, "widget", None), "model", None)
-                )
-                if dv_model is not None:
+                dv_pane = self.task.window.get_dock_pane("device_viewer.dock_pane")
+                model = getattr(dv_pane, "model", None)
+                if model is not None:
                     channel_areas = dict(
-                        dv_model.electrodes.channel_electrode_areas_scaled_map
-                    )
-                    svg_path = getattr(
-                        dv_model.electrodes.svg_model, "svg_path", None
-                    )
-            except Exception:
-                pass
+                        model.electrodes.channel_electrode_areas_scaled_map)
+                    svg_path = getattr(model.electrodes.svg_model, "filename", None)
+            except Exception as e:
+                logger.debug(f"logging device-context probe failed: {e}")
             return LoggingDeviceContext(
                 experiment_directory=experiment_manager.get_experiment_directory(),
                 device_svg_path=svg_path,

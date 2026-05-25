@@ -496,6 +496,12 @@ class ProtocolTreePane(QWidget):
             f"Protocol run starting: {self._repeats_total} rep(s), "
             f"preview={preview_mode}, start_step={start_path}"
         )
+        # NOTE: protocol logging starts here (run start). Whole-protocol
+        # repeat runs restart the executor via _restart_for_next_rep, which
+        # bypasses this method, so logging currently captures the FIRST
+        # iteration only. Spanning all repeats in one log is a follow-up.
+        # capacitance_per_unit_area is not seeded from the device model here;
+        # it is updated live via the controller as calibration arrives.
         if self._logging_device_context_provider is not None:
             try:
                 _log_ctx = self._logging_device_context_provider()
