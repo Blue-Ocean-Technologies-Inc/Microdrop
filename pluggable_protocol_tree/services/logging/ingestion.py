@@ -3,6 +3,7 @@ the ProtocolLoggingController. Append paths are lock-guarded because
 capacitance/actuation arrive on a dramatiq worker thread while step
 context updates arrive on the GUI thread."""
 
+import json
 import threading
 from typing import Dict, List, Optional
 
@@ -58,6 +59,39 @@ class LoggingIngestion:
         with self._lock:
             self._media[bucket].append(str(model.path))
 
+    def log_capacitance(self, message) -> bool:
+        """Parse a CAPACITANCE_UPDATED payload and append one row stamped
+        with the current step + current phase actuation. Returns False
+        (skips) when no step is set yet or the payload is unparseable —
+        matches legacy lenient behavior."""
+        if not self._step_id and self._step_idx == 0:
+            return False
+        try:
+            data = json.loads(message)
+        except (ValueError, TypeError):
+            return False
+        cap_str = data.get("capacitance", "-")
+        volt_str = data.get("voltage", "-")
+        if cap_str == "-" or volt_str == "-":
+            return False
+        cap = _parse_number(cap_str, "pF")
+        volt = _parse_number(volt_str, "V")
+        if cap is None or volt is None:
+            return False
+        force = self._calculate_force(volt)
+        self.log_data({
+            "step_idx": self._step_idx,
+            "utc_time": int(data.get("reception_time", 0) or 0),
+            "instrument_time_us": data.get("instrument_time_us", 0),
+            "step_id": self._step_id,
+            "Capacitance (pF)": cap,
+            "Voltage (V)": volt,
+            "Force Over Unit Area (mN/mm^2)": force,
+            "Actuated Area (mm^2)": self._actuated_area,
+            "actuated_channels": list(self._actuated_channels),
+        })
+        return True
+
     # --- force ---
     def _calculate_force(self, voltage: float) -> Optional[float]:
         if self._cpa is None or voltage <= 0:
@@ -84,3 +118,14 @@ class LoggingIngestion:
     @property
     def media(self) -> Dict[str, List[str]]:
         return self._media
+
+
+def _parse_number(raw, unit: str):
+    """Parse '12.5pF' / '12.5 pF' / '12.5' -> 12.5. Returns None on failure."""
+    try:
+        s = str(raw)
+        if unit in s:
+            s = s.replace(unit, "").strip()
+        return float(s)
+    except (ValueError, TypeError):
+        return None

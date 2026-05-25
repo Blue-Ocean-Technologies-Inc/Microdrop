@@ -52,3 +52,53 @@ def test_log_media_accepts_plain_string_type():
         type = "IMAGE"          # plain string, not an enum
     ing.log_media(_M())
     assert ing.media["image"] == ["b.png"]
+
+
+import json
+
+
+def _msg(cap="12.5pF", volt="100V", instr=1000, recv=1700000000):
+    return json.dumps({"capacitance": cap, "voltage": volt,
+                       "instrument_time_us": instr, "reception_time": recv})
+
+
+def test_log_capacitance_stamps_step_and_phase_and_force():
+    ing = LoggingIngestion()
+    ing.update_capacitance_per_unit_area(2.0)
+    ing.set_step(step_id="uuid-1", step_idx=3)
+    ing.set_actuation(actuated_channels=[5, 6], actuated_area=4.0)
+    assert ing.log_capacitance(_msg()) is True
+    e = ing.entries[-1]
+    assert e["step_id"] == "uuid-1"
+    assert e["step_idx"] == 3
+    assert e["Capacitance (pF)"] == 12.5
+    assert e["Voltage (V)"] == 100.0
+    assert e["Force Over Unit Area (mN/mm^2)"] == round(0.5 * 2.0 * 100.0**2, 6)
+    assert e["Actuated Area (mm^2)"] == 4.0
+    assert e["actuated_channels"] == [5, 6]
+    assert e["instrument_time_us"] == 1000
+
+
+def test_log_capacitance_per_phase_attribution():
+    ing = LoggingIngestion()
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=1.0)
+    ing.log_capacitance(_msg())
+    ing.set_actuation(actuated_channels=[2, 3], actuated_area=2.0)   # next phase
+    ing.log_capacitance(_msg())
+    assert ing.entries[0]["actuated_channels"] == [1]
+    assert ing.entries[1]["actuated_channels"] == [2, 3]
+
+
+def test_log_capacitance_bare_numbers_and_invalid():
+    ing = LoggingIngestion()
+    ing.set_step(step_id="s", step_idx=1)
+    assert ing.log_capacitance(_msg(cap="9.0", volt="50")) is True
+    assert ing.entries[-1]["Capacitance (pF)"] == 9.0
+    assert ing.log_capacitance(_msg(cap="-", volt="-")) is False   # skipped
+    assert ing.log_capacitance("not json") is False
+
+
+def test_log_capacitance_requires_step_set():
+    ing = LoggingIngestion()
+    assert ing.log_capacitance(_msg()) is False    # no step set yet
