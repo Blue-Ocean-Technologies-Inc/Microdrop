@@ -26,7 +26,7 @@ from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeVie
     ElectrodeEndpointItem
 from device_viewer.default_settings import AUTOROUTE_COLOR, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message, serialize_bool
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
@@ -1012,7 +1012,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             return
 
         desired = not bool(getattr(self.model, "realtime_mode", False))
-        publish_message(topic=SET_REALTIME_MODE, message=serialize_bool(desired))
+        publish_message(topic=SET_REALTIME_MODE, message=str(desired))
         logger.info(f"Gamepad: realtime mode toggle requested -> {desired}")
 
     @observe("model:realtime_mode")
