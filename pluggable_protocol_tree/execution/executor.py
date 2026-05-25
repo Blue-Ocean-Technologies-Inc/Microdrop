@@ -27,6 +27,9 @@ from typing import Callable, Optional
 from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
 
 from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.exceptions import (
+    AbortError, StepExecutionError,
+)
 from pluggable_protocol_tree.execution.listener import (
     set_active_step, clear_active_step, warm_broker_connection,
 )
@@ -370,7 +373,18 @@ class ProtocolExecutor(HasTraits):
         which columns override).
         """
         fn = getattr(col.handler, hook_name)
-        if hook_name in ("on_protocol_start", "on_protocol_end"):
-            fn(ctx)
-        else:
-            fn(row, ctx)
+        try:
+            if hook_name in ("on_protocol_start", "on_protocol_end"):
+                fn(ctx)
+            else:
+                fn(row, ctx)
+        except AbortError:
+            # Expected on Stop (a sibling/this hook's wait_for saw the
+            # stop_event). Propagate unannotated so it routes to the
+            # aborted/terminal path, not an error dialog.
+            raise
+        except Exception as e:
+            # Annotate real failures with the step + column so the
+            # protocol-error dialog can report where and why, not just the
+            # bare exception text. Chain so the full traceback survives.
+            raise StepExecutionError(col, hook_name, row, e) from e

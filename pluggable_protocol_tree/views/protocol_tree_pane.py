@@ -374,7 +374,18 @@ class ProtocolTreePane(QWidget):
         self._repeats_completed = 0
         self._update_repeat_status_label()
         self._on_protocol_terminated()
-        error_dialog(parent=self, title="Protocol error", message=str(msg))
+        # The summary message (str(msg)) already names the step, column and
+        # cause (see StepExecutionError). Attach the full traceback of the
+        # underlying exception as expandable detail for debugging.
+        detail = None
+        exc = getattr(self.executor, "_error", None)
+        if exc is not None:
+            import traceback
+            detail = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
+        error_dialog(parent=self, title="Protocol error",
+                     message=str(msg), detail=detail)
 
     def _refresh_status(self):
         if self._step_started_at is None:

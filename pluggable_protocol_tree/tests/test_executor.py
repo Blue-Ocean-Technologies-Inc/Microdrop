@@ -574,3 +574,47 @@ def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
     assert len(err_events) == 1
     assert "first" in err_events[0][1]
     assert "second" not in err_events[0][1]
+
+
+def test_hook_error_message_names_step_column_and_hook():
+    """A failing hook surfaces a protocol_error whose message names the
+    step, the column and the hook (not just the bare exception)."""
+    class _Boom(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            raise RuntimeError("kaboom")
+    col = Column(
+        model=BaseColumnModel(col_id="magnet", col_name="Magnet",
+                              default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_Boom(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
+    assert "Step 1" in err          # which step
+    assert "Magnet" in err          # which column
+    assert "on_step" in err         # which hook
+    assert "kaboom" in err          # original cause preserved
+
+
+def test_wait_for_timeout_message_names_topic():
+    """A wait_for timeout names the topic it was waiting for and the
+    likely cause, surfaced through the step/column annotation."""
+    class _Waiter(BaseColumnHandler):
+        wait_for_topics = ["dropbot/applied"]
+        def on_step(self, row, ctx):
+            ctx.wait_for("dropbot/applied", timeout=0.05)
+    col = Column(
+        model=BaseColumnModel(col_id="w", col_name="Waiter",
+                              default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_Waiter(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
+    assert "dropbot/applied" in err          # WHAT timed out (topic)
+    assert "Timed out after 0.05s" in err     # the timeout cause
+    assert "Waiter" in err                    # which column
