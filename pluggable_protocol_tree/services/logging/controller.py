@@ -101,31 +101,38 @@ class ProtocolLoggingController:
 
     # --- listener forwards (may run on a worker thread) ---
     def on_capacitance(self, message) -> None:
-        if self._ingestion is not None:
-            self._ingestion.log_capacitance(message)
+        ing = self._ingestion
+        if ing is not None:
+            ing.log_capacitance(message)
 
     def on_actuation(self, message) -> None:
-        if self._ingestion is None:
+        ing = self._ingestion
+        if ing is None:
             return
         try:
-            channels = json.loads(message).get("channels", []) or []
+            data = json.loads(message)
         except (ValueError, TypeError):
             return
+        if not isinstance(data, dict):
+            return
+        channels = data.get("channels", []) or []
         areas = getattr(self._device_context, "channel_areas", {}) or {}
         area = sum(float(areas.get(int(ch), 0.0)) for ch in channels)
-        self._ingestion.set_actuation(actuated_channels=channels, actuated_area=area)
+        ing.set_actuation(actuated_channels=channels, actuated_area=area)
 
     def on_media(self, message) -> None:
-        if self._ingestion is None:
+        ing = self._ingestion
+        if ing is None:
             return
         try:
             from device_viewer.models.media_capture_model import (
                 MediaCaptureMessageModel,
             )
-            self._ingestion.log_media(MediaCaptureMessageModel.model_validate_json(message))
+            ing.log_media(MediaCaptureMessageModel.model_validate_json(message))
         except Exception as e:                 # pragma: no cover - defensive
             logger.warning(f"media log failed: {e}")
 
     def update_capacitance_per_unit_area(self, value) -> None:
-        if self._ingestion is not None:
-            self._ingestion.update_capacitance_per_unit_area(value)
+        ing = self._ingestion
+        if ing is not None:
+            ing.update_capacitance_per_unit_area(value)

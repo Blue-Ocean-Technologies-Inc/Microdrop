@@ -60,3 +60,17 @@ def test_flush_writes_artifacts_and_clears_sink(tmp_path):
     assert list((tmp_path / "data").glob("data_*.csv"))
     assert list((tmp_path / "reports").glob("report_*.html"))
     assert L.get_active_logger() is None
+
+
+def test_on_actuation_ignores_non_dict_json(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation("[1, 2, 3]")        # valid JSON, but a list -> must not raise
+    c.on_actuation("not json")          # malformed -> must not raise
+    # capacitance still logs with whatever actuation state exists (empty)
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    assert c._ingestion.entries[-1]["actuated_channels"] == []
+    c.stop_logging(completed_steps=1)
