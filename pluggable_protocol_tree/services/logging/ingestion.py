@@ -64,7 +64,7 @@ class LoggingIngestion:
         with the current step + current phase actuation. Returns False
         (skips) when no step is set yet or the payload is unparseable —
         matches legacy lenient behavior."""
-        if not self._step_id and self._step_idx == 0:
+        if not self._step_id:           # no step set yet -> skip (legacy parity)
             return False
         try:
             data = json.loads(message)
@@ -82,7 +82,7 @@ class LoggingIngestion:
         self.log_data({
             "step_idx": self._step_idx,
             "utc_time": int(data.get("reception_time", 0) or 0),
-            "instrument_time_us": data.get("instrument_time_us", 0),
+            "instrument_time_us": int(data.get("instrument_time_us", 0) or 0),
             "step_id": self._step_id,
             "Capacitance (pF)": cap,
             "Voltage (V)": volt,
@@ -121,7 +121,9 @@ class LoggingIngestion:
 
 
 def _parse_number(raw, unit: str):
-    """Parse '12.5pF' / '12.5 pF' / '12.5' -> 12.5. Returns None on failure."""
+    """Parse '12.5pF' / '12.5 pF' / '12.5' -> 12.5. Returns None on failure.
+
+    Units must not be substrings of one another (ok for 'pF'/'V')."""
     try:
         s = str(raw)
         if unit in s:

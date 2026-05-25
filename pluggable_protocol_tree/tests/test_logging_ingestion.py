@@ -1,3 +1,5 @@
+import json
+
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 
 
@@ -54,9 +56,6 @@ def test_log_media_accepts_plain_string_type():
     assert ing.media["image"] == ["b.png"]
 
 
-import json
-
-
 def _msg(cap="12.5pF", volt="100V", instr=1000, recv=1700000000):
     return json.dumps({"capacitance": cap, "voltage": volt,
                        "instrument_time_us": instr, "reception_time": recv})
@@ -77,6 +76,7 @@ def test_log_capacitance_stamps_step_and_phase_and_force():
     assert e["Actuated Area (mm^2)"] == 4.0
     assert e["actuated_channels"] == [5, 6]
     assert e["instrument_time_us"] == 1000
+    assert e["utc_time"] == 1700000000
 
 
 def test_log_capacitance_per_phase_attribution():
@@ -102,3 +102,11 @@ def test_log_capacitance_bare_numbers_and_invalid():
 def test_log_capacitance_requires_step_set():
     ing = LoggingIngestion()
     assert ing.log_capacitance(_msg()) is False    # no step set yet
+
+
+def test_log_capacitance_force_none_without_cpa():
+    ing = LoggingIngestion()
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=1.0)
+    assert ing.log_capacitance(_msg()) is True
+    assert ing.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
