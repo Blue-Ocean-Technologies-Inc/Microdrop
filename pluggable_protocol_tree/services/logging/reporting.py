@@ -68,6 +68,8 @@ class LoggingReport:
             rows += (f"<tr><th>{_html.escape(col)}</th>"
                      f"<td>{s.mean():.4g}</td><td>{s.std():.4g}</td>"
                      f"<td>{s.min():.4g}</td><td>{s.max():.4g}</td></tr>")
+        if not rows:
+            return "<h2>Data Summary</h2><p>No numeric data.</p>"
         return ("<h2>Data Summary</h2><table>"
                 "<tr><th>Column</th><th>mean</th><th>std</th>"
                 f"<th>min</th><th>max</th></tr>{rows}</table>")
@@ -81,6 +83,8 @@ class LoggingReport:
         if not entries:
             return "<h2>Data Trends</h2><p>No data.</p>"
         df = pd.DataFrame(entries)
+        if "step_idx" not in df.columns:
+            return "<h2>Data Trends</h2><p>No step index in data.</p>"
         charts = []
         for col in LoggingReport._numeric_columns(columns):
             if col not in df:
@@ -107,7 +111,9 @@ class LoggingReport:
             from microdrop_utils.plotly_helpers import (
                 create_plotly_svg_dropbot_device_heatmap,
             )
-            fig = create_plotly_svg_dropbot_device_heatmap(str(svg), counts)
+            fig = create_plotly_svg_dropbot_device_heatmap(
+                str(svg), counts,
+                quant_title="Actuation Count", quant_units="count")
             return ("<h3>Device actuation heatmap</h3>"
                     + fig.to_html(full_html=False, include_plotlyjs=False))
         except Exception as e:                 # pragma: no cover - defensive

@@ -49,3 +49,15 @@ def test_build_html_escapes_metadata():
 def test_write_report_creates_reports_dir(tmp_path):
     path = LoggingReport.write_report(tmp_path, "<html><body>ok</body></html>")
     assert path.exists() and path.parent.name == "reports" and path.suffix == ".html"
+
+
+def test_build_html_without_step_idx_does_not_crash():
+    from pathlib import Path
+    html = LoggingReport.build_html(
+        entries=[{"Capacitance (pF)": 1.0}],          # no step_idx
+        columns=["Capacitance (pF)"],
+        metadata={}, media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    assert "<html" in html.lower()
+    assert "Data Trends" in html
