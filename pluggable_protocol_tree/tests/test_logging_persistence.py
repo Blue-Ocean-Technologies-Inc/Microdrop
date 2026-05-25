@@ -34,6 +34,16 @@ def test_write_data_files_writes_json_and_csv(tmp_path):
     payload = json.loads(json_path.read_text())
     assert payload["columns"] == cols
     assert json_path.parent.name == "data"
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    assert df.columns.tolist() == cols
+    assert len(df) == 2
+
+
+def test_correct_rollover_multiple_consecutive_wraps():
+    vals = [4294967290, 5, 4294967200, 1]   # wraps at idx 1 and idx 3
+    out = LoggingPersistence._correct_rollover(vals)
+    assert out == [4294967290, 5 + 2**32, 4294967200 + 2**32, 1 + 2 * 2**32]
 
 
 def test_write_data_files_rollover_corrects_instrument_time(tmp_path):
