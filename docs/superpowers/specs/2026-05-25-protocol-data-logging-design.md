@@ -69,7 +69,7 @@ Forwards each payload to the **active** controller via a module-level registry t
 Static per-run device state assembled by the dock pane:
 - `experiment_directory: Path`
 - `device_svg_path: Path | None`
-- `electrode_areas: dict[str, float]` (electrode id → area mm²; used to sum a phase's actuated area from `ELECTRODES_STATE_CHANGE.electrodes`)
+- `channel_areas: dict[int, float]` (channel → area mm², from the device viewer's `electrodes.channel_electrode_areas_scaled_map`; used to sum a phase's actuated area from `ELECTRODES_STATE_CHANGE.channels`)
 - `capacitance_per_unit_area: float | None` (seed; live updates flow via `update_capacitance_per_unit_area`)
 
 ## Lifecycle & data flow
@@ -84,7 +84,7 @@ run start →
   step_started(row) → step_idx += 1; ingestion.set_step(step_id=row.uuid, step_idx)
   ELECTRODES_STATE_CHANGE (per phase, via listener) →
                       actuated_channels = msg.channels
-                      actuated_area     = Σ electrode_areas[e] for msg.electrodes
+                      actuated_area     = Σ channel_areas[ch] for msg.channels
                       ingestion.set_actuation(actuated_channels, actuated_area)
   CAPACITANCE_UPDATED (via listener) → controller.log_capacitance(payload)
                       → ingestion stamps it with the current step + current phase
