@@ -6,7 +6,9 @@ defined here, ACTOR_TOPIC_DICT aggregating the listener→topic map."""
 import os
 
 from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_GEOMETRY_CHANGED, \
-    DEVICE_VIEWER_STATE_CHANGED
+    DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_MEDIA_CAPTURED
+
+from dropbot_controller.consts import CAPACITANCE_UPDATED
 
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED
 
@@ -40,9 +42,6 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_RUNNING,
     ]
 }
-
-from dropbot_controller.consts import CAPACITANCE_UPDATED
-from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED
 
 LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
 LOGGING_ACTOR_TOPIC_DICT = {

@@ -4,7 +4,6 @@ active for the current run (set in start_logging, cleared in
 stop_logging). Mirrors execution/listener.py's active-step pattern."""
 
 import threading
-from typing import Optional
 
 import dramatiq
 
@@ -22,18 +21,21 @@ _lock = threading.Lock()
 
 
 def set_active_logger(controller) -> None:
+    """Register the controller that should receive logging messages for the current run."""
     global _active
     with _lock:
         _active = controller
 
 
 def clear_active_logger() -> None:
+    """Unregister the active logger (called when a run stops)."""
     global _active
     with _lock:
         _active = None
 
 
 def get_active_logger():
+    """Return the active logging controller, or None when no run is logging."""
     with _lock:
         return _active
 
