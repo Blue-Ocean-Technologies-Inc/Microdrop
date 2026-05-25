@@ -441,3 +441,28 @@ def test_repeat_duration_controls_is_a_declared_bool_trait():
     r = BaseRow()
     r.repeat_duration_controls = True
     assert r.repeat_duration_controls is True
+
+
+# --- seed_default_step_if_empty (issue #424: default step when no protocol) ---
+
+def _seed_test_manager():
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    return RowManager(columns=[make_type_column(), make_name_column()])
+
+
+def test_seed_default_step_seeds_one_step_when_empty():
+    rm = _seed_test_manager()
+    assert rm.root.children == []
+    assert rm.seed_default_step_if_empty() is True
+    assert len(rm.root.children) == 1
+    assert rm.root.children[0].row_type == "step"
+
+
+def test_seed_default_step_is_noop_when_nonempty():
+    rm = _seed_test_manager()
+    rm.add_step(values={"name": "existing"})
+    assert rm.seed_default_step_if_empty() is False
+    assert len(rm.root.children) == 1
+    assert rm.root.children[0].name == "existing"

@@ -969,7 +969,18 @@ class ProtocolTreePane(QWidget):
         self.manager.selection = []
         self.manager.rows_changed = True
         self.protocol_state_tracker.reset()
+        # Legacy protocol_grid parity: a new protocol starts with one
+        # default step. Seed before reseeding so it's the clean baseline.
+        self.manager.seed_default_step_if_empty()
         self.protocol_state_tracker.reseed_baseline(self.manager)
+
+    def _seed_default_step_if_empty(self) -> None:
+        """When no protocol is loaded, start with one default step (legacy
+        protocol_grid parity) and treat it as the clean baseline so it
+        isn't flagged as unsaved. No-op if the tree already has rows.
+        Used by the full-app dock pane on startup."""
+        if self.manager.seed_default_step_if_empty():
+            self.protocol_state_tracker.reseed_baseline(self.manager)
 
     def save_protocol_dialog(self):
         known_path = self.protocol_state_tracker.loaded_protocol_path

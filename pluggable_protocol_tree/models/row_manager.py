@@ -114,6 +114,16 @@ class RowManager(HasTraits):
         self.rows_changed = True
         return parent_path + (index,)
 
+    def seed_default_step_if_empty(self) -> bool:
+        """Add a single default step when the tree has no rows, so a fresh
+        or newly-created protocol starts with something to edit (legacy
+        protocol_grid parity). No-op when the tree already has rows (e.g. a
+        loaded protocol — honor the file). Returns True iff a step was added."""
+        if self.root.children:
+            return False
+        self.add_step()
+        return True
+
     def remove(self, paths: List[Path]) -> None:
         """Remove all rows at `paths`. Paths that refer to a descendant of
         another removed path are skipped (the ancestor removal already

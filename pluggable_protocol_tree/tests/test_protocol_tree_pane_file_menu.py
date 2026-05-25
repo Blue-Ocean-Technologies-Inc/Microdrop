@@ -259,7 +259,10 @@ def test_new_protocol_resets_manager_and_tracker(qapp, tmp_path):
     ):
         pane.new_protocol()
 
-    assert len(pane.manager.root.children) == 0
+    # Legacy protocol_grid parity: a new protocol seeds one default step,
+    # which is the clean baseline (not flagged as unsaved).
+    assert len(pane.manager.root.children) == 1
+    assert pane.manager.root.children[0].row_type == "step"
     t = pane.protocol_state_tracker
     assert t.protocol_name == "untitled"
     assert t.loaded_protocol_path == ""
