@@ -52,7 +52,7 @@ def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
 class ProtocolLoggingController:
     def __init__(self, *, settling_provider: Optional[Callable[[], float]] = None,
                  flush_scheduler: Optional[Callable[["ProtocolLoggingController"], None]] = None,
-                 completion_callback: Optional[Callable[[Optional["Path"]], None]] = None):
+                 completion_callback: Optional[Callable[[Optional[Path]], None]] = None):
         self._settling_provider = settling_provider or _default_settling_provider
         self._flush_scheduler = flush_scheduler or _qtimer_flush_scheduler
         self._completion_callback = completion_callback
@@ -72,7 +72,7 @@ class ProtocolLoggingController:
         # log instead of stopping after the first.
         qsignals.step_started.connect(self._on_step_started)
 
-    def log_metadata(self, mapping) -> None:
+    def log_metadata(self, mapping: dict) -> None:
         """Forward extra report metadata to the active run's ingestion.
         No-op when no run is logging (e.g. preview, or after flush)."""
         ing = self._ingestion
