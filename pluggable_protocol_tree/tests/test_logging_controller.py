@@ -74,3 +74,84 @@ def test_on_actuation_ignores_non_dict_json(tmp_path):
                                  "instrument_time_us": 1, "reception_time": 2}))
     assert c._ingestion.entries[-1]["actuated_channels"] == []
     c.stop_logging(completed_steps=1)
+
+
+def _ctx_no_cpa(tmp_path):
+    return LoggingDeviceContext(
+        experiment_directory=tmp_path, device_svg_path=None,
+        channel_areas={5: 2.0}, capacitance_per_unit_area=None)
+
+
+def test_on_calibration_populates_force(tmp_path):
+    """CALIBRATION_DATA → capacitance-per-unit-area = liquid - filler, so
+    subsequent capacitance rows get a real force (legacy parity)."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx_no_cpa(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_calibration(json.dumps({"liquid_capacitance_over_area": 5.0,
+                                 "filler_capacitance_over_area": 3.0}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    # cpa = 5 - 3 = 2.0 ; force = 0.5 * 2 * 100^2
+    assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] == \
+        round(0.5 * 2.0 * 100.0 ** 2, 6)
+    c.stop_logging(0)
+
+
+def test_on_calibration_ignores_invalid_liquid_le_filler(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx_no_cpa(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_calibration(json.dumps({"liquid_capacitance_over_area": 2.0,
+                                 "filler_capacitance_over_area": 5.0}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
+    c.stop_logging(0)
+
+
+def test_attach_only_wires_step_started():
+    """attach must wire ONLY step_started — start/stop are pane-driven so a
+    whole-protocol repeat run is one log, not stopped after rep 1."""
+    class _FakeSig:
+        def __init__(self):
+            self.slots = []
+        def connect(self, fn):
+            self.slots.append(fn)
+
+    class _FakeQSignals:
+        def __init__(self):
+            self.step_started = _FakeSig()
+            self.protocol_finished = _FakeSig()
+            self.protocol_aborted = _FakeSig()
+            self.protocol_error = _FakeSig()
+
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=lambda ctrl: None)
+    q = _FakeQSignals()
+    c.attach(q)
+    assert len(q.step_started.slots) == 1
+    assert q.protocol_finished.slots == []
+    assert q.protocol_aborted.slots == []
+    assert q.protocol_error.slots == []
+
+
+def test_logging_spans_multiple_reps_one_log(tmp_path):
+    """One start_logging + many step_started (across simulated reps) + one
+    stop_logging => a single artifact set with continuous step_idx."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=2, preview_mode=False)
+    for _ in range(4):                       # 2 steps x 2 reps
+        c._on_step_started(_FakeRow())
+        c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+        c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                     "instrument_time_us": 1, "reception_time": 2}))
+    # not stopped between reps -> all four samples in one ingestion
+    assert len(c._ingestion.entries) == 4
+    step_idxs = [e["step_idx"] for e in c._ingestion.entries]
+    assert step_idxs == [1, 2, 3, 4]         # continuous across reps
+    c.stop_logging(2)
+    assert list((tmp_path / "data").glob("data_*.json"))

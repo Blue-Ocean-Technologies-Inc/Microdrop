@@ -8,7 +8,7 @@ import threading
 import dramatiq
 
 from dropbot_controller.consts import CAPACITANCE_UPDATED
-from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED
+from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED, CALIBRATION_DATA
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_CHANGE, LOGGING_LISTENER_NAME,
 )
@@ -51,6 +51,8 @@ def route_to_active_logger(topic: str, payload) -> None:
             sink.on_actuation(payload)
         elif topic == DEVICE_VIEWER_MEDIA_CAPTURED:
             sink.on_media(payload)
+        elif topic == CALIBRATION_DATA:
+            sink.on_calibration(payload)
     except Exception as e:                     # pragma: no cover - defensive
         logger.error(f"logging route failed for {topic}: {e}")
 

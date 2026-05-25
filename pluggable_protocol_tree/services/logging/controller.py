@@ -32,6 +32,22 @@ def _qtimer_flush_scheduler(controller) -> None:
                       controller._flush)
 
 
+def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
+    """liquid - filler (pF/mm^2), or None when invalid. Mirrors the legacy
+    ForceCalculationService.calculate_capacitance_per_unit_area: both
+    values must be present, non-negative, and liquid must exceed filler."""
+    if liquid is None or filler is None:
+        return None
+    try:
+        liquid = float(liquid)
+        filler = float(filler)
+    except (ValueError, TypeError):
+        return None
+    if liquid < 0 or filler < 0 or liquid <= filler:
+        return None
+    return liquid - filler
+
+
 class ProtocolLoggingController:
     def __init__(self, *, settling_provider: Optional[Callable[[], float]] = None,
                  flush_scheduler: Optional[Callable[["ProtocolLoggingController"], None]] = None):
@@ -44,10 +60,13 @@ class ProtocolLoggingController:
 
     # --- executor signal wiring ---
     def attach(self, qsignals) -> None:
+        # Only the per-step context comes from the executor signals.
+        # start_logging / stop_logging are driven by the pane: a
+        # whole-protocol repeat run restarts the executor per repetition
+        # (firing protocol_finished each time), so the pane stops logging
+        # once at its single terminal point — keeping all repeats in one
+        # log instead of stopping after the first.
         qsignals.step_started.connect(self._on_step_started)
-        qsignals.protocol_finished.connect(lambda: self.stop_logging(self._step_idx))
-        qsignals.protocol_aborted.connect(lambda: self.stop_logging(self._step_idx))
-        qsignals.protocol_error.connect(lambda _msg: self.stop_logging(self._step_idx))
 
     # --- lifecycle ---
     def start_logging(self, device_context, n_steps: int, preview_mode: bool) -> None:
@@ -131,6 +150,26 @@ class ProtocolLoggingController:
             ing.log_media(MediaCaptureMessageModel.model_validate_json(message))
         except Exception as e:                 # pragma: no cover - defensive
             logger.warning(f"media log failed: {e}")
+
+    def on_calibration(self, message) -> None:
+        """CALIBRATION_DATA payload → capacitance-per-unit-area. Lets the
+        Force column populate on a live run (legacy parity); ignored
+        until calibration data arrives, and invalid data leaves the
+        previous value untouched."""
+        ing = self._ingestion
+        if ing is None:
+            return
+        try:
+            data = json.loads(message)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(data, dict):
+            return
+        cpa = _capacitance_per_unit_area(
+            data.get("liquid_capacitance_over_area"),
+            data.get("filler_capacitance_over_area"))
+        if cpa is not None:
+            ing.update_capacitance_per_unit_area(cpa)
 
     def update_capacitance_per_unit_area(self, value) -> None:
         ing = self._ingestion
