@@ -868,12 +868,14 @@ def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path
     pane = ptp.ProtocolTreePane([make_name_column()])
     seen = {}
     monkeypatch.setattr(ptp, "success", lambda **k: seen.update(k))
-    report = tmp_path / "reports" / "report_x.html"
+    report = tmp_path / "exp dir" / "reports" / "report_x.html"   # space in path
     report.parent.mkdir(parents=True)
     report.write_text("<html></html>", encoding="utf-8")
 
     pane._on_logging_complete(report)
-    assert "report_x.html" in seen["message"]
+    assert "report_x.html" in seen.get("message", "")
+    assert "file://" in seen.get("message", "")
+    assert "%20" in seen.get("message", "")          # space percent-encoded, link not broken
     assert seen["title"] == "Run Summary Generated"
 
 

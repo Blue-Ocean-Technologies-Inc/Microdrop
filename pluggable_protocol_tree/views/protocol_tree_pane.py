@@ -1127,7 +1127,7 @@ class ProtocolTreePane(QWidget):
         if report_path is None:
             return
         try:
-            file_url = QUrl.fromLocalFile(str(report_path)).toString()
+            file_url = QUrl.fromLocalFile(str(report_path)).toString(QUrl.FullyEncoded)
             success(
                 parent=None,
                 message=(f"Report file saved to:<br>"
