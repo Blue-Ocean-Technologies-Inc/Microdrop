@@ -156,6 +156,19 @@ class PluggableProtocolTreePlugin(Plugin):
         # registered before we wire its subscriptions.
         from pluggable_protocol_tree.services.logging import listener as _logging_listener  # noqa: F401
         try:
+            router_data = MessageRouterData()
+            for listener_name, log_topics in LOGGING_ACTOR_TOPIC_DICT.items():
+                for topic in log_topics:
+                    router_data.add_subscriber_to_topic(
+                        topic=topic,
+                        subscribing_actor_name=listener_name,
+                    )
+        except Exception as e:
+            logger.warning(
+                f"failed to wire logging listener subscriptions "
+                f"(Redis unreachable?): {e}"
+            )
+        try:
             topics = sorted({
                 t for c in self._assemble_columns()
                 for t in (c.handler.wait_for_topics or [])
@@ -176,18 +189,5 @@ class PluggableProtocolTreePlugin(Plugin):
             # a missing pane.
             logger.warning(
                 f"failed to wire executor listener subscriptions "
-                f"(Redis unreachable?): {e}"
-            )
-        try:
-            router_data = MessageRouterData()
-            for listener_name, topics in LOGGING_ACTOR_TOPIC_DICT.items():
-                for topic in topics:
-                    router_data.add_subscriber_to_topic(
-                        topic=topic,
-                        subscribing_actor_name=listener_name,
-                    )
-        except Exception as e:
-            logger.warning(
-                f"failed to wire logging listener subscriptions "
                 f"(Redis unreachable?): {e}"
             )
