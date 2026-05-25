@@ -650,13 +650,13 @@ class ProtocolTreePane(QWidget):
                 saved = self.experiment_manager.auto_save_protocol(
                     self.manager.to_json())
                 if saved:
-                    anchor = f'<a href="file:///{saved}">{saved.name}</a>'
-                    self.logging_controller.log_metadata({"Protocol Path": anchor})
+                    self.logging_controller.log_metadata(
+                        {"Protocol Path": str(saved)})
             except Exception as e:
                 logger.warning(f"protocol auto-save failed: {e}")
 
         generate_report = True
-        if outcome in ("aborted", "error"):
+        if outcome in ("aborted", "error") and have_exp:
             try:
                 if confirm(parent=None,
                            message=("Protocol was stopped before completion."

@@ -988,6 +988,17 @@ def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch,
     assert "protocol_x.json" in arg["Protocol Path"]
 
 
+def test_completion_flow_aborted_no_experiment_manager_skips_summary_prompt(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=False)
+    confirms = []
+    monkeypatch.setattr(ptp, "confirm", lambda **k: confirms.append(k) or ptp.NO)
+
+    pane._run_completion_flow("aborted")
+
+    assert confirms == []          # no summary prompt without an experiment manager
+    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+
+
 def test_terminated_error_outcome_defers_completion_flow(qapp):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
