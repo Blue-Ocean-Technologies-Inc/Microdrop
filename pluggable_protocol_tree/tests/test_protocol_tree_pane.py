@@ -851,14 +851,17 @@ def test_format_error_html_escapes_fallback():
 
 def test_pane_terminated_stops_logging(qapp):
     """The single terminal point drives logging stop (so one log spans all
-    whole-protocol repetitions)."""
+    whole-protocol repetitions). With no experiment_manager, finished outcome
+    skips the new-experiment prompt and calls stop_logging with generate_report=True."""
     from unittest.mock import MagicMock
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
     pane = ProtocolTreePane([make_type_column()])
     pane.logging_controller = MagicMock()
     pane._on_protocol_terminated()
-    pane.logging_controller.stop_logging.assert_called_once_with(pane._repeats_completed)
+    pane.logging_controller.stop_logging.assert_called_once_with(
+        pane._repeats_completed, generate_report=True
+    )
 
 
 def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path):
@@ -888,3 +891,75 @@ def test_on_logging_complete_none_shows_no_dialog(qapp, monkeypatch):
     monkeypatch.setattr(ptp, "success", lambda **k: calls.append(k))
     pane._on_logging_complete(None)
     assert calls == []
+
+
+def _pane_for_flow(monkeypatch, *, with_exp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from unittest.mock import MagicMock
+
+    kwargs = {}
+    if with_exp:
+        kwargs = {"application": MagicMock(), "experiment_manager": MagicMock()}
+        kwargs["experiment_manager"].auto_save_protocol.return_value = None
+    pane = ptp.ProtocolTreePane([make_name_column()], **kwargs)
+    pane.logging_controller = MagicMock()
+    pane._current_run_preview_mode = False
+    pane._repeats_completed = 2
+    return ptp, pane
+
+
+def test_completion_flow_finished_prompts_new_experiment(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
+    from unittest.mock import MagicMock
+    pane._on_new_experiment = MagicMock()
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.YES)
+
+    pane._run_completion_flow("finished")
+
+    pane._on_new_experiment.assert_called_once()
+    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+
+
+def test_completion_flow_aborted_no_skips_report(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)
+
+    pane._run_completion_flow("aborted")
+
+    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=False)
+
+
+def test_completion_flow_error_prompts_summary_like_abort(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.YES)
+
+    pane._run_completion_flow("error")
+
+    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+
+
+def test_completion_flow_preview_shows_info_no_confirm(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
+    pane._current_run_preview_mode = True
+    counts = {"info": 0, "confirm": 0}
+    monkeypatch.setattr(ptp, "information",
+                        lambda **k: counts.__setitem__("info", counts["info"] + 1))
+    monkeypatch.setattr(ptp, "confirm",
+                        lambda **k: counts.__setitem__("confirm", counts["confirm"] + 1) or ptp.YES)
+
+    pane._run_completion_flow("finished")
+
+    assert counts == {"info": 1, "confirm": 0}
+    pane.logging_controller.stop_logging.assert_called_once_with(2)
+
+
+def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(qapp, monkeypatch):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=False)
+    confirms = []
+    monkeypatch.setattr(ptp, "confirm", lambda **k: confirms.append(k) or ptp.YES)
+
+    pane._run_completion_flow("finished")
+
+    assert confirms == []          # no "Create New Experiment?" without a manager
+    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)

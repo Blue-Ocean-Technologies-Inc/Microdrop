@@ -569,7 +569,7 @@ class ProtocolTreePane(QWidget):
         if self._repeats_completed < self._repeats_total:
             QTimer.singleShot(50, self._restart_for_next_rep)
             return
-        self._on_protocol_terminated()
+        self._on_protocol_terminated("finished")
 
     def _restart_for_next_rep(self):
         self.executor.start(preview_mode=self._current_run_preview_mode)
@@ -580,14 +580,10 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._on_protocol_terminated()
+        self._on_protocol_terminated("aborted")
 
-    def _on_protocol_terminated(self):
+    def _on_protocol_terminated(self, outcome="finished"):
         logger.info("Protocol terminated --> free mode")
-        # Single terminal point for every outcome (final repetition done,
-        # aborted, or errored) — stop logging here so one log spans all
-        # repetitions. No-op when logging wasn't started (e.g. no provider).
-        self.logging_controller.stop_logging(self._repeats_completed)
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
@@ -613,6 +609,72 @@ class ProtocolTreePane(QWidget):
                 self.device_viewer_sync._publish_for_row(None)
             except Exception as e:
                 logger.warning(f"protocol-terminated DV publish failed: {e}")
+        # Logging stop + end-of-run dialogs run last, after immediate teardown
+        # (hardware clear / idle UI) so electrodes de-energize before any modal
+        # dialog blocks. For "error", the caller (_on_error) runs the flow after
+        # showing the error dialog, so we skip it here.
+        if outcome != "error":
+            self._run_completion_flow(outcome)
+
+    def _run_completion_flow(self, outcome):
+        """End-of-run UX: auto-save the protocol, prompt per outcome, and
+        stop logging (which schedules the deferred flush). ``outcome`` is one
+        of "finished", "aborted", "error". Every dialog is best-effort —
+        failures are logged, never raised, so terminal cleanup is unaffected."""
+        # Preview runs produce no artifacts; just confirm completion.
+        if self._current_run_preview_mode:
+            try:
+                self.logging_controller.stop_logging(self._repeats_completed)
+            except Exception as e:
+                logger.warning(f"stop_logging (preview) failed: {e}")
+            try:
+                information(parent=None,
+                            message="Preview run completed successfully.",
+                            title="Preview Complete", timeout=3000)
+            except Exception as e:
+                logger.warning(f"preview-complete dialog failed: {e}")
+            return
+
+        have_exp = (self.experiment_manager is not None
+                    and self.application is not None)
+
+        # Auto-save the protocol + record its path into the report metadata,
+        # before stop_logging so the metadata is present when _flush builds
+        # the report.
+        if have_exp:
+            try:
+                saved = self.experiment_manager.auto_save_protocol(
+                    self.manager.to_json())
+                if saved:
+                    anchor = f'<a href="file:///{saved}">{saved.name}</a>'
+                    self.logging_controller.log_metadata({"Protocol Path": anchor})
+            except Exception as e:
+                logger.warning(f"protocol auto-save failed: {e}")
+
+        generate_report = True
+        if outcome in ("aborted", "error"):
+            try:
+                if confirm(parent=None,
+                           message=("Protocol was stopped before completion."
+                                    "<br><br>Press <b>YES</b> to create run "
+                                    "summary."),
+                           title="Generate Run Summary?", cancel=False) == NO:
+                    generate_report = False
+            except Exception as e:
+                logger.warning(f"run-summary confirm failed: {e}")
+        elif outcome == "finished" and have_exp:
+            try:
+                if confirm(parent=None, title="Create New Experiment?",
+                           cancel=False) == YES:
+                    self._on_new_experiment()
+            except Exception as e:
+                logger.warning(f"new-experiment confirm failed: {e}")
+
+        try:
+            self.logging_controller.stop_logging(
+                self._repeats_completed, generate_report=generate_report)
+        except Exception as e:
+            logger.warning(f"stop_logging failed: {e}")
 
     # --- pause-time phase navigation ---------------------------------
 
