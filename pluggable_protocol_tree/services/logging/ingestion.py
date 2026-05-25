@@ -4,7 +4,6 @@ capacitance/actuation arrive on a dramatiq worker thread while step
 context updates arrive on the GUI thread."""
 
 import threading
-import time
 from typing import Dict, List, Optional
 
 from logger.logger_service import get_logger
@@ -51,7 +50,9 @@ class LoggingIngestion:
             self._metadata.update(entry)
 
     def log_media(self, model) -> None:
-        bucket = getattr(getattr(model, "type", None), "value", "other")
+        type_obj = getattr(model, "type", None)
+        bucket = getattr(type_obj, "value", None) or type_obj or "other"
+        bucket = str(bucket).lower()
         if bucket not in self._media:
             bucket = "other"
         with self._lock:

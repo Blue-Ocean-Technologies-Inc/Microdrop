@@ -42,3 +42,13 @@ def test_log_media_buckets_by_type():
         value = "video"
     ing.log_media(_M("a.mp4", _T()))
     assert ing.media["video"] == ["a.mp4"]
+
+
+def test_log_media_accepts_plain_string_type():
+    ing = LoggingIngestion()
+
+    class _M:
+        path = "b.png"
+        type = "IMAGE"          # plain string, not an enum
+    ing.log_media(_M())
+    assert ing.media["image"] == ["b.png"]
