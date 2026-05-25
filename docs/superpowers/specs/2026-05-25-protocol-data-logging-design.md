@@ -24,18 +24,19 @@ New package `pluggable_protocol_tree/services/logging/`:
 The only unit that knows about the executor. Lives on the GUI thread; driven by Qt signals.
 
 - `attach(qsignals)` — connect to `protocol_started`, `step_started`, `protocol_finished`, `protocol_aborted`, `protocol_error`.
-- `start_logging(device_context: LoggingDeviceContext, n_steps: int, preview_mode: bool)` — no-op when `preview_mode` is True; otherwise creates a fresh `LoggingIngestion`, records start metadata, registers itself as the active capacitance/media sink.
-- on `step_started(row)` → compute and set the ingestion's per-step context (see Data flow).
+- `start_logging(device_context: LoggingDeviceContext, n_steps: int, preview_mode: bool)` — no-op when `preview_mode` is True; otherwise creates a fresh `LoggingIngestion`, records start metadata, registers itself as the active capacitance/actuation/media sink.
+- on `step_started(row)` → set the ingestion's current step (`step_id=row.uuid`, `step_idx`). The actuation (channels/area) is **not** set here — it tracks per phase (see Data flow).
 - `stop_logging(completed_steps)` — records final metadata, unregisters the sink, then schedules the settling flush: `QTimer.singleShot(int(logs_settling_time_s * 1000), self._flush)`.
 - `_flush()` — calls `LoggingPersistence.write_data_files(...)` then `LoggingReport.write_report(...)`; all failures caught + logged.
-- `log_capacitance(payload)` / `log_media(model)` / `update_capacitance_per_unit_area(value)` — thin forwards to the active ingestion (called by the listener; thread-safe via the ingestion lock).
+- `log_capacitance(payload)` / `set_actuation(electrodes, channels)` / `log_media(model)` / `update_capacitance_per_unit_area(value)` — thin forwards to the active ingestion (called by the listener; thread-safe via the ingestion lock).
 
 ### `ingestion.py` — `LoggingIngestion`
 Collects rows of data. No Qt, no broker.
 
-- `set_step_context(*, step_id, step_idx, actuated_channels, actuated_area)`.
+- `set_step(*, step_id, step_idx)` — set the current step (from `step_started`).
+- `set_actuation(*, actuated_channels, actuated_area)` — set the current **phase** actuation (from each `ELECTRODES_STATE_CHANGE`). Carries forward until the next phase; not reset on step boundary.
 - `update_capacitance_per_unit_area(value: float | None)`.
-- `log_capacitance(message)` — parse the JSON payload `{capacitance, voltage, instrument_time_us, reception_time}` (tolerating "123.45pF"/"100V" and bare-number forms), compute force, append one columnar entry stamped with the current step context. Skips when no step context or unparseable (legacy parity).
+- `log_capacitance(message)` — parse the JSON payload `{capacitance, voltage, instrument_time_us, reception_time}` (tolerating "123.45pF"/"100V" and bare-number forms), compute force, append one columnar entry stamped with the current step **and current phase actuation**. Skips when no step set or unparseable (legacy parity).
 - `log_media(model: MediaCaptureMessageModel)` — bucket into video/image/other.
 - `log_data(dict)` / `log_metadata(dict)` — append data row / merge metadata; track column order.
 - `_calculate_force(voltage)` — `0.5 * capacitance_per_unit_area * voltage**2`, rounded 6dp; `None` when c-per-area is `None` or `voltage <= 0`.
@@ -57,14 +58,18 @@ Pure functions over the collected entries.
 Pure function `build_html(entries, metadata, media, device_context, notes) -> str` + `write_report(experiment_dir, html) -> path` → `experiment_dir/reports/report_<timestamp>.html`. Sections (legacy parity): metadata, data-files links, data summary (per-numeric-column mean/std/min/max), data trends (per-step plotly bar charts with error bars), device heatmap (channel actuation duration via `create_plotly_svg_dropbot_device_heatmap` using `device_context.device_svg_path`), media captures (embedded video/image), notes. Plotly via CDN; self-contained HTML.
 
 ### `capacitance_listener.py`
-A dramatiq listener subscribing to `CAPACITANCE_UPDATED` (`dropbot/signals/capacitance_updated`) and the media-capture topic (`DEVICE_VIEWER_MEDIA_CAPTURED`). Forwards each payload to the **active** controller via a module-level registry the controller sets in `start_logging` and clears in `stop_logging` (mirrors the executor's active-step pattern). Registered in the tree plugin's `ACTOR_TOPIC_DICT`.
+A dramatiq listener subscribing to:
+- `CAPACITANCE_UPDATED` (`dropbot/signals/capacitance_updated`) → `controller.log_capacitance(payload)`.
+- `ELECTRODES_STATE_CHANGE` → `controller.set_actuation(electrodes, channels)` — the per-phase actuation snapshot (this is exactly what `RoutesHandler` publishes once per phase, immediately before the hardware applies it, so the capacitance that follows is attributed to the right phase).
+- the media-capture topic (`DEVICE_VIEWER_MEDIA_CAPTURED`) → `controller.log_media(...)`.
+
+Forwards each payload to the **active** controller via a module-level registry the controller sets in `start_logging` and clears in `stop_logging` (mirrors the executor's active-step pattern). Registered in the tree plugin's `ACTOR_TOPIC_DICT`. Because messages for these topics are processed in arrival order, the most-recent `ELECTRODES_STATE_CHANGE` is the phase a subsequent capacitance sample belongs to.
 
 ### `LoggingDeviceContext` (value object, in `controller.py` or a small `models.py`)
 Static per-run device state assembled by the dock pane:
 - `experiment_directory: Path`
 - `device_svg_path: Path | None`
-- `electrode_to_channel: dict[str, int]`
-- `electrode_areas: dict[str, float]` (electrode id → area mm², for actuated-area sums)
+- `electrode_areas: dict[str, float]` (electrode id → area mm²; used to sum a phase's actuated area from `ELECTRODES_STATE_CHANGE.electrodes`)
 - `capacitance_per_unit_area: float | None` (seed; live updates flow via `update_capacitance_per_unit_area`)
 
 ## Lifecycle & data flow
@@ -76,19 +81,21 @@ run start →
       svg path + electrode areas + map from the device-viewer model; c-per-area seed)
   protocol_started → controller.start_logging(ctx, n_steps, preview_mode)
                      (registers active sink; no-op if preview)
-  step_started(row) → step_idx += 1
-                      actuated_channels = channels for (row.electrodes ∪ route electrodes)
-                      actuated_area     = Σ electrode_areas[e] for those electrodes
-                      ingestion.set_step_context(step_id=row.uuid, step_idx, channels, area)
-  CAPACITANCE_UPDATED (worker thread, via listener) → controller.log_capacitance(payload)
-                      → ingestion stamps it with the current step context + force
+  step_started(row) → step_idx += 1; ingestion.set_step(step_id=row.uuid, step_idx)
+  ELECTRODES_STATE_CHANGE (per phase, via listener) →
+                      actuated_channels = msg.channels
+                      actuated_area     = Σ electrode_areas[e] for msg.electrodes
+                      ingestion.set_actuation(actuated_channels, actuated_area)
+  CAPACITANCE_UPDATED (via listener) → controller.log_capacitance(payload)
+                      → ingestion stamps it with the current step + current phase
+                        actuation + force
   media topic → controller.log_media(MediaCaptureMessageModel)
   calibration signal → controller.update_capacitance_per_unit_area(value)
   protocol_finished/aborted/error → controller.stop_logging(completed_steps)
        → QTimer.singleShot(settling_ms) → _flush(): persistence.write_data_files(); report.write_report()
 ```
 
-Per-step (not per-phase) capacitance context matches legacy granularity. (Route steps actuate different electrodes per phase, but we log the step's actuated set — per-phase attribution is a possible future enhancement, out of scope here.)
+**Per-phase attribution:** each capacitance sample is attributed to the phase that was actuated when it arrived — `actuated_channels` / `actuated_area` track the most-recent `ELECTRODES_STATE_CHANGE` (one per phase), while `step_id` / `step_idx` track the current step. This is finer-grained than the legacy per-step logging: a route step that walks many electrodes records the actual per-phase actuation rather than one step-wide set.
 
 ## Device context sourcing
 
@@ -106,10 +113,10 @@ The dock pane is the single place that gathers device state (it already holds th
 ## Testing
 
 - **Unit (no Qt/broker):**
-  - Ingestion: capacitance parsing (pF/V and bare forms, invalid skipped), force formula, per-step context stamping, media bucketing, column-order tracking.
+  - Ingestion: capacitance parsing (pF/V and bare forms, invalid skipped), force formula, step + per-phase actuation stamping (a sample after `set_actuation(A)` then `set_actuation(B)` records B's channels/area), media bucketing, column-order tracking.
   - Persistence: columnar round-trip, `instrument_time_us` rollover correction, JSON + CSV written.
   - Reporting: `build_html` returns HTML containing each expected section; empty-data and no-media cases don't crash.
-- **Integration:** run a 1-step protocol through `ProtocolExecutor` (preview off) with a fake capacitance feed into the controller; assert the artifact set exists (`data/data_*.json`, `data/data_*.csv`, `reports/report_*.html`) and the data file has the expected columns.
+- **Integration:** run a protocol through `ProtocolExecutor` (preview off) feeding `ELECTRODES_STATE_CHANGE` (≥2 phases with different electrode sets) and capacitance samples into the controller; assert the artifact set exists (`data/data_*.json`, `data/data_*.csv`, `reports/report_*.html`), the data file has the expected columns, and samples are attributed to the correct phase's `actuated_channels`.
 
 ## Acceptance criteria (from #421)
 
@@ -127,6 +134,5 @@ The dock pane is the single place that gathers device state (it already holds th
 
 - Redesigning the artifact format / report layout (keep legacy contract).
 - Deleting the legacy `ProtocolDataLogger` in place (that's PPT-9 / #371).
-- Per-phase capacitance attribution.
 - Cloud / remote upload of artifacts.
 - Relocating `logs_settling_time_s` out of `protocol_grid` (that's #419).
