@@ -92,39 +92,6 @@ def publish_message(message: str, topic: str, actor_to_send: str = "message_rout
     broker.enqueue(message)
 
 
-# -----------------------------------------------------------------------------
-# Boolean payload (de)serialization
-# -----------------------------------------------------------------------------
-# Messages on the bus are plain strings, so booleans must be encoded. This was
-# historically done ad-hoc: some publishers used ``str(bool)`` (yielding
-# ``"True"``/``"False"``) while others wrote lowercase ``"true"``/``"false"``
-# literals, and consumers parsed with a mix of case-sensitive
-# (``message == "True"``) and case-insensitive (``message.casefold() == "true"``)
-# checks. That inconsistency is fragile: a casing change on either side silently
-# breaks the contract. Use ``serialize_bool`` when publishing and ``parse_bool``
-# when consuming so the wire format lives in exactly one place.
-#
-# The canonical form is the capitalized ``"True"``/``"False"`` because some
-# existing consumers (e.g. ``on_set_realtime_mode_request``) still compare
-# case-sensitively against ``"True"``. ``parse_bool`` is already
-# case-insensitive, so once all consumers are migrated to it the exact casing
-# becomes irrelevant and this can switch to lowercase if desired.
-
-#: Canonical string payloads for boolean values.
-TRUE_MESSAGE = "True"
-FALSE_MESSAGE = "False"
-
-
-def serialize_bool(value: bool) -> str:
-    """Encode a boolean as its canonical message payload."""
-    return TRUE_MESSAGE if value else FALSE_MESSAGE
-
-
-def parse_bool(message: str) -> bool:
-    """Decode a boolean message payload, tolerant of casing/whitespace."""
-    return str(message).strip().casefold() == TRUE_MESSAGE.casefold()
-
-
 class MQTTMatcher:
     """Intended to manage topic filters including wildcards.
 
