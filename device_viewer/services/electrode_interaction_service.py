@@ -26,7 +26,7 @@ from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeVie
     ElectrodeEndpointItem
 from device_viewer.default_settings import AUTOROUTE_COLOR, electrode_outline_key, \
     electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message, serialize_bool
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
@@ -145,16 +145,19 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._btn_debounce_find_liquid_s = self._env_float(
             "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S", 2.0
         )
+        # Short debounce: just enough to swallow button bounce. The toggle now
+        # reads the true state from the model, so it can't "waste" a press.
         self._btn_debounce_realtime_s = self._env_float(
-            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", 2.0
+            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", 0.4
         )
         # Per-category last-action timestamps (independent debounce).
         self._last_dpad_action_ts = 0.0
         self._last_find_liquid_ts = 0.0
         self._last_realtime_toggle_ts = 0.0
 
-        # Track realtime-mode state locally for toggling.
-        self._realtime_mode_on = False
+        # Realtime-mode state is read from the shared model (model.realtime_mode),
+        # which is kept in sync via REALTIME_MODE_UPDATED. No local mirror here:
+        # a private flag would drift out of sync with the mouse-driven checkbox.
         # Track cumulative device-view rotation in 90-degree steps.
         self._device_rotation_deg = 0
 
@@ -993,12 +996,30 @@ class ElectrodeInteractionControllerService(HasTraits):
     # Realtime-mode toggle (Start button)
     # -----------------------------------------------------------------
     def _toggle_realtime_mode(self) -> None:
-        """Toggle realtime mode on/off via the Start button."""
-        self._realtime_mode_on = not getattr(self, "_realtime_mode_on", False)
-        publish_message(topic=SET_REALTIME_MODE, message=str(self._realtime_mode_on))
-        state_str = "ON" if self._realtime_mode_on else "OFF"
+        """Request a realtime-mode toggle via the Start button.
+
+        The desired state is derived from the shared model (kept in sync by
+        REALTIME_MODE_UPDATED) rather than a private mirror, so the gamepad
+        can't drift out of sync with the mouse-driven checkbox. The HUD is
+        updated by ``_on_model_realtime_mode_changed`` once the change is
+        actually applied, not optimistically here.
+        """
+        if not bool(getattr(self.model, "connected", False)):
+            # on_set_realtime_mode_request only runs when the DropBot is
+            # connected; publishing now would silently do nothing.
+            self._set_hud("Realtime mode: connect DropBot first")
+            logger.info("Gamepad: realtime toggle ignored (DropBot not connected)")
+            return
+
+        desired = not bool(getattr(self.model, "realtime_mode", False))
+        publish_message(topic=SET_REALTIME_MODE, message=serialize_bool(desired))
+        logger.info(f"Gamepad: realtime mode toggle requested -> {desired}")
+
+    @observe("model:realtime_mode")
+    def _on_model_realtime_mode_changed(self, event) -> None:
+        """Reflect the applied realtime-mode state on the HUD."""
+        state_str = "ON" if bool(event.new) else "OFF"
         self._set_hud(f"Realtime mode: {state_str}")
-        logger.info(f"Gamepad: realtime mode toggled {state_str}")
 
     def cleanup(self) -> None:
         """Disconnect controller listeners on model reloads."""
