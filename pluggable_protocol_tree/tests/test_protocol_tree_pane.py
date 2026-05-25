@@ -811,3 +811,39 @@ def test_clear_highlights_suppresses_sync_publish(qapp):
 
     assert seen_states == [True]
     assert sync._suppress_publish is False    # restored
+
+
+def test_format_error_html_from_step_execution_error():
+    """The protocol-error dialog body is built as HTML from the structured
+    StepExecutionError fields (step, column, hook, cause)."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+
+    class _Model:
+        col_name = "Magnet"
+    class _Col:
+        model = _Model()
+    class _Row:
+        path = (0, 1)          # -> "Step 1.2"
+        name = "Engage magnet"
+
+    exc = StepExecutionError(
+        _Col(), "on_step", _Row(),
+        TimeoutError("Timed out after 10.0s waiting for a reply on 'topic/x'."),
+    )
+    html = ProtocolTreePane._format_error_html(exc, "fallback")
+    assert "Step 1.2" in html
+    assert "Engage magnet" in html
+    assert "Magnet" in html
+    assert "on_step" in html
+    assert "Timed out after 10.0s" in html
+    assert "<p" in html and "</p>" in html       # it's HTML
+
+
+def test_format_error_html_escapes_fallback():
+    """Non-annotated errors fall back to the plain message, HTML-escaped."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    html = ProtocolTreePane._format_error_html(None, "<oops> & <crash>")
+    assert "&lt;oops&gt;" in html
+    assert "&amp;" in html
+    assert "<oops>" not in html                  # raw angle brackets escaped

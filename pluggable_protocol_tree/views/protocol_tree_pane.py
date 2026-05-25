@@ -374,18 +374,60 @@ class ProtocolTreePane(QWidget):
         self._repeats_completed = 0
         self._update_repeat_status_label()
         self._on_protocol_terminated()
-        # The summary message (str(msg)) already names the step, column and
-        # cause (see StepExecutionError). Attach the full traceback of the
-        # underlying exception as expandable detail for debugging.
-        detail = None
+        # Present a nicely-formatted HTML body (rendered via the dialog's
+        # `informative` slot) built from the structured StepExecutionError
+        # fields, with the full traceback as collapsible detail. `message`
+        # stays the plain summary as a fallback.
         exc = getattr(self.executor, "_error", None)
+        informative = self._format_error_html(exc, str(msg))
+        detail = None
         if exc is not None:
             import traceback
             detail = "".join(
                 traceback.format_exception(type(exc), exc, exc.__traceback__)
             )
-        error_dialog(parent=self, title="Protocol error",
-                     message=str(msg), detail=detail)
+        error_dialog(parent=None, title="Protocol error",
+                     message=str(msg), informative=informative, detail=detail)
+
+    @staticmethod
+    def _format_error_html(exc, fallback_msg: str) -> str:
+        """Build the HTML body shown in the protocol-error dialog. Uses the
+        structured StepExecutionError fields (step / column / hook / cause)
+        when available, else falls back to the plain message text."""
+        import html as _html
+        from pluggable_protocol_tree.execution.exceptions import (
+            StepExecutionError,
+        )
+
+        red = "#c0392b"
+        if isinstance(exc, StepExecutionError):
+            row = exc.row
+            if row is not None:
+                dotted = ".".join(
+                    str(i + 1) for i in (getattr(row, "path", ()) or ())
+                )
+                name = getattr(row, "name", "") or ""
+                where = f"Step {dotted}"
+                if name:
+                    where += f" &mdash; &ldquo;{_html.escape(name)}&rdquo;"
+            else:
+                where = "Protocol"
+            col_label = (
+                getattr(getattr(exc.col, "model", None), "col_name", "")
+                or getattr(getattr(exc.col, "model", None), "col_id", "")
+                or "column"
+            )
+            cause = _html.escape(str(exc.cause)).replace("\n", "<br>")
+            return (
+                f"<p style='margin:0 0 6px 0;'><b>{where}</b></p>"
+                f"<p style='margin:0 0 10px 0;color:#555;'>The "
+                f"<b>{_html.escape(col_label)}</b> column failed during "
+                f"<code>{_html.escape(exc.hook_name)}</code>.</p>"
+                f"<p style='margin:0;color:{red};'>{cause}</p>"
+            )
+        # Generic fallback (non-annotated errors, or signal emitted directly).
+        safe = _html.escape(fallback_msg).replace("\n", "<br>")
+        return f"<p style='margin:0;color:{red};'>{safe}</p>"
 
     def _refresh_status(self):
         if self._step_started_at is None:
