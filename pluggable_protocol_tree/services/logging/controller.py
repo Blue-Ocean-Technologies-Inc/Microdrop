@@ -5,6 +5,7 @@ flush is deferred so in-flight capacitance after 'done' is captured."""
 
 import json
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 from logger.logger_service import get_logger
@@ -50,13 +51,16 @@ def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
 
 class ProtocolLoggingController:
     def __init__(self, *, settling_provider: Optional[Callable[[], float]] = None,
-                 flush_scheduler: Optional[Callable[["ProtocolLoggingController"], None]] = None):
+                 flush_scheduler: Optional[Callable[["ProtocolLoggingController"], None]] = None,
+                 completion_callback: Optional[Callable[[Optional["Path"]], None]] = None):
         self._settling_provider = settling_provider or _default_settling_provider
         self._flush_scheduler = flush_scheduler or _qtimer_flush_scheduler
+        self._completion_callback = completion_callback
         self._ingestion: Optional[LoggingIngestion] = None
         self._device_context = None
         self._step_idx = 0
         self._start_time = ""
+        self._generate_report = True
 
     # --- executor signal wiring ---
     def attach(self, qsignals) -> None:
@@ -67,6 +71,13 @@ class ProtocolLoggingController:
         # once at its single terminal point — keeping all repeats in one
         # log instead of stopping after the first.
         qsignals.step_started.connect(self._on_step_started)
+
+    def log_metadata(self, mapping) -> None:
+        """Forward extra report metadata to the active run's ingestion.
+        No-op when no run is logging (e.g. preview, or after flush)."""
+        ing = self._ingestion
+        if ing is not None:
+            ing.log_metadata(mapping)
 
     # --- lifecycle ---
     def start_logging(self, device_context, n_steps: int, preview_mode: bool) -> None:
@@ -93,9 +104,10 @@ class ProtocolLoggingController:
         self._ingestion.set_step(step_id=getattr(row, "uuid", ""),
                                  step_idx=self._step_idx)
 
-    def stop_logging(self, completed_steps) -> None:
+    def stop_logging(self, completed_steps, *, generate_report: bool = True) -> None:
         if self._ingestion is None:
             return
+        self._generate_report = generate_report
         self._ingestion.log_metadata({"Completed Steps": completed_steps})
         _listener.clear_active_logger()
         self._flush_scheduler(self)
@@ -104,19 +116,29 @@ class ProtocolLoggingController:
         ing = self._ingestion
         if ing is None:
             return
+        report_path = None
         try:
             LoggingPersistence.write_data_files(
                 self._device_context.experiment_directory, self._start_time,
                 ing.entries, ing.columns)
-            html = LoggingReport.build_html(
-                entries=ing.entries, columns=ing.columns, metadata=ing.metadata,
-                media=ing.media, device_context=self._device_context, notes=None)
-            LoggingReport.write_report(
-                self._device_context.experiment_directory, html)
+            if self._generate_report:
+                html = LoggingReport.build_html(
+                    entries=ing.entries, columns=ing.columns, metadata=ing.metadata,
+                    media=ing.media, device_context=self._device_context, notes=None)
+                report_path = LoggingReport.write_report(
+                    self._device_context.experiment_directory, html)
         except Exception as e:
             logger.error(f"protocol logging flush failed: {e}")
+            report_path = None
         finally:
             self._ingestion = None
+        # Notify the GUI (report saved / skipped). Outside the try so a
+        # callback error is not misreported as a flush failure.
+        if self._completion_callback is not None:
+            try:
+                self._completion_callback(report_path)
+            except Exception as e:
+                logger.error(f"logging completion callback failed: {e}")
 
     # --- listener forwards (may run on a worker thread) ---
     def on_capacitance(self, message) -> None:

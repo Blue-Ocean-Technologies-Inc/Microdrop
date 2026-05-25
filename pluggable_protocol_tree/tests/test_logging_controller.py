@@ -155,3 +155,44 @@ def test_logging_spans_multiple_reps_one_log(tmp_path):
     assert step_idxs == [1, 2, 3, 4]         # continuous across reps
     c.stop_logging(2)
     assert list((tmp_path / "data").glob("data_*.json"))
+
+
+def test_stop_logging_generate_report_false_writes_data_no_report(tmp_path):
+    captured = []
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate,
+                                  completion_callback=captured.append)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    c.stop_logging(completed_steps=1, generate_report=False)
+    assert list((tmp_path / "data").glob("data_*.json"))
+    assert not list((tmp_path / "reports").glob("report_*.html"))
+    assert captured == [None]
+
+
+def test_stop_logging_generate_report_true_invokes_callback_with_path(tmp_path):
+    captured = []
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate,
+                                  completion_callback=captured.append)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    c.stop_logging(completed_steps=1)            # generate_report defaults True
+    assert len(captured) == 1 and captured[0] is not None
+    assert captured[0].name.startswith("report_")
+
+
+def test_log_metadata_forwards_to_ingestion_and_is_noop_without(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c.log_metadata({"Protocol Path": "<a>x</a>"})
+    assert c._ingestion.metadata["Protocol Path"] == "<a>x</a>"
+    c._ingestion = None
+    c.log_metadata({"k": "v"})                   # must not raise
