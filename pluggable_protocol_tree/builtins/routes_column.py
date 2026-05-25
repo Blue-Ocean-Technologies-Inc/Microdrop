@@ -114,6 +114,17 @@ class RoutesHandler(BaseColumnHandler):
         step_label = f"Step {dotted_id}"
         static_routes = list(getattr(row, "routes", []) or [])
 
+        # Route Reps Dur mode is authoritative ONLY when the controls flag
+        # says so. The same flag gates BOTH the duration-mode cycle
+        # truncation below and the hold-pad after the loop — keeping them
+        # in lockstep. In count mode (flag False) repeat_duration is just
+        # a display estimate and must NOT truncate the loop, so we pass
+        # repeat_duration_s=0 and let route_repetitions drive the cycles.
+        in_duration_mode = (
+            bool(getattr(row, "repeat_duration_controls", False))
+            and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
+        )
+
         # Materialize so we know the total upfront for phase_started's
         # (i, N) emission. Phase counts are bounded by step config and
         # well within reasonable list sizes; no streaming benefit lost.
@@ -124,7 +135,8 @@ class RoutesHandler(BaseColumnHandler):
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
             soft_start=bool(getattr(row, "soft_start", False)),
             soft_end=bool(getattr(row, "soft_end", False)),
-            repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
+            repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
+                               if in_duration_mode else 0.0),
             linear_repeats=bool(getattr(row, "linear_repeats", False)),
             n_repeats=int(getattr(row, "route_repetitions", 1)),
             step_duration_s=float(getattr(row, "duration_s", 1.0)),
@@ -192,9 +204,7 @@ class RoutesHandler(BaseColumnHandler):
         # Route Reps Dur mode: after the full cycles, hold the last
         # phase's electrodes (no new publish) for the exact leftover so
         # total step time lands on the budget precisely.
-        if (bool(getattr(row, "repeat_duration_controls", False))
-                and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
-                and not stop_event.is_set()):
+        if in_duration_mode and not stop_event.is_set():
             # Hold the last phase for the leftover so total step time lands
             # on the budget exactly. Based on the ACTUAL emitted phase count
             # (len(phases)) so it accounts for loop cycles, soft-start/end

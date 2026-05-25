@@ -408,3 +408,56 @@ def test_routes_handler_no_pad_sleep_when_phases_fill_budget():
         col.handler.on_step(row, ctx)
 
     assert len(sleeps) == len(fake_phases)   # no extra pad sleep (pad == 0)
+
+
+def _captured_repeat_duration_s(controls):
+    """Run RoutesHandler.on_step and return the repeat_duration_s that
+    was passed into iter_phases, for a row with repeat_duration=7.0 and
+    repeat_duration_controls=`controls`."""
+    from unittest.mock import MagicMock, patch
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    import pluggable_protocol_tree.builtins.routes_column as mod
+
+    col = make_routes_column()
+    Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.duration_s = 0.0
+    row.repeat_duration = 7.0
+    row.route_repetitions = 1
+    row.repeat_duration_controls = controls
+
+    ctx = MagicMock()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.pause_event.is_set.return_value = False
+    ctx.protocol.preview_mode = True
+    ctx.scratch = {}
+    ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
+
+    seen = {}
+    real = mod.iter_phases
+
+    def spy(*a, **k):
+        seen["rd"] = k.get("repeat_duration_s")
+        return real(*a, **k)
+
+    with patch.object(mod, "iter_phases", side_effect=spy), \
+         patch.object(mod, "publish_message", lambda **kw: None):
+        col.handler.on_step(row, ctx)
+    return seen["rd"]
+
+
+def test_routes_handler_duration_mode_gated_on_controls_flag():
+    """Phase generation must enter duration mode ONLY when
+    repeat_duration_controls is True. In count mode (flag False) a
+    non-zero repeat_duration (e.g. the auto-estimate) must NOT truncate
+    the loop: iter_phases receives repeat_duration_s=0 so
+    route_repetitions drives the cycle count. Otherwise the loop is
+    truncated to the budget WITHOUT the compensating hold-pad (which is
+    also gated on the flag), making the step run short."""
+    assert _captured_repeat_duration_s(controls=False) == 0.0   # count mode
+    assert _captured_repeat_duration_s(controls=True) == 7.0     # duration mode
