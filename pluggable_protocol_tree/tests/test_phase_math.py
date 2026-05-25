@@ -124,26 +124,27 @@ def test_repeats_loop_route_n_repeats():
 def test_repeats_loop_with_repeat_duration_caps_cycles():
     """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
     cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
-    cycle. Duration mode: 1 cycle, NO return phase (RoutesHandler holds
-    the last phase for leftover time instead)."""
+    cycle. Duration mode still closes the loop with a return-to-start
+    phase (the RoutesHandler's len(phases)-based hold-pad keeps timing
+    exact)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
         repeat_duration_s=2.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]   # 1 cycle, no return
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]   # 1 cycle + return-to-start
 
 
 def test_repeats_loop_with_repeat_duration_fits_two_cycles():
     """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles. Duration mode:
-    no return phase (RoutesHandler holds the last phase for leftover)."""
+    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles. Duration mode closes
+    the loop with a return-to-start phase, same as count mode."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,
         repeat_duration_s=6.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles, no return
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
 
 
 def test_repeats_empty_route_yields_nothing():
@@ -322,9 +323,9 @@ def test_iter_phases_soft_end_appends_ramp():
 
 
 def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles.
-    Duration mode drops the trailing return phase; the RoutesHandler
-    holds the last phase for the leftover seconds."""
+    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles, then a
+    return-to-start phase so the loop closes (timing stays exact via the
+    RoutesHandler's len(phases)-based hold-pad)."""
     out = list(iter_phases(
         static_electrodes=[],
         routes=[["a", "b", "c", "a"]],
@@ -332,7 +333,7 @@ def test_iter_phases_repeat_duration_caps_loop_cycles():
         repeat_duration_s=6.5, step_duration_s=1.0,
         n_repeats=999,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles, no return
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
 
 
 def test_iter_phases_linear_repeats_replays_open_route():
@@ -345,13 +346,13 @@ def test_iter_phases_linear_repeats_replays_open_route():
     assert out == [{"a"}, {"b"}, {"a"}, {"b"}, {"a"}, {"b"}]
 
 
-# --- duration-mode return-phase drop ---
+# --- loop closes (return-to-start) in BOTH count and duration mode ---
 
 
-def test_duration_mode_omits_trailing_return_phase():
-    """Loop route, 4-window cycle, T fits exactly 2 cycles at dwell=1.0.
-    Count mode yields N*C + 1 (return) phases; duration mode yields N*C
-    (no return) so emitted dwell == cycles*cycle_time exactly."""
+def test_loop_closes_with_return_phase_in_both_modes():
+    """A loop that starts at electrode 'a' must also end at 'a' in both
+    count and duration mode. 4-window cycle; both modes append the
+    return-to-start phase. Only the cycle count differs."""
     route = ["a", "b", "c", "d", "a"]   # loop, effective len 4, trail 1 => 4 windows
     count_mode = list(_route_with_repeats(
         route, trail_length=1, trail_overlay=0,
@@ -359,5 +360,9 @@ def test_duration_mode_omits_trailing_return_phase():
     dur_mode = list(_route_with_repeats(
         route, trail_length=1, trail_overlay=0,
         n_repeats=2, repeat_duration_s=8.0, step_duration_s=1.0))
-    assert len(count_mode) == 2 * 4 + 1     # cycles + return phase
-    assert len(dur_mode) == 2 * 4           # no return phase
+    # Both: cycles * 4 windows + 1 return-to-start (= the first window).
+    assert len(count_mode) == 2 * 4 + 1
+    assert len(dur_mode) == 2 * 4 + 1
+    # The loop closes: last phase == first phase (back at the start, 'a').
+    assert count_mode[-1] == count_mode[0] == {"a"}
+    assert dur_mode[-1] == dur_mode[0] == {"a"}

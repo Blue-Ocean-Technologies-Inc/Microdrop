@@ -91,15 +91,16 @@ def _route_with_repeats(
     Open route + linear_repeats=False → one pass of _route_windows.
     Open route + linear_repeats=True  → n_repeats passes (the row's
                                         `route_repetitions` column).
-    Loop route → n_repeats cycles plus one return-to-start phase at the
-                 very end (mirrors the legacy device-viewer route
-                 executor: N reps of a C-phase cycle yields N*C + 1
-                 phases, the final one being the window at position 0
-                 so the loop visibly closes). UNLESS repeat_duration_s
-                 > 0, in which case cycles = max(1, floor(
-                 repeat_duration_s / (cycle_phases * step_duration_s))).
-                 The minimum of 1 guarantees at least one cycle even on
-                 tiny budgets.
+    Loop route → ``cycles`` full cycles plus one return-to-start phase at
+                 the very end (mirrors the legacy device-viewer route
+                 executor: N cycles of a C-phase loop yields N*C + 1
+                 phases, the final one being the window at position 0 so a
+                 loop that starts at electrode X also ends at X). The
+                 return phase is emitted in BOTH modes; only ``cycles``
+                 differs: count mode uses ``max(1, n_repeats)``; duration
+                 mode uses ``max(1, floor(repeat_duration_s /
+                 (cycle_phases * step_duration_s)))``. The minimum of 1
+                 guarantees at least one cycle even on tiny budgets.
 
     Empty route yields nothing.
     """
@@ -111,21 +112,21 @@ def _route_with_repeats(
 
     is_loop = _is_loop_route(route)
     if is_loop:
+        # Count vs duration mode differ ONLY in how many full cycles run;
+        # both close the loop with a final return-to-start phase so a loop
+        # that begins at electrode X also ends at X. Timing stays exact in
+        # duration mode because the RoutesHandler's hold-pad is computed
+        # from the actual emitted phase count (len(phases) * per_phase_dwell),
+        # which already includes this return phase.
         if repeat_duration_s > 0 and step_duration_s > 0:
             cycle_phases = len(cycle)
             cycles = max(1, int(repeat_duration_s
                                 / (cycle_phases * step_duration_s)))
-            for _ in range(cycles):
-                yield from cycle
-            # Duration mode: NO trailing return phase. The RoutesHandler
-            # holds the last phase for the leftover (repeat_duration -
-            # len(phases) * per_phase_dwell) so total step time lands on
-            # the budget exactly.
         else:
             cycles = max(1, int(n_repeats))
-            for _ in range(cycles):
-                yield from cycle
-            yield cycle[0]
+        for _ in range(cycles):
+            yield from cycle
+        yield cycle[0]   # return-to-start so the loop visibly closes
     else:
         passes = max(1, int(n_repeats)) if linear_repeats else 1
         for _ in range(passes):
