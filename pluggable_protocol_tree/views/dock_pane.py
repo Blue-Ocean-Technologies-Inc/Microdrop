@@ -45,6 +45,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             parent=parent,
         )
         pane.protocol_state_tracker.dock_pane = self
+        # Legacy protocol_grid parity: the full app opens with one default
+        # step when no protocol is loaded (no-op once a protocol is loaded).
+        pane._seed_default_step_if_empty()
         return pane
 
     # --- &Protocol menu action delegates ----------------------------

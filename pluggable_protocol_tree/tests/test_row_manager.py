@@ -421,3 +421,48 @@ def test_protocol_metadata_holds_arbitrary_payload(manager):
     manager.protocol_metadata["someone_elses_key"] = [1, 2, 3]
     assert manager.protocol_metadata["electrode_to_channel"] == {"e00": 0, "e01": 1}
     assert manager.protocol_metadata["someone_elses_key"] == [1, 2, 3]
+
+
+# --- repeat_duration_controls internal flag (route-reps split) ---
+
+def test_base_row_has_repeat_duration_controls_flag_default_false():
+    from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+    assert BaseRow().repeat_duration_controls is False
+    assert GroupRow().repeat_duration_controls is False
+
+
+def test_repeat_duration_controls_is_a_declared_bool_trait():
+    from traits.api import Bool
+    from pluggable_protocol_tree.models.row import BaseRow
+    trait = BaseRow.class_traits().get("repeat_duration_controls")
+    assert trait is not None, "trait not declared on BaseRow"
+    assert isinstance(trait.trait_type, Bool)
+    # round-trip still works
+    r = BaseRow()
+    r.repeat_duration_controls = True
+    assert r.repeat_duration_controls is True
+
+
+# --- seed_default_step_if_empty (issue #424: default step when no protocol) ---
+
+def _seed_test_manager():
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    return RowManager(columns=[make_type_column(), make_name_column()])
+
+
+def test_seed_default_step_seeds_one_step_when_empty():
+    rm = _seed_test_manager()
+    assert rm.root.children == []
+    assert rm.seed_default_step_if_empty() is True
+    assert len(rm.root.children) == 1
+    assert rm.root.children[0].row_type == "step"
+
+
+def test_seed_default_step_is_noop_when_nonempty():
+    rm = _seed_test_manager()
+    rm.add_step(values={"name": "existing"})
+    assert rm.seed_default_step_if_empty() is False
+    assert len(rm.root.children) == 1
+    assert rm.root.children[0].name == "existing"

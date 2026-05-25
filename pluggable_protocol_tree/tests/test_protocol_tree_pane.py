@@ -178,16 +178,34 @@ def test_pane_tick_timer_runs_at_10_hz(qapp):
     assert pane._tick_timer.interval() == 100
 
 
-def test_pane_phase_acked_signal_resets_phase_timer(qapp):
+def test_pane_phase_started_signal_sets_phase_timer(qapp):
+    """Phase timing is driven by the executor's phase_started signal
+    (independent of hardware ack), so the status bar tracks the executor
+    regardless of whether an ack arrives."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
     pane._current_row = object()
     pane._step_started_at = None
-    pane.phase_acked.emit()
+    pane.executor.qsignals.phase_started.emit(1, 3, 0.5)
     assert pane._phase_started_at is not None
     assert pane._step_started_at is not None
+    assert pane._phase_index == 1
+    assert pane._phase_total == 3
+
+
+def test_pane_phase_acked_is_noop_for_timer(qapp):
+    """phase_acked no longer sets the phase timer — that moved to
+    phase_started so external acks don't fight the executor-driven clock."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
+    pane._current_row = object()
+    pane._phase_started_at = None
+    pane.phase_acked.emit()
+    assert pane._phase_started_at is None
 
 
 def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
@@ -741,10 +759,18 @@ def test_delete_all_steps_goes_to_free_mode(qapp):
     assert not pane.widget.tree.currentIndex().isValid()
 
 
-def test_on_step_started_publishes_to_dv(qapp):
-    """During execution, the executor's step_started callback should
-    push the running step's electrodes/routes to the DV so it tracks
-    the executor (mirrors legacy protocol_grid behavior)."""
+def test_on_step_started_does_not_publish_static_step_view(qapp):
+    """Regression: step_started must NOT publish the static step view via
+    _publish_for_row during a run.
+
+    RoutesHandler publishes a per-phase display for every phase (carrying
+    the full step context: step_id, label, routes, editable=False). The
+    static _publish_for_row view (electrodes=[], editable=True) was
+    published on step_started too, and — because the worker publishes
+    phase 1 to the broker before the queued step_started slot runs — it
+    consistently landed AFTER phase 1 and cleared it, so the animation
+    appeared to begin at the second position. The per-phase displays are
+    authoritative during execution; step_started must not clobber them."""
     from unittest.mock import MagicMock
     from pluggable_protocol_tree.views.protocol_tree_pane import (
         ProtocolTreePane,
@@ -758,7 +784,7 @@ def test_on_step_started_publishes_to_dv(qapp):
     pane.manager.add_step(values={"name": "S1"})
     row = pane.manager.get_row((0,))
     pane._on_step_started(row)
-    sync._publish_for_row.assert_called_once_with(row)
+    sync._publish_for_row.assert_not_called()
 
 
 def test_clear_highlights_suppresses_sync_publish(qapp):
@@ -785,3 +811,39 @@ def test_clear_highlights_suppresses_sync_publish(qapp):
 
     assert seen_states == [True]
     assert sync._suppress_publish is False    # restored
+
+
+def test_format_error_html_from_step_execution_error():
+    """The protocol-error dialog body is built as HTML from the structured
+    StepExecutionError fields (step, column, hook, cause)."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+
+    class _Model:
+        col_name = "Magnet"
+    class _Col:
+        model = _Model()
+    class _Row:
+        path = (0, 1)          # -> "Step 1.2"
+        name = "Engage magnet"
+
+    exc = StepExecutionError(
+        _Col(), "on_step", _Row(),
+        TimeoutError("Timed out after 10.0s waiting for a reply on 'topic/x'."),
+    )
+    html = ProtocolTreePane._format_error_html(exc, "fallback")
+    assert "Step 1.2" in html
+    assert "Engage magnet" in html
+    assert "Magnet" in html
+    assert "on_step" in html
+    assert "Timed out after 10.0s" in html
+    assert "<p" in html and "</p>" in html       # it's HTML
+
+
+def test_format_error_html_escapes_fallback():
+    """Non-annotated errors fall back to the plain message, HTML-escaped."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    html = ProtocolTreePane._format_error_html(None, "<oops> & <crash>")
+    assert "&lt;oops&gt;" in html
+    assert "&amp;" in html
+    assert "<oops>" not in html                  # raw angle brackets escaped

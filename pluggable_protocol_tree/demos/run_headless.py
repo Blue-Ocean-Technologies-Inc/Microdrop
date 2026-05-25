@@ -61,6 +61,9 @@ from pluggable_protocol_tree.builtins.repeat_duration_column import (
     make_repeat_duration_column,
 )
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.route_repetitions_column import (
+    make_route_repetitions_column,
+)
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
 from pluggable_protocol_tree.builtins.soft_start_column import make_soft_start_column
@@ -180,6 +183,7 @@ def _build_protocol(include_ack_column: bool) -> RowManager:
         make_id_column(),
         make_name_column(),
         make_repetitions_column(),
+        make_route_repetitions_column(),
         make_duration_column(),
         # PPT-3 — the headless electrode-actuation columns.
         make_electrodes_column(),

@@ -163,3 +163,148 @@ def test_repetitions_column_editable_on_groups():
     col = make_repetitions_column()
     flags = col.view.get_flags(GroupRow())
     assert flags & Qt.ItemIsEditable
+
+
+# --- route_repetitions column (route-reps split) ---
+
+def test_route_repetitions_column_metadata():
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    col = make_route_repetitions_column()
+    assert col.model.col_id == "route_repetitions"
+    assert col.model.col_name == "Route Reps"
+    assert col.model.default_value == 1
+    assert col.view.hidden_by_default is False
+    assert col.view.low == 1 and col.view.high == 1000
+
+
+def test_route_repetitions_editable_on_step_not_group():
+    from pyface.qt.QtCore import Qt
+    from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    col = make_route_repetitions_column()
+    assert col.view.get_flags(BaseRow()) & Qt.ItemIsEditable
+    assert not (col.view.get_flags(GroupRow()) & Qt.ItemIsEditable)
+
+
+def test_route_reps_handler_plain_write_when_not_in_duration_mode():
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    col = make_route_repetitions_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = False
+    assert col.handler.on_interact(row, col.model, 5) is True
+    assert row.route_repetitions == 5
+
+
+def test_route_reps_handler_switch_back_from_duration_on_confirm(monkeypatch):
+    import pluggable_protocol_tree.builtins.route_repetitions_column as mod
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    monkeypatch.setattr(mod, "confirm", lambda *a, **k: mod.YES)
+    col = mod.make_route_repetitions_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = True
+    assert col.handler.on_interact(row, col.model, 3) is True
+    assert row.repeat_duration_controls is False     # handed back to count mode
+    assert row.route_repetitions == 3
+
+
+def test_route_reps_handler_cancel_rejects_edit(monkeypatch):
+    import pluggable_protocol_tree.builtins.route_repetitions_column as mod
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    monkeypatch.setattr(mod, "confirm", lambda *a, **k: 0)   # not YES
+    col = mod.make_route_repetitions_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = True
+    row.route_repetitions = 1
+    assert col.handler.on_interact(row, col.model, 9) is False
+    assert row.repeat_duration_controls is True          # unchanged
+    assert row.route_repetitions == 1                    # edit rejected
+
+
+def test_reps_handler_is_plain_write_through_even_in_duration_mode():
+    """Reps now means 'repeat the whole thing' only; it must NOT prompt or
+    touch repeat_duration_controls. A bare BaseColumnHandler write-through."""
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repetitions_column import (
+        make_repetitions_column,
+    )
+    col = make_repetitions_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = True
+    assert col.handler.on_interact(row, col.model, 4) is True
+    assert row.repetitions == 4
+    assert row.repeat_duration_controls is True   # untouched by Reps edits
+
+
+# --- Route Reps Dur handler repoints to route_repetitions + flag trait ---
+
+def test_repeat_duration_handler_uses_route_repetitions_for_estimate(monkeypatch):
+    """When the typed value matches the auto-estimate computed from
+    route_repetitions, the write goes through without a dialog and the
+    flag stays False."""
+    import pluggable_protocol_tree.builtins.repeat_duration_column as mod
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+
+    cols = [make_repeat_duration_column(), make_route_repetitions_column(),
+            make_routes_column(), make_duration_column()]
+    Row = build_row_type(cols, base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]   # one loop route
+    row.route_repetitions = 2
+    row.duration_s = 1.0
+    row.repeat_duration_controls = False
+
+    from pluggable_protocol_tree.services.phase_math import estimate_repeat_duration_s
+    est = estimate_repeat_duration_s(
+        routes=row.routes, trail_length=1, trail_overlay=0,
+        n_repeats=2, step_duration_s=1.0, linear_repeats=False,
+        soft_start=False, soft_end=False,
+    )
+    monkeypatch.setattr(mod, "confirm", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("dialog should not appear when value matches estimate")))
+    col = make_repeat_duration_column()
+    assert col.handler.on_interact(row, col.model, round(est, 2)) is True
+    assert row.repeat_duration_controls is False
+
+
+def test_repeat_duration_handler_switch_to_duration_on_confirm(monkeypatch):
+    import pluggable_protocol_tree.builtins.repeat_duration_column as mod
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+
+    cols = [make_repeat_duration_column(), make_route_repetitions_column(),
+            make_routes_column()]
+    Row = build_row_type(cols, base=BaseRow)
+    row = Row()
+    row.routes = [["a", "b", "c", "a"]]
+    row.route_repetitions = 2
+    row.repeat_duration_controls = False
+    monkeypatch.setattr(mod, "confirm", lambda *a, **k: mod.YES)
+    col = make_repeat_duration_column()
+    assert col.handler.on_interact(row, col.model, 99.0) is True
+    assert row.repeat_duration_controls is True
+    assert row.repeat_duration == 99.0

@@ -141,3 +141,43 @@ def test_protocol_metadata_missing_in_legacy_payload_loads_as_empty():
 
     rm2 = RowManager.from_json(payload, columns=list(cols))
     assert rm2.protocol_metadata == {}
+
+
+# --- repeat_duration_controls round-trip via row_flags (route-reps split) ---
+
+def test_row_flags_serialized_only_for_true_rows(manager):
+    p = manager.add_step(values={"name": "A"})
+    row = manager.get_row(p)
+    row.repeat_duration_controls = True
+    manager.add_step(values={"name": "B"})  # stays False
+    data = manager.to_json()
+    flags = data["row_flags"]
+    assert row.uuid in flags
+    assert flags[row.uuid]["repeat_duration_controls"] is True
+    # The False row is omitted to keep saves compact.
+    assert len(flags) == 1
+
+
+def test_row_flags_round_trip(manager):
+    p = manager.add_step(values={"name": "A"})
+    manager.get_row(p).repeat_duration_controls = True
+    data = manager.to_json()
+    new_mgr = RowManager.from_json(data, columns=list(manager.columns))
+    assert new_mgr.root.children[0].repeat_duration_controls is True
+
+
+def test_row_flags_round_trip_nested_step(manager):
+    g = manager.add_group(name="G")
+    p = manager.add_step(parent_path=g, values={"name": "Inner"})
+    manager.get_row(p).repeat_duration_controls = True
+    data = manager.to_json()
+    new_mgr = RowManager.from_json(data, columns=list(manager.columns))
+    assert new_mgr.root.children[0].children[0].repeat_duration_controls is True
+
+
+def test_load_old_payload_without_row_flags_defaults_false(manager):
+    manager.add_step(values={"name": "A"})
+    data = manager.to_json()
+    del data["row_flags"]            # simulate a pre-split save
+    new_mgr = RowManager.from_json(data, columns=list(manager.columns))
+    assert new_mgr.root.children[0].repeat_duration_controls is False

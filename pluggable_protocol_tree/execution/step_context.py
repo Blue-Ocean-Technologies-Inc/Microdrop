@@ -194,8 +194,18 @@ class StepContext(HasTraits):
                 f"wait_for({topic!r}) called but topic not in any handler's "
                 f"wait_for_topics; declare it on the IColumnHandler."
             )
-        return box.drain_one(
-            predicate=predicate,
-            timeout=timeout,
-            stop_event=self.protocol.stop_event,
-        )
+        try:
+            return box.drain_one(
+                predicate=predicate,
+                timeout=timeout,
+                stop_event=self.protocol.stop_event,
+            )
+        except TimeoutError:
+            # Re-raise naming the topic + likely cause so the protocol-error
+            # dialog says WHAT we were waiting for, not just "timed out".
+            raise TimeoutError(
+                f"Timed out after {timeout}s waiting for a reply on "
+                f"{topic!r}. No matching message arrived — the hardware or "
+                f"backend responder for this topic may be disconnected, not "
+                f"running, or slower than the timeout."
+            ) from None

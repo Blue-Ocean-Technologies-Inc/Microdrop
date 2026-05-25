@@ -76,7 +76,9 @@ def test_windows_empty_route_yields_nothing():
 
 # --- _route_with_repeats ---
 
-from pluggable_protocol_tree.services.phase_math import _route_with_repeats
+from pluggable_protocol_tree.services.phase_math import (
+    _route_with_repeats,
+)
 
 
 def test_repeats_open_route_no_linear_repeats_one_pass():
@@ -99,44 +101,50 @@ def test_repeats_open_route_linear_repeats_replays_n_times():
 
 
 def test_repeats_loop_route_default_one_cycle():
+    """One cycle of a 3-electrode loop yields 4 phases — the three
+    cycle windows plus a return-to-start phase (matches the legacy
+    device-viewer route executor)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_repeats_loop_route_n_repeats():
-    """Loop route + n_repeats=2 → 2 full cycles."""
+    """Loop route + n_repeats=2 → 2 full cycles + 1 return phase."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=2,
         repeat_duration_s=0.0, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
 
 
 def test_repeats_loop_with_repeat_duration_caps_cycles():
     """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
     cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
-    cycle (always at least one pass). Test: 1 cycle yielded."""
+    cycle. Duration mode still closes the loop with a return-to-start
+    phase (the RoutesHandler's len(phases)-based hold-pad keeps timing
+    exact)."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
         repeat_duration_s=2.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]   # 1 cycle
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]   # 1 cycle + return-to-start
 
 
 def test_repeats_loop_with_repeat_duration_fits_two_cycles():
     """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles."""
+    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles. Duration mode closes
+    the loop with a return-to-start phase, same as count mode."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=999,
         repeat_duration_s=6.5, step_duration_s=1.0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]   # 2 cycles
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
 
 
 def test_repeats_empty_route_yields_nothing():
@@ -262,11 +270,23 @@ def test_iter_phases_one_open_route_with_static():
 
 
 def test_iter_phases_one_loop_route():
+    """Loop closes with a return-to-start phase."""
     out = list(iter_phases(
         static_electrodes=[], routes=[["a", "b", "c", "a"]],
         trail_length=1, trail_overlay=0,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]
+
+
+def test_iter_phases_four_electrode_loop_yields_five_phases():
+    """Loop with 4 unique electrodes, trail=1, one square at a time:
+    A→B→C→D→A. Five phases total (4 forward + 1 return). Mirrors the
+    legacy device-viewer loop execution that the user expects."""
+    out = list(iter_phases(
+        static_electrodes=[], routes=[["a", "b", "c", "d", "a"]],
+        trail_length=1, trail_overlay=0,
+    ))
+    assert out == [{"a"}, {"b"}, {"c"}, {"d"}, {"a"}]
 
 
 def test_iter_phases_two_routes_zip_with_static():
@@ -303,7 +323,9 @@ def test_iter_phases_soft_end_appends_ramp():
 
 
 def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles."""
+    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles, then a
+    return-to-start phase so the loop closes (timing stays exact via the
+    RoutesHandler's len(phases)-based hold-pad)."""
     out = list(iter_phases(
         static_electrodes=[],
         routes=[["a", "b", "c", "a"]],
@@ -311,7 +333,7 @@ def test_iter_phases_repeat_duration_caps_loop_cycles():
         repeat_duration_s=6.5, step_duration_s=1.0,
         n_repeats=999,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}]
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
 
 
 def test_iter_phases_linear_repeats_replays_open_route():
@@ -322,3 +344,25 @@ def test_iter_phases_linear_repeats_replays_open_route():
         linear_repeats=True, n_repeats=3,
     ))
     assert out == [{"a"}, {"b"}, {"a"}, {"b"}, {"a"}, {"b"}]
+
+
+# --- loop closes (return-to-start) in BOTH count and duration mode ---
+
+
+def test_loop_closes_with_return_phase_in_both_modes():
+    """A loop that starts at electrode 'a' must also end at 'a' in both
+    count and duration mode. 4-window cycle; both modes append the
+    return-to-start phase. Only the cycle count differs."""
+    route = ["a", "b", "c", "d", "a"]   # loop, effective len 4, trail 1 => 4 windows
+    count_mode = list(_route_with_repeats(
+        route, trail_length=1, trail_overlay=0,
+        n_repeats=2, repeat_duration_s=0.0, step_duration_s=1.0))
+    dur_mode = list(_route_with_repeats(
+        route, trail_length=1, trail_overlay=0,
+        n_repeats=2, repeat_duration_s=8.0, step_duration_s=1.0))
+    # Both: cycles * 4 windows + 1 return-to-start (= the first window).
+    assert len(count_mode) == 2 * 4 + 1
+    assert len(dur_mode) == 2 * 4 + 1
+    # The loop closes: last phase == first phase (back at the start, 'a').
+    assert count_mode[-1] == count_mode[0] == {"a"}
+    assert dur_mode[-1] == dur_mode[0] == {"a"}

@@ -81,3 +81,18 @@ def test_dock_pane_passes_device_viewer_sync_to_pane(qapp):
     contents = dp.create_contents(parent=None)
 
     assert isinstance(contents.device_viewer_sync, DeviceViewerSyncController)
+
+
+def test_dock_pane_seeds_default_step_on_startup(qapp):
+    """Legacy protocol_grid parity (issue #424): opening the dock pane with
+    no protocol loaded starts with one default step, treated as a clean
+    baseline (not flagged as unsaved)."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    dp, _, _ = _make_dock_pane_with_mocked_app(
+        qapp, [make_type_column(), make_name_column()])
+    contents = dp.create_contents(parent=None)
+    assert len(contents.manager.root.children) == 1
+    assert contents.manager.root.children[0].row_type == "step"
+    assert contents.protocol_state_tracker.is_modified is False

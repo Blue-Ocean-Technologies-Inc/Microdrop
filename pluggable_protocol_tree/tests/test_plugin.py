@@ -55,14 +55,14 @@ def test_assemble_columns_canonical_order_after_ppt3():
     p = PluggableProtocolTreePlugin()
     ids = [c.model.col_id for c in p._assemble_columns()
            if c.model.col_id in (
-               "type", "id", "name", "repetitions", "duration_s",
-               "electrodes", "routes",
+               "type", "id", "name", "repetitions", "route_repetitions",
+               "duration_s", "electrodes", "routes",
                "trail_length", "trail_overlay", "soft_start", "soft_end",
                "repeat_duration", "linear_repeats",
            )]
     assert ids == [
-        "type", "id", "name", "repetitions", "duration_s",
-        "electrodes", "routes",
+        "type", "id", "name", "repetitions", "route_repetitions",
+        "duration_s", "electrodes", "routes",
         "trail_length", "trail_overlay", "soft_start", "soft_end",
         "repeat_duration", "linear_repeats",
     ]
@@ -114,3 +114,14 @@ def test_extension_point_accepts_compound_columns_alongside_plain_columns():
     # enabled_count_compound exposes 'ec_enabled' + 'ec_count' fields.
     assert "ec_enabled" in ids
     assert "ec_count" in ids
+
+
+def test_assembled_columns_have_route_reps_and_no_controls_column():
+    p = PluggableProtocolTreePlugin()
+    ids = [c.model.col_id for c in p._assemble_columns()]
+    assert "route_repetitions" in ids
+    assert "repeat_duration_controls" not in ids
+    # Reps still present and distinct from Route Reps.
+    assert "repetitions" in ids
+    # Route Reps lands right after Reps.
+    assert ids.index("route_repetitions") == ids.index("repetitions") + 1

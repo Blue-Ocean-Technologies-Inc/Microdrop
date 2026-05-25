@@ -1,5 +1,5 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Dict, Property
+from traits.api import Bool, Dict, Property
 from pyface.api import warning
 
 from logger.logger_service import get_logger
@@ -47,6 +47,13 @@ class PeripheralPreferences(PreferencesHelper):
         low=MIN_ZSTAGE_HEIGHT_MM,
         high="_max_down_height",
         desc="Height of stage when down command sent"
+    )
+
+    wait_for_magnet_ack = Bool(
+        True,
+        desc="Block each magnet protocol step until the hardware "
+             "acknowledges the new position (MAGNET_APPLIED). Disable to "
+             "fire-and-forget when no magnet responder is connected."
     )
 
     #### Preferences ##########################################################
