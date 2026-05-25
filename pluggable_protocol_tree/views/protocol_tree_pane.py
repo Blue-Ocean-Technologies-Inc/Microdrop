@@ -310,13 +310,15 @@ class ProtocolTreePane(QWidget):
         if not self._tick_timer.isActive():
             self._tick_timer.start()
 
-        # Push the running step's electrodes/routes to the DV so it
-        # tracks the executor (mirrors the legacy protocol_grid behavior).
-        if self.device_viewer_sync is not None:
-            try:
-                self.device_viewer_sync._publish_for_row(row)
-            except Exception as e:
-                logger.warning(f"executor->DV publish failed: {e}")
+        # NOTE: we deliberately do NOT publish the static step view to the
+        # DV here. RoutesHandler publishes a per-phase display for every
+        # phase (carrying step_id/label/routes + the phase's active
+        # electrodes, editable=False), which is the authoritative source
+        # while a protocol runs. Publishing _publish_for_row(row) here too
+        # raced with phase 1: the worker publishes phase 1 to the broker
+        # before this queued slot runs, so the static view (electrodes=[],
+        # editable=True) consistently landed AFTER phase 1 and cleared it,
+        # making the animation appear to begin at the second position.
 
     def _next_step_name(self, current):
         steps = self.manager.iter_execution_steps()
