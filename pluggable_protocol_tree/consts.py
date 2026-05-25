@@ -41,3 +41,15 @@ ACTOR_TOPIC_DICT = {
     ]
 }
 
+from dropbot_controller.consts import CAPACITANCE_UPDATED
+from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED
+
+LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
+LOGGING_ACTOR_TOPIC_DICT = {
+    LOGGING_LISTENER_NAME: [
+        CAPACITANCE_UPDATED,
+        ELECTRODES_STATE_CHANGE,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
+    ]
+}
+
