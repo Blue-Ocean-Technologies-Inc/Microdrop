@@ -5,7 +5,7 @@ from ..interfaces.i_route_execution_service import IRouteExecutionService
 from electrode_controller.consts import electrode_state_change_publisher
 from protocol_grid.consts import ROUTES_EXECUTING
 from protocol_grid.services.path_execution_service import PathExecutionService
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message, serialize_bool
 from PySide6.QtCore import QTimer
 from microdrop_utils.pyside_helpers import PausableTimer
 
@@ -114,7 +114,7 @@ class RouteExecutionService(HasTraits):
         self._current_phase_index = 0
         self.model.route_execution_service_executing = True
         self.model.route_execution_service_paused = False
-        publish_message(topic=ROUTES_EXECUTING, message="true")
+        publish_message(topic=ROUTES_EXECUTING, message=serialize_bool(True))
 
         # Compute phases-per-rep from the longest loop cycle across all paths
         max_cycle_length = 0
@@ -292,7 +292,7 @@ class RouteExecutionService(HasTraits):
 
         self.model.route_execution_service_executing = False
         self.model.route_execution_service_paused = False
-        publish_message(topic=ROUTES_EXECUTING, message="false")
+        publish_message(topic=ROUTES_EXECUTING, message=serialize_bool(False))
         self._execution_plan = []
         self._current_phase_index = 0
 
