@@ -218,6 +218,9 @@ def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
         calls.append((title, message))
 
     monkeypatch.setattr(ptp, "error_dialog", fake_error_dialog)
+    # _run_completion_flow("error") now runs after the dialog; patch confirm
+    # and stop_logging so the test doesn't block on a modal or crash.
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)
 
     pane = ptp.ProtocolTreePane([make_type_column()])
     pane.executor.qsignals.protocol_started.emit()
@@ -653,6 +656,7 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
         "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
         lambda topic, message: publishes.append((topic, message)),
     )
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.views.protocol_tree_pane import (
         ProtocolTreePane,
     )
@@ -660,6 +664,9 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
         make_name_column,
     )
     from device_viewer.consts import PROTOCOL_RUNNING
+    # _run_completion_flow("aborted") calls confirm(); patch it to avoid
+    # a blocking modal dialog in headless tests.
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)
     pane = ProtocolTreePane([make_name_column()])
     pane._on_protocol_aborted()
     assert (PROTOCOL_RUNNING, "False") in publishes
@@ -979,3 +986,41 @@ def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch,
     (arg,), _ = pane.logging_controller.log_metadata.call_args
     assert "Protocol Path" in arg
     assert "protocol_x.json" in arg["Protocol Path"]
+
+
+def test_terminated_error_outcome_defers_completion_flow(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    ran = []
+    pane._run_completion_flow = lambda outcome: ran.append(outcome)
+    pane._on_protocol_terminated("error")
+    assert ran == []                      # error: flow deferred to _on_error
+
+
+def test_terminated_finished_outcome_runs_completion_flow(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    ran = []
+    pane._run_completion_flow = lambda outcome: ran.append(outcome)
+    pane._on_protocol_terminated("finished")
+    assert ran == ["finished"]
+
+
+def test_on_error_shows_dialog_before_completion_flow(qapp, monkeypatch):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    order = []
+    pane._publish_protocol_running = lambda *a, **k: None
+    pane._on_protocol_terminated = lambda outcome="finished": order.append(("term", outcome))
+    pane._run_completion_flow = lambda outcome: order.append(("flow", outcome))
+    monkeypatch.setattr(ptp, "error_dialog", lambda **k: order.append("error_dialog"))
+
+    pane._on_error("boom")
+
+    assert order == [("term", "error"), "error_dialog", ("flow", "error")]

@@ -383,7 +383,9 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._on_protocol_terminated()
+        # Immediate teardown only; the completion flow is deferred so the
+        # error dialog is shown before the "Generate Run Summary?" prompt.
+        self._on_protocol_terminated("error")
         # Present a nicely-formatted HTML body (rendered via the dialog's
         # `informative` slot) built from the structured StepExecutionError
         # fields, with the full traceback as collapsible detail. `message`
@@ -398,6 +400,8 @@ class ProtocolTreePane(QWidget):
             )
         error_dialog(parent=None, title="Protocol error",
                      message=str(msg), informative=informative, detail=detail)
+        # Now prompt for a run summary (error is treated like a force-stop).
+        self._run_completion_flow("error")
 
     @staticmethod
     def _format_error_html(exc, fallback_msg: str) -> str:
