@@ -21,9 +21,12 @@ def test_handler_emits_adapted_message_via_display_state_signal():
         DeviceViewerDockPane,
     )
     pane = MagicMock()
-    pane.model.electrodes.id_to_channel = {
+    # The handler reads the real electrodes Property `electrode_ids_channels_map`
+    # and asks the routes model for a layer color via get_available_color().
+    pane.model.electrodes.electrode_ids_channels_map = {
         "e00": 0, "e01": 1, "e02": 2, "missing": None,
     }
+    pane.model.routes.get_available_color.return_value = "blue"
     msg = ProtocolTreeDisplayMessage(
         electrodes=["e00", "e01", "missing"],
         routes=[["e02", "e00"]],
@@ -53,7 +56,7 @@ def test_free_mode_payload_clears_display():
         DeviceViewerDockPane,
     )
     pane = MagicMock()
-    pane.model.electrodes.id_to_channel = {"e00": 0, "e01": 1}
+    pane.model.electrodes.electrode_ids_channels_map = {"e00": 0, "e01": 1}
     msg = ProtocolTreeDisplayMessage(free_mode=True)
     DeviceViewerDockPane._on_protocol_tree_display_state_triggered(
         pane, msg.serialize(),
