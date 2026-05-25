@@ -963,3 +963,19 @@ def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(qapp, m
 
     assert confirms == []          # no "Create New Experiment?" without a manager
     pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+
+
+def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch, tmp_path):
+    ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
+    saved = tmp_path / "protocols" / "protocol_x.json"
+    saved.parent.mkdir(parents=True)
+    saved.write_text("{}", encoding="utf-8")
+    pane.experiment_manager.auto_save_protocol.return_value = saved
+    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)   # don't start a new experiment
+
+    pane._run_completion_flow("finished")
+
+    pane.logging_controller.log_metadata.assert_called_once()
+    (arg,), _ = pane.logging_controller.log_metadata.call_args
+    assert "Protocol Path" in arg
+    assert "protocol_x.json" in arg["Protocol Path"]

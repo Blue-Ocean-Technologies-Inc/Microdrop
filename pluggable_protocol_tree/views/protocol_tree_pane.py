@@ -664,7 +664,9 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"run-summary confirm failed: {e}")
         elif outcome == "finished" and have_exp:
             try:
-                if confirm(parent=None, title="Create New Experiment?",
+                if confirm(parent=None,
+                           message="Would you like to start a new experiment?",
+                           title="Create New Experiment?",
                            cancel=False) == YES:
                     self._on_new_experiment()
             except Exception as e:
