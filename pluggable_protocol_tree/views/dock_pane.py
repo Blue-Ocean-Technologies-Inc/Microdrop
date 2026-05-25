@@ -36,12 +36,38 @@ class PluggableProtocolDockPane(TraitsDockPane):
         manager = RowManager(columns=list(self.columns))
         sync = DeviceViewerSyncController(row_manager=manager)
 
+        def _logging_device_context():
+            from pluggable_protocol_tree.services.logging.models import (
+                LoggingDeviceContext,
+            )
+            channel_areas, svg_path = {}, None
+            try:
+                dv_model = (
+                    getattr(sync, "device_view_model", None)
+                    or getattr(getattr(sync, "widget", None), "model", None)
+                )
+                if dv_model is not None:
+                    channel_areas = dict(
+                        dv_model.electrodes.channel_electrode_areas_scaled_map
+                    )
+                    svg_path = getattr(
+                        dv_model.electrodes.svg_model, "svg_path", None
+                    )
+            except Exception:
+                pass
+            return LoggingDeviceContext(
+                experiment_directory=experiment_manager.get_experiment_directory(),
+                device_svg_path=svg_path,
+                channel_areas=channel_areas,
+            )
+
         pane = ProtocolTreePane(
             manager,
             application=app,
             experiment_manager=experiment_manager,
             sticky_manager=sticky_manager,
             device_viewer_sync=sync,
+            logging_device_context_provider=_logging_device_context,
             parent=parent,
         )
         pane.protocol_state_tracker.dock_pane = self

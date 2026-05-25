@@ -83,6 +83,7 @@ class ProtocolTreePane(QWidget):
         device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
+        logging_device_context_provider=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -96,6 +97,7 @@ class ProtocolTreePane(QWidget):
         self.experiment_manager = experiment_manager
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
+        self._logging_device_context_provider = logging_device_context_provider
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -118,6 +120,12 @@ class ProtocolTreePane(QWidget):
         self._build_layout()
 
         self.executor = self._build_executor(executor_factory)
+
+        from pluggable_protocol_tree.services.logging.controller import (
+            ProtocolLoggingController,
+        )
+        self.logging_controller = ProtocolLoggingController()
+        self.logging_controller.attach(self.executor.qsignals)
 
         self._step_index = 0
         self._step_total = 0
@@ -488,6 +496,14 @@ class ProtocolTreePane(QWidget):
             f"Protocol run starting: {self._repeats_total} rep(s), "
             f"preview={preview_mode}, start_step={start_path}"
         )
+        if self._logging_device_context_provider is not None:
+            try:
+                _log_ctx = self._logging_device_context_provider()
+                if _log_ctx is not None:
+                    _n_steps = sum(1 for _ in self.manager.iter_execution_frames())
+                    self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
+            except Exception as e:
+                logger.warning(f"could not start protocol logging: {e}")
         self.executor.start(
             start_step_path=start_path,
             preview_mode=preview_mode,
