@@ -847,3 +847,15 @@ def test_format_error_html_escapes_fallback():
     assert "&lt;oops&gt;" in html
     assert "&amp;" in html
     assert "<oops>" not in html                  # raw angle brackets escaped
+
+
+def test_pane_terminated_stops_logging(qapp):
+    """The single terminal point drives logging stop (so one log spans all
+    whole-protocol repetitions)."""
+    from unittest.mock import MagicMock
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    pane = ProtocolTreePane([make_type_column()])
+    pane.logging_controller = MagicMock()
+    pane._on_protocol_terminated()
+    pane.logging_controller.stop_logging.assert_called_once_with(pane._repeats_completed)

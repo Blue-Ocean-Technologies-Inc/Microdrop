@@ -496,12 +496,13 @@ class ProtocolTreePane(QWidget):
             f"Protocol run starting: {self._repeats_total} rep(s), "
             f"preview={preview_mode}, start_step={start_path}"
         )
-        # NOTE: protocol logging starts here (run start). Whole-protocol
-        # repeat runs restart the executor via _restart_for_next_rep, which
-        # bypasses this method, so logging currently captures the FIRST
-        # iteration only. Spanning all repeats in one log is a follow-up.
-        # capacitance_per_unit_area is not seeded from the device model here;
-        # it is updated live via the controller as calibration arrives.
+        # Protocol logging starts once here (run start) and stops once in
+        # _on_protocol_terminated — the single terminal point reached only
+        # after the LAST repetition (whole-protocol repeats restart the
+        # executor via _restart_for_next_rep, which returns before the
+        # terminal). So one log spans all repetitions. capacitance_per_unit_area
+        # is not seeded here; it arrives live via the controller's
+        # on_calibration (CALIBRATION_DATA) so the Force column populates.
         if self._logging_device_context_provider is not None:
             try:
                 _log_ctx = self._logging_device_context_provider()
@@ -581,6 +582,10 @@ class ProtocolTreePane(QWidget):
 
     def _on_protocol_terminated(self):
         logger.info("Protocol terminated --> free mode")
+        # Single terminal point for every outcome (final repetition done,
+        # aborted, or errored) — stop logging here so one log spans all
+        # repetitions. No-op when logging wasn't started (e.g. no provider).
+        self.logging_controller.stop_logging(self._repeats_completed)
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
