@@ -20,6 +20,16 @@ DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
 
+# Live gamepad button-capture (remap) request: payload is the action name being
+# rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
+# the device-viewer listener to the live interaction service. Dispatches to
+# _on_gamepad_capture_request_triggered (topic.split("/")[-1] == unique segment).
+GAMEPAD_CAPTURE_REQUEST        = "ui/device_viewer/gamepad_capture_request"
+# Manual gamepad reconnect request (payload unused). Lets the user re-attempt
+# controller acquisition from the UI after an unplug/replug. Dispatches to
+# _on_gamepad_reconnect_request_triggered.
+GAMEPAD_RECONNECT_REQUEST      = "ui/device_viewer/gamepad_reconnect_request"
+
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
 # imported from protocol_grid.consts) to avoid the circular import that would otherwise form
 # now that protocol_grid.consts re-exports the device_viewer topics above. Duplicated as literals
@@ -57,6 +67,8 @@ ACTOR_TOPIC_DICT = {
         DISABLED_CHANNELS_CHANGED,
         HALTED,
         PROTOCOL_TREE_DISPLAY_STATE,
+        GAMEPAD_CAPTURE_REQUEST,
+        GAMEPAD_RECONNECT_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
         # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
@@ -70,6 +82,25 @@ LAYERS_VIEW_MIN_HEIGHT = 250
 
 # Default electrode channel count; configurable in Device Viewer preferences.
 NUMBER_OF_CHANNELS = 120
+
+# ---------------------------------------------------------------------------
+# Gamepad defaults (configurable in Device Viewer preferences). Env vars of the
+# form MICRODROP_GAMEPAD_* still override the stored preference at runtime.
+# Button indices are for the common NES/SNES-style USB pad:
+#   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
+# ---------------------------------------------------------------------------
+GAMEPAD_BTN_CLEAR = 1      # A      -> clear all electrodes
+GAMEPAD_BTN_FIND = 8       # Select -> find liquid
+GAMEPAD_BTN_SPLIT = 2      # B hold -> split
+GAMEPAD_BTN_ADD = 3        # Y hold -> add electrode
+GAMEPAD_BTN_REMOVE = 0     # X hold -> remove electrode
+GAMEPAD_BTN_REALTIME = 9   # Start  -> toggle realtime mode
+
+GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7   # D-pad move / split step debounce
+GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3   # D-pad add / remove debounce
+GAMEPAD_DEBOUNCE_FIND_S = 2.0         # find-liquid button debounce
+GAMEPAD_DEBOUNCE_REALTIME_S = 0.4     # realtime-toggle button debounce
+GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation threshold
 
 ## device vew zoom sensitivity
 ZOOM_SENSITIVITY = 5

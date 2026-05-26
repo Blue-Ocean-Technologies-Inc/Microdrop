@@ -18,7 +18,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     confirm,
     error, warning,
 )
-from pyface.qt.QtCore import QPointF, QSizeF, Qt
+from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
@@ -230,6 +230,22 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_realtime_mode_updated_triggered(self, message):
         if self.model:
             self.model.realtime_mode = message.lower() == "true"
+
+    def _gamepad_interaction_service(self):
+        """The live interaction service that owns the gamepad poll loop, if any."""
+        return getattr(getattr(self, "scene", None), "interaction_service", None)
+
+    def _on_gamepad_capture_request_triggered(self, message):
+        """Relay a Gamepad-prefs remap request to the live interaction service."""
+        svc = self._gamepad_interaction_service()
+        if svc is not None and hasattr(svc, "begin_button_capture"):
+            svc.begin_button_capture(message)
+
+    def _on_gamepad_reconnect_request_triggered(self, message):
+        """Relay a manual gamepad-reconnect request to the interaction service."""
+        svc = self._gamepad_interaction_service()
+        if svc is not None and hasattr(svc, "reconnect_gamepad"):
+            svc.reconnect_gamepad()
 
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
@@ -1277,6 +1293,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         # media-capture notifications can use it directly.
         self.camera_control_widget.status_bar_manager = event.new
 
+        # Same for the gamepad interaction service: it was constructed before
+        # the manager existed, so push it now. The service re-applies its
+        # connection indicator (and HUD) once the manager is set.
+        svc = self._gamepad_interaction_service()
+        if svc is not None:
+            svc.status_bar_manager = event.new
+
         # --- Initialize widgets ---
         self.recording_icon = PulsingLabel(
             icon_str="album",
@@ -1296,3 +1319,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.recording_icon.hide()
 
         self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
+
+        # Place the joystick icon as the outermost-LEFT status-bar icon.
+        # Deferred via singleShot(0) so it runs after every other plugin's
+        # synchronous status-bar setup (realtime icon, ladder, etc.) has added
+        # its icons; attach_gamepad_indicator then inserts the joystick at the
+        # first permanent slot, to the left of them all, with uniform spacing.
+        _mgr = event.new
+        if _mgr is not None and hasattr(_mgr, "attach_gamepad_indicator"):
+            QTimer.singleShot(0, _mgr.attach_gamepad_indicator)

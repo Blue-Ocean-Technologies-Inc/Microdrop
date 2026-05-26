@@ -5,9 +5,12 @@ from pathlib import Path
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from microdrop_application.preferences_dialog import advanced_mode_tab
-from traits.api import Dict, Directory, File, Property, Range, Bool
+from traits.api import Button, Dict, Directory, File, Instance, Property, Range, Bool, Str, observe
 from traits.etsconfig.api import ETSConfig
-from traitsui.api import FileEditor, Group, Item, View
+from traitsui.api import FileEditor, Group, HGroup, Item, View
+from pyface.qt.QtCore import QTimer
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from logger.logger_service import get_logger
 from microdrop_utils.file_handler import safe_copy_file
@@ -29,6 +32,19 @@ from .consts import (
     MASTER_SVG_FILE,
     NUMBER_OF_CHANNELS,
     ZOOM_SENSITIVITY,
+    GAMEPAD_CAPTURE_REQUEST,
+    GAMEPAD_BTN_CLEAR,
+    GAMEPAD_BTN_FIND,
+    GAMEPAD_BTN_SPLIT,
+    GAMEPAD_BTN_ADD,
+    GAMEPAD_BTN_REMOVE,
+    GAMEPAD_BTN_REALTIME,
+    GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
+    GAMEPAD_DEBOUNCE_ADD_REMOVE_S,
+    GAMEPAD_DEBOUNCE_FIND_S,
+    GAMEPAD_DEBOUNCE_REALTIME_S,
+    GAMEPAD_AXIS_THRESHOLD,
+    GAMEPAD_RECONNECT_REQUEST,
 )
 from .default_settings import default_alphas, default_visibility
 
@@ -68,6 +84,40 @@ class DeviceViewerPreferences(PreferencesHelper):
     # getters for processed values from int set in spinner
     _auto_fit_margin_scale = Property(observe="AUTO_FIT_MARGIN_SCALE")
     _zoom_scale = Property(observe="ZOOM_SENSITIVITY")
+
+    ### Gamepad prefs ###
+    # Persisted button indices. The interaction service reads these (with
+    # MICRODROP_GAMEPAD_* env vars taking precedence) and reloads live when they
+    # change. SDL exposes up to 32 buttons; 0-31 is a safe range.
+    gamepad_btn_clear = Range(value=GAMEPAD_BTN_CLEAR, low=0, high=31, mode="spinner")
+    gamepad_btn_find = Range(value=GAMEPAD_BTN_FIND, low=0, high=31, mode="spinner")
+    gamepad_btn_split = Range(value=GAMEPAD_BTN_SPLIT, low=0, high=31, mode="spinner")
+    gamepad_btn_add = Range(value=GAMEPAD_BTN_ADD, low=0, high=31, mode="spinner")
+    gamepad_btn_remove = Range(value=GAMEPAD_BTN_REMOVE, low=0, high=31, mode="spinner")
+    gamepad_btn_realtime = Range(value=GAMEPAD_BTN_REALTIME, low=0, high=31, mode="spinner")
+
+    # Persisted debounce timings (seconds) and analog-stick threshold.
+    gamepad_debounce_move_split = Range(value=GAMEPAD_DEBOUNCE_MOVE_SPLIT_S, low=0.0, high=3.0)
+    gamepad_debounce_add_remove = Range(value=GAMEPAD_DEBOUNCE_ADD_REMOVE_S, low=0.0, high=3.0)
+    gamepad_debounce_find = Range(value=GAMEPAD_DEBOUNCE_FIND_S, low=0.0, high=5.0)
+    gamepad_debounce_realtime = Range(value=GAMEPAD_DEBOUNCE_REALTIME_S, low=0.0, high=5.0)
+    gamepad_axis_threshold = Range(value=GAMEPAD_AXIS_THRESHOLD, low=0.1, high=1.0)
+
+    # Transient capture-mode UI state. Trailing underscore keeps these OUT of the
+    # preferences node (see PreferencesHelper._is_preference_trait), so the Button
+    # clicks and the prompt label are never persisted.
+    capture_prompt_ = Str()
+    # Single-shot timer that auto-clears the prompt. Not every capture outcome
+    # writes a binding (timeout, cancel, reconnect), so the prompt can't rely on
+    # _gamepad_binding_changed alone to clear. Trailing underscore => not persisted.
+    _capture_prompt_timer_ = Instance(QTimer)
+    rebind_clear_ = Button("Rebind")
+    rebind_find_ = Button("Rebind")
+    rebind_split_ = Button("Rebind")
+    rebind_add_ = Button("Rebind")
+    rebind_remove_ = Button("Rebind")
+    rebind_realtime_ = Button("Rebind")
+    reconnect_gamepad_ = Button("Reconnect controller")
 
     DEFAULT_SVG_FILE = File
 
@@ -123,6 +173,78 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     def _get__zoom_scale(self) -> float:
         return 1 + (self.ZOOM_SENSITIVITY / 100)
+
+    # ---- Gamepad live button-capture (remap) ----
+    def _set_capture_prompt(self, text: str, timeout_ms: int = 11000) -> None:
+        """Set the prompt label and auto-clear it after ``timeout_ms``.
+
+        A non-binding outcome (capture timeout/cancel, reconnect) never writes a
+        preference, so the timer is what clears those prompts; a successful
+        capture clears it earlier via _gamepad_binding_changed.
+        """
+        self.capture_prompt_ = text
+        timer = self._capture_prompt_timer_
+        if timer is None:
+            timer = QTimer()
+            timer.setSingleShot(True)
+            timer.timeout.connect(lambda: self.trait_set(capture_prompt_=""))
+            self._capture_prompt_timer_ = timer
+        if text:
+            timer.start(timeout_ms)
+        else:
+            timer.stop()
+
+    def _request_gamepad_capture(self, action: str) -> None:
+        """Ask the live interaction service to capture the next button press.
+
+        The service writes the captured index back into the matching
+        gamepad_btn_* preference, which syncs to this instance via the
+        preferences node and clears the prompt (see _gamepad_binding_changed).
+        """
+        self._set_capture_prompt(
+            f"Press a gamepad button to assign to '{action}'… "
+            f"(no press within ~10s cancels)"
+        )
+        publish_message(topic=GAMEPAD_CAPTURE_REQUEST, message=action)
+
+    def _rebind_clear__fired(self):
+        self._request_gamepad_capture("clear")
+
+    def _rebind_find__fired(self):
+        self._request_gamepad_capture("find")
+
+    def _rebind_split__fired(self):
+        self._request_gamepad_capture("split")
+
+    def _rebind_add__fired(self):
+        self._request_gamepad_capture("add")
+
+    def _rebind_remove__fired(self):
+        self._request_gamepad_capture("remove")
+
+    def _rebind_realtime__fired(self):
+        self._request_gamepad_capture("realtime")
+
+    def _reconnect_gamepad__fired(self):
+        """Ask the live service to re-attempt controller acquisition.
+
+        Result is reflected by the status-bar joystick icon; the prompt is just
+        transient feedback and auto-clears.
+        """
+        self._set_capture_prompt("Attempting to reconnect controller…", timeout_ms=2500)
+        publish_message(topic=GAMEPAD_RECONNECT_REQUEST, message="")
+
+    @observe(
+        "gamepad_btn_clear, gamepad_btn_find, gamepad_btn_split, "
+        "gamepad_btn_add, gamepad_btn_remove, gamepad_btn_realtime"
+    )
+    def _gamepad_binding_changed(self, event):
+        """Clear the capture prompt once a binding actually changes.
+
+        Fires both for manual spinner edits and when the service writes a
+        freshly captured button into the preference node.
+        """
+        self._set_capture_prompt("")
 
 
 device_viewer_tab = PreferencesCategory(
@@ -185,6 +307,45 @@ main_view_settings = (
     ),
 )
 
+########## Gamepad settings ###########################
+def _gamepad_button_row(trait_name: str, rebind_trait: str, label: str) -> HGroup:
+    """A button-index spinner paired with a live 'Rebind' capture button."""
+    return HGroup(
+        Item(trait_name, label=label),
+        Item(rebind_trait, show_label=False, tooltip="Press, then press a button on the gamepad"),
+    )
+
+
+gamepad_settings = Group(
+    Group(
+        HGroup(
+            Item("capture_prompt_", style="readonly", show_label=False, springy=True),
+            Item("reconnect_gamepad_", show_label=False,
+                 tooltip="Re-attempt connection after unplugging/replugging the controller"),
+        ),
+        _gamepad_button_row("gamepad_btn_clear", "rebind_clear_", "Clear all (A)"),
+        _gamepad_button_row("gamepad_btn_find", "rebind_find_", "Find liquid (Select)"),
+        _gamepad_button_row("gamepad_btn_split", "rebind_split_", "Split — hold (B)"),
+        _gamepad_button_row("gamepad_btn_add", "rebind_add_", "Add — hold (Y)"),
+        _gamepad_button_row("gamepad_btn_remove", "rebind_remove_", "Remove — hold (X)"),
+        _gamepad_button_row("gamepad_btn_realtime", "rebind_realtime_", "Realtime toggle (Start)"),
+        label="Button mapping",
+        show_border=True,
+    ),
+    Group(
+        Item("gamepad_debounce_move_split", label="Move / split (s)"),
+        Item("gamepad_debounce_add_remove", label="Add / remove (s)"),
+        Item("gamepad_debounce_find", label="Find liquid (s)"),
+        Item("gamepad_debounce_realtime", label="Realtime toggle (s)"),
+        Item("gamepad_axis_threshold", label="Analog-stick threshold"),
+        label="Timing & sensitivity",
+        show_border=True,
+    ),
+    label="Gamepad",
+    show_border=True,
+    style_sheet=preferences_group_style_sheet,
+)
+
 class DeviceViewerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
 
@@ -202,6 +363,8 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         main_view_settings,
         Item("_"),  # Separator
         sidebar_settings_grid,
+        Item("_"),  # Separator
+        gamepad_settings,
         Item("_"),
         resizable=True,
     )

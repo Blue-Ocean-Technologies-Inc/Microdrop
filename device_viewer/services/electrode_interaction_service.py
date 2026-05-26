@@ -5,7 +5,7 @@ import time
 from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent, QAction
 from PySide6.QtWidgets import (QGraphicsView, QGraphicsSceneWheelEvent, 
                                QGraphicsSceneContextMenuEvent, QMenu)
-from traits.api import HasTraits, Instance, Dict, List, Str, observe, Bool
+from traits.api import HasTraits, Instance, Dict, List, Str, observe, Bool, Float
 from PySide6.QtCore import QPointF, QTimer
 
 try:
@@ -17,6 +17,12 @@ from device_viewer.models.electrodes import Electrode
 from device_viewer.utils.electrode_route_helpers import find_shortest_paths
 from dropbot_controller.consts import (
     DETECT_DROPLETS, SET_REALTIME_MODE
+)
+from device_viewer.consts import (
+    GAMEPAD_BTN_CLEAR, GAMEPAD_BTN_FIND, GAMEPAD_BTN_SPLIT, GAMEPAD_BTN_ADD,
+    GAMEPAD_BTN_REMOVE, GAMEPAD_BTN_REALTIME, GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
+    GAMEPAD_DEBOUNCE_ADD_REMOVE_S, GAMEPAD_DEBOUNCE_FIND_S,
+    GAMEPAD_DEBOUNCE_REALTIME_S, GAMEPAD_AXIS_THRESHOLD,
 )
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
@@ -94,7 +100,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
 
-    _x_modifier_down = Bool(False, desc="When True (B held), arrow presses are split steps.")
+    _split_modifier_down = Bool(False, desc="When True (B held), arrow presses are split steps.")
     _add_modifier_down = Bool(False, desc="When True (Y held), arrows extend active electrodes.")
     _remove_modifier_down = Bool(False, desc="When True (X held), arrows shrink active electrodes.")
     # NOTE: Traits `Str` does not accept None reliably; use "" as the unset sentinel.
@@ -121,6 +127,25 @@ class ElectrodeInteractionControllerService(HasTraits):
     _btn_remove_modifier = Instance(int, allow_none=True)
     _btn_realtime_toggle = Instance(int, allow_none=True)
 
+    # Live button-capture (remap) state. When _capture_action is a non-empty
+    # action name, the next gamepad button press is bound to that action instead
+    # of triggering its normal behaviour. _capture_deadline expires the request.
+    _capture_action = Str("")
+    _capture_deadline = Float(0.0)
+
+    #: Single source of truth for the button mapping, keyed by capture action
+    #: name. Each entry is (preferences trait, env override key, live attribute,
+    #: built-in default). Used by both _load_gamepad_mapping (read) and
+    #: _finish_button_capture (write-back), so the two can't drift apart.
+    _GAMEPAD_ACTIONS = {
+        "clear":    ("gamepad_btn_clear",    "MICRODROP_GAMEPAD_BTN_CLEAR",           "_btn_clear",           GAMEPAD_BTN_CLEAR),
+        "find":     ("gamepad_btn_find",     "MICRODROP_GAMEPAD_BTN_FIND",            "_btn_find_liquid",     GAMEPAD_BTN_FIND),
+        "split":    ("gamepad_btn_split",    "MICRODROP_GAMEPAD_BTN_SPLIT",           "_btn_split",           GAMEPAD_BTN_SPLIT),
+        "add":      ("gamepad_btn_add",      "MICRODROP_GAMEPAD_BTN_ADD_MOD",         "_btn_add_modifier",    GAMEPAD_BTN_ADD),
+        "remove":   ("gamepad_btn_remove",   "MICRODROP_GAMEPAD_BTN_REMOVE_MOD",      "_btn_remove_modifier", GAMEPAD_BTN_REMOVE),
+        "realtime": ("gamepad_btn_realtime", "MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE", "_btn_realtime_toggle", GAMEPAD_BTN_REALTIME),
+    }
+
     _hud_message = Str("")
 
     #######################################################################################################
@@ -128,32 +153,22 @@ class ElectrodeInteractionControllerService(HasTraits):
     #######################################################################################################
 
     def traits_init(self):
-        # Controller support via pygame (SDL).
-        self.setup_pygame_gamepad_support()
-
         # Split-mode history (for contracting back toward the mirror point).
         self._split_sessions: list[dict] = []
         self._split_base_ids: set[str] | None = None
 
-        # Per-action debounce (seconds). Each action category has its own timer.
-        self._dpad_debounce_move_split_s = self._env_float(
-            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_S", 0.7
-        )
-        self._dpad_debounce_add_remove_s = self._env_float(
-            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_ADD_REMOVE_S", 0.3
-        )
-        self._btn_debounce_find_liquid_s = self._env_float(
-            "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S", 2.0
-        )
-        # Short debounce: just enough to swallow button bounce. The toggle now
-        # reads the true state from the model, so it can't "waste" a press.
-        self._btn_debounce_realtime_s = self._env_float(
-            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", 0.4
-        )
+        # Per-action debounce (seconds) + analog-stick threshold, resolved from
+        # env vars / preferences / defaults. Loaded before controller setup.
+        self._load_gamepad_timing()
+
         # Per-category last-action timestamps (independent debounce).
         self._last_dpad_action_ts = 0.0
         self._last_find_liquid_ts = 0.0
         self._last_realtime_toggle_ts = 0.0
+
+        # Controller support via pygame (SDL). Loads the button mapping and
+        # acquires a controller if one is attached.
+        self.setup_pygame_gamepad_support()
 
         # Realtime-mode state is read from the shared model (model.realtime_mode),
         # which is kept in sync via REALTIME_MODE_UPDATED. No local mirror here:
@@ -184,6 +199,37 @@ class ElectrodeInteractionControllerService(HasTraits):
         except Exception:
             pass
 
+    def _set_gamepad_indicator(self, text: str) -> None:
+        """Update the persistent gamepad indicator on the app status bar.
+
+        Empty ``text`` hides the indicator. Unlike ``_set_hud`` (a transient,
+        rotating action message), this is a persistent connection state.
+        """
+        mgr = getattr(self, "status_bar_manager", None)
+        if mgr is None:
+            return
+        try:
+            mgr.gamepad_status = text
+        except Exception:
+            pass
+
+    @observe("status_bar_manager")
+    def _on_status_bar_manager_set(self, event):
+        """Re-apply the gamepad indicator when the status bar manager arrives.
+
+        The manager is typically None when this service is constructed (the task
+        creates it in activated(), after dock-pane creation) and is pushed in
+        later. Without this, a controller acquired during startup would set the
+        indicator against a None manager and never show the icon.
+        """
+        if event.new is None or not self._pygame_enabled or self._pygame_joystick is None:
+            return
+        try:
+            name = self._pygame_joystick.get_name()
+        except Exception:
+            name = "controller"
+        self._set_gamepad_indicator(name)
+
     def _env_int(self, key: str, default: int | None) -> int | None:
         val = os.environ.get(key, "").strip()
         if val == "":
@@ -194,68 +240,129 @@ class ElectrodeInteractionControllerService(HasTraits):
             logger.warning(f"Invalid int for {key}={val!r}")
             return default
 
-    def _env_float(self, key: str, default: float) -> float:
-        val = os.environ.get(key, "").strip()
-        if val == "":
-            return default
-        try:
-            return float(val)
-        except Exception:
-            logger.warning(f"Invalid float for {key}={val!r}")
-            return default
+    def _pref_int(self, env_key: str, pref_name: str, default: int) -> int:
+        """Resolve an int gamepad setting: env var > stored preference > default.
+
+        The env var keeps its historical override role; otherwise the value
+        comes from the Device Viewer preferences (editable in the UI).
+        """
+        raw = os.environ.get(env_key, "").strip()
+        if raw != "":
+            try:
+                return int(raw)
+            except Exception:
+                logger.warning(f"Invalid int for {env_key}={raw!r}")
+        prefs = self.device_viewer_preferences
+        if prefs is not None:
+            try:
+                return int(getattr(prefs, pref_name))
+            except Exception:
+                pass
+        return default
+
+    def _pref_float(self, env_key: str, pref_name: str, default: float) -> float:
+        """Resolve a float gamepad setting: env var > stored preference > default."""
+        raw = os.environ.get(env_key, "").strip()
+        if raw != "":
+            try:
+                return float(raw)
+            except Exception:
+                logger.warning(f"Invalid float for {env_key}={raw!r}")
+        prefs = self.device_viewer_preferences
+        if prefs is not None:
+            try:
+                return float(getattr(prefs, pref_name))
+            except Exception:
+                pass
+        return default
 
     def setup_pygame_gamepad_support(self) -> bool:
-        """
-        Use pygame joystick events as a fallback when QtGamepad isn't available.
+        """Enable gamepad input via pygame.
+
+        Idempotent, so it is safe to call again when a new service instance is
+        created on a model reload.
+
+        NOTE: we must call the full ``pygame.init()`` (not just
+        ``pygame.joystick.init()``). Joystick events are delivered through SDL's
+        event queue, and on some platforms — notably macOS — that queue only
+        works once the video/event subsystem is initialized and pumped. With
+        only the joystick module initialized, ``pygame.event.get()`` returns no
+        events and the controller appears completely unresponsive.
+
+        The poll timer is started whenever pygame is up — even with no
+        controller currently attached — so that ``JOYDEVICEADDED`` hot-plug
+        events are received and a controller plugged in later still works.
         """
         if pygame is None:
             return False
 
         try:
             os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
-            pygame.init()
-            pygame.joystick.init()
+            # Guard so we don't re-init on every model reload. pygame.init() is
+            # required for event delivery (see docstring); it is a no-op if the
+            # relevant subsystems are already up.
+            if not pygame.get_init():
+                pygame.init()
+            if not pygame.joystick.get_init():
+                pygame.joystick.init()
         except Exception as e:
-            logger.debug(f"pygame init failed: {e}")
+            logger.warning(f"pygame init failed: {e}")
             return False
 
-        try:
-            count = pygame.joystick.get_count()
-        except Exception:
-            count = 0
+        # Resolve the button mapping up front (env-based, controller-independent)
+        # so it's ready the moment a controller is acquired.
+        self._load_gamepad_mapping()
 
-        if count <= 0:
-            logger.info("pygame: no joysticks detected")
-            return False
+        # Grab a controller now if one is already present; otherwise the timer
+        # below keeps polling so a JOYDEVICEADDED event can grab one later.
+        self._acquire_joystick()
+        self._start_pygame_timer()
 
-        try:
-            js = pygame.joystick.Joystick(0)
-            js.init()
-            self._pygame_joystick = js
-            self._pygame_enabled = True
-            logger.info(f"pygame: using joystick[0]={js.get_name()!r}")
-        except Exception as e:
-            logger.debug(f"pygame: failed to init joystick: {e}")
-            return False
+        logger.info(
+            "pygame gamepad support enabled (controller %s). Mapping: A=clear, "
+            "Select=find, B=split, Y=add, X=remove, Start=realtime. Override with "
+            "env vars MICRODROP_GAMEPAD_BTN_CLEAR / _BTN_FIND / _BTN_SPLIT / "
+            "_BTN_ADD_MOD / _BTN_REMOVE_MOD / _BTN_REALTIME_TOGGLE.",
+            "attached" if self._pygame_enabled else "waiting for hot-plug",
+        )
+        return True
 
-        # Button mapping (override if needed):
-        #   MICRODROP_GAMEPAD_BTN_CLEAR (defaults to 1)            -> A  = clear all
-        #   MICRODROP_GAMEPAD_BTN_FIND  (defaults to 8)            -> Select = find liquid
-        #   MICRODROP_GAMEPAD_BTN_SPLIT (defaults to 2)            -> B (hold) = split
-        #   MICRODROP_GAMEPAD_BTN_ADD_MOD (defaults to 3)          -> Y (hold) = add electrode
-        #   MICRODROP_GAMEPAD_BTN_REMOVE_MOD (defaults to 0)       -> X (hold) = remove electrode
-        #   MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE (defaults to 9)  -> Start = toggle realtime
-        #
-        # For the common "USB gamepad" NES/SNES-style controller (per probe output):
-        #   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
-        self._btn_clear = self._env_int("MICRODROP_GAMEPAD_BTN_CLEAR", 1)
-        self._btn_find_liquid = self._env_int("MICRODROP_GAMEPAD_BTN_FIND", 8)
-        self._btn_split = self._env_int("MICRODROP_GAMEPAD_BTN_SPLIT", 2)
-        self._btn_add_modifier = self._env_int("MICRODROP_GAMEPAD_BTN_ADD_MOD", 3)
-        self._btn_remove_modifier = self._env_int("MICRODROP_GAMEPAD_BTN_REMOVE_MOD", 0)
-        self._btn_realtime_toggle = self._env_int("MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE", 9)
+    def _load_gamepad_mapping(self) -> None:
+        """Load the (controller-independent) button mapping.
 
-        # D-pad mapping: prefer HAT, but allow axis-based D-pad for some devices.
+        Each value resolves as: MICRODROP_GAMEPAD_* env var > stored Device
+        Viewer preference > built-in default. Re-run live whenever the
+        preferences change (see _on_gamepad_buttons_pref_changed).
+
+        For the common "USB gamepad" NES/SNES-style controller (per probe output):
+          X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
+        """
+        for pref_name, env_key, attr, default in self._GAMEPAD_ACTIONS.values():
+            setattr(self, attr, self._pref_int(env_key, pref_name, default))
+
+    def _load_gamepad_timing(self) -> None:
+        """Load debounce timings + analog-stick threshold.
+
+        Same resolution order as the button mapping (env > preference >
+        default). Re-run live on preference changes; no controller required.
+        """
+        self._dpad_debounce_move_split_s = self._pref_float(
+            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_S", "gamepad_debounce_move_split", GAMEPAD_DEBOUNCE_MOVE_SPLIT_S)
+        self._dpad_debounce_add_remove_s = self._pref_float(
+            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_ADD_REMOVE_S", "gamepad_debounce_add_remove", GAMEPAD_DEBOUNCE_ADD_REMOVE_S)
+        self._btn_debounce_find_liquid_s = self._pref_float(
+            "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S", "gamepad_debounce_find", GAMEPAD_DEBOUNCE_FIND_S)
+        self._btn_debounce_realtime_s = self._pref_float(
+            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", "gamepad_debounce_realtime", GAMEPAD_DEBOUNCE_REALTIME_S)
+        self._pygame_axis_threshold = self._pref_float(
+            "MICRODROP_GAMEPAD_AXIS_THRESHOLD", "gamepad_axis_threshold", GAMEPAD_AXIS_THRESHOLD)
+
+    def _configure_dpad_mapping(self, js) -> None:
+        """Resolve D-pad axis mapping for ``js``: prefer HAT, fall back to axes.
+
+        The D-pad axis indices stay env-only (device-specific, not user-facing);
+        the activation threshold lives in _load_gamepad_timing.
+        """
         default_dpad_x = None
         default_dpad_y = None
         try:
@@ -268,25 +375,207 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         self._pygame_dpad_x_axis = self._env_int("MICRODROP_GAMEPAD_DPAD_X_AXIS", default_dpad_x)
         self._pygame_dpad_y_axis = self._env_int("MICRODROP_GAMEPAD_DPAD_Y_AXIS", default_dpad_y)
-        self._pygame_axis_threshold = self._env_float("MICRODROP_GAMEPAD_AXIS_THRESHOLD", 0.6)
 
-        # Poll pygame events from the Qt event loop.
-        timer = QTimer()
+    def _acquire_joystick(self) -> bool:
+        """Grab joystick[0] if one is present. Safe to call repeatedly.
+
+        Called both at setup and on a ``JOYDEVICEADDED`` hot-plug event. A no-op
+        if a live joystick is already held or none is connected.
+        """
+        if pygame is None:
+            return False
+        try:
+            count = pygame.joystick.get_count()
+        except Exception:
+            count = 0
+        if count <= 0:
+            self._pygame_enabled = False
+            return False
+
+        # Already holding a live controller?
+        if self._pygame_joystick is not None:
+            try:
+                if self._pygame_joystick.get_init():
+                    self._pygame_enabled = True
+                    return True
+            except Exception:
+                pass
+
+        try:
+            js = pygame.joystick.Joystick(0)
+            js.init()
+            self._pygame_joystick = js
+            self._pygame_enabled = True
+            logger.info(f"pygame: using joystick[0]={js.get_name()!r}")
+        except Exception as e:
+            logger.warning(f"pygame: failed to acquire joystick: {e}")
+            self._pygame_joystick = None
+            self._pygame_enabled = False
+            return False
+
+        # D-pad defaults depend on the specific device.
+        self._configure_dpad_mapping(js)
+        try:
+            name = js.get_name()
+        except Exception:
+            name = "controller"
+        # Connection state is shown by the persistent status-bar joystick icon
+        # (green + controller-name tooltip); no transient HUD message needed.
+        self._set_gamepad_indicator(name)
+        return True
+
+    def _release_joystick(self) -> None:
+        """Drop the current controller and reset any held input state.
+
+        Called on a ``JOYDEVICEREMOVED`` hot-plug event and from ``cleanup``.
+        Leaves the poll timer running so a reconnect can be picked up.
+        """
+        js = self._pygame_joystick
+        self._pygame_joystick = None
+        self._pygame_enabled = False
+        self._set_gamepad_indicator("")
+
+        # Clear held modifiers / split session so a reconnect starts clean and
+        # we don't act on stale "button held" state from the removed device.
+        self._split_modifier_down = False
+        self._add_modifier_down = False
+        self._remove_modifier_down = False
+        self._reset_split_state()
+        self._axis_left_pressed = False
+        self._axis_right_pressed = False
+        self._axis_up_pressed = False
+        self._axis_down_pressed = False
+
+        if js is not None:
+            try:
+                js.quit()
+            except Exception:
+                pass
+
+    def _start_pygame_timer(self) -> None:
+        """Start the ~100 Hz poll timer (idempotent).
+
+        The timer is parented to the device view (a QObject) so Qt bounds its
+        lifetime and tears it down even if ``cleanup`` is somehow missed —
+        preventing orphaned timers from stacking across model reloads.
+        """
+        if self._pygame_timer is not None:
+            return  # already running
+        timer = QTimer(self.device_view)
         timer.setInterval(10)  # ~100 Hz
         timer.timeout.connect(self._poll_pygame_events)
         timer.start()
         self._pygame_timer = timer
 
-        logger.info(
-            "pygame gamepad enabled. Mapping: A=clear, Select=find, B=split, "
-            "Y=add, X=remove, Start=realtime. Override with env vars "
-            "MICRODROP_GAMEPAD_BTN_CLEAR / _BTN_FIND / _BTN_SPLIT / _BTN_ADD_MOD / "
-            "_BTN_REMOVE_MOD / _BTN_REALTIME_TOGGLE."
-        )
-        return True
+    # ------------------ Live remap (button capture) ------------------
+
+    #: How long a pending capture request waits for a button press (seconds).
+    _CAPTURE_TIMEOUT_S = 10.0
+
+    def begin_button_capture(self, action: str) -> None:
+        """Arm capture mode: the next button press binds to ``action``.
+
+        Called (via the device-viewer listener) when the user clicks a "Rebind"
+        button in the Gamepad preferences pane.
+        """
+        action = (action or "").strip()
+        if action not in self._GAMEPAD_ACTIONS:
+            logger.warning(f"gamepad capture: unknown action {action!r}")
+            return
+        if not self._pygame_enabled:
+            self._set_hud("Gamepad: connect a controller before rebinding")
+            return
+        self._capture_action = action
+        self._capture_deadline = time.monotonic() + self._CAPTURE_TIMEOUT_S
+        self._set_hud(f"Gamepad: press a button to assign to '{action}'…")
+        logger.info(f"gamepad capture armed for action {action!r}")
+
+    def _finish_button_capture(self, btn: int) -> None:
+        """Bind the captured ``btn`` to the pending action and persist it."""
+        action, self._capture_action = self._capture_action, ""
+        mapping = self._GAMEPAD_ACTIONS.get(action)
+        if mapping is None:
+            return
+        pref_name, _env_key, _attr, _default = mapping
+
+        # Warn (but don't block) if this button is already bound elsewhere — the
+        # two handlers would both fire on that press. Up to the user to resolve.
+        clashes = [
+            other for other, m in self._GAMEPAD_ACTIONS.items()
+            if other != action and getattr(self, m[2], None) == int(btn)
+        ]
+        if clashes:
+            logger.warning(
+                f"gamepad capture: button {btn} also bound to {', '.join(clashes)}"
+            )
+
+        prefs = self.device_viewer_preferences
+        if prefs is not None:
+            try:
+                # Writing the preference persists it and syncs to the prefs pane
+                # (clearing its capture prompt). Our own _on_gamepad_buttons_pref
+                # observer then reloads the live mapping.
+                setattr(prefs, pref_name, int(btn))
+            except Exception as e:
+                logger.warning(f"gamepad capture: failed to store {pref_name}={btn}: {e}")
+        # Reload now too, in case no preferences object is wired up.
+        self._load_gamepad_mapping()
+        self._set_hud(f"Gamepad: '{action}' bound to button {btn}")
+        logger.info(f"gamepad capture: action {action!r} -> button {btn}")
+
+    def reconnect_gamepad(self) -> None:
+        """Manually re-attempt controller acquisition (UI 'reconnect' action).
+
+        Hot-plug is handled automatically via JOYDEVICEADDED, but this gives the
+        user an explicit retry (e.g. if SDL missed the event). Re-inits the
+        joystick subsystem so a freshly re-plugged device is enumerated.
+        """
+        if pygame is None:
+            self._set_hud("Gamepad: pygame unavailable")
+            return
+        try:
+            # Re-init the joystick subsystem so get_count() re-enumerates devices.
+            pygame.joystick.quit()
+            pygame.joystick.init()
+        except Exception as e:
+            logger.warning(f"gamepad reconnect: subsystem re-init failed: {e}")
+        # Drop any stale handle, ensure the poll timer is running, then re-grab.
+        self._release_joystick()
+        self._start_pygame_timer()
+        if self._acquire_joystick():
+            logger.info("gamepad reconnect: controller acquired")
+        else:
+            self._set_hud("Gamepad: no controller found")
+            logger.info("gamepad reconnect: no controller found")
+
+    # ------------------ Live preference reload ------------------
+
+    @observe(
+        "device_viewer_preferences:gamepad_btn_clear,"
+        "device_viewer_preferences:gamepad_btn_find,"
+        "device_viewer_preferences:gamepad_btn_split,"
+        "device_viewer_preferences:gamepad_btn_add,"
+        "device_viewer_preferences:gamepad_btn_remove,"
+        "device_viewer_preferences:gamepad_btn_realtime"
+    )
+    def _on_gamepad_buttons_pref_changed(self, event):
+        self._load_gamepad_mapping()
+
+    @observe(
+        "device_viewer_preferences:gamepad_debounce_move_split,"
+        "device_viewer_preferences:gamepad_debounce_add_remove,"
+        "device_viewer_preferences:gamepad_debounce_find,"
+        "device_viewer_preferences:gamepad_debounce_realtime,"
+        "device_viewer_preferences:gamepad_axis_threshold"
+    )
+    def _on_gamepad_timing_pref_changed(self, event):
+        self._load_gamepad_timing()
 
     def _poll_pygame_events(self) -> None:
-        if not self._pygame_enabled or pygame is None:
+        # Note: we keep polling even when no controller is attached
+        # (``_pygame_enabled`` is False) so that JOYDEVICEADDED hot-plug events
+        # are still received. We only bail if the subsystem itself is gone.
+        if pygame is None or not pygame.joystick.get_init():
             return
 
         try:
@@ -298,11 +587,37 @@ class ElectrodeInteractionControllerService(HasTraits):
                 return
             return
 
+        # Expire a pending button-capture request that was never satisfied.
+        if self._capture_action and time.monotonic() > self._capture_deadline:
+            cancelled, self._capture_action = self._capture_action, ""
+            self._set_hud(f"Gamepad: rebind of '{cancelled}' cancelled (timeout)")
+
         # Keep modifier state in sync even if button events are missed/reordered.
-        self._sync_modifiers_from_pygame_state()
+        # Only meaningful while a controller is live. Skipped during a pending
+        # capture so pressing a modifier button to rebind it doesn't also flip
+        # the live modifier / reset the split session as a side effect.
+        if self._pygame_enabled and not self._capture_action:
+            self._sync_modifiers_from_pygame_state()
 
         for e in events:
             et = getattr(e, "type", None)
+
+            # --- Hot-plug: handled regardless of current attached state ---
+            if et == getattr(pygame, "JOYDEVICEADDED", None):
+                if not self._pygame_enabled:
+                    self._acquire_joystick()
+                continue
+            if et == getattr(pygame, "JOYDEVICEREMOVED", None):
+                if self._pygame_enabled:
+                    # The joystick icon grays out + tooltips "Gamepad
+                    # disconnected"; no transient HUD message needed.
+                    self._release_joystick()
+                continue
+
+            # --- Input events: ignored unless a controller is attached ---
+            if not self._pygame_enabled:
+                continue
+
             if et == getattr(pygame, "JOYBUTTONDOWN", None):
                 btn = int(getattr(e, "button", -1))
                 self._handle_pygame_button(btn, pressed=True)
@@ -340,23 +655,23 @@ class ElectrodeInteractionControllerService(HasTraits):
             except Exception:
                 return False
 
-        new_x = _pressed(self._btn_split)
+        new_split = _pressed(self._btn_split)
         new_add = _pressed(self._btn_add_modifier)
         new_remove = _pressed(self._btn_remove_modifier)
 
-        # Rising edge for X should reset split session.
-        if new_x and not self._x_modifier_down:
+        # Rising edge of the split button starts a fresh split session.
+        if new_split and not self._split_modifier_down:
             self._reset_split_state()
             self._axis_left_pressed = False
             self._axis_right_pressed = False
             self._axis_up_pressed = False
             self._axis_down_pressed = False
 
-        # Falling edge resets as well.
-        if (not new_x) and self._x_modifier_down:
+        # Falling edge ends the split session.
+        if (not new_split) and self._split_modifier_down:
             self._reset_split_state()
 
-        self._x_modifier_down = new_x
+        self._split_modifier_down = new_split
         self._add_modifier_down = new_add
         self._remove_modifier_down = new_remove
 
@@ -364,6 +679,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         # Debug log: helps discover mapping quickly.
         if pressed:
             logger.debug(f"pygame button down: {btn}")
+
+        # Live remap: if a capture is pending, the next press binds the button
+        # to that action instead of performing its normal function.
+        if self._capture_action and pressed:
+            self._finish_button_capture(btn)
+            return
 
         # A = clear all electrodes
         if btn == self._btn_clear and pressed:
@@ -384,27 +705,12 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.detect_droplet()
             return
 
-        # B (hold) = split modifier
-        if btn == self._btn_split:
-            if pressed and not self._x_modifier_down:
-                self._reset_split_state()
-                self._axis_left_pressed = False
-                self._axis_right_pressed = False
-                self._axis_up_pressed = False
-                self._axis_down_pressed = False
-            self._x_modifier_down = bool(pressed)
-            if not pressed:
-                self._reset_split_state()
-            return
-
-        # Y (hold) = add-electrode modifier
-        if btn == self._btn_add_modifier:
-            self._add_modifier_down = bool(pressed)
-            return
-
-        # X (hold) = remove-electrode modifier
-        if btn == self._btn_remove_modifier:
-            self._remove_modifier_down = bool(pressed)
+        # Hold modifiers (B=split, Y=add, X=remove) are intentionally NOT
+        # handled here. They are tracked from live device state in
+        # _sync_modifiers_from_pygame_state (the single source of truth), which
+        # runs every poll tick and on every direction event — so it can't drift
+        # if SDL drops or reorders button up/down events. Just ignore them here.
+        if btn in (self._btn_split, self._btn_add_modifier, self._btn_remove_modifier):
             return
 
         # Start = toggle realtime mode (debounced)
@@ -484,12 +790,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         else:
             debounce_s = float(getattr(self, "_dpad_debounce_move_split_s", 0.7) or 0.0)
         if debounce_s > 0 and (now - float(getattr(self, "_last_dpad_action_ts", 0.0))) < debounce_s:
-            mode = "SPLIT" if self._x_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
+            mode = "SPLIT" if self._split_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
             self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} (debounce {debounce_s:.0f}s)")
             return
         self._last_dpad_action_ts = now
 
-        mode = "SPLIT" if self._x_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
+        mode = "SPLIT" if self._split_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
         axis = "H" if mapped_direction in ("left", "right") else "V"
         active_n = len(self._get_active_electrode_ids())
         self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} axis={axis} active={active_n}")
@@ -500,13 +806,13 @@ class ElectrodeInteractionControllerService(HasTraits):
                 direction,
                 mapped_direction,
                 self._get_device_rotation_deg(),
-                self._x_modifier_down,
+                self._split_modifier_down,
                 self._add_modifier_down,
                 self._remove_modifier_down,
                 len(self._get_active_electrode_ids()),
             )
 
-        if self._x_modifier_down:
+        if self._split_modifier_down:
             self._split_step(mapped_direction)
         elif self._add_modifier_down:
             self._extend_active_electrodes(mapped_direction)
@@ -1022,25 +1328,25 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._set_hud(f"Realtime mode: {state_str}")
 
     def cleanup(self) -> None:
-        """Disconnect controller listeners on model reloads."""
+        """Disconnect controller listeners on model reloads.
+
+        Stops and disposes the poll timer and releases the controller. The
+        pygame joystick *subsystem* is intentionally left initialized: a fresh
+        service re-runs ``setup_pygame_gamepad_support`` (which is idempotent),
+        so quitting/re-initializing SDL on every reload would just be churn.
+        """
         try:
             if self._pygame_timer is not None:
                 try:
                     self._pygame_timer.stop()
+                    # Parented to the device view; deleteLater lets Qt reclaim it.
+                    self._pygame_timer.deleteLater()
                 except Exception:
                     pass
                 self._pygame_timer = None
-            self._pygame_enabled = False
-            self._pygame_joystick = None
+            # Releases the controller and clears held modifier/split state.
+            self._release_joystick()
         finally:
-            self._x_modifier_down = False
-            self._add_modifier_down = False
-            self._remove_modifier_down = False
-            self._reset_split_state()
-            self._axis_left_pressed = False
-            self._axis_right_pressed = False
-            self._axis_up_pressed = False
-            self._axis_down_pressed = False
             # Remove HUD message
             try:
                 if self._hud_message and getattr(self, "status_bar_manager", None):
