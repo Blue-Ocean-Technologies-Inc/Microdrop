@@ -54,4 +54,9 @@ class IDropbotControllerBase(IDramatiqControllerBase):
         """
         handle halt requests.
         """
+
+    def on_reboot_request(self, message):
+        """
+        Reboot the dropbot microcontroller. This disconnects the device while it resets.
+        """
     ####################################################################################

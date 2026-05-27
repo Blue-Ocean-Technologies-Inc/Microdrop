@@ -34,6 +34,7 @@ RETRY_CONNECTION = "dropbot/requests/retry_connection"
 HALT = "dropbot/requests/halt"
 SET_VOLTAGE = "dropbot/requests/set_voltage"
 SET_FREQUENCY = "dropbot/requests/set_frequency"
+REBOOT = "dropbot/requests/reboot"
 
 # Protocol-driven setpoint topics (separate from UI SET_VOLTAGE/SET_FREQUENCY
 # so the realtime-mode gate and prefs-persistence side effects don't apply).
