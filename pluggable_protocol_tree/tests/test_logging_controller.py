@@ -206,6 +206,20 @@ def test_stop_logging_overwrites_steps_metadata_with_actual_count(tmp_path):
     assert "Completed Steps" not in metadata
 
 
+def test_stop_logging_adds_start_stop_elapsed_time_metadata(tmp_path):
+    """Legacy parity: the report metadata table includes Start Time, Stop
+    Time, and Elapsed Time once a run stops."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    meta = c._ingestion.metadata
+    c.stop_logging()
+    for key in ("Start Time", "Stop Time", "Elapsed Time"):
+        assert key in meta
+    assert meta["Elapsed Time"].count(":") == 2          # "H:MM:SS"
+
+
 def test_log_metadata_forwards_to_ingestion_and_is_noop_without(tmp_path):
     c = ProtocolLoggingController(settling_provider=lambda: 0.0,
                                   flush_scheduler=_immediate)

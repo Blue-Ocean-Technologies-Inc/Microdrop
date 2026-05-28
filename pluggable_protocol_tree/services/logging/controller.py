@@ -3,10 +3,13 @@ run's worth of logged artifacts. Owns a LoggingIngestion per run; the
 logging listener forwards capacitance/actuation/media to it. Settling
 flush is deferred so in-flight capacitance after 'done' is captured."""
 
+import datetime as _dt
 import json
 import time
 from pathlib import Path
 from typing import Callable, Optional
+
+_TIME_FMT = "%Y-%m-%d %H:%M:%S"
 
 from logger.logger_service import get_logger
 
@@ -31,6 +34,14 @@ def _qtimer_flush_scheduler(controller) -> None:
     from pyface.qt.QtCore import QTimer
     QTimer.singleShot(int(controller._settling_provider() * 1000),
                       controller._flush)
+
+
+def _format_elapsed(delta: _dt.timedelta) -> str:
+    """`H:MM:SS` for the metadata table (sub-second jitter is noise here)."""
+    total = int(delta.total_seconds())
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}"
 
 
 def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
@@ -61,6 +72,7 @@ class ProtocolLoggingController:
         self._step_idx = 0
         self._n_steps = 0
         self._start_time = ""
+        self._start_dt: Optional[_dt.datetime] = None
         self._generate_report = True
 
     # --- executor signal wiring ---
@@ -92,6 +104,7 @@ class ProtocolLoggingController:
         self._step_idx = 0
         self._n_steps = int(n_steps)
         self._start_time = time.strftime("%Y%m%d_%H%M%S")
+        self._start_dt = _dt.datetime.now()
         self._ingestion.log_metadata({
             "Experiment Directory": str(device_context.experiment_directory),
             "Device SVG": str(getattr(device_context, "device_svg_path", "")),
@@ -115,8 +128,14 @@ class ProtocolLoggingController:
         # self._step_idx is the count of step_started signals received,
         # which is the true completed-step count and survives abort/error
         # (unlike the pane's _repeats_completed which resets on abort).
-        self._ingestion.log_metadata(
-            {"Steps": f"{self._step_idx} / {self._n_steps}"})
+        stop_dt = _dt.datetime.now()
+        meta = {"Steps": f"{self._step_idx} / {self._n_steps}"}
+        if self._start_dt is not None:
+            elapsed = stop_dt - self._start_dt
+            meta["Start Time"] = self._start_dt.strftime(_TIME_FMT)
+            meta["Stop Time"] = stop_dt.strftime(_TIME_FMT)
+            meta["Elapsed Time"] = _format_elapsed(elapsed)
+        self._ingestion.log_metadata(meta)
         _listener.clear_active_logger()
         self._flush_scheduler(self)
 
@@ -126,13 +145,14 @@ class ProtocolLoggingController:
             return
         report_path = None
         try:
-            LoggingPersistence.write_data_files(
+            json_path, csv_path = LoggingPersistence.write_data_files(
                 self._device_context.experiment_directory, self._start_time,
                 ing.entries, ing.columns)
             if self._generate_report:
                 html = LoggingReport.build_html(
                     entries=ing.entries, columns=ing.columns, metadata=ing.metadata,
-                    media=ing.media, device_context=self._device_context, notes=None)
+                    media=ing.media, device_context=self._device_context,
+                    notes=None, data_files=[json_path, csv_path])
                 report_path = LoggingReport.write_report(
                     self._device_context.experiment_directory, html)
         except Exception as e:

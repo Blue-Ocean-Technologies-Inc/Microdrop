@@ -26,9 +26,11 @@ class LoggingReport:
     @staticmethod
     def build_html(*, entries: List[dict], columns: List[str],
                    metadata: Dict, media: Dict[str, List[str]],
-                   device_context, notes: Optional[List[str]] = None) -> str:
+                   device_context, notes: Optional[List[str]] = None,
+                   data_files: Optional[List] = None) -> str:
         sections = [
             LoggingReport._metadata_section(metadata),
+            LoggingReport._data_files_section(data_files or []),
             LoggingReport._summary_section(entries, columns),
             LoggingReport._trends_section(entries, columns, device_context),
             LoggingReport._media_section(media),
@@ -59,6 +61,24 @@ class LoggingReport:
             for k, v in (metadata or {}).items()
         )
         return f"<h2>Metadata</h2><table>{rows}</table>"
+
+    @staticmethod
+    def _data_files_section(data_files: List) -> str:
+        """Legacy-parity 'Data Files' section: clickable file:// link per
+        artifact written this run (data_<t>.json / data_<t>.csv)."""
+        if not data_files:
+            return ""
+        items = []
+        for f in data_files:
+            try:
+                p = Path(f)
+                uri = p.as_uri()
+                items.append(
+                    f'<li><a href="{_html.escape(uri, quote=True)}">'
+                    f"{_html.escape(p.name)}</a></li>")
+            except (ValueError, OSError):
+                items.append(f"<li>{_html.escape(str(f))}</li>")
+        return f"<h2>Data Files</h2><ul>{''.join(items)}</ul>"
 
     @staticmethod
     def _format_metadata_value(key, value) -> str:
@@ -115,25 +135,51 @@ class LoggingReport:
         df = pd.DataFrame(entries)
         if "step_idx" not in df.columns:
             return "<h2>Data Trends</h2><p>No step index in data.</p>"
+
+        # Legacy parity: heatmap first (it represents the whole run), then a
+        # per-quantity horizontal bar chart per step_id. First plotly figure
+        # pulls in the version-correct plotly.js from the CDN; subsequent
+        # figures reuse it. Never use plotly-latest.min.js (1.x) which can't
+        # decode the typed-array output from plotly >= 3.x.
+        heatmap = LoggingReport._heatmap(
+            df, device_context, include_plotlyjs=True)
+        plotly_js_emitted = bool(heatmap)
+
+        # Steps are categorical along the y-axis (label = step_id when
+        # available, else step_idx). Sort by step_idx descending so step 1
+        # appears at the top of each chart, like the legacy report.
+        has_step_id = "step_id" in df.columns
+        group_cols = ["step_idx", "step_id"] if has_step_id else ["step_idx"]
+        y_col = "step_id" if has_step_id else "step_idx"
         charts = []
-        plotly_js_emitted = False
         for col in LoggingReport._numeric_columns(columns):
             if col not in df:
                 continue
             s = pd.to_numeric(df[col], errors="coerce")
             if s.dropna().empty:
                 continue
-            agg = df.assign(_v=s).groupby("step_idx")["_v"].agg(["mean", "std"]).reset_index()
-            fig = px.bar(agg, x="step_idx", y="mean", error_y="std", title=col)
-            # First chart pulls the version-correct plotly.js from the CDN;
-            # subsequent charts reuse it. Never use plotly-latest.min.js.
+            agg = (df.assign(_v=s)
+                    .groupby(group_cols)["_v"]
+                    .agg(["mean", "std"])
+                    .reset_index()
+                    .sort_values("step_idx", ascending=False))
+            fig = px.bar(
+                agg, x="mean", y=y_col, error_x="std",
+                orientation="h", title=col,
+                labels={"mean": f"Mean {col}", y_col: "Protocol Steps"},
+                template="plotly_white",
+                color_discrete_sequence=["#17a2b8"])
+            fig.update_layout(
+                yaxis=dict(type="category", title="Protocol Steps"),
+                xaxis=dict(title=f"Mean {col}"),
+                margin=dict(l=20, r=20, t=50, b=20),
+                # Grow height with step count so labels don't overlap.
+                height=250 + (len(agg) * 35))
             charts.append(fig.to_html(
                 full_html=False,
                 include_plotlyjs="cdn" if not plotly_js_emitted else False))
             plotly_js_emitted = True
-        heatmap = LoggingReport._heatmap(
-            df, device_context, include_plotlyjs=not plotly_js_emitted)
-        return "<h2>Data Trends</h2>" + "".join(charts) + heatmap
+        return "<h2>Data Trends</h2>" + heatmap + "".join(charts)
 
     @staticmethod
     def _heatmap(df: pd.DataFrame, device_context, *,
@@ -141,17 +187,16 @@ class LoggingReport:
         svg = getattr(device_context, "device_svg_path", None)
         if not svg or "actuated_channels" not in df:
             return ""
-        counts: Dict[int, int] = {}
-        for chans in df["actuated_channels"]:
-            for ch in (chans or []):
-                counts[int(ch)] = counts.get(int(ch), 0) + 1
+        durations = LoggingReport._channel_durations_seconds(df)
+        if not durations:
+            return ""
         try:
             from microdrop_utils.plotly_helpers import (
                 create_plotly_svg_dropbot_device_heatmap,
             )
             fig = create_plotly_svg_dropbot_device_heatmap(
-                str(svg), counts,
-                quant_title="Actuation Count", quant_units="count")
+                str(svg), durations,
+                quant_title="Actuation Time", quant_units="s")
             return ("<h3>Device actuation heatmap</h3>"
                     + fig.to_html(
                         full_html=False,
@@ -159,6 +204,43 @@ class LoggingReport:
         except Exception as e:                 # pragma: no cover - defensive
             logger.warning(f"heatmap generation failed: {e}")
             return ""
+
+    @staticmethod
+    def _channel_durations_seconds(df: pd.DataFrame) -> Dict[int, float]:
+        """Estimate total actuation time per channel, in seconds.
+
+        Mirrors legacy ``protocol_data_logger._get_channel_duration``:
+        count capacitance samples that observed each channel, multiply by
+        the average sample interval (instrument time, rollover-corrected).
+        Returns an empty dict when there's no instrument time column or
+        not enough samples to estimate an interval — caller treats that
+        as "no heatmap" so an empty run doesn't render a misleading panel.
+        """
+        if "actuated_channels" not in df:
+            return {}
+        counts: Dict[int, int] = {}
+        for chans in df["actuated_channels"]:
+            for ch in (chans or []):
+                counts[int(ch)] = counts.get(int(ch), 0) + 1
+        if not counts:
+            return {}
+        if "instrument_time_us" not in df.columns:
+            return {}
+        # The persistence layer applies the same rollover correction to
+        # the on-disk artifact; reuse it so the heatmap matches.
+        from pluggable_protocol_tree.services.logging.persistence import (
+            LoggingPersistence,
+        )
+        raw_us = df["instrument_time_us"].tolist()
+        corrected = [v for v in LoggingPersistence._correct_rollover(raw_us)
+                     if v is not None]
+        if len(corrected) < 2:
+            return {}
+        series = pd.Series(corrected).sort_values()
+        avg_interval_s = float(series.diff().dropna().mean()) * 1e-6
+        if avg_interval_s <= 0:
+            return {}
+        return {ch: round(n * avg_interval_s, 6) for ch, n in counts.items()}
 
     @staticmethod
     def _media_section(media: Dict[str, List[str]]) -> str:

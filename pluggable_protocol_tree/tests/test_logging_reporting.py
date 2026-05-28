@@ -124,6 +124,107 @@ def test_build_html_path_metadata_non_absolute_falls_back_to_escaped_text():
     assert "<a href" not in html.split("Metadata")[1].split("Data Summary")[0]
 
 
+def test_build_html_data_files_section_lists_clickable_links(tmp_path):
+    """Legacy parity: a 'Data Files' section lists each artifact (json/csv)
+    written this run as a clickable file:// link showing its basename."""
+    json_f = tmp_path / "data" / "data_x.json"
+    csv_f = tmp_path / "data" / "data_x.csv"
+    json_f.parent.mkdir(parents=True)
+    json_f.write_text("{}", encoding="utf-8")
+    csv_f.write_text("", encoding="utf-8")
+    html = LoggingReport.build_html(
+        entries=[], columns=[], metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None, data_files=[json_f, csv_f])
+    assert "<h2>Data Files</h2>" in html
+    assert ">data_x.json</a>" in html
+    assert ">data_x.csv</a>" in html
+    assert 'href="file://' in html
+
+
+def test_build_html_no_data_files_omits_section():
+    html = LoggingReport.build_html(
+        entries=[], columns=[], metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    assert "<h2>Data Files</h2>" not in html
+
+
+def test_trends_section_renders_horizontal_bars_keyed_by_protocol_steps():
+    """Y-axis is the categorical protocol step (label = step_id), bars are
+    horizontal — matches legacy protocol_grid's report. The 'Protocol Steps'
+    yaxis title and `orientation: h` are both visible in plotly's JSON."""
+    cols = ["step_idx", "step_id", "Capacitance (pF)", "Voltage (V)",
+            "Actuated Area (mm^2)", "actuated_channels"]
+    html = LoggingReport.build_html(
+        entries=_entries(), columns=cols, metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    assert '"orientation":"h"' in html
+    assert "Protocol Steps" in html
+
+
+def test_channel_durations_uses_average_sample_interval(monkeypatch):
+    """The heatmap reports per-channel actuation TIME (seconds), computed
+    as the legacy logger did: count samples per channel × mean sample
+    interval (from rollover-corrected instrument_time_us)."""
+    import pandas as pd
+    from pluggable_protocol_tree.services.logging.reporting import LoggingReport
+    # 4 samples, 10ms apart -> avg interval 0.01 s.
+    # Channel 1 actuated in 3 of them, channel 2 in 1.
+    df = pd.DataFrame([
+        {"actuated_channels": [1], "instrument_time_us": 0},
+        {"actuated_channels": [1, 2], "instrument_time_us": 10_000},
+        {"actuated_channels": [1], "instrument_time_us": 20_000},
+        {"actuated_channels": [1], "instrument_time_us": 30_000},
+    ])
+    out = LoggingReport._channel_durations_seconds(df)
+    assert out == {1: round(4 * 0.01, 6), 2: round(1 * 0.01, 6)}
+
+
+def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
+    """The heatmap helper receives quant_title='Actuation Time' and
+    quant_units='s' (legacy parity), with channel keys mapped to seconds."""
+    import pandas as pd
+    from pluggable_protocol_tree.services.logging import reporting as r
+
+    captured = {}
+
+    class _FakeFig:
+        @staticmethod
+        def to_html(**_k):
+            return "<div>fake-heatmap</div>"
+
+    def _fake_helper(svg_file, channel_quantity_dict, **kw):
+        captured["svg"] = svg_file
+        captured["channels"] = dict(channel_quantity_dict)
+        captured["title"] = kw.get("quant_title")
+        captured["units"] = kw.get("quant_units")
+        return _FakeFig()
+
+    # Replace the helper at the import site used inside _heatmap.
+    import microdrop_utils.plotly_helpers as ph
+    monkeypatch.setattr(
+        ph, "create_plotly_svg_dropbot_device_heatmap", _fake_helper)
+
+    df = pd.DataFrame([
+        {"actuated_channels": [1], "instrument_time_us": 0},
+        {"actuated_channels": [1], "instrument_time_us": 10_000},
+    ])
+    svg = tmp_path / "device.svg"
+    svg.write_text("<svg/>", encoding="utf-8")
+    ctx = LoggingDeviceContext(
+        experiment_directory=tmp_path, device_svg_path=str(svg))
+    html = r.LoggingReport._heatmap(df, ctx, include_plotlyjs=False)
+    assert "fake-heatmap" in html
+    assert captured["title"] == "Actuation Time"
+    assert captured["units"] == "s"
+    assert 1 in captured["channels"] and captured["channels"][1] > 0
+
+
 def test_build_html_without_step_idx_does_not_crash():
     from pathlib import Path
     html = LoggingReport.build_html(
