@@ -173,8 +173,25 @@ class ElectrodeInteractionControllerService(HasTraits):
         # Realtime-mode state is read from the shared model (model.realtime_mode),
         # which is kept in sync via REALTIME_MODE_UPDATED. No local mirror here:
         # a private flag would drift out of sync with the mouse-driven checkbox.
-        # Track cumulative device-view rotation in 90-degree steps.
-        self._device_rotation_deg = 0
+        # Cumulative device-view rotation is stored on the model as
+        # model.device_rotation_deg (persisted via preferences). Apply any
+        # rotation loaded from preferences to the view now that both the
+        # QGraphicsView and the electrode layer are bound.
+        self._apply_persisted_device_rotation()
+
+    def _apply_persisted_device_rotation(self) -> None:
+        """Apply the persisted rotation angle to the QGraphicsView.
+
+        Mirrors the sequence used by `_rotate_device_view` (rotate the
+        view, counter-rotate label text, then re-fit) so the loaded state
+        looks identical to what a user-driven rotate would produce.
+        """
+        rot = int(self.model.device_rotation_deg or 0) % 360
+        if not rot:
+            return
+        self.device_view.rotate(rot)
+        self.electrode_view_layer.rotate_electrode_views_texts(-rot)
+        self.device_view.fit_to_scene_rect()
 
     def _set_hud(self, text: str) -> None:
         mgr = getattr(self, "status_bar_manager", None)
@@ -760,7 +777,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _get_device_rotation_deg(self) -> int:
         """Return tracked device-view rotation (0/90/180/270)."""
-        return int(getattr(self, "_device_rotation_deg", 0) or 0) % 360
+        return int(self.model.device_rotation_deg or 0) % 360
 
     def _map_direction_for_device_rotation(self, direction: str) -> str:
         """
@@ -1382,8 +1399,11 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         # rotate entire view:
         self.device_view.rotate(angle_step)
+
         # Track cumulative device-view rotation to remap controller directions.
-        self._device_rotation_deg = (int(getattr(self, "_device_rotation_deg", 0) or 0) + int(angle_step)) % 360
+        # Writing the model trait also persists the new angle to preferences
+        # via the observer on DeviceViewMainModel.
+        self.model.device_rotation_deg = (int(self.model.device_rotation_deg or 0) + int(angle_step)) % 360
         # undo rotation on text for maintaining readability
         self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
 
