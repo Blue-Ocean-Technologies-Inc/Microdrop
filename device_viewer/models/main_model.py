@@ -1,7 +1,7 @@
 from pathlib import Path
 from microdrop_utils.decorators import debounce
 
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, UUID, provides, DelegatesTo
+from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, Int, UUID, provides, DelegatesTo
 from pyface.undo.api import UndoManager
 
 from .alpha import AlphaValue
@@ -101,6 +101,11 @@ class DeviceViewMainModel(HasTraits):
     # ------------------ Camera Model --------------------
     camera_perspective = Instance(PerspectiveModel, PerspectiveModel())
 
+    # ------------------ Device View Perspective --------------------
+    # Cumulative device-view rotation in degrees (0/90/180/270). Persisted
+    # via preferences and applied to the QGraphicsView at startup.
+    device_rotation_deg = Int(0)
+
     def load_camera_perspective_from_preferences(self):
         _reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.reference_rect", "[]"))
         _transformed_reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.transformed_reference_rect", "[]"))
@@ -110,6 +115,14 @@ class DeviceViewMainModel(HasTraits):
 
         if _transformed_reference_rect:
             self.camera_perspective.transformed_reference_rect = _transformed_reference_rect
+
+    def load_device_perspective_from_preferences(self):
+        raw = self.preferences.preferences.get("device_view.rotation_deg", "0")
+        try:
+            self.device_rotation_deg = int(raw) % 360
+        except (TypeError, ValueError):
+            # Corrupt preference value -- fall back to the default (0).
+            pass
 
     # ------------------ Initialization --------------------
     def traits_init(self):
@@ -295,6 +308,12 @@ class DeviceViewMainModel(HasTraits):
     def _camera_perspective_changed(self, event=None):
         self.preferences.preferences.set("camera.reference_rect", qpointf_list_serialize(self.camera_perspective.reference_rect))
         self.preferences.preferences.set("camera.transformed_reference_rect", qpointf_list_serialize(self.camera_perspective.transformed_reference_rect))
+
+    @observe("device_rotation_deg")
+    def _device_perspective_changed(self, event=None):
+        self.preferences.preferences.set(
+            "device_view.rotation_deg", str(self.device_rotation_deg)
+        )
 
     @observe("protocol_running")
     def _protocol_running_changed(self, event=None):
