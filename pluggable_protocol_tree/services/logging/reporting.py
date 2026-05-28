@@ -145,12 +145,10 @@ class LoggingReport:
             df, device_context, include_plotlyjs=True)
         plotly_js_emitted = bool(heatmap)
 
-        # Steps are categorical along the y-axis (label = step_id when
-        # available, else step_idx). Sort by step_idx descending so step 1
+        # Steps are categorical along the y-axis: just the 1-indexed step
+        # number ("Step 1", "Step 2", ...) — not the row uuid (step_id),
+        # which is unreadable. Sort by step_idx descending so step 1
         # appears at the top of each chart, like the legacy report.
-        has_step_id = "step_id" in df.columns
-        group_cols = ["step_idx", "step_id"] if has_step_id else ["step_idx"]
-        y_col = "step_id" if has_step_id else "step_idx"
         charts = []
         for col in LoggingReport._numeric_columns(columns):
             if col not in df:
@@ -159,14 +157,15 @@ class LoggingReport:
             if s.dropna().empty:
                 continue
             agg = (df.assign(_v=s)
-                    .groupby(group_cols)["_v"]
+                    .groupby("step_idx")["_v"]
                     .agg(["mean", "std"])
                     .reset_index()
                     .sort_values("step_idx", ascending=False))
+            agg["step_label"] = agg["step_idx"].apply(lambda i: f"Step {int(i)}")
             fig = px.bar(
-                agg, x="mean", y=y_col, error_x="std",
+                agg, x="mean", y="step_label", error_x="std",
                 orientation="h", title=col,
-                labels={"mean": f"Mean {col}", y_col: "Protocol Steps"},
+                labels={"mean": f"Mean {col}", "step_label": "Protocol Steps"},
                 template="plotly_white",
                 color_discrete_sequence=["#17a2b8"])
             fig.update_layout(
@@ -194,9 +193,11 @@ class LoggingReport:
             from microdrop_utils.plotly_helpers import (
                 create_plotly_svg_dropbot_device_heatmap,
             )
+            # Defaults ("Actuation Times" / "seconds") trigger the helper's
+            # format_time_tooltip auto-scaling (sec → min → hours). Passing
+            # "s" instead of "seconds" disables it and shows raw floats.
             fig = create_plotly_svg_dropbot_device_heatmap(
-                str(svg), durations,
-                quant_title="Actuation Time", quant_units="s")
+                str(svg), durations)
             return ("<h3>Device actuation heatmap</h3>"
                     + fig.to_html(
                         full_html=False,
@@ -209,38 +210,37 @@ class LoggingReport:
     def _channel_durations_seconds(df: pd.DataFrame) -> Dict[int, float]:
         """Estimate total actuation time per channel, in seconds.
 
-        Mirrors legacy ``protocol_data_logger._get_channel_duration``:
-        count capacitance samples that observed each channel, multiply by
-        the average sample interval (instrument time, rollover-corrected).
-        Returns an empty dict when there's no instrument time column or
-        not enough samples to estimate an interval — caller treats that
-        as "no heatmap" so an empty run doesn't render a misleading panel.
+        Direct port of legacy ``protocol_data_logger._get_channel_duration``:
+        explode the per-row ``actuated_channels`` list, count samples per
+        channel, multiply by the mean sample interval over the rollover-
+        corrected ``instrument_time_us`` series (mean uses ``fillna(0)`` so
+        the leading NaN from ``.diff()`` is treated as a zero-step gap —
+        same biased average the legacy report ships).
         """
-        if "actuated_channels" not in df:
+        if "actuated_channels" not in df.columns \
+                or "instrument_time_us" not in df.columns or df.empty:
             return {}
-        counts: Dict[int, int] = {}
-        for chans in df["actuated_channels"]:
-            for ch in (chans or []):
-                counts[int(ch)] = counts.get(int(ch), 0) + 1
-        if not counts:
-            return {}
-        if "instrument_time_us" not in df.columns:
-            return {}
-        # The persistence layer applies the same rollover correction to
-        # the on-disk artifact; reuse it so the heatmap matches.
+        # Reuse the persistence rollover correction so the heatmap agrees
+        # with the on-disk corr_instrument_time_us in the data file.
         from pluggable_protocol_tree.services.logging.persistence import (
             LoggingPersistence,
         )
-        raw_us = df["instrument_time_us"].tolist()
-        corrected = [v for v in LoggingPersistence._correct_rollover(raw_us)
-                     if v is not None]
-        if len(corrected) < 2:
+        corr = LoggingPersistence._correct_rollover(
+            df["instrument_time_us"].tolist())
+        if not corr or len([v for v in corr if v is not None]) < 2:
             return {}
-        series = pd.Series(corrected).sort_values()
-        avg_interval_s = float(series.diff().dropna().mean()) * 1e-6
+        df = df.assign(_corr_us=corr)
+        avg_interval_s = float(
+            df.sort_values("_corr_us")["_corr_us"].diff().fillna(0).mean()
+        ) * 1e-6
         if avg_interval_s <= 0:
             return {}
-        return {ch: round(n * avg_interval_s, 6) for ch, n in counts.items()}
+        counts = (df.explode("actuated_channels")["actuated_channels"]
+                    .dropna()
+                    .astype(int)
+                    .value_counts())
+        return {int(ch): float(round(n * avg_interval_s, 6))
+                for ch, n in counts.to_dict().items()}
 
     @staticmethod
     def _media_section(media: Dict[str, List[str]]) -> str:

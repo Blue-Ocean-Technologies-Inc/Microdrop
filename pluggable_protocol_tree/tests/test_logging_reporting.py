@@ -152,10 +152,10 @@ def test_build_html_no_data_files_omits_section():
     assert "<h2>Data Files</h2>" not in html
 
 
-def test_trends_section_renders_horizontal_bars_keyed_by_protocol_steps():
-    """Y-axis is the categorical protocol step (label = step_id), bars are
-    horizontal — matches legacy protocol_grid's report. The 'Protocol Steps'
-    yaxis title and `orientation: h` are both visible in plotly's JSON."""
+def test_trends_section_renders_horizontal_bars_keyed_by_step_index():
+    """Y-axis is the 1-indexed protocol step number ("Step 1", "Step 2"),
+    NOT the row uuid (step_id, which is unreadable). Bars are horizontal —
+    legacy protocol_grid parity."""
     cols = ["step_idx", "step_id", "Capacitance (pF)", "Voltage (V)",
             "Actuated Area (mm^2)", "actuated_channels"]
     html = LoggingReport.build_html(
@@ -165,16 +165,23 @@ def test_trends_section_renders_horizontal_bars_keyed_by_protocol_steps():
         notes=None)
     assert '"orientation":"h"' in html
     assert "Protocol Steps" in html
+    # The uuid-style step_id ("s0", "s1") must NOT appear as a y-axis
+    # label; the user-facing label is "Step 0" / "Step 1".
+    assert "Step 0" in html and "Step 1" in html
+    assert '"y":["s0"' not in html and '"y":["s1"' not in html
 
 
-def test_channel_durations_uses_average_sample_interval(monkeypatch):
+def test_channel_durations_matches_legacy_fillna_zero_average():
     """The heatmap reports per-channel actuation TIME (seconds), computed
-    as the legacy logger did: count samples per channel × mean sample
-    interval (from rollover-corrected instrument_time_us)."""
+    as the legacy `_get_channel_duration` does: count samples per channel
+    × mean sample interval over the rollover-corrected instrument time,
+    where the leading NaN from `.diff()` is filled with 0 (matching the
+    biased-low average the legacy report has always shipped, so we don't
+    silently diverge from the existing protocol_grid report)."""
     import pandas as pd
     from pluggable_protocol_tree.services.logging.reporting import LoggingReport
-    # 4 samples, 10ms apart -> avg interval 0.01 s.
-    # Channel 1 actuated in 3 of them, channel 2 in 1.
+    # 4 samples, 10ms apart. .diff() = [NaN, 10000, 10000, 10000] us;
+    # .fillna(0).mean() = 7500 us = 0.0075 s (legacy's biased mean).
     df = pd.DataFrame([
         {"actuated_channels": [1], "instrument_time_us": 0},
         {"actuated_channels": [1, 2], "instrument_time_us": 10_000},
@@ -182,7 +189,7 @@ def test_channel_durations_uses_average_sample_interval(monkeypatch):
         {"actuated_channels": [1], "instrument_time_us": 30_000},
     ])
     out = LoggingReport._channel_durations_seconds(df)
-    assert out == {1: round(4 * 0.01, 6), 2: round(1 * 0.01, 6)}
+    assert out == {1: round(4 * 0.0075, 6), 2: round(1 * 0.0075, 6)}
 
 
 def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
@@ -201,8 +208,10 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
     def _fake_helper(svg_file, channel_quantity_dict, **kw):
         captured["svg"] = svg_file
         captured["channels"] = dict(channel_quantity_dict)
-        captured["title"] = kw.get("quant_title")
-        captured["units"] = kw.get("quant_units")
+        # Helper defaults: quant_title="Actuation Times", quant_units="seconds".
+        # The reporting code now calls without overrides so the helper's
+        # built-in format_time_tooltip kicks in (sec/min/hours auto-scaling).
+        captured["kw"] = dict(kw)
         return _FakeFig()
 
     # Replace the helper at the import site used inside _heatmap.
@@ -220,8 +229,10 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
         experiment_directory=tmp_path, device_svg_path=str(svg))
     html = r.LoggingReport._heatmap(df, ctx, include_plotlyjs=False)
     assert "fake-heatmap" in html
-    assert captured["title"] == "Actuation Time"
-    assert captured["units"] == "s"
+    # No overrides — let the helper use its "seconds" default so
+    # format_time_tooltip auto-scales (sec → min → hours) in the tooltip.
+    assert "quant_title" not in captured["kw"]
+    assert "quant_units" not in captured["kw"]
     assert 1 in captured["channels"] and captured["channels"][1] > 0
 
 
