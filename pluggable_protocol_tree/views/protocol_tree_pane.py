@@ -19,10 +19,13 @@ import threading
 import time
 from pathlib import Path
 
-from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal, QUrl
+from pyface.qt.QtCore import (
+    Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
+)
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
-    QFileDialog, QToolButton, QVBoxLayout, QWidget,
+    QApplication, QFileDialog, QProgressDialog, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
@@ -72,6 +75,10 @@ class ProtocolTreePane(QWidget):
     """
 
     phase_acked = Signal()
+    # Emitted by the logging controller from a worker thread when the
+    # deferred flush completes; QueuedConnection in __init__ marshals it
+    # back to the GUI thread so the success dialog runs there.
+    _logging_complete = Signal(object)
 
     def __init__(
         self,
@@ -124,8 +131,18 @@ class ProtocolTreePane(QWidget):
         from pluggable_protocol_tree.services.logging.controller import (
             ProtocolLoggingController,
         )
+        # The flush_scheduler shows a "Generating Run Report..." progress
+        # dialog around the report build (legacy parity, mirrors
+        # protocol_grid's with_loading_screen("Generating Run Report...")).
+        # The flush runs in a QThread to keep the GUI responsive while
+        # plotly renders charts; the controller's completion_callback is
+        # routed through a Qt signal so the success dialog ends up back on
+        # the GUI thread.
+        self._logging_complete.connect(
+            self._on_logging_complete, Qt.QueuedConnection)
         self.logging_controller = ProtocolLoggingController(
-            completion_callback=self._on_logging_complete,
+            completion_callback=self._logging_complete.emit,
+            flush_scheduler=self._schedule_flush_with_progress,
         )
         self.logging_controller.attach(self.executor.qsignals)
 
@@ -1186,6 +1203,50 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
+
+    def _schedule_flush_with_progress(self, controller):
+        """Custom flush scheduler: wait the settling delay (so in-flight
+        capacitance is captured), then run ``controller._flush()`` in a
+        background QThread while a modal "Generating Run Report..." dialog
+        keeps the GUI honest about why it's busy. Legacy parity with
+        protocol_grid's ``@with_loading_screen("Generating Run Report...")``.
+
+        When the run skipped the report (force-stop -> NO), the flush is
+        just a quick data-file write — no dialog, no worker thread, fast
+        path mirrors the original ``QTimer.singleShot`` scheduler.
+        """
+        settling_ms = int(controller._settling_provider() * 1000)
+        if not controller._generate_report:
+            QTimer.singleShot(settling_ms, controller._flush)
+            return
+
+        def _start_worker():
+            progress = QProgressDialog(
+                "Generating Run Report...", None, 0, 0, self)
+            progress.setWindowTitle("Please Wait")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setCancelButton(None)
+            progress.show()
+            QApplication.processEvents()
+
+            worker_holder = {}
+
+            class _FlushWorker(QThread):
+                def run(self_inner):
+                    try:
+                        controller._flush()
+                    except Exception as e:
+                        logger.warning(f"deferred flush failed: {e}")
+
+            worker = _FlushWorker(self)
+            worker_holder["w"] = worker          # keep reference alive
+            loop = QEventLoop()
+            worker.finished.connect(loop.quit)
+            worker.finished.connect(progress.close)
+            worker.start()
+            loop.exec()
+
+        QTimer.singleShot(settling_ms, _start_worker)
 
     def _on_logging_complete(self, report_path):
         """Controller completion callback (runs on the GUI thread via the

@@ -871,6 +871,77 @@ def test_pane_terminated_stops_logging(qapp):
     )
 
 
+def test_flush_with_report_shows_progress_dialog_and_runs_in_worker(qapp, monkeypatch):
+    """Legacy parity: when a report will be generated, the flush scheduler
+    shows a 'Generating Run Report...' modal dialog and runs the flush
+    in a QThread so the GUI stays responsive while plotly builds charts."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pyface.qt.QtCore import QThread
+
+    shown = []
+    class _FakeProgress:
+        def __init__(self_, *a, **k): shown.append(("constructed",))
+        def setWindowTitle(self_, t): shown.append(("title", t))
+        def setWindowModality(self_, m): shown.append(("modality", m))
+        def setCancelButton(self_, b): shown.append(("cancel", b))
+        def show(self_): shown.append(("show",))
+        def close(self_): shown.append(("close",))
+    monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    controller = pane.logging_controller
+    # Force the fast (no-wait) path on the settling timer.
+    controller._settling_provider = lambda: 0.0
+    controller._generate_report = True
+    flush_thread = {}
+
+    def _fake_flush():
+        # Capture the thread it ran on so we can assert it's NOT the GUI.
+        flush_thread["t"] = QThread.currentThread()
+
+    controller._flush = _fake_flush
+
+    pane._schedule_flush_with_progress(controller)
+    # The scheduler uses QTimer.singleShot(0, ...) + a nested QEventLoop;
+    # processing events drains both.
+    for _ in range(20):
+        qapp.processEvents()
+
+    assert ("show",) in shown
+    assert ("title", "Please Wait") in shown
+    assert ("close",) in shown
+    assert flush_thread.get("t") is not None
+    assert flush_thread["t"] is not QThread.currentThread()  # worker thread
+
+
+def test_flush_without_report_skips_progress_dialog(qapp, monkeypatch):
+    """Fast path: when no report is being generated (force-stop -> NO),
+    skip the dialog and the worker thread entirely — flush just writes
+    data files, so blocking on the GUI is fine and a dialog would be noise."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    shown = []
+    class _FakeProgress:
+        def __init__(self_, *a, **k): shown.append("constructed")
+    monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    controller = pane.logging_controller
+    controller._settling_provider = lambda: 0.0
+    controller._generate_report = False
+    flushed = []
+    controller._flush = lambda: flushed.append(True)
+
+    pane._schedule_flush_with_progress(controller)
+    for _ in range(5):
+        qapp.processEvents()
+
+    assert flushed == [True]
+    assert shown == []                # dialog must NOT appear on fast path
+
+
 def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
