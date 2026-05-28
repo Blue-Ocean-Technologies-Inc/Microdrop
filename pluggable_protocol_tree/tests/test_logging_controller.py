@@ -220,6 +220,57 @@ def test_stop_logging_adds_start_stop_elapsed_time_metadata(tmp_path):
     assert meta["Elapsed Time"].count(":") == 2          # "H:MM:SS"
 
 
+def test_flush_drains_app_globals_media_captures_into_ingestion(tmp_path, monkeypatch):
+    """Mirror legacy parity: the camera widget caches captures into
+    app_globals["media_captures"] but doesn't publish the topic our
+    listener subscribes to. The controller must drain the bucket at
+    flush time so the report's Media Captures section sees them."""
+    from pluggable_protocol_tree.services.logging import controller as ctrl_mod
+
+    # In-memory stand-in for the Redis-backed app_globals dict.
+    fake_globals = {}
+    monkeypatch.setattr(ctrl_mod, "_get_app_globals", lambda: fake_globals)
+
+    img_path = tmp_path / "captures" / "img.png"
+    vid_path = tmp_path / "captures" / "vid.mkv"
+    img_path.parent.mkdir(parents=True)
+    img_path.write_bytes(b"")
+    vid_path.write_bytes(b"")
+    # Each entry is a JSON-serialised MediaCaptureMessageModel — same shape
+    # the camera widget's _cache_media_capture actor stores.
+    seed = [
+        '{"path":"' + str(img_path).replace("\\", "/") + '","type":"image"}',
+        '{"path":"' + str(vid_path).replace("\\", "/") + '","type":"video"}',
+    ]
+
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    # start_logging cleared the bucket — seed it after start, the same way
+    # captures land asynchronously during a real run.
+    fake_globals["media_captures"] = list(seed)
+    assert fake_globals["media_captures"] == seed
+    # Snapshot the ingestion media dict before flush clears the ingestion.
+    media = c._ingestion.media
+    c._on_step_started(_FakeRow())
+    c.stop_logging()
+    assert str(img_path) in media["image"][0]
+    assert str(vid_path) in media["video"][0]
+
+
+def test_start_logging_resets_app_globals_media_bucket(tmp_path, monkeypatch):
+    """Each run's report must only show that run's captures — start_logging
+    clears the shared bucket before the run begins."""
+    from pluggable_protocol_tree.services.logging import controller as ctrl_mod
+    fake_globals = {"media_captures": ["leftover-from-previous-run"]}
+    monkeypatch.setattr(ctrl_mod, "_get_app_globals", lambda: fake_globals)
+
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    assert fake_globals["media_captures"] == []
+
+
 def test_log_metadata_forwards_to_ingestion_and_is_noop_without(tmp_path):
     c = ProtocolLoggingController(settling_provider=lambda: 0.0,
                                   flush_scheduler=_immediate)

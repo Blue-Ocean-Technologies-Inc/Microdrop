@@ -44,6 +44,23 @@ def _format_elapsed(delta: _dt.timedelta) -> str:
     return f"{h}:{m:02d}:{s:02d}"
 
 
+_MEDIA_CAPTURES_KEY = "media_captures"
+
+
+def _get_app_globals():
+    """Open a handle to the shared Redis-backed app globals dict, or None
+    when Redis is unreachable (tests, demos, headless). Caller treats None
+    as "no media to drain"."""
+    try:
+        from microdrop_application.helpers import (
+            get_microdrop_redis_globals_manager,
+        )
+        return get_microdrop_redis_globals_manager()
+    except Exception as e:                     # pragma: no cover - defensive
+        logger.debug(f"app_globals unavailable, media drain skipped: {e}")
+        return None
+
+
 def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
     """liquid - filler (pF/mm^2), or None when invalid. Mirrors the legacy
     ForceCalculationService.calculate_capacitance_per_unit_area: both
@@ -110,6 +127,21 @@ class ProtocolLoggingController:
             "Device SVG": str(getattr(device_context, "device_svg_path", "")),
             "Steps": f"0 / {self._n_steps}",
         })
+        # Reset the shared media-captures bucket so only THIS run's camera
+        # output ends up in this run's report — _flush drains it back.
+        # Camera capture path: device_viewer.views.camera_control_view.utils.
+        # _cache_media_capture is a dramatiq actor that appends serialised
+        # MediaCaptureMessageModel JSON to app_globals["media_captures"]
+        # but never publishes the DEVICE_VIEWER_MEDIA_CAPTURED topic; the
+        # listener wired in start_logging therefore can't see captures
+        # live (legacy parity bug). Reading the bucket at flush time
+        # closes the gap.
+        ag = _get_app_globals()
+        if ag is not None:
+            try:
+                ag[_MEDIA_CAPTURES_KEY] = []
+            except Exception as e:                # pragma: no cover - defensive
+                logger.debug(f"could not reset media_captures bucket: {e}")
         _listener.set_active_logger(self)
 
     def _on_step_started(self, row) -> None:
@@ -139,10 +171,45 @@ class ProtocolLoggingController:
         _listener.clear_active_logger()
         self._flush_scheduler(self)
 
+    def _drain_media_captures(self) -> None:
+        """Pull every camera capture cached this run out of the shared
+        app_globals bucket and into the ingestion. Mirrors legacy
+        ``protocol_data_logger.generate_and_save_report`` which sweeps
+        the same Redis key with ``force=True`` because captures land
+        asynchronously and may arrive after stop_logging."""
+        ing = self._ingestion
+        if ing is None:
+            return
+        ag = _get_app_globals()
+        if ag is None:
+            return
+        try:
+            captures = list(ag.get(_MEDIA_CAPTURES_KEY) or [])
+        except Exception as e:                    # pragma: no cover - defensive
+            logger.debug(f"could not read media_captures bucket: {e}")
+            return
+        if not captures:
+            return
+        try:
+            from device_viewer.models.media_capture_model import (
+                MediaCaptureMessageModel,
+            )
+        except Exception as e:                    # pragma: no cover - defensive
+            logger.warning(f"media model unavailable, skipping drain: {e}")
+            return
+        for payload in captures:
+            try:
+                ing.log_media(MediaCaptureMessageModel.model_validate_json(payload))
+            except Exception as e:                # pragma: no cover - defensive
+                logger.warning(f"media drain entry failed: {e}")
+
     def _flush(self) -> None:
         ing = self._ingestion
         if ing is None:
             return
+        # Drain camera captures BEFORE building the report so the Media
+        # Captures section sees this run's videos/images.
+        self._drain_media_captures()
         report_path = None
         try:
             json_path, csv_path = LoggingPersistence.write_data_files(

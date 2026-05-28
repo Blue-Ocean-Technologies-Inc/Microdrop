@@ -236,6 +236,46 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
     assert 1 in captured["channels"] and captured["channels"][1] > 0
 
 
+def test_media_section_renders_thumbnails_and_play_placeholders(tmp_path):
+    """Legacy parity: images get a 360x240 <img> thumbnail, videos get a
+    click-to-play placeholder div (the onclick swaps in a <video>), and
+    each item shows as a numbered `<a>basename</a>` link. Mirrors
+    protocol_data_logger._get_files_summary."""
+    img = tmp_path / "captures" / "img_001.png"
+    vid = tmp_path / "captures" / "vid_001.mkv"
+    img.parent.mkdir(parents=True)
+    img.write_bytes(b"")
+    vid.write_bytes(b"")
+    html = LoggingReport.build_html(
+        entries=[], columns=[], metadata={},
+        media={"video": [str(vid)], "image": [str(img)], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    # Section / sub-section headings
+    assert "<h2>Media Captures</h2>" in html
+    assert "<h3>Video Captures</h3>" in html
+    assert "<h3>Image Captures</h3>" in html
+    # Numbered link + basename for each
+    assert ">img_001.png</a>" in html
+    assert ">vid_001.mkv</a>" in html
+    assert "<b>1.</b>" in html
+    # Image thumbnail (360x240 file:// src)
+    assert 'width="360" height="240"' in html
+    assert 'src="file://' in html
+    # Video click-to-play placeholder (the play triangle character)
+    assert "&#9658;" in html
+    assert "swap" not in html.lower() or "onclick" in html        # placeholder exists
+
+
+def test_media_section_omitted_when_no_captures():
+    html = LoggingReport.build_html(
+        entries=[], columns=[], metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    assert "<h2>Media Captures</h2>" not in html
+
+
 def test_build_html_without_step_idx_does_not_crash():
     from pathlib import Path
     html = LoggingReport.build_html(

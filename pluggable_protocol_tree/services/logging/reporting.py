@@ -244,18 +244,68 @@ class LoggingReport:
 
     @staticmethod
     def _media_section(media: Dict[str, List[str]]) -> str:
-        vids = "".join(
-            f"<video controls width='320' src='{_html.escape(p)}'></video>"
-            for p in media.get("video", []))
-        imgs = "".join(
-            f"<img width='320' src='{_html.escape(p)}'>"
-            for p in media.get("image", []))
-        others = "".join(
-            f"<li>{_html.escape(p)}</li>" for p in media.get("other", []))
-        if not (vids or imgs or others):
+        """Render legacy-parity Media Captures with thumbnails and
+        click-to-play video placeholders. Mirrors
+        protocol_data_logger._get_files_summary."""
+        videos = media.get("video", []) or []
+        images = media.get("image", []) or []
+        others = media.get("other", []) or []
+        if not (videos or images or others):
             return ""
-        return (f"<h2>Media Captures</h2>{vids}{imgs}"
-                f"{'<ul>' + others + '</ul>' if others else ''}")
+        out = ["<h2>Media Captures</h2>"]
+        if videos:
+            out.append("<h3>Video Captures</h3>")
+            out.append(LoggingReport._media_items(videos, kind="video"))
+        if images:
+            out.append("<h3>Image Captures</h3>")
+            out.append(LoggingReport._media_items(images, kind="image"))
+        if others:
+            out.append("<h3>Other Captures</h3>")
+            out.append(LoggingReport._media_items(others, kind="other"))
+        return "".join(out)
+
+    @staticmethod
+    def _media_items(paths: List[str], *, kind: str) -> str:
+        """Numbered list of <a>basename</a> + (image thumbnail | video
+        play-button placeholder | nothing) per item. ``kind`` is one of
+        "image" / "video" / "other"."""
+        parts = []
+        for idx, p in enumerate(paths, start=1):
+            try:
+                file_url = Path(p).as_uri()
+            except (ValueError, OSError):
+                file_url = ""
+            display_name = Path(p).name if p else ""
+            link_html = (
+                f'<a href="{_html.escape(file_url, quote=True)}">'
+                f"{_html.escape(display_name)}</a>"
+                if file_url else _html.escape(str(p)))
+            extra = ""
+            if file_url and kind == "image":
+                extra = (f'<br><br><img src="{_html.escape(file_url, quote=True)}"'
+                         f' width="360" height="240">')
+            elif file_url and kind == "video":
+                # Click swaps the placeholder div for a <video> tag,
+                # matching the legacy report. Single-quoted inner HTML
+                # so the outer double-quotes stay valid.
+                safe_url = _html.escape(file_url, quote=True)
+                extra = (
+                    "<br><br>"
+                    "<div onclick=\"this.outerHTML='"
+                    "<video width=&quot;360&quot; height=&quot;240&quot;"
+                    " controls autoplay>"
+                    f"<source src=&quot;{safe_url}&quot;"
+                    " type=&quot;video/x-matroska&quot;>"
+                    "Your browser does not support the video tag."
+                    "</video>'\" "
+                    "style=\"cursor:pointer;width:360px;height:240px;"
+                    "background:#000;display:flex;align-items:center;"
+                    "justify-content:center;\">"
+                    "<div style=\"font-size:50px;color:white;\">&#9658;</div>"
+                    "</div>"
+                )
+            parts.append(f"<b>{idx}.</b> {link_html}{extra}<br><br>")
+        return "".join(parts)
 
     @staticmethod
     def _notes_section(notes: List[str]) -> str:
