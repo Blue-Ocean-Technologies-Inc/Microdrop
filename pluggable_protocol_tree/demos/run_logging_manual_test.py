@@ -86,8 +86,10 @@ def main() -> int:
         shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True)
 
+    # Absolute path so the report's Experiment Directory metadata can render
+    # as a clickable file:// anchor (Path.as_uri requires absolute paths).
     ctx = LoggingDeviceContext(
-        experiment_directory=OUT_DIR,
+        experiment_directory=OUT_DIR.resolve(),
         device_svg_path=None,            # supply a real .svg to get a heatmap
         channel_areas=CHANNEL_AREAS,
         capacitance_per_unit_area=None,  # arrives via calibration below

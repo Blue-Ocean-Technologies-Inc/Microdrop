@@ -80,6 +80,50 @@ def test_build_html_uses_version_correct_plotly_cdn_not_stale_latest():
         f"{plotly.__version__})")
 
 
+def test_build_html_renders_path_metadata_as_clickable_anchors(tmp_path):
+    """Path-valued metadata keys (Experiment Directory, Device SVG,
+    Protocol Path) render as clickable file:// anchors showing just the
+    basename — matches legacy protocol_grid's protocol_data_logger."""
+    exp_dir = tmp_path / "exp with space"
+    svg = tmp_path / "device.svg"
+    proto = tmp_path / "protocols" / "protocol_x.json"
+    proto.parent.mkdir(parents=True)
+
+    html = LoggingReport.build_html(
+        entries=[], columns=[],
+        metadata={"Experiment Directory": str(exp_dir),
+                  "Device SVG": str(svg),
+                  "Protocol Path": str(proto),
+                  "Steps": "0 / 1"},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+
+    # Anchor with file:// scheme; basename is the visible link text;
+    # spaces inside the href become %20 (Path.as_uri percent-encodes the
+    # URL), while the visible link text is just the basename.
+    assert '<a href="file://' in html
+    assert "exp%20with%20space" in html              # href is URL-encoded
+    assert ">exp with space</a>" in html             # link text is plain basename
+    assert ">device.svg</a>" in html
+    assert ">protocol_x.json</a>" in html
+    # Non-path keys still render as escaped plain text, not as anchors.
+    assert "<td>0 / 1</td>" in html
+
+
+def test_build_html_path_metadata_non_absolute_falls_back_to_escaped_text():
+    """Relative paths can't form a file:// URI (Path.as_uri raises); the
+    renderer must fall back to escaped text instead of crashing."""
+    html = LoggingReport.build_html(
+        entries=[], columns=[],
+        metadata={"Protocol Path": "<not-a-path>"},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None)
+    assert "&lt;not-a-path&gt;" in html
+    assert "<a href" not in html.split("Metadata")[1].split("Data Summary")[0]
+
+
 def test_build_html_without_step_idx_does_not_crash():
     from pathlib import Path
     html = LoggingReport.build_html(

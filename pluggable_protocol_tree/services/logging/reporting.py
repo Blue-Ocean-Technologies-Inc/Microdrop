@@ -16,6 +16,11 @@ logger = get_logger(__name__)
 _NUMERIC_EXCLUDE = {"step_idx", "utc_time", "instrument_time_us",
                     "step_id", "actuated_channels"}
 
+# Metadata keys whose values are filesystem paths and should render as
+# clickable file:// anchors instead of raw strings. Legacy parity with
+# protocol_grid.services.protocol_data_logger.
+_PATH_METADATA_KEYS = {"Experiment Directory", "Device SVG", "Protocol Path"}
+
 
 class LoggingReport:
     @staticmethod
@@ -50,10 +55,29 @@ class LoggingReport:
     def _metadata_section(metadata: Dict) -> str:
         rows = "".join(
             f"<tr><th>{_html.escape(str(k))}</th>"
-            f"<td>{_html.escape(str(v))}</td></tr>"
+            f"<td>{LoggingReport._format_metadata_value(k, v)}</td></tr>"
             for k, v in (metadata or {}).items()
         )
         return f"<h2>Metadata</h2><table>{rows}</table>"
+
+    @staticmethod
+    def _format_metadata_value(key, value) -> str:
+        """HTML for a metadata cell. Path-valued keys render as clickable
+        file:// anchors showing just the basename; everything else is
+        escaped plain text. Path.as_uri() handles percent-encoding (spaces,
+        non-ASCII, Windows backslashes); a non-absolute path falls back to
+        the escaped string so this can never raise on test fixtures like
+        Path('.')."""
+        text = str(value)
+        if key not in _PATH_METADATA_KEYS or not text:
+            return _html.escape(text)
+        try:
+            p = Path(text)
+            uri = p.as_uri()
+        except (ValueError, OSError):
+            return _html.escape(text)
+        return (f'<a href="{_html.escape(uri, quote=True)}">'
+                f"{_html.escape(p.name)}</a>")
 
     @staticmethod
     def _numeric_columns(columns: List[str]) -> List[str]:
