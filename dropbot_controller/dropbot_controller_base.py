@@ -338,6 +338,9 @@ class DropbotControllerBase(HasTraits):
 
         publish_message(topic=ELECTRODES_STATE_CHANGE, message=app_globals.get("last_channels_requested", []))
 
+    def on_reboot_request(self, message):
+        logger.critical("Attempting to reboot dropbot microcontroller...")
+        self.proxy.reboot()
     ########################################################################################################
 
 

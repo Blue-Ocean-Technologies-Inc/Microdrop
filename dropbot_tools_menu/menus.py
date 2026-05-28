@@ -1,20 +1,22 @@
-from dropbot.hardware_test import ALL_TESTS
 from pyface.tasks.action.api import SMenu
 from traits.api import Property, Directory
+from traits.api import Int, Any
 
 from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
-
 logger = get_logger(__name__)
 
+from dropbot.hardware_test import ALL_TESTS
+
+from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
 from microdrop_utils.status_bar_utils import set_status_bar_message
 
 from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
-    TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING
+    TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING, REBOOT
 
-from traits.api import Int, Any
 
 from .self_test_dialogs import ShowSelfTestIntroDialogAction, DropbotDisconnectedDialogAction
+
+from microdrop_application.dialogs.pyface_wrapper import warning, OK
 
 
 class RunTests(DramatiqMessagePublishAction):
@@ -82,7 +84,25 @@ def dropbot_tools_menu_factory(plugin=None):
     # create an action to restart dropbot search
     dropbot_search = DramatiqMessagePublishAction(name="&Search for Dropbot Connection", topic=START_DEVICE_MONITORING)
 
+    # create an action to reboot dropbot
+
+    class DropbotRebootAction(DramatiqMessagePublishAction):
+        name = "&Reboot Dropbot"
+        topic = REBOOT
+
+        def pre_perform(self):
+            logger.info("Request user confirmation to reboot Dropbot")
+
+            user_choice = warning(None,
+                                  "Rebooting the <b>DropBot</b> will <b>Disconnect</b> the microcontroller and the "
+                                  "DropBot may become <b>Unresponsive</b>. Do you still want to proceed?",
+                                  title="Dropbot Reboot Warning",)
+
+            return user_choice == OK
+
+    dropbot_reboot = DropbotRebootAction()
+
     # return an SMenu object compiling each object made and put into Dropbot menu under Tools menu.
-    return SMenu(items=[run_all_tests, test_options_menu, dropbot_search], id="dropbot_tools", name="Drop&bot")
+    return SMenu(items=[run_all_tests, test_options_menu, dropbot_search, dropbot_reboot], id="dropbot_tools", name="Drop&bot")
 
 
