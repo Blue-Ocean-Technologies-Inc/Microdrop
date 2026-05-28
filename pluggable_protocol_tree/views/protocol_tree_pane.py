@@ -628,7 +628,7 @@ class ProtocolTreePane(QWidget):
         # Preview runs produce no artifacts; just confirm completion.
         if self._current_run_preview_mode:
             try:
-                self.logging_controller.stop_logging(self._repeats_completed)
+                self.logging_controller.stop_logging()
             except Exception as e:
                 logger.warning(f"stop_logging (preview) failed: {e}")
             try:
@@ -677,8 +677,7 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"new-experiment confirm failed: {e}")
 
         try:
-            self.logging_controller.stop_logging(
-                self._repeats_completed, generate_report=generate_report)
+            self.logging_controller.stop_logging(generate_report=generate_report)
         except Exception as e:
             logger.warning(f"stop_logging failed: {e}")
 

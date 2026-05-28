@@ -59,6 +59,7 @@ class ProtocolLoggingController:
         self._ingestion: Optional[LoggingIngestion] = None
         self._device_context = None
         self._step_idx = 0
+        self._n_steps = 0
         self._start_time = ""
         self._generate_report = True
 
@@ -89,11 +90,12 @@ class ProtocolLoggingController:
         self._ingestion.update_capacitance_per_unit_area(
             getattr(device_context, "capacitance_per_unit_area", None))
         self._step_idx = 0
+        self._n_steps = int(n_steps)
         self._start_time = time.strftime("%Y%m%d_%H%M%S")
         self._ingestion.log_metadata({
             "Experiment Directory": str(device_context.experiment_directory),
             "Device SVG": str(getattr(device_context, "device_svg_path", "")),
-            "Steps": f"0 / {n_steps}",
+            "Steps": f"0 / {self._n_steps}",
         })
         _listener.set_active_logger(self)
 
@@ -104,11 +106,17 @@ class ProtocolLoggingController:
         self._ingestion.set_step(step_id=getattr(row, "uuid", ""),
                                  step_idx=self._step_idx)
 
-    def stop_logging(self, completed_steps, *, generate_report: bool = True) -> None:
+    def stop_logging(self, *, generate_report: bool = True) -> None:
         if self._ingestion is None:
             return
         self._generate_report = generate_report
-        self._ingestion.log_metadata({"Completed Steps": completed_steps})
+        # Overwrite the "Steps" row seeded in start_logging so the metadata
+        # reflects what actually ran (start_logging seeded "0 / n_steps").
+        # self._step_idx is the count of step_started signals received,
+        # which is the true completed-step count and survives abort/error
+        # (unlike the pane's _repeats_completed which resets on abort).
+        self._ingestion.log_metadata(
+            {"Steps": f"{self._step_idx} / {self._n_steps}"})
         _listener.clear_active_logger()
         self._flush_scheduler(self)
 

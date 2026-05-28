@@ -43,7 +43,7 @@ def test_actuation_area_summed_from_channel_areas(tmp_path):
     e = c._ingestion.entries[-1]
     assert e["Actuated Area (mm^2)"] == 5.0      # 2.0 + 3.0
     assert e["actuated_channels"] == [5, 6]
-    c.stop_logging(completed_steps=1)
+    c.stop_logging()
 
 
 def test_flush_writes_artifacts_and_clears_sink(tmp_path):
@@ -55,7 +55,7 @@ def test_flush_writes_artifacts_and_clears_sink(tmp_path):
     c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
     c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
                                  "instrument_time_us": 1, "reception_time": 2}))
-    c.stop_logging(completed_steps=1)
+    c.stop_logging()
     assert list((tmp_path / "data").glob("data_*.json"))
     assert list((tmp_path / "data").glob("data_*.csv"))
     assert list((tmp_path / "reports").glob("report_*.html"))
@@ -73,7 +73,7 @@ def test_on_actuation_ignores_non_dict_json(tmp_path):
     c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
                                  "instrument_time_us": 1, "reception_time": 2}))
     assert c._ingestion.entries[-1]["actuated_channels"] == []
-    c.stop_logging(completed_steps=1)
+    c.stop_logging()
 
 
 def _ctx_no_cpa(tmp_path):
@@ -96,7 +96,7 @@ def test_on_calibration_populates_force(tmp_path):
     # cpa = 5 - 3 = 2.0 ; force = 0.5 * 2 * 100^2
     assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] == \
         round(0.5 * 2.0 * 100.0 ** 2, 6)
-    c.stop_logging(0)
+    c.stop_logging()
 
 
 def test_on_calibration_ignores_invalid_liquid_le_filler(tmp_path):
@@ -109,7 +109,7 @@ def test_on_calibration_ignores_invalid_liquid_le_filler(tmp_path):
     c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
                                  "instrument_time_us": 1, "reception_time": 2}))
     assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
-    c.stop_logging(0)
+    c.stop_logging()
 
 
 def test_attach_only_wires_step_started():
@@ -153,7 +153,7 @@ def test_logging_spans_multiple_reps_one_log(tmp_path):
     assert len(c._ingestion.entries) == 4
     step_idxs = [e["step_idx"] for e in c._ingestion.entries]
     assert step_idxs == [1, 2, 3, 4]         # continuous across reps
-    c.stop_logging(2)
+    c.stop_logging()
     assert list((tmp_path / "data").glob("data_*.json"))
 
 
@@ -167,7 +167,7 @@ def test_stop_logging_generate_report_false_writes_data_no_report(tmp_path):
     c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
     c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
                                  "instrument_time_us": 1, "reception_time": 2}))
-    c.stop_logging(completed_steps=1, generate_report=False)
+    c.stop_logging(generate_report=False)
     assert list((tmp_path / "data").glob("data_*.json"))
     assert not list((tmp_path / "reports").glob("report_*.html"))
     assert captured == [None]
@@ -183,9 +183,27 @@ def test_stop_logging_generate_report_true_invokes_callback_with_path(tmp_path):
     c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
     c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
                                  "instrument_time_us": 1, "reception_time": 2}))
-    c.stop_logging(completed_steps=1)            # generate_report defaults True
+    c.stop_logging()            # generate_report defaults True
     assert len(captured) == 1 and captured[0] is not None
     assert captured[0].name.startswith("report_")
+
+
+def test_stop_logging_overwrites_steps_metadata_with_actual_count(tmp_path):
+    """The 'Steps' metadata row seeded as '0 / n' must be overwritten with
+    the real completed-step count (self._step_idx) on stop, so the report's
+    Metadata section doesn't show 0/n forever."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=3, preview_mode=False)
+    assert c._ingestion.metadata["Steps"] == "0 / 3"
+    c._on_step_started(_FakeRow())
+    c._on_step_started(_FakeRow())                # 2 of 3 steps actually ran
+    # Snapshot metadata BEFORE stop (which clears self._ingestion); the
+    # report builder will read the same dict from ing.metadata at flush time.
+    metadata = c._ingestion.metadata
+    c.stop_logging()
+    assert metadata["Steps"] == "2 / 3"
+    assert "Completed Steps" not in metadata
 
 
 def test_log_metadata_forwards_to_ingestion_and_is_noop_without(tmp_path):

@@ -867,7 +867,7 @@ def test_pane_terminated_stops_logging(qapp):
     pane.logging_controller = MagicMock()
     pane._on_protocol_terminated()
     pane.logging_controller.stop_logging.assert_called_once_with(
-        pane._repeats_completed, generate_report=True
+        generate_report=True
     )
 
 
@@ -925,7 +925,7 @@ def test_completion_flow_finished_prompts_new_experiment(qapp, monkeypatch):
     pane._run_completion_flow("finished")
 
     pane._on_new_experiment.assert_called_once()
-    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
 def test_completion_flow_aborted_no_skips_report(qapp, monkeypatch):
@@ -934,7 +934,7 @@ def test_completion_flow_aborted_no_skips_report(qapp, monkeypatch):
 
     pane._run_completion_flow("aborted")
 
-    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=False)
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=False)
 
 
 def test_completion_flow_error_prompts_summary_like_abort(qapp, monkeypatch):
@@ -943,7 +943,7 @@ def test_completion_flow_error_prompts_summary_like_abort(qapp, monkeypatch):
 
     pane._run_completion_flow("error")
 
-    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
 def test_completion_flow_preview_shows_info_no_confirm(qapp, monkeypatch):
@@ -958,7 +958,7 @@ def test_completion_flow_preview_shows_info_no_confirm(qapp, monkeypatch):
     pane._run_completion_flow("finished")
 
     assert counts == {"info": 1, "confirm": 0}
-    pane.logging_controller.stop_logging.assert_called_once_with(2)
+    pane.logging_controller.stop_logging.assert_called_once_with()
 
 
 def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(qapp, monkeypatch):
@@ -969,7 +969,7 @@ def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(qapp, m
     pane._run_completion_flow("finished")
 
     assert confirms == []          # no "Create New Experiment?" without a manager
-    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
 def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch, tmp_path):
@@ -996,7 +996,7 @@ def test_completion_flow_aborted_no_experiment_manager_skips_summary_prompt(qapp
     pane._run_completion_flow("aborted")
 
     assert confirms == []          # no summary prompt without an experiment manager
-    pane.logging_controller.stop_logging.assert_called_once_with(2, generate_report=True)
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
 def test_terminated_error_outcome_defers_completion_flow(qapp):

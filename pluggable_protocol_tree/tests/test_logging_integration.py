@@ -29,7 +29,7 @@ def test_two_phase_run_produces_artifacts_with_per_phase_channels(tmp_path):
     c.on_actuation(json.dumps({"electrodes": ["b", "c"], "channels": [2, 3]}))
     c.on_capacitance(json.dumps({"capacitance": "20pF", "voltage": "100V",
                                  "instrument_time_us": 6, "reception_time": 2}))
-    c.stop_logging(completed_steps=1)
+    c.stop_logging()
 
     data_json = list((tmp_path / "data").glob("data_*.json"))
     assert data_json and list((tmp_path / "data").glob("data_*.csv"))
