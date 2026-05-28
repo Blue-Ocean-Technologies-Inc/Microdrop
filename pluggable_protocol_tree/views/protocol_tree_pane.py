@@ -19,14 +19,17 @@ import threading
 import time
 from pathlib import Path
 
-from pyface.qt.QtCore import Qt, QModelIndex, QTimer, Signal
+from pyface.qt.QtCore import (
+    Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
+)
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
-    QFileDialog, QToolButton, QVBoxLayout, QWidget,
+    QApplication, QFileDialog, QProgressDialog, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, confirm, error as error_dialog,
+    NO, YES, confirm, error as error_dialog, information, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
@@ -72,6 +75,10 @@ class ProtocolTreePane(QWidget):
     """
 
     phase_acked = Signal()
+    # Emitted by the logging controller from a worker thread when the
+    # deferred flush completes; QueuedConnection in __init__ marshals it
+    # back to the GUI thread so the success dialog runs there.
+    _logging_complete = Signal(object)
 
     def __init__(
         self,
@@ -83,6 +90,7 @@ class ProtocolTreePane(QWidget):
         device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
+        logging_device_context_provider=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -96,6 +104,7 @@ class ProtocolTreePane(QWidget):
         self.experiment_manager = experiment_manager
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
+        self._logging_device_context_provider = logging_device_context_provider
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -118,6 +127,24 @@ class ProtocolTreePane(QWidget):
         self._build_layout()
 
         self.executor = self._build_executor(executor_factory)
+
+        from pluggable_protocol_tree.services.logging.controller import (
+            ProtocolLoggingController,
+        )
+        # The flush_scheduler shows a "Generating Run Report..." progress
+        # dialog around the report build (legacy parity, mirrors
+        # protocol_grid's with_loading_screen("Generating Run Report...")).
+        # The flush runs in a QThread to keep the GUI responsive while
+        # plotly renders charts; the controller's completion_callback is
+        # routed through a Qt signal so the success dialog ends up back on
+        # the GUI thread.
+        self._logging_complete.connect(
+            self._on_logging_complete, Qt.QueuedConnection)
+        self.logging_controller = ProtocolLoggingController(
+            completion_callback=self._logging_complete.emit,
+            flush_scheduler=self._schedule_flush_with_progress,
+        )
+        self.logging_controller.attach(self.executor.qsignals)
 
         self._step_index = 0
         self._step_total = 0
@@ -373,7 +400,9 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._on_protocol_terminated()
+        # Immediate teardown only; the completion flow is deferred so the
+        # error dialog is shown before the "Generate Run Summary?" prompt.
+        self._on_protocol_terminated("error")
         # Present a nicely-formatted HTML body (rendered via the dialog's
         # `informative` slot) built from the structured StepExecutionError
         # fields, with the full traceback as collapsible detail. `message`
@@ -388,6 +417,8 @@ class ProtocolTreePane(QWidget):
             )
         error_dialog(parent=None, title="Protocol error",
                      message=str(msg), informative=informative, detail=detail)
+        # Now prompt for a run summary (error is treated like a force-stop).
+        self._run_completion_flow("error")
 
     @staticmethod
     def _format_error_html(exc, fallback_msg: str) -> str:
@@ -488,6 +519,21 @@ class ProtocolTreePane(QWidget):
             f"Protocol run starting: {self._repeats_total} rep(s), "
             f"preview={preview_mode}, start_step={start_path}"
         )
+        # Protocol logging starts once here (run start) and stops once in
+        # _on_protocol_terminated — the single terminal point reached only
+        # after the LAST repetition (whole-protocol repeats restart the
+        # executor via _restart_for_next_rep, which returns before the
+        # terminal). So one log spans all repetitions. capacitance_per_unit_area
+        # is not seeded here; it arrives live via the controller's
+        # on_calibration (CALIBRATION_DATA) so the Force column populates.
+        if self._logging_device_context_provider is not None:
+            try:
+                _log_ctx = self._logging_device_context_provider()
+                if _log_ctx is not None:
+                    _n_steps = sum(1 for _ in self.manager.iter_execution_frames())
+                    self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
+            except Exception as e:
+                logger.warning(f"could not start protocol logging: {e}")
         self.executor.start(
             start_step_path=start_path,
             preview_mode=preview_mode,
@@ -544,7 +590,7 @@ class ProtocolTreePane(QWidget):
         if self._repeats_completed < self._repeats_total:
             QTimer.singleShot(50, self._restart_for_next_rep)
             return
-        self._on_protocol_terminated()
+        self._on_protocol_terminated("finished")
 
     def _restart_for_next_rep(self):
         self.executor.start(preview_mode=self._current_run_preview_mode)
@@ -555,9 +601,9 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._on_protocol_terminated()
+        self._on_protocol_terminated("aborted")
 
-    def _on_protocol_terminated(self):
+    def _on_protocol_terminated(self, outcome="finished"):
         logger.info("Protocol terminated --> free mode")
         self.clear_highlights()
         self._set_idle_button_state()
@@ -584,6 +630,73 @@ class ProtocolTreePane(QWidget):
                 self.device_viewer_sync._publish_for_row(None)
             except Exception as e:
                 logger.warning(f"protocol-terminated DV publish failed: {e}")
+        # Logging stop + end-of-run dialogs run last, after immediate teardown
+        # (hardware clear / idle UI) so electrodes de-energize before any modal
+        # dialog blocks. For "error", the caller (_on_error) runs the flow after
+        # showing the error dialog, so we skip it here.
+        if outcome != "error":
+            self._run_completion_flow(outcome)
+
+    def _run_completion_flow(self, outcome):
+        """End-of-run UX: auto-save the protocol, prompt per outcome, and
+        stop logging (which schedules the deferred flush). ``outcome`` is one
+        of "finished", "aborted", "error". Every dialog is best-effort —
+        failures are logged, never raised, so terminal cleanup is unaffected."""
+        # Preview runs produce no artifacts; just confirm completion.
+        if self._current_run_preview_mode:
+            try:
+                self.logging_controller.stop_logging()
+            except Exception as e:
+                logger.warning(f"stop_logging (preview) failed: {e}")
+            try:
+                information(parent=None,
+                            message="Preview run completed successfully.",
+                            title="Preview Complete", timeout=3000)
+            except Exception as e:
+                logger.warning(f"preview-complete dialog failed: {e}")
+            return
+
+        have_exp = (self.experiment_manager is not None
+                    and self.application is not None)
+
+        # Auto-save the protocol + record its path into the report metadata,
+        # before stop_logging so the metadata is present when _flush builds
+        # the report.
+        if have_exp:
+            try:
+                saved = self.experiment_manager.auto_save_protocol(
+                    self.manager.to_json())
+                if saved:
+                    self.logging_controller.log_metadata(
+                        {"Protocol Path": str(saved)})
+            except Exception as e:
+                logger.warning(f"protocol auto-save failed: {e}")
+
+        generate_report = True
+        if outcome in ("aborted", "error") and have_exp:
+            try:
+                if confirm(parent=None,
+                           message=("Protocol was stopped before completion."
+                                    "<br><br>Press <b>YES</b> to create run "
+                                    "summary."),
+                           title="Generate Run Summary?", cancel=False) == NO:
+                    generate_report = False
+            except Exception as e:
+                logger.warning(f"run-summary confirm failed: {e}")
+        elif outcome == "finished" and have_exp:
+            try:
+                if confirm(parent=None,
+                           message="Would you like to start a new experiment?",
+                           title="Create New Experiment?",
+                           cancel=False) == YES:
+                    self._on_new_experiment()
+            except Exception as e:
+                logger.warning(f"new-experiment confirm failed: {e}")
+
+        try:
+            self.logging_controller.stop_logging(generate_report=generate_report)
+        except Exception as e:
+            logger.warning(f"stop_logging failed: {e}")
 
     # --- pause-time phase navigation ---------------------------------
 
@@ -1090,6 +1203,75 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
+
+    def _schedule_flush_with_progress(self, controller):
+        """Custom flush scheduler: pop the "Generating Run Report..." dialog
+        immediately, then sit through the settling delay (so in-flight
+        capacitance is captured) before running ``controller._flush()`` in
+        a background QThread. Legacy parity with protocol_grid's
+        ``@with_loading_screen("Generating Run Report...")``.
+
+        Showing the dialog *before* the settling timer (not after) is the
+        UX point: ``stop_logging`` is called the moment the user dismisses
+        the new-experiment / summary confirm, so any latency between that
+        click and the dialog reads as the GUI freezing. With this order
+        the user sees feedback instantly, the settling delay (and the
+        plotly chart build) happens under the dialog, and the worker
+        thread keeps the GUI responsive while charts render.
+
+        When the run skipped the report (force-stop -> NO), the flush is
+        just a quick data-file write — no dialog, no worker thread, fast
+        path mirrors the original ``QTimer.singleShot`` scheduler.
+        """
+        settling_ms = int(controller._settling_provider() * 1000)
+        if not controller._generate_report:
+            QTimer.singleShot(settling_ms, controller._flush)
+            return
+
+        progress = QProgressDialog(
+            "Generating Run Report...", None, 0, 0, self)
+        progress.setWindowTitle("Please Wait")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setCancelButton(None)
+        progress.show()
+        QApplication.processEvents()
+
+        def _start_worker():
+            worker_holder = {}
+
+            class _FlushWorker(QThread):
+                def run(self_inner):
+                    try:
+                        controller._flush()
+                    except Exception as e:
+                        logger.warning(f"deferred flush failed: {e}")
+
+            worker = _FlushWorker(self)
+            worker_holder["w"] = worker          # keep reference alive
+            loop = QEventLoop()
+            worker.finished.connect(loop.quit)
+            worker.finished.connect(progress.close)
+            worker.start()
+            loop.exec()
+
+        QTimer.singleShot(settling_ms, _start_worker)
+
+    def _on_logging_complete(self, report_path):
+        """Controller completion callback (runs on the GUI thread via the
+        QTimer-scheduled flush). Shows the report-link success dialog when a
+        report was generated; silent when it was skipped or the flush failed."""
+        if report_path is None:
+            return
+        try:
+            file_url = QUrl.fromLocalFile(str(report_path)).toString(QUrl.FullyEncoded)
+            success(
+                parent=None,
+                message=(f"Report file saved to:<br>"
+                         f"<a href='{file_url}'>{Path(report_path).name}</a>"),
+                title="Run Summary Generated",
+            )
+        except Exception as e:
+            logger.warning(f"run-summary success dialog failed: {e}")
 
     def _on_new_experiment(self):
         if self.experiment_manager is None or self.application is None:

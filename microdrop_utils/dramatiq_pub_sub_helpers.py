@@ -40,7 +40,7 @@ class ValidatedTopicPublisher(HasTraits):
 
         # 2. Serialize the validated model to a JSON string.
         # model_dump_json() is crucial here because it automatically converts
-        # Python sets (like your set[StrictInt]) back into JSON arrays safely.
+        # Python sets (set[StrictInt]) back into JSON arrays safely.
         json_message = validated_model.model_dump_json()
 
         # 3. Call your Dramatiq actor utility
