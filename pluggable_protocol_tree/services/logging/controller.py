@@ -155,6 +155,9 @@ class ProtocolLoggingController:
                     notes=None, data_files=[json_path, csv_path])
                 report_path = LoggingReport.write_report(
                     self._device_context.experiment_directory, html)
+
+                logger.info(f"Report written to {report_path}")
+
         except Exception as e:
             logger.error(f"protocol logging flush failed: {e}")
             report_path = None
