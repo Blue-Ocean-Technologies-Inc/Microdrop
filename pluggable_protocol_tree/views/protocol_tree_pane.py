@@ -1205,11 +1205,19 @@ class ProtocolTreePane(QWidget):
     # --- experiment-bar handlers ------------------------------------
 
     def _schedule_flush_with_progress(self, controller):
-        """Custom flush scheduler: wait the settling delay (so in-flight
-        capacitance is captured), then run ``controller._flush()`` in a
-        background QThread while a modal "Generating Run Report..." dialog
-        keeps the GUI honest about why it's busy. Legacy parity with
-        protocol_grid's ``@with_loading_screen("Generating Run Report...")``.
+        """Custom flush scheduler: pop the "Generating Run Report..." dialog
+        immediately, then sit through the settling delay (so in-flight
+        capacitance is captured) before running ``controller._flush()`` in
+        a background QThread. Legacy parity with protocol_grid's
+        ``@with_loading_screen("Generating Run Report...")``.
+
+        Showing the dialog *before* the settling timer (not after) is the
+        UX point: ``stop_logging`` is called the moment the user dismisses
+        the new-experiment / summary confirm, so any latency between that
+        click and the dialog reads as the GUI freezing. With this order
+        the user sees feedback instantly, the settling delay (and the
+        plotly chart build) happens under the dialog, and the worker
+        thread keeps the GUI responsive while charts render.
 
         When the run skipped the report (force-stop -> NO), the flush is
         just a quick data-file write — no dialog, no worker thread, fast
@@ -1220,15 +1228,15 @@ class ProtocolTreePane(QWidget):
             QTimer.singleShot(settling_ms, controller._flush)
             return
 
-        def _start_worker():
-            progress = QProgressDialog(
-                "Generating Run Report...", None, 0, 0, self)
-            progress.setWindowTitle("Please Wait")
-            progress.setWindowModality(Qt.WindowModal)
-            progress.setCancelButton(None)
-            progress.show()
-            QApplication.processEvents()
+        progress = QProgressDialog(
+            "Generating Run Report...", None, 0, 0, self)
+        progress.setWindowTitle("Please Wait")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setCancelButton(None)
+        progress.show()
+        QApplication.processEvents()
 
+        def _start_worker():
             worker_holder = {}
 
             class _FlushWorker(QThread):

@@ -915,6 +915,38 @@ def test_flush_with_report_shows_progress_dialog_and_runs_in_worker(qapp, monkey
     assert flush_thread["t"] is not QThread.currentThread()  # worker thread
 
 
+def test_flush_progress_dialog_appears_before_settling_delay(qapp, monkeypatch):
+    """No perceived pause between the new-experiment confirm and the
+    "Generating Run Report..." dialog: the dialog must be shown
+    synchronously inside `_schedule_flush_with_progress`, before any
+    QTimer-scheduled callback fires (i.e. before any processEvents)."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    events = []
+    class _FakeProgress:
+        def __init__(self_, *a, **k): events.append("constructed")
+        def setWindowTitle(self_, t): pass
+        def setWindowModality(self_, m): pass
+        def setCancelButton(self_, b): pass
+        def show(self_): events.append("show")
+        def close(self_): events.append("close")
+    monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    controller = pane.logging_controller
+    # Pretend settling is non-trivial so the timer wouldn't have fired by
+    # the time _schedule_flush_with_progress returns.
+    controller._settling_provider = lambda: 5.0
+    controller._generate_report = True
+    controller._flush = lambda: None
+
+    pane._schedule_flush_with_progress(controller)
+
+    # Without ANY event processing yet, the dialog must already be shown.
+    assert events[:2] == ["constructed", "show"]
+
+
 def test_flush_without_report_skips_progress_dialog(qapp, monkeypatch):
     """Fast path: when no report is being generated (force-stop -> NO),
     skip the dialog and the worker thread entirely — flush just writes
