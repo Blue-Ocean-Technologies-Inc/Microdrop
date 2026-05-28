@@ -31,9 +31,15 @@ class LoggingReport:
         if notes:
             sections.append(LoggingReport._notes_section(notes))
         body = "\n".join(s for s in sections if s)
+        # NOTE: plotly.js is loaded from the CDN by the first plotly figure
+        # itself (include_plotlyjs='cdn' in _trends_section / _heatmap), so
+        # the bundle version always matches the installed Python plotly. Do
+        # NOT add a hardcoded <script src=".../plotly-latest.min.js"> here:
+        # that URL is pinned to plotly.js 1.x and cannot decode the typed-
+        # array (bdata) output emitted by plotly >= 3.x, which silently
+        # renders every chart as blank.
         return (
             "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>"
             "<style>body{font-family:sans-serif;margin:24px;} "
             "table{border-collapse:collapse;} td,th{border:1px solid #ccc;"
             "padding:4px 8px;}</style></head><body>"
@@ -86,6 +92,7 @@ class LoggingReport:
         if "step_idx" not in df.columns:
             return "<h2>Data Trends</h2><p>No step index in data.</p>"
         charts = []
+        plotly_js_emitted = False
         for col in LoggingReport._numeric_columns(columns):
             if col not in df:
                 continue
@@ -94,12 +101,19 @@ class LoggingReport:
                 continue
             agg = df.assign(_v=s).groupby("step_idx")["_v"].agg(["mean", "std"]).reset_index()
             fig = px.bar(agg, x="step_idx", y="mean", error_y="std", title=col)
-            charts.append(fig.to_html(full_html=False, include_plotlyjs=False))
-        heatmap = LoggingReport._heatmap(df, device_context)
+            # First chart pulls the version-correct plotly.js from the CDN;
+            # subsequent charts reuse it. Never use plotly-latest.min.js.
+            charts.append(fig.to_html(
+                full_html=False,
+                include_plotlyjs="cdn" if not plotly_js_emitted else False))
+            plotly_js_emitted = True
+        heatmap = LoggingReport._heatmap(
+            df, device_context, include_plotlyjs=not plotly_js_emitted)
         return "<h2>Data Trends</h2>" + "".join(charts) + heatmap
 
     @staticmethod
-    def _heatmap(df: pd.DataFrame, device_context) -> str:
+    def _heatmap(df: pd.DataFrame, device_context, *,
+                 include_plotlyjs: bool = False) -> str:
         svg = getattr(device_context, "device_svg_path", None)
         if not svg or "actuated_channels" not in df:
             return ""
@@ -115,7 +129,9 @@ class LoggingReport:
                 str(svg), counts,
                 quant_title="Actuation Count", quant_units="count")
             return ("<h3>Device actuation heatmap</h3>"
-                    + fig.to_html(full_html=False, include_plotlyjs=False))
+                    + fig.to_html(
+                        full_html=False,
+                        include_plotlyjs="cdn" if include_plotlyjs else False))
         except Exception as e:                 # pragma: no cover - defensive
             logger.warning(f"heatmap generation failed: {e}")
             return ""

@@ -51,6 +51,35 @@ def test_write_report_creates_reports_dir(tmp_path):
     assert path.exists() and path.parent.name == "reports" and path.suffix == ".html"
 
 
+def test_build_html_uses_version_correct_plotly_cdn_not_stale_latest():
+    """plotly-latest.min.js on the legacy CDN is pinned to plotly.js 1.x,
+    which cannot decode the typed-array (bdata) output emitted by plotly
+    >= 3.x and silently renders every chart blank. The report must instead
+    let the first plotly figure emit its own version-correct CDN tag, so
+    the bundle version matches the installed plotly."""
+    import plotly                                  # installed version
+    cols = ["step_idx", "step_id", "Capacitance (pF)", "Voltage (V)",
+            "Actuated Area (mm^2)", "actuated_channels"]
+    html = LoggingReport.build_html(
+        entries=_entries(), columns=cols, metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        notes=None,
+    )
+    assert "plotly-latest.min.js" not in html      # stale v1.x bundle
+    # The version-correct CDN script is what plotly.io emits when
+    # include_plotlyjs='cdn'. Cross-check by asking plotly itself.
+    import plotly.graph_objs as go
+    import plotly.io as pio
+    probe = pio.to_html(go.Figure([go.Bar(x=[1], y=[1])]),
+                        include_plotlyjs="cdn", full_html=False)
+    import re
+    m = re.search(r'src="(https://cdn\.plot\.ly/plotly-[\d.]+\.min\.js)"', probe)
+    assert m and m.group(1) in html, (
+        f"expected version-correct plotly CDN URL in report (plotly "
+        f"{plotly.__version__})")
+
+
 def test_build_html_without_step_idx_does_not_crash():
     from pathlib import Path
     html = LoggingReport.build_html(
