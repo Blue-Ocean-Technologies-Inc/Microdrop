@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from functools import wraps
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -57,14 +58,70 @@ from pluggable_protocol_tree.views.navigation_bar import (
 )
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
-from logger.logger_service import get_logger
+from microdrop_application.dialogs.pyface_wrapper import error
 
+from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
 def _dotted_path(row) -> str:
     """1-indexed dotted-path id (matches the IdColumnView display)."""
     return ".".join(str(i + 1) for i in row.path)
+
+def attempt_func_execution_with_error_dialog(func):
+    """Wrap an instance method so any uncaught exception is surfaced to
+    the user as a styled error dialog instead of crashing the pane.
+
+    The dialog uses the existing pyface_wrapper.error layout:
+      * ``message``    — one-line summary: humanised operation name +
+                         exception type. Plain text.
+      * ``informative`` — HTML body: bold op name + red exception type +
+                          escaped exception message (matches the
+                          ``_on_error`` styling for the protocol-error
+                          dialog).
+      * ``detail``     — full traceback, collapsible preformatted.
+
+    Also logs the exception with full traceback via the module logger so
+    the error is captured even when the user dismisses the dialog.
+
+    Intended for top-level user-triggered pane actions (file open / save /
+    import / browse-reports / etc.). Do NOT use on executor callbacks —
+    those handle errors via the executor's own signal chain.
+    """
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as exc:
+            import html as _html
+            import traceback as _tb
+            op_name = func.__name__.replace("_", " ").strip().title()
+            logger.error(f"{op_name} failed: {exc}", exc_info=True)
+            detail = "".join(
+                _tb.format_exception(type(exc), exc, exc.__traceback__)
+            )
+            cause = _html.escape(str(exc) or "(no message)").replace(
+                "\n", "<br>")
+            informative = (
+                f"<p style='margin:0 0 6px 0;'>"
+                f"<b>{_html.escape(op_name)}</b> failed.</p>"
+                f"<p style='margin:0;color:#c0392b;'>"
+                f"<b>{_html.escape(type(exc).__name__)}:</b> {cause}</p>"
+            )
+            try:
+                error(
+                    self,
+                    message=f"{op_name} failed: {type(exc).__name__}",
+                    title=f"{op_name} Error",
+                    informative=informative,
+                    detail=detail,
+                )
+            except Exception as dialog_err:
+                logger.error(
+                    f"failed to show error dialog for {op_name}: "
+                    f"{dialog_err}", exc_info=True)
+            return None
+    return wrapper
 
 
 class ProtocolTreePane(QWidget):
@@ -333,10 +390,8 @@ class ProtocolTreePane(QWidget):
     # --- step lifecycle handlers --------------------------------------
 
     def _publish_protocol_running(self, value: str) -> None:
-        try:
-            publish_message(topic=PROTOCOL_RUNNING, message=value)
-        except Exception as e:
-            logger.warning(f"PROTOCOL_RUNNING publish failed: {e}")
+        logger.info("Protocol Tree: Publishing Protocol Running")
+        publish_message(topic=PROTOCOL_RUNNING, message=value)
 
     def _on_protocol_started(self):
         self.protocol_running_changed.emit(True)
