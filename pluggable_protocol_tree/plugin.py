@@ -8,7 +8,7 @@ plugin class."""
 from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.task_extension import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import List, Str, Either
+from traits.api import Instance, List, Str, Either
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -30,10 +30,12 @@ from pluggable_protocol_tree.builtins.trail_length_column import make_trail_leng
 from pluggable_protocol_tree.builtins.trail_overlay_column import make_trail_overlay_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
-    ACTOR_TOPIC_DICT, LOGGING_ACTOR_TOPIC_DICT, PKG, PKG_name, PROTOCOL_COLUMNS,
+    ACTOR_TOPIC_DICT, LOGGING_ACTOR_TOPIC_DICT, PKG, PKG_name,
+    PROTOCOL_COLUMNS, PROTOCOL_QUICK_ACTIONS,
 )
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
 from logger.logger_service import get_logger
@@ -64,6 +66,18 @@ class PluggableProtocolTreePlugin(Plugin):
     #: Plain list — set directly in tests; populated from the extension
     #: point at plugin start in a live application.
     contributed_columns = List(desc="Columns contributed by other plugins")
+
+    #: Envisage extension point — sibling plugins contribute
+    #: IQuickAction instances rendered as buttons on the tree's
+    #: quick-actions toolbar. Tree plugin itself contributes none.
+    _quick_action_extension_point = ExtensionPoint(
+        List(Instance(IQuickAction)), id=PROTOCOL_QUICK_ACTIONS,
+        desc="IQuickAction instances contributed by sibling plugins.",
+    )
+
+    contributed_quick_actions = List(
+        desc="Quick actions contributed by other plugins (populated "
+             "from the extension point at plugin start).")
 
     # Standard plumbing
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
@@ -97,7 +111,10 @@ class PluggableProtocolTreePlugin(Plugin):
     def _make_dock_pane(self, *args, **kwargs):
         from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
         columns = self._assemble_columns()
-        return PluggableProtocolDockPane(columns=columns, *args, **kwargs)
+        quick_actions = self._assemble_quick_actions()
+        return PluggableProtocolDockPane(
+            columns=columns, quick_actions=quick_actions,
+            *args, **kwargs)
 
     def _assemble_columns(self):
         builtins = [
@@ -128,6 +145,15 @@ class PluggableProtocolTreePlugin(Plugin):
                 out.append(c)
         return out
 
+    def _assemble_quick_actions(self):
+        """Return contributed quick actions in deterministic order
+        (priority then action_id)."""
+        try:
+            actions = list(self.contributed_quick_actions)
+        except Exception:
+            actions = []
+        return sorted(actions, key=lambda a: (a.priority, a.action_id))
+
     def start(self):
         """Populate contributed_columns from the extension point, then
         register the executor listener's subscriptions with the message
@@ -144,6 +170,13 @@ class PluggableProtocolTreePlugin(Plugin):
             # an empty dock pane. Log it so the developer sees it.
             logger.warning(
                 f"failed to read PROTOCOL_COLUMNS extension point: {e}"
+            )
+        try:
+            self.contributed_quick_actions = list(
+                self._quick_action_extension_point)
+        except Exception as e:
+            logger.warning(
+                f"failed to read PROTOCOL_QUICK_ACTIONS extension point: {e}"
             )
         try:
             from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterData
