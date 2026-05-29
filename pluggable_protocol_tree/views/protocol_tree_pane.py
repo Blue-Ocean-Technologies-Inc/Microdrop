@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import glob
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -62,6 +63,19 @@ logger = get_logger(__name__)
 def _dotted_path(row) -> str:
     """1-indexed dotted-path id (matches the IdColumnView display)."""
     return ".".join(str(i + 1) for i in row.path)
+
+
+def _get_report_browser_dialog_cls():
+    """Lazy import so the pluggable tree doesn't statically depend on
+    protocol_quick_action_tools. Returns the dialog class or None when
+    the new plugin isn't installed (development environments, demos)."""
+    try:
+        from protocol_quick_action_tools.views.report_browser_dialog import (
+            ReportBrowserDialog,
+        )
+        return ReportBrowserDialog
+    except Exception:                             # pragma: no cover - defensive
+        return None
 
 
 class ProtocolTreePane(QWidget):
@@ -111,6 +125,14 @@ class ProtocolTreePane(QWidget):
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
+
+        # Optional callable returning the path to the experiment's reports
+        # dir. Used by browse_reports_dialog to feed the ReportBrowserDialog
+        # without statically depending on experiment_manager's API surface.
+        self._reports_dir_provider = (
+            (lambda: experiment_manager.get_experiment_directory() / "reports")
+            if experiment_manager is not None else None
+        )
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -1346,3 +1368,93 @@ class ProtocolTreePane(QWidget):
         if cur is None:
             return
         self.experiment_label.update_experiment_id(cur.stem)
+
+    # --- quick-actions helpers --------------------------------------
+
+    def _insert_position_after_selection(self):
+        """Return ``(parent_path, index)`` for "insert after current
+        selection". With nothing selected -> ``((), None)`` (append to
+        root). With one selection at path ``(p..., i)`` -> ``((p...,),
+        i + 1)``. With multiple selections we use the last one."""
+        sel = list(self.manager.selection or [])
+        if not sel:
+            return ((), None)
+        last = tuple(sel[-1])
+        return (last[:-1], last[-1] + 1)
+
+    def add_step_after_selection(self):
+        parent_path, index = self._insert_position_after_selection()
+        self.manager.add_step(parent_path=parent_path, index=index)
+
+    def add_group_after_selection(self):
+        parent_path, index = self._insert_position_after_selection()
+        self.manager.add_group(parent_path=parent_path, index=index)
+
+    def delete_selected_rows(self):
+        sel = list(self.manager.selection or [])
+        if not sel:
+            return
+        self.manager.remove(sel)
+
+    def import_into_selected_group(self):
+        """Open a file picker, load the JSON protocol, and merge every
+        top-level row from the loaded protocol under the selected group.
+
+        No-op when the selection isn't exactly one row OR the selected
+        row isn't a GroupRow.
+        """
+        sel = list(self.manager.selection or [])
+        if len(sel) != 1:
+            return
+        target_path = tuple(sel[0])
+        try:
+            target = self.manager.get_row(target_path)
+        except (IndexError, AttributeError):
+            return
+        if not isinstance(target, GroupRow):
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Protocol", "", "Protocol JSON (*.json)")
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as e:
+            logger.warning(f"import_into_selected_group: read failed: {e}")
+            return
+        # The loaded protocol's top-level rows live under data["rows"]
+        # (RowManager.to_json shape); each entry is either a step dict
+        # or a {"type": "group", "rows": [...]} dict. Use add_step /
+        # add_group with the row dict's values to seed each new row.
+        for row_dict in (data.get("rows") or []):
+            if row_dict.get("type") == "group":
+                self.manager.add_group(
+                    parent_path=target_path,
+                    name=row_dict.get("name", "Group"),
+                )
+                # Nested rows are not recursively imported in this PR —
+                # callers paste structurally identical protocols and the
+                # legacy did the same. Out of scope: deep-import.
+            else:
+                values = {k: v for k, v in row_dict.items()
+                          if k not in ("type",)}
+                self.manager.add_step(
+                    parent_path=target_path, values=values)
+
+    def browse_reports_dialog(self):
+        """Glob <experiment_dir>/reports/*.html and open the
+        ReportBrowserDialog from protocol_quick_action_tools. No-op when
+        no reports-dir provider is configured (demos / no experiment
+        manager) or when the dialog plugin isn't installed."""
+        if self._reports_dir_provider is None:
+            logger.debug("browse_reports_dialog: no reports_dir_provider")
+            return
+        cls = _get_report_browser_dialog_cls()
+        if cls is None:
+            logger.warning(
+                "browse_reports_dialog: ReportBrowserDialog not available")
+            return
+        reports_dir = self._reports_dir_provider()
+        paths = sorted(glob.glob(str(reports_dir / "*.html")))
+        cls(paths, parent=self).exec()

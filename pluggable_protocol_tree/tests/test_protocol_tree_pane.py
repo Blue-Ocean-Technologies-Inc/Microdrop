@@ -1199,3 +1199,110 @@ def test_pane_skips_quick_action_bar_when_no_actions(qapp):
     pane = ptp.ProtocolTreePane([make_name_column()])
     assert pane.quick_action_bar is None
     assert pane.quick_actions_controller is None
+
+
+def _pane_with_two_steps(qapp):
+    """Pane with a tree containing exactly two top-level step rows."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    # seed_default_step_if_empty already gave us 1 step; add one more.
+    pane.manager.add_step()
+    return pane
+
+
+def test_add_step_after_selection_with_no_selection_appends_root(qapp):
+    pane = _pane_with_two_steps(qapp)
+    before = len(pane.manager.root.children)
+    pane.manager.selection = []
+    pane.add_step_after_selection()
+    assert len(pane.manager.root.children) == before + 1
+
+
+def test_add_step_after_selection_with_one_selected_inserts_below(qapp):
+    pane = _pane_with_two_steps(qapp)
+    pane.manager.selection = [(0,)]
+    before = len(pane.manager.root.children)
+    pane.add_step_after_selection()
+    assert len(pane.manager.root.children) == before + 1
+
+
+def test_add_group_after_selection_appends_a_group(qapp):
+    pane = _pane_with_two_steps(qapp)
+    pane.manager.selection = []
+    before = len(pane.manager.root.children)
+    pane.add_group_after_selection()
+    assert len(pane.manager.root.children) == before + 1
+    from pluggable_protocol_tree.models.row import GroupRow
+    assert isinstance(pane.manager.root.children[-1], GroupRow)
+
+
+def test_delete_selected_rows_removes_at_those_paths(qapp):
+    pane = _pane_with_two_steps(qapp)
+    before = len(pane.manager.root.children)
+    pane.manager.selection = [(0,)]
+    pane.delete_selected_rows()
+    assert len(pane.manager.root.children) == before - 1
+
+
+def test_delete_selected_rows_no_selection_is_noop(qapp):
+    pane = _pane_with_two_steps(qapp)
+    before = len(pane.manager.root.children)
+    pane.manager.selection = []
+    pane.delete_selected_rows()
+    assert len(pane.manager.root.children) == before
+
+
+def test_import_into_selected_group_noop_when_no_group_selected(qapp,
+                                                                 monkeypatch):
+    """Selection points to a step (not a group) -> import is a no-op."""
+    pane = _pane_with_two_steps(qapp)
+    pane.manager.selection = [(0,)]            # a step row
+    called = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: called.append(True) or ("", ""))
+    pane.import_into_selected_group()
+    assert called == []                        # never even opened the dialog
+
+
+def test_browse_reports_dialog_opens_with_globbed_paths(qapp, monkeypatch,
+                                                         tmp_path):
+    """browse_reports_dialog globs <experiment_dir>/reports/*.html and
+    feeds the path list into ReportBrowserDialog. The pane only needs a
+    ``reports_dir_provider`` (callable) — the dialog class itself is
+    monkeypatched here so this test can run without the new plugin."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "report_a.html").write_text("<html></html>", encoding="utf-8")
+    (reports / "report_b.html").write_text("<html></html>", encoding="utf-8")
+
+    captured = {}
+    class _FakeDialog:
+        def __init__(self, paths, parent=None):
+            captured["paths"] = list(paths)
+        def exec(self_inner):
+            return 0
+    monkeypatch.setattr(ptp, "_get_report_browser_dialog_cls",
+                        lambda: _FakeDialog)
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane._reports_dir_provider = lambda: reports
+    pane.browse_reports_dialog()
+    assert set(captured["paths"]) == {
+        str(reports / "report_a.html"),
+        str(reports / "report_b.html"),
+    }
+
+
+def test_browse_reports_dialog_no_provider_logs_and_returns(qapp, caplog):
+    """No reports_dir_provider configured (e.g. demo, no experiment manager)
+    -> log a debug message and return; do NOT crash."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane._reports_dir_provider = None
+    pane.browse_reports_dialog()                 # must not raise
