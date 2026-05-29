@@ -279,3 +279,58 @@ def test_log_metadata_forwards_to_ingestion_and_is_noop_without(tmp_path):
     assert c._ingestion.metadata["Protocol Path"] == "<a>x</a>"
     c._ingestion = None
     c.log_metadata({"k": "v"})                   # must not raise
+
+
+# ---------------------------------------------------------------------------
+# all_report_paths accumulator tests (legacy parity)
+# ---------------------------------------------------------------------------
+
+def test_all_report_paths_starts_empty():
+    """Fresh controller has no report paths."""
+    c = ProtocolLoggingController()
+    assert c.all_report_paths == []
+
+
+def test_all_report_paths_accumulates_across_runs(tmp_path):
+    """Successful flushes append the report path; multiple runs on one
+    controller instance accumulate. Matches legacy
+    protocol_data_logger.all_report_paths semantics."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+
+    # --- run 1 ---
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    c.stop_logging()
+    assert len(c.all_report_paths) == 1
+
+    # --- run 2 ---
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    c.stop_logging()
+    assert len(c.all_report_paths) == 2
+
+    # both paths exist on disk and end with .html
+    for p in c.all_report_paths:
+        assert p.exists()
+        assert p.suffix == ".html"
+
+
+def test_all_report_paths_does_not_grow_when_generate_report_is_false(tmp_path):
+    """When the user declined report generation (generate_report=False),
+    no path should land in the session list."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [5]}))
+    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
+                                 "instrument_time_us": 1, "reception_time": 2}))
+    c.stop_logging(generate_report=False)
+    assert c.all_report_paths == []
