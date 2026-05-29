@@ -13,7 +13,7 @@ selection, and is_running flag. Contributions stay Qt-free where they
 can by delegating Qt work to pane helper methods.
 """
 
-from traits.api import Bool, Int, Interface, Str
+from traits.api import Int, Interface, Str
 
 
 class IQuickAction(Interface):
