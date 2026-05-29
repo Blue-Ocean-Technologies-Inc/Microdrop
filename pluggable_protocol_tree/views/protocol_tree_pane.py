@@ -79,6 +79,11 @@ class ProtocolTreePane(QWidget):
     # deferred flush completes; QueuedConnection in __init__ marshals it
     # back to the GUI thread so the success dialog runs there.
     _logging_complete = Signal(object)
+    # Quick-actions toolbar feed: emit True/False on protocol start/end,
+    # parameterless selection_changed on each tree selection move.
+    # QuickActionsController listens to both to drive button enabled state.
+    protocol_running_changed = Signal(bool)
+    selection_changed = Signal()
 
     def __init__(
         self,
@@ -111,6 +116,13 @@ class ProtocolTreePane(QWidget):
         self.device_viewer_sync = device_viewer_sync
         if self.device_viewer_sync is not None:
             self.device_viewer_sync.attach(self.widget)
+
+        # Re-emit the tree's selectionChanged as a parameterless signal so
+        # the QuickActionsController doesn't have to know about Qt selection
+        # models. The pane already constructed self.widget above.
+        self.widget.tree.selectionModel().selectionChanged.connect(
+            lambda *_: self.selection_changed.emit()
+        )
 
         self.protocol_state_tracker = PluggableProtocolStateTracker()
         # Structural mutations (add/remove/move/paste/new) re-check the
@@ -303,6 +315,7 @@ class ProtocolTreePane(QWidget):
             logger.warning(f"PROTOCOL_RUNNING publish failed: {e}")
 
     def _on_protocol_started(self):
+        self.protocol_running_changed.emit(True)
         self._publish_protocol_running("True")
         try:
             self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
@@ -604,6 +617,7 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated("aborted")
 
     def _on_protocol_terminated(self, outcome="finished"):
+        self.protocol_running_changed.emit(False)
         logger.info("Protocol terminated --> free mode")
         self.clear_highlights()
         self._set_idle_button_state()

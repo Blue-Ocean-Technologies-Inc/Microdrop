@@ -1138,3 +1138,37 @@ def test_on_error_shows_dialog_before_completion_flow(qapp, monkeypatch):
     pane._on_error("boom")
 
     assert order == [("term", "error"), "error_dialog", ("flow", "error")]
+
+
+def test_pane_emits_protocol_running_changed_true_on_start(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    seen = []
+    pane.protocol_running_changed.connect(lambda v: seen.append(v))
+    pane._on_protocol_started()
+    assert seen == [True]
+
+
+def test_pane_emits_protocol_running_changed_false_on_terminated(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    seen = []
+    pane.protocol_running_changed.connect(lambda v: seen.append(v))
+    pane._on_protocol_terminated()
+    assert seen == [False]
+
+
+def test_pane_emits_selection_changed_on_tree_selection(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pyface.qt.QtCore import QItemSelection
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    fired = []
+    pane.selection_changed.connect(lambda: fired.append(True))
+    # Drive the tree's selectionModel directly — pane subscribes to
+    # selectionChanged and re-emits the parameterless selection_changed.
+    sm = pane.widget.tree.selectionModel()
+    sm.selectionChanged.emit(QItemSelection(), QItemSelection())
+    assert fired == [True]
