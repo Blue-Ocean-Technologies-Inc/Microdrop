@@ -198,11 +198,60 @@ def test_browse_reports_metadata_and_shortcut():
     assert a.shortcut == "R"
 
 
-def test_browse_reports_execute_calls_pane_helper():
+def test_browse_reports_execute_opens_dialog_with_session_paths(monkeypatch):
+    """The action reads ``pane.logging_controller.all_report_paths``
+    (set by ProtocolLoggingController on every successful flush) and
+    feeds the str-converted paths into ReportBrowserDialog."""
+    from pathlib import Path
+
+    from protocol_quick_action_tools.quick_actions import browse_reports as mod
+    captured = {}
+
+    class _FakeDialog:
+        def __init__(self_inner, paths, parent=None):
+            captured["paths"] = list(paths)
+            captured["parent"] = parent
+        def exec(self_inner):
+            return 0
+
+    monkeypatch.setattr(mod, "ReportBrowserDialog", _FakeDialog)
+
     a = make_browse_reports_action()
-    ctx = _ctx()
+    pane = MagicMock()
+    pane.logging_controller.all_report_paths = [
+        Path("/x/y/report_a.html"),
+        Path("/x/y/report_b.html"),
+    ]
+    ctx = QuickActionCtx(pane=pane, is_running=False)
     a.on_execute_action(ctx)
-    ctx.pane.browse_reports_dialog.assert_called_once_with()
+
+    assert captured["paths"] == [
+        str(Path("/x/y/report_a.html")),
+        str(Path("/x/y/report_b.html")),
+    ]
+    assert captured["parent"] is pane
+
+
+def test_browse_reports_execute_empty_session_opens_empty_dialog(monkeypatch):
+    """No reports yet (empty session list) -> dialog opens with an
+    empty path list rather than raising."""
+    from protocol_quick_action_tools.quick_actions import browse_reports as mod
+    captured = {}
+
+    class _FakeDialog:
+        def __init__(self_inner, paths, parent=None):
+            captured["paths"] = list(paths)
+        def exec(self_inner):
+            return 0
+
+    monkeypatch.setattr(mod, "ReportBrowserDialog", _FakeDialog)
+
+    a = make_browse_reports_action()
+    pane = MagicMock()
+    pane.logging_controller.all_report_paths = []
+    a.on_execute_action(QuickActionCtx(pane=pane, is_running=False))
+
+    assert captured["paths"] == []
 
 
 def test_browse_reports_disabled_without_experiment_manager():

@@ -1267,47 +1267,6 @@ def test_import_into_selected_group_noop_when_no_group_selected(qapp,
     assert called == []                        # never even opened the dialog
 
 
-def test_browse_reports_dialog_opens_with_globbed_paths(qapp, monkeypatch,
-                                                         tmp_path):
-    """browse_reports_dialog globs <experiment_dir>/reports/*.html and
-    feeds the path list into ReportBrowserDialog. The pane only needs a
-    ``reports_dir_provider`` (callable) — the dialog class itself is
-    monkeypatched here so this test can run without the new plugin."""
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
-    reports = tmp_path / "reports"
-    reports.mkdir()
-    (reports / "report_a.html").write_text("<html></html>", encoding="utf-8")
-    (reports / "report_b.html").write_text("<html></html>", encoding="utf-8")
-
-    captured = {}
-    class _FakeDialog:
-        def __init__(self, paths, parent=None):
-            captured["paths"] = list(paths)
-        def exec(self_inner):
-            return 0
-    monkeypatch.setattr(ptp, "_get_report_browser_dialog_cls",
-                        lambda: _FakeDialog)
-
-    pane = ptp.ProtocolTreePane([make_name_column()])
-    pane._reports_dir_provider = lambda: reports
-    pane.browse_reports_dialog()
-    assert set(captured["paths"]) == {
-        str(reports / "report_a.html"),
-        str(reports / "report_b.html"),
-    }
-
-
-def test_browse_reports_dialog_no_provider_logs_and_returns(qapp, caplog):
-    """No reports_dir_provider configured (e.g. demo, no experiment manager)
-    -> log a debug message and return; do NOT crash."""
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
-    pane = ptp.ProtocolTreePane([make_name_column()])
-    pane._reports_dir_provider = None
-    pane.browse_reports_dialog()                 # must not raise
-
-
 def test_delete_last_step_removes_last_top_level_step(qapp):
     """Two top-level steps -> delete_last_step removes the second one."""
     pane = _pane_with_two_steps(qapp)        # helper from Task 8 already exists
