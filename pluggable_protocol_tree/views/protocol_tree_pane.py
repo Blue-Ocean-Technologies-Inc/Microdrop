@@ -1397,14 +1397,30 @@ class ProtocolTreePane(QWidget):
         self.manager.remove(sel)
 
     def delete_last_step(self):
-        """Delete the last step in the protocol (execution order).
-        Descends through groups so the deepest-rightmost step is the
-        one removed, not a group container. No-op when the tree has
-        no steps."""
-        steps = list(self.manager.iter_execution_steps())
-        if not steps:
+        """Delete the last meaningful element at the end of the protocol.
+
+        Walks down the rightmost path through groups:
+          * Empty trailing group  -> delete the group.
+          * Non-empty group       -> descend, then re-check.
+          * Step                  -> delete the step.
+
+        No-op when the tree is empty. The primary case (the user's
+        common click) is "delete the deepest-rightmost step"; the
+        empty-trailing-group case keeps the action from silently
+        no-op'ing when the user has lingering empty groups."""
+        parent = self.manager.root
+        if not parent.children:
             return
-        self.manager.remove([tuple(steps[-1].path)])
+        while True:
+            last = parent.children[-1]
+            if isinstance(last, GroupRow):
+                if not last.children:
+                    self.manager.remove([tuple(last.path)])
+                    return
+                parent = last
+                continue
+            self.manager.remove([tuple(last.path)])
+            return
 
     def import_into_selected_group(self):
         """Open a file picker, load the JSON protocol, and merge every

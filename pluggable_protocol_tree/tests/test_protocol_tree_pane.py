@@ -1349,3 +1349,63 @@ def test_delete_last_step_empty_tree_is_noop(qapp):
     # The pane starts with an empty tree (no auto-seeding in __init__).
     assert len(pane.manager.root.children) == 0
     pane.delete_last_step()                    # must not raise
+
+
+def test_delete_last_step_empty_trailing_group_deletes_the_group(qapp):
+    """`S1, EmptyGroup` -> delete removes the empty group, leaves S1."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()                       # S1
+    group_path = pane.manager.add_group(name="G")
+    assert len(pane.manager.root.children) == 2
+
+    pane.delete_last_step()
+
+    assert len(pane.manager.root.children) == 1
+    from pluggable_protocol_tree.models.row import GroupRow
+    # The remaining row is the step (S1), NOT the group.
+    assert not isinstance(pane.manager.root.children[0], GroupRow)
+
+
+def test_delete_last_step_non_empty_group_descends_to_step(qapp):
+    """`S1, Group[S2, S3]` -> delete removes S3, leaving Group[S2]."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()                       # S1 at (0,)
+    group_path = pane.manager.add_group(name="G")
+    pane.manager.add_step(parent_path=group_path) # S2
+    pane.manager.add_step(parent_path=group_path) # S3
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 2
+
+    pane.delete_last_step()
+
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 1               # S3 gone, S2 remains
+    assert len(pane.manager.root.children) == 2   # S1 + G(S2)
+
+
+def test_delete_last_step_nested_empty_group_deletes_inner_empty_group(qapp):
+    """`S1, Group[S2, EmptyInnerGroup]` -> delete removes the inner
+    empty group, leaving Group[S2]."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.models.row import GroupRow
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()
+    group_path = pane.manager.add_group(name="G")
+    pane.manager.add_step(parent_path=group_path)
+    pane.manager.add_group(parent_path=group_path, name="Inner")
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 2
+    assert isinstance(group.children[-1], GroupRow)
+    assert len(group.children[-1].children) == 0
+
+    pane.delete_last_step()
+
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 1
+    # Remaining is the step inside G — the inner empty group is gone.
+    assert not isinstance(group.children[0], GroupRow)
