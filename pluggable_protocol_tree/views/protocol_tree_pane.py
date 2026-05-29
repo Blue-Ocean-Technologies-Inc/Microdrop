@@ -19,6 +19,8 @@ import threading
 import time
 from functools import wraps
 from pathlib import Path
+import html as _html
+import traceback as _tb
 
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
@@ -38,8 +40,10 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE, PROTOCOL_TREE_DISPLAY_STATE,
 )
+from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
@@ -62,7 +66,6 @@ from microdrop_application.dialogs.pyface_wrapper import error
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
-
 
 def _dotted_path(row) -> str:
     """1-indexed dotted-path id (matches the IdColumnView display)."""
@@ -93,8 +96,6 @@ def attempt_func_execution_with_error_dialog(func):
         try:
             return func(self, *args, **kwargs)
         except Exception as exc:
-            import html as _html
-            import traceback as _tb
             op_name = func.__name__.replace("_", " ").strip().title()
             logger.error(f"{op_name} failed: {exc}", exc_info=True)
             detail = "".join(
@@ -517,11 +518,6 @@ class ProtocolTreePane(QWidget):
         """Build the HTML body shown in the protocol-error dialog. Uses the
         structured StepExecutionError fields (step / column / hook / cause)
         when available, else falls back to the plain message text."""
-        import html as _html
-        from pluggable_protocol_tree.execution.exceptions import (
-            StepExecutionError,
-        )
-
         red = "#c0392b"
         if isinstance(exc, StepExecutionError):
             row = exc.row
@@ -552,6 +548,7 @@ class ProtocolTreePane(QWidget):
         safe = _html.escape(fallback_msg).replace("\n", "<br>")
         return f"<p style='margin:0;color:{red};'>{safe}</p>"
 
+    @attempt_func_execution_with_error_dialog
     def _refresh_status(self):
         if self._step_started_at is None:
             return
@@ -840,12 +837,6 @@ class ProtocolTreePane(QWidget):
         # even in preview mode. Cached step metadata from _current_row.
         row = self._current_row
         if row is not None:
-            from pluggable_protocol_tree.models.display_state import (
-                ProtocolTreeDisplayMessage,
-            )
-            from pluggable_protocol_tree.consts import (
-                PROTOCOL_TREE_DISPLAY_STATE,
-            )
             dotted_id = ".".join(str(i + 1) for i in row.path)
             display_msg = ProtocolTreeDisplayMessage(
                 electrodes=electrodes,
@@ -886,19 +877,21 @@ class ProtocolTreePane(QWidget):
         )
 
     # --- step-cursor navigation -------------------------------------
-
+    @attempt_func_execution_with_error_dialog
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
             logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
             self._select_step(steps[0])
 
+    @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
             logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
             self._select_step(steps[-1])
 
+    @attempt_func_execution_with_error_dialog
     def navigate_to_previous_step(self):
         steps = list(self.manager.iter_execution_steps())
         if not steps:
@@ -912,6 +905,7 @@ class ProtocolTreePane(QWidget):
             logger.info(f"Nav: previous step --> [{_dotted_path(steps[cur - 1])}]")
             self._select_step(steps[cur - 1])
 
+    @attempt_func_execution_with_error_dialog
     def navigate_to_next_step(self):
         steps = list(self.manager.iter_execution_steps())
         if not steps:
@@ -966,6 +960,7 @@ class ProtocolTreePane(QWidget):
                     pane.device_viewer_sync._suppress_publish = False
         return _Guard()
 
+    @attempt_func_execution_with_error_dialog
     def _select_step(self, row):
         # No suppress wrap: nav buttons (next/prev/first/last) call this
         # path, and the user expects the DV to update on those clicks
@@ -981,6 +976,7 @@ class ProtocolTreePane(QWidget):
         self.widget.tree.setCurrentIndex(idx)
         self.widget.tree.scrollTo(idx)
 
+    @attempt_func_execution_with_error_dialog
     def clear_highlights(self):
         """Reset the tree's selection + active-row highlight + per-step
         labels to the idle visual state."""
@@ -1008,7 +1004,7 @@ class ProtocolTreePane(QWidget):
             self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
 
     # --- save / load -----------------------------------------------
-
+    @attempt_func_execution_with_error_dialog
     def save_to_dialog(self, parent=None):
         """Open a file dialog and persist the manager's JSON state.
 
@@ -1029,6 +1025,7 @@ class ProtocolTreePane(QWidget):
             return None
         return path
 
+    @attempt_func_execution_with_error_dialog
     def load_from_dialog(self, columns_factory, parent=None):
         """Open a file dialog and replace the manager's state from JSON.
 
@@ -1052,6 +1049,7 @@ class ProtocolTreePane(QWidget):
             return None
         return path
 
+    @attempt_func_execution_with_error_dialog
     def closeEvent(self, event):
         """Detach Traits observers before the underlying QWidget is
         destroyed. Without this, application.experiment_changed firing
@@ -1220,6 +1218,7 @@ class ProtocolTreePane(QWidget):
                 return False
         return True
 
+    @attempt_func_execution_with_error_dialog
     def new_protocol(self):
         if not self._confirm_proceed_or_abort():
             return
@@ -1241,6 +1240,7 @@ class ProtocolTreePane(QWidget):
         if self.manager.seed_default_step_if_empty():
             self.protocol_state_tracker.reseed_baseline(self.manager)
 
+    @attempt_func_execution_with_error_dialog
     def save_protocol_dialog(self):
         known_path = self.protocol_state_tracker.loaded_protocol_path
         if not known_path:
@@ -1255,12 +1255,14 @@ class ProtocolTreePane(QWidget):
         self.protocol_state_tracker.set_saved(known_path)
         self.protocol_state_tracker.reseed_baseline(self.manager)
 
+    @attempt_func_execution_with_error_dialog
     def save_as_protocol_dialog(self):
         path = self.save_to_dialog(parent=self)
         if path:
             self.protocol_state_tracker.set_saved(path)
             self.protocol_state_tracker.reseed_baseline(self.manager)
 
+    @attempt_func_execution_with_error_dialog
     def load_protocol_dialog(self, columns_factory=None):
         if not self._confirm_proceed_or_abort():
             return
@@ -1296,7 +1298,7 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
-
+    @attempt_func_execution_with_error_dialog
     def _schedule_flush_with_progress(self, controller):
         """Custom flush scheduler: pop the "Generating Run Report..." dialog
         immediately, then sit through the settling delay (so in-flight
@@ -1349,6 +1351,7 @@ class ProtocolTreePane(QWidget):
 
         QTimer.singleShot(settling_ms, _start_worker)
 
+    @attempt_func_execution_with_error_dialog
     def _on_logging_complete(self, report_path):
         """Controller completion callback (runs on the GUI thread via the
         QTimer-scheduled flush). Shows the report-link success dialog when a
@@ -1366,6 +1369,7 @@ class ProtocolTreePane(QWidget):
         except Exception as e:
             logger.warning(f"run-summary success dialog failed: {e}")
 
+    @attempt_func_execution_with_error_dialog
     def _on_new_experiment(self):
         if self.experiment_manager is None or self.application is None:
             logger.info("New Experiment requested (stub: no services injected)")
@@ -1379,6 +1383,7 @@ class ProtocolTreePane(QWidget):
         self.application.current_experiment_directory = new_dir
         logger.info(f"Started new experiment: {new_dir.stem}")
 
+    @attempt_func_execution_with_error_dialog
     def _on_new_note(self):
         if self.sticky_manager is None or self.experiment_manager is None:
             logger.info("New Note requested (stub: no services injected)")
@@ -1387,12 +1392,14 @@ class ProtocolTreePane(QWidget):
         experiment_name = base_dir.stem
         self.sticky_manager.request_new_note(base_dir, experiment_name)
 
+    @attempt_func_execution_with_error_dialog
     def _on_experiment_label_clicked(self):
         if self.experiment_manager is None:
             logger.info("Experiment label clicked (stub: no service injected)")
             return
         self.experiment_manager.open_experiment_directory()
 
+    @attempt_func_execution_with_error_dialog
     def _on_experiment_changed(self, _event):
         if self.experiment_label is None:
             return
@@ -1406,7 +1413,7 @@ class ProtocolTreePane(QWidget):
         self.experiment_label.update_experiment_id(cur.stem)
 
     # --- quick-actions helpers --------------------------------------
-
+    @attempt_func_execution_with_error_dialog
     def _insert_position_after_selection(self):
         """Return ``(parent_path, index)`` for "insert after current
         selection". Rules:
@@ -1432,20 +1439,24 @@ class ProtocolTreePane(QWidget):
         # Step (or fallback for multi-selection): insert after at parent.
         return (last[:-1], last[-1] + 1)
 
+    @attempt_func_execution_with_error_dialog
     def add_step_after_selection(self):
         parent_path, index = self._insert_position_after_selection()
         self.manager.add_step(parent_path=parent_path, index=index)
 
+    @attempt_func_execution_with_error_dialog
     def add_group_after_selection(self):
         parent_path, index = self._insert_position_after_selection()
         self.manager.add_group(parent_path=parent_path, index=index)
 
+    @attempt_func_execution_with_error_dialog
     def delete_selected_rows(self):
         sel = list(self.manager.selection or [])
         if not sel:
             return
         self.manager.remove(sel)
 
+    @attempt_func_execution_with_error_dialog
     def delete_last_step(self):
         """Delete the last meaningful element at the end of the protocol.
 
@@ -1472,6 +1483,7 @@ class ProtocolTreePane(QWidget):
             self.manager.remove([tuple(last.path)])
             return
 
+    @attempt_func_execution_with_error_dialog
     def import_into_selected_group(self):
         """Open a file picker, load the JSON protocol, and merge every
         top-level row from the loaded protocol under the selected group.
@@ -1514,6 +1526,11 @@ class ProtocolTreePane(QWidget):
             (i, fid) for i, fid in enumerate(fields)
             if fid not in _RESERVED_ROW_METADATA_FIELDS
         ]
+        # Build once — same across all rows; keyed by col_id for O(1)
+        # lookup inside the loop.
+        live_by_col_id = {
+            c.model.col_id: c for c in self.manager.columns
+        }
 
         for row in (data.get("rows") or []):
             # Top-level only — nested rows are not recursively
@@ -1524,11 +1541,29 @@ class ProtocolTreePane(QWidget):
                 self.manager.add_group(
                     parent_path=target_path, name=row[name_idx])
             else:
-                values = {fid: row[i] for i, fid in col_field_positions}
-                # Name is filtered from the column-values list by the
-                # dedup in services/persistence.py; inject it from
-                # the fixed metadata position so the imported step
-                # keeps its name instead of defaulting to "Step".
+                # Resolve each saved column id against the LIVE column
+                # set. Skip:
+                #   * column ids unknown to this tree (different plugin
+                #     set) — would otherwise set orphan attributes.
+                #   * None saved values — strict-typed traits (Float,
+                #     Int, ...) reject None; skipping lets the trait's
+                #     default apply.
+                # Use the live column's model.deserialize so custom
+                # serializations round-trip correctly (matches
+                # services/persistence.deserialize_tree).
+                values = {}
+                for i, fid in col_field_positions:
+                    live = live_by_col_id.get(fid)
+                    if live is None:
+                        continue
+                    raw = row[i]
+                    if raw is None:
+                        continue
+                    values[fid] = live.model.deserialize(raw)
+                # Name was filtered from col_field_positions by the
+                # persistence dedup — inject it explicitly from the
+                # fixed metadata position.
                 values["name"] = row[name_idx]
                 self.manager.add_step(
-                    parent_path=target_path, values=values)
+                    parent_path=target_path, values=values,
+                )

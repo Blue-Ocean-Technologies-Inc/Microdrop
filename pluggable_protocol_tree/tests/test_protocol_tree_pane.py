@@ -1683,3 +1683,97 @@ def test_attempt_func_execution_html_escapes_exception_message(qapp,
     # The raw script tag must NOT appear; escaped form must.
     assert "<script>" not in captured["informative"]
     assert "&lt;script&gt;" in captured["informative"]
+
+
+def test_import_into_selected_group_skips_none_values(qapp, tmp_path,
+                                                       monkeypatch):
+    """A saved row with None for a strict-typed column (e.g. Float)
+    must NOT raise TraitError on import — the None is skipped so the
+    trait keeps its default. Regression for the bug reported on
+    feat/433."""
+    import json as _json
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.duration_column import (
+        make_duration_column,
+    )
+
+    cols = [make_name_column(), make_duration_column()]
+    pane = ptp.ProtocolTreePane(cols)
+    target_path = pane.manager.add_group(name="Dest")
+    pane.manager.selection = [tuple(target_path)]
+
+    # Synthetic file: duration is None — strict Float trait rejects it
+    # with a naive setattr. Importer must skip and let the default apply.
+    file_data = {
+        "schema_version": 1,
+        "protocol_metadata": {}, "row_flags": {},
+        "columns": [
+            {"id": "name", "cls": "x.NameColumnModel"},
+            {"id": "duration_s", "cls": "x.DurationColumnModel"},
+        ],
+        "fields": ["depth", "uuid", "type", "name", "duration_s"],
+        "rows": [
+            [0, "u-1", "step", "imported_step", None],
+        ],
+    }
+    f = tmp_path / "p.json"
+    f.write_text(_json.dumps(file_data), encoding="utf-8")
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: (str(f), ""))
+
+    pane.import_into_selected_group()                # must not raise
+
+    dest = pane.manager.get_row(target_path)
+    assert len(dest.children) == 1
+    new_step = dest.children[0]
+    assert new_step.name == "imported_step"
+    # duration kept its default (not None — the row class has a defined
+    # Float default, typically 1.0). Just assert it's a float (not None).
+    assert isinstance(new_step.duration_s, float)
+
+
+def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
+                                                                    tmp_path,
+                                                                    monkeypatch):
+    """A saved column id absent from the LIVE column set must be
+    skipped rather than becoming an orphan attribute on the row."""
+    import json as _json
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    # Live tree has only the name column.
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    target_path = pane.manager.add_group(name="Dest")
+    pane.manager.selection = [tuple(target_path)]
+
+    file_data = {
+        "schema_version": 1,
+        "protocol_metadata": {}, "row_flags": {},
+        "columns": [
+            {"id": "name", "cls": "x.NameColumnModel"},
+            {"id": "unknown_plugin_col", "cls": "x.WhateverModel"},
+        ],
+        "fields": ["depth", "uuid", "type", "name", "unknown_plugin_col"],
+        "rows": [
+            [0, "u-1", "step", "ok_step", "junk-value"],
+        ],
+    }
+    f = tmp_path / "p.json"
+    f.write_text(_json.dumps(file_data), encoding="utf-8")
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: (str(f), ""))
+
+    pane.import_into_selected_group()
+
+    dest = pane.manager.get_row(target_path)
+    assert len(dest.children) == 1
+    new_step = dest.children[0]
+    assert new_step.name == "ok_step"
+    # The unknown column id must NOT have leaked onto the row as an
+    # orphan attribute.
+    assert not hasattr(new_step, "unknown_plugin_col")
