@@ -1306,3 +1306,46 @@ def test_browse_reports_dialog_no_provider_logs_and_returns(qapp, caplog):
     pane = ptp.ProtocolTreePane([make_name_column()])
     pane._reports_dir_provider = None
     pane.browse_reports_dialog()                 # must not raise
+
+
+def test_delete_last_step_removes_last_top_level_step(qapp):
+    """Two top-level steps -> delete_last_step removes the second one."""
+    pane = _pane_with_two_steps(qapp)        # helper from Task 8 already exists
+    before = len(pane.manager.root.children)
+    # No selection — the action's new behaviour is independent of selection.
+    pane.manager.selection = []
+    pane.delete_last_step()
+    assert len(pane.manager.root.children) == before - 1
+
+
+def test_delete_last_step_descends_into_groups(qapp):
+    """Last child is a group containing a step -> delete the step
+    inside the group, leaving the (now-empty) group in place."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    # The pane starts with an empty tree. Add a top-level step, then a
+    # group containing one step so the last execution step is nested.
+    pane.manager.add_step()                            # step at (0,)
+    group_path = pane.manager.add_group(name="G")      # group at (1,)
+    pane.manager.add_step(parent_path=group_path)      # step at (1, 0)
+    # Tree now: step(0,) / Group(step(1,0))
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 1            # sanity
+
+    pane.delete_last_step()
+
+    # The nested step inside G must be gone; G itself must remain.
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 0
+    # And the top-level step is untouched.
+    assert len(pane.manager.root.children) == 2  # original step + empty group
+
+
+def test_delete_last_step_empty_tree_is_noop(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    # The pane starts with an empty tree (no auto-seeding in __init__).
+    assert len(pane.manager.root.children) == 0
+    pane.delete_last_step()                    # must not raise

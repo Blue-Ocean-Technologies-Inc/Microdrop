@@ -95,18 +95,19 @@ def test_delete_row_metadata():
 
 def test_delete_row_execute_calls_pane_helper():
     a = make_delete_row_action()
-    ctx = _ctx(selected_paths=[(0,)])
+    ctx = _ctx()
     a.on_execute_action(ctx)
-    ctx.pane.delete_selected_rows.assert_called_once_with()
+    ctx.pane.delete_last_step.assert_called_once_with()
 
 
-def test_delete_row_is_enabled_matrix():
+def test_delete_row_is_enabled_only_gated_by_is_running():
+    """Per #433 follow-up: delete button is always available when the
+    protocol isn't running — selection state is irrelevant."""
     a = make_delete_row_action()
-    assert a.is_enabled(_ctx()) is False                  # no selection
+    assert a.is_enabled(_ctx()) is True                       # no selection
     assert a.is_enabled(_ctx(selected_paths=[(0,)])) is True
     assert a.is_enabled(_ctx(selected_paths=[(0,), (1,)])) is True
-    assert a.is_enabled(_ctx(selected_paths=[(0,)],
-                              is_running=True)) is False
+    assert a.is_enabled(_ctx(is_running=True)) is False
 
 
 # --- add_group ----------------------------------------------------

@@ -1396,6 +1396,16 @@ class ProtocolTreePane(QWidget):
             return
         self.manager.remove(sel)
 
+    def delete_last_step(self):
+        """Delete the last step in the protocol (execution order).
+        Descends through groups so the deepest-rightmost step is the
+        one removed, not a group container. No-op when the tree has
+        no steps."""
+        steps = list(self.manager.iter_execution_steps())
+        if not steps:
+            return
+        self.manager.remove([tuple(steps[-1].path)])
+
     def import_into_selected_group(self):
         """Open a file picker, load the JSON protocol, and merge every
         top-level row from the loaded protocol under the selected group.
