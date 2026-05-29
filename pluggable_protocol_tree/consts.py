@@ -53,3 +53,9 @@ LOGGING_ACTOR_TOPIC_DICT = {
     ]
 }
 
+# Envisage extension point — plugins contribute IQuickAction instances
+# (see interfaces/i_quick_action.py) that render as buttons on the
+# pluggable tree's quick-actions toolbar. Tree plugin ships zero
+# builtins; all contributions come from sibling plugins.
+PROTOCOL_QUICK_ACTIONS = f"{PKG}.protocol_quick_actions"
+
