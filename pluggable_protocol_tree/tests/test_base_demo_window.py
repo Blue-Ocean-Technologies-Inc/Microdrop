@@ -457,7 +457,11 @@ def test_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
     w._save()
     import json
     payload = json.loads(save_path.read_text())
-    assert payload["columns"][0]["id"] == "type"
+    # After the dedup fix, type/name are NOT in col_specs — they are encoded
+    # in the fixed row-metadata fields (positions 2 and 3). The first ordinary
+    # column is now "id" (the type/name builtins are filtered out).
+    assert payload["columns"][0]["id"] == "id"
+    # The row name is still at index 3 (the fixed metadata field).
     assert any(r[3] == "S1" for r in payload["rows"])
 
 

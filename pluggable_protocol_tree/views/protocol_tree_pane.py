@@ -1441,21 +1441,38 @@ class ProtocolTreePane(QWidget):
         except (OSError, ValueError) as e:
             logger.warning(f"import_into_selected_group: read failed: {e}")
             return
-        # The loaded protocol's top-level rows live under data["rows"]
-        # (RowManager.to_json shape); each entry is either a step dict
-        # or a {"type": "group", "rows": [...]} dict. Use add_step /
-        # add_group with the row dict's values to seed each new row.
-        for row_dict in (data.get("rows") or []):
-            if row_dict.get("type") == "group":
+        # Persistence schema: fields[:4] = ["depth", "uuid", "type",
+        # "name"]; remaining entries are column ids. After the dedup
+        # fix in persistence.py, type/name are NOT duplicated as ordinary
+        # columns, so the fixed indices below are stable.
+        fields = data.get("fields") or []
+        if len(fields) < 4:
+            return
+        DEPTH_IDX, TYPE_IDX, NAME_IDX = 0, 2, 3
+        col_field_ids = fields[4:]
+
+        for row in (data.get("rows") or []):
+            # Top-level rows only (depth 0). Nested rows are not
+            # recursively imported in this PR — callers paste
+            # structurally identical protocols and the legacy did
+            # the same. Out of scope: deep-import.
+            if int(row[DEPTH_IDX]) != 0:
+                continue
+            if row[TYPE_IDX] == "group":
                 self.manager.add_group(
                     parent_path=target_path,
-                    name=row_dict.get("name", "Group"),
+                    name=row[NAME_IDX],
                 )
-                # Nested rows are not recursively imported in this PR —
-                # callers paste structurally identical protocols and the
-                # legacy did the same. Out of scope: deep-import.
             else:
-                values = {k: v for k, v in row_dict.items()
-                          if k not in ("type",)}
+                # add_step setattrs each value directly on the row,
+                # so we feed it the serialized form. Most builtin
+                # columns are identity-serialize (Str / Int / Float /
+                # List), so this round-trips correctly.
+                # Name comes from the fixed row-metadata field (not from
+                # col_field_ids, since the name column is filtered out of
+                # col_specs by the dedup fix in persistence.py).
+                values = dict(zip(col_field_ids, row[4:]))
+                values["name"] = row[NAME_IDX]
                 self.manager.add_step(
-                    parent_path=target_path, values=values)
+                    parent_path=target_path, values=values,
+                )

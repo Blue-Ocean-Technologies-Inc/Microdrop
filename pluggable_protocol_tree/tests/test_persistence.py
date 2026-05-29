@@ -30,17 +30,23 @@ def test_to_json_schema_version(manager):
 
 
 def test_to_json_columns_metadata(manager):
+    # After the dedup fix the builtin type/name columns are filtered out of
+    # col_specs (they are already encoded in the fixed row-metadata fields).
+    # Only the non-reserved ordinary columns remain.
     data = manager.to_json()
     ids = [c["id"] for c in data["columns"]]
-    assert ids == ["type", "id", "name", "duration_s"]
+    assert ids == ["id", "duration_s"]
     for c in data["columns"]:
         assert "cls" in c
 
 
 def test_to_json_fields_order(manager):
+    # After the dedup fix the builtin type/name columns are filtered out of
+    # col_specs, so "type" and "name" each appear exactly once (in the fixed
+    # row-metadata prefix).  The "id" and "duration_s" ordinary columns remain.
     data = manager.to_json()
     assert data["fields"] == ["depth", "uuid", "type", "name",
-                              "type", "id", "name", "duration_s"]
+                              "id", "duration_s"]
 
 
 def test_to_json_rows_encoded_with_depth(manager):
@@ -181,3 +187,85 @@ def test_load_old_payload_without_row_flags_defaults_false(manager):
     del data["row_flags"]            # simulate a pre-split save
     new_mgr = RowManager.from_json(data, columns=list(manager.columns))
     assert new_mgr.root.children[0].repeat_duration_controls is False
+
+
+# --- Issue-1 dedup fix ---
+
+def test_serialize_no_duplicate_type_or_name_in_fields():
+    """The builtin type/name columns must NOT be serialized in
+    addition to the fixed row metadata — fields are unique."""
+    cols = [make_type_column(), make_id_column(), make_name_column()]
+    m = RowManager(columns=cols)
+    m.add_step()
+    m.add_group(name="G")
+    data = m.to_json()
+    assert data["fields"].count("type") == 1
+    assert data["fields"].count("name") == 1
+    # Per-row width matches fields width — no orphan values.
+    for row in data["rows"]:
+        assert len(row) == len(data["fields"])
+
+
+def test_roundtrip_after_dedup_preserves_step_type_and_name():
+    """After the dedup fix, save -> load -> save preserves every
+    row's type and name."""
+    cols = [make_type_column(), make_name_column()]
+    m = RowManager(columns=cols)
+    m.add_step()
+    g = m.add_group(name="MyGroup")
+    m.add_step(parent_path=g)
+
+    data = m.to_json()
+    m2 = RowManager(columns=cols)
+    m2.set_state_from_json(data, columns=cols)
+
+    assert m2.root.children[0].row_type == "step"
+    assert m2.root.children[1].row_type == "group"
+    assert m2.root.children[1].name == "MyGroup"
+    assert m2.root.children[1].children[0].row_type == "step"
+
+
+def test_load_old_duplicate_fields_payload_still_loads():
+    """Backward compat: a pre-fix save that has duplicate 'type'/'name'
+    in col_specs still loads without error. The setattr calls for the
+    orphan attributes are harmless because the row constructor already
+    set name/row_type from the fixed metadata fields."""
+    cols = [make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column()]
+    m = RowManager(columns=cols)
+    m.add_step(values={"name": "OldStep", "duration_s": 3.0})
+    g = m.add_group(name="OldGroup")
+    m.add_step(parent_path=g, values={"name": "Nested"})
+
+    # Simulate the OLD (buggy) format: inject duplicate type/name into
+    # col_specs and duplicate values into every row.
+    data = m.to_json()
+    # Insert fake type/name col_specs at the front (as old saves did)
+    data["columns"] = (
+        [{"id": "type", "cls": "pluggable_protocol_tree.builtins.type_column.TypeColumnModel"},
+         {"id": "name", "cls": "pluggable_protocol_tree.builtins.name_column.NameColumnModel"}]
+        + data["columns"]
+    )
+    # fields = ["depth", "uuid", "type", "name", "type", "name", "id", "duration_s"]
+    # Insert the duplicated fields after the fixed prefix.
+    data["fields"] = (
+        data["fields"][:4]                     # depth, uuid, type, name
+        + ["type", "name"]                     # duplicates (old format)
+        + data["fields"][4:]                   # remaining ordinary columns
+    )
+    # Inject duplicate values into each row at the right position.
+    new_rows = []
+    for row in data["rows"]:
+        # row[:4] = depth, uuid, type, name; row[4:] = ordinary col values
+        new_row = list(row[:4]) + [row[2], row[3]] + list(row[4:])
+        new_rows.append(new_row)
+    data["rows"] = new_rows
+
+    # Load with current column set — must not raise.
+    nm = RowManager.from_json(data, columns=list(cols))
+    assert nm.root.children[0].name == "OldStep"
+    assert nm.root.children[0].row_type == "step"
+    assert nm.root.children[0].duration_s == 3.0
+    assert nm.root.children[1].name == "OldGroup"
+    assert nm.root.children[1].row_type == "group"
+    assert nm.root.children[1].children[0].name == "Nested"

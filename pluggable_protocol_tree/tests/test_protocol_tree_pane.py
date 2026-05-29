@@ -367,7 +367,10 @@ def test_pane_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
                         lambda *a, **kw: (str(save_path), ""))
     pane.save_to_dialog()
     payload = json.loads(save_path.read_text())
-    assert payload["columns"][0]["id"] == "type"
+    # After the dedup fix, type/name are NOT in col_specs — they are encoded
+    # in the fixed row-metadata fields (positions 2 and 3). The first ordinary
+    # column is now "id" (the type/name builtins are filtered out).
+    assert payload["columns"][0]["id"] == "id"
 
 
 def test_pane_stub_mode_buttons_log_only(qapp):
@@ -1265,6 +1268,77 @@ def test_import_into_selected_group_noop_when_no_group_selected(qapp,
         lambda *a, **k: called.append(True) or ("", ""))
     pane.import_into_selected_group()
     assert called == []                        # never even opened the dialog
+
+
+def test_import_into_selected_group_adds_top_level_rows(qapp, tmp_path,
+                                                         monkeypatch):
+    """Selecting a group + importing -> the imported protocol's
+    top-level rows are merged under the selected group. Nested rows
+    are NOT recursively imported."""
+    import json as _json
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.models.row_manager import RowManager
+
+    # Build a target pane with one group selected.
+    cols = [make_type_column(), make_name_column()]
+    pane = ptp.ProtocolTreePane(cols)
+    target_path = pane.manager.add_group(name="Dest")
+    pane.manager.selection = [tuple(target_path)]
+
+    # Build an "imported" protocol via the actual serializer: one
+    # top-level step and one top-level group (the group's nested
+    # contents must be ignored per the deep-import-out-of-scope rule).
+    src = RowManager(columns=cols)
+    src.add_step(values={"name": "imported_step"})
+    inner_group = src.add_group(name="ImportedGroup")
+    src.add_step(parent_path=inner_group, values={"name": "should_be_skipped"})
+    file_data = src.to_json()
+    f = tmp_path / "p.json"
+    f.write_text(_json.dumps(file_data), encoding="utf-8")
+
+    # Stub the file-dialog to return our file.
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: (str(f), ""))
+
+    pane.import_into_selected_group()
+
+    # The target group now has exactly two new direct children:
+    # the imported step and the imported (empty) group.
+    dest = pane.manager.get_row(target_path)
+    assert len(dest.children) == 2
+    # First merged child: the step.
+    assert dest.children[0].row_type == "step"
+    assert dest.children[0].name == "imported_step"
+    # Second merged child: the group, but with NO children.
+    assert dest.children[1].row_type == "group"
+    assert dest.children[1].name == "ImportedGroup"
+    assert len(dest.children[1].children) == 0
+
+
+def test_import_into_selected_group_noop_on_unreadable_file(qapp,
+                                                              monkeypatch):
+    """A broken file selection -> the method returns without raising
+    and without mutating the tree."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    target_path = pane.manager.add_group(name="Dest")
+    pane.manager.selection = [tuple(target_path)]
+
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: ("/non/existent.json", ""))
+
+    before = len(pane.manager.get_row(target_path).children)
+    pane.import_into_selected_group()                # must not raise
+    after = len(pane.manager.get_row(target_path).children)
+    assert before == after
 
 
 def test_delete_last_step_removes_last_top_level_step(qapp):

@@ -83,13 +83,22 @@ def _build_sample_manager():
 
 
 def test_resolve_columns_round_trips_all_ppt3_builtins():
-    """Every column factory in the canonical PPT-3 set must round-trip
-    through to_json -> resolve_columns with the same col_ids in the
-    same order."""
+    """Every non-reserved column factory in the canonical PPT-3 set must
+    round-trip through to_json -> resolve_columns with the same col_ids in
+    the same order.
+
+    After the dedup fix, type/name are NOT stored in col_specs (they are
+    encoded in the fixed row-metadata prefix), so resolve_columns returns
+    only the non-reserved columns.
+    """
+    from pluggable_protocol_tree.services.persistence import (
+        _RESERVED_ROW_METADATA_FIELDS,
+    )
     rm = _build_sample_manager()
     payload = rm.to_json()
     cols = resolve_columns(payload)
-    expected_ids = [c.model.col_id for c in _all_ppt3_columns()]
+    expected_ids = [c.model.col_id for c in _all_ppt3_columns()
+                    if c.model.col_id not in _RESERVED_ROW_METADATA_FIELDS]
     assert [c.model.col_id for c in cols] == expected_ids
 
 
@@ -145,12 +154,19 @@ def test_resolve_columns_missing_cls_field_raises():
 
 
 def test_from_file_loads_manager_with_resolved_columns(tmp_path: Path):
+    from pluggable_protocol_tree.services.persistence import (
+        _RESERVED_ROW_METADATA_FIELDS,
+    )
     rm = _build_sample_manager()
     path = tmp_path / "protocol.json"
     path.write_text(json.dumps(rm.to_json()))
 
     session = ProtocolSession.from_file(str(path), with_demo_hardware=False)
-    assert len(session.manager.columns) == len(_all_ppt3_columns())
+    # After the dedup fix, type/name are NOT stored in col_specs, so
+    # resolve_columns returns only the non-reserved columns (14 - 2 = 12).
+    expected_count = sum(1 for c in _all_ppt3_columns()
+                         if c.model.col_id not in _RESERVED_ROW_METADATA_FIELDS)
+    assert len(session.manager.columns) == expected_count
     assert len(session.manager.root.children) == 2
     assert session.manager.root.children[0].name == "S1"
     assert session.manager.root.children[1].name == "S2"
