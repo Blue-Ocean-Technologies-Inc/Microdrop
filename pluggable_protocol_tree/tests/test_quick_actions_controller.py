@@ -105,6 +105,26 @@ def test_click_on_disabled_button_does_not_execute(qapp):
     assert a.calls == 0
 
 
+def test_controller_skips_actions_not_in_bar_buttons(qapp):
+    """If QuickActionBar dropped a duplicate, the controller's iteration
+    must NOT raise KeyError. It silently skips actions whose action_id
+    isn't a key in bar.buttons."""
+    a = _ToggleAction(action_id="dup", icon_text="add", tooltip="")
+    b = _ToggleAction(action_id="dup", icon_text="del", tooltip="")
+    pane = _FakePane()
+    bar = QuickActionBar(actions=[a, b])      # bar drops the second
+    # Controller must accept the full actions list without raising.
+    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a, b])
+    ctrl.refresh_enabled()
+    pane.protocol_running_changed.emit(True)
+    pane.protocol_running_changed.emit(False)
+    pane.selection_changed.emit()
+    # Clicking the (only) button fires only the first action.
+    bar.buttons["dup"].click()
+    assert a.calls == 1
+    assert b.calls == 0
+
+
 def test_buggy_action_does_not_break_other_buttons(qapp, caplog):
     class _Boom(BaseQuickAction):
         def on_execute_action(self, ctx):

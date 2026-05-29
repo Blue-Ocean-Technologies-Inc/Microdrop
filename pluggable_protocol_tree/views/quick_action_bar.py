@@ -34,6 +34,11 @@ class QuickActionBar(QWidget):
         icon_font = QFont(ICON_FONT_FAMILY)
         icon_font.setPixelSize(20)
         for action in sorted_actions:
+            if action.action_id in self.buttons:
+                logger.warning(
+                    f"quick-action duplicate action_id {action.action_id!r}: "
+                    f"keeping first contribution; skipping subsequent entry.")
+                continue
             btn = QToolButton()
             btn.setText(action.icon_text)
             btn.setFont(icon_font)
@@ -62,8 +67,18 @@ class QuickActionsController:
         self._pane = pane
         self._actions = list(actions)
         self._is_running = False
-        # Wire button clicks.
+        # Wire button clicks. Only wire the first action per action_id —
+        # duplicate contributions were already dropped by QuickActionBar,
+        # so iterating self._actions here (the full caller-supplied list)
+        # could otherwise double-connect the same button for two actions
+        # that share an id.
+        _wired_ids: set = set()
         for action in self._actions:
+            if action.action_id not in bar.buttons:
+                continue
+            if action.action_id in _wired_ids:
+                continue
+            _wired_ids.add(action.action_id)
             btn = bar.buttons[action.action_id]
             btn.clicked.connect(lambda _checked=False, a=action: self._execute(a))
         # Wire pane signals (drives re-enable + running state).
@@ -85,7 +100,13 @@ class QuickActionsController:
 
     def refresh_enabled(self) -> None:
         ctx = self._build_ctx()
+        _seen: set = set()
         for action in self._actions:
+            if action.action_id not in self._bar.buttons:
+                continue
+            if action.action_id in _seen:
+                continue
+            _seen.add(action.action_id)
             try:
                 enabled = bool(action.is_enabled(ctx)) and not ctx.is_running
             except Exception as e:                # pragma: no cover - defensive
@@ -97,6 +118,8 @@ class QuickActionsController:
 
     def _execute(self, action) -> None:
         ctx = self._build_ctx()
+        if action.action_id not in self._bar.buttons:
+            return
         if ctx.is_running or not self._bar.buttons[action.action_id].isEnabled():
             # The shortcut path bypasses Qt's enabled-state gate; gate again here.
             return
@@ -109,6 +132,8 @@ class QuickActionsController:
     def _wire_shortcuts(self) -> None:
         claimed = {}                              # shortcut str -> action_id
         for action in self._actions:
+            if action.action_id not in self._bar.buttons:
+                continue
             key_str = (action.shortcut or "").strip()
             if not key_str:
                 continue

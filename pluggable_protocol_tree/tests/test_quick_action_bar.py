@@ -37,3 +37,16 @@ def test_button_text_is_icon_text_and_tooltip_matches(qapp):
     b = bar.buttons["add_step"]
     assert b.text() == "add"
     assert b.toolTip() == "Add step below selection"
+
+
+def test_bar_skips_duplicate_action_id_and_logs_warning(qapp, caplog):
+    """Two contributions with the same action_id is a programming bug
+    in the contributing plugins. The bar logs a warning and keeps the
+    first one (priority-sorted); the duplicate is dropped from both
+    self.buttons AND the visible layout."""
+    bar = QuickActionBar(actions=[
+        _make("add_step", priority=10),
+        _make("add_step", priority=20),
+    ])
+    assert list(bar.buttons.keys()) == ["add_step"]
+    assert "add_step" in caplog.text

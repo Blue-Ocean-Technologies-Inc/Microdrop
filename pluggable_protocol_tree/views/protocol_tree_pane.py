@@ -74,7 +74,7 @@ def _get_report_browser_dialog_cls():
             ReportBrowserDialog,
         )
         return ReportBrowserDialog
-    except Exception:                             # pragma: no cover - defensive
+    except ImportError:                           # pragma: no cover - defensive
         return None
 
 
