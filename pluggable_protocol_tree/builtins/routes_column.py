@@ -72,11 +72,10 @@ class RoutesColumnModel(BaseColumnModel):
 
 
 class RoutesSummaryView(BaseColumnView):
-    """Read-only cell. '0 routes' / '1 route' / 'N routes'."""
+    """Read-only cell. '0' / '1' / 'N'."""
 
     def format_display(self, value, row):
-        n = len(value or [])
-        return f"{n} route" + ("" if n == 1 else "s")
+        return str(len(value or []))
 
     def get_flags(self, row):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable

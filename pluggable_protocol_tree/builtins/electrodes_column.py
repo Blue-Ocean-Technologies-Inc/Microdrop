@@ -20,11 +20,10 @@ class ElectrodesColumnModel(BaseColumnModel):
 
 
 class ElectrodesSummaryView(BaseColumnView):
-    """Read-only cell. Shows '0 electrodes' / '1 electrode' / 'N electrodes'."""
+    """Read-only cell. Shows '0' / '1' / 'N'."""
 
     def format_display(self, value, row):
-        n = len(value or [])
-        return f"{n} electrode" + ("" if n == 1 else "s")
+        return str(len(value or []))
 
     def get_flags(self, row):
         # NOT editable — no ItemIsEditable flag.
