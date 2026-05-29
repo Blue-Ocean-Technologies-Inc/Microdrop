@@ -9,12 +9,16 @@ per-action enabled state, and keyboard-shortcut wiring.
 from typing import Dict, List
 
 from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QFont
+from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QHBoxLayout, QToolButton, QWidget
 
+from logger.logger_service import get_logger
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
+from pluggable_protocol_tree.models.quick_action import QuickActionCtx
+
+logger = get_logger(__name__)
 
 
 class QuickActionBar(QWidget):
@@ -43,12 +47,6 @@ class QuickActionBar(QWidget):
 # --- controller ----------------------------------------------------
 
 
-from logger.logger_service import get_logger
-from pluggable_protocol_tree.models.quick_action import QuickActionCtx
-
-logger = get_logger(__name__)
-
-
 class QuickActionsController:
     """Wires a QuickActionBar to a ProtocolTreePane.
 
@@ -71,6 +69,8 @@ class QuickActionsController:
         # Wire pane signals (drives re-enable + running state).
         pane.selection_changed.connect(self.refresh_enabled)
         pane.protocol_running_changed.connect(self._on_running_changed)
+        self.shortcuts = []
+        self._wire_shortcuts()
         self.refresh_enabled()
 
     def _build_ctx(self) -> QuickActionCtx:
@@ -105,3 +105,22 @@ class QuickActionsController:
         except Exception as e:
             logger.error(
                 f"quick-action {action.action_id!r} raised: {e}", exc_info=True)
+
+    def _wire_shortcuts(self) -> None:
+        claimed = {}                              # shortcut str -> action_id
+        for action in self._actions:
+            key_str = (action.shortcut or "").strip()
+            if not key_str:
+                continue
+            existing = claimed.get(key_str)
+            if existing is not None:
+                logger.warning(
+                    f"quick-action shortcut conflict on {key_str!r}: "
+                    f"{existing!r} already registered; skipping "
+                    f"{action.action_id!r}.")
+                continue
+            claimed[key_str] = action.action_id
+            qs = QShortcut(QKeySequence(key_str), self._pane)
+            qs.setContext(Qt.WidgetWithChildrenShortcut)
+            qs.activated.connect(lambda a=action: self._execute(a))
+            self.shortcuts.append(qs)
