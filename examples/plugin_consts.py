@@ -21,6 +21,7 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
+from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
@@ -74,6 +75,7 @@ EXPERIMENTAl_PLUGINS = [
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     PeripheralProtocolControlsPlugin,
+    ProtocolQuickActionToolsPlugin,
     VideoProtocolControlsPlugin,
 ]
 
