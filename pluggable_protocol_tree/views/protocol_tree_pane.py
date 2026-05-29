@@ -1373,13 +1373,27 @@ class ProtocolTreePane(QWidget):
 
     def _insert_position_after_selection(self):
         """Return ``(parent_path, index)`` for "insert after current
-        selection". With nothing selected -> ``((), None)`` (append to
-        root). With one selection at path ``(p..., i)`` -> ``((p...,),
-        i + 1)``. With multiple selections we use the last one."""
+        selection". Rules:
+
+        * No selection  -> ``((), None)``  (append at root).
+        * Single GroupRow selected  -> ``(group_path, None)``  (append
+          INSIDE the group as its last child).
+        * Single step (or last of multi-selection)  -> ``(parent_path,
+          step_index + 1)``  (insert immediately after).
+        """
         sel = list(self.manager.selection or [])
         if not sel:
             return ((), None)
         last = tuple(sel[-1])
+        # Single-group selection -> append inside the group.
+        if len(sel) == 1:
+            try:
+                row = self.manager.get_row(last)
+            except (IndexError, AttributeError):
+                row = None
+            if isinstance(row, GroupRow):
+                return (last, None)
+        # Step (or fallback for multi-selection): insert after at parent.
         return (last[:-1], last[-1] + 1)
 
     def add_step_after_selection(self):

@@ -1409,3 +1409,77 @@ def test_delete_last_step_nested_empty_group_deletes_inner_empty_group(qapp):
     assert len(group.children) == 1
     # Remaining is the step inside G — the inner empty group is gone.
     assert not isinstance(group.children[0], GroupRow)
+
+
+def test_add_step_after_selection_with_group_selected_appends_inside_group(qapp):
+    """Single-group selection -> new step lands inside the group, not
+    at the root level after it."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()                       # step at (0,)
+    group_path = pane.manager.add_group(name="G") # group at (1,)
+    pane.manager.selection = [tuple(group_path)]
+
+    pane.add_step_after_selection()
+
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 1               # new step is inside G
+    # Top-level layout unchanged: still just step + group.
+    assert len(pane.manager.root.children) == 2
+
+
+def test_add_group_after_selection_with_group_selected_appends_inside_group(qapp):
+    """Same rule applies to add_group: single-group selection -> the
+    new group nests inside as a sub-group."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.models.row import GroupRow
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()
+    group_path = pane.manager.add_group(name="G")
+    pane.manager.selection = [tuple(group_path)]
+
+    pane.add_group_after_selection()
+
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 1
+    assert isinstance(group.children[0], GroupRow)
+    assert len(pane.manager.root.children) == 2
+
+
+def test_add_step_after_selection_with_multi_selection_uses_last(qapp):
+    """Multi-selection with the last being a group does NOT trigger
+    the "append inside" rule — only single-group selection does."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    pane.manager.add_step()                       # step at (0,)
+    group_path = pane.manager.add_group(name="G") # group at (1,)
+    # Select both — multi-selection.
+    pane.manager.selection = [(0,), tuple(group_path)]
+
+    pane.add_step_after_selection()
+
+    # New step is at root level (after the group), NOT inside G.
+    group = pane.manager.get_row(group_path)
+    assert len(group.children) == 0
+    assert len(pane.manager.root.children) == 3
+
+
+def test_add_step_after_selection_with_nested_group_selected_appends_inside(qapp):
+    """A nested group is still a group — selecting it appends inside,
+    same as a top-level group."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    outer = pane.manager.add_group(name="Outer")
+    inner = pane.manager.add_group(parent_path=outer, name="Inner")
+    pane.manager.selection = [tuple(inner)]
+
+    pane.add_step_after_selection()
+
+    inner_row = pane.manager.get_row(inner)
+    outer_row = pane.manager.get_row(outer)
+    assert len(inner_row.children) == 1            # step inside Inner
+    assert len(outer_row.children) == 1            # Outer still has only Inner
