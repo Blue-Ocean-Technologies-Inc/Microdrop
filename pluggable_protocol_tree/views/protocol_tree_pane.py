@@ -40,6 +40,9 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
 from pluggable_protocol_tree.models.row import GroupRow
+from pluggable_protocol_tree.services.persistence import (
+    _RESERVED_ROW_METADATA_FIELDS,
+)
 from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
@@ -1441,38 +1444,36 @@ class ProtocolTreePane(QWidget):
         except (OSError, ValueError) as e:
             logger.warning(f"import_into_selected_group: read failed: {e}")
             return
-        # Persistence schema: fields[:4] = ["depth", "uuid", "type",
-        # "name"]; remaining entries are column ids. After the dedup
-        # fix in persistence.py, type/name are NOT duplicated as ordinary
-        # columns, so the fixed indices below are stable.
+        # Look up positions by name so we stay correct if the
+        # persistence schema reorders or adds fixed metadata.
         fields = data.get("fields") or []
-        if len(fields) < 4:
-            return
-        DEPTH_IDX, TYPE_IDX, NAME_IDX = 0, 2, 3
-        col_field_ids = fields[4:]
+        try:
+            depth_idx = fields.index("depth")
+            type_idx = fields.index("type")
+            name_idx = fields.index("name")
+        except ValueError:
+            return            # malformed file — no fixed metadata
+        # (index, col_id) pairs for the column-value positions:
+        # everything except the reserved row-metadata fields.
+        col_field_positions = [
+            (i, fid) for i, fid in enumerate(fields)
+            if fid not in _RESERVED_ROW_METADATA_FIELDS
+        ]
 
         for row in (data.get("rows") or []):
-            # Top-level rows only (depth 0). Nested rows are not
-            # recursively imported in this PR — callers paste
-            # structurally identical protocols and the legacy did
-            # the same. Out of scope: deep-import.
-            if int(row[DEPTH_IDX]) != 0:
+            # Top-level only — nested rows are not recursively
+            # imported (deep-import out of scope; legacy parity).
+            if int(row[depth_idx]) != 0:
                 continue
-            if row[TYPE_IDX] == "group":
+            if row[type_idx] == "group":
                 self.manager.add_group(
-                    parent_path=target_path,
-                    name=row[NAME_IDX],
-                )
+                    parent_path=target_path, name=row[name_idx])
             else:
-                # add_step setattrs each value directly on the row,
-                # so we feed it the serialized form. Most builtin
-                # columns are identity-serialize (Str / Int / Float /
-                # List), so this round-trips correctly.
-                # Name comes from the fixed row-metadata field (not from
-                # col_field_ids, since the name column is filtered out of
-                # col_specs by the dedup fix in persistence.py).
-                values = dict(zip(col_field_ids, row[4:]))
-                values["name"] = row[NAME_IDX]
+                values = {fid: row[i] for i, fid in col_field_positions}
+                # Name is filtered from the column-values list by the
+                # dedup in services/persistence.py; inject it from
+                # the fixed metadata position so the imported step
+                # keeps its name instead of defaulting to "Step".
+                values["name"] = row[name_idx]
                 self.manager.add_step(
-                    parent_path=target_path, values=values,
-                )
+                    parent_path=target_path, values=values)

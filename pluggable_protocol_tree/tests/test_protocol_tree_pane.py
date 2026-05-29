@@ -1516,3 +1516,52 @@ def test_add_step_after_selection_with_nested_group_selected_appends_inside(qapp
     outer_row = pane.manager.get_row(outer)
     assert len(inner_row.children) == 1            # step inside Inner
     assert len(outer_row.children) == 1            # Outer still has only Inner
+
+
+def test_import_into_selected_group_robust_to_schema_field_order(qapp,
+                                                                  tmp_path,
+                                                                  monkeypatch):
+    """If a saved file ever reorders the leading-metadata fields,
+    the importer must still merge correctly because positions are
+    looked up by name, not hardcoded."""
+    import json as _json
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    pane = ptp.ProtocolTreePane(
+        [make_type_column(), make_name_column()])
+    target_path = pane.manager.add_group(name="Dest")
+    pane.manager.selection = [tuple(target_path)]
+
+    # Synthetic file: shuffle the fixed metadata around so
+    # `depth` is at position 1 and `type` is at position 0,
+    # plus one ordinary column at position 3.
+    file_data = {
+        "schema_version": 1,
+        "protocol_metadata": {},
+        "row_flags": {},
+        "columns": [],
+        "fields": ["type", "depth", "name", "uuid"],
+        "rows": [
+            ["step", 0, "imported_step", "u-1"],
+            ["group", 0, "imported_group", "u-2"],
+            ["step", 1, "nested_skip", "u-3"],   # nested -> skipped
+        ],
+    }
+    f = tmp_path / "p.json"
+    f.write_text(_json.dumps(file_data), encoding="utf-8")
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
+        "getOpenFileName",
+        lambda *a, **k: (str(f), ""))
+
+    pane.import_into_selected_group()
+
+    dest = pane.manager.get_row(target_path)
+    assert len(dest.children) == 2
+    assert dest.children[0].row_type == "step"
+    assert dest.children[0].name == "imported_step"
+    assert dest.children[1].row_type == "group"
+    assert dest.children[1].name == "imported_group"
+    assert len(dest.children[1].children) == 0
