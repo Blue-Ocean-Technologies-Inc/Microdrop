@@ -24,5 +24,21 @@ class ProtocolQuickActionToolsPlugin(Plugin):
     contributed_quick_actions = List(contributes_to=PROTOCOL_QUICK_ACTIONS)
 
     def _contributed_quick_actions_default(self):
-        # Filled in by task 12.
-        return []
+        from .quick_actions.add_group import make_add_group_action
+        from .quick_actions.add_step import make_add_step_action
+        from .quick_actions.browse_reports import make_browse_reports_action
+        from .quick_actions.delete_row import make_delete_row_action
+        from .quick_actions.import_protocol import make_import_protocol_action
+        from .quick_actions.new_protocol import make_new_protocol_action
+        from .quick_actions.open_protocol import make_open_protocol_action
+        from .quick_actions.save_protocol import make_save_protocol_action
+        return [
+            make_add_step_action(),
+            make_delete_row_action(),
+            make_add_group_action(),
+            make_import_protocol_action(),
+            make_open_protocol_action(),
+            make_save_protocol_action(),
+            make_new_protocol_action(),
+            make_browse_reports_action(),
+        ]
