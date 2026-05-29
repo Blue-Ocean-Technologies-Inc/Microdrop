@@ -1172,3 +1172,30 @@ def test_pane_emits_selection_changed_on_tree_selection(qapp):
     sm = pane.widget.tree.selectionModel()
     sm.selectionChanged.emit(QItemSelection(), QItemSelection())
     assert fired == [True]
+
+
+def test_pane_mounts_quick_action_bar_when_actions_passed(qapp):
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.models.quick_action import BaseQuickAction
+
+    a = BaseQuickAction(action_id="add_step", icon_text="add",
+                        tooltip="Add step", priority=10)
+    b = BaseQuickAction(action_id="save_protocol", icon_text="save",
+                        tooltip="Save", priority=60)
+    pane = ptp.ProtocolTreePane([make_name_column()], quick_actions=[a, b])
+    assert pane.quick_action_bar is not None
+    assert set(pane.quick_action_bar.buttons.keys()) == {"add_step", "save_protocol"}
+    assert pane.quick_actions_controller is not None
+
+
+def test_pane_skips_quick_action_bar_when_no_actions(qapp):
+    """No actions contributed (e.g. demo, headless test) -> no bar
+    widget mounted; controller is None. This is the architectural
+    commitment: the tree plugin ships zero builtins."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    pane = ptp.ProtocolTreePane([make_name_column()])
+    assert pane.quick_action_bar is None
+    assert pane.quick_actions_controller is None

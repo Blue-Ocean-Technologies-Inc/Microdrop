@@ -96,6 +96,7 @@ class ProtocolTreePane(QWidget):
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         logging_device_context_provider=None,
+        quick_actions=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -136,6 +137,24 @@ class ProtocolTreePane(QWidget):
         self._build_status_bar()
         self._build_navigation_bar()
         self._build_experiment_bar()
+
+        # Quick-actions toolbar (bar + controller). Both are None when no
+        # contributions exist (demo / headless test environments) so the
+        # pane stays usable with no chrome below the tree. Constructed
+        # before _build_layout() so it can be inserted in the layout.
+        from pluggable_protocol_tree.views.quick_action_bar import (
+            QuickActionBar, QuickActionsController,
+        )
+        if quick_actions:
+            self.quick_action_bar = QuickActionBar(
+                actions=list(quick_actions), parent=self)
+            self.quick_actions_controller = QuickActionsController(
+                bar=self.quick_action_bar, pane=self,
+                actions=list(quick_actions))
+        else:
+            self.quick_action_bar = None
+            self.quick_actions_controller = None
+
         self._build_layout()
 
         self.executor = self._build_executor(executor_factory)
@@ -250,6 +269,8 @@ class ProtocolTreePane(QWidget):
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.widget)
+        if self.quick_action_bar is not None:
+            layout.addWidget(self.quick_action_bar)
 
     def _build_executor(self, executor_factory):
         factory = executor_factory or self._default_executor_factory
