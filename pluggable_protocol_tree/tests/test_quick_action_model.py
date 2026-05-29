@@ -45,3 +45,17 @@ def test_quick_action_ctx_defaults():
     ctx = QuickActionCtx(pane=MagicMock())
     assert ctx.selected_paths == ()
     assert ctx.is_running is False
+
+
+def test_subclass_can_add_extra_trait():
+    """Plugin authors will subclass BaseQuickAction and frequently add
+    their own bookkeeping traits (e.g. cached state). Catch the
+    HasStrictTraits regression: subclassing must remain open."""
+    from traits.api import Str
+
+    class _MyAction(BaseQuickAction):
+        label = Str("default")
+
+    a = _MyAction(action_id="a", label="hello")
+    assert a.label == "hello"
+    assert a.action_id == "a"
