@@ -461,3 +461,142 @@ def test_routes_handler_duration_mode_gated_on_controls_flag():
     also gated on the flag), making the step run short."""
     assert _captured_repeat_duration_s(controls=False) == 0.0   # count mode
     assert _captured_repeat_duration_s(controls=True) == 7.0     # duration mode
+
+
+def test_cooperative_sleep_returns_early_on_phase_advance_event():
+    """_cooperative_sleep wakes promptly when phase_advance_event is set,
+    same shape as the existing stop_event wake — return cleanly (do NOT
+    raise)."""
+    import threading
+    import time
+    from pluggable_protocol_tree.builtins.routes_column import (
+        _cooperative_sleep,
+    )
+    stop_event = threading.Event()
+    pause_event = None
+    advance_event = threading.Event()
+
+    def _set_after(delay):
+        time.sleep(delay)
+        advance_event.set()
+
+    threading.Thread(target=_set_after, args=(0.05,), daemon=True).start()
+    t0 = time.monotonic()
+    # 5 second dwell, but the advance_event fires at ~50 ms
+    _cooperative_sleep(5.0, stop_event, pause_event,
+                       phase_advance_event=advance_event)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 0.5, f"expected early return, elapsed={elapsed:.2f}s"
+
+
+def test_cooperative_sleep_phase_advance_event_kwarg_is_optional():
+    """Callers that don't care about phase early-advance can omit the
+    kwarg and get the original behaviour."""
+    import threading
+    import time
+    from pluggable_protocol_tree.builtins.routes_column import (
+        _cooperative_sleep,
+    )
+    stop_event = threading.Event()
+    t0 = time.monotonic()
+    _cooperative_sleep(0.1, stop_event, None)
+    elapsed = time.monotonic() - t0
+    assert 0.05 <= elapsed < 0.5      # roughly the requested dwell
+
+
+def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
+    """RoutesHandler must clear the event at the TOP of each phase loop
+    iteration so a set from phase N doesn't leak into phase N+1."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    from pluggable_protocol_tree.builtins.routes_column import (
+        RoutesColumnHandler,
+    )
+
+    handler = RoutesColumnHandler()
+    advance_event = threading.Event()
+    advance_event.set()                # simulate stale set from prior phase
+
+    row = MagicMock()
+    row.routes = []                    # no routes -> single static phase
+    row.electrodes = ["e1"]
+    row.duration_s = 0.001
+    row.route_repetitions = 1
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 0.0
+    row.repeat_duration_controls = False
+    row.linear_repeats = False
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True          # skip hardware publish + ack wait
+    proto.scratch = {"electrode_to_channel": {"e1": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = advance_event
+    ctx.step_phases_done_event = threading.Event()
+    ctx.wait_for = MagicMock()
+
+    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
+               lambda **kw: None):
+        handler.on_step(row, ctx)
+    # Even though the test pre-set the event, RoutesHandler must clear
+    # it before entering the dwell (otherwise the single-phase wouldn't
+    # actually sleep). Confirm by asserting the event ended up CLEARED
+    # after on_step returns (Routes also has nothing left to set after
+    # the loop exits).
+    assert advance_event.is_set() is False
+
+
+def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
+    """After Routes finishes its per-phase loop (and any in-duration-mode
+    hold), step_phases_done_event must be set so sibling handlers can
+    exit their wait loops."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    from pluggable_protocol_tree.builtins.routes_column import (
+        RoutesColumnHandler,
+    )
+
+    handler = RoutesColumnHandler()
+    row = MagicMock()
+    row.routes = []
+    row.electrodes = ["e1"]
+    row.duration_s = 0.001
+    row.route_repetitions = 1
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 0.0
+    row.repeat_duration_controls = False
+    row.linear_repeats = False
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True
+    proto.scratch = {"electrode_to_channel": {"e1": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.wait_for = MagicMock()
+
+    assert ctx.step_phases_done_event.is_set() is False
+    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
+               lambda **kw: None):
+        handler.on_step(row, ctx)
+    assert ctx.step_phases_done_event.is_set() is True
