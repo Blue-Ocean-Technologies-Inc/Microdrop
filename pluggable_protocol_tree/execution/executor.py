@@ -309,7 +309,13 @@ class ProtocolExecutor(HasTraits):
         broadcast-to-multiple-waiters semantics. Same topic in
         different buckets is fine (sequential).
         """
-        step_ctx = StepContext(row=row, protocol=proto_ctx)
+        # Fresh Events per step — never reused across steps so a stale
+        # `set` from a prior step can't leak in.
+        step_ctx = StepContext(
+            row=row, protocol=proto_ctx,
+            phase_advance_event=threading.Event(),
+            step_phases_done_event=threading.Event(),
+        )
         # Detect within-bucket topic collisions before opening any boxes.
         per_priority_topics: dict[int, dict[str, str]] = {}  # priority → topic → col_id
         for col in cols:

@@ -184,6 +184,18 @@ class StepContext(HasTraits):
                      desc="step-scoped scratch (cleared per step)")
     _mailboxes = Dict(Str, Instance(Mailbox))
 
+    phase_advance_event = Instance(threading.Event,
+        desc="Set by any handler to cut the current phase short. "
+             "Cleared on each phase boundary by RoutesHandler so a set "
+             "carries through to the current phase only. "
+             "RoutesHandler._cooperative_sleep wakes on it the same way "
+             "it wakes on stop_event.")
+    step_phases_done_event = Instance(threading.Event,
+        desc="Set by RoutesHandler once after its per-phase loop returns. "
+             "Lets sibling handlers in the same parallel bucket (notably "
+             "VolumeThresholdHandler) exit their wait loops instead of "
+             "blocking forever on a never-arriving next phase.")
+
     def open_mailbox(self, topic: str) -> None:
         """Pre-register a mailbox for ``topic``. Called by the executor
         at step start for every topic in the union of all handlers'
