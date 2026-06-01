@@ -21,6 +21,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
     name = Str("Protocol (pluggable)")
 
     columns = List(Instance(IColumn))
+    quick_actions = List(desc="Quick actions to mount under the tree.")
 
     def create_contents(self, parent):
         # Local imports to avoid pulling Qt at plugin-import time.
@@ -66,6 +67,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             sticky_manager=sticky_manager,
             device_viewer_sync=sync,
             logging_device_context_provider=_logging_device_context,
+            quick_actions=list(self.quick_actions),
             parent=parent,
         )
         pane.protocol_state_tracker.dock_pane = self

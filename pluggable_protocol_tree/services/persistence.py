@@ -19,6 +19,12 @@ from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow
 from pluggable_protocol_tree.models._compound_adapters import _CompoundFieldAdapter
 
+# These four fields are written per-row from node.row_type / node.name /
+# node.uuid / nesting depth directly. The builtin type/name columns share
+# those col_ids — serializing them again would duplicate both the field name
+# in `fields` and the value in every row (a real bug observed in saved files).
+_RESERVED_ROW_METADATA_FIELDS = frozenset({"depth", "uuid", "type", "name"})
+
 
 def _persisted_cls_qualname(model) -> str:
     """The 'cls' qualname stored in column entries. For compound-field
@@ -39,6 +45,13 @@ def serialize_tree(root: GroupRow, columns: list, protocol_metadata=None) -> dic
     'electrode_to_channel'). Optional for backward compat with
     PPT-1/PPT-2 callers that don't pass it.
     """
+    # Filter out builtin columns whose col_id matches a reserved row-metadata
+    # field. Those values are already written from node.row_type / node.name /
+    # node.uuid / depth — serializing them as ordinary columns duplicates the
+    # field name in `fields` and the value in every row.
+    columns = [c for c in columns
+               if c.model.col_id not in _RESERVED_ROW_METADATA_FIELDS]
+
     col_specs = []
     for c in columns:
         spec = {

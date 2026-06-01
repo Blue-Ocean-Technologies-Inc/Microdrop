@@ -91,6 +91,7 @@ class ProtocolLoggingController:
         self._start_time = ""
         self._start_dt: Optional[_dt.datetime] = None
         self._generate_report = True
+        self.all_report_paths: list[Path] = []
 
     # --- executor signal wiring ---
     def attach(self, qsignals) -> None:
@@ -222,7 +223,7 @@ class ProtocolLoggingController:
                     notes=None, data_files=[json_path, csv_path])
                 report_path = LoggingReport.write_report(
                     self._device_context.experiment_directory, html)
-
+                self.all_report_paths.append(report_path)
                 logger.info(f"Report written to {report_path}")
 
         except Exception as e:
