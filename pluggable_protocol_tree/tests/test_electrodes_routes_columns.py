@@ -510,10 +510,10 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     from unittest.mock import MagicMock, patch
     import threading
     from pluggable_protocol_tree.builtins.routes_column import (
-        RoutesColumnHandler,
+        RoutesHandler,
     )
 
-    handler = RoutesColumnHandler()
+    handler = RoutesHandler()
     advance_event = threading.Event()
     advance_event.set()                # simulate stale set from prior phase
 
@@ -563,10 +563,10 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     from unittest.mock import MagicMock, patch
     import threading
     from pluggable_protocol_tree.builtins.routes_column import (
-        RoutesColumnHandler,
+        RoutesHandler,
     )
 
-    handler = RoutesColumnHandler()
+    handler = RoutesHandler()
     row = MagicMock()
     row.routes = []
     row.electrodes = ["e1"]
