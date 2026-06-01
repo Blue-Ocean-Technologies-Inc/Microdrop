@@ -618,3 +618,69 @@ def test_wait_for_timeout_message_names_topic():
     assert "dropbot/applied" in err          # WHAT timed out (topic)
     assert "Timed out after 0.05s" in err     # the timeout cause
     assert "Waiter" in err                    # which column
+
+
+def test_executor_start_extra_scratch_merges_after_protocol_metadata():
+    """`extra_scratch` is for runtime-only data (electrode areas etc.)
+    that must NOT be serialised into the protocol file. It merges into
+    proto_ctx.scratch AFTER protocol_metadata, so a key in extra_scratch
+    overrides one with the same name in protocol_metadata."""
+    from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+    from pluggable_protocol_tree.models.column import BaseColumnHandler
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    rm = RowManager(columns=[make_name_column()])
+    rm.add_step()
+    rm.protocol_metadata = {
+        "electrode_to_channel": {"e1": 1},
+        "override_me": "from_metadata",
+    }
+
+    seen = {}
+    class _PeekHandler(BaseColumnHandler):
+        priority = 50
+        def on_protocol_start(self, ctx):
+            seen.update(dict(ctx.scratch))
+
+    # Inject a snooping column.
+    rm.columns[0].handler = _PeekHandler()
+
+    exe = ProtocolExecutor(row_manager=rm)
+    exe.start(extra_scratch={
+        "electrode_areas": {"e1": 1.5, "e2": 2.0},
+        "override_me": "from_extra",
+    })
+    exe.wait(timeout=5.0)
+
+    # Both metadata + extra are present; extra wins on the conflict.
+    assert seen["electrode_to_channel"] == {"e1": 1}
+    assert seen["electrode_areas"] == {"e1": 1.5, "e2": 2.0}
+    assert seen["override_me"] == "from_extra"
+
+
+def test_executor_start_extra_scratch_optional_defaults_to_none():
+    """Callers that don't pass extra_scratch get the prior behaviour
+    (only protocol_metadata in scratch)."""
+    from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+    from pluggable_protocol_tree.models.column import BaseColumnHandler
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    rm = RowManager(columns=[make_name_column()])
+    rm.add_step()
+    rm.protocol_metadata = {"electrode_to_channel": {"e1": 1}}
+
+    seen = {}
+    class _PeekHandler(BaseColumnHandler):
+        priority = 50
+        def on_protocol_start(self, ctx):
+            seen.update(dict(ctx.scratch))
+
+    rm.columns[0].handler = _PeekHandler()
+
+    exe = ProtocolExecutor(row_manager=rm)
+    exe.start()
+    exe.wait(timeout=5.0)
+
+    assert seen == {"electrode_to_channel": {"e1": 1}}
