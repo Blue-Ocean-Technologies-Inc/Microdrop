@@ -144,6 +144,10 @@ class RoutesHandler(BaseColumnHandler):
         total_phases = len(phases)
         qsignals = getattr(ctx.protocol, "qsignals", None)
         for phase_idx, phase in enumerate(phases, start=1):
+            # Fresh slate: a handler set in phase N-1 must NOT carry
+            # over into phase N. Cleared before the stop/pause checks
+            # below so a stale set doesn't accidentally fire here.
+            ctx.phase_advance_event.clear()
             if stop_event.is_set():
                 break
             # Pause check at the phase boundary — block here so the
@@ -199,7 +203,8 @@ class RoutesHandler(BaseColumnHandler):
                 # snappy visual playback with no per-phase 5s stalls.
                 ctx.wait_for(electrode_state_change_publisher.topic, timeout=5.0)
 
-            _cooperative_sleep(per_phase_dwell, stop_event, pause_event)
+            _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
+                               phase_advance_event=ctx.phase_advance_event)
         # Route Reps Dur mode: after the full cycles, hold the last
         # phase's electrodes (no new publish) for the exact leftover so
         # total step time lands on the budget precisely.
@@ -214,18 +219,29 @@ class RoutesHandler(BaseColumnHandler):
                 _cooperative_sleep(pad, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
+        # Signal sibling parallel-bucket handlers (e.g.
+        # VolumeThresholdHandler) that the per-phase loop is done so
+        # they can exit their wait loops cleanly. Without this,
+        # handlers blocked in wait_for(ELECTRODES_STATE_CHANGE) for a
+        # next phase that will never come would block the bucket's
+        # ThreadPoolExecutor indefinitely.
+        ctx.step_phases_done_event.set()
 
 
-def _cooperative_sleep(seconds: float, stop_event, pause_event=None) -> None:
+def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
+                       phase_advance_event=None) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
     ``pause_event.wait_cleared()`` until the user resumes, then
-    continue with the remaining dwell. Returns early on stop or when
-    seconds reaches 0."""
+    continue with the remaining dwell. Returns early on stop, on
+    phase_advance_event (any handler can set it to cut the phase short),
+    or when seconds reaches 0."""
     remaining = seconds
     while remaining > 0:
         if stop_event.is_set():
+            return
+        if phase_advance_event is not None and phase_advance_event.is_set():
             return
         if pause_event is not None and pause_event.is_set():
             pause_event.wait_cleared()
@@ -244,3 +260,7 @@ def make_routes_column():
         view=RoutesSummaryView(),
         handler=RoutesHandler(),
     )
+
+
+# Alias used by PPT-25 tests and VolumeThresholdHandler references.
+RoutesColumnHandler = RoutesHandler
