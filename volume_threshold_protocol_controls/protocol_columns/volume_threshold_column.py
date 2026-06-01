@@ -2,11 +2,17 @@
 
 Single-file layout mirrors peripheral_protocol_controls's magnet_column
 and dropbot_protocol_controls's voltage / frequency / droplet columns.
-
-The handler is a stub in Task 5; the real on_step body lands in Task 6.
 """
 
+import json as _json
+
 from traits.api import Float
+
+from logger.logger_service import get_logger
+
+from dropbot_controller.consts import CAPACITANCE_UPDATED
+from device_viewer.consts import CALIBRATION_DATA
+from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
@@ -16,9 +22,46 @@ from pluggable_protocol_tree.views.columns.spinbox import (
 )
 
 from ..consts import (
+    CAP_POLL_TIMEOUT_S, PHASE_POLL_TIMEOUT_S,
     VOLUME_THRESHOLD_COL_ID, VOLUME_THRESHOLD_COL_NAME,
     VOLUME_THRESHOLD_DEFAULT,
 )
+
+logger = get_logger(__name__)
+
+
+def _parse_capacitance_pf(raw):
+    """Pull the numeric pF value out of a CAPACITANCE_UPDATED payload.
+    Returns None on any parse failure (handler skips and waits for the
+    next reading rather than crashing)."""
+    try:
+        data = _json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    cap_str = data.get("capacitance")
+    if not isinstance(cap_str, str):
+        return None
+    try:
+        return float(cap_str.split("pF")[0])
+    except (ValueError, AttributeError):
+        return None
+
+
+def _capacitance_per_unit_area(liquid, filler):
+    """liquid - filler when both are present, non-negative, and
+    liquid > filler. Returns None otherwise. Mirrors the legacy
+    ForceCalculationService.calculate_capacitance_per_unit_area and the
+    logging controller's _capacitance_per_unit_area helper."""
+    if liquid is None or filler is None:
+        return None
+    try:
+        liquid = float(liquid)
+        filler = float(filler)
+    except (TypeError, ValueError):
+        return None
+    if liquid < 0 or filler < 0 or liquid <= filler:
+        return None
+    return liquid - filler
 
 
 class VolumeThresholdColumnModel(BaseColumnModel):
@@ -46,19 +89,135 @@ class VolumeThresholdColumnView(DoubleSpinBoxColumnView):
     hidden_by_default = True
 
 
-class VolumeThresholdHandler(BaseColumnHandler):
-    """Stub. Task 6 fills in the on_step body that subscribes to
-    ELECTRODES_STATE_CHANGE / CAPACITANCE_UPDATED / CALIBRATION_DATA,
-    computes per-phase target capacitance, and sets
-    ctx.phase_advance_event when the threshold is met.
+_VOLUME_THRESHOLD_TOPICS = [
+    ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED, CALIBRATION_DATA,
+]
 
-    Priority 30 puts it in the SAME parallel bucket as RoutesHandler —
-    they run concurrently within the bucket so the handler can monitor
-    while Routes drives the phases.
+
+class VolumeThresholdHandler(BaseColumnHandler):
+    """Per-step volume threshold monitor (priority 30 — runs in
+    parallel with RoutesHandler).
+
+    Per phase:
+      * Read the actuated electrodes from the ELECTRODES_STATE_CHANGE
+        payload that RoutesHandler publishes.
+      * Drain any pending CALIBRATION_DATA messages and recompute
+        capacitance-per-unit-area.
+      * target = threshold * actuated_area * cpa
+      * Poll CAPACITANCE_UPDATED until current >= target -> set
+        ctx.phase_advance_event (RoutesHandler's _cooperative_sleep
+        wakes on it) -> loop back for the next phase boundary.
     """
 
     priority = 30
-    wait_for_topics = []                # populated in Task 6
+
+    def _wait_for_topics_default(self):
+        return list(_VOLUME_THRESHOLD_TOPICS)
+
+    def on_step(self, row, ctx):
+        threshold = float(getattr(row, "volume_threshold", 0.0) or 0.0)
+        if threshold <= 0:
+            return
+        if getattr(ctx.protocol, "preview_mode", False):
+            return
+        electrode_areas = dict(
+            ctx.protocol.scratch.get("electrode_areas") or {}
+        )
+        if not electrode_areas:
+            logger.info(
+                "volume_threshold: no electrode_areas in scratch; "
+                "skipping (likely a demo / headless run)"
+            )
+            return
+
+        stop_event = ctx.protocol.stop_event
+        cpa = self._latest_cpa(ctx, default=None)
+
+        while (not stop_event.is_set()
+               and not ctx.step_phases_done_event.is_set()):
+            try:
+                payload = ctx.wait_for(
+                    ELECTRODES_STATE_CHANGE,
+                    timeout=PHASE_POLL_TIMEOUT_S,
+                )
+            except TimeoutError:
+                # Wake up periodically to recheck stop / phases-done.
+                continue
+
+            # Phase boundary observed — refresh calibration if a new
+            # CALIBRATION_DATA arrived since last time.
+            cpa = self._latest_cpa(ctx, default=cpa)
+            try:
+                electrodes = _json.loads(payload).get("electrodes") or []
+            except (TypeError, ValueError):
+                continue
+
+            actuated_area = sum(
+                float(electrode_areas.get(e, 0.0)) for e in electrodes
+            )
+            if cpa is None or actuated_area <= 0.0:
+                # Cannot compute target — wait for the next phase.
+                continue
+
+            target = threshold * actuated_area * cpa
+            self._monitor_until_threshold(ctx, target)
+            # If the advance event was set, the threshold was crossed —
+            # our job for this step is done; RoutesHandler will clear
+            # the event and advance the phase.
+            if ctx.phase_advance_event.is_set():
+                return
+
+    @staticmethod
+    def _monitor_until_threshold(ctx, target):
+        """Loop wait_for(CAPACITANCE_UPDATED) until current_cap >=
+        target, the step's phases finish, or stop fires. Sets
+        ctx.phase_advance_event on hit; returns silently otherwise so
+        the outer loop can pick up the next phase boundary."""
+        stop_event = ctx.protocol.stop_event
+        while (not stop_event.is_set()
+               and not ctx.step_phases_done_event.is_set()):
+            try:
+                cap_payload = ctx.wait_for(
+                    CAPACITANCE_UPDATED, timeout=CAP_POLL_TIMEOUT_S,
+                )
+            except TimeoutError:
+                return
+            current = _parse_capacitance_pf(cap_payload)
+            if current is None:
+                continue
+            if current >= target:
+                ctx.phase_advance_event.set()
+                return
+
+    @staticmethod
+    def _latest_cpa(ctx, default):
+        """Drain any pending CALIBRATION_DATA messages and return the
+        most recent capacitance-per-unit-area, or `default` if no
+        valid calibration arrived. Returns immediately when the
+        mailbox is empty (zero timeout)."""
+        latest = default
+        while True:
+            try:
+                raw = ctx.wait_for(CALIBRATION_DATA, timeout=0.0)
+            except TimeoutError:
+                return latest
+            try:
+                payload = _json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            value = _capacitance_per_unit_area(
+                payload.get("liquid_capacitance_over_area"),
+                payload.get("filler_capacitance_over_area"),
+            )
+            if value is not None:
+                latest = value
+
+
+# Expose wait_for_topics as a plain class attribute so tests (and the
+# executor's topic-aggregation pass) can read it at class level without
+# needing an instance. The _wait_for_topics_default() method above keeps
+# the Traits instance machinery working correctly.
+VolumeThresholdHandler.wait_for_topics = _VOLUME_THRESHOLD_TOPICS
 
 
 def make_volume_threshold_column() -> Column:
