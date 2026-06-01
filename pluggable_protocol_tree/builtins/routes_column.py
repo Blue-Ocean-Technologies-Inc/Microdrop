@@ -261,6 +261,3 @@ def make_routes_column():
         handler=RoutesHandler(),
     )
 
-
-# Alias used by PPT-25 tests and VolumeThresholdHandler references.
-RoutesColumnHandler = RoutesHandler
