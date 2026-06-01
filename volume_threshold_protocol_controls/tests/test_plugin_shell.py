@@ -22,9 +22,12 @@ def test_plugin_id_and_name():
     assert p.name == "Volume Threshold Protocol Controls Plugin"
 
 
-def test_plugin_default_contributions_is_empty_until_task_6():
-    """Column factory ships in Task 6. Scaffold must boot cleanly
-    with no contributions so the rest of the plan can land in any
-    order without breaking Envisage load."""
+def test_plugin_default_contributions_lists_volume_threshold_column():
+    """Task 5 wired the column factory into the plugin's contributions."""
+    from volume_threshold_protocol_controls.consts import (
+        VOLUME_THRESHOLD_COL_ID,
+    )
     p = VolumeThresholdProtocolControlsPlugin()
-    assert isinstance(p.contributed_protocol_columns, list)
+    contribs = p.contributed_protocol_columns
+    assert len(contribs) == 1
+    assert contribs[0].model.col_id == VOLUME_THRESHOLD_COL_ID
