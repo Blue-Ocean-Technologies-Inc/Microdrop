@@ -2,8 +2,8 @@
 volume-threshold per-step column to the pluggable protocol tree.
 
 Pattern mirrors peripheral_protocol_controls /
-dropbot_protocol_controls. The column factory lands in Task 6; the
-scaffold lands first so plugin-load smoke tests pass.
+dropbot_protocol_controls. The column factory is wired in via
+_contributed_protocol_columns_default.
 """
 
 from envisage.plugin import Plugin
