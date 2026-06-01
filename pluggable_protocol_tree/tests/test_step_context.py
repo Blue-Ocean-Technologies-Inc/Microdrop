@@ -314,3 +314,48 @@ def test_listener_route_for_unopened_topic_drops_silently():
         _listener.route_to_active_step("t/unknown", {"v": 1})
     finally:
         _listener.clear_active_step()
+
+
+def test_step_context_has_phase_advance_event_unset_by_default():
+    """phase_advance_event is the early-phase-completion signal. New
+    StepContexts must always start with it cleared so a stale set from
+    a prior step can't leak in."""
+    import threading
+    from pluggable_protocol_tree.execution.step_context import (
+        ProtocolContext, StepContext,
+    )
+    proto = ProtocolContext(stop_event=threading.Event())
+    ctx = StepContext(protocol=proto, phase_advance_event=threading.Event(),
+                      step_phases_done_event=threading.Event())
+    assert ctx.phase_advance_event is not None
+    assert ctx.phase_advance_event.is_set() is False
+    assert ctx.step_phases_done_event is not None
+    assert ctx.step_phases_done_event.is_set() is False
+
+
+def test_executor_build_step_ctx_seeds_two_fresh_events():
+    """Each call to _build_step_ctx must produce a fresh pair of
+    threading.Events — a set leftover from the prior step must NOT
+    appear on the next step."""
+    import threading
+    from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+    from pluggable_protocol_tree.execution.step_context import ProtocolContext
+    from pluggable_protocol_tree.models.row_manager import RowManager
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    rm = RowManager(columns=[make_name_column()])
+    rm.add_step()
+    exe = ProtocolExecutor(row_manager=rm)
+    proto = ProtocolContext(stop_event=threading.Event())
+    row = rm.root.children[0]
+
+    ctx_a = exe._build_step_ctx(row, list(rm.columns), proto)
+    ctx_a.phase_advance_event.set()
+    ctx_a.step_phases_done_event.set()
+
+    ctx_b = exe._build_step_ctx(row, list(rm.columns), proto)
+    assert ctx_b.phase_advance_event.is_set() is False
+    assert ctx_b.step_phases_done_event.is_set() is False
+    # And they must be distinct Event instances, not aliases.
+    assert ctx_a.phase_advance_event is not ctx_b.phase_advance_event
+    assert ctx_a.step_phases_done_event is not ctx_b.step_phases_done_event
