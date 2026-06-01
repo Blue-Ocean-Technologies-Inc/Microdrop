@@ -28,5 +28,7 @@ class VolumeThresholdProtocolControlsPlugin(Plugin):
     )
 
     def _contributed_protocol_columns_default(self):
-        # Populated by Task 6 (column factory).
-        return []
+        from .protocol_columns.volume_threshold_column import (
+            make_volume_threshold_column,
+        )
+        return [make_volume_threshold_column()]
