@@ -1,10 +1,17 @@
-from traits.api import HasTraits, Float, Instance
+from traits.api import HasTraits, Float, Instance, observe
 
 from device_viewer.models.electrodes import Electrodes
 
 from logger.logger_service import get_logger
-
 logger = get_logger(__name__)
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
+
+def _update_app_globals_on_trait_change_event(event, value_units=""):
+    app_globals[event.name] = event.new
+    logger.info(f"App Globals Update: {event.name}: {event.new} {value_units}")
 
 
 class CalibrationModel(HasTraits):
@@ -37,3 +44,12 @@ class CalibrationModel(HasTraits):
 
     def reset(self):
         self.reset_traits(["filler_capacitance_over_area", "liquid_capacitance_over_area"])
+
+    @observe("liquid_capacitance_over_area")
+    def _liquid_capacitance_changed(self, event):
+        _update_app_globals_on_trait_change_event(event, "pF/mm^2")
+
+    @observe("filler_capacitance_over_area")
+    def _filler_capacitance_changed(self, event):
+        _update_app_globals_on_trait_change_event(event,"pF/mm^2")
+
