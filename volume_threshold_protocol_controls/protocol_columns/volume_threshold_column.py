@@ -165,10 +165,18 @@ class VolumeThresholdHandler(BaseColumnHandler):
 
     @staticmethod
     def _monitor_until_threshold(ctx, target):
-        """Loop wait_for(CAPACITANCE_UPDATED) until current_cap >=
-        target, the step's phases finish, or stop fires. Sets
-        ctx.phase_advance_event on hit; returns silently otherwise so
-        the outer loop can pick up the next phase boundary."""
+        """Poll CAPACITANCE_UPDATED until current_cap >= target (sets
+        ctx.phase_advance_event and returns), or stop / step-phases-done
+        fires, or the poll times out.
+
+        On TimeoutError we RETURN (not continue) on purpose: returning
+        hands control back to on_step's outer loop, which re-waits for
+        the next ELECTRODES_STATE_CHANGE and recomputes the target for
+        the new phase. CAP_POLL_TIMEOUT_S thus doubles as the cadence at
+        which we re-sync to phase boundaries. On real hardware
+        capacitance reports arrive sub-second, well inside the poll
+        window, so a timeout normally only fires at a genuine lull
+        (e.g. between phases)."""
         stop_event = ctx.protocol.stop_event
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
@@ -207,7 +215,6 @@ class VolumeThresholdHandler(BaseColumnHandler):
             )
             if value is not None:
                 latest = value
-
 
 
 def make_volume_threshold_column() -> Column:
