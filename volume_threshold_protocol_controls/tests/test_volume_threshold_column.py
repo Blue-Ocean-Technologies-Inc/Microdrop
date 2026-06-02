@@ -28,13 +28,13 @@ def test_column_view_hidden_by_default_and_step_only():
     assert col.view.renders_on_group is False
 
 
-def test_column_trait_is_float_with_default_zero():
-    """trait_for_row must return a Float trait — the legacy column was
-    a numeric volume; a string trait would silently accept garbage."""
-    from traits.api import Float
+def test_column_trait_is_int_with_default_zero():
+    """trait_for_row must return an Int trait — the column is a 0-100
+    percent."""
+    from traits.api import Int
     col = make_volume_threshold_column()
     trait = col.model.trait_for_row()
-    assert isinstance(trait.handler, Float().handler.__class__)
+    assert isinstance(trait.handler, Int().handler.__class__)
 
 
 def test_plugin_default_lists_the_column():
@@ -99,22 +99,23 @@ def test_handler_returns_immediately_when_threshold_is_zero():
 
 
 def test_handler_returns_immediately_when_preview_mode():
-    handler, row, ctx, _ = _make_handler_ctx(threshold=1.0, preview=True,
+    handler, row, ctx, _ = _make_handler_ctx(threshold=50, preview=True,
                                               electrode_areas={"e1": 1.0})
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is False
 
 
 def test_handler_returns_immediately_when_electrode_areas_missing():
-    handler, row, ctx, _ = _make_handler_ctx(threshold=1.0,
+    handler, row, ctx, _ = _make_handler_ctx(threshold=50,
                                               electrode_areas=None)
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is False
 
 
 def test_handler_sets_phase_advance_event_when_capacitance_crosses_target():
-    """electrodes ["e1"] -> area 1.0; liquid=5 filler=3 -> cpa=2;
-    threshold=0.5 -> target=1.0pF. A reading of 1.5pF triggers advance.
+    """electrodes ["e1"] -> area 1.0; liquid_capacitance_over_area=5.0;
+    percent=50 -> full=5.0, target=0.50*5.0=2.5pF. A reading of 3.0pF
+    crosses the target and triggers advance.
     A daemon sets step_phases_done_event so the per-phase outer loop
     exits after the crossing (mirrors RoutesHandler finishing its
     phases in a real run)."""
@@ -125,7 +126,7 @@ def test_handler_sets_phase_advance_event_when_capacitance_crosses_target():
     from dropbot_controller.consts import CAPACITANCE_UPDATED
     from electrode_controller.consts import ELECTRODES_STATE_CHANGE
     handler, row, ctx, enq = _make_handler_ctx(
-        threshold=0.5, electrode_areas={"e1": 1.0},
+        threshold=50, electrode_areas={"e1": 1.0},
     )
     enq(CALIBRATION_DATA,
         json.dumps({"liquid_capacitance_over_area": 5.0,
@@ -133,7 +134,7 @@ def test_handler_sets_phase_advance_event_when_capacitance_crosses_target():
     enq(ELECTRODES_STATE_CHANGE,
         json.dumps({"electrodes": ["e1"], "channels": [1]}))
     enq(CAPACITANCE_UPDATED,
-        json.dumps({"capacitance": "1.5pF", "voltage": "100V"}))
+        json.dumps({"capacitance": "3.0pF", "voltage": "100V"}))
 
     def _set_done_soon():
         time.sleep(0.05)
@@ -151,7 +152,7 @@ def test_handler_does_not_set_event_when_below_target():
     from dropbot_controller.consts import CAPACITANCE_UPDATED
     from electrode_controller.consts import ELECTRODES_STATE_CHANGE
     handler, row, ctx, enq = _make_handler_ctx(
-        threshold=0.5, electrode_areas={"e1": 1.0},
+        threshold=50, electrode_areas={"e1": 1.0},
     )
     enq(CALIBRATION_DATA,
         json.dumps({"liquid_capacitance_over_area": 5.0,
@@ -159,7 +160,7 @@ def test_handler_does_not_set_event_when_below_target():
     enq(ELECTRODES_STATE_CHANGE,
         json.dumps({"electrodes": ["e1"], "channels": [1]}))
     enq(CAPACITANCE_UPDATED,
-        json.dumps({"capacitance": "0.5pF", "voltage": "100V"}))
+        json.dumps({"capacitance": "2.0pF", "voltage": "100V"}))
     # Simulate Routes finishing so the outer loop exits.
     def _set_done_soon():
         import time
@@ -176,7 +177,7 @@ def test_handler_skips_phase_when_actuated_area_is_zero():
     from device_viewer.consts import CALIBRATION_DATA
     from electrode_controller.consts import ELECTRODES_STATE_CHANGE
     handler, row, ctx, enq = _make_handler_ctx(
-        threshold=1.0, electrode_areas={"e1": 1.0},
+        threshold=50, electrode_areas={"e1": 1.0},
     )
     enq(CALIBRATION_DATA,
         json.dumps({"liquid_capacitance_over_area": 5.0,
