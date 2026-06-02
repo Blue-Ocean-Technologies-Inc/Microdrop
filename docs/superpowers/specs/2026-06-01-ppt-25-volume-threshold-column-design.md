@@ -104,7 +104,7 @@ events as fresh `threading.Event()` instances. Other handlers get
 them for free via `ctx.phase_advance_event` / `ctx.step_phases_done_event`.
 
 **`execution/executor.py`** — `Executor.start()` and `__init__` grow
-an optional `initial_scratch: dict | None = None` argument that
+an optional `extra_scratch: dict | None = None` argument that
 merges into `proto_ctx.scratch` AFTER the `protocol_metadata` update.
 Mirrors how `electrode_to_channel` flows in today, but is for runtime
 (not file-persisted) data such as electrode areas. Demo callers don't
@@ -380,3 +380,19 @@ No live Redis or Qt event loop needed for these tests; the existing
 - **Tuning the `_CAP_POLL_TIMEOUT_S` interval.** 1s is a reasonable
   default; expose as a user setting only if real-world runs show it
   matters.
+- **Per-phase-precise target re-sync for sub-1s dwells.** The handler
+  re-syncs to the current phase's actuated electrodes whenever
+  `_monitor_until_threshold` returns (on a `CAP_POLL_TIMEOUT_S`
+  timeout or a crossing), then recomputes the target from the next
+  buffered `ELECTRODES_STATE_CHANGE`. On real hardware capacitance
+  reports arrive sub-second, so re-sync effectively happens at every
+  phase boundary. For protocols whose per-phase dwell is shorter than
+  ~`CAP_POLL_TIMEOUT_S`, several phases can buffer during one monitor
+  poll, so a phase may be evaluated against a slightly-stale (earlier)
+  phase's target — ending it marginally early. Association is always
+  correct (the mailbox is FIFO; the handler never reads a phase it has
+  already consumed), only freshness lags. The legacy bounded
+  monitoring explicitly to the phase duration; a future enhancement
+  could stamp a monotonic phase index into the `ELECTRODES_STATE_CHANGE`
+  payload and have the monitor abandon as soon as a newer index
+  appears. Out of scope for the initial port.
