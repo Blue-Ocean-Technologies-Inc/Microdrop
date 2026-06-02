@@ -152,19 +152,23 @@ class ProtocolContext(HasTraits):
         Sets ``pause_event`` (the executor blocks on it at the next step
         boundary) and emits ``protocol_paused`` so the UI freezes its
         step/phase timers. Safe to call from a worker thread — the signal
-        is delivered to GUI slots via a queued connection.
+        is delivered to GUI slots via a queued connection. ``qsignals`` may
+        be None in headless/test runs, in which case only the event is set.
         """
         self.pause_event.set()
-        self.qsignals.protocol_paused.emit()
+        if self.qsignals is not None:
+            self.qsignals.protocol_paused.emit()
 
     def resume(self):
         """Clear the pause and tell the UI.
 
         Inverse of :meth:`pause`: clears ``pause_event`` (waking the
         executor's ``wait_cleared``) and emits ``protocol_resumed``.
+        ``qsignals`` may be None in headless/test runs.
         """
         self.pause_event.clear()
-        self.qsignals.protocol_resumed.emit()
+        if self.qsignals is not None:
+            self.qsignals.protocol_resumed.emit()
 
 
 class StepContext(HasTraits):
@@ -258,12 +262,6 @@ class StepContext(HasTraits):
         """
         try:
             self.protocol.pause()
-            # FIXME: StepContext has no ``_wait_for_dialog_event`` trait, so
-            # this lambda raises AttributeError if it ever fires; the
-            # connection is also never disconnected (leaks across steps).
-            # The real resume path is the ``events`` polling below — see the
-            # post-commit review for the recommended removal.
-            self.protocol.qsignals.protocol_resumed.connect(lambda : self._wait_for_dialog_event.set())
 
             deadline = time.monotonic() + timeout
             poll_interval = 0.01  # 10ms

@@ -2,8 +2,8 @@
 
 Stores a free-text message on each row (Str trait). When a step carries a
 non-empty message, the handler pauses the protocol at the *start* of that
-step (``on_pre_step``) and shows a modal confirm dialog with the message.
-The protocol stays paused — its step/phase timers frozen via
+step (``on_pre_step``) and shows a modal single-acknowledge dialog with
+the message. The protocol stays paused — its step/phase timers frozen via
 ``protocol_paused`` — until the operator acknowledges the dialog, then
 resumes. An empty message is a no-op, so the column is free on steps that
 don't need an operator gate.
@@ -28,7 +28,7 @@ from PySide6.QtCore import QTimer
 from traits.api import Str
 
 from logger.logger_service import get_logger
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+from microdrop_application.dialogs.pyface_wrapper import information
 from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
@@ -82,17 +82,20 @@ class MsgPromptColumnHandler(BaseColumnHandler):
                 # Runs on the GUI thread (see module docstring). The
                 # worker thread is parked in ctx.wait below until this
                 # sets the dialog event.
-                usr_choice = confirm(
+                #
+                # Single-acknowledge dialog (no decline button): any
+                # dismissal continues the run, so the parked worker thread
+                # can never wedge waiting on a choice that was never made.
+                # The real cancellation path stays the toolbar Stop, which
+                # trips stop_event (also in the wait's event list).
+                result = information(
                     None,
                     message=val,
                     title="Message Prompt",
+                    cancel=False,
                 )
-
-                if usr_choice == YES:
-                    logger.info("User selected message prompt yes")
-                    self._wait_for_dialog_event.set()
-                else:
-                    logger.info(f"User selected message prompt {usr_choice}")
+                logger.info(f"Message prompt acknowledged (result={result})")
+                self._wait_for_dialog_event.set()
 
             QTimer.singleShot(0, qsignals, _user_prompt)
             # Park the worker thread until the operator acknowledges
