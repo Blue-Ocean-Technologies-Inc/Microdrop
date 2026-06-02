@@ -68,12 +68,6 @@ class ProtocolExecutor(HasTraits):
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
     _preview_mode = Any
-    # Runtime-only scratch merged into ProtocolContext.scratch by run()
-    # AFTER protocol_metadata. Use this for data that comes from the
-    # live app at start time (e.g. electrode areas from the DV model)
-    # and must NOT be persisted into the protocol JSON file.
-    _extra_scratch = Any
-
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
 
@@ -119,7 +113,6 @@ class ProtocolExecutor(HasTraits):
         self,
         start_step_path: Optional[tuple] = None,
         preview_mode: bool = False,
-        extra_scratch: Optional[dict] = None,
     ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
         a second call while already running is ignored.
@@ -145,7 +138,6 @@ class ProtocolExecutor(HasTraits):
             tuple(start_step_path) if start_step_path is not None else None
         )
         self._preview_mode = bool(preview_mode)
-        self._extra_scratch = dict(extra_scratch) if extra_scratch else None
         self._thread = threading.Thread(
             target=self.run,
             name="pluggable_protocol_tree_executor",
@@ -197,10 +189,6 @@ class ProtocolExecutor(HasTraits):
         # into the context's scratch so handlers can reach it without
         # holding a reference to the RowManager.
         proto_ctx.scratch.update(self.row_manager.protocol_metadata)
-        # Runtime-only scratch (electrode areas, etc.) — merged AFTER
-        # protocol_metadata so it wins on key collision.
-        if self._extra_scratch:
-            proto_ctx.scratch.update(self._extra_scratch)
         proto_started_at = _time.monotonic()
         try:
             # Hide first-publish latency (Redis connect ~2s) from step 1's

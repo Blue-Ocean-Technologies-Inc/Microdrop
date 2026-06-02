@@ -60,6 +60,8 @@ nothing else in the core contract changes.
 - `CALIBRATION_DATA` topic carries `{liquid_capacitance_over_area,
   filler_capacitance_over_area}` (used today by
   `pluggable_protocol_tree.services.logging.controller.on_calibration`).
+  **Note:** `VolumeThresholdHandler` no longer uses this topic; it reads
+  calibration values directly from `app_globals` instead (see §1 below).
 - `proto_ctx.scratch` already hydrates from
   `RowManager.protocol_metadata` at protocol start
   (`executor.py:192`).
@@ -69,6 +71,15 @@ nothing else in the core contract changes.
 Three units change, one new plugin lands.
 
 ### 1. `pluggable_protocol_tree` — two new per-step events
+
+> **Implementation note (post-spec update):** `Executor.start()` no longer
+> accepts `extra_scratch`; that parameter and the associated `_extra_scratch`
+> trait have been removed. The volume-threshold handler reads calibration
+> and channel areas from `app_globals` (the Redis-backed globals manager)
+> via `_get_app_globals()` instead of scratch. Correspondingly,
+> `ProtocolTreePane`'s `electrode_areas_provider` / `full_capacitance_provider`
+> constructor params and `_resolve_extra_scratch()` method have been removed,
+> and `PluggableProtocolDockPane` no longer injects those providers.
 
 **`execution/step_context.py`** — `StepContext` gains two new fields:
 
@@ -145,8 +156,16 @@ the trail-loop knobs. 0 disables; reaching the percent of the full
 **`VolumeThresholdHandler`** — `priority=30` (same bucket as
 `RoutesHandler` so they run in the same parallel pool; the handler
 must NOT touch hardware so the bucket-collision rule doesn't apply).
-`wait_for_topics = [CAPACITANCE_UPDATED, ELECTRODES_STATE_CHANGE,
-CALIBRATION_DATA]`. Formula: `target = (percent / 100) × liquid_capacitance_over_area × actuated_area`.
+`wait_for_topics = [CAPACITANCE_UPDATED, ELECTRODES_STATE_CHANGE]`
+(no `CALIBRATION_DATA` — calibration is read from `app_globals`).
+Formula: `target = (percent / 100) × liquid_capacitance_over_area × actuated_area`.
+
+Calibration source: `app_globals["liquid_capacitance_over_area"]` and
+`app_globals["channel_electrode_areas_scaled_map"]` (published by the DV
+model observers in `device_viewer.models.calibration` /
+`device_viewer.models.electrodes`). Area keys are strings after Redis
+JSON round-trip; handler looks up `str(channel)` from the
+`ELECTRODES_STATE_CHANGE` `"channels"` list.
 
 **`on_step(self, row, ctx)`** body:
 
@@ -254,39 +273,23 @@ def _latest_full_cap_over_area(ctx, default=None):
 
 ### 3. Live-app wiring (dock pane)
 
+> **Implementation note (post-spec update):** The provider/snapshot
+> approach described below was superseded. `ProtocolTreePane` no longer
+> accepts `electrode_areas_provider` or `full_capacitance_provider`, and
+> `PluggableProtocolDockPane` no longer injects them. The
+> `VolumeThresholdHandler` reads calibration and channel areas directly
+> from `app_globals` (the Redis-backed globals manager) at handler
+> execution time, not at run start. This eliminates the
+> `CALIBRATION_DATA`-timing issue at the source: `app_globals` always
+> reflects the latest calibrated values published by the DV model
+> observers.
+
 `PluggableProtocolDockPane.create_contents` (`views/dock_pane.py`)
-constructs the pane; the pane's protocol-start path
-(`_start_protocol_run`) is where `electrode_areas` enters the system.
-
-**`views/protocol_tree_pane.py`** — `_start_protocol_run` receives two
-optional providers injected via constructor (same shape as
-`logging_device_context_provider` already there):
-
-- `electrode_areas_provider: Callable[[], dict] | None` — per-electrode
-  area map, resolved once at run start into
-  `extra_scratch["electrode_areas"]`.
-- `full_capacitance_provider: Callable[[], float | None] | None` — the
-  calibrated FULL (liquid-covered) capacitance-per-unit-area from the
-  live DV model, resolved once at run start into
-  `extra_scratch["full_capacitance_over_area"]`.
-
-Both are snapshotted into `extra_scratch` by `_resolve_extra_scratch()`
-and passed to `self.executor.start(extra_scratch=...)`. The
-`full_capacitance_over_area` snapshot is the **primary** source for the
-volume-threshold handler because `CALIBRATION_DATA` fires only on
-calibration *change*, which happens pre-run — at that moment no step
-mailbox exists, so `route_to_active_step` (execution/listener.py) drops
-the message. The CALIBRATION_DATA mailbox drain inside the handler is
-kept as a live mid-run override for the rare case calibration changes
-during a run.
-
-**`views/dock_pane.py`** — alongside the existing
-`_logging_device_context` and `_electrode_areas` providers, add a sibling
-`_full_capacitance_over_area` provider that reads
-`dv_pane.model.liquid_capacitance_over_area` from the live DV model.
-Pass it into
-`ProtocolTreePane(..., electrode_areas_provider=_electrode_areas,
-full_capacitance_provider=_full_capacitance_over_area)`.
+constructs the pane with the `_logging_device_context` provider only.
+The `_electrode_areas` and `_full_capacitance_over_area` closures have
+been removed. The `_logging_device_context` closure that reads
+`channel_electrode_areas_scaled_map` for protocol logging is unrelated
+and unchanged.
 
 **Plugin registration:** add
 `VolumeThresholdProtocolControlsPlugin()` to
@@ -301,15 +304,13 @@ user sets Volume Threshold % cell (e.g. 50)
   -> persisted in row.volume_threshold (Int, 0-100 percent)
 
 dock pane / start_protocol_run
-  -> electrode_areas_provider() -> {electrode_id: area_mm2, ...}
-  -> executor.start(extra_scratch={"electrode_areas": ...})
+  -> executor.start(preview_mode=...) [no extra_scratch]
 
 executor.run
-  -> proto_ctx.scratch hydrated:
-       {"electrode_to_channel": ..., "electrode_areas": ...}
+  -> proto_ctx.scratch hydrated: {"electrode_to_channel": ...}
   -> per step: _build_step_ctx() creates fresh phase_advance_event,
-       opens mailboxes for CAPACITANCE_UPDATED / ELECTRODES_STATE_CHANGE /
-       CALIBRATION_DATA (plus everything else handlers declare).
+       opens mailboxes for CAPACITANCE_UPDATED / ELECTRODES_STATE_CHANGE
+       (plus everything else handlers declare; no CALIBRATION_DATA).
   -> _run_hooks("on_step", ...) fires Routes + VolumeThreshold in parallel.
 
 [Routes per phase]
@@ -323,11 +324,13 @@ executor.run
   return from on_step
 
 [VolumeThreshold loop]
+  read liquid_capacitance_over_area + channel_electrode_areas_scaled_map
+    from app_globals (once per step, before outer loop)
   while not stop_event AND not step_phases_done_event:
-    try: wait_for(ELECTRODES_STATE_CHANGE, timeout=2s) -> electrodes
+    try: wait_for(ELECTRODES_STATE_CHANGE, timeout=2s) -> channels
     except TimeoutError: continue          -- re-check exit flags
-    drain CALIBRATION_DATA -> latest full_cap_over_area (liquid reference)
     compute target = (percent / 100) * full_cap_over_area * actuated_area
+      (area summed from channel_areas[str(channel)] for each channel)
     while monitoring:
       payload = wait_for(CAPACITANCE_UPDATED, timeout=1s)
       if parse(payload) >= target:
@@ -344,19 +347,17 @@ If volume threshold hits mid-dwell:
 
 ## Error handling
 
-- **Threshold = 0 / preview / no electrode_areas / no calibration:**
-  the handler logs and returns; no-op for the rest of the step.
-  Routes runs uninterrupted.
+- **Threshold = 0 / preview / app_globals unavailable / missing calibration
+  or channel areas:** the handler logs and returns; no-op for the rest of
+  the step. Routes runs uninterrupted.
 - **Unparseable capacitance / electrodes payload:** the predicate
   discards; the loop polls the next message. A truly broken
   publisher manifests as the phase running its normal dwell — same
   as threshold-not-reached.
 - **Stop event:** every wait honours `stop_event` (raises `AbortError`
   out of `wait_for`); the handler exits cleanly.
-- **Demo / headless runs without a DV:** the dock pane is the only
-  injector of `electrode_areas`; demos pass nothing → scratch is
-  missing the key → handler logs once and returns. No crash, no
-  hardware coupling.
+- **Demo / headless runs without Redis:** `_get_app_globals()` returns
+  None → handler logs once and returns. No crash, no hardware coupling.
 
 ## Testing
 
@@ -372,25 +373,23 @@ If volume threshold hits mid-dwell:
     iteration (set during phase N → cleared at the top of phase N+1).
   - `step_phases_done_event` is set exactly once, after the final
     phase (and after any in-duration-mode hold).
-- `test_executor.py` (extend): `executor.start(extra_scratch=...)`
-  merges into `proto_ctx.scratch` after `protocol_metadata` (and
-  takes precedence on key collision).
+- `test_executor.py`: the `extra_scratch` tests have been removed
+  (that parameter no longer exists on `executor.start`).
 
 **`volume_threshold_protocol_controls/tests/`**
 
 - `test_volume_threshold_column.py`:
-  - Column metadata (id, name, default, priority, wait_for_topics).
-  - Handler short-circuits when `threshold <= 0`, `preview_mode`, or
-    `electrode_areas` empty.
-  - `_latest_full_cap_over_area` reads `liquid_capacitance_over_area`
-    (full liquid reference; filler not used) and returns `default` when
-    no CALIBRATION_DATA pending.
-  - Driven via a stubbed `StepContext` whose mailboxes are pre-
-    populated with synthetic ELECTRODES_STATE_CHANGE +
-    CAPACITANCE_UPDATED payloads:
+  - Column metadata (id, name, default, priority, wait_for_topics;
+    `CALIBRATION_DATA` is NOT in `wait_for_topics`).
+  - Handler short-circuits when `threshold <= 0`, `preview_mode`,
+    `app_globals` unavailable, or calibration / channel areas absent.
+  - `_get_app_globals` is a module-level seam; tests monkeypatch it
+    to inject a plain dict with `liquid_capacitance_over_area` and
+    `channel_electrode_areas_scaled_map` (string keys).
+  - Driven via a stubbed ctx whose `wait_for` is queue-backed:
+    - ELECTRODES_STATE_CHANGE carries `{"channels": [...]}`.
     - Capacitance crosses target → `ctx.phase_advance_event` is set.
-    - Capacitance stays below target through the dwell → event NOT
-      set; handler simply waits for the next ELECTRODES_STATE_CHANGE.
+    - Capacitance stays below target → event NOT set.
 
 No live Redis or Qt event loop needed for these tests; the existing
 `Mailbox` is thread-safe and accepts `deposit()` calls directly.
