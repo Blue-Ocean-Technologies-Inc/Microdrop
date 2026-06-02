@@ -3,6 +3,14 @@
 Single-file layout mirrors peripheral_protocol_controls's magnet_column
 and dropbot_protocol_controls's voltage / frequency / droplet columns.
 
+The column stores a 0-100 PERCENT (Int). Each phase ends early once the
+measured capacitance of the actuated electrodes reaches this percent of
+their calibrated FULL (liquid-covered) capacitance:
+
+    target = (percent / 100) * liquid_capacitance_over_area * actuated_area
+
+The filler/baseline value is NOT used in this formula.
+
 Re-sync cadence note: the handler recomputes the per-phase target each
 time it re-reads ELECTRODES_STATE_CHANGE, which happens whenever
 _monitor_until_threshold returns (a CAP_POLL_TIMEOUT_S timeout or a
@@ -16,7 +24,7 @@ spec's "Out of scope" section for the rationale and a future fix.
 
 import json as _json
 
-from traits.api import Float
+from traits.api import Int
 
 from logger.logger_service import get_logger
 
@@ -28,7 +36,7 @@ from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
 from pluggable_protocol_tree.views.columns.spinbox import (
-    DoubleSpinBoxColumnView,
+    IntSpinBoxColumnView,
 )
 
 from ..consts import (
@@ -57,43 +65,27 @@ def _parse_capacitance_pf(raw):
         return None
 
 
-def _capacitance_per_unit_area(liquid, filler):
-    """liquid - filler when both are present, non-negative, and
-    liquid > filler. Returns None otherwise. Mirrors the legacy
-    ForceCalculationService.calculate_capacitance_per_unit_area and the
-    logging controller's _capacitance_per_unit_area helper."""
-    if liquid is None or filler is None:
-        return None
-    try:
-        liquid = float(liquid)
-        filler = float(filler)
-    except (TypeError, ValueError):
-        return None
-    if liquid < 0 or filler < 0 or liquid <= filler:
-        return None
-    return liquid - filler
-
-
 class VolumeThresholdColumnModel(BaseColumnModel):
-    """Per-step volume threshold (user units, typically µL). 0 disables.
+    """Per-step volume threshold as a PERCENTAGE (0-100; 0 disables).
 
-    Stored as a Float trait. The unit is unit-agnostic from the
-    column's perspective — the handler multiplies it into the
-    target-capacitance formula and the user picks the unit by
-    convention with their calibration data.
+    Each phase ends early once the measured capacitance of the phase's
+    actuated electrodes reaches this percent of their calibrated FULL
+    (liquid-covered) capacitance:
+        target = (percent / 100) * liquid_capacitance_over_area * actuated_area
     """
 
     def trait_for_row(self):
-        return Float(float(self.default_value or 0.0),
-                     desc="Volume threshold for this step. Reaches "
-                          "target capacitance early-ends the phase. "
-                          "0 disables.")
+        return Int(int(self.default_value or 0),
+                   desc="Volume threshold as a percent (0-100) of the "
+                        "actuated electrodes' full (liquid-covered) "
+                        "capacitance. Reaching it early-ends the phase. "
+                        "0 disables.")
 
 
-class VolumeThresholdColumnView(DoubleSpinBoxColumnView):
-    """Numeric edit; hidden by default like droplet_check / trail knobs.
-    User opts the column in via the header right-click menu when they
-    want volume-threshold behaviour on a step."""
+class VolumeThresholdColumnView(IntSpinBoxColumnView):
+    """Int percent spinner (0-100); hidden by default like droplet_check
+    / trail knobs. User opts the column in via the header right-click
+    menu when they want volume-threshold behaviour on a step."""
 
     renders_on_group = False
     hidden_by_default = True
@@ -106,9 +98,9 @@ class VolumeThresholdHandler(BaseColumnHandler):
     Per phase:
       * Read the actuated electrodes from the ELECTRODES_STATE_CHANGE
         payload that RoutesHandler publishes.
-      * Drain any pending CALIBRATION_DATA messages and recompute
-        capacitance-per-unit-area.
-      * target = threshold * actuated_area * cpa
+      * Drain any pending CALIBRATION_DATA messages and reread the full
+        (liquid-covered) capacitance-per-unit-area.
+      * target = (percent / 100) * liquid_capacitance_over_area * actuated_area
       * Poll CAPACITANCE_UPDATED until current >= target -> set
         ctx.phase_advance_event (RoutesHandler's _cooperative_sleep
         wakes on it) -> loop back for the next phase boundary.
@@ -120,8 +112,8 @@ class VolumeThresholdHandler(BaseColumnHandler):
     ]
 
     def on_step(self, row, ctx):
-        threshold = float(getattr(row, "volume_threshold", 0.0) or 0.0)
-        if threshold <= 0:
+        percent = float(getattr(row, "volume_threshold", 0) or 0)
+        if percent <= 0:
             return
         if getattr(ctx.protocol, "preview_mode", False):
             return
@@ -136,7 +128,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
             return
 
         stop_event = ctx.protocol.stop_event
-        cpa = self._latest_cpa(ctx, default=None)
+        full_cap_over_area = self._latest_full_cap_over_area(ctx, default=None)
 
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
@@ -146,12 +138,10 @@ class VolumeThresholdHandler(BaseColumnHandler):
                     timeout=PHASE_POLL_TIMEOUT_S,
                 )
             except TimeoutError:
-                # Wake up periodically to recheck stop / phases-done.
                 continue
 
-            # Phase boundary observed — refresh calibration if a new
-            # CALIBRATION_DATA arrived since last time.
-            cpa = self._latest_cpa(ctx, default=cpa)
+            full_cap_over_area = self._latest_full_cap_over_area(
+                ctx, default=full_cap_over_area)
             try:
                 electrodes = _json.loads(payload).get("electrodes") or []
             except (TypeError, ValueError):
@@ -160,18 +150,17 @@ class VolumeThresholdHandler(BaseColumnHandler):
             actuated_area = sum(
                 float(electrode_areas.get(e, 0.0)) for e in electrodes
             )
-            if cpa is None or actuated_area <= 0.0:
-                # Cannot compute target — wait for the next phase.
+            if full_cap_over_area is None or actuated_area <= 0.0:
                 continue
 
-            target = threshold * actuated_area * cpa
+            full_cap = full_cap_over_area * actuated_area
+            target = (percent / 100.0) * full_cap
             self._monitor_until_threshold(ctx, target)
             # Do NOT return here — loop back to monitor the NEXT phase.
             # RoutesHandler clears phase_advance_event at the top of its
             # next phase iteration and publishes a fresh
             # ELECTRODES_STATE_CHANGE, which our outer loop picks up.
-            # The loop exits only on stop_event or step_phases_done_event
-            # (set by RoutesHandler after its final phase).
+            # The loop exits only on stop_event or step_phases_done_event.
 
     @staticmethod
     def _monitor_until_threshold(ctx, target):
@@ -204,11 +193,12 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 return
 
     @staticmethod
-    def _latest_cpa(ctx, default=None):
-        """Drain any pending CALIBRATION_DATA messages and return the
-        most recent capacitance-per-unit-area, or `default` if no
-        valid calibration arrived. Returns immediately when the
-        mailbox is empty (zero timeout)."""
+    def _latest_full_cap_over_area(ctx, default=None):
+        """Drain pending CALIBRATION_DATA messages and return the most
+        recent FULL (liquid-covered) capacitance-per-unit-area, or
+        `default` if none arrived. 'Full' is the liquid reference from
+        calibration; the percentage target is a fraction of it. Returns
+        immediately when the mailbox is empty (zero timeout)."""
         latest = default
         while True:
             try:
@@ -219,11 +209,12 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 payload = _json.loads(raw)
             except (TypeError, ValueError):
                 continue
-            value = _capacitance_per_unit_area(
-                payload.get("liquid_capacitance_over_area"),
-                payload.get("filler_capacitance_over_area"),
-            )
-            if value is not None:
+            value = payload.get("liquid_capacitance_over_area")
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
                 latest = value
 
 
@@ -235,7 +226,7 @@ def make_volume_threshold_column() -> Column:
             default_value=VOLUME_THRESHOLD_DEFAULT,
         ),
         view=VolumeThresholdColumnView(
-            low=0.0, high=1_000_000.0, decimals=4, single_step=0.01,
+            low=0, high=100,
         ),
         handler=VolumeThresholdHandler(),
     )
