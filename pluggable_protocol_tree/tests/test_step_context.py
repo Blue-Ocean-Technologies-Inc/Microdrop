@@ -314,3 +314,106 @@ def test_listener_route_for_unopened_topic_drops_silently():
         _listener.route_to_active_step("t/unknown", {"v": 1})
     finally:
         _listener.clear_active_step()
+
+
+# --- ProtocolContext.pause/resume + StepContext.wait ---
+
+import pytest
+
+from pluggable_protocol_tree.execution.events import PauseEvent
+
+
+class _FakeSignal:
+    """Records each emit() onto a shared log so tests can assert ordering."""
+
+    def __init__(self, log: list, name: str):
+        self._log = log
+        self._name = name
+
+    def emit(self):
+        self._log.append(self._name)
+
+
+class _FakeQSignals:
+    """Stand-in for ExecutorSignals — no QObject / Qt loop needed. Only the
+    two signals pause/resume touch are provided."""
+
+    def __init__(self):
+        self.events: list = []
+        self.protocol_paused = _FakeSignal(self.events, "paused")
+        self.protocol_resumed = _FakeSignal(self.events, "resumed")
+
+
+def _make_proto(qsignals=None) -> ProtocolContext:
+    return ProtocolContext(
+        columns=[],
+        stop_event=threading.Event(),
+        pause_event=PauseEvent(),
+        qsignals=qsignals,
+    )
+
+
+def test_pause_resume_set_clear_event_and_emit_signals():
+    q = _FakeQSignals()
+    proto = _make_proto(q)
+    proto.pause()
+    assert proto.pause_event.is_set() is True
+    proto.resume()
+    assert proto.pause_event.is_set() is False
+    # Single source of truth: paused then resumed, in order.
+    assert q.events == ["paused", "resumed"]
+
+
+def test_pause_resume_without_qsignals_does_not_crash():
+    """Headless/test runs have no ExecutorSignals; only the event toggles."""
+    proto = _make_proto(qsignals=None)
+    proto.pause()
+    assert proto.pause_event.is_set() is True
+    proto.resume()
+    assert proto.pause_event.is_set() is False
+
+
+def test_wait_returns_and_resumes_when_event_fires():
+    q = _FakeQSignals()
+    proto = _make_proto(q)
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    ev = threading.Event()
+    threading.Timer(0.05, ev.set).start()
+
+    step.wait(events=[ev, proto.stop_event], timeout=1.0)
+
+    # Acknowledged → run resumed before returning.
+    assert proto.pause_event.is_set() is False
+    assert q.events == ["paused", "resumed"]
+
+
+def test_wait_aborts_promptly_when_stop_event_fires():
+    proto = _make_proto()
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    threading.Timer(0.05, proto.stop_event.set).start()
+    start = time.monotonic()
+    with pytest.raises(AbortError):
+        step.wait(events=[proto.stop_event], timeout=2.0)
+    # Must abort on the stop_event, not wait out the 2s timeout.
+    assert time.monotonic() - start < 0.5
+
+
+def test_wait_times_out_when_nothing_fires():
+    proto = _make_proto()
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    ev = threading.Event()  # never set
+    with pytest.raises(TimeoutError):
+        step.wait(events=[ev, proto.stop_event], timeout=0.05)
+
+
+def test_wait_returns_on_external_resume():
+    """Clearing pause_event out-of-band (e.g. toolbar Resume) ends the wait
+    even though none of the passed events ever fire."""
+    proto = _make_proto()
+    step = StepContext(row=BaseRow(name="x"), protocol=proto)
+    ev = threading.Event()  # never set
+    threading.Timer(0.05, proto.pause_event.clear).start()
+    start = time.monotonic()
+    step.wait(events=[ev, proto.stop_event], timeout=2.0)
+    assert time.monotonic() - start < 0.5
+    assert proto.pause_event.is_set() is False
