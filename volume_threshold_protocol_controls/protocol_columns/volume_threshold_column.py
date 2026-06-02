@@ -11,19 +11,17 @@ their calibrated FULL (liquid-covered) capacitance:
 
 The filler/baseline value is NOT used in this formula.
 
-Calibration source (full_capacitance_over_area):
-    The FULL (liquid-covered) capacitance-per-unit-area is snapshotted from
-    the live DV model into proto_ctx.scratch["full_capacitance_over_area"] at
-    run start (by the dock pane via extra_scratch), and read from scratch as
-    the primary source in on_step.
-
-    The CALIBRATION_DATA topic fires only on calibration *change*, which
-    happens pre-run (when the user calibrates in the device_view_dock_pane).
-    At that moment no protocol step is active, so route_to_active_step drops
-    the message. The mailbox is therefore empty when on_step runs, making
-    CALIBRATION_DATA alone an unreliable source. The scratch snapshot fixes
-    this; the CALIBRATION_DATA mailbox drain is kept as a live mid-run
-    override for the rare case calibration changes during a run.
+Calibration + area source: read straight from app_globals (the
+Redis-backed globals manager). The DV models publish there on change
+(device_viewer.models.calibration / .electrodes observers):
+  * ``liquid_capacitance_over_area`` (pF/mm^2) — the FULL liquid-covered
+    reference.
+  * ``channel_electrode_areas_scaled_map`` — channel-id -> summed
+    electrode area (mm^2). JSON round-trip through Redis stringifies the
+    int keys, so we look up with ``str(channel)``.
+This avoids the CALIBRATION_DATA-topic timing trap (that topic fires only
+on calibration *change*, pre-run, when no step mailbox exists to receive
+it). app_globals always reflects the latest calibrated values.
 
 Re-sync cadence note: the handler recomputes the per-phase target each
 time it re-reads ELECTRODES_STATE_CHANGE, which happens whenever
@@ -43,7 +41,6 @@ from traits.api import Int
 from logger.logger_service import get_logger
 
 from dropbot_controller.consts import CAPACITANCE_UPDATED
-from device_viewer.consts import CALIBRATION_DATA
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
 from pluggable_protocol_tree.models.column import (
@@ -60,6 +57,48 @@ from ..consts import (
 )
 
 logger = get_logger(__name__)
+
+_LIQUID_CAP_KEY = "liquid_capacitance_over_area"
+_CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"
+
+
+def _get_app_globals():
+    """The Redis-backed globals manager where the DV models publish
+    calibration + channel areas. Returns None when unavailable
+    (headless / no-Redis). A module-level seam so tests can monkeypatch."""
+    try:
+        from microdrop_application.helpers import (
+            get_microdrop_redis_globals_manager,
+        )
+        return get_microdrop_redis_globals_manager()
+    except Exception as e:                         # pragma: no cover - defensive
+        logger.debug(f"app_globals unavailable: {e}")
+        return None
+
+
+def _read_full_cap_over_area(app_globals):
+    """The FULL (liquid-covered) capacitance-per-unit-area from
+    app_globals, or None when absent / non-positive / unparseable."""
+    try:
+        value = app_globals.get(_LIQUID_CAP_KEY)
+    except Exception:                              # pragma: no cover - defensive
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _read_channel_areas(app_globals):
+    """channel-id(str) -> summed electrode area (mm^2) from app_globals,
+    or {} when absent. Keys are strings because the source Dict(Int,Float)
+    is JSON-round-tripped through Redis; callers look up str(channel)."""
+    try:
+        areas = app_globals.get(_CHANNEL_AREAS_KEY)
+    except Exception:                              # pragma: no cover - defensive
+        return {}
+    return areas if isinstance(areas, dict) else {}
 
 
 def _parse_capacitance_pf(raw):
@@ -109,26 +148,18 @@ class VolumeThresholdHandler(BaseColumnHandler):
     """Per-step volume threshold monitor (priority 30 — runs in
     parallel with RoutesHandler).
 
-    Per phase:
-      * Read the actuated electrodes from the ELECTRODES_STATE_CHANGE
-        payload that RoutesHandler publishes.
-      * Use the full (liquid-covered) capacitance-per-unit-area seeded
-        into proto_ctx.scratch["full_capacitance_over_area"] at run
-        start (primary source). Drain any pending CALIBRATION_DATA
-        messages as a live mid-run override (secondary source). The
-        CALIBRATION_DATA topic fires only on calibration change, which
-        happens pre-run — the message is dropped before any step mailbox
-        exists, so the scratch snapshot is the reliable path.
-      * target = (percent / 100) * liquid_capacitance_over_area * actuated_area
-      * Poll CAPACITANCE_UPDATED until current >= target -> set
-        ctx.phase_advance_event (RoutesHandler's _cooperative_sleep
-        wakes on it) -> loop back for the next phase boundary.
+    Reads the full (liquid-covered) capacitance-per-unit-area and the
+    channel-area map from app_globals (published by the DV models).
+    Per phase: read the actuated channels from the ELECTRODES_STATE_CHANGE
+    payload RoutesHandler publishes, sum their areas, compute
+    ``target = (percent/100) * full_cap_over_area * actuated_area``, and
+    poll CAPACITANCE_UPDATED until ``current >= target`` -> set
+    ctx.phase_advance_event (RoutesHandler's _cooperative_sleep wakes on
+    it) -> loop back for the next phase boundary.
     """
 
     priority = 30
-    wait_for_topics = [
-        ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED, CALIBRATION_DATA,
-    ]
+    wait_for_topics = [ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED]
 
     def on_step(self, row, ctx):
         percent = float(getattr(row, "volume_threshold", 0) or 0)
@@ -136,63 +167,50 @@ class VolumeThresholdHandler(BaseColumnHandler):
             return
         if getattr(ctx.protocol, "preview_mode", False):
             return
-        electrode_areas = dict(
-            ctx.protocol.scratch.get("electrode_areas") or {}
-        )
-        if not electrode_areas:
+
+        app_globals = _get_app_globals()
+        if app_globals is None:
             logger.info(
-                "volume_threshold: no electrode_areas in scratch; "
-                "skipping (likely a demo / headless run)"
-            )
+                "volume_threshold: app_globals unavailable; skipping "
+                "(headless / no-Redis run)")
+            return
+
+        full_cap_over_area = _read_full_cap_over_area(app_globals)
+        channel_areas = _read_channel_areas(app_globals)
+        if full_cap_over_area is None or not channel_areas:
+            logger.info(
+                "volume_threshold: missing calibration "
+                "(liquid_capacitance_over_area) or channel areas in "
+                "app_globals; calibrate + load a device first. Skipping.")
             return
 
         stop_event = ctx.protocol.stop_event
-        # Primary source: the full (liquid-covered) capacitance-per-unit-area
-        # snapshotted from the DV model into scratch at run start. The
-        # CALIBRATION_DATA topic only fires on calibration *change* — which
-        # happens pre-run, when no step is active, so the message is dropped
-        # before any mailbox exists. The scratch snapshot is therefore the
-        # reliable source; the topic drain below is a live mid-run override
-        # for the rare case calibration changes during a run.
-        seeded = ctx.protocol.scratch.get("full_capacitance_over_area")
-        try:
-            seeded = float(seeded) if seeded else None
-        except (TypeError, ValueError):
-            seeded = None
-        full_cap_over_area = self._latest_full_cap_over_area(ctx, default=seeded)
-
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
             try:
                 payload = ctx.wait_for(
-                    ELECTRODES_STATE_CHANGE,
-                    timeout=PHASE_POLL_TIMEOUT_S,
+                    ELECTRODES_STATE_CHANGE, timeout=PHASE_POLL_TIMEOUT_S,
                 )
             except TimeoutError:
                 continue
-
-            full_cap_over_area = self._latest_full_cap_over_area(
-                ctx, default=full_cap_over_area)
             try:
-                electrodes = _json.loads(payload).get("electrodes") or []
+                channels = _json.loads(payload).get("channels") or []
             except (TypeError, ValueError):
                 continue
 
             actuated_area = sum(
-                float(electrode_areas.get(e, 0.0)) for e in electrodes
+                float(channel_areas.get(str(c), 0.0)) for c in channels
             )
-            if full_cap_over_area is None or actuated_area <= 0.0:
+            if actuated_area <= 0.0:
                 continue
 
-            full_cap = full_cap_over_area * actuated_area
-            target = (percent / 100.0) * full_cap
+            target = (percent / 100.0) * full_cap_over_area * actuated_area
             self._monitor_until_threshold(ctx, target)
-            # Do NOT return here — loop back to monitor the NEXT phase.
-            # RoutesHandler clears
-            # at the top of its
+            # Do NOT return — loop back to monitor the next phase.
+            # RoutesHandler clears phase_advance_event at the top of its
             # next phase iteration and publishes a fresh
-            # ELECTRODES_STATE_CHANGE, which our outer loop picks up.
-            # The loop exits only on stop_event or step_phases_done_event.
+            # ELECTRODES_STATE_CHANGE, which our outer loop picks up. The
+            # loop exits only on stop_event or step_phases_done_event.
 
     @staticmethod
     def _monitor_until_threshold(ctx, target):
@@ -204,10 +222,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
         hands control back to on_step's outer loop, which re-waits for
         the next ELECTRODES_STATE_CHANGE and recomputes the target for
         the new phase. CAP_POLL_TIMEOUT_S thus doubles as the cadence at
-        which we re-sync to phase boundaries. On real hardware
-        capacitance reports arrive sub-second, well inside the poll
-        window, so a timeout normally only fires at a genuine lull
-        (e.g. between phases)."""
+        which we re-sync to phase boundaries."""
         stop_event = ctx.protocol.stop_event
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
@@ -222,33 +237,9 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 continue
             if current >= target:
                 ctx.phase_advance_event.set()
-                logger.info("volume_threshold: target reached, advance phase event is set")
+                logger.info(
+                    "volume_threshold: target reached, phase_advance_event set")
                 return
-
-    @staticmethod
-    def _latest_full_cap_over_area(ctx, default=None):
-        """Drain pending CALIBRATION_DATA messages and return the most
-        recent FULL (liquid-covered) capacitance-per-unit-area, or
-        `default` if none arrived. 'Full' is the liquid reference from
-        calibration; the percentage target is a fraction of it. Returns
-        immediately when the mailbox is empty (zero timeout)."""
-        latest = default
-        while True:
-            try:
-                raw = ctx.wait_for(CALIBRATION_DATA, timeout=0.0)
-            except TimeoutError:
-                return latest
-            try:
-                payload = _json.loads(raw)
-            except (TypeError, ValueError):
-                continue
-            value = payload.get("liquid_capacitance_over_area")
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
-                latest = value
 
 
 def make_volume_threshold_column() -> Column:
@@ -258,8 +249,6 @@ def make_volume_threshold_column() -> Column:
             col_name=VOLUME_THRESHOLD_COL_NAME,
             default_value=VOLUME_THRESHOLD_DEFAULT,
         ),
-        view=VolumeThresholdColumnView(
-            low=0, high=100,
-        ),
+        view=VolumeThresholdColumnView(low=0, high=100),
         handler=VolumeThresholdHandler(),
     )
