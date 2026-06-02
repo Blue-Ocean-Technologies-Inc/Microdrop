@@ -6,8 +6,8 @@ PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 VOLUME_THRESHOLD_COL_ID = "volume_threshold"
-VOLUME_THRESHOLD_COL_NAME = "Volume Threshold"
-VOLUME_THRESHOLD_DEFAULT = 0.0           # disabled
+VOLUME_THRESHOLD_COL_NAME = "Volume Threshold %"
+VOLUME_THRESHOLD_DEFAULT = 0           # percent; 0 disables
 
 # Handler polling interval while waiting for the next phase boundary
 # (ELECTRODES_STATE_CHANGE). Short so the handler exits within ~2s of

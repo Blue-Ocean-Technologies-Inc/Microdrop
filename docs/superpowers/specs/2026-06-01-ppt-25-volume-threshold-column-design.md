@@ -6,13 +6,16 @@
 
 ## Goal
 
-Port the `Volume Threshold` per-step column from legacy `protocol_grid`
-into the pluggable protocol tree. The column lets the user specify a
-target droplet volume; the runner converts it to a target capacitance
-per phase (using calibration data and the actuated electrodes' areas)
-and **cuts the current phase short** as soon as the measured
-capacitance reaches that target. Threshold = `0.0` disables the
-behaviour for the step. Preview-mode runs skip the check entirely.
+Port the `Volume Threshold %` per-step column from legacy `protocol_grid`
+into the pluggable protocol tree. The column stores a 0-100 **percent**
+(Int; 0 disables). Each phase ends early once the measured capacitance of
+the actuated electrodes reaches this percent of their calibrated FULL
+(liquid-covered) capacitance:
+
+    target = (percent / 100) × liquid_capacitance_over_area × actuated_area
+
+The filler/baseline value is NOT used. Preview-mode runs skip the check
+entirely.
 
 ## Background
 
@@ -25,7 +28,8 @@ runner (`protocol_runner_controller.py:1500-1611`):
 1. Reads `step.parameters["Volume Threshold"]` (float, `0.0` disables).
 2. At each phase start, computes
    `target = threshold × actuated_area × (liquid_cap − filler_cap)`
-   using `ForceCalculationService.calculate_capacitance_per_unit_area`
+   (legacy formula using `ForceCalculationService.calculate_capacitance_per_unit_area`;
+   the new column uses `(percent / 100) × liquid_cap × actuated_area` — filler not used)
    and the calibration's per-electrode areas.
 3. Starts the service, which polls; on `current_cap >= target` emits
    `threshold_reached` → the runner stops the phase timer and jumps to
@@ -128,30 +132,27 @@ volume_threshold_protocol_controls/
 ```
 
 **`VolumeThresholdColumnModel`** —
-`col_id="volume_threshold"`, `col_name="Volume Threshold"`,
-`default_value=0.0`. Float trait. Step-level (`renders_on_group=False`).
-Hidden by default (`hidden_by_default=True`) — surfaces via header
-right-click, same posture as `droplet_check` and the trail-loop knobs.
-Value is in droplet-volume units (typically µL; the column doesn't
-care — it just multiplies the user's number into the formula and is
-itself unit-agnostic).
+`col_id="volume_threshold"`, `col_name="Volume Threshold %"`,
+`default_value=0`. Int trait (0-100 percent). Step-level
+(`renders_on_group=False`). Hidden by default (`hidden_by_default=True`)
+— surfaces via header right-click, same posture as `droplet_check` and
+the trail-loop knobs. 0 disables; reaching the percent of the full
+(liquid-covered) capacitance cuts the phase short.
 
-**`VolumeThresholdColumnView`** — numeric edit. Reuse the existing
-`FloatEditColumnView` if one exists; otherwise base it on
-`StringEditColumnView` with a parse-on-commit float conversion (look
-at `repeat_duration_column` / `duration_column` for prior art).
+**`VolumeThresholdColumnView`** — `IntSpinBoxColumnView` with
+`low=0, high=100`.
 
 **`VolumeThresholdHandler`** — `priority=30` (same bucket as
 `RoutesHandler` so they run in the same parallel pool; the handler
 must NOT touch hardware so the bucket-collision rule doesn't apply).
 `wait_for_topics = [CAPACITANCE_UPDATED, ELECTRODES_STATE_CHANGE,
-CALIBRATION_DATA]`.
+CALIBRATION_DATA]`. Formula: `target = (percent / 100) × liquid_capacitance_over_area × actuated_area`.
 
 **`on_step(self, row, ctx)`** body:
 
 ```
-threshold = float(getattr(row, "volume_threshold", 0.0) or 0.0)
-if threshold <= 0:                  # disabled
+percent = float(getattr(row, "volume_threshold", 0) or 0)
+if percent <= 0:                    # disabled
     return
 if ctx.protocol.preview_mode:       # no hardware, nothing to monitor
     return
@@ -164,9 +165,8 @@ if not electrode_areas:
     )
     return
 
-cpa = self._latest_cpa(ctx)         # see helper below; None when no calibration
+full_cap_over_area = self._latest_full_cap_over_area(ctx, default=None)
 stop_event = ctx.protocol.stop_event
-advance_event = ctx.phase_advance_event
 
 # Outer loop: one iteration per phase. ELECTRODES_STATE_CHANGE marks
 # each phase boundary (Routes publishes it). Loop exits when stop fires,
@@ -182,17 +182,18 @@ while (not stop_event.is_set()
     except TimeoutError:
         continue                       # recheck loop conditions
 
-    # Drain any pending CALIBRATION_DATA messages so cpa stays current.
-    cpa = self._latest_cpa(ctx, default=cpa)
+    # Drain any pending CALIBRATION_DATA messages so full_cap_over_area stays current.
+    full_cap_over_area = self._latest_full_cap_over_area(ctx, default=full_cap_over_area)
 
     electrodes = json.loads(payload).get("electrodes") or []
     actuated_area = sum(
         float(electrode_areas.get(e, 0.0)) for e in electrodes
     )
-    if cpa is None or actuated_area <= 0.0:
+    if full_cap_over_area is None or actuated_area <= 0.0:
         continue                     # cannot compute target — wait next phase
 
-    target = threshold * actuated_area * cpa
+    full_cap = full_cap_over_area * actuated_area
+    target = (percent / 100.0) * full_cap
     self._monitor_until_threshold(ctx, target)
 
 
@@ -220,12 +221,12 @@ def _monitor_until_threshold(self, ctx, target):
 
 
 @staticmethod
-def _latest_cpa(ctx, default=None):
+def _latest_full_cap_over_area(ctx, default=None):
     """Drain any pending CALIBRATION_DATA messages from the mailbox and
-    return the most recent capacitance-per-unit-area, or `default` if
-    nothing has arrived. cpa = liquid - filler when both are present,
-    non-negative, and liquid > filler (matches the legacy formula and
-    the logging controller's _capacitance_per_unit_area helper)."""
+    return the most recent FULL (liquid-covered) capacitance-per-unit-area,
+    or `default` if nothing has arrived. 'Full' is the liquid reference
+    from calibration; the percentage target is a fraction of it.
+    Reads `liquid_capacitance_over_area` only — filler is not used."""
     ...
 ```
 
@@ -268,8 +269,8 @@ etc.).
 ## Data flow
 
 ```
-user sets Volume Threshold cell (e.g. 0.6)
-  -> persisted in row.volume_threshold (Float)
+user sets Volume Threshold % cell (e.g. 50)
+  -> persisted in row.volume_threshold (Int, 0-100 percent)
 
 dock pane / start_protocol_run
   -> electrode_areas_provider() -> {electrode_id: area_mm2, ...}
@@ -297,8 +298,8 @@ executor.run
   while not stop_event AND not step_phases_done_event:
     try: wait_for(ELECTRODES_STATE_CHANGE, timeout=2s) -> electrodes
     except TimeoutError: continue          -- re-check exit flags
-    drain CALIBRATION_DATA -> latest cpa
-    compute target = threshold * area * cpa
+    drain CALIBRATION_DATA -> latest full_cap_over_area (liquid reference)
+    compute target = (percent / 100) * full_cap_over_area * actuated_area
     while monitoring:
       payload = wait_for(CAPACITANCE_UPDATED, timeout=1s)
       if parse(payload) >= target:
@@ -353,8 +354,9 @@ If volume threshold hits mid-dwell:
   - Column metadata (id, name, default, priority, wait_for_topics).
   - Handler short-circuits when `threshold <= 0`, `preview_mode`, or
     `electrode_areas` empty.
-  - `_latest_cpa` parses `liquid - filler` correctly and returns
-    `default` when no CALIBRATION_DATA pending.
+  - `_latest_full_cap_over_area` reads `liquid_capacitance_over_area`
+    (full liquid reference; filler not used) and returns `default` when
+    no CALIBRATION_DATA pending.
   - Driven via a stubbed `StepContext` whose mailboxes are pre-
     populated with synthetic ELECTRODES_STATE_CHANGE +
     CAPACITANCE_UPDATED payloads:
