@@ -158,6 +158,7 @@ class ProtocolTreePane(QWidget):
         executor_factory=None,
         logging_device_context_provider=None,
         electrode_areas_provider=None,
+        full_capacitance_provider=None,
         quick_actions=None,
         parent=None,
     ):
@@ -174,6 +175,7 @@ class ProtocolTreePane(QWidget):
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
         self._electrode_areas_provider = electrode_areas_provider
+        self._full_capacitance_provider = full_capacitance_provider
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -601,24 +603,32 @@ class ProtocolTreePane(QWidget):
         )
 
     def _resolve_extra_scratch(self):
-        """Resolve the electrode_areas_provider (if any) into an
-        extra_scratch dict for executor.start. Returns None when no
-        provider is configured or it yields nothing — the executor
-        then runs with protocol_metadata-only scratch. Guarded: a
-        provider error logs a warning and degrades to None (the
-        volume-threshold column self-disables when areas are absent)."""
-        if self._electrode_areas_provider is None:
-            return None
-        try:
-            areas = self._electrode_areas_provider()
-        except Exception as e:
-            logger.warning(
-                f"electrode_areas_provider raised: {e}; volume-threshold "
-                f"column will skip this run")
-            return None
-        if not areas:
-            return None
-        return {"electrode_areas": dict(areas)}
+        """Resolve run-start device snapshots (electrode areas + full
+        capacitance reference) into an extra_scratch dict for
+        executor.start. Returns None when nothing is available — the
+        executor then runs with protocol_metadata-only scratch, and the
+        volume-threshold column self-disables. Each provider is guarded:
+        a provider error logs a warning and is simply omitted."""
+        scratch = {}
+        if self._electrode_areas_provider is not None:
+            try:
+                areas = self._electrode_areas_provider()
+                if areas:
+                    scratch["electrode_areas"] = dict(areas)
+            except Exception as e:
+                logger.warning(
+                    f"electrode_areas_provider raised: {e}; volume-threshold "
+                    f"column will skip this run")
+        if self._full_capacitance_provider is not None:
+            try:
+                full = self._full_capacitance_provider()
+                if full:
+                    scratch["full_capacitance_over_area"] = float(full)
+            except Exception as e:
+                logger.warning(
+                    f"full_capacitance_provider raised: {e}; volume-threshold "
+                    f"column will skip this run")
+        return scratch or None
 
     def _start_protocol_run(self, preview_mode):
         self._repeats_total = self.status_bar.edit_repeat_protocol.value()

@@ -84,6 +84,26 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 logger.debug(f"electrode-areas probe failed: {e}")
                 return {}
 
+        def _full_capacitance_over_area():
+            """The calibrated FULL (liquid-covered) capacitance per unit
+            area (pF/mm^2) from the live DV model, snapshotted at run
+            start. Returns None when the DV is unavailable or the user
+            hasn't calibrated — the volume-threshold handler then has no
+            target reference and no-ops. Snapshotted (not taken from the
+            CALIBRATION_DATA topic) because that topic only fires on
+            calibration *change*, pre-run, when no step mailbox exists to
+            receive it."""
+            try:
+                dv_pane = self.task.window.get_dock_pane(
+                    "device_viewer.dock_pane")
+                model = getattr(dv_pane, "model", None)
+                if model is None:
+                    return None
+                return getattr(model, "liquid_capacitance_over_area", None)
+            except Exception as e:
+                logger.debug(f"full-capacitance probe failed: {e}")
+                return None
+
         pane = ProtocolTreePane(
             manager,
             application=app,
@@ -92,6 +112,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             device_viewer_sync=sync,
             logging_device_context_provider=_logging_device_context,
             electrode_areas_provider=_electrode_areas,
+            full_capacitance_provider=_full_capacitance_over_area,
             quick_actions=list(self.quick_actions),
             parent=parent,
         )

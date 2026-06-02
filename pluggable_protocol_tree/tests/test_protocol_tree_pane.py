@@ -1843,3 +1843,22 @@ def test_pane_omits_extra_scratch_when_no_provider(qapp):
 
     # extra_scratch must be None (or absent) — never an electrode_areas dict.
     assert captured.get("extra_scratch") is None
+
+
+def test_pane_passes_full_capacitance_to_executor_start(qapp):
+    """full_capacitance_provider is snapshotted into
+    extra_scratch['full_capacitance_over_area'] at run start."""
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
+    _factory, captured = _make_capturing_executor_factory()
+
+    pane = ptp.ProtocolTreePane(
+        [make_name_column()],
+        executor_factory=_factory,
+        electrode_areas_provider=lambda: {"e1": 1.0},
+        full_capacitance_provider=lambda: 5.0,
+    )
+    pane._start_protocol_run(preview_mode=False)
+    assert captured["extra_scratch"]["electrode_areas"] == {"e1": 1.0}
+    assert captured["extra_scratch"]["full_capacitance_over_area"] == 5.0

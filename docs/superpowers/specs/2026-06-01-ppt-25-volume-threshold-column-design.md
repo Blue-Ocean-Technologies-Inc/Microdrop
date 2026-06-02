@@ -165,7 +165,18 @@ if not electrode_areas:
     )
     return
 
-full_cap_over_area = self._latest_full_cap_over_area(ctx, default=None)
+# Primary source: full-capacitance reference snapshotted from the DV model
+# into proto_ctx.scratch["full_capacitance_over_area"] at run start (via
+# full_capacitance_provider + extra_scratch in the dock pane). CALIBRATION_DATA
+# fires only on calibration *change*, pre-run, when no step mailbox exists —
+# so the scratch snapshot is the reliable source. The topic drain below
+# (_latest_full_cap_over_area) is kept as a live mid-run override.
+seeded = ctx.protocol.scratch.get("full_capacitance_over_area")
+try:
+    seeded = float(seeded) if seeded else None
+except (TypeError, ValueError):
+    seeded = None
+full_cap_over_area = self._latest_full_cap_over_area(ctx, default=seeded)
 stop_event = ctx.protocol.stop_event
 
 # Outer loop: one iteration per phase. ELECTRODES_STATE_CHANGE marks
@@ -247,18 +258,35 @@ def _latest_full_cap_over_area(ctx, default=None):
 constructs the pane; the pane's protocol-start path
 (`_start_protocol_run`) is where `electrode_areas` enters the system.
 
-**`views/protocol_tree_pane.py`** — `_start_protocol_run` receives an
-optional `electrode_areas_provider: Callable[[], dict] | None`
-(injected via constructor, same shape as `logging_device_context_provider`
-already there). When provided, the pane resolves it once and passes
-the dict as `extra_scratch={"electrode_areas": ...}` into
-`self.executor.start(...)`.
+**`views/protocol_tree_pane.py`** — `_start_protocol_run` receives two
+optional providers injected via constructor (same shape as
+`logging_device_context_provider` already there):
+
+- `electrode_areas_provider: Callable[[], dict] | None` — per-electrode
+  area map, resolved once at run start into
+  `extra_scratch["electrode_areas"]`.
+- `full_capacitance_provider: Callable[[], float | None] | None` — the
+  calibrated FULL (liquid-covered) capacitance-per-unit-area from the
+  live DV model, resolved once at run start into
+  `extra_scratch["full_capacitance_over_area"]`.
+
+Both are snapshotted into `extra_scratch` by `_resolve_extra_scratch()`
+and passed to `self.executor.start(extra_scratch=...)`. The
+`full_capacitance_over_area` snapshot is the **primary** source for the
+volume-threshold handler because `CALIBRATION_DATA` fires only on
+calibration *change*, which happens pre-run — at that moment no step
+mailbox exists, so `route_to_active_step` (execution/listener.py) drops
+the message. The CALIBRATION_DATA mailbox drain inside the handler is
+kept as a live mid-run override for the rare case calibration changes
+during a run.
 
 **`views/dock_pane.py`** — alongside the existing
-`_logging_device_context` provider, add a sibling
-`_electrode_areas` provider that reads from `dv_pane.model.electrodes`
-(unit conversion to mm² already lives in the DV model). Pass it into
-`ProtocolTreePane(..., electrode_areas_provider=_electrode_areas)`.
+`_logging_device_context` and `_electrode_areas` providers, add a sibling
+`_full_capacitance_over_area` provider that reads
+`dv_pane.model.liquid_capacitance_over_area` from the live DV model.
+Pass it into
+`ProtocolTreePane(..., electrode_areas_provider=_electrode_areas,
+full_capacitance_provider=_full_capacitance_over_area)`.
 
 **Plugin registration:** add
 `VolumeThresholdProtocolControlsPlugin()` to
