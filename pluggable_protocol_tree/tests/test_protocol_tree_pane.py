@@ -1807,7 +1807,7 @@ def _make_capturing_executor_factory():
     return _factory, captured
 
 
-def test_pane_passes_electrode_areas_to_executor_start(qapp, monkeypatch):
+def test_pane_passes_electrode_areas_to_executor_start(qapp):
     """When an electrode_areas_provider is injected, the pane resolves
     it once at start and threads the result into executor.start as
     extra_scratch['electrode_areas']."""
