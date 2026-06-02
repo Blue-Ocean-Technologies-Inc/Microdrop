@@ -114,8 +114,13 @@ def test_handler_returns_immediately_when_electrode_areas_missing():
 
 def test_handler_sets_phase_advance_event_when_capacitance_crosses_target():
     """electrodes ["e1"] -> area 1.0; liquid=5 filler=3 -> cpa=2;
-    threshold=0.5 -> target=1.0pF. A reading of 1.5pF triggers advance."""
+    threshold=0.5 -> target=1.0pF. A reading of 1.5pF triggers advance.
+    A daemon sets step_phases_done_event so the per-phase outer loop
+    exits after the crossing (mirrors RoutesHandler finishing its
+    phases in a real run)."""
     import json
+    import threading
+    import time
     from device_viewer.consts import CALIBRATION_DATA
     from dropbot_controller.consts import CAPACITANCE_UPDATED
     from electrode_controller.consts import ELECTRODES_STATE_CHANGE
@@ -129,6 +134,12 @@ def test_handler_sets_phase_advance_event_when_capacitance_crosses_target():
         json.dumps({"electrodes": ["e1"], "channels": [1]}))
     enq(CAPACITANCE_UPDATED,
         json.dumps({"capacitance": "1.5pF", "voltage": "100V"}))
+
+    def _set_done_soon():
+        time.sleep(0.05)
+        ctx.step_phases_done_event.set()
+    threading.Thread(target=_set_done_soon, daemon=True).start()
+
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is True
 
@@ -184,7 +195,9 @@ def test_handler_wait_for_topics_declared():
     from volume_threshold_protocol_controls.protocol_columns.volume_threshold_column import (
         VolumeThresholdHandler,
     )
-    declared = set(VolumeThresholdHandler.wait_for_topics)
+    # Instance-level access — that's how the executor reads it
+    # (col.handler.wait_for_topics in _build_step_ctx).
+    declared = set(VolumeThresholdHandler().wait_for_topics)
     assert CAPACITANCE_UPDATED in declared
     assert ELECTRODES_STATE_CHANGE in declared
     assert CALIBRATION_DATA in declared
