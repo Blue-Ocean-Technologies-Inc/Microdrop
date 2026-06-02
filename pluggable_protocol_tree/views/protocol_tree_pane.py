@@ -157,8 +157,6 @@ class ProtocolTreePane(QWidget):
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         logging_device_context_provider=None,
-        electrode_areas_provider=None,
-        full_capacitance_provider=None,
         quick_actions=None,
         parent=None,
     ):
@@ -174,8 +172,6 @@ class ProtocolTreePane(QWidget):
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
-        self._electrode_areas_provider = electrode_areas_provider
-        self._full_capacitance_provider = full_capacitance_provider
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -602,34 +598,6 @@ class ProtocolTreePane(QWidget):
             preview_mode=self.navigation_bar.is_preview_mode(),
         )
 
-    def _resolve_extra_scratch(self):
-        """Resolve run-start device snapshots (electrode areas + full
-        capacitance reference) into an extra_scratch dict for
-        executor.start. Returns None when nothing is available — the
-        executor then runs with protocol_metadata-only scratch, and the
-        volume-threshold column self-disables. Each provider is guarded:
-        a provider error logs a warning and is simply omitted."""
-        scratch = {}
-        if self._electrode_areas_provider is not None:
-            try:
-                areas = self._electrode_areas_provider()
-                if areas:
-                    scratch["electrode_areas"] = dict(areas)
-            except Exception as e:
-                logger.warning(
-                    f"electrode_areas_provider raised: {e}; volume-threshold "
-                    f"column will skip this run")
-        if self._full_capacitance_provider is not None:
-            try:
-                full = self._full_capacitance_provider()
-                if full:
-                    scratch["full_capacitance_over_area"] = float(full)
-            except Exception as e:
-                logger.warning(
-                    f"full_capacitance_provider raised: {e}; volume-threshold "
-                    f"column will skip this run")
-        return scratch or None
-
     def _start_protocol_run(self, preview_mode):
         self._repeats_total = self.status_bar.edit_repeat_protocol.value()
         self._repeats_completed = 0
@@ -658,7 +626,6 @@ class ProtocolTreePane(QWidget):
         self.executor.start(
             start_step_path=start_path,
             preview_mode=preview_mode,
-            extra_scratch=self._resolve_extra_scratch(),
         )
 
     def _update_repeat_status_label(self):
@@ -715,10 +682,7 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated("finished")
 
     def _restart_for_next_rep(self):
-        self.executor.start(
-            preview_mode=self._current_run_preview_mode,
-            extra_scratch=self._resolve_extra_scratch(),
-        )
+        self.executor.start(preview_mode=self._current_run_preview_mode)
 
     def _on_protocol_aborted(self):
         logger.info("Protocol aborted by user")
