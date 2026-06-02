@@ -231,6 +231,6 @@ class Electrodes(HasTraits):
             area_change = event.new - event.old
             self.svg_model.electrode_areas_scaled[channel_affected] += area_change
 
-    @observe("channel_electrodes_area_scaled_map")
+    @observe("channel_electrode_areas_scaled_map")
     def _channel_electrode_areas_scaled_map_changed(self, event):
         _update_app_globals_on_trait_change_event(event)
