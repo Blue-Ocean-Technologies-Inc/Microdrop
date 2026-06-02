@@ -89,11 +89,6 @@ class VolumeThresholdColumnView(DoubleSpinBoxColumnView):
     hidden_by_default = True
 
 
-_VOLUME_THRESHOLD_TOPICS = [
-    ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED, CALIBRATION_DATA,
-]
-
-
 class VolumeThresholdHandler(BaseColumnHandler):
     """Per-step volume threshold monitor (priority 30 — runs in
     parallel with RoutesHandler).
@@ -110,9 +105,9 @@ class VolumeThresholdHandler(BaseColumnHandler):
     """
 
     priority = 30
-
-    def _wait_for_topics_default(self):
-        return list(_VOLUME_THRESHOLD_TOPICS)
+    wait_for_topics = [
+        ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED, CALIBRATION_DATA,
+    ]
 
     def on_step(self, row, ctx):
         threshold = float(getattr(row, "volume_threshold", 0.0) or 0.0)
@@ -161,11 +156,12 @@ class VolumeThresholdHandler(BaseColumnHandler):
 
             target = threshold * actuated_area * cpa
             self._monitor_until_threshold(ctx, target)
-            # If the advance event was set, the threshold was crossed —
-            # our job for this step is done; RoutesHandler will clear
-            # the event and advance the phase.
-            if ctx.phase_advance_event.is_set():
-                return
+            # Do NOT return here — loop back to monitor the NEXT phase.
+            # RoutesHandler clears phase_advance_event at the top of its
+            # next phase iteration and publishes a fresh
+            # ELECTRODES_STATE_CHANGE, which our outer loop picks up.
+            # The loop exits only on stop_event or step_phases_done_event
+            # (set by RoutesHandler after its final phase).
 
     @staticmethod
     def _monitor_until_threshold(ctx, target):
@@ -190,7 +186,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 return
 
     @staticmethod
-    def _latest_cpa(ctx, default):
+    def _latest_cpa(ctx, default=None):
         """Drain any pending CALIBRATION_DATA messages and return the
         most recent capacitance-per-unit-area, or `default` if no
         valid calibration arrived. Returns immediately when the
@@ -212,12 +208,6 @@ class VolumeThresholdHandler(BaseColumnHandler):
             if value is not None:
                 latest = value
 
-
-# Expose wait_for_topics as a plain class attribute so tests (and the
-# executor's topic-aggregation pass) can read it at class level without
-# needing an instance. The _wait_for_topics_default() method above keeps
-# the Traits instance machinery working correctly.
-VolumeThresholdHandler.wait_for_topics = _VOLUME_THRESHOLD_TOPICS
 
 
 def make_volume_threshold_column() -> Column:
