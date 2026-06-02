@@ -206,3 +206,32 @@ def test_handler_wait_for_topics_declared():
     assert CAPACITANCE_UPDATED in declared
     assert ELECTRODES_STATE_CHANGE in declared
     assert CALIBRATION_DATA in declared
+
+
+def test_handler_uses_full_capacitance_seeded_in_scratch_no_calibration_msg():
+    """Real-world path: calibration is snapshotted into scratch at run
+    start (the CALIBRATION_DATA topic fired pre-run and was dropped).
+    The handler must use the scratch value — NOT require a live
+    CALIBRATION_DATA message — to compute the target and advance.
+    Regression for the 'nothing happens' bug."""
+    import json
+    import threading
+    import time
+    from dropbot_controller.consts import CAPACITANCE_UPDATED
+    from electrode_controller.consts import ELECTRODES_STATE_CHANGE
+    handler, row, ctx, enq = _make_handler_ctx(
+        threshold=50, electrode_areas={"e1": 1.0},
+    )
+    ctx.protocol.scratch["full_capacitance_over_area"] = 5.0
+    enq(ELECTRODES_STATE_CHANGE,
+        json.dumps({"electrodes": ["e1"], "channels": [1]}))
+    enq(CAPACITANCE_UPDATED,
+        json.dumps({"capacitance": "3.0pF", "voltage": "100V"}))
+
+    def _set_done_soon():
+        time.sleep(0.05)
+        ctx.step_phases_done_event.set()
+    threading.Thread(target=_set_done_soon, daemon=True).start()
+
+    handler.on_step(row, ctx)
+    assert ctx.phase_advance_event.is_set() is True
