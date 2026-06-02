@@ -157,6 +157,7 @@ class ProtocolTreePane(QWidget):
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         logging_device_context_provider=None,
+        electrode_areas_provider=None,
         quick_actions=None,
         parent=None,
     ):
@@ -172,6 +173,7 @@ class ProtocolTreePane(QWidget):
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
+        self._electrode_areas_provider = electrode_areas_provider
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
@@ -598,6 +600,26 @@ class ProtocolTreePane(QWidget):
             preview_mode=self.navigation_bar.is_preview_mode(),
         )
 
+    def _resolve_extra_scratch(self):
+        """Resolve the electrode_areas_provider (if any) into an
+        extra_scratch dict for executor.start. Returns None when no
+        provider is configured or it yields nothing — the executor
+        then runs with protocol_metadata-only scratch. Guarded: a
+        provider error logs a warning and degrades to None (the
+        volume-threshold column self-disables when areas are absent)."""
+        if self._electrode_areas_provider is None:
+            return None
+        try:
+            areas = self._electrode_areas_provider()
+        except Exception as e:
+            logger.warning(
+                f"electrode_areas_provider raised: {e}; volume-threshold "
+                f"column will skip this run")
+            return None
+        if not areas:
+            return None
+        return {"electrode_areas": dict(areas)}
+
     def _start_protocol_run(self, preview_mode):
         self._repeats_total = self.status_bar.edit_repeat_protocol.value()
         self._repeats_completed = 0
@@ -626,6 +648,7 @@ class ProtocolTreePane(QWidget):
         self.executor.start(
             start_step_path=start_path,
             preview_mode=preview_mode,
+            extra_scratch=self._resolve_extra_scratch(),
         )
 
     def _update_repeat_status_label(self):
@@ -682,7 +705,10 @@ class ProtocolTreePane(QWidget):
         self._on_protocol_terminated("finished")
 
     def _restart_for_next_rep(self):
-        self.executor.start(preview_mode=self._current_run_preview_mode)
+        self.executor.start(
+            preview_mode=self._current_run_preview_mode,
+            extra_scratch=self._resolve_extra_scratch(),
+        )
 
     def _on_protocol_aborted(self):
         logger.info("Protocol aborted by user")
