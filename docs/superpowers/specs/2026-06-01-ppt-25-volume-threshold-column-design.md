@@ -118,12 +118,14 @@ mailbox setup).
 events as fresh `threading.Event()` instances. Other handlers get
 them for free via `ctx.phase_advance_event` / `ctx.step_phases_done_event`.
 
-**`execution/executor.py`** — `Executor.start()` and `__init__` grow
-an optional `extra_scratch: dict | None = None` argument that
-merges into `proto_ctx.scratch` AFTER the `protocol_metadata` update.
-Mirrors how `electrode_to_channel` flows in today, but is for runtime
-(not file-persisted) data such as electrode areas. Demo callers don't
-pass it; the dock pane does.
+> **Implementation note (superseded):** an `Executor.start(extra_scratch=...)`
+> kwarg was added here to snapshot electrode areas / calibration into
+> `proto_ctx.scratch` at run start, then **removed** in the final design.
+> The handler now reads calibration and per-channel areas directly from
+> `app_globals` (the Redis-backed globals manager), where the device-viewer
+> models publish them on change. This drops the `extra_scratch` kwarg, the
+> pane's `electrode_areas_provider` / `full_capacitance_provider`, and the
+> dock-pane snapshot closures entirely. See §2 (handler) and §3 (wiring).
 
 ### 2. New plugin `volume_threshold_protocol_controls`
 
