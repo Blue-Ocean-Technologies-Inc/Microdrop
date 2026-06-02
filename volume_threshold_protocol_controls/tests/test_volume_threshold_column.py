@@ -162,7 +162,9 @@ def test_handler_does_not_set_event_when_below_target():
         json.dumps({"capacitance": "0.5pF", "voltage": "100V"}))
     # Simulate Routes finishing so the outer loop exits.
     def _set_done_soon():
-        import time; time.sleep(0.05); ctx.step_phases_done_event.set()
+        import time
+        time.sleep(0.05)
+        ctx.step_phases_done_event.set()
     threading.Thread(target=_set_done_soon, daemon=True).start()
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is False
@@ -182,7 +184,9 @@ def test_handler_skips_phase_when_actuated_area_is_zero():
     enq(ELECTRODES_STATE_CHANGE,
         json.dumps({"electrodes": ["unknown"], "channels": [99]}))
     def _set_done_soon():
-        import time; time.sleep(0.05); ctx.step_phases_done_event.set()
+        import time
+        time.sleep(0.05)
+        ctx.step_phases_done_event.set()
     threading.Thread(target=_set_done_soon, daemon=True).start()
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is False
