@@ -11,6 +11,20 @@ their calibrated FULL (liquid-covered) capacitance:
 
 The filler/baseline value is NOT used in this formula.
 
+Calibration source (full_capacitance_over_area):
+    The FULL (liquid-covered) capacitance-per-unit-area is snapshotted from
+    the live DV model into proto_ctx.scratch["full_capacitance_over_area"] at
+    run start (by the dock pane via extra_scratch), and read from scratch as
+    the primary source in on_step.
+
+    The CALIBRATION_DATA topic fires only on calibration *change*, which
+    happens pre-run (when the user calibrates in the device_view_dock_pane).
+    At that moment no protocol step is active, so route_to_active_step drops
+    the message. The mailbox is therefore empty when on_step runs, making
+    CALIBRATION_DATA alone an unreliable source. The scratch snapshot fixes
+    this; the CALIBRATION_DATA mailbox drain is kept as a live mid-run
+    override for the rare case calibration changes during a run.
+
 Re-sync cadence note: the handler recomputes the per-phase target each
 time it re-reads ELECTRODES_STATE_CHANGE, which happens whenever
 _monitor_until_threshold returns (a CAP_POLL_TIMEOUT_S timeout or a
@@ -98,8 +112,13 @@ class VolumeThresholdHandler(BaseColumnHandler):
     Per phase:
       * Read the actuated electrodes from the ELECTRODES_STATE_CHANGE
         payload that RoutesHandler publishes.
-      * Drain any pending CALIBRATION_DATA messages and reread the full
-        (liquid-covered) capacitance-per-unit-area.
+      * Use the full (liquid-covered) capacitance-per-unit-area seeded
+        into proto_ctx.scratch["full_capacitance_over_area"] at run
+        start (primary source). Drain any pending CALIBRATION_DATA
+        messages as a live mid-run override (secondary source). The
+        CALIBRATION_DATA topic fires only on calibration change, which
+        happens pre-run — the message is dropped before any step mailbox
+        exists, so the scratch snapshot is the reliable path.
       * target = (percent / 100) * liquid_capacitance_over_area * actuated_area
       * Poll CAPACITANCE_UPDATED until current >= target -> set
         ctx.phase_advance_event (RoutesHandler's _cooperative_sleep
@@ -128,7 +147,19 @@ class VolumeThresholdHandler(BaseColumnHandler):
             return
 
         stop_event = ctx.protocol.stop_event
-        full_cap_over_area = self._latest_full_cap_over_area(ctx, default=None)
+        # Primary source: the full (liquid-covered) capacitance-per-unit-area
+        # snapshotted from the DV model into scratch at run start. The
+        # CALIBRATION_DATA topic only fires on calibration *change* — which
+        # happens pre-run, when no step is active, so the message is dropped
+        # before any mailbox exists. The scratch snapshot is therefore the
+        # reliable source; the topic drain below is a live mid-run override
+        # for the rare case calibration changes during a run.
+        seeded = ctx.protocol.scratch.get("full_capacitance_over_area")
+        try:
+            seeded = float(seeded) if seeded else None
+        except (TypeError, ValueError):
+            seeded = None
+        full_cap_over_area = self._latest_full_cap_over_area(ctx, default=seeded)
 
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
@@ -157,7 +188,8 @@ class VolumeThresholdHandler(BaseColumnHandler):
             target = (percent / 100.0) * full_cap
             self._monitor_until_threshold(ctx, target)
             # Do NOT return here — loop back to monitor the NEXT phase.
-            # RoutesHandler clears phase_advance_event at the top of its
+            # RoutesHandler clears
+            # at the top of its
             # next phase iteration and publishes a fresh
             # ELECTRODES_STATE_CHANGE, which our outer loop picks up.
             # The loop exits only on stop_event or step_phases_done_event.
@@ -190,6 +222,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 continue
             if current >= target:
                 ctx.phase_advance_event.set()
+                logger.info("volume_threshold: target reached, advance phase event is set")
                 return
 
     @staticmethod
