@@ -2,6 +2,16 @@
 
 Single-file layout mirrors peripheral_protocol_controls's magnet_column
 and dropbot_protocol_controls's voltage / frequency / droplet columns.
+
+Re-sync cadence note: the handler recomputes the per-phase target each
+time it re-reads ELECTRODES_STATE_CHANGE, which happens whenever
+_monitor_until_threshold returns (a CAP_POLL_TIMEOUT_S timeout or a
+crossing). On real hardware capacitance reports arrive sub-second, so
+re-sync effectively lands at every phase boundary. For protocols with
+per-phase dwells shorter than ~CAP_POLL_TIMEOUT_S, several phases can
+buffer during one poll and a phase may be evaluated against a slightly
+earlier phase's target (correct association, lagging freshness). See the
+spec's "Out of scope" section for the rationale and a future fix.
 """
 
 import json as _json
