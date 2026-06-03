@@ -120,8 +120,11 @@ class RoutesHandler(BaseColumnHandler):
         ctx.phase_advance_event.clear()
         if stop_event.is_set():
             return False
-        # Pause check at the phase boundary — block so the next phase's
-        # actuation doesn't fire until the user resumes.
+        # Pause check at the phase boundary — block here so the
+        # next phase's actuation doesn't fire until the user
+        # resumes. The executor's between-step pause check
+        # doesn't reach inside on_step's phase loop, so without
+        # this the routes keep playing through a Pause click.
         if pause_event.is_set():
             pause_event.wait_cleared()
             if stop_event.is_set():
@@ -164,6 +167,10 @@ class RoutesHandler(BaseColumnHandler):
                 topic=ELECTRODES_STATE_CHANGE,
                 message=json.dumps(payload),
             )
+            # 5.0s timeout matches ack_roundtrip_column. Cold-
+            # broker first publish pays ~1-2s; typical ack <100ms.
+            # In preview we skip this entirely so the user gets a
+            # snappy visual playback with no per-phase 5s stalls.
             ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
@@ -236,8 +243,12 @@ class RoutesHandler(BaseColumnHandler):
                 _cooperative_sleep(pad, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
-        # Signal sibling parallel-bucket handlers (e.g. VolumeThresholdHandler)
-        # that the per-phase loop is done so they can exit their wait loops.
+        # Signal sibling parallel-bucket handlers (e.g.
+        # VolumeThresholdHandler) that the per-phase loop is done so
+        # they can exit their wait loops cleanly. Without this,
+        # handlers blocked in wait_for(ELECTRODES_STATE_CHANGE) for a
+        # next phase that will never come would block the bucket's
+        # ThreadPoolExecutor indefinitely.
         ctx.step_phases_done_event.set()
 
 
