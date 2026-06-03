@@ -565,6 +565,13 @@ class ProtocolTreePane(QWidget):
                     f"Phase {self._phase_index}/{self._phase_total}  "
                     f"{phase_elapsed:4.2f}s / {target:.2f}s"
                 )
+            elif self._phase_index > 0:
+                # Dynamic duration loop: total is unknown while looping, so
+                # show the running phase number with no misleading denominator.
+                self._status_phase_time_label.setText(
+                    f"Phase {self._phase_index}  "
+                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
+                )
             else:
                 self._status_phase_time_label.setText(
                     f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
