@@ -19,7 +19,7 @@ Composed of small one-job helpers so each can be tested in isolation:
 No Traits, no Qt, no broker — testable as plain Python.
 """
 
-from typing import Iterator, List, Set
+from typing import Iterator, List, Optional, Set, Tuple
 
 
 def _is_loop_route(route: List[str]) -> bool:
@@ -140,7 +140,7 @@ def duration_loop_parts(
     trail_length: int = 1,
     trail_overlay: int = 0,
     soft_start: bool = False,
-):
+) -> Tuple[List[Set[str]], List[Set[str]], Optional[Set[str]]]:
     """Decompose a step into the pieces the RoutesHandler needs to drive a
     *dynamic* duration-mode loop under volume threshold:
 
@@ -155,6 +155,11 @@ def duration_loop_parts(
     There is deliberately NO soft-end ramp: volume threshold reaching its
     target guarantees the droplet's position, so the gentle-release ramp is
     dropped. See the design spec.
+
+    Open (non-loop) routes are handled by the same machinery — one forward
+    pass becomes the unit_cycle and return_phase is its first window; the
+    helper is designed for loop routes, and an open-route caller is
+    responsible for that semantic.
     """
     static = set(static_electrodes or [])
     if not routes:
