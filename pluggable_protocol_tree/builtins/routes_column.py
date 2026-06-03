@@ -46,7 +46,9 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
-from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.phase_math import (
+    duration_loop_parts, iter_phases,
+)
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 
@@ -177,6 +179,68 @@ class RoutesHandler(BaseColumnHandler):
                            phase_advance_event=ctx.phase_advance_event)
         return True
 
+    def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
+                                   step_uuid, step_label, preview_mode,
+                                   per_phase_dwell, stop_event, pause_event,
+                                   qsignals, budget):
+        """Duration mode + volume threshold: loop the unit cycle as long as
+        another FULL-duration cycle still fits the budget, then close with
+        the return-to-start phase and idle any sub-cycle remainder.
+
+        Volume threshold cuts each phase short (via phase_advance_event), so
+        wall-clock elapses slower than ``per_phase_dwell`` would predict and
+        more cycles fit -> the freed time becomes more loops, not idle. The
+        soft-end ramp-down is intentionally absent (duration_loop_parts does
+        not produce it): reaching the threshold guarantees droplet position.
+        The phase index is a running counter with total 0 (unknown while
+        looping) so the status bar shows the advancing phase number."""
+        ramp_up, unit_cycle, return_phase = duration_loop_parts(
+            static_electrodes=list(getattr(row, "electrodes", []) or []),
+            routes=list(getattr(row, "routes", []) or []),
+            trail_length=int(getattr(row, "trail_length", 1)),
+            trail_overlay=int(getattr(row, "trail_overlay", 0)),
+            soft_start=bool(getattr(row, "soft_start", False)),
+        )
+        cycle_full_time = len(unit_cycle) * per_phase_dwell
+        step_start = _monotonic()
+        running_idx = 0
+
+        def _run(phase):
+            nonlocal running_idx
+            running_idx += 1
+            return self._run_phase(
+                phase, ctx=ctx, mapping=mapping, static_routes=static_routes,
+                step_uuid=step_uuid, step_label=step_label,
+                preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
+                stop_event=stop_event, pause_event=pause_event,
+                qsignals=qsignals, phase_index=running_idx, phase_total=0)
+
+        for phase in ramp_up:
+            if not _run(phase):
+                return
+
+        while not stop_event.is_set():
+            # Only add a cycle if there's room for a COMPLETE one at full
+            # per-phase dwell. cycle_full_time <= 0 (degenerate 0-dwell
+            # config) would never gate, so run a single cycle and stop.
+            if cycle_full_time <= 0:
+                for phase in unit_cycle:
+                    if not _run(phase):
+                        return
+                break
+            if _monotonic() - step_start + cycle_full_time > budget:
+                break
+            for phase in unit_cycle:
+                if not _run(phase):
+                    return
+
+        if return_phase is not None and not stop_event.is_set():
+            _run(return_phase)
+
+        remaining = budget - (_monotonic() - step_start)
+        if remaining > 0 and not stop_event.is_set():
+            _cooperative_sleep(remaining, stop_event, pause_event)
+
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
         per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
@@ -204,50 +268,63 @@ class RoutesHandler(BaseColumnHandler):
             and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
         )
 
-        # Materialize so we know the total upfront for phase_started's
-        # (i, N) emission. Phase counts are bounded by step config and
-        # well within reasonable list sizes; no streaming benefit lost.
-        phases = list(iter_phases(
-            static_electrodes=list(getattr(row, "electrodes", []) or []),
-            routes=list(getattr(row, "routes", []) or []),
-            trail_length=int(getattr(row, "trail_length", 1)),
-            trail_overlay=int(getattr(row, "trail_overlay", 0)),
-            soft_start=bool(getattr(row, "soft_start", False)),
-            soft_end=bool(getattr(row, "soft_end", False)),
-            repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
-                               if in_duration_mode else 0.0),
-            linear_repeats=bool(getattr(row, "linear_repeats", False)),
-            n_repeats=int(getattr(row, "route_repetitions", 1)),
-            step_duration_s=float(getattr(row, "duration_s", 1.0)),
-        ))
-        total_phases = len(phases)
         qsignals = getattr(ctx.protocol, "qsignals", None)
-        for phase_idx, phase in enumerate(phases, start=1):
-            if not self._run_phase(
-                    phase, ctx=ctx, mapping=mapping,
-                    static_routes=static_routes, step_uuid=step_uuid,
-                    step_label=step_label, preview_mode=preview_mode,
-                    per_phase_dwell=per_phase_dwell, stop_event=stop_event,
-                    pause_event=pause_event, qsignals=qsignals,
-                    phase_index=phase_idx, phase_total=total_phases):
-                break
-        # Route Reps Dur mode: after the full cycles, hold the last phase's
-        # electrodes (no new publish) for the exact leftover so total step
-        # time lands on the budget precisely. Based on the ACTUAL emitted
-        # phase count so it accounts for loop cycles, ramps, and routes.
-        if in_duration_mode and not stop_event.is_set():
-            pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
-                          - len(phases) * per_phase_dwell)
-            if pad > 0:
-                _cooperative_sleep(pad, stop_event, pause_event)
+        vt_active = False
+        try:
+            vt_active = float(getattr(row, "volume_threshold", 0) or 0) > 0
+        except (TypeError, ValueError):
+            vt_active = False
+
+        if in_duration_mode and vt_active:
+            self._run_dynamic_duration_loop(
+                row, ctx=ctx, mapping=mapping, static_routes=static_routes,
+                step_uuid=step_uuid, step_label=step_label,
+                preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
+                stop_event=stop_event, pause_event=pause_event,
+                qsignals=qsignals,
+                budget=float(getattr(row, "repeat_duration", 0.0) or 0.0))
+        else:
+            phases = list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
+                                   if in_duration_mode else 0.0),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "route_repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+            total_phases = len(phases)
+            for phase_idx, phase in enumerate(phases, start=1):
+                if not self._run_phase(
+                        phase, ctx=ctx, mapping=mapping,
+                        static_routes=static_routes, step_uuid=step_uuid,
+                        step_label=step_label, preview_mode=preview_mode,
+                        per_phase_dwell=per_phase_dwell, stop_event=stop_event,
+                        pause_event=pause_event, qsignals=qsignals,
+                        phase_index=phase_idx, phase_total=total_phases):
+                    break
+            # Route Reps Dur mode: after the full cycles, hold the last
+            # phase's electrodes (no new publish) for the exact leftover so
+            # total step time lands on the budget precisely. Based on the
+            # ACTUAL emitted phase count so it accounts for loop cycles,
+            # ramps, and routes.
+            if in_duration_mode and not stop_event.is_set():
+                pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
+                              - len(phases) * per_phase_dwell)
+                if pad > 0:
+                    _cooperative_sleep(pad, stop_event, pause_event)
+
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
-        # Signal sibling parallel-bucket handlers (e.g.
-        # VolumeThresholdHandler) that the per-phase loop is done so
-        # they can exit their wait loops cleanly. Without this,
-        # handlers blocked in wait_for(ELECTRODES_STATE_CHANGE) for a
-        # next phase that will never come would block the bucket's
-        # ThreadPoolExecutor indefinitely.
+        # Signal sibling parallel-bucket handlers (e.g. VolumeThresholdHandler)
+        # that the per-phase loop is done so they can exit their wait loops
+        # cleanly. Without this, handlers blocked in
+        # wait_for(ELECTRODES_STATE_CHANGE) for a next phase that will never
+        # come would block the bucket's ThreadPoolExecutor indefinitely.
         ctx.step_phases_done_event.set()
 
 
