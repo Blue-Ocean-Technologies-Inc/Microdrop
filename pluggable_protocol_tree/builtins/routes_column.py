@@ -62,6 +62,11 @@ DURATION_CONSUMED_KEY = "_routes_consumed_duration"
 # durations.
 _SLICE_S = 0.05
 
+# Indirection so the dynamic duration loop's wall-clock reads can be
+# replaced with a deterministic fake clock in tests. Production uses
+# time.monotonic unchanged.
+_monotonic = time.monotonic
+
 
 class RoutesColumnModel(BaseColumnModel):
     """List[List[str]] trait. Default = empty list."""
@@ -96,6 +101,74 @@ class RoutesHandler(BaseColumnHandler):
     """
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
+
+    def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
+                   step_label, preview_mode, per_phase_dwell, stop_event,
+                   pause_event, qsignals, phase_index, phase_total):
+        """Run ONE phase: clear the early-advance event, honour stop/pause,
+        publish display (+ hardware when not preview), wait the ack, and
+        dwell (cut short by phase_advance_event). Returns False if a Stop
+        landed before/at this phase (caller should break its loop), True
+        otherwise.
+
+        ``phase_total`` is 0 for the dynamic loop (total unknown while
+        looping); callers in the static path pass the materialized count.
+        """
+        # Fresh slate: a handler set in phase N-1 must NOT carry over into
+        # phase N. Cleared before the stop/pause checks so a stale set
+        # doesn't accidentally fire here.
+        ctx.phase_advance_event.clear()
+        if stop_event.is_set():
+            return False
+        # Pause check at the phase boundary — block so the next phase's
+        # actuation doesn't fire until the user resumes.
+        if pause_event.is_set():
+            pause_event.wait_cleared()
+            if stop_event.is_set():
+                return False
+
+        electrodes = sorted(phase)
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        for e in electrodes:
+            if e not in mapping:
+                logger.warning(
+                    f"electrode {e!r} has no channel mapping; "
+                    f"actuation channel skipped"
+                )
+
+        if qsignals is not None:
+            qsignals.phase_started.emit(
+                phase_index, phase_total, per_phase_dwell,
+            )
+
+        # 1. Display: synchronous, no ack. editable=False so the DV won't
+        # echo a hardware publish back at us during a run.
+        display_msg = ProtocolTreeDisplayMessage(
+            electrodes=electrodes,
+            routes=static_routes,
+            step_id=step_uuid,
+            step_label=step_label,
+            free_mode=False,
+            editable=False,
+        )
+        publish_message(
+            topic=PROTOCOL_TREE_DISPLAY_STATE,
+            message=display_msg.serialize(),
+        )
+
+        # 2. Hardware: only when not preview. Gating happens on the sender
+        # side by simply not publishing.
+        if not preview_mode:
+            payload = {"electrodes": electrodes, "channels": channels}
+            publish_message(
+                topic=ELECTRODES_STATE_CHANGE,
+                message=json.dumps(payload),
+            )
+            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+
+        _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
+                           phase_advance_event=ctx.phase_advance_event)
+        return True
 
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
@@ -144,87 +217,27 @@ class RoutesHandler(BaseColumnHandler):
         total_phases = len(phases)
         qsignals = getattr(ctx.protocol, "qsignals", None)
         for phase_idx, phase in enumerate(phases, start=1):
-            # Fresh slate: a handler set in phase N-1 must NOT carry
-            # over into phase N. Cleared before the stop/pause checks
-            # below so a stale set doesn't accidentally fire here.
-            ctx.phase_advance_event.clear()
-            if stop_event.is_set():
+            if not self._run_phase(
+                    phase, ctx=ctx, mapping=mapping,
+                    static_routes=static_routes, step_uuid=step_uuid,
+                    step_label=step_label, preview_mode=preview_mode,
+                    per_phase_dwell=per_phase_dwell, stop_event=stop_event,
+                    pause_event=pause_event, qsignals=qsignals,
+                    phase_index=phase_idx, phase_total=total_phases):
                 break
-            # Pause check at the phase boundary — block here so the
-            # next phase's actuation doesn't fire until the user
-            # resumes. The executor's between-step pause check
-            # doesn't reach inside on_step's phase loop, so without
-            # this the routes keep playing through a Pause click.
-            if pause_event.is_set():
-                pause_event.wait_cleared()
-                if stop_event.is_set():
-                    break
-
-            electrodes = sorted(phase)
-            channels = set()
-            for e in electrodes:
-                if e in mapping:
-                    channels.add(mapping(e))
-
-                else:
-                    logger.warning(
-                        f"electrode {e!r} has no channel mapping; "
-                        f"actuation channel skipped"
-                    )
-
-            if qsignals is not None:
-                qsignals.phase_started.emit(
-                    phase_idx, total_phases, per_phase_dwell,
-                )
-
-            # 1. Display: synchronous, no ack. editable=False so the DV
-            # won't echo a hardware publish back at us during a run.
-            display_msg = ProtocolTreeDisplayMessage(
-                electrodes=electrodes,
-                routes=routes,
-                step_id=step_uuid,
-                step_label=step_label,
-                free_mode=False,
-                editable=False,
-            )
-            publish_message(
-                topic=PROTOCOL_TREE_DISPLAY_STATE,
-                message=display_msg.serialize(),
-            )
-
-            # 2. Hardware: only when not preview. dropbot_controller
-            # has no preview-mode awareness — gating happens here, on
-            # the sender side, by simply not publishing.
-            if not preview_mode:
-                electrode_state_change_publisher.publish(actual_channels=channels)
-                # 5.0s timeout matches ack_roundtrip_column. Cold-
-                # broker first publish pays ~1-2s; typical ack <100ms.
-                # In preview we skip this entirely so the user gets a
-                # snappy visual playback with no per-phase 5s stalls.
-                ctx.wait_for(electrode_state_change_publisher.topic, timeout=5.0)
-
-            _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
-                               phase_advance_event=ctx.phase_advance_event)
-        # Route Reps Dur mode: after the full cycles, hold the last
-        # phase's electrodes (no new publish) for the exact leftover so
-        # total step time lands on the budget precisely.
+        # Route Reps Dur mode: after the full cycles, hold the last phase's
+        # electrodes (no new publish) for the exact leftover so total step
+        # time lands on the budget precisely. Based on the ACTUAL emitted
+        # phase count so it accounts for loop cycles, ramps, and routes.
         if in_duration_mode and not stop_event.is_set():
-            # Hold the last phase for the leftover so total step time lands
-            # on the budget exactly. Based on the ACTUAL emitted phase count
-            # (len(phases)) so it accounts for loop cycles, soft-start/end
-            # ramp phases, and multi/open routes uniformly.
             pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
                           - len(phases) * per_phase_dwell)
             if pad > 0:
                 _cooperative_sleep(pad, stop_event, pause_event)
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
-        # Signal sibling parallel-bucket handlers (e.g.
-        # VolumeThresholdHandler) that the per-phase loop is done so
-        # they can exit their wait loops cleanly. Without this,
-        # handlers blocked in wait_for(ELECTRODES_STATE_CHANGE) for a
-        # next phase that will never come would block the bucket's
-        # ThreadPoolExecutor indefinitely.
+        # Signal sibling parallel-bucket handlers (e.g. VolumeThresholdHandler)
+        # that the per-phase loop is done so they can exit their wait loops.
         ctx.step_phases_done_event.set()
 
 
