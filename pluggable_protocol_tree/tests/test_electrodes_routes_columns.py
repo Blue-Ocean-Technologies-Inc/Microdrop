@@ -839,3 +839,62 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     # 7 repeats of the single static phase; no return phase (return_phase is None).
     assert len(displays) == 7
     assert ctx.step_phases_done_event.is_set() is True
+
+
+def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
+    """Budget smaller than a single full cycle: the while guard fails on the
+    very first check (no unit cycle runs), but the return-to-start phase still
+    fires once so the step isn't a no-op, then the remainder idles."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+
+    handler = RoutesHandler()
+    row = MagicMock()
+    row.routes = [["a", "b", "a"]]      # unit cycle [{a},{b}] -> cycle_full_time 2.0
+    row.electrodes = []
+    row.duration_s = 1.0
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 1.0           # < cycle_full_time (2.0)
+    row.repeat_duration_controls = True
+    row.linear_repeats = False
+    row.route_repetitions = 1
+    row.volume_threshold = 50
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True
+    proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.scratch = {}
+    ctx.wait_for = MagicMock()
+
+    clock = {"t": 0.0}
+    displays = []
+
+    def fake_publish(**kw):
+        from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+        if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
+            displays.append(kw)
+
+    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
+         patch.object(mod, "publish_message", side_effect=fake_publish):
+        handler.on_step(row, ctx)
+
+    # No full cycle fit; only the single return-to-start phase ran.
+    assert len(displays) == 1
+    assert ctx.step_phases_done_event.is_set() is True
