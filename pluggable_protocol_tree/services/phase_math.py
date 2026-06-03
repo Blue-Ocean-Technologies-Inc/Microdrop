@@ -133,6 +133,47 @@ def _route_with_repeats(
             yield from cycle
 
 
+def duration_loop_parts(
+    static_electrodes: List[str],
+    routes: List[List[str]],
+    *,
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    soft_start: bool = False,
+):
+    """Decompose a step into the pieces the RoutesHandler needs to drive a
+    *dynamic* duration-mode loop under volume threshold:
+
+        (ramp_up_phases, unit_cycle, return_phase)
+
+    ``unit_cycle`` is ONE pass of the zipped route windows + static set
+    (the repeatable unit). ``ramp_up_phases`` is the soft-start ramp toward
+    ``unit_cycle[0]`` (empty when soft_start is False or the first phase has
+    <= 1 electrode). ``return_phase`` is ``unit_cycle[0]`` (to close the loop
+    back to its origin) or None when there are no routes.
+
+    There is deliberately NO soft-end ramp: volume threshold reaching its
+    target guarantees the droplet's position, so the gentle-release ramp is
+    dropped. See the design spec.
+    """
+    static = set(static_electrodes or [])
+    if not routes:
+        # Static-only step: the single static set is the repeatable unit;
+        # nothing to "return to", so no closing phase.
+        return [], [set(static)], None
+    per_route = [_route_windows(r, trail_length, trail_overlay)
+                 for r in routes]
+    unit_cycle = list(_zip_with_static(per_route, static))
+    if not unit_cycle:
+        return [], [set(static)], None
+    ramp_up: List[Set[str]] = []
+    first = unit_cycle[0]
+    if soft_start and len(first) > 1:
+        ordered = sorted(first)
+        ramp_up = [set(ordered[:size]) for size in range(1, len(first))]
+    return ramp_up, unit_cycle, unit_cycle[0]
+
+
 def _ramp_up(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
     """Prepend ramp phases that grow from 1 electrode to the size of
     the first phase. K=1 first phase → no-op. K=3 first phase {a,b,c}
