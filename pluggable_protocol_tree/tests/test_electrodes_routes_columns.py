@@ -529,6 +529,7 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     row.repeat_duration = 0.0
     row.repeat_duration_controls = False
     row.linear_repeats = False
+    row.volume_threshold = 0           # no VT -> static path
     row.uuid = "u"
     row.path = (0,)
 
@@ -579,6 +580,7 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     row.repeat_duration = 0.0
     row.repeat_duration_controls = False
     row.linear_repeats = False
+    row.volume_threshold = 0           # no VT -> static path
     row.uuid = "u"
     row.path = (0,)
 
@@ -600,3 +602,180 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
                lambda **kw: None):
         handler.on_step(row, ctx)
     assert ctx.step_phases_done_event.is_set() is True
+
+
+def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
+    """Duration mode + volume_threshold > 0: the handler loops the unit
+    cycle dynamically based on a fake clock that advances slower than the
+    full per-phase dwell (simulating VT cutting phases short), running far
+    more cycles than the precalc (budget / cycle_full_time) would.
+
+    Deterministic clock: each phase advances the fake clock by 0.5s; the
+    full per-phase dwell is 1.0s, so the precalc would do budget/cycle_time
+    = 8/2 = 4 cycles, but the dynamic loop fits ~7."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+
+    handler = RoutesHandler()
+    row = MagicMock()
+    row.routes = [["a", "b", "a"]]      # loop route -> unit cycle [{a},{b}]
+    row.electrodes = []
+    row.duration_s = 1.0                # full per-phase dwell
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = True                 # MUST be ignored (ramp-down dropped)
+    row.repeat_duration = 8.0
+    row.repeat_duration_controls = True
+    row.linear_repeats = False
+    row.route_repetitions = 1
+    row.volume_threshold = 50           # VT active
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True           # skip hardware publish + ack wait
+    proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.scratch = {}
+    ctx.wait_for = MagicMock()
+
+    clock = {"t": 0.0}
+
+    def fake_sleep(secs, *a, **k):
+        clock["t"] += 0.5               # each phase "really" takes 0.5s
+
+    displays = []
+
+    def fake_publish(**kw):
+        from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+        if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
+            displays.append(kw)
+
+    # iter_phases must NOT be used on the dynamic path.
+    iter_spy = MagicMock(side_effect=AssertionError("iter_phases used on VT path"))
+
+    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
+         patch.object(mod, "_cooperative_sleep", side_effect=fake_sleep), \
+         patch.object(mod, "publish_message", side_effect=fake_publish), \
+         patch.object(mod, "iter_phases", iter_spy):
+        handler.on_step(row, ctx)
+
+    # Unit cycle = 2 phases; loop runs while t + 2.0 <= 8.0 (t <= 6.0),
+    # advancing 1.0/cycle -> cycles at t=0,1,2,3,4,5,6 = 7 cycles = 14
+    # phases, plus the single return-to-start phase = 15 display publishes.
+    assert len(displays) == 15
+    # Precalc equivalent would be 4 cycles + return = 9; dynamic ran more.
+    assert len(displays) > 9
+    assert ctx.step_phases_done_event.is_set() is True
+    assert ctx.scratch.get(mod.DURATION_CONSUMED_KEY) is True
+
+
+def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
+    """Each phase emits phase_started with a monotonically increasing index
+    and phase_total == 0 (unknown while looping)."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+
+    handler = RoutesHandler()
+    row = MagicMock()
+    row.routes = [["a", "b", "a"]]
+    row.electrodes = []
+    row.duration_s = 1.0
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 4.0
+    row.repeat_duration_controls = True
+    row.linear_repeats = False
+    row.route_repetitions = 1
+    row.volume_threshold = 50
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True
+    proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.scratch = {}
+    ctx.wait_for = MagicMock()
+
+    clock = {"t": 0.0}
+    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
+         patch.object(mod, "publish_message", lambda **kw: None):
+        handler.on_step(row, ctx)
+
+    calls = proto.qsignals.phase_started.emit.call_args_list
+    indices = [c.args[0] for c in calls]
+    totals = [c.args[1] for c in calls]
+    assert indices == list(range(1, len(indices) + 1))   # 1,2,3,... no gaps
+    assert all(t == 0 for t in totals)                   # total unknown
+
+
+def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
+    """Duration mode WITHOUT volume threshold: the static precalc path runs
+    (iter_phases is used), proving the dynamic loop is gated on VT."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+
+    handler = RoutesHandler()
+    row = MagicMock()
+    row.routes = [["a", "b", "a"]]
+    row.electrodes = []
+    row.duration_s = 0.0
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 8.0
+    row.repeat_duration_controls = True
+    row.linear_repeats = False
+    row.route_repetitions = 1
+    row.volume_threshold = 0            # NO VT
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True
+    proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.scratch = {}
+    ctx.wait_for = MagicMock()
+
+    real_iter = mod.iter_phases
+    iter_spy = MagicMock(side_effect=real_iter)
+    with patch.object(mod, "iter_phases", iter_spy), \
+         patch.object(mod, "publish_message", lambda **kw: None):
+        handler.on_step(row, ctx)
+
+    assert iter_spy.called          # precalc path used
