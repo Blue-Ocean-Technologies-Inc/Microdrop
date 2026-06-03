@@ -1779,3 +1779,38 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
     assert not hasattr(new_step, "unknown_plugin_col")
 
 
+def test_refresh_status_running_index_without_total(qapp):
+    """Dynamic VT loop: phase_total == 0 but phase_index > 0 -> show the
+    running phase number with NO denominator."""
+    import time as _t
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
+    pane._step_started_at = _t.monotonic()
+    pane._phase_started_at = _t.monotonic()
+    pane._phase_index = 7
+    pane._phase_total = 0
+    pane._phase_target = 1.0
+    pane._refresh_status()
+    text = pane._status_phase_time_label.text()
+    assert "Phase 7" in text
+    assert "Phase 7/" not in text          # no denominator
+
+
+def test_refresh_status_index_over_total_when_known(qapp):
+    """Static/count path: phase_total > 0 -> unchanged 'i/N' rendering."""
+    import time as _t
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
+    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
+    pane._step_started_at = _t.monotonic()
+    pane._phase_started_at = _t.monotonic()
+    pane._phase_index = 2
+    pane._phase_total = 5
+    pane._phase_target = 0.5
+    pane._refresh_status()
+    assert "Phase 2/5" in pane._status_phase_time_label.text()
+
+
