@@ -382,7 +382,7 @@ serial.serialutil.SerialException: [Errno 2] could not open port
         custom_buttons = {
             "Restart": {"action": handle_restart_and_close},
             "Continue": {"action": handle_continue_and_close},
-            "Cancel": {"action": handle_cancel_and_close},
+            "Cancel": {"action": handle_cancel_and_close, "role": "exit"},
         }
 
         dialog = CustomActionDialog(

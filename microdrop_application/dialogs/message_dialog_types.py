@@ -32,7 +32,7 @@ class WarningAlertDialog(BaseMessageDialog):
     ):
         buttons = {"OK": {"action": self.accept_warning}}
         if exit:
-            buttons["Exit"] = {"action": self.close_dialog}
+            buttons["Exit"] = {"action": self.close_dialog, "role": "exit"}
 
         super().__init__(
             parent=parent,
@@ -104,7 +104,7 @@ class ErrorAlertDialog(BaseMessageDialog):
     ):
         buttons = {"OK": {"action": self.acknowledge_error}}
         if exit:
-            buttons["Exit"] = {"action": self.close_dialog}
+            buttons["Exit"] = {"action": self.close_dialog, "role": "exit"}
 
         # Set default size for error dialogs with details to be larger
         if error_details and "size" not in kwargs:
@@ -155,7 +155,7 @@ class SuccessDialog(BaseMessageDialog):
     ):
         buttons = {"OK": {"action": self.acknowledge_success}}
         if exit:
-            buttons["Exit"] = {"action": self.close_dialog}
+            buttons["Exit"] = {"action": self.close_dialog, "role": "exit"}
 
         super().__init__(
             parent=parent,
@@ -194,7 +194,7 @@ class InformationDialog(BaseMessageDialog):
     ):
         buttons = {"OK": {"action": self.acknowledge_info}}
         if exit:
-            buttons["Exit"] = {"action": self.close_dialog}
+            buttons["Exit"] = {"action": self.close_dialog, "role": "exit"}
 
         # Auto-resize for long information conten
         if len(message) > 300 or message.count("\n") > 6:
@@ -241,7 +241,7 @@ class QuestionDialog(BaseMessageDialog):
         **kwargs,
     ):
         buttons = {
-            no_text: {"action": no_action or self.reject},
+            no_text: {"action": no_action or self.reject, "role": "exit"},
             yes_text: {"action": yes_action or self.accept},
         }
 
@@ -277,7 +277,7 @@ class DetectionIssueDialog(BaseMessageDialog):
         **kwargs,
     ):
         buttons = {
-            continue_button_text: {"action": self.continue_anyway},
+            continue_button_text: {"action": self.continue_anyway, "role": "exit"},
             pause_button_text: {"action": self.pause_and_review},
         }
 
