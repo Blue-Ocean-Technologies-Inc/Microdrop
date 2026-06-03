@@ -2,11 +2,13 @@
 
 Stores a free-text message on each row (Str trait). When a step carries a
 non-empty message, the handler pauses the protocol at the *start* of that
-step (``on_pre_step``) and shows a modal single-acknowledge dialog with
-the message. The protocol stays paused — its step/phase timers frozen via
-``protocol_paused`` — until the operator acknowledges the dialog, then
-resumes. An empty message is a no-op, so the column is free on steps that
-don't need an operator gate.
+step (``on_pre_step``) and shows a modal confirm dialog with the message
+and two choices, "Continue" and "Stay Paused". The protocol stays paused —
+its step/phase timers frozen via ``protocol_paused`` — until the operator
+picks Continue, then resumes. Choosing Stay Paused (or dismissing the
+dialog) leaves the step parked; from there the run can only be cleared with
+the toolbar Stop. An empty message is a no-op, so the column is free on
+steps that don't need an operator gate.
 
 This mirrors the legacy ``user_prompt_plugin`` "message" step setting: a
 manual checkpoint the operator must clear before the run continues (e.g.
@@ -28,8 +30,7 @@ from PySide6.QtCore import QTimer
 from traits.api import Str
 
 from logger.logger_service import get_logger
-from microdrop_application.dialogs.pyface_wrapper import information
-from pluggable_protocol_tree.execution.exceptions import AbortError
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
@@ -65,37 +66,36 @@ class MsgPromptColumnHandler(BaseColumnHandler):
     def on_pre_step(self, row, ctx):
         """Block this step behind an operator-acknowledged dialog.
 
-        No-op when the step has no message. Raises ``AbortError`` if the
-        protocol was already stopped before the prompt is shown so a
-        pending Stop isn't masked by the dialog.
+        No-op when the step has no message. Otherwise the worker thread
+        parks until the operator picks Continue (resume) or the run is
+        stopped; the step/phase timers stay frozen while parked.
         """
         val = row.message_prompt
         qsignals = ctx.protocol.qsignals
-
-        if ctx.protocol.stop_event.is_set():
-            raise AbortError("Protocol was stopped")
 
         if val:
             self._wait_for_dialog_event.clear()
 
             def _user_prompt():
-                # Runs on the GUI thread (see module docstring). The
-                # worker thread is parked in ctx.wait below until this
-                # sets the dialog event.
-                #
-                # Single-acknowledge dialog (no decline button): any
-                # dismissal continues the run, so the parked worker thread
-                # can never wedge waiting on a choice that was never made.
-                # The real cancellation path stays the toolbar Stop, which
-                # trips stop_event (also in the wait's event list).
-                result = information(
+                # Runs on the GUI thread (see module docstring). The worker
+                # thread is parked in ctx.wait below; only "Continue" sets
+                # the dialog event and releases it. "Stay Paused" (or any
+                # dismissal, which confirm() reports as NO/CANCEL) leaves the
+                # step parked until the toolbar Stop trips stop_event.
+                usr_choice = confirm(
                     None,
                     message=val,
+                    yes_label="Continue",
+                    no_label="Stay Paused",
                     title="Message Prompt",
-                    cancel=False,
                 )
-                logger.info(f"Message prompt acknowledged (result={result})")
-                self._wait_for_dialog_event.set()
+
+                if usr_choice == YES:
+                    logger.info("Message prompt: operator chose Continue; resuming")
+                    self._wait_for_dialog_event.set()
+                else:
+                    logger.info("Message prompt: operator left the step paused "
+                                f"(choice={usr_choice})")
 
             QTimer.singleShot(0, qsignals, _user_prompt)
             # Park the worker thread until the operator acknowledges
