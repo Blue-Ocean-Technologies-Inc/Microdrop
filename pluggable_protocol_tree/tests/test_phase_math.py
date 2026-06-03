@@ -366,3 +366,43 @@ def test_loop_closes_with_return_phase_in_both_modes():
     # The loop closes: last phase == first phase (back at the start, 'a').
     assert count_mode[-1] == count_mode[0] == {"a"}
     assert dur_mode[-1] == dur_mode[0] == {"a"}
+
+
+# --- duration_loop_parts ---
+
+from pluggable_protocol_tree.services.phase_math import duration_loop_parts
+
+
+def test_duration_loop_parts_loop_route_basic():
+    """One loop route, trail 1: unit cycle is the two windows; the return
+    phase closes back to the first window; no soft-start ramp."""
+    ramp, cycle, ret = duration_loop_parts(
+        static_electrodes=[], routes=[["a", "b", "a"]],
+        trail_length=1, trail_overlay=0, soft_start=False)
+    assert cycle == [{"a"}, {"b"}]
+    assert ret == {"a"}
+    assert ramp == []
+
+
+def test_duration_loop_parts_soft_start_ramps_first_unit_phase():
+    """soft_start grows 1->N toward the first unit phase (sorted order),
+    just like _ramp_up, but as an explicit list."""
+    ramp, cycle, ret = duration_loop_parts(
+        static_electrodes=["s1", "s2"], routes=[["a", "b", "a"]],
+        trail_length=1, trail_overlay=0, soft_start=True)
+    first = cycle[0]
+    assert first == {"s1", "s2", "a"}            # static unioned into window
+    ordered = sorted(first)
+    assert ramp == [set(ordered[:1]), set(ordered[:2])]
+    assert ret == first
+
+
+def test_duration_loop_parts_no_routes_static_only():
+    """No routes: the unit cycle is the single static phase and there is
+    no return phase (nothing to close)."""
+    ramp, cycle, ret = duration_loop_parts(
+        static_electrodes=["x"], routes=[], trail_length=1,
+        trail_overlay=0, soft_start=True)
+    assert cycle == [{"x"}]
+    assert ret is None
+    assert ramp == []
