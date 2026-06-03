@@ -73,6 +73,10 @@ class MsgPromptColumnHandler(BaseColumnHandler):
         val = row.message_prompt
         qsignals = ctx.protocol.qsignals
 
+        if ctx.protocol.stop_event.is_set():
+            logger.warning("Message prompt skipped since protocol stopped")
+            return
+
         if val:
             self._wait_for_dialog_event.clear()
 
