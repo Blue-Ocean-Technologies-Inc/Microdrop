@@ -1,6 +1,6 @@
 """Volume-threshold column tests: model + view + factory metadata, and
 the handler's per-phase monitor loop (reading calibration + channel areas
-from app_globals via a monkeypatched _get_app_globals seam)."""
+from the module-level ``app_globals``, monkeypatched with a plain dict)."""
 
 import json
 import threading
@@ -59,15 +59,15 @@ def test_handler_wait_for_topics_declared():
 def _make_handler_ctx(monkeypatch, *, threshold=0, preview=False,
                       app_globals=None, stop_event=None):
     """Build a handler + a stubbed ctx whose wait_for is a queue-backed
-    stub (feed via the returned _enqueue). The module's _get_app_globals
-    seam is monkeypatched to return `app_globals` (a plain dict, or None).
+    stub (feed via the returned _enqueue). The module-level ``app_globals``
+    is monkeypatched with `app_globals` (a plain dict, or None).
     """
     from unittest.mock import MagicMock
     from volume_threshold_protocol_controls.protocol_columns.volume_threshold_column import (
         VolumeThresholdHandler,
     )
 
-    monkeypatch.setattr(mod, "_get_app_globals", lambda: app_globals)
+    monkeypatch.setattr(mod, "app_globals", app_globals)
 
     handler = VolumeThresholdHandler()
     row = MagicMock()
