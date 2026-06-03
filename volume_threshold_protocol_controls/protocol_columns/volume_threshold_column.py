@@ -40,6 +40,8 @@ from traits.api import Int
 
 from logger.logger_service import get_logger
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
 from dropbot_controller.consts import CAPACITANCE_UPDATED
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
@@ -58,22 +60,15 @@ from ..consts import (
 
 logger = get_logger(__name__)
 
+# The Redis-backed globals manager, where the device-viewer models publish
+# calibration + channel areas on change (device_viewer.models.calibration /
+# .electrodes observers). Initialised once at import — the proxy connects
+# lazily on first access, so this is import-safe without a running Redis.
+# Tests monkeypatch this module attribute with a plain dict.
+app_globals = get_microdrop_redis_globals_manager()
+
 _LIQUID_CAP_KEY = "liquid_capacitance_over_area"
 _CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"
-
-
-def _get_app_globals():
-    """The Redis-backed globals manager where the DV models publish
-    calibration + channel areas. Returns None when unavailable
-    (headless / no-Redis). A module-level seam so tests can monkeypatch."""
-    try:
-        from microdrop_application.helpers import (
-            get_microdrop_redis_globals_manager,
-        )
-        return get_microdrop_redis_globals_manager()
-    except Exception as e:                         # pragma: no cover - defensive
-        logger.debug(f"app_globals unavailable: {e}")
-        return None
 
 
 def _read_full_cap_over_area(app_globals):
@@ -166,13 +161,6 @@ class VolumeThresholdHandler(BaseColumnHandler):
         if percent <= 0:
             return
         if getattr(ctx.protocol, "preview_mode", False):
-            return
-
-        app_globals = _get_app_globals()
-        if app_globals is None:
-            logger.info(
-                "volume_threshold: app_globals unavailable; skipping "
-                "(headless / no-Redis run)")
             return
 
         full_cap_over_area = _read_full_cap_over_area(app_globals)
