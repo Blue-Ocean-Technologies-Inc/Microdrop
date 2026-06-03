@@ -17,6 +17,7 @@ from pluggable_protocol_tree.builtins.duration_column import make_duration_colum
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.linear_repeats_column import make_linear_repeats_column
+from pluggable_protocol_tree.builtins.message_prompt_column import make_message_prompt_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repeat_duration_column import make_repeat_duration_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
@@ -132,6 +133,7 @@ class PluggableProtocolTreePlugin(Plugin):
             make_soft_end_column(),
             make_repeat_duration_column(),
             make_linear_repeats_column(),
+            make_message_prompt_column(),
         ]
         try:
             contributed = list(self.contributed_columns)

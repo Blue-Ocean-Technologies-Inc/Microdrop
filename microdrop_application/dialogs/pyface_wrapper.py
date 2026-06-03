@@ -123,12 +123,16 @@ def confirm(
         if dialog_ref[0] is not None:
             dialog_ref[0].close_with_result(result)
 
-    buttons = {
-        no_label: {"action": lambda: close_result(BaseMessageDialog.RESULT_NO)},
-        yes_label: {"action": lambda: close_result(BaseMessageDialog.RESULT_YES)},
-    }
+    buttons = {}
+
+    buttons[yes_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_YES)}
+
     if cancel:
-        buttons[cancel_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_CANCEL)}
+        buttons[cancel_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_CANCEL), "role": "exit"}
+
+    if no_label:
+        buttons[no_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_NO), "role": "exit"}
+
 
     # Factory function to create BaseMessageDialog
     def create_dialog(**opts):
@@ -249,10 +253,6 @@ def warning(
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
 
-    # Override default buttons to match Pyface warning dialog
-    dialog.set_button_text("Discard Changes", "OK")
-    dialog.set_button_text("Save Changes", "Cancel")
-
     result = dialog.exec()
 
     mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
@@ -304,9 +304,6 @@ def error(
         return ErrorAlertDialog(error_details=None, **opts)  # Detail is handled by _prepare_dialog
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
-
-    # Override default buttons to match Pyface error dialog
-    dialog.set_button_text("Save", "OK")
 
     result = dialog.exec()
 

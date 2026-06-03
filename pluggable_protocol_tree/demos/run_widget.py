@@ -27,6 +27,7 @@ from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
 from pluggable_protocol_tree.builtins.soft_start_column import make_soft_start_column
 from pluggable_protocol_tree.builtins.trail_length_column import make_trail_length_column
+from pluggable_protocol_tree.builtins.message_prompt_column import make_message_prompt_column
 from pluggable_protocol_tree.builtins.trail_overlay_column import (
     make_trail_overlay_column,
 )
@@ -71,15 +72,18 @@ def _overlay_listener(message: str, topic: str, timestamp: float = None):
 
 
 def _columns():
+    # Trimmed to a minimal set while exercising the message-prompt column
+    # in isolation; uncomment the rest to demo the full column lineup.
     return [
         make_type_column(), make_id_column(), make_name_column(),
-        make_repetitions_column(), make_route_repetitions_column(),
+        # make_repetitions_column(), make_route_repetitions_column(),
         make_duration_column(),
-        make_electrodes_column(), make_routes_column(),
-        make_trail_length_column(), make_trail_overlay_column(),
-        make_soft_start_column(), make_soft_end_column(),
-        make_repeat_duration_column(), make_linear_repeats_column(),
-        make_message_column(), make_ack_roundtrip_column(),
+        # make_electrodes_column(), make_routes_column(),
+        # make_trail_length_column(), make_trail_overlay_column(),
+        # make_soft_start_column(), make_soft_end_column(),
+        # make_repeat_duration_column(), make_linear_repeats_column(),
+        # make_message_column(), make_ack_roundtrip_column(),
+        make_message_prompt_column(),
     ]
 
 

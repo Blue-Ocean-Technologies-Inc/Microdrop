@@ -146,6 +146,30 @@ class ProtocolContext(HasTraits):
     # Mirrors the legacy protocol_grid "Preview Mode" checkbox.
     preview_mode = Bool(False)
 
+    def pause(self):
+        """Pause the run and tell the UI.
+
+        Sets ``pause_event`` (the executor blocks on it at the next step
+        boundary) and emits ``protocol_paused`` so the UI freezes its
+        step/phase timers. Safe to call from a worker thread — the signal
+        is delivered to GUI slots via a queued connection. ``qsignals`` may
+        be None in headless/test runs, in which case only the event is set.
+        """
+        self.pause_event.set()
+        if self.qsignals is not None:
+            self.qsignals.protocol_paused.emit()
+
+    def resume(self):
+        """Clear the pause and tell the UI.
+
+        Inverse of :meth:`pause`: clears ``pause_event`` (waking the
+        executor's ``wait_cleared``) and emits ``protocol_resumed``.
+        ``qsignals`` may be None in headless/test runs.
+        """
+        self.pause_event.clear()
+        if self.qsignals is not None:
+            self.qsignals.protocol_resumed.emit()
+
 
 class StepContext(HasTraits):
     """Spans one row's execution.
@@ -208,4 +232,84 @@ class StepContext(HasTraits):
                 f"{topic!r}. No matching message arrived — the hardware or "
                 f"backend responder for this topic may be disconnected, not "
                 f"running, or slower than the timeout."
+            ) from None
+
+
+    def wait(self, events: list[threading.Event], timeout: float = 86400):
+        """Pause the run and block the worker thread until an event fires.
+
+        Used by hooks that hand control to the UI mid-step (e.g. the
+        message-prompt dialog): pauses the protocol so timers freeze, then
+        polls ``events`` plus an "externally resumed" check until one of
+        them trips. On a normal acknowledge it resumes the protocol before
+        returning; on Stop it aborts.
+
+        The default ``timeout`` of 86400s (24h) is "effectively infinite"
+        for an operator-facing wait — the real cancellation path is the
+        protocol's ``stop_event`` (pass it in ``events``).
+
+        Args:
+            events: events to wake on. Include ``protocol.stop_event`` to
+                make Stop abort the wait.
+            timeout: seconds before raising ``TimeoutError``.
+
+        Returns ``None``. Raises:
+          * ``TimeoutError`` after ``timeout`` seconds with nothing set.
+          * ``AbortError`` if ``protocol.stop_event`` fires.
+
+        Implementation note: like :func:`wait_first`, this polls on a
+        short slice because the stdlib has no multi-event wait.
+        """
+        try:
+            self.protocol.pause()
+
+            deadline = time.monotonic() + timeout
+            poll_interval = 0.01  # 10ms
+            triggered = None
+
+            while True:
+
+                # External resume (e.g. toolbar Resume cleared pause_event)
+                # — treat as "done waiting" and stop immediately.
+                if not self.protocol.pause_event.is_set():
+                    triggered = True
+                    break
+
+                # 1. Check if any of the caller's events has fired.
+                for e in events:
+                    if e.is_set():
+                        triggered = e
+                        break  # Break out of the inner 'for' loop
+
+                # 2. If an event triggered, exit immediately (do NOT sleep).
+                if triggered is not None:
+                    break
+
+                # 3. Calculate time left and check for timeout.
+                remaining_time = deadline - time.monotonic()
+                if remaining_time <= 0.0:
+                    break
+
+                # 4. Sleep briefly before checking again.
+                time.sleep(min(poll_interval, remaining_time))
+
+            if triggered is None:
+                raise TimeoutError(
+                    f"wait_for timed out after {timeout}s"
+                )
+            elif triggered is self.protocol.stop_event:
+                raise AbortError("stop_event fired while waiting")
+
+            else:
+                # Acknowledged (event set) or externally resumed — clear the
+                # pause and notify the UI before handing control back.
+                self.protocol.resume()
+
+
+        except TimeoutError:
+            # Re-raise with a uniform message so the protocol-error dialog
+            # states the wait timed out rather than surfacing the raw poll
+            # internals.
+            raise TimeoutError(
+                f"Timed out after {timeout}s wait"
             ) from None

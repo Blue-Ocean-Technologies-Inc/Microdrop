@@ -635,15 +635,16 @@ class BaseMessageDialog(QDialog):
 
     def _button_sort_key(self, item):
         """
-        Sort key for buttons to ensure exit/cancel buttons come first (left).
+        Sort key for buttons to ensure secondary/exit buttons come first (left).
+
+        Classification is driven solely by an explicit ``role`` marker in the
+        button config (``{"role": "exit"}`` or ``"secondary"``). Buttons without
+        that marker are treated as primary and sorted to the right.
         """
-        button_text, _ = item
-        # Exit/cancel buttons get priority 0 (leftmost)
-        lower_text = button_text.lower()
-        if lower_text in ["exit", "cancel", "close", "no", "nope"] or "discard" in lower_text or "continue anyway" in lower_text:
-            return 0
-        # All other buttons get priority 1 (rightward)
-        return 1
+        _button_text, config = item
+        if isinstance(config, dict) and config.get("role") in ("exit", "secondary"):
+            return 0  # secondary/exit buttons go leftmost
+        return 1  # primary buttons go rightward
 
     def _create_buttons(self):
         """Create the button section."""
@@ -671,10 +672,15 @@ class BaseMessageDialog(QDialog):
             button = QPushButton(button_text)
             # Set proper object name for styling - Exit buttons get special
             # styling
-            if self._button_sort_key((button_text, None)) == 0:
+            is_secondary = self._button_sort_key((button_text, config)) == 0
+            if is_secondary:
                 button.setObjectName("exitButton")
             else:
                 button.setObjectName(f"{button_text.lower().replace(' ', '')}Button")
+            # Remember the resolved role so a later set_button_text() rename
+            # keeps the secondary styling even when the new label no longer
+            # matches the exit text heuristics.
+            button.setProperty("dialogRole", "exit" if is_secondary else "primary")
 
             # Button font
             button_font = QFont(self.text_font_family)
@@ -837,9 +843,9 @@ class BaseMessageDialog(QDialog):
     def _get_default_buttons(self) -> Dict[str, Any]:
         """Get default button configuration based on dialog type."""
         if self.dialog_type == self.TYPE_QUESTION:
-            return {"Exit": {"action": self.reject}, "Save": {"action": self.accept}}
+            return {"Exit": {"action": self.reject, "role": "exit"}, "Save": {"action": self.accept}}
         else:
-            return {"Exit": {"action": self.reject}, "OK": {"action": self.accept}}
+            return {"Exit": {"action": self.reject, "role": "exit"}, "OK": {"action": self.accept}}
 
     def _connect_signals(self):
         """Connect internal signals."""
@@ -1187,9 +1193,9 @@ class BaseMessageDialog(QDialog):
             button.setText(new_text)
             # Update the dictionary key
             self.buttons[new_text] = self.buttons.pop(old_text)
-            # Update object name for styling - preserve exit button styling
-            lower_text = new_text.lower()
-            if lower_text in ["exit", "cancel", "close", "no", "nope"] or "discard" in lower_text or "continue anyway" in lower_text:
+            # Styling follows the button's stored role, not its label text, so
+            # a rename never changes whether it is the secondary/exit button.
+            if button.property("dialogRole") == "exit":
                 button.setObjectName("exitButton")
             else:
                 button.setObjectName(f"{new_text.lower().replace(' ', '')}Button")
