@@ -673,7 +673,7 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     # Unit cycle = 2 phases; loop runs while t + 2.0 <= 8.0 (t <= 6.0),
     # advancing 1.0/cycle -> cycles at t=0,1,2,3,4,5,6 = 7 cycles = 14
     # phases, plus the single return-to-start phase = 15 display publishes.
-    assert len(displays) == 15
+    assert len(displays) == 7 * 2 + 1   # 7 cycles x 2 phases + 1 return phase
     # Precalc equivalent would be 4 cycles + return = 9; dynamic ran more.
     assert len(displays) > 9
     assert ctx.step_phases_done_event.is_set() is True
@@ -779,3 +779,63 @@ def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
         handler.on_step(row, ctx)
 
     assert iter_spy.called          # precalc path used
+
+
+def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
+    """Static-only step (no routes) + VT + duration mode: the single static
+    phase is repeated within the budget; there is no return phase; the
+    done event is still set. unit_cycle=[{a}] (cycle_full_time=1.0), budget
+    4.0, clock +0.5/phase -> cycles at t=0,0.5,...,3.0 = 7 phases."""
+    from unittest.mock import MagicMock, patch
+    import threading
+    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+
+    handler = RoutesHandler()
+    row = MagicMock()
+    row.routes = []                     # static-only
+    row.electrodes = ["a"]
+    row.duration_s = 1.0
+    row.trail_length = 1
+    row.trail_overlay = 0
+    row.soft_start = False
+    row.soft_end = False
+    row.repeat_duration = 4.0
+    row.repeat_duration_controls = True
+    row.linear_repeats = False
+    row.route_repetitions = 1
+    row.volume_threshold = 50
+    row.uuid = "u"
+    row.path = (0,)
+
+    proto = MagicMock()
+    proto.stop_event = threading.Event()
+    proto.pause_event = MagicMock(is_set=lambda: False)
+    proto.preview_mode = True
+    proto.scratch = {"electrode_to_channel": {"a": 0}}
+    proto.qsignals = MagicMock()
+
+    ctx = MagicMock()
+    ctx.protocol = proto
+    ctx.phase_advance_event = threading.Event()
+    ctx.step_phases_done_event = threading.Event()
+    ctx.scratch = {}
+    ctx.wait_for = MagicMock()
+
+    clock = {"t": 0.0}
+    displays = []
+
+    def fake_publish(**kw):
+        from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+        if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
+            displays.append(kw)
+
+    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
+         patch.object(mod, "_cooperative_sleep",
+                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
+         patch.object(mod, "publish_message", side_effect=fake_publish):
+        handler.on_step(row, ctx)
+
+    # 7 repeats of the single static phase; no return phase (return_phase is None).
+    assert len(displays) == 7
+    assert ctx.step_phases_done_event.is_set() is True
