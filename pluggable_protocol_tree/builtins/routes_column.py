@@ -276,8 +276,10 @@ class RoutesHandler(BaseColumnHandler):
         qsignals = getattr(ctx.protocol, "qsignals", None)
         vt_active = False
         # Soft, dependency-free detection: the volume_threshold column may not
-        # be loaded (attribute absent -> 0). try/except guards a real row whose
-        # attribute exists but isn't numeric; it does NOT exist for MagicMocks.
+        # be loaded (attribute absent -> getattr default 0). try/except guards
+        # a real row whose attribute exists but holds a non-numeric value. (It
+        # does NOT shield against MagicMock test rows -- float(MagicMock()) is
+        # 1.0 -- so those tests set row.volume_threshold explicitly.)
         try:
             vt_active = float(getattr(row, "volume_threshold", 0) or 0) > 0
         except (TypeError, ValueError):
