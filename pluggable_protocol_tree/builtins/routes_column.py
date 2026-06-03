@@ -201,6 +201,10 @@ class RoutesHandler(BaseColumnHandler):
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
             soft_start=bool(getattr(row, "soft_start", False)),
         )
+        # No routes -> unit_cycle is the single static phase and return_phase
+        # is None; the loop below repeats that static actuation across the
+        # budget (holding the droplet, re-checking the threshold each dwell)
+        # rather than yielding it once. Intentional for VT static-merge steps.
         cycle_full_time = len(unit_cycle) * per_phase_dwell
         step_start = _monotonic()
         running_idx = 0
@@ -271,6 +275,9 @@ class RoutesHandler(BaseColumnHandler):
 
         qsignals = getattr(ctx.protocol, "qsignals", None)
         vt_active = False
+        # Soft, dependency-free detection: the volume_threshold column may not
+        # be loaded (attribute absent -> 0). try/except guards a real row whose
+        # attribute exists but isn't numeric; it does NOT exist for MagicMocks.
         try:
             vt_active = float(getattr(row, "volume_threshold", 0) or 0) > 0
         except (TypeError, ValueError):
