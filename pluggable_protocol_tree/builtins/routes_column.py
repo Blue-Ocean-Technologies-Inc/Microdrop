@@ -59,10 +59,28 @@ logger = logging.getLogger(__name__)
 # row's total duration and shouldn't be slept again.
 DURATION_CONSUMED_KEY = "_routes_consumed_duration"
 
+# Generic opt-in hook (set on ctx.scratch in on_pre_step by any column that
+# wants this step's phases held open for buffering). When present,
+# RoutesHandler gives each phase a post-dwell grace + honours
+# add_time_buffer_to_current_phase, and in duration mode loops the unit cycle
+# within the budget. This keeps RoutesHandler decoupled — it never names the
+# columns that hook in (same pattern as DURATION_CONSUMED_KEY above).
+# volume_threshold sets this; other columns may too.
+PHASE_HOLD_REQUESTED_KEY = "_phase_hold_requested"
+
 # Cooperative-sleep slice: how often to check stop_event during a
 # per-phase dwell so a Stop press lands within ~50ms even on long
 # durations.
 _SLICE_S = 0.05
+
+# Post-dwell grace: when a step holds the phase for sibling columns (e.g.
+# volume threshold), how long to wait past the nominal dwell for one of
+# them to register buffer / open a dialog before advancing anyway. Covers
+# the tiny gap between the dwell ending and a sibling detecting the miss,
+# so a participating column isn't missed and a non-participating one never
+# deadlocks. While the run is paused (operator dialog up) the grace is
+# refreshed each loop, so a slow operator never causes an early advance.
+_HOLD_GRACE_S = 0.5
 
 # Indirection so the dynamic duration loop's wall-clock reads can be
 # replaced with a deterministic fake clock in tests. Production uses
@@ -106,7 +124,8 @@ class RoutesHandler(BaseColumnHandler):
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
-                   pause_event, qsignals, phase_index, phase_total):
+                   pause_event, qsignals, phase_index, phase_total,
+                   hold_for_buffer=False):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -115,11 +134,18 @@ class RoutesHandler(BaseColumnHandler):
 
         ``phase_total`` is 0 for the dynamic loop (total unknown while
         looping); callers in the static path pass the materialized count.
+
+        ``hold_for_buffer``: when True, after the nominal dwell give sibling
+        columns a grace window to extend THIS phase (see the post-dwell hold
+        below). Used for volume-threshold steps so a missed threshold can
+        hold the phase open rather than advancing on schedule.
         """
         # Fresh slate: a handler set in phase N-1 must NOT carry over into
         # phase N. Cleared before the stop/pause checks so a stale set
-        # doesn't accidentally fire here.
+        # doesn't accidentally fire here. Same for any unconsumed phase-time
+        # buffer left over from a phase that ended early.
         ctx.phase_advance_event.clear()
+        ctx.reset_phase_time_buffer()
         if stop_event.is_set():
             return False
         # Pause check at the phase boundary — block here so the
@@ -177,23 +203,71 @@ class RoutesHandler(BaseColumnHandler):
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)
+
+        # Consume any phase-time buffer a sibling column added (only relevant
+        # when this step opted into holding — see below) and tell the status
+        # bar so its target grows to match. Whether the held time is credited
+        # back to a duration budget is the requesting column's policy (it calls
+        # ctx.note_phase_extension), not RoutesHandler's — we only hold + report.
+        def _take_and_emit():
+            extra = ctx.take_phase_time_buffer()
+            if extra > 0 and qsignals is not None:
+                qsignals.phase_extended.emit(extra)
+            return extra
+
+        # Post-dwell hold: a sibling column (e.g. volume threshold) often
+        # only detects a miss right at the dwell's end — too late to have
+        # added buffer mid-dwell. Give it a short grace to register buffer
+        # or open a dialog (which pauses us), holding THIS phase's actuation
+        # meanwhile. phase_advance_event (threshold reached / operator
+        # "proceed") ends the hold at once; the grace bounds it so a step
+        # whose sibling never participates can't deadlock. While paused
+        # (dialog up) we refresh the grace each loop so a deliberate operator
+        # never triggers an early advance.
+        if hold_for_buffer and not preview_mode:
+            grace_deadline = time.monotonic() + _HOLD_GRACE_S
+            while (not stop_event.is_set()
+                   and not ctx.phase_advance_event.is_set()):
+                if pause_event.is_set():
+                    pause_event.wait_cleared()
+                    grace_deadline = time.monotonic() + _HOLD_GRACE_S
+                    continue
+                extra = _take_and_emit()
+                if extra > 0:
+                    _cooperative_sleep(
+                        extra, stop_event, pause_event,
+                        phase_advance_event=ctx.phase_advance_event,
+                        buffer_provider=_take_and_emit)
+                    grace_deadline = time.monotonic() + _HOLD_GRACE_S
+                    continue
+                if time.monotonic() >= grace_deadline:
+                    break
+                time.sleep(_SLICE_S)
         return True
 
     def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
                                    step_uuid, step_label, preview_mode,
                                    per_phase_dwell, stop_event, pause_event,
                                    qsignals, budget):
-        """Duration mode + volume threshold: loop the unit cycle as long as
+        """Duration mode + a phase-hold hook: loop the unit cycle as long as
         another FULL-duration cycle still fits the budget, then close with
         the return-to-start phase and idle any sub-cycle remainder.
 
-        Volume threshold cuts each phase short (via phase_advance_event), so
-        wall-clock elapses slower than ``per_phase_dwell`` would predict and
-        more cycles fit -> the freed time becomes more loops, not idle. The
-        soft-end ramp-down is intentionally absent (duration_loop_parts does
-        not produce it): reaching the threshold guarantees droplet position.
+        A hook column (e.g. volume threshold) cuts each phase short via
+        phase_advance_event, so wall-clock elapses slower than
+        ``per_phase_dwell`` would predict and more cycles fit -> the freed
+        time becomes more loops, not idle. The soft-end ramp-down is
+        intentionally absent (duration_loop_parts does not produce it):
+        reaching the hook's advance condition guarantees droplet position.
         The phase index is a running counter with total 0 (unknown while
-        looping) so the status bar shows the advancing phase number."""
+        looping) so the status bar shows the advancing phase number.
+
+        Operator-requested phase extensions (the recovery dialog's "extend by
+        X") are CREDITED BACK to the budget: they add to the step's total
+        time rather than displacing later cycles. A 1000s budget with a 30s
+        stuck-phase extension therefore runs ~1030s total, keeping the full
+        1000s of cycling. ``ctx.phase_extension_total()`` accumulates those
+        extensions; ``_budget_elapsed`` subtracts them from wall-clock."""
         ramp_up, unit_cycle, return_phase = duration_loop_parts(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
             routes=list(getattr(row, "routes", []) or []),
@@ -209,15 +283,27 @@ class RoutesHandler(BaseColumnHandler):
         step_start = _monotonic()
         running_idx = 0
 
+        def _budget_elapsed():
+            # Wall-clock since step start MINUS operator-requested phase
+            # extensions, so those add to the total run time rather than
+            # eating into the duration budget.
+            return _monotonic() - step_start - ctx.phase_extension_total()
+
         def _run(phase):
             nonlocal running_idx
             running_idx += 1
+            # hold_for_buffer=True: this loop only runs when a column requested
+            # the phase-hold hook, so honour the same post-dwell hold/dialog as
+            # the static path. A phase whose hook advances early is still cut
+            # short by phase_advance_event (so cycles keep fitting the budget);
+            # only a held phase can extend / open the dialog.
             return self._run_phase(
                 phase, ctx=ctx, mapping=mapping, static_routes=static_routes,
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals, phase_index=running_idx, phase_total=0)
+                qsignals=qsignals, phase_index=running_idx, phase_total=0,
+                hold_for_buffer=True)
 
         for phase in ramp_up:
             if not _run(phase):
@@ -232,7 +318,7 @@ class RoutesHandler(BaseColumnHandler):
                     if not _run(phase):
                         return
                 break
-            if _monotonic() - step_start + cycle_full_time > budget:
+            if _budget_elapsed() + cycle_full_time > budget:
                 break
             for phase in unit_cycle:
                 if not _run(phase):
@@ -241,7 +327,7 @@ class RoutesHandler(BaseColumnHandler):
         if return_phase is not None and not stop_event.is_set():
             _run(return_phase)
 
-        remaining = budget - (_monotonic() - step_start)
+        remaining = budget - _budget_elapsed()
         if remaining > 0 and not stop_event.is_set():
             _cooperative_sleep(remaining, stop_event, pause_event)
 
@@ -273,18 +359,13 @@ class RoutesHandler(BaseColumnHandler):
         )
 
         qsignals = getattr(ctx.protocol, "qsignals", None)
-        vt_active = False
-        # Soft, dependency-free detection: the volume_threshold column may not
-        # be loaded (attribute absent -> getattr default 0). try/except guards
-        # a real row whose attribute exists but holds a non-numeric value. (It
-        # does NOT shield against MagicMock test rows -- float(MagicMock()) is
-        # 1.0 -- so those tests set row.volume_threshold explicitly.)
-        try:
-            vt_active = float(getattr(row, "volume_threshold", 0) or 0) > 0
-        except (TypeError, ValueError):
-            vt_active = False
+        # Generic opt-in: a sibling column (e.g. volume threshold) requested in
+        # on_pre_step that this step's phases be held open for buffering /
+        # threshold-driven advancement. RoutesHandler honours the flag without
+        # knowing which column set it — see PHASE_HOLD_REQUESTED_KEY.
+        phase_hold = bool(ctx.scratch.get(PHASE_HOLD_REQUESTED_KEY, False))
 
-        if in_duration_mode and vt_active:
+        if in_duration_mode and phase_hold:
             self._run_dynamic_duration_loop(
                 row, ctx=ctx, mapping=mapping, static_routes=static_routes,
                 step_uuid=step_uuid, step_label=step_label,
@@ -314,7 +395,8 @@ class RoutesHandler(BaseColumnHandler):
                         step_label=step_label, preview_mode=preview_mode,
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
                         pause_event=pause_event, qsignals=qsignals,
-                        phase_index=phase_idx, phase_total=total_phases):
+                        phase_index=phase_idx, phase_total=total_phases,
+                        hold_for_buffer=phase_hold):
                     break
             # Route Reps Dur mode: after the full cycles, hold the last
             # phase's electrodes (no new publish) for the exact leftover so
@@ -338,14 +420,20 @@ class RoutesHandler(BaseColumnHandler):
 
 
 def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
-                       phase_advance_event=None) -> None:
+                       phase_advance_event=None, buffer_provider=None) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
     ``pause_event.wait_cleared()`` until the user resumes, then
     continue with the remaining dwell. Returns early on stop, on
     phase_advance_event (any handler can set it to cut the phase short),
-    or when seconds reaches 0."""
+    or when seconds reaches 0.
+
+    ``buffer_provider`` (optional): a zero-arg callable polled each slice
+    that returns seconds to ADD to the remaining dwell. Lets a sibling
+    column extend the phase mid-dwell via
+    ``StepContext.add_time_buffer_to_current_phase`` without restarting it.
+    """
     remaining = seconds
     while remaining > 0:
         if stop_event.is_set():
@@ -356,6 +444,8 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
             pause_event.wait_cleared()
             if stop_event.is_set():
                 return
+        if buffer_provider is not None:
+            remaining += buffer_provider()
         slice_dur = min(_SLICE_S, remaining)
         time.sleep(slice_dur)
         remaining -= slice_dur
