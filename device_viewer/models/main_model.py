@@ -124,6 +124,23 @@ class DeviceViewMainModel(HasTraits):
             # Corrupt preference value -- fall back to the default (0).
             pass
 
+    def load_calibration_data_from_preferences(self):
+        """Restore the last measured calibration capacitances so the sidebar
+        starts at the previous session's values. Data-only, mirroring the
+        camera reference-rect persistence -- no preferences-pane view."""
+        for key, trait_name in (
+            ("calibration.liquid_capacitance_over_area", "liquid_capacitance_over_area"),
+            ("calibration.filler_capacitance_over_area", "filler_capacitance_over_area"),
+        ):
+            raw = self.preferences.preferences.get(key, "")
+            if not raw:
+                continue
+            try:
+                setattr(self.calibration, trait_name, float(raw))
+            except (TypeError, ValueError):
+                # Corrupt preference value -- keep the default (None).
+                pass
+
     # ------------------ Initialization --------------------
     def traits_init(self):
         """Initialize the model with default traits."""
@@ -313,6 +330,21 @@ class DeviceViewMainModel(HasTraits):
     def _device_perspective_changed(self, event=None):
         self.preferences.preferences.set(
             "device_view.rotation_deg", str(self.device_rotation_deg)
+        )
+
+    @observe("calibration:liquid_capacitance_over_area, calibration:filler_capacitance_over_area")
+    def _calibration_data_changed(self, event=None):
+        """Persist the calibration capacitances so they survive a restart
+        (loaded back via load_calibration_data_from_preferences)."""
+        liquid = self.calibration.liquid_capacitance_over_area
+        filler = self.calibration.filler_capacitance_over_area
+        self.preferences.preferences.set(
+            "calibration.liquid_capacitance_over_area",
+            "" if liquid is None else str(liquid),
+        )
+        self.preferences.preferences.set(
+            "calibration.filler_capacitance_over_area",
+            "" if filler is None else str(filler),
         )
 
     @observe("protocol_running")
