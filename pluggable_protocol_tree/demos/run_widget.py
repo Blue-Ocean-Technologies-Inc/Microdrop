@@ -88,7 +88,7 @@ def _columns():
 
 
 def _pre_populate(rm):
-    """Seed the electrode→channel mapping. e00..e24 → channels 0..24."""
+    """Seed the electrode-->channel mapping. e00..e24 --> channels 0..24."""
     rm.protocol_metadata["electrode_to_channel"] = {
         f"e{i:02d}": i for i in range(GRID_W * GRID_H)
     }

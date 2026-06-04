@@ -103,7 +103,7 @@ class ProtocolTreeWidget(QWidget):
             sc.activated.connect(slot)
             self._shortcuts.append(sc)
 
-        # Mirror Qt selection → RowManager selection
+        # Mirror Qt selection --> RowManager selection
         self.tree.selectionModel().selectionChanged.connect(self._sync_selection)
 
     # --- active-row highlight + scroll (called by the executor wiring) ---
@@ -172,7 +172,7 @@ class ProtocolTreeWidget(QWidget):
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _on_header_context_menu(self, pos):
-        """Header right-click → menu listing every column with a
+        """Header right-click --> menu listing every column with a
         toggleable 'Show' checkmark. Affects only the QTreeView's
         column visibility — does not touch the underlying row data."""
         menu = QMenu()
@@ -196,8 +196,8 @@ class ProtocolTreeWidget(QWidget):
         self._manager.add_group(parent_path=parent_path)
 
     def _parent_path_for_anchor(self, idx):
-        """If anchored on a group → insert inside. On a step → insert as
-        sibling. No anchor → root."""
+        """If anchored on a group --> insert inside. On a step --> insert as
+        sibling. No anchor --> root."""
         if not idx.isValid():
             return ()
         from pluggable_protocol_tree.models.row import GroupRow
@@ -256,7 +256,7 @@ class ProtocolTreeWidget(QWidget):
             from pyface.qt.QtCore import QItemSelectionModel
             sm = self.tree.selectionModel()
             if not self._manager.root.children:
-                # Empty tree → free mode.
+                # Empty tree --> free mode.
                 sm.clearSelection()
                 sm.setCurrentIndex(
                     QModelIndex(),

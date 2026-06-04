@@ -1,7 +1,7 @@
 """Package-level constants for the pluggable protocol tree.
 
 Follows the MicroDrop convention: PKG derived from __name__, topic constants
-defined here, ACTOR_TOPIC_DICT aggregating the listener→topic map."""
+defined here, ACTOR_TOPIC_DICT aggregating the listener-->topic map."""
 
 import os
 

@@ -316,7 +316,7 @@ class ProtocolExecutor(HasTraits):
             step_phases_done_event=threading.Event(),
         )
         # Detect within-bucket topic collisions before opening any boxes.
-        per_priority_topics: dict[int, dict[str, str]] = {}  # priority → topic → col_id
+        per_priority_topics: dict[int, dict[str, str]] = {}  # priority --> topic --> col_id
         for col in cols:
             topics = col.handler.wait_for_topics or []
             bucket = per_priority_topics.setdefault(col.handler.priority, {})

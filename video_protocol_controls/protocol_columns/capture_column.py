@@ -69,7 +69,7 @@ class CaptureHandler(BaseColumnHandler):
 
     # Declared at class level as a Trait so HasTraits constructor kwargs
     # (e.g. CaptureHandler(fire_at_start=False)) work correctly.
-    # Default True → fire at step start; False → fire at step end.
+    # Default True --> fire at step start; False → fire at step end.
     fire_at_start = Bool(True)
 
     def on_pre_step(self, row, ctx):

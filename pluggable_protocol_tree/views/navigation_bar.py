@@ -84,7 +84,7 @@ class NavigationBar(QWidget):
         self.btn_last.setToolTip("Last Step")
 
         # Play is a QToolButton with a menu-button split: the main face
-        # behaves like before (click → start/pause/resume the protocol),
+        # behaves like before (click --> start/pause/resume the protocol),
         # while the dropdown arrow exposes the persistent run-mode
         # toggle Preview Mode (the legacy protocol_grid checkbox).
         # Droplet detection is owned by its own column now, so it

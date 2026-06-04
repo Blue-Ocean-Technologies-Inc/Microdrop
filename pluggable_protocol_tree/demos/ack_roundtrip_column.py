@@ -1,4 +1,4 @@
-"""Demo column with publish → wait_for round-trip via Dramatiq.
+"""Demo column with publish --> wait_for round-trip via Dramatiq.
 
 Mimics what production hardware columns (PPT-3+ Voltage / Routes /
 Electrodes) will do: publish a state-set request to a topic, block
@@ -9,7 +9,7 @@ run its dwell sleep.
 The responder is an in-process Dramatiq actor that sleeps for a
 simulated settle time and publishes confirmation. Requires Redis +
 a worker; the demo's run_widget starts both. If Redis isn't reachable
-the wait_for will raise TimeoutError → protocol_error dialog.
+the wait_for will raise TimeoutError --> protocol_error dialog.
 """
 
 import logging

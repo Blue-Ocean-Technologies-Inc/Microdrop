@@ -39,7 +39,7 @@ class BaseCompoundColumnModel(HasTraits):
 @provides(ICompoundColumnView)
 class BaseCompoundColumnView(HasTraits):
     """Subclass and override cell_view_for_field, OR use DictCompoundColumnView
-    for a static field_id → view dict."""
+    for a static field_id --> view dict."""
 
     def cell_view_for_field(self, field_id) -> IColumnView:
         raise NotImplementedError
