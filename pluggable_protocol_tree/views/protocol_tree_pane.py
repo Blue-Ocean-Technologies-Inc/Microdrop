@@ -363,6 +363,7 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
         self.executor.qsignals.protocol_error.connect(self._on_error)
         self.executor.qsignals.phase_started.connect(self._on_phase_started)
+        self.executor.qsignals.phase_extended.connect(self._on_phase_extended)
         if self.phase_ack_topic is not None:
             self.phase_acked.connect(self._on_phase_ack)
 
@@ -471,6 +472,18 @@ class ProtocolTreePane(QWidget):
             self._phase_target = float(phase_duration_s)
         except (TypeError, ValueError):
             self._phase_target = None
+        self._refresh_status()
+
+    def _on_phase_extended(self, extra_s):
+        """A handler extended the current phase (e.g. volume threshold
+        holding for more wetting time). Grow the displayed target so the
+        'elapsed / target' readout stays honest while the phase is held."""
+        if self._current_row is None:
+            return
+        try:
+            self._phase_target = (self._phase_target or 0.0) + float(extra_s)
+        except (TypeError, ValueError):
+            return
         self._refresh_status()
 
     def _on_step_repetition(self, rep_chain):
