@@ -61,7 +61,7 @@ from dropbot_protocol_controls.services import (  # noqa: F401
 # Module-level so the Tools menu can flip its `mode` at runtime and the
 # next protocol run picks up the change. Default `error` so the demo
 # exercises the backend-error-via-dialog path on first run; switch via
-# Tools → Responder Mode for the other scenarios.
+# Tools --> Responder Mode for the other scenarios.
 _responder = DropletDetectionResponder(mode="error")
 
 

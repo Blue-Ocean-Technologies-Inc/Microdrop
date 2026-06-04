@@ -697,7 +697,7 @@ def test_step_finished_freezes_step_elapsed_label(qapp):
 
 
 def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
-    """protocol_error → idle button state, tick timer stopped, dialog
+    """protocol_error --> idle button state, tick timer stopped, dialog
     shown via the styled pyface_wrapper.error helper.
 
     The pane is the owner of the error path now (post-PPT-10.1

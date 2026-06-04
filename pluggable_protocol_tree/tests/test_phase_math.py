@@ -112,7 +112,7 @@ def test_repeats_loop_route_default_one_cycle():
 
 
 def test_repeats_loop_route_n_repeats():
-    """Loop route + n_repeats=2 → 2 full cycles + 1 return phase."""
+    """Loop route + n_repeats=2 --> 2 full cycles + 1 return phase."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
         linear_repeats=False, n_repeats=2,
@@ -123,7 +123,7 @@ def test_repeats_loop_route_n_repeats():
 
 def test_repeats_loop_with_repeat_duration_caps_cycles():
     """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
-    cycle_phases=3 → 2.5/3 = 0.83, floor → 0 cycles. But minimum is 1
+    cycle_phases=3 --> 2.5/3 = 0.83, floor --> 0 cycles. But minimum is 1
     cycle. Duration mode still closes the loop with a return-to-start
     phase (the RoutesHandler's len(phases)-based hold-pad keeps timing
     exact)."""
@@ -137,7 +137,7 @@ def test_repeats_loop_with_repeat_duration_caps_cycles():
 
 def test_repeats_loop_with_repeat_duration_fits_two_cycles():
     """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 → 6.5/3 = 2.17, floor → 2 cycles. Duration mode closes
+    cycle_phases=3 --> 6.5/3 = 2.17, floor --> 2 cycles. Duration mode closes
     the loop with a return-to-start phase, same as count mode."""
     out = list(_route_with_repeats(
         ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
@@ -211,13 +211,13 @@ from pluggable_protocol_tree.services.phase_math import (
 
 
 def test_ramp_up_single_electrode_first_phase_is_noop():
-    """First phase has 1 electrode → nothing to ramp."""
+    """First phase has 1 electrode --> nothing to ramp."""
     out = list(_ramp_up(iter([{"a"}, {"b"}])))
     assert out == [{"a"}, {"b"}]
 
 
 def test_ramp_up_three_electrode_first_phase_prepends_two():
-    """First phase {a,b,c} → prepend {a}, {a,b} so the trail grows."""
+    """First phase {a,b,c} --> prepend {a}, {a,b} so the trail grows."""
     out = list(_ramp_up(iter([{"a", "b", "c"}, {"d", "e", "f"}])))
     assert len(out) == 4
     assert len(out[0]) == 1 and out[0].issubset({"a", "b", "c"})
@@ -237,7 +237,7 @@ def test_ramp_down_single_electrode_last_phase_is_noop():
 
 
 def test_ramp_down_three_electrode_last_phase_appends_two():
-    """Last phase {x,y,z} → append two ramp-down phases shrinking by 1."""
+    """Last phase {x,y,z} --> append two ramp-down phases shrinking by 1."""
     out = list(_ramp_down(iter([{"a"}, {"x", "y", "z"}])))
     assert len(out) == 4
     assert out[0] == {"a"}
@@ -280,7 +280,7 @@ def test_iter_phases_one_loop_route():
 
 def test_iter_phases_four_electrode_loop_yields_five_phases():
     """Loop with 4 unique electrodes, trail=1, one square at a time:
-    A→B→C→D→A. Five phases total (4 forward + 1 return). Mirrors the
+    A-->B-->C-->D-->A. Five phases total (4 forward + 1 return). Mirrors the
     legacy device-viewer loop execution that the user expects."""
     out = list(iter_phases(
         static_electrodes=[], routes=[["a", "b", "c", "d", "a"]],
@@ -323,7 +323,7 @@ def test_iter_phases_soft_end_appends_ramp():
 
 
 def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 → 2 cycles, then a
+    """Loop with cycle=3, step_duration=1, budget=6.5 --> 2 cycles, then a
     return-to-start phase so the loop closes (timing stays exact via the
     RoutesHandler's len(phases)-based hold-pad)."""
     out = list(iter_phases(

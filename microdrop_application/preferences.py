@@ -41,9 +41,9 @@ class MicrodropPreferences(PreferencesHelper):
 
     # ---- Central canvas background styling ----------------------------------
     # `canvas_background_use_custom` is the master switch:
-    #   - False → canvas follows the system color scheme (white in light mode,
+    #   - False --> canvas follows the system color scheme (white in light mode,
     #     black in dark mode) as defined in MicrodropCentralCanvas.
-    #   - True  → use `canvas_background_color` (picked via a Color dialog in
+    #   - True  --> use `canvas_background_color` (picked via a Color dialog in
     #     the preferences view).
     # `canvas_background_opacity` is a percentage (0–100) applied to whichever
     # colour ends up being used, producing the final rgba stylesheet.

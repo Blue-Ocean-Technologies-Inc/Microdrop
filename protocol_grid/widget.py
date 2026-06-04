@@ -3157,7 +3157,7 @@ class PGCWidget(QWidget):
 
         # All cell mutations below run as programmatic changes so the
         # itemChanged re-entry from setText/setFlags doesn't trigger
-        # on_item_changed → update_single_step_dev_fields →
+        # on_item_changed --> update_single_step_dev_fields -->
         # _reconcile_step_freeze_state recursion.
         prior_programmatic = self._programmatic_change
         self._programmatic_change = True

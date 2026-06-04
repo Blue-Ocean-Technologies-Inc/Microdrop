@@ -118,7 +118,7 @@ def test_make_capture_column_fire_at_start_false_when_pref_is_end():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_fires_capture_when_fire_at_start_true_and_capture_true():
-    """fire_at_start=True, row.capture=True → publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
+    """fire_at_start=True, row.capture=True --> publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
     handler = CaptureHandler(fire_at_start=True)
 
     row = MagicMock()
@@ -153,7 +153,7 @@ def test_on_pre_step_fires_capture_when_fire_at_start_true_and_capture_true():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_does_not_fire_when_fire_at_start_false():
-    """fire_at_start=False → on_pre_step is a no-op regardless of row.capture."""
+    """fire_at_start=False --> on_pre_step is a no-op regardless of row.capture."""
     handler = CaptureHandler(fire_at_start=False)
 
     row = MagicMock()
@@ -175,7 +175,7 @@ def test_on_pre_step_does_not_fire_when_fire_at_start_false():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_does_not_fire_when_capture_false():
-    """fire_at_start=True but row.capture=False → no publish."""
+    """fire_at_start=True but row.capture=False --> no publish."""
     handler = CaptureHandler(fire_at_start=True)
 
     row = MagicMock()
@@ -197,7 +197,7 @@ def test_on_pre_step_does_not_fire_when_capture_false():
 # ---------------------------------------------------------------------------
 
 def test_on_post_step_fires_capture_when_fire_at_start_false_and_capture_true():
-    """fire_at_start=False, row.capture=True → publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
+    """fire_at_start=False, row.capture=True --> publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
     handler = CaptureHandler(fire_at_start=False)
 
     row = MagicMock()

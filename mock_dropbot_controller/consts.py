@@ -17,7 +17,7 @@ from dropbot_controller.consts import (
 
 from electrode_controller.consts import ELECTRODES_STATE_APPLIED
 
-# Mock-specific request topics (frontend → backend via pub/sub)
+# Mock-specific request topics (frontend --> backend via pub/sub)
 MOCK_CHANGE_SIM_SETTINGS = "mock_dropbot/requests/change_simulation_settings"
 MOCK_SIMULATE_CONNECT = "mock_dropbot/requests/simulate_connect"
 MOCK_SIMULATE_DISCONNECT = "mock_dropbot/requests/simulate_disconnect"
@@ -25,7 +25,7 @@ MOCK_SIMULATE_CHIP_INSERT = "mock_dropbot/requests/simulate_chip_insert"
 MOCK_SIMULATE_SHORTS = "mock_dropbot/requests/simulate_shorts"
 MOCK_SIMULATE_HALT = "mock_dropbot/requests/simulate_halt"
 
-# Mock-specific signal topics (backend → frontend via pub/sub)
+# Mock-specific signal topics (backend --> frontend via pub/sub)
 MOCK_ACTUATED_CHANNELS_UPDATED = "mock_dropbot/signals/actuated_channels_updated"
 MOCK_STREAM_STATUS_UPDATED = "mock_dropbot/signals/stream_status_updated"
 

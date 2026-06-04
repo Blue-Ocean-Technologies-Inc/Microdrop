@@ -80,7 +80,7 @@ def test_video_handler_wait_for_topics_is_empty():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_no_publish_when_state_unchanged_false():
-    """video=False and last=False → no publish."""
+    """video=False and last=False --> no publish."""
     handler = VideoHandler()
     row = MagicMock()
     row.video = False
@@ -98,7 +98,7 @@ def test_on_pre_step_no_publish_when_state_unchanged_false():
 
 
 def test_on_pre_step_no_publish_when_state_unchanged_true():
-    """video=True and last=True → no publish (symmetric to the False case)."""
+    """video=True and last=True --> no publish (symmetric to the False case)."""
     handler = VideoHandler()
     row = MagicMock()
     row.video = True
@@ -120,7 +120,7 @@ def test_on_pre_step_no_publish_when_state_unchanged_true():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_publishes_true_on_flip_on():
-    """video=True, last=False → publish 'true'; scratch updated to True."""
+    """video=True, last=False --> publish 'true'; scratch updated to True."""
     handler = VideoHandler()
     row = MagicMock()
     row.video = True
@@ -144,7 +144,7 @@ def test_on_pre_step_publishes_true_on_flip_on():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_publishes_false_on_flip_off():
-    """video=False, last=True → publish 'false'; scratch updated to False."""
+    """video=False, last=True --> publish 'false'; scratch updated to False."""
     handler = VideoHandler()
     row = MagicMock()
     row.video = False
@@ -164,7 +164,7 @@ def test_on_pre_step_publishes_false_on_flip_off():
 
 
 # ---------------------------------------------------------------------------
-# 8. Re-arming: flip-on → flip-off → flip-on → three publishes total
+# 8. Re-arming: flip-on --> flip-off → flip-on → three publishes total
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_rearming_across_three_calls():
