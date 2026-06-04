@@ -117,7 +117,7 @@ class MagnetHandler(BaseCompoundColumnHandler):
         # imports (matches the "read at runtime" pattern for up_height_mm).
         from peripheral_controller.preferences import PeripheralPreferences
         if PeripheralPreferences().wait_for_magnet_ack:
-            ctx.wait_for(MAGNET_APPLIED, timeout=10.0)
+            ctx.wait_for(MAGNET_APPLIED, timeout=2.0)
 
 
 def make_magnet_column():
