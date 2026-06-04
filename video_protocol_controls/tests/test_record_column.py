@@ -81,7 +81,7 @@ def test_record_handler_wait_for_topics_is_empty():
 # ---------------------------------------------------------------------------
 
 def test_on_pre_step_no_publish_when_state_unchanged_false():
-    """record=False and last=False → no publish."""
+    """record=False and last=False --> no publish."""
     handler = RecordHandler()
     row = MagicMock()
     row.record = False

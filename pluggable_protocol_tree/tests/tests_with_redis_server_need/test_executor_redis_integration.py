@@ -2,8 +2,8 @@
 
 Skips automatically if Redis isn't reachable (see conftest.py).
 
-Proves: publish_message → message_router_actor → executor_listener actor
-→ route_to_active_step → mailbox → ctx.wait_for → handler returns the
+Proves: publish_message --> message_router_actor --> executor_listener actor
+--> route_to_active_step --> mailbox --> ctx.wait_for --> handler returns the
 payload (as a JSON string — that's the wire format, handlers JSON-decode
 on the receiving side).
 """
@@ -149,8 +149,8 @@ def test_step_blocks_on_state_apply_before_duration_starts(router_actor):
     (DurationColumnHandler at priority 90) start its dwell sleep.
 
     Proves:
-      * publish_message → message_router → subscriber actor → router →
-        executor_listener → mailbox → ctx.wait_for round-trip works
+      * publish_message --> message_router --> subscriber actor --> router -->
+        executor_listener --> mailbox --> ctx.wait_for round-trip works
         end-to-end against a real broker.
       * Priority buckets serialize correctly: state-apply (priority 30)
         finishes BEFORE the duration sleep (priority 90) starts —

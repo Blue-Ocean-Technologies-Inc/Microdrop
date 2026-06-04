@@ -1,12 +1,12 @@
 """End-to-end test for the RoutesHandler chain against a real broker.
 
 Flow exercised:
-  RoutesHandler.on_step → publish_message(ELECTRODES_STATE_CHANGE)
-                       → message_router → demo electrode_responder
-                       → publish_message(ELECTRODES_STATE_APPLIED)
-                       → message_router → executor_listener
-                       → mailbox → ctx.wait_for() returns
-                       → next phase
+  RoutesHandler.on_step --> publish_message(ELECTRODES_STATE_CHANGE)
+                       --> message_router --> demo electrode_responder
+                       --> publish_message(ELECTRODES_STATE_APPLIED)
+                       --> message_router --> executor_listener
+                       --> mailbox --> ctx.wait_for() returns
+                       --> next phase
 """
 
 import json
@@ -89,7 +89,7 @@ def _all_columns():
 
 def test_routes_handler_publishes_phases_and_unblocks_on_ack(router_actor):
     """One step with electrodes=['e00','e01'] + routes=[['e02','e03','e04']]
-    + trail_length=1 → 3 phases, each unioned with the static set,
+    + trail_length=1 --> 3 phases, each unioned with the static set,
     each ack'd by the demo electrode_responder."""
     _phase_spy_log.clear()
 

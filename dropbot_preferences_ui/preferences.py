@@ -119,7 +119,7 @@ class VoltageFrequencyRangePane(PreferencesPane):
 
     # Create the grid group for the sidebar items.
     # Each tuple pairs a trait name with its display label.
-    # With 2 columns, items fill left→right per row:
+    # With 2 columns, items fill left-->right per row:
     #   Row 1: Min Voltage     | Min Frequency
     #   Row 2: Max Voltage     | Max Frequency
     #   Row 3: Default Voltage | Default Frequency

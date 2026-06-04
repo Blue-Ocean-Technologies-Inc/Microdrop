@@ -34,7 +34,7 @@ def _route_windows(route: List[str], trail_length: int,
 
     Open route: yields ceil((len - trail_length) / step + 1) windows,
     each a set of trail_length consecutive electrodes (or fewer at the
-    tail). Trail_length > len(route) → one window of the whole route.
+    tail). Trail_length > len(route) --> one window of the whole route.
 
     Loop route (first == last): drops the duplicated last electrode,
     yields one full cycle of windows that wrap around the effective
@@ -88,10 +88,10 @@ def _route_with_repeats(
 ) -> Iterator[Set[str]]:
     """Wraps _route_windows with repeat-count + duration-budget logic.
 
-    Open route + linear_repeats=False → one pass of _route_windows.
-    Open route + linear_repeats=True  → n_repeats passes (the row's
+    Open route + linear_repeats=False --> one pass of _route_windows.
+    Open route + linear_repeats=True  --> n_repeats passes (the row's
                                         `route_repetitions` column).
-    Loop route → ``cycles`` full cycles plus one return-to-start phase at
+    Loop route --> ``cycles`` full cycles plus one return-to-start phase at
                  the very end (mirrors the legacy device-viewer route
                  executor: N cycles of a C-phase loop yields N*C + 1
                  phases, the final one being the window at position 0 so a
@@ -181,8 +181,8 @@ def duration_loop_parts(
 
 def _ramp_up(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
     """Prepend ramp phases that grow from 1 electrode to the size of
-    the first phase. K=1 first phase → no-op. K=3 first phase {a,b,c}
-    → yields {a}, {a,b} BEFORE the original {a,b,c}.
+    the first phase. K=1 first phase --> no-op. K=3 first phase {a,b,c}
+    --> yields {a}, {a,b} BEFORE the original {a,b,c}.
 
     Element ordering within a set is non-deterministic; the ramp picks
     elements in `sorted()` order so the choice is at least stable
@@ -332,8 +332,8 @@ def _zip_with_static(per_route_iters: list,
     window. Routes that exhaust early hold at their last yielded
     window; the iteration stops only when ALL routes are exhausted.
 
-    No routes at all → yield the static set exactly once (the step
-    still gets one phase). No static + no routes → yield one empty
+    No routes at all --> yield the static set exactly once (the step
+    still gets one phase). No static + no routes --> yield one empty
     phase (preserves the 'every step has at least one phase'
     invariant the executor relies on).
     """

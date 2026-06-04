@@ -139,7 +139,7 @@ def _setup_dramatiq_routing():
                     topic=topic, subscribing_actor_name=actor_name,
                 )
             except Exception:
-                pass     # not subscribed → nothing to remove
+                pass     # not subscribed --> nothing to remove
             router.message_router_data.add_subscriber_to_topic(
                 topic=topic, subscribing_actor_name=actor_name,
             )
@@ -199,7 +199,7 @@ def _build_protocol(include_ack_column: bool) -> RowManager:
         cols.append(make_ack_roundtrip_column())
     rm = RowManager(columns=cols)
 
-    # PPT-3 — the per-protocol electrode→channel mapping the
+    # PPT-3 — the per-protocol electrode-->channel mapping the
     # RoutesHandler reads from ProtocolContext.scratch when resolving
     # actuation channels for each phase.
     rm.protocol_metadata["electrode_to_channel"] = {

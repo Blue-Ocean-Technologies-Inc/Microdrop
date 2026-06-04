@@ -83,7 +83,7 @@ def _ctx_no_cpa(tmp_path):
 
 
 def test_on_calibration_populates_force(tmp_path):
-    """CALIBRATION_DATA → capacitance-per-unit-area = liquid - filler, so
+    """CALIBRATION_DATA --> capacitance-per-unit-area = liquid - filler, so
     subsequent capacitance rows get a real force (legacy parity)."""
     c = ProtocolLoggingController(settling_provider=lambda: 0.0,
                                   flush_scheduler=_immediate)

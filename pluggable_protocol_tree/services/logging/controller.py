@@ -273,7 +273,7 @@ class ProtocolLoggingController:
             logger.warning(f"media log failed: {e}")
 
     def on_calibration(self, message) -> None:
-        """CALIBRATION_DATA payload → capacitance-per-unit-area. Lets the
+        """CALIBRATION_DATA payload --> capacitance-per-unit-area. Lets the
         Force column populate on a live run (legacy parity); ignored
         until calibration data arrives, and invalid data leaves the
         previous value untouched."""

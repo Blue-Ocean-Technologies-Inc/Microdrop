@@ -297,7 +297,7 @@ class RouteLayerManager(HasTraits):
         self.mark_params_committed()
 
     def mark_params_committed(self) -> None:
-        """Snapshot current values as the committed baseline → disables button."""
+        """Snapshot current values as the committed baseline --> disables button."""
         self._committed_params_baseline = self._current_params()
 
     def clear_committed_baseline(self) -> None:

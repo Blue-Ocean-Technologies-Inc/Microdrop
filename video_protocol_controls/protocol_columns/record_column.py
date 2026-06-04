@@ -4,7 +4,7 @@ flip-off.  Cross-step state is tracked via ctx.protocol.scratch so
 change-detection survives across multiple steps of the same protocol run.
 
 Bracketing semantics in detail:
-  - flip-on  (False → True):  publish {"action": "start", "directory": ...,
+  - flip-on  (False --> True):  publish {"action": "start", "directory": ...,
                                          "step_description": ..., "step_id": ...,
                                          "show_dialog": false}
   - flip-off (True → False):  publish {"action": "stop"}

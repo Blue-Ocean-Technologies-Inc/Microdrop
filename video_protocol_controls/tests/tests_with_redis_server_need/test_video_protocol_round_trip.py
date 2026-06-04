@@ -151,10 +151,10 @@ def test_three_step_video_protocol_publishes_expected_sequence(
     sequence described in PPT-6 Task 9:
 
     Step 1 (Video=on, Capture=off, Record=off)
-        → 1 camera-active publish ("true")
+        --> 1 camera-active publish ("true")
     Step 2 (Video=on, Capture=on, Record=on)   [Video unchanged — no publish]
-        → 1 screen-capture publish (JSON with step metadata)
-        → 1 screen-recording publish (action="start", JSON with step metadata)
+        --> 1 screen-capture publish (JSON with step metadata)
+        --> 1 screen-recording publish (action="start", JSON with step metadata)
     Step 3 (all off)
         → 1 camera-active publish ("false")
         → 1 screen-recording publish (action="stop")   [no capture publish]

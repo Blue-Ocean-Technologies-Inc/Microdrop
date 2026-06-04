@@ -194,7 +194,7 @@ class LoggingReport:
                 create_plotly_svg_dropbot_device_heatmap,
             )
             # Defaults ("Actuation Times" / "seconds") trigger the helper's
-            # format_time_tooltip auto-scaling (sec → min → hours). Passing
+            # format_time_tooltip auto-scaling (sec --> min --> hours). Passing
             # "s" instead of "seconds" disables it and shows raw floats.
             fig = create_plotly_svg_dropbot_device_heatmap(
                 str(svg), durations)

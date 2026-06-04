@@ -38,7 +38,7 @@ class TooltipStylesExample(QWidget):
         
         # Example 3: Using navigation button with tooltips
         nav_style = get_complete_stylesheet(theme, "navigation")
-        btn_nav = QPushButton("→")
+        btn_nav = QPushButton("-->")
         btn_nav.setToolTip("Navigation button with consistent tooltip")
         btn_nav.setStyleSheet(nav_style)
         
