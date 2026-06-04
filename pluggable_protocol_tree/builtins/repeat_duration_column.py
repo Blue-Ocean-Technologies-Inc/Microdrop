@@ -32,7 +32,7 @@ class RepeatDurationColumnModel(BaseColumnModel):
 
 
 class RepeatDurationHandler(BaseColumnHandler):
-    """Intercepts edits to prompt for the Route Reps → Route Reps Dur
+    """Intercepts edits to prompt for the Route Reps --> Route Reps Dur
     mode handoff. Read-through writes (no prompt) when:
       * the row is already in Route Reps Dur-controls mode, or
       * the new value matches the auto-estimate (rounding to the
@@ -92,7 +92,7 @@ def make_repeat_duration_column():
             col_id="repeat_duration", col_name="Route Reps Dur",
             default_value=0.0,
         ),
-        view=DoubleSpinBoxColumnView(low=0.0, high=3600.0,
-                                     decimals=2, single_step=0.1),
+        view=DoubleSpinBoxColumnView(low=0.0, high=float("inf"),
+                                     decimals=2, single_step=10),
         handler=RepeatDurationHandler(),
     )
