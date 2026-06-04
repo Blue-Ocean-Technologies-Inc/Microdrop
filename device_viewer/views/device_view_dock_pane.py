@@ -210,6 +210,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         ############## load preferred / default device-view rotation ###################
         self.model.load_device_perspective_from_preferences()
 
+        ############## load last-session calibration data ##############################
+        self.model.load_calibration_data_from_preferences()
+
         ################################################################################################
         # ----------- Setup device view widget ----------------- #
         ################################################################################################
