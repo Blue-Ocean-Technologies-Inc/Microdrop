@@ -646,7 +646,10 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     ctx.protocol = proto
     ctx.phase_advance_event = threading.Event()
     ctx.step_phases_done_event = threading.Event()
-    ctx.scratch = {}
+    # Simulate volume_threshold's on_pre_step hook requesting phase holds.
+    ctx.scratch = {mod.PHASE_HOLD_REQUESTED_KEY: True}
+    # Real StepContext returns a float here; the mock must too (budget math).
+    ctx.phase_extension_total.return_value = 0.0
     ctx.wait_for = MagicMock()
 
     clock = {"t": 0.0}
@@ -716,7 +719,10 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
     ctx.protocol = proto
     ctx.phase_advance_event = threading.Event()
     ctx.step_phases_done_event = threading.Event()
-    ctx.scratch = {}
+    # Simulate volume_threshold's on_pre_step hook requesting phase holds.
+    ctx.scratch = {mod.PHASE_HOLD_REQUESTED_KEY: True}
+    # Real StepContext returns a float here; the mock must too (budget math).
+    ctx.phase_extension_total.return_value = 0.0
     ctx.wait_for = MagicMock()
 
     clock = {"t": 0.0}
@@ -819,7 +825,10 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     ctx.protocol = proto
     ctx.phase_advance_event = threading.Event()
     ctx.step_phases_done_event = threading.Event()
-    ctx.scratch = {}
+    # Simulate volume_threshold's on_pre_step hook requesting phase holds.
+    ctx.scratch = {mod.PHASE_HOLD_REQUESTED_KEY: True}
+    # Real StepContext returns a float here; the mock must too (budget math).
+    ctx.phase_extension_total.return_value = 0.0
     ctx.wait_for = MagicMock()
 
     clock = {"t": 0.0}
@@ -878,7 +887,10 @@ def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
     ctx.protocol = proto
     ctx.phase_advance_event = threading.Event()
     ctx.step_phases_done_event = threading.Event()
-    ctx.scratch = {}
+    # Simulate volume_threshold's on_pre_step hook requesting phase holds.
+    ctx.scratch = {mod.PHASE_HOLD_REQUESTED_KEY: True}
+    # Real StepContext returns a float here; the mock must too (budget math).
+    ctx.phase_extension_total.return_value = 0.0
     ctx.wait_for = MagicMock()
 
     clock = {"t": 0.0}
