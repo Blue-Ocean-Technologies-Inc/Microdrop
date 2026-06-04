@@ -12,7 +12,8 @@ from microdrop_utils.app_setup_helpers import microdrop_runner_setup
 microdrop_runner_setup()
 
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
-    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, DEFAULT_APPLICATION, SERVER_CONTEXT, \
+    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, FRONTEND_APPLICATION, \
+    BACKEND_APPLICATION, SERVER_CONTEXT, \
     REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS
 
 from logger.logger_service import get_logger
@@ -81,7 +82,7 @@ def main(plugins, contexts, application, persist):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the frontend device viewer plugins.")
+    parser = argparse.ArgumentParser(description="Run the device viewer plugins.")
 
     parser.add_argument(
         "--device",
@@ -91,21 +92,57 @@ if __name__ == "__main__":
         help="Specify the device to use: 'dropbot' or 'opendrop'"
     )
 
-    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + SERVICE_PLUGINS + BACKEND_PLUGINS
+    parser.add_argument(
+        "--plugins",
+        nargs="+",
+        choices=["frontend", "backend", "services"],
+        default=["frontend", "backend"],
+        help="Which plugin layers to load (space-separated). 'frontend' also pulls in "
+             "the colocated service plugins. Default: frontend backend.",
+    )
 
     args = parser.parse_args()
+    selected = set(args.plugins)
 
-    if args.device == "dropbot":
-        plugins += DROPBOT_FRONTEND_PLUGINS + DROPBOT_BACKEND_PLUGINS
-    elif args.device == "opendrop":
-        plugins += OPENDROP_FRONTEND_PLUGINS + OPENDROP_BACKEND_PLUGINS
+    plugins = list(REQUIRED_PLUGINS)
 
-    elif args.device == "mock":
-        plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + MOCK_DROPBOT_BACKEND_PLUGINS + DROPBOT_FRONTEND_PLUGINS
+    if "frontend" in selected:
+        plugins += FRONTEND_PLUGINS
+        if args.device == "dropbot":
+            plugins += DROPBOT_FRONTEND_PLUGINS
+        elif args.device == "opendrop":
+            plugins += OPENDROP_FRONTEND_PLUGINS
+        elif args.device == "mock":
+            plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + DROPBOT_FRONTEND_PLUGINS
+
+    # Service plugins are host-bound by trust and must colocate with the GUI,
+    # so they load alongside the frontend as well as on explicit request.
+    if "frontend" in selected or "services" in selected:
+        plugins += SERVICE_PLUGINS
+
+    if "backend" in selected:
+        plugins += BACKEND_PLUGINS
+        if args.device == "dropbot":
+            plugins += DROPBOT_BACKEND_PLUGINS
+        elif args.device == "opendrop":
+            plugins += OPENDROP_BACKEND_PLUGINS
+        elif args.device == "mock":
+            plugins += MOCK_DROPBOT_BACKEND_PLUGINS
+
+    # De-duplicate while preserving load order (matters for service priority).
+    plugins = list(dict.fromkeys(plugins))
+
+    # A GUI process when the frontend is loaded; otherwise a persistent
+    # headless backend process.
+    has_frontend = "frontend" in selected
+
+    # The frontend host owns the Redis server; a backend-only process is
+    # assumed to be remote and connects to an already-running Redis.
+    contexts = (SERVER_CONTEXT + REQUIRED_CONTEXT) if has_frontend else REQUIRED_CONTEXT
 
     main(
         plugins=plugins,
-        contexts=SERVER_CONTEXT + REQUIRED_CONTEXT,
-        application=DEFAULT_APPLICATION,
-        persist=False # UI so no
-         )
+        contexts=contexts,
+        application=FRONTEND_APPLICATION if has_frontend else BACKEND_APPLICATION,
+        persist=not has_frontend,
+    )
