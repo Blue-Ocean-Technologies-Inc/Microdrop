@@ -35,6 +35,7 @@ spec's "Out of scope" section for the rationale and a future fix.
 """
 
 import json as _json
+import time
 
 from traits.api import Int
 
@@ -45,6 +46,9 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from dropbot_controller.consts import CAPACITANCE_UPDATED
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
+from pluggable_protocol_tree.builtins.routes_column import (
+    PHASE_HOLD_REQUESTED_KEY,
+)
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
@@ -57,6 +61,7 @@ from ..consts import (
     VOLUME_THRESHOLD_COL_ID, VOLUME_THRESHOLD_COL_NAME,
     VOLUME_THRESHOLD_DEFAULT,
 )
+from ..views.recovery_dialog import show_volume_threshold_recovery_dialog
 
 logger = get_logger(__name__)
 
@@ -151,10 +156,33 @@ class VolumeThresholdHandler(BaseColumnHandler):
     poll CAPACITANCE_UPDATED until ``current >= target`` -> set
     ctx.phase_advance_event (RoutesHandler's _cooperative_sleep wakes on
     it) -> loop back for the next phase boundary.
+
+    If the target is NOT reached within the phase's duration, the handler
+    opens a recovery dialog via ``ctx.prompt_gui`` (which pauses the run):
+    the operator can extend the time + lower the coverage and retry,
+    proceed anyway, or stop the run.
     """
 
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED]
+
+    def on_pre_step(self, row, ctx):
+        """Hook into RoutesHandler's generic phase-hold mechanism.
+
+        When this step has a threshold set, flag the step so the route driver
+        holds each phase open — letting a missed threshold extend the phase
+        (buffer) and/or open the recovery dialog instead of advancing on
+        schedule. The wiring lives here, in the volume-threshold plugin;
+        RoutesHandler only reads the flag (PHASE_HOLD_REQUESTED_KEY) and never
+        references volume threshold. on_pre_step runs serially before the
+        parallel on_step bucket, so RoutesHandler.on_step sees it.
+        """
+        try:
+            active = float(getattr(row, "volume_threshold", 0) or 0) > 0
+        except (TypeError, ValueError):
+            active = False
+        if active:
+            ctx.scratch[PHASE_HOLD_REQUESTED_KEY] = True
 
     def on_step(self, row, ctx):
         percent = float(getattr(row, "volume_threshold", 0) or 0)
@@ -166,11 +194,17 @@ class VolumeThresholdHandler(BaseColumnHandler):
         full_cap_over_area = _read_full_cap_over_area(app_globals)
         channel_areas = _read_channel_areas(app_globals)
         if full_cap_over_area is None or not channel_areas:
-            logger.info(
+            logger.warning(
                 "volume_threshold: missing calibration "
                 "(liquid_capacitance_over_area) or channel areas in "
                 "app_globals; calibrate + load a device first. Skipping.")
             return
+
+        # The phase's wall-clock budget. RoutesHandler dwells this long per
+        # phase (per_phase_dwell = row.duration_s); we treat it as the
+        # deadline by which the target must be reached. Missing it opens
+        # the recovery dialog.
+        phase_duration_s = float(getattr(row, "duration_s", 0.0) or 0.0)
 
         stop_event = ctx.protocol.stop_event
         while (not stop_event.is_set()
@@ -192,42 +226,123 @@ class VolumeThresholdHandler(BaseColumnHandler):
             if actuated_area <= 0.0:
                 continue
 
-            target = (percent / 100.0) * full_cap_over_area * actuated_area
-            self._monitor_until_threshold(ctx, target)
+            # A coverage change the operator makes in the recovery dialog
+            # carries forward to subsequent phases of this step.
+            percent = self._run_phase(
+                ctx, row, percent, full_cap_over_area, actuated_area,
+                phase_duration_s,
+            )
             # Do NOT return — loop back to monitor the next phase.
             # RoutesHandler clears phase_advance_event at the top of its
             # next phase iteration and publishes a fresh
             # ELECTRODES_STATE_CHANGE, which our outer loop picks up. The
             # loop exits only on stop_event or step_phases_done_event.
 
-    @staticmethod
-    def _monitor_until_threshold(ctx, target):
-        """Poll CAPACITANCE_UPDATED until current_cap >= target (sets
-        ctx.phase_advance_event and returns), or stop / step-phases-done
-        fires, or the poll times out.
+    def _run_phase(self, ctx, row, percent, full_cap_over_area,
+                   actuated_area, phase_duration_s):
+        """Monitor one phase to its deadline; on a miss, open the recovery
+        dialog and apply the operator's choice (retry / proceed / stop).
+        Returns the (possibly updated) coverage percent to carry forward."""
+        target = (percent / 100.0) * full_cap_over_area * actuated_area
 
-        On TimeoutError we RETURN (not continue) on purpose: returning
-        hands control back to on_step's outer loop, which re-waits for
-        the next ELECTRODES_STATE_CHANGE and recomputes the target for
-        the new phase. CAP_POLL_TIMEOUT_S thus doubles as the cadence at
-        which we re-sync to phase boundaries."""
+        # No phase duration => no meaningful "end of phase": fall back to the
+        # legacy re-sync cadence (one CAP_POLL_TIMEOUT_S window, no dialog)
+        # and let the outer loop re-read the next phase.
+        if phase_duration_s <= 0.0:
+            self._monitor_until_threshold(
+                ctx, target, time.monotonic() + CAP_POLL_TIMEOUT_S)
+            return percent
+
+        # When the step is looping on a duration budget, the dialog offers a
+        # per-extension choice: charge the extra time to the budget, or add it
+        # on top of the total run.
+        in_duration_mode = (
+            bool(getattr(row, "repeat_duration_controls", False))
+            and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
+        )
+
+        deadline = time.monotonic() + phase_duration_s
+        while True:
+            status, last_cap = self._monitor_until_threshold(
+                ctx, target, deadline)
+            if status != "timeout":
+                # "reached" (phase_advance_event already set) or "stopped".
+                return percent
+
+            # Phase duration elapsed without reaching target -> ask the
+            # operator. ctx.prompt_gui pauses the run, marshals the dialog
+            # onto the GUI thread, and blocks here until they answer (or
+            # Stop / external Resume) — no message passing, no actors.
+            def _ask():
+                d = show_volume_threshold_recovery_dialog(
+                    int(percent), last_cap, target,
+                    duration_mode=in_duration_mode)
+                if d.get("action") == "retry":
+                    extend_s = float(d.get("extend_s", 0.0) or 0.0)
+                    # Register the extension while still paused so the route
+                    # driver — which is holding this phase open — folds it
+                    # into the dwell the instant we resume (no advance race).
+                    ctx.add_time_buffer_to_current_phase(extend_s)
+                    # In a duration loop, credit the extension back to the
+                    # budget (the full duration still runs; total = budget +
+                    # extension) UNLESS the operator chose to count it toward
+                    # the existing duration (eat into the budget; exact total).
+                    if (extend_s > 0 and in_duration_mode
+                            and not d.get("count_toward_duration", False)):
+                        ctx.note_phase_extension(extend_s)
+                return d
+
+            decision = ctx.prompt_gui(_ask) or {"action": "proceed"}
+            action = decision.get("action", "proceed")
+
+            if action == "stop":
+                ctx.protocol.stop_event.set()
+                return percent
+            if action == "proceed":
+                ctx.phase_advance_event.set()
+                return percent
+
+            # "retry": apply the new coverage + extension and keep monitoring.
+            percent = int(decision.get("new_percent", percent))
+            target = (percent / 100.0) * full_cap_over_area * actuated_area
+            extend_s = float(decision.get("extend_s", 0.0) or 0.0)
+            deadline = time.monotonic() + max(extend_s, 0.0)
+
+    @staticmethod
+    def _monitor_until_threshold(ctx, target, deadline):
+        """Poll CAPACITANCE_UPDATED until current_cap >= target (sets
+        ctx.phase_advance_event), the ``deadline`` passes, or stop /
+        step-phases-done fires.
+
+        Returns ``(status, last_cap)`` where status is:
+          * "reached" — target met; phase_advance_event set.
+          * "timeout" — deadline elapsed without meeting target.
+          * "stopped" — stop_event / step_phases_done_event fired.
+        ``last_cap`` is the most recent parsed pF reading (or None)."""
         stop_event = ctx.protocol.stop_event
+        last = None
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                return "timeout", last
             try:
                 cap_payload = ctx.wait_for(
-                    CAPACITANCE_UPDATED, timeout=CAP_POLL_TIMEOUT_S,
+                    CAPACITANCE_UPDATED,
+                    timeout=min(CAP_POLL_TIMEOUT_S, remaining),
                 )
             except TimeoutError:
-                return
+                continue
             current = _parse_capacitance_pf(cap_payload)
             if current is None:
                 continue
+            last = current
             if current >= target:
                 ctx.phase_advance_event.set()
                 logger.info(
                     "volume_threshold: target reached, phase_advance_event set")
-                return
+                return "reached", current
+        return "stopped", last
 
 
 def make_volume_threshold_column() -> Column:
