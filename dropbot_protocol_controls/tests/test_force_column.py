@@ -1,35 +1,44 @@
 """Tests for the force column — model, factory, view dependency
-declarations. Reactive Qt-model wiring lives in Task 5."""
+declarations, and the calibration-driven repaint handler."""
 
 import pytest
+from pyface.qt.QtCore import QObject, Signal
 from traits.api import HasTraits, Int
 
 from pluggable_protocol_tree.models.column import Column
 
+from dropbot_protocol_controls.protocol_columns import force_column
 from dropbot_protocol_controls.protocol_columns.force_column import (
+    ForceColumnHandler,
     ForceColumnModel,
     ForceColumnView,
     make_force_column,
 )
-from dropbot_protocol_controls.services.calibration_cache import cache
 from dropbot_protocol_controls.services.force_math import force_for_step
-
-
-@pytest.fixture(autouse=True)
-def _reset_cache():
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
-    yield
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
 
 
 class _FakeRow(HasTraits):
     voltage = Int(100)
+
+
+class _Emitter(QObject):
+    """Owns a real bound Qt signal for wiring into a handler."""
+
+    sig = Signal()
+
+
+@pytest.fixture
+def patch_c_per_a(monkeypatch):
+    """Patch the calibration lookup the model calls so get_value is
+    isolated from app globals / Redis."""
+
+    def _set(value):
+        monkeypatch.setattr(
+            force_column, "current_capacitance_per_unit_area",
+            lambda: value,
+        )
+
+    return _set
 
 
 def test_make_force_column_returns_column_with_force_id():
@@ -38,29 +47,23 @@ def test_make_force_column_returns_column_with_force_id():
     assert col.model.col_id == "force"
     assert col.model.col_name == "Force (mN/m)"
     assert col.view is not None
-    assert col.handler is not None
+    assert isinstance(col.handler, ForceColumnHandler)
 
 
-def test_get_value_happy_path_matches_force_for_step():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
-    expected_c_per_a = cache.capacitance_per_unit_area()
-    assert expected_c_per_a is not None  # sanity
-
+def test_get_value_happy_path_matches_force_for_step(patch_c_per_a):
+    patch_c_per_a(1.5)
     model = ForceColumnModel(
         col_id="force", col_name="Force (mN/m)", default_value=0.0,
     )
     row = _FakeRow(voltage=100)
 
-    expected = force_for_step(100.0, expected_c_per_a)
+    expected = force_for_step(100.0, 1.5)
     assert expected is not None
     assert model.get_value(row) == pytest.approx(expected)
 
 
-def test_get_value_no_calibration_returns_none():
-    # Cache left at defaults (0.0 / 0.0) by the autouse fixture.
+def test_get_value_no_calibration_returns_none(patch_c_per_a):
+    patch_c_per_a(None)
     model = ForceColumnModel(
         col_id="force", col_name="Force (mN/m)", default_value=0.0,
     )
@@ -68,11 +71,8 @@ def test_get_value_no_calibration_returns_none():
     assert model.get_value(row) is None
 
 
-def test_get_value_voltage_zero_returns_none():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_get_value_voltage_zero_returns_none(patch_c_per_a):
+    patch_c_per_a(1.5)
     model = ForceColumnModel(
         col_id="force", col_name="Force (mN/m)", default_value=0.0,
     )
@@ -111,5 +111,41 @@ def test_serialize_drops_value_to_none_and_deserialize_returns_float_placeholder
 def test_view_dependency_declarations_are_present():
     view = ForceColumnView()
     assert list(view.depends_on_row_traits) == ["voltage"]
-    assert view.depends_on_event_source is cache
-    assert view.depends_on_event_trait_name == "cache_changed"
+
+
+# ---------------------------------------------------------------------------
+# ForceColumnHandler — calibration-driven column repaint.
+# ---------------------------------------------------------------------------
+
+def test_calibration_trigger_emits_signal_when_wired():
+    handler = ForceColumnHandler()
+    emitter = _Emitter()
+    fired = []
+    emitter.sig.connect(lambda: fired.append(True))
+    handler.column_changed_signal = emitter.sig
+
+    handler._on_calibration_data_triggered(message="ignored")
+
+    assert fired == [True]
+
+
+def test_calibration_trigger_defers_when_signal_not_wired():
+    handler = ForceColumnHandler()
+    assert handler.column_changed_signal is None
+
+    handler._on_calibration_data_triggered(message="ignored")
+
+    assert handler.trigger_column_change_when_wired is True
+
+
+def test_deferred_trigger_replays_when_signal_is_wired_later():
+    handler = ForceColumnHandler()
+    handler._on_calibration_data_triggered(message="ignored")  # before wiring
+
+    emitter = _Emitter()
+    fired = []
+    emitter.sig.connect(lambda: fired.append(True))
+
+    handler.column_changed_signal = emitter.sig  # wiring replays the repaint
+
+    assert fired == [True]

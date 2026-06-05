@@ -1,16 +1,16 @@
 """Reactive wiring tests for MvcTreeModel.
 
-Covers two paths added in PPT-7 Task 5:
+Covers two repaint paths:
 - per-row trait dependency: a column view declaring depends_on_row_traits
   should cause the model to emit dataChanged for that column's cell on
   the row whose trait fired.
-- column-wide event dependency: a column view declaring
-  depends_on_event_source + depends_on_event_trait_name should cause
-  the model to emit a column-wide repaint when the event fires.
+- column-wide repaint: the model hands each handler its column_changed
+  signal; a handler emitting that signal should cause the model to emit
+  a column-wide repaint (layoutChanged).
 """
 
 import pytest
-from traits.api import Bool, Float, HasTraits, Int, List as TraitList, Str
+from traits.api import Float, Int, List as TraitList, Str
 
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
@@ -27,10 +27,6 @@ from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 
 
-class _RowTraitEventSource(HasTraits):
-    test_event = Bool(False)
-
-
 class _DerivedColumnModel(BaseColumnModel):
     def trait_for_row(self):
         return Float(0.0)
@@ -42,11 +38,6 @@ class _DerivedColumnModel(BaseColumnModel):
 class _RowTraitDependentView(ReadOnlyLabelColumnView):
     depends_on_row_traits = TraitList(Str, value=["voltage"])
 
-    def format_display(self, value, row):
-        return f"{value:.1f}"
-
-
-class _EventDependentView(ReadOnlyLabelColumnView):
     def format_display(self, value, row):
         return f"{value:.1f}"
 
@@ -75,19 +66,6 @@ def _make_derived_column_with_row_dep():
             col_id="derived", col_name="Derived", default_value=0.0,
         ),
         view=_RowTraitDependentView(),
-        handler=BaseColumnHandler(),
-    )
-
-
-def _make_derived_column_with_event_dep(source, trait_name):
-    view = _EventDependentView()
-    view.depends_on_event_source = source
-    view.depends_on_event_trait_name = trait_name
-    return Column(
-        model=_DerivedColumnModel(
-            col_id="derived", col_name="Derived", default_value=0.0,
-        ),
-        view=view,
         handler=BaseColumnHandler(),
     )
 
@@ -183,12 +161,25 @@ def test_row_observers_rewire_after_add_step():
 
 
 # -----------------------------------------------------------------------------
-# Column-wide event dependency
+# Column-wide repaint via the handler's column_changed signal
 # -----------------------------------------------------------------------------
 
-def test_event_dependency_triggers_column_wide_repaint():
-    source = _RowTraitEventSource()
-    derived_col = _make_derived_column_with_event_dep(source, "test_event")
+def test_model_wires_its_column_changed_signal_into_every_handler():
+    derived_col = _make_derived_column_with_row_dep()
+    cols = [
+        make_type_column(), make_id_column(), make_name_column(), derived_col,
+    ]
+    manager = RowManager(columns=cols)
+    manager.add_step()
+
+    qm = MvcTreeModel(manager)
+
+    for col in manager.columns:
+        assert col.handler.column_changed_signal is qm.column_changed
+
+
+def test_handler_signal_triggers_column_wide_repaint():
+    derived_col = _make_derived_column_with_row_dep()
     cols = [
         make_type_column(), make_id_column(), make_name_column(), derived_col,
     ]
@@ -197,44 +188,30 @@ def test_event_dependency_triggers_column_wide_repaint():
     manager.add_step()
 
     qm = MvcTreeModel(manager)
-    derived_idx = [c.model.col_id for c in manager.columns].index("derived")
 
     layout_changed_count = {"n": 0}
     qm.layoutChanged.connect(lambda: layout_changed_count.__setitem__(
         "n", layout_changed_count["n"] + 1,
     ))
-    data_changed: list = []
-    qm.dataChanged.connect(
-        lambda top, bottom, *_: data_changed.append(
-            (top.column(), bottom.column()),
-        ),
-    )
 
     before = layout_changed_count["n"]
-    source.test_event = True
+    derived_col.handler.column_changed_signal.emit()
 
-    fired_layout = layout_changed_count["n"] > before
-    fired_data_for_col = any(
-        top == derived_idx and bottom == derived_idx
-        for top, bottom in data_changed
-    )
-    assert fired_layout or fired_data_for_col, (
-        "Expected event-dependency to repaint the derived column "
-        f"(layout fires={layout_changed_count['n'] - before}, "
-        f"data-changed cols={data_changed})"
+    assert layout_changed_count["n"] > before, (
+        "Expected the handler's column_changed signal to repaint the column "
+        f"(layout fires={layout_changed_count['n'] - before})"
     )
 
 
-def test_event_dependency_no_crash_with_zero_rows():
-    source = _RowTraitEventSource()
-    derived_col = _make_derived_column_with_event_dep(source, "test_event")
+def test_handler_signal_no_crash_with_zero_rows():
+    derived_col = _make_derived_column_with_row_dep()
     cols = [
         make_type_column(), make_id_column(), make_name_column(), derived_col,
     ]
     manager = RowManager(columns=cols)
 
-    MvcTreeModel(manager)
-    source.test_event = True   # must not raise
+    qm = MvcTreeModel(manager)
+    derived_col.handler.column_changed_signal.emit()   # must not raise
 
 
 # -----------------------------------------------------------------------------
