@@ -124,6 +124,24 @@ class DeviceViewMainModel(HasTraits):
             # Corrupt preference value -- fall back to the default (0).
             pass
 
+    def load_calibration_data_from_preferences(self):
+        """Restore the last measured calibration capacitances so the sidebar
+        starts at the previous session's values. Data-only, mirroring the
+        camera reference-rect persistence -- no preferences-pane view."""
+        l_cap_pref = str(self.preferences.preferences.get("calibration.liquid_capacitance_over_area"))
+        f_cap_pref = str(self.preferences.preferences.get("calibration.filler_capacitance_over_area"))
+
+        try:
+            self.calibration.liquid_capacitance_over_area = float(l_cap_pref)
+            self.calibration.filler_capacitance_over_area = float(f_cap_pref)
+
+            logger.info(f"Loaded calibration data from preferences:\n"
+                        f"filler cap = {self.calibration.filler_capacitance_over_area}pF / mm^2;\n"
+                        f"liquid cap = {self.calibration.liquid_capacitance_over_area}pF / mm^2")
+
+        except (TypeError, ValueError):
+            logger.warning(f"Failed to load calibration data from preferences: since values were not floats: liquid cap preference = {l_cap_pref}, filler capacitance preference = {f_cap_pref}")
+
     # ------------------ Initialization --------------------
     def traits_init(self):
         """Initialize the model with default traits."""
@@ -314,6 +332,14 @@ class DeviceViewMainModel(HasTraits):
         self.preferences.preferences.set(
             "device_view.rotation_deg", str(self.device_rotation_deg)
         )
+
+    @observe("calibration:liquid_capacitance_over_area, calibration:filler_capacitance_over_area")
+    def _calibration_data_changed(self, event=None):
+        """Persist the calibration capacitances so they survive a restart
+        (loaded back via load_calibration_data_from_preferences)."""
+        self.preferences.preferences.set(f"calibration.{event.name}", str(event.new))
+
+        logger.info(f"Preferences: {event.name} changed to {event.new}")
 
     @observe("protocol_running")
     def _protocol_running_changed(self, event=None):
