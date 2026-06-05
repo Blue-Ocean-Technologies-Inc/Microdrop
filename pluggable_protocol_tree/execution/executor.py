@@ -64,6 +64,12 @@ class ProtocolExecutor(HasTraits):
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
     _start_step_path = Any
+    # Phase index to begin the start step at (seek-restart from a navigated
+    # phase). Applied to the first executed step's StepContext, then 0.
+    _start_phase_offset = Any
+    # Set by seek_restart() around its internal stop so the terminal
+    # (aborted) signal is suppressed — a reposition, not a user Stop.
+    _suppress_terminal = Any
     # When True, the next run() builds the ProtocolContext with
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
@@ -113,6 +119,7 @@ class ProtocolExecutor(HasTraits):
         self,
         start_step_path: Optional[tuple] = None,
         preview_mode: bool = False,
+        start_phase_offset: int = 0,
     ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
         a second call while already running is ignored.
@@ -137,6 +144,7 @@ class ProtocolExecutor(HasTraits):
         self._start_step_path = (
             tuple(start_step_path) if start_step_path is not None else None
         )
+        self._start_phase_offset = max(0, int(start_phase_offset or 0))
         self._preview_mode = bool(preview_mode)
         self._thread = threading.Thread(
             target=self.run,
@@ -171,6 +179,32 @@ class ProtocolExecutor(HasTraits):
         self.stop_event.set()
         self.pause_event.clear()
 
+    def seek_restart(
+        self,
+        start_step_path: tuple,
+        start_phase_offset: int = 0,
+        preview_mode: bool = False,
+    ) -> None:
+        """Reposition a paused run: stop the worker and immediately restart
+        it seeked to ``(start_step_path, start_phase_offset)``.
+
+        The internal stop's terminal signal is suppressed (no protocol_aborted
+        → no teardown / run-summary dialog) — this is a reposition, not a user
+        Stop. Joins the stopped worker first (cooperative sleep lands the stop
+        within ~_SLICE_S) so start()'s is_alive guard sees it finished.
+        """
+        self._suppress_terminal = True
+        try:
+            self.stop()
+            self.wait(timeout=5.0)
+        finally:
+            self._suppress_terminal = False
+        self.start(
+            start_step_path=start_step_path,
+            start_phase_offset=start_phase_offset,
+            preview_mode=preview_mode,
+        )
+
     # ------- main loop -------
 
     def run(self) -> None:
@@ -202,6 +236,9 @@ class ProtocolExecutor(HasTraits):
             # Pop into a local — once we've found the start path, the
             # rest of the loop runs without the per-frame check.
             skip_until = self._start_step_path
+            # Applied to the FIRST executed step only (the seek start step),
+            # then zeroed so later steps run from phase 0.
+            start_offset = int(self._start_phase_offset or 0)
             for row, rep_chain in self.row_manager.iter_execution_frames():
                 if self.stop_event.is_set():
                     break
@@ -239,6 +276,8 @@ class ProtocolExecutor(HasTraits):
                 )
 
                 step_ctx = self._build_step_ctx(row, cols, proto_ctx)
+                step_ctx.start_phase_offset = start_offset
+                start_offset = 0
                 set_active_step(step_ctx)
                 try:
                     # Rep info first so UI labels are populated before the
@@ -291,6 +330,10 @@ class ProtocolExecutor(HasTraits):
         Order matters: an in-loop exception (recorded as self._error)
         wins over user Stop, which wins over normal completion.
         """
+        # seek_restart stops the worker only to reposition — no terminal
+        # signal (would trip teardown / the run-summary flow).
+        if self._suppress_terminal:
+            return
         if self._error is not None:
             self.qsignals.protocol_error.emit(str(self._error))
         elif self.stop_event.is_set():
