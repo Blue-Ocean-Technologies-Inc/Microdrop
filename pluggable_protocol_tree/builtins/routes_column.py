@@ -40,6 +40,7 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
+from pluggable_protocol_tree.execution.phase_record import PhaseRecord
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
@@ -81,6 +82,14 @@ _SLICE_S = 0.05
 # deadlocks. While the run is paused (operator dialog up) the grace is
 # refreshed each loop, so a slow operator never causes an early advance.
 _HOLD_GRACE_S = 0.5
+
+
+def _phase_offset(ctx) -> int:
+    """The seek-restart start phase offset on ``ctx`` (0 when unset). Guards
+    against non-int values (e.g. a MagicMock ctx in tests, whose attribute
+    access would otherwise int() to a bogus 1)."""
+    value = getattr(ctx, "start_phase_offset", 0)
+    return value if isinstance(value, int) and value > 0 else 0
 
 # Indirection so the dynamic duration loop's wall-clock reads can be
 # replaced with a deterministic fake clock in tests. Production uses
@@ -125,7 +134,7 @@ class RoutesHandler(BaseColumnHandler):
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
                    pause_event, qsignals, phase_index, phase_total,
-                   hold_for_buffer=False):
+                   step_path=(), hold_for_buffer=False):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -171,6 +180,16 @@ class RoutesHandler(BaseColumnHandler):
             qsignals.phase_started.emit(
                 phase_index, phase_total, per_phase_dwell,
             )
+            # Record this phase into the step's navigable timeline. phase_index
+            # is 1-based for display; the record uses the 0-based in-step index
+            # (so it lines up with start_phase_offset on a seek-restart).
+            qsignals.phase_recorded.emit(PhaseRecord(
+                step_path=tuple(step_path or ()),
+                phase_index=max(0, phase_index - 1),
+                electrodes=list(electrodes),
+                channels=list(channels),
+                duration_s=per_phase_dwell,
+            ))
 
         # 1. Display: synchronous, no ack. editable=False so the DV won't
         # echo a hardware publish back at us during a run.
@@ -248,7 +267,7 @@ class RoutesHandler(BaseColumnHandler):
     def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
                                    step_uuid, step_label, preview_mode,
                                    per_phase_dwell, stop_event, pause_event,
-                                   qsignals, budget):
+                                   qsignals, budget, step_path=()):
         """Duration mode + a phase-hold hook: loop the unit cycle as long as
         another FULL-duration cycle still fits the budget, then close with
         the return-to-start phase and idle any sub-cycle remainder.
@@ -282,6 +301,11 @@ class RoutesHandler(BaseColumnHandler):
         cycle_full_time = len(unit_cycle) * per_phase_dwell
         step_start = _monotonic()
         running_idx = 0
+        # Seek-restart: skip (fast-forward) the first `skip_phases` emitted
+        # phases without actuating/dwelling, so a restart from a navigated
+        # dynamic phase resumes at the right point. Skipped phases take ~no
+        # time, so the duration budget effectively starts at that phase.
+        skip_phases = _phase_offset(ctx)
 
         def _budget_elapsed():
             # Wall-clock since step start MINUS operator-requested phase
@@ -292,6 +316,8 @@ class RoutesHandler(BaseColumnHandler):
         def _run(phase):
             nonlocal running_idx
             running_idx += 1
+            if running_idx <= skip_phases:
+                return True            # fast-forward: no actuation/dwell
             # hold_for_buffer=True: this loop only runs when a column requested
             # the phase-hold hook, so honour the same post-dwell hold/dialog as
             # the static path. A phase whose hook advances early is still cut
@@ -303,7 +329,7 @@ class RoutesHandler(BaseColumnHandler):
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
                 qsignals=qsignals, phase_index=running_idx, phase_total=0,
-                hold_for_buffer=True)
+                step_path=step_path, hold_for_buffer=True)
 
         for phase in ramp_up:
             if not _run(phase):
@@ -343,6 +369,7 @@ class RoutesHandler(BaseColumnHandler):
         # changes per phase. step_label format matches the dotted-path
         # convention used elsewhere ("Step 1.2").
         step_uuid = getattr(row, "uuid", "") or ""
+        step_path = tuple(getattr(row, "path", ()) or ())
         dotted_id = ".".join(str(i + 1) for i in row.path)
         step_label = f"Step {dotted_id}"
 
@@ -372,7 +399,7 @@ class RoutesHandler(BaseColumnHandler):
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals,
+                qsignals=qsignals, step_path=step_path,
                 budget=float(getattr(row, "repeat_duration", 0.0) or 0.0))
         else:
             phases = list(iter_phases(
@@ -389,7 +416,11 @@ class RoutesHandler(BaseColumnHandler):
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
             total_phases = len(phases)
-            for phase_idx, phase in enumerate(phases, start=1):
+            # Seek-restart: begin at start_phase_offset (skip earlier phases
+            # entirely); number from there so "Phase i/N" continues from the
+            # navigated phase.
+            offset = _phase_offset(ctx)
+            for phase_idx, phase in enumerate(phases[offset:], start=offset + 1):
                 if not self._run_phase(
                         phase, ctx=ctx, mapping=mapping,
                         static_routes=static_routes, step_uuid=step_uuid,
@@ -397,7 +428,7 @@ class RoutesHandler(BaseColumnHandler):
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
                         pause_event=pause_event, qsignals=qsignals,
                         phase_index=phase_idx, phase_total=total_phases,
-                        hold_for_buffer=phase_hold):
+                        step_path=step_path, hold_for_buffer=phase_hold):
                     break
             # Route Reps Dur mode: after the full cycles, hold the last
             # phase's electrodes (no new publish) for the exact leftover so
