@@ -9,6 +9,9 @@ from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.services.column_visibility_store import (
+    load_column_visibility, save_column_visibility,
+)
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
@@ -74,6 +77,15 @@ class ProtocolTreeWidget(QWidget):
         for i, col in enumerate(self._manager.columns):
             if getattr(col.view, "hidden_by_default", False):
                 self.tree.setColumnHidden(i, True)
+
+        # Restore the user's persisted column visibility, overriding the
+        # hidden_by_default defaults for any column they have toggled before.
+        # Columns absent from the saved map keep the default applied above.
+        saved_visibility = load_column_visibility()
+        for i, col in enumerate(self._manager.columns):
+            visible = saved_visibility.get(col.model.col_name)
+            if visible is not None:
+                self.tree.setColumnHidden(i, not visible)
 
         # PPT-3: header right-click menu to toggle column visibility
         header = self.tree.header()
@@ -174,7 +186,10 @@ class ProtocolTreeWidget(QWidget):
     def _on_header_context_menu(self, pos):
         """Header right-click → menu listing every column with a
         toggleable 'Show' checkmark. Affects only the QTreeView's
-        column visibility — does not touch the underlying row data."""
+        column visibility — does not touch the underlying row data.
+
+        Each toggle persists the full visibility map so the choice
+        survives an app restart (see column_visibility_store)."""
         menu = QMenu()
         for i, col in enumerate(self._manager.columns):
             action = menu.addAction(col.model.col_name)
@@ -183,9 +198,18 @@ class ProtocolTreeWidget(QWidget):
 
             def _toggle(checked, idx=i):
                 self.tree.setColumnHidden(idx, not checked)
+                self._persist_column_visibility()
 
             action.toggled.connect(_toggle)
         menu.exec(self.tree.header().viewport().mapToGlobal(pos))
+
+    def _persist_column_visibility(self):
+        """Save the current {col_name: visible} map for every column."""
+        visibility = {
+            col.model.col_name: not self.tree.isColumnHidden(i)
+            for i, col in enumerate(self._manager.columns)
+        }
+        save_column_visibility(visibility)
 
     def _add_step_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
