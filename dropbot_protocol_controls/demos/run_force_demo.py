@@ -3,9 +3,10 @@ published CALIBRATION_DATA message.
 
 Opens a Qt window with 3 pre-populated steps (voltages 75/100/120 V).
 500 ms after the window appears, a fake CALIBRATION_DATA payload is
-published; this propagates calibration_data_listener -> CalibrationCache
--> cache_changed -> Qt model dataChanged, and all 3 Force cells
-transition from blank to numeric values.
+published; this propagates calibration_data_listener (ForceColumnHandler)
+-> column_changed_signal -> Qt model layoutChanged, and all 3 Force cells
+transition from blank to numeric values (the values themselves are read
+from the calibration app globals in ForceColumnModel.get_value).
 
 The Tools menu also has a "Publish Calibration..." item that opens a
 small dialog with editable liquid/filler spinboxes and an Apply button,
@@ -114,18 +115,18 @@ def _pre_populate(rm):
 
 def _routing_setup(router):
     """Wire the calibration listener so the published CALIBRATION_DATA
-    message reaches the actor that updates the cache, plus the V/F
-    demo responder so FrequencyHandler/VoltageHandler wait_for() acks
-    arrive (without it, on_step times out at 5s)."""
+    message reaches the Force column handler, plus the V/F demo responder
+    so FrequencyHandler/VoltageHandler wait_for() acks arrive (without it,
+    on_step times out at 5s)."""
     subscribe_calibration_listener(router)
     subscribe_demo_responder(router)
 
 
 def _publish_demo_calibration():
     """Fired by QTimer.singleShot 500 ms after the window opens. The
-    publish should propagate _on_calibration -> cache.cache_changed ->
-    MvcTreeModel.dataChanged for the Force column -> repaint of all 3
-    cells from blank to a formatted force value."""
+    publish should propagate _on_calibration_data_triggered ->
+    column_changed_signal -> MvcTreeModel.layoutChanged -> repaint of
+    all 3 Force cells from blank to a formatted force value."""
     logging.getLogger(__name__).info(
         "[force-demo] publishing CALIBRATION_DATA: %s",
         _DEMO_CALIBRATION_PAYLOAD,
