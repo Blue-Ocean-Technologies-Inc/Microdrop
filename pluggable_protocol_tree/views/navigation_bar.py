@@ -416,6 +416,22 @@ class StatusBar(QScrollArea):
         self.lbl_phase_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_phase_time.setVisible(False)
 
+        # Pure wall-clock elapsed timers (pause-aware) — distinct from the
+        # progress readouts above, these just keep ticking so the operator
+        # always sees how long the current phase / step / whole protocol has
+        # actually been running.
+        self.lbl_elapsed_phase = QLabel("Elapsed Phase: 0.0 s")
+        self.lbl_elapsed_phase.setFixedWidth(150)
+        self.lbl_elapsed_phase.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.lbl_elapsed_step = QLabel("Elapsed Step: 0.0 s")
+        self.lbl_elapsed_step.setFixedWidth(150)
+        self.lbl_elapsed_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.lbl_elapsed_protocol = QLabel("Elapsed Protocol: 0.0 s")
+        self.lbl_elapsed_protocol.setFixedWidth(170)
+        self.lbl_elapsed_protocol.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
         repeat_layout = QHBoxLayout()
         repeat_layout.setContentsMargins(0, 0, 0, 0)
         repeat_layout.setSpacing(2)
@@ -470,6 +486,8 @@ class StatusBar(QScrollArea):
 
         for w in (
             self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
+            self.lbl_elapsed_phase, self.lbl_elapsed_step,
+            self.lbl_elapsed_protocol,
             self.lbl_step_progress, self.lbl_step_repetition,
             self.lbl_recent_step, self.lbl_next_step,
         ):
@@ -479,6 +497,9 @@ class StatusBar(QScrollArea):
         layout.addWidget(self.lbl_total_time)
         layout.addWidget(self.lbl_step_time)
         layout.addWidget(self.lbl_phase_time)
+        layout.addWidget(self.lbl_elapsed_phase)
+        layout.addWidget(self.lbl_elapsed_step)
+        layout.addWidget(self.lbl_elapsed_protocol)
         layout.addWidget(repeat_widget)
         layout.addWidget(self.lbl_step_progress)
         layout.addWidget(self.lbl_step_repetition)
@@ -522,6 +543,8 @@ class StatusBar(QScrollArea):
         label_style = f"QLabel {{ color: {text_color}; }}"
         for label in (
             self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
+            self.lbl_elapsed_phase, self.lbl_elapsed_step,
+            self.lbl_elapsed_protocol,
             self.lbl_repeat_protocol, self.lbl_repeat_protocol_status,
             self.lbl_step_progress, self.lbl_step_repetition,
             self.lbl_recent_step, self.lbl_next_step,

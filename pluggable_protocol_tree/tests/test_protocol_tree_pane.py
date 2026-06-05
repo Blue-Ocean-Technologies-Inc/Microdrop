@@ -187,10 +187,10 @@ def test_pane_phase_started_signal_sets_phase_timer(qapp):
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
     pane._current_row = object()
-    pane._step_started_at = None
+    pane._step_timer.reset(running=False)
     pane.executor.qsignals.phase_started.emit(1, 3, 0.5)
-    assert pane._phase_started_at is not None
-    assert pane._step_started_at is not None
+    assert pane._phase_timer.running
+    assert pane._step_timer.running          # phase_started starts the step timer too
     assert pane._phase_index == 1
     assert pane._phase_total == 3
 
@@ -203,9 +203,9 @@ def test_pane_phase_acked_is_noop_for_timer(qapp):
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
     pane._current_row = object()
-    pane._phase_started_at = None
+    pane._phase_timer.reset(running=False)
     pane.phase_acked.emit()
-    assert pane._phase_started_at is None
+    assert not pane._phase_timer.running
 
 
 def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
@@ -1782,13 +1782,13 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
 def test_refresh_status_running_index_without_total(qapp):
     """Dynamic VT loop: phase_total == 0 but phase_index > 0 -> show the
     running phase number with NO denominator."""
-    import time as _t
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
-    pane._step_started_at = _t.monotonic()
-    pane._phase_started_at = _t.monotonic()
+    pane._current_row = object()
+    pane._step_timer.reset(running=True)
+    pane._phase_timer.reset(running=True)
     pane._phase_index = 7
     pane._phase_total = 0
     pane._phase_target = 1.0
@@ -1800,13 +1800,13 @@ def test_refresh_status_running_index_without_total(qapp):
 
 def test_refresh_status_index_over_total_when_known(qapp):
     """Static/count path: phase_total > 0 -> unchanged 'i/N' rendering."""
-    import time as _t
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
-    pane._step_started_at = _t.monotonic()
-    pane._phase_started_at = _t.monotonic()
+    pane._current_row = object()
+    pane._step_timer.reset(running=True)
+    pane._phase_timer.reset(running=True)
     pane._phase_index = 2
     pane._phase_total = 5
     pane._phase_target = 0.5

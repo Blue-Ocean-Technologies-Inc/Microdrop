@@ -56,6 +56,7 @@ from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.elapsed_timer import ElapsedTimer
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
@@ -240,8 +241,12 @@ class ProtocolTreePane(QWidget):
 
         self._step_index = 0
         self._step_total = 0
-        self._step_started_at: float | None = None
-        self._phase_started_at: float | None = None
+        # Pause-aware wall-clock timers (exclude paused time) for the three
+        # status scopes. Drive both the existing readouts (pick up where they
+        # left off on resume) and the new Elapsed labels.
+        self._protocol_timer = ElapsedTimer()
+        self._step_timer = ElapsedTimer()
+        self._phase_timer = ElapsedTimer()
         self._phase_target: float | None = None
         self._phase_index = 0
         self._phase_total = 0
@@ -397,6 +402,7 @@ class ProtocolTreePane(QWidget):
 
     def _on_protocol_started(self):
         self.protocol_running_changed.emit(True)
+        self._protocol_timer.reset(running=True)
         self._publish_protocol_running("True")
         try:
             self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
@@ -409,8 +415,11 @@ class ProtocolTreePane(QWidget):
     def _on_step_started(self, row):
         self._step_index += 1
         self._current_row = row
-        self._step_started_at = time.monotonic()
-        self._phase_started_at = None
+        self._step_timer.reset(running=True)
+        self._phase_timer.reset(running=False)   # starts on first phase_started
+        # Protocol timer started at protocol_started; ensure it's running in
+        # case the first step_started arrives before that slot (queued order).
+        self._protocol_timer.start()
         self._phase_index = 0
         self._phase_total = 0
         try:
@@ -462,10 +471,9 @@ class ProtocolTreePane(QWidget):
         the executor regardless of whether a hardware ack arrives."""
         if self._current_row is None:
             return
-        now = time.monotonic()
-        if self._step_started_at is None:
-            self._step_started_at = now
-        self._phase_started_at = now
+        if not self._step_timer.running:
+            self._step_timer.start()
+        self._phase_timer.reset(running=True)
         self._phase_index = int(phase_index)
         self._phase_total = int(phase_total)
         try:
@@ -563,31 +571,44 @@ class ProtocolTreePane(QWidget):
 
     @attempt_func_execution_with_error_dialog
     def _refresh_status(self):
-        if self._step_started_at is None:
+        if self._current_row is None:
             return
-        step_elapsed = time.monotonic() - self._step_started_at
+        step_elapsed = self._step_timer.value()
+        phase_elapsed = self._phase_timer.value()
+        protocol_elapsed = self._protocol_timer.value()
+
         self._status_step_time_label.setText(f"Step {step_elapsed:5.2f}s")
+        self.status_bar.lbl_total_time.setText(
+            f"Total Time: {protocol_elapsed:.1f} s")
+        # Pure elapsed timers (pause-aware) — always tick, never a ratio.
+        self.status_bar.lbl_elapsed_phase.setText(
+            f"Elapsed Phase: {phase_elapsed:.1f} s")
+        self.status_bar.lbl_elapsed_step.setText(
+            f"Elapsed Step: {step_elapsed:.1f} s")
+        self.status_bar.lbl_elapsed_protocol.setText(
+            f"Elapsed Protocol: {protocol_elapsed:.1f} s")
+
         if self._status_phase_time_label is not None:
-            phase_elapsed = (
-                0.0 if self._phase_started_at is None
-                else time.monotonic() - self._phase_started_at
-            )
             target = self._phase_target if self._phase_target is not None else 0.0
+            # Never show elapsed > target in the progress ratio. Pause-aware
+            # timing already keeps paused time out; clamp guards held phases /
+            # rounding so the ratio reads sensibly.
+            disp = min(phase_elapsed, target) if target > 0 else phase_elapsed
             if self._phase_total > 0:
                 self._status_phase_time_label.setText(
                     f"Phase {self._phase_index}/{self._phase_total}  "
-                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
+                    f"{disp:4.2f}s / {target:.2f}s"
                 )
             elif self._phase_index > 0:
                 # Dynamic duration loop: total is unknown while looping, so
                 # show the running phase number with no misleading denominator.
                 self._status_phase_time_label.setText(
                     f"Phase {self._phase_index}  "
-                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
+                    f"{disp:4.2f}s / {target:.2f}s"
                 )
             else:
                 self._status_phase_time_label.setText(
-                    f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
+                    f"Phase {disp:5.2f}s / {target:.2f}s"
                 )
 
     # --- button state machine ----------------------------------------
@@ -675,6 +696,11 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_paused(self):
         logger.info("Protocol paused")
         self.navigation_bar.show_resume_state()
+        # Freeze the timers so paused time isn't counted; the display stays at
+        # the frozen values and resumes from there.
+        self._protocol_timer.pause()
+        self._step_timer.pause()
+        self._phase_timer.pause()
         self._tick_timer.stop()
         if self._current_row is not None:
             self._compute_pause_phase_state(self._current_row)
@@ -684,6 +710,10 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_resumed(self):
         logger.info("Protocol resumed")
         self.navigation_bar.show_pause_state()
+        # Pick up where we left off — paused interval is not counted.
+        self._protocol_timer.start()
+        self._step_timer.start()
+        self._phase_timer.start()
         if self._current_row is not None:
             self._tick_timer.start()
         self.navigation_bar.merge_phase_controls_to_play_button()
@@ -1007,8 +1037,9 @@ class ProtocolTreePane(QWidget):
 
         self._step_index = 0
         self._step_total = 0
-        self._step_started_at = None
-        self._phase_started_at = None
+        self._protocol_timer.reset()
+        self._step_timer.reset()
+        self._phase_timer.reset()
         self._phase_target = None
         self._phase_index = 0
         self._phase_total = 0
