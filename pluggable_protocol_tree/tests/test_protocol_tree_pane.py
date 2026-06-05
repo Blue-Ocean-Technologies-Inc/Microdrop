@@ -295,14 +295,21 @@ def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
 
     monkeypatch.setattr(ptp, "publish_message", fake_publish)
 
+    from pluggable_protocol_tree.execution.phase_record import PhaseRecord
+
     pane = ptp.ProtocolTreePane([make_type_column()])
-    pane._pause_phases = [{"e1"}, {"e1", "e2"}]
-    pane._pause_phase_idx = 0
     pane.manager.protocol_metadata["electrode_to_channel"] = {"e1": 1, "e2": 2}
+    pane._phase_timeline = [
+        PhaseRecord(step_path=(), phase_index=0, electrodes=["e1"],
+                    channels=[1], duration_s=0.5),
+        PhaseRecord(step_path=(), phase_index=1, electrodes=["e1", "e2"],
+                    channels=[1, 2], duration_s=0.5),
+    ]
+    pane._nav_phase_idx = 0
     pane._on_next_phase()
     assert captured  # something was published
-    topic, _ = captured[0]
-    assert topic == ptp.ELECTRODES_STATE_CHANGE
+    topics = [t for t, _ in captured]
+    assert ptp.ELECTRODES_STATE_CHANGE in topics
 
 
 def test_pane_navigate_to_first_step_selects_first_row(qapp):

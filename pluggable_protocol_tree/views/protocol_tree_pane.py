@@ -54,6 +54,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+from pluggable_protocol_tree.execution.phase_record import PhaseRecord
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.elapsed_timer import ElapsedTimer
@@ -254,8 +255,16 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 1
         self._repeats_completed = 0
         self._current_run_preview_mode = False
-        self._pause_phases: list = []
-        self._pause_phase_idx: int = 0
+        # Per-step phase timeline (memory-bounded): the phases recorded for the
+        # current step, cleared each step. Used for pause-time navigation.
+        self._phase_timeline: list = []
+        # Cached (step_path, [PhaseRecord]) for the paused step so navigating
+        # away and back restores the *recorded* (dynamic-inclusive) phases.
+        self._recorded_step_timeline = None
+        # Navigation cursor while paused, and the armed seek-restart target.
+        self._nav_step_path = None
+        self._nav_phase_idx = 0
+        self._pending_seek = None
 
         self._status_step_label = self.status_bar.lbl_step_progress
         self._status_step_time_label = self.status_bar.lbl_step_time
@@ -369,6 +378,7 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.protocol_error.connect(self._on_error)
         self.executor.qsignals.phase_started.connect(self._on_phase_started)
         self.executor.qsignals.phase_extended.connect(self._on_phase_extended)
+        self.executor.qsignals.phase_recorded.connect(self._on_phase_recorded)
         if self.phase_ack_topic is not None:
             self.phase_acked.connect(self._on_phase_ack)
 
@@ -415,6 +425,9 @@ class ProtocolTreePane(QWidget):
     def _on_step_started(self, row):
         self._step_index += 1
         self._current_row = row
+        # Fresh per-step phase timeline (memory-bounded to one step).
+        self._phase_timeline = []
+        self._pending_seek = None
         self._step_timer.reset(running=True)
         self._phase_timer.reset(running=False)   # starts on first phase_started
         # Protocol timer started at protocol_started; ensure it's running in
@@ -481,6 +494,11 @@ class ProtocolTreePane(QWidget):
         except (TypeError, ValueError):
             self._phase_target = None
         self._refresh_status()
+
+    def _on_phase_recorded(self, record):
+        """Append a phase to the current step's navigable timeline (cleared
+        each step, so memory is bounded to one step's phases)."""
+        self._phase_timeline.append(record)
 
     def _on_phase_extended(self, extra_s):
         """A handler extended the current phase (e.g. volume threshold
@@ -689,7 +707,15 @@ class ProtocolTreePane(QWidget):
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
-            self.executor.resume()
+            # Resume vs. seek-restart: if the operator navigated to a different
+            # phase/step while paused, play RESTARTS from there; otherwise it
+            # continues exactly where the worker froze.
+            if self._pending_seek is not None:
+                path, offset = self._pending_seek
+                self._pending_seek = None
+                self._begin_seek_restart(path, offset)
+            else:
+                self.executor.resume()
         else:
             self.executor.pause()
 
@@ -703,9 +729,22 @@ class ProtocolTreePane(QWidget):
         self._phase_timer.pause()
         self._tick_timer.stop()
         if self._current_row is not None:
-            self._compute_pause_phase_state(self._current_row)
+            self._enter_phase_navigation()
             self.navigation_bar.split_play_button_to_phase_controls()
             self._update_phase_nav_buttons()
+
+    def _begin_seek_restart(self, step_path, phase_offset):
+        """Play from a navigated phase: restart the run seeked to
+        (step_path, phase_offset). The executor stops + restarts quietly."""
+        logger.info(
+            f"Seek-restart at step {step_path} phase {phase_offset}")
+        self.navigation_bar.merge_phase_controls_to_play_button()
+        self.navigation_bar.show_pause_state()
+        self.executor.seek_restart(
+            start_step_path=tuple(step_path),
+            start_phase_offset=int(phase_offset),
+            preview_mode=self._current_run_preview_mode,
+        )
 
     def _on_protocol_resumed(self):
         logger.info("Protocol resumed")
@@ -749,8 +788,11 @@ class ProtocolTreePane(QWidget):
         self._set_idle_button_state()
         self._tick_timer.stop()
         self.navigation_bar.merge_phase_controls_to_play_button()
-        self._pause_phases = []
-        self._pause_phase_idx = 0
+        self._phase_timeline = []
+        self._recorded_step_timeline = None
+        self._nav_step_path = None
+        self._nav_phase_idx = 0
+        self._pending_seek = None
         # Clear hardware actuation: independent of the DV's free-mode
         # publish below, which can race with PROTOCOL_RUNNING and leave
         # the last step's channels energized after abort/error.
@@ -838,11 +880,103 @@ class ProtocolTreePane(QWidget):
         except Exception as e:
             logger.warning(f"stop_logging failed: {e}")
 
-    # --- pause-time phase navigation ---------------------------------
+    # --- pause-time phase / step navigation --------------------------
 
-    def _compute_pause_phase_state(self, row):
+    def _enter_phase_navigation(self):
+        """On pause, arm the cursor at the frozen phase of the current step
+        using its recorded timeline. Cache that timeline (keyed by step path)
+        so navigating away and back restores the dynamic-inclusive phases."""
+        path = tuple(getattr(self._current_row, "path", ()) or ())
+        self._recorded_step_timeline = (path, list(self._phase_timeline))
+        self._nav_step_path = path
+        self._nav_phase_idx = max(0, len(self._phase_timeline) - 1)
+        self._pending_seek = None       # no navigation yet -> resume continues
+
+    def _on_prev_phase(self):
+        if self._phase_timeline and self._nav_phase_idx > 0:
+            self._nav_phase_idx -= 1
+            self._goto_cursor_phase()
+
+    def _on_next_phase(self):
+        if (self._phase_timeline
+                and self._nav_phase_idx < len(self._phase_timeline) - 1):
+            self._nav_phase_idx += 1
+            self._goto_cursor_phase()
+
+    def _goto_cursor_phase(self):
+        """Actuate the cursor phase live, reflect it in the status, and arm a
+        seek-restart at it. Resets the (frozen) phase timer so Elapsed Phase
+        starts fresh when the operator presses play."""
+        if not self._phase_timeline:
+            return
+        rec = self._phase_timeline[self._nav_phase_idx]
+        self._actuate_phase_record(rec)
+        self._phase_index = rec.phase_index + 1
+        self._phase_total = 0           # running index; no (maybe-wrong) denom
+        self._phase_target = float(rec.duration_s or 0.0)
+        self._phase_timer.reset(running=False)
+        self._pending_seek = (tuple(rec.step_path), int(rec.phase_index))
+        self._refresh_status()
+        self._update_phase_nav_buttons()
+
+    def _actuate_phase_record(self, rec):
+        """Publish a phase's display (always) + hardware (preview-gated) so the
+        device viewer / chip reflect the navigated phase immediately. The
+        record already carries the electrodes/channels; step metadata comes
+        from the record's step (which may differ from the frozen step)."""
         try:
-            self._pause_phases = list(iter_phases(
+            row = self.manager.get_row(tuple(rec.step_path))
+        except Exception:
+            row = None
+        row = row or self._current_row
+        electrodes = list(rec.electrodes)
+        channels = list(rec.channels)
+        if row is not None:
+            dotted_id = ".".join(
+                str(i + 1) for i in (getattr(row, "path", ()) or ()))
+            display_msg = ProtocolTreeDisplayMessage(
+                electrodes=electrodes,
+                routes=list(getattr(row, "routes", []) or []),
+                step_id=getattr(row, "uuid", "") or "",
+                step_label=f"Step {dotted_id}",
+                free_mode=False,
+                editable=False,
+            )
+            try:
+                publish_message(topic=PROTOCOL_TREE_DISPLAY_STATE,
+                                message=display_msg.serialize())
+            except Exception as e:
+                logger.warning(f"phase navigation display publish failed: {e}")
+
+        # Hardware path: gated on preview. Matches RoutesHandler — the
+        # backend has no preview awareness, we just don't publish.
+        if not self._current_run_preview_mode:
+            try:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(
+                        {"electrodes": electrodes, "channels": channels}),
+                )
+            except Exception as e:
+                logger.warning(f"phase navigation hardware publish failed: {e}")
+
+    def _timeline_for_step(self, row):
+        """Phase timeline for a step: the cached recorded list when it's the
+        paused step (dynamic-inclusive), else a derived structural list."""
+        path = tuple(getattr(row, "path", ()) or ())
+        if (self._recorded_step_timeline is not None
+                and self._recorded_step_timeline[0] == path):
+            return list(self._recorded_step_timeline[1])
+        return self._derive_step_timeline(row)
+
+    def _derive_step_timeline(self, row):
+        """Build a structural phase timeline for a not-yet-run step via
+        iter_phases (no dynamic-loop phases — that step hasn't executed)."""
+        path = tuple(getattr(row, "path", ()) or ())
+        mapping = self.manager.protocol_metadata.get("electrode_to_channel", {})
+        dur = float(getattr(row, "duration_s", 0.0) or 0.0)
+        try:
+            phases = list(iter_phases(
                 static_electrodes=list(getattr(row, "electrodes", []) or []),
                 routes=list(getattr(row, "routes", []) or []),
                 trail_length=int(getattr(row, "trail_length", 1)),
@@ -856,118 +990,117 @@ class ProtocolTreePane(QWidget):
             ))
         except Exception as e:
             logger.warning(f"phase navigation: iter_phases failed: {e}")
-            self._pause_phases = []
-        self._pause_phase_idx = 0
+            return []
+        out = []
+        for i, ph in enumerate(phases):
+            electrodes = sorted(ph)
+            channels = sorted(mapping[e] for e in electrodes if e in mapping)
+            out.append(PhaseRecord(
+                step_path=path, phase_index=i, electrodes=electrodes,
+                channels=channels, duration_s=dur))
+        return out
 
-    def _on_prev_phase(self):
-        if self._pause_phases and self._pause_phase_idx > 0:
-            self._pause_phase_idx -= 1
-            self._publish_paused_phase()
+    def _navigate_to_step_paused(self, row):
+        """Reposition the cursor to another step while paused: rebuild that
+        step's timeline, actuate its first phase, and arm a seek there."""
+        path = tuple(getattr(row, "path", ()) or ())
+        self._current_row = row
+        self.widget.highlight_active_row(row)
+        # Reflect the step position in the status label.
+        steps = [tuple(s.path) for s in self.manager.iter_execution_steps()]
+        if path in steps:
+            self._step_index = steps.index(path) + 1
+            self._status_step_label.setText(
+                f"Step {self._step_index} / {self._step_total}")
+        self._phase_timeline = self._timeline_for_step(row)
+        self._nav_step_path = path
+        self._nav_phase_idx = 0
+        if self._phase_timeline:
+            self._goto_cursor_phase()
+        else:
+            # Step with no phases: arm a seek at phase 0 with minimal status.
+            self._pending_seek = (path, 0)
+            self._phase_index = 0
+            self._phase_total = 0
+            self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
+            self._phase_timer.reset(running=False)
+            self._refresh_status()
             self._update_phase_nav_buttons()
-
-    def _on_next_phase(self):
-        if (self._pause_phases
-                and self._pause_phase_idx < len(self._pause_phases) - 1):
-            self._pause_phase_idx += 1
-            self._publish_paused_phase()
-            self._update_phase_nav_buttons()
-
-    def _publish_paused_phase(self):
-        if not self._pause_phases:
-            return
-        phase = self._pause_phases[self._pause_phase_idx]
-        mapping = self.manager.protocol_metadata.get(
-            "electrode_to_channel", {},
-        )
-        electrodes = sorted(phase)
-        channels = sorted(mapping[e] for e in electrodes if e in mapping)
-
-        # Display path: always publishes to PROTOCOL_TREE_DISPLAY_STATE
-        # so the DV's overlay tracks Prev/Next phase clicks instantly,
-        # even in preview mode. Cached step metadata from _current_row.
-        row = self._current_row
-        if row is not None:
-            dotted_id = ".".join(str(i + 1) for i in row.path)
-            display_msg = ProtocolTreeDisplayMessage(
-                electrodes=electrodes,
-                routes=list(getattr(row, "routes", []) or []),
-                step_id=getattr(row, "uuid", "") or "",
-                step_label=f"Step {dotted_id}",
-                free_mode=False,
-                editable=False,
-            )
-            try:
-                publish_message(
-                    topic=PROTOCOL_TREE_DISPLAY_STATE,
-                    message=display_msg.serialize(),
-                )
-            except Exception as e:
-                logger.warning(f"phase navigation display publish failed: {e}")
-
-        # Hardware path: gated on preview. Matches RoutesHandler — the
-        # backend has no preview awareness, we just don't publish.
-        if not self._current_run_preview_mode:
-            payload = {"electrodes": electrodes, "channels": channels}
-            try:
-                publish_message(
-                    topic=ELECTRODES_STATE_CHANGE,
-                    message=json.dumps(payload),
-                )
-            except Exception as e:
-                logger.warning(f"phase navigation hardware publish failed: {e}")
 
     def _update_phase_nav_buttons(self):
-        prev_enabled = self._pause_phase_idx > 0
+        prev_enabled = self._nav_phase_idx > 0
         next_enabled = (
-            bool(self._pause_phases)
-            and self._pause_phase_idx < len(self._pause_phases) - 1
+            bool(self._phase_timeline)
+            and self._nav_phase_idx < len(self._phase_timeline) - 1
         )
         self.navigation_bar.set_phase_navigation_enabled(
             prev_enabled, next_enabled,
         )
 
     # --- step-cursor navigation -------------------------------------
+    def _go_to_step(self, row):
+        """Dispatch step navigation: while paused, reposition the protocol
+        cursor (and arm a seek-restart there); otherwise just select the row
+        (free-mode tree navigation)."""
+        if self.executor.pause_event.is_set():
+            self._navigate_to_step_paused(row)
+        else:
+            self._select_step(row)
+
+    def _current_step_index(self, steps):
+        """Index of the 'current' step. While paused-navigating the cursor
+        (self._nav_step_path) is authoritative; otherwise the tree selection."""
+        if self.executor.pause_event.is_set() and self._nav_step_path is not None:
+            paths = [tuple(s.path) for s in steps]
+            if self._nav_step_path in paths:
+                return paths.index(self._nav_step_path)
+        return self._current_step_in(steps)
+
     @attempt_func_execution_with_error_dialog
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
             logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
-            self._select_step(steps[0])
+            self._go_to_step(steps[0])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
             logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
-            self._select_step(steps[-1])
+            self._go_to_step(steps[-1])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_previous_step(self):
         steps = list(self.manager.iter_execution_steps())
         if not steps:
             return
-        cur = self._current_step_in(steps)
+        cur = self._current_step_index(steps)
         if cur is None:
             logger.info(f"Nav: previous (no current) --> [{_dotted_path(steps[0])}]")
-            self._select_step(steps[0])
+            self._go_to_step(steps[0])
             return
         if cur > 0:
             logger.info(f"Nav: previous step --> [{_dotted_path(steps[cur - 1])}]")
-            self._select_step(steps[cur - 1])
+            self._go_to_step(steps[cur - 1])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_next_step(self):
         steps = list(self.manager.iter_execution_steps())
         if not steps:
             return
-        cur = self._current_step_in(steps)
+        cur = self._current_step_index(steps)
         if cur is None:
             logger.info(f"Nav: next (no current) --> [{_dotted_path(steps[0])}]")
-            self._select_step(steps[0])
+            self._go_to_step(steps[0])
             return
         if cur < len(steps) - 1:
             logger.info(f"Nav: next step --> [{_dotted_path(steps[cur + 1])}]")
-            self._select_step(steps[cur + 1])
+            self._go_to_step(steps[cur + 1])
+            return
+        # At the last step: free mode duplicates it; while paused we must NOT
+        # mutate the protocol — just stay put.
+        if self.executor.pause_event.is_set():
             return
         logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")
         self._duplicate_step_after(steps[cur])
