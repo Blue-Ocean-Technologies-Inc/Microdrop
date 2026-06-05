@@ -39,3 +39,9 @@ class ExecutorSignals(QObject):
     # the phase's target time by this amount so "elapsed / target" stays
     # honest while the phase is held.
     phase_extended     = Signal(float)
+    # One PhaseRecord per phase as it starts — RoutesHandler emits it with
+    # the phase's step path, in-step index, actuated electrodes/channels and
+    # target dwell. The pane collects these into the current step's navigable
+    # timeline (cleared each step), so the operator can scrub/seek phases —
+    # including dynamically-added duration-loop phases — while paused.
+    phase_recorded     = Signal(object)
