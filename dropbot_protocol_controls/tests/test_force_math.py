@@ -3,13 +3,27 @@ ForceCalculationService that PPT-9 will eventually retire."""
 
 import pytest
 
+from dropbot_protocol_controls.services import force_math
 from dropbot_protocol_controls.services.force_math import (
     capacitance_per_unit_area,
+    current_capacitance_per_unit_area,
     force_for_step,
 )
 from protocol_grid.services.force_calculation_service import (
     ForceCalculationService,
 )
+
+
+class _FakeGlobals:
+    """In-memory stand-in for the Redis app-globals proxy so the
+    current_capacitance_per_unit_area tests stay deterministic and don't
+    need a running Redis server."""
+
+    def __init__(self, **values):
+        self._values = values
+
+    def get(self, key, default=None):
+        return self._values.get(key, default)
 
 
 def test_capacitance_per_unit_area_none_liquid_returns_none():
@@ -94,3 +108,29 @@ def test_force_for_step_legacy_parity(voltage, c_per_a):
         ForceCalculationService.calculate_force_for_step(voltage, c_per_a),
         abs=1e-6,
     )
+
+
+# ---------------------------------------------------------------------------
+# current_capacitance_per_unit_area — reads from app globals where the device
+# viewer's CalibrationModel publishes the measured capacitances.
+# ---------------------------------------------------------------------------
+
+def test_current_reads_both_from_globals(monkeypatch):
+    monkeypatch.setattr(force_math, "app_globals", _FakeGlobals(
+        liquid_capacitance_over_area=2.0,
+        filler_capacitance_over_area=0.5,
+    ))
+    assert current_capacitance_per_unit_area() == 1.5
+
+
+def test_current_missing_global_returns_none(monkeypatch):
+    monkeypatch.setattr(force_math, "app_globals", _FakeGlobals(
+        liquid_capacitance_over_area=2.0,
+        # filler absent → get() returns None → guard returns None
+    ))
+    assert current_capacitance_per_unit_area() is None
+
+
+def test_current_empty_globals_returns_none(monkeypatch):
+    monkeypatch.setattr(force_math, "app_globals", _FakeGlobals())
+    assert current_capacitance_per_unit_area() is None
