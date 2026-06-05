@@ -102,7 +102,7 @@ class Mailbox:
 
 # --- contexts ---
 
-from traits.api import Any, Bool, Dict, HasTraits, Instance, Str, List
+from traits.api import Any, Bool, Dict, HasTraits, Instance, Int, Str, List
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -195,6 +195,12 @@ class StepContext(HasTraits):
              "Lets sibling handlers in the same parallel bucket (notably "
              "VolumeThresholdHandler) exit their wait loops instead of "
              "blocking forever on a never-arriving next phase.")
+
+    start_phase_offset = Int(0,
+        desc="Phase index to begin this step at, for a seek-restart from a "
+             "navigated phase. The executor sets it only on the start step "
+             "(0 otherwise); RoutesHandler skips/fast-forwards the first "
+             "`offset` phases and runs normally from there.")
 
     def traits_init(self):
         # Plain (non-trait) coordination state for phase-time buffering,
