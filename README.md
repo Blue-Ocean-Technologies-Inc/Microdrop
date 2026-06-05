@@ -99,6 +99,41 @@ The command to create the environment is:
 
 And remember to startup the redis server. There is a start_redis_server.py python script for thisnin examples. Or one can just ruin ``redis-server`` on a terminal.
 
+## **Running the Application**
+
+Redis must be running before launching (see above).
+
+The combined launcher `examples/run_device_viewer_pluggable.py` can load any
+combination of plugin layers via `--plugins`, so a single script covers the
+full app, frontend-only, or backend-only runs:
+
+```bash
+# Full app — frontend + backend (the default)
+python examples/run_device_viewer_pluggable.py
+
+# Frontend (GUI) only — needs Redis + a backend running separately
+python examples/run_device_viewer_pluggable.py --plugins frontend
+
+# Backend only — persistent headless process, connects to an existing Redis
+python examples/run_device_viewer_pluggable.py --plugins backend
+
+# Any combination, with a device selection
+python examples/run_device_viewer_pluggable.py --plugins backend services --device mock
+```
+
+`--plugins` accepts one or more space-separated values from `frontend`,
+`backend`, and `services`, defaulting to `frontend backend`. Notes:
+
+- **Services** (e.g. SSH controls) are trust-bound to the GUI host, so they
+  load automatically with `frontend`, or on explicit `services` request.
+- Selecting `frontend` runs the GUI application; a backend-only selection runs
+  the persistent headless backend application.
+- The **frontend host owns the Redis server**; a backend-only run instead
+  connects to an already-running Redis (use this for a remote backend host).
+
+`--device` selects the hardware target (`dropbot`, `opendrop`, or `mock`;
+default `dropbot`) and pulls in the matching device-specific plugins.
+
 # **Remote Microdrop Instructions**
 
 ## **1. SERVER-SIDE (via SSH)**
