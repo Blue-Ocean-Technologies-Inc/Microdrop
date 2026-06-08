@@ -196,7 +196,7 @@ class RoutesHandler(BaseColumnHandler):
             # broker first publish pays ~1-2s; typical ack <100ms.
             # In preview we skip this entirely so the user gets a
             # snappy visual playback with no per-phase 5s stalls.
-            ctx.wait_for(electrode_state_change_publisher.topic, timeout=5.0)
+            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)
