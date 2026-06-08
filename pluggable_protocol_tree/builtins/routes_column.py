@@ -28,16 +28,16 @@ DurationColumnHandler (90), so the duration sleep only starts after
 ALL phases have completed and been ack'd.
 """
 
-import json
 import logging
 import time
 
 from pyface.qt.QtCore import Qt
 from traits.api import List, Str
 
+from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    ELECTRODES_STATE_APPLIED,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
 from pluggable_protocol_tree.models.column import (
@@ -111,7 +111,8 @@ class RoutesHandler(BaseColumnHandler):
         step_uuid = getattr(row, "uuid", "") or ""
         dotted_id = ".".join(str(i + 1) for i in row.path)
         step_label = f"Step {dotted_id}"
-        static_routes = list(getattr(row, "routes", []) or [])
+
+        routes = list(getattr(row, "routes", []) or [])
 
         # Route Reps Dur mode is authoritative ONLY when the controls flag
         # says so. The same flag gates BOTH the duration-mode cycle
@@ -129,7 +130,7 @@ class RoutesHandler(BaseColumnHandler):
         # well within reasonable list sizes; no streaming benefit lost.
         phases = list(iter_phases(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
-            routes=list(getattr(row, "routes", []) or []),
+            routes=routes,
             trail_length=int(getattr(row, "trail_length", 1)),
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
             soft_start=bool(getattr(row, "soft_start", False)),
@@ -156,9 +157,12 @@ class RoutesHandler(BaseColumnHandler):
                     break
 
             electrodes = sorted(phase)
-            channels = sorted(mapping[e] for e in electrodes if e in mapping)
+            channels = set()
             for e in electrodes:
-                if e not in mapping:
+                if e in mapping:
+                    channels.add(mapping(e))
+
+                else:
                     logger.warning(
                         f"electrode {e!r} has no channel mapping; "
                         f"actuation channel skipped"
@@ -173,7 +177,7 @@ class RoutesHandler(BaseColumnHandler):
             # won't echo a hardware publish back at us during a run.
             display_msg = ProtocolTreeDisplayMessage(
                 electrodes=electrodes,
-                routes=static_routes,
+                routes=routes,
                 step_id=step_uuid,
                 step_label=step_label,
                 free_mode=False,
@@ -188,16 +192,12 @@ class RoutesHandler(BaseColumnHandler):
             # has no preview-mode awareness — gating happens here, on
             # the sender side, by simply not publishing.
             if not preview_mode:
-                payload = {"electrodes": electrodes, "channels": channels}
-                publish_message(
-                    topic=ELECTRODES_STATE_CHANGE,
-                    message=json.dumps(payload),
-                )
+                electrode_state_change_publisher.publish(actual_channels=channels)
                 # 5.0s timeout matches ack_roundtrip_column. Cold-
                 # broker first publish pays ~1-2s; typical ack <100ms.
                 # In preview we skip this entirely so the user gets a
                 # snappy visual playback with no per-phase 5s stalls.
-                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+                ctx.wait_for(electrode_state_change_publisher.topic, timeout=5.0)
 
             _cooperative_sleep(per_phase_dwell, stop_event, pause_event)
         # Route Reps Dur mode: after the full cycles, hold the last
