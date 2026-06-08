@@ -46,5 +46,13 @@ class MockDropbotStatusModel(BaseStatusModel):
 
     actuated_channels_text = Str("None")
 
+    # Per-section expand/collapse toggles for the mock controls panel. Each
+    # drives a `visible_when` on its section's content group so the sections
+    # collapse independently (any combination can be open at once).
+    show_status = Bool(True, desc="Expand the Status section")
+    show_readings = Bool(True, desc="Expand the Readings section")
+    show_capacitance_sim = Bool(True, desc="Expand the Capacitance Simulation section")
+    show_event_sim = Bool(True, desc="Expand the Event Simulation section")
+
     def _update_chip_display(self, inserted: bool) -> None:
         self.chip_status_text = "Present" if inserted else "Absent"

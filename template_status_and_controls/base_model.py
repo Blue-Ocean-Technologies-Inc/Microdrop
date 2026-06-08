@@ -97,8 +97,11 @@ class BaseStatusModel(HasTraits):
         return self.DISCONNECTED_COLOR
 
     def traits_init(self):
-        # push initial app globals based on model values
-        self._realtime_mode_updated()
+        # push initial app globals based on model values if server is connected
+        try:
+            self._realtime_mode_updated()
+        except:
+            pass
 
     # ------------------------------------------------------------------ #
     # Observers
