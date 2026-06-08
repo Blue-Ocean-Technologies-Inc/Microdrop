@@ -17,12 +17,14 @@ Per-handler logic is added in subsequent PPT-10.2 plan tasks.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import dramatiq
 
 from pyface.qt.QtCore import QObject, Signal
 from pyface.qt.QtWidgets import QWidget
 
-from traits.api import Bool, Dict, HasTraits, Instance, Int, Str
+from traits.api import Bool, Dict, HasTraits, Instance, Str, Property, List, observe, Set, Int
 
 from device_viewer.consts import (
     DEVICE_VIEWER_GEOMETRY_CHANGED,
@@ -32,6 +34,8 @@ from device_viewer.consts import (
 from device_viewer.models.messages import (
     DeviceViewerMessageModel, GeometryChangedMessage,
 )
+from dropbot_controller.consts import REALTIME_MODE_UPDATED
+from electrode_controller.consts import electrode_state_change_publisher
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
@@ -44,6 +48,7 @@ from pluggable_protocol_tree.models.display_state import (
 )
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 logger = get_logger(__name__)
 
@@ -69,13 +74,17 @@ class DeviceViewerSyncController(HasTraits):
     _last_selected_uuid      = Str()
     _protocol_running        = Bool(False)
     _suppress_publish        = Bool(False)
-    # Inverted view of protocol_metadata["electrode_to_channel"]; built
-    # on geometry change. The forward mapping itself lives ONLY in
-    # row_manager.protocol_metadata - this dict is just an inverted
-    # cache for fast free-mode reverse-lookup.
-    _channel_to_id_cache     = Dict(Int, Str)
-    _tree_widget             = Instance(object, allow_none=True)
+
+    #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
+    # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
+    electrode_ids_channels_map = Dict(Str, Int)
+    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrode_ids_channels_map')
+
+    _tree_widget             = Instance(ProtocolTreeWidget, allow_none=True)
     _selection_model         = Instance(QObject, allow_none=True)
+
+    realtime_mode = Bool()
+    actuated_channels = Set(Int)
 
     def _bridge_default(self) -> _Bridge:
         return _Bridge()
@@ -86,6 +95,10 @@ class DeviceViewerSyncController(HasTraits):
             listener_name=self.listener_name,
             class_method=self._listener_routine,
         )
+
+        # seed electrode_ids_channels_map from metadata if it exists
+        if self.row_manager.protocol_metadata.get("electrode_to_channel"):
+            self.electrode_ids_channels_map = self.row_manager.protocol_metadata["electrode_to_channel"]
 
     # --- public lifecycle ----------------------------------------------
 
@@ -126,13 +139,42 @@ class DeviceViewerSyncController(HasTraits):
         self._selection_model = None
         self._tree_widget = None
 
-    # --- single source of truth ----------------------------------------
+    # -------- trait observers --------------
+    @observe("electrode_ids_channels_map")
+    def _update_metadata(self, event):
+        self.row_manager.protocol_metadata["electrode_to_channel"] = event.new
 
-    @property
-    def id_to_channel(self) -> dict[str, int | None]:
-        return self.row_manager.protocol_metadata.get(
-            "electrode_to_channel", {},
-        )
+    def _get_channels_electrode_ids_map(self):
+        """
+        Creates an inverted map from each channel to a list of its electrode IDs.
+        This property depends on and reuses the result from the first property.
+        """
+
+        channel_to_electrode_ids_map = defaultdict(list)
+
+        if self.electrode_ids_channels_map:
+            for electrode_id, channel in self.electrode_ids_channels_map.items():
+                channel_to_electrode_ids_map[channel].append(electrode_id)
+
+        return channel_to_electrode_ids_map
+
+    @observe("realtime_mode")
+    @observe("actuated_channels")
+    def _send_actuation_request(self, event):
+
+        reason = ""
+        if self._protocol_running:
+            reason += "Protocol Running"
+
+        if not self.realtime_mode:
+            reason += "Realtime Mode Off"
+
+        if reason:
+            logger.warning(f"PROTOCOL TREE: Cannot publish actuations; reason: {reason}")
+            return
+
+        logger.info(f"PROTOCOL TREE: Publishing electrode actuation:{self.actuated_channels}")
+        electrode_state_change_publisher.publish(actuated_channels=self.actuated_channels)
 
     # --- worker-thread dispatch (no Qt / RowManager mutation here) -----
 
@@ -145,27 +187,19 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.protocol_running_changed.emit(
                 message.casefold() == "true"
             )
+        elif topic == REALTIME_MODE_UPDATED:
+            self.realtime_mode = True
 
     # --- Qt-thread handlers --------------------------------------------
-
-    def _apply_geometry(self, id_to_channel: dict) -> None:
-        """Single write site for the electrode-to-channel mapping in
-        protocol-tree land. Stores a copy in protocol_metadata and
-        rebuilds the inverted reverse-lookup cache."""
-        stored = dict(id_to_channel)
-        self.row_manager.protocol_metadata["electrode_to_channel"] = stored
-        self._channel_to_id_cache = {
-            chan: eid for eid, chan in stored.items() if chan is not None
-        }
 
     def _on_geometry_qt(self, payload: str) -> None:
         """Receive DEVICE_VIEWER_GEOMETRY_CHANGED on the Qt thread."""
         try:
-            msg = GeometryChangedMessage.deserialize(payload)
+            geo_change_msg = GeometryChangedMessage.deserialize(payload)
         except Exception as e:
             logger.warning(f"failed to parse geometry payload {payload!r}: {e}")
             return
-        self._apply_geometry(msg.id_to_channel)
+        self.electrode_ids_channels_map = dict(geo_change_msg.id_to_channel)
 
     def _on_dv_state_qt(self, payload: str) -> None:
         """Receive DEVICE_VIEWER_STATE_CHANGED on the Qt thread. Captures
@@ -183,14 +217,15 @@ class DeviceViewerSyncController(HasTraits):
         # is authoritative; state msgs only fill the gap at cold-start.
         if (not self.row_manager.protocol_metadata.get("electrode_to_channel")
                 and dv_msg.id_to_channel):
-            logger.info(f"Protocol Tree: Applying initial id_to_channel to metadata:  {dv_msg.id_to_channel} ")
-            self._apply_geometry(dv_msg.id_to_channel)
 
-        electrodes = sorted(
-            self._channel_to_id_cache[c]
-            for c in dv_msg.channels_activated
-            if c in self._channel_to_id_cache
-        )
+            logger.info(f"Protocol Tree: Applying initial id_to_channel to metadata:  {dv_msg.id_to_channel} ")
+            self.electrode_ids_channels_map = dict(dv_msg.id_to_channel)
+
+        electrodes = set()
+        for ch in dv_msg.channels_activated:
+            if ch in self.channels_electrode_ids_map:
+                electrodes.update(self.channels_electrode_ids_map[ch])
+
         routes = [list(ids) for ids, _color in dv_msg.routes]
 
         if dv_msg.step_id:
@@ -202,16 +237,20 @@ class DeviceViewerSyncController(HasTraits):
             if row is None or isinstance(row, GroupRow):
                 return
             path = tuple(row.path)
+
+            # trigger actuations if possible
+            self.actuated_channels = set(dv_msg.channels_activated)
+
             # Direct trait writes bypass both QtTreeModel.setData and
             # the delegate, so fire cell_changed for each column the
             # user actually changed — the protocol state tracker uses
             # this for O(1) incremental dirty bookkeeping.
-            if list(getattr(row, "electrodes", []) or []) != electrodes:
-                row.electrodes = electrodes
+            if list(row.electrodes or []) != electrodes:
+                row.electrodes = list(electrodes)
                 self.row_manager.cell_changed = {
                     "path": path, "col_id": "electrodes",
                 }
-            if list(getattr(row, "routes", []) or []) != routes:
+            if list(row.routes or []) != routes:
                 row.routes = routes
                 self.row_manager.cell_changed = {
                     "path": path, "col_id": "routes",
@@ -255,6 +294,7 @@ class DeviceViewerSyncController(HasTraits):
 
         prev_uuid = self._last_selected_uuid
         if row is None or isinstance(row, GroupRow):
+            self.actuated_channels = set()
             msg = ProtocolTreeDisplayMessage(free_mode=True)
             self._last_selected_uuid = ""
             if prev_uuid:
@@ -265,8 +305,8 @@ class DeviceViewerSyncController(HasTraits):
             # rather than the bare row name (which defaults to "Step").
             dotted_id = ".".join(str(i + 1) for i in row.path)
             msg = ProtocolTreeDisplayMessage(
-                electrodes=list(getattr(row, "electrodes", []) or []),
-                routes=list(getattr(row, "routes", []) or []),
+                electrodes=list(row.electrodes or []),
+                routes=list(row.routes or []),
                 step_id=row.uuid,
                 step_label=f"Step {dotted_id}",
                 free_mode=False,
@@ -278,6 +318,8 @@ class DeviceViewerSyncController(HasTraits):
                     f"({len(msg.electrodes)} electrodes, "
                     f"{len(msg.routes)} routes)"
                 )
+                self.actuated_channels = set(self.electrode_ids_channels_map[id] for id in row.electrodes)
+
             self._last_selected_uuid = row.uuid
         publish_message(
             topic=PROTOCOL_TREE_DISPLAY_STATE,
