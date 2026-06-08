@@ -574,6 +574,11 @@ class DeviceViewerDockPane(TraitsDockPane):
 
                 return
 
+    @observe("model.protocol_running")
+    @observe("model.free_mode")
+    @observe("model.realtime_mode")
+    @observe("model.connected")
+    def _actuation_publish_disabled_log_message(self, event):
         reason = ""
         if self.model.protocol_running:
             reason += "Protocol running; "
@@ -587,7 +592,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         if not self.model.connected:
             reason += "Device Not connected; "
 
-        logger.warning(
+        logger.critical(
             f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
         )
 
