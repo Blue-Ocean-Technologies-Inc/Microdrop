@@ -206,19 +206,16 @@ class RoutesHandler(BaseColumnHandler):
             message=display_msg.serialize(),
         )
 
-        # 2. Hardware: only when not preview. Gating happens on the sender
-        # side by simply not publishing.
+        # 2. Hardware: only when not preview. dropbot_controller
+        # has no preview-mode awareness — gating happens here, on
+        # the sender side, by simply not publishing.
         if not preview_mode:
-            payload = {"electrodes": electrodes, "channels": channels}
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps(payload),
-            )
+            electrode_state_change_publisher.publish(actual_channels=channels)
             # 5.0s timeout matches ack_roundtrip_column. Cold-
             # broker first publish pays ~1-2s; typical ack <100ms.
             # In preview we skip this entirely so the user gets a
             # snappy visual playback with no per-phase 5s stalls.
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            ctx.wait_for(electrode_state_change_publisher.topic, timeout=5.0)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)
@@ -395,7 +392,7 @@ class RoutesHandler(BaseColumnHandler):
 
         if in_duration_mode and phase_hold:
             self._run_dynamic_duration_loop(
-                row, ctx=ctx, mapping=mapping, static_routes=static_routes,
+                row, ctx=ctx, mapping=mapping, static_routes=routes,
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
@@ -423,7 +420,7 @@ class RoutesHandler(BaseColumnHandler):
             for phase_idx, phase in enumerate(phases[offset:], start=offset + 1):
                 if not self._run_phase(
                         phase, ctx=ctx, mapping=mapping,
-                        static_routes=static_routes, step_uuid=step_uuid,
+                        static_routes=routes, step_uuid=step_uuid,
                         step_label=step_label, preview_mode=preview_mode,
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
                         pause_event=pause_event, qsignals=qsignals,
