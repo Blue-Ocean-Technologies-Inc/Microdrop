@@ -245,7 +245,8 @@ class RouteExecutionService(HasTraits):
         self._last_set_channels = set(merged_channels)
 
         # Send to hardware
-        electrode_state_change_publisher.publish(merged_channels)
+        # electrode_state_change_publisher.publish(merged_channels)
+        # actuated channels trait change should trigger the publisher in dv dock pane observer
 
     # ----------------------------- Status display ----------------------------
 
