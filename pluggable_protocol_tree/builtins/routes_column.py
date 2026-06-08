@@ -191,7 +191,7 @@ class RoutesHandler(BaseColumnHandler):
         # has no preview-mode awareness — gating happens here, on
         # the sender side, by simply not publishing.
         if not preview_mode:
-            electrode_state_change_publisher.publish(actual_channels=channels)
+            electrode_state_change_publisher.publish(actuated_channels=channels)
             # 5.0s timeout matches ack_roundtrip_column. Cold-
             # broker first publish pays ~1-2s; typical ack <100ms.
             # In preview we skip this entirely so the user gets a
