@@ -158,19 +158,26 @@ class DeviceViewerSyncController(HasTraits):
 
         return channel_to_electrode_ids_map
 
+    @observe("_protocol_running")
     @observe("realtime_mode")
-    @observe("actuated_channels")
-    def _send_actuation_request(self, event):
-
+    def _cannot_publish_actuation_log(self, event):
         reason = ""
         if self._protocol_running:
-            reason += "Protocol Running"
+            reason += "Protocol running; "
 
-        if not self.realtime_mode:
-            reason += "Realtime Mode Off"
+        if self.realtime_mode:
+            reason += "Realtime mode"
 
         if reason:
             logger.warning(f"PROTOCOL TREE: Cannot publish actuations; reason: {reason}")
+        else:
+            logger.info("PROTOCOL TREE: Can publish actuations when step selected")
+
+
+    @observe("realtime_mode")
+    @observe("actuated_channels")
+    def _send_actuation_request(self, event):
+        if self._protocol_running or not self.realtime_mode:
             return
 
         logger.info(f"PROTOCOL TREE: Publishing electrode actuation:{self.actuated_channels}")
@@ -184,9 +191,7 @@ class DeviceViewerSyncController(HasTraits):
         elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
             self.bridge.geometry_changed.emit(message)
         elif topic == PROTOCOL_RUNNING:
-            self.bridge.protocol_running_changed.emit(
-                message.casefold() == "true"
-            )
+            self.bridge.protocol_running_changed.emit(message.casefold() == "true")
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
 
@@ -341,7 +346,7 @@ class DeviceViewerSyncController(HasTraits):
                 index=None,
                 values={
                     "name": "Step (free-mode capture)",
-                    "electrodes": stash["electrodes"],
+                    "electrodes": list(stash["electrodes"]),
                     "routes": stash["routes"],
                 },
             )
