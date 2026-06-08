@@ -2,11 +2,11 @@
 
 Wires the real make_force_column() + make_voltage_column() into a
 RowManager, then exercises both reactive paths end-to-end:
-- mutating row.voltage repaints the Force cell on that row.
-- firing cache.cache_changed repaints the entire Force column.
-
-Treats the production view's depends_on_row_traits / depends_on_event_*
-declarations as the contract that MvcTreeModel must honour.
+- mutating row.voltage repaints the Force cell on that row (per-row
+  dataChanged, driven by the view's depends_on_row_traits).
+- a CALIBRATION_DATA event reaching the Force column handler repaints
+  the entire Force column (column-wide layoutChanged, driven by the
+  handler's column_changed_signal).
 """
 
 from unittest.mock import patch
@@ -25,20 +25,26 @@ from dropbot_protocol_controls.protocol_columns.force_column import (
 from dropbot_protocol_controls.protocol_columns.voltage_column import (
     make_voltage_column,
 )
-from dropbot_protocol_controls.services.calibration_cache import cache
+from dropbot_protocol_controls.services import force_math
+
+
+class _FakeGlobals:
+    def __init__(self):
+        self._values = {}
+
+    def get(self, key, default=None):
+        return self._values.get(key, default)
+
+    def set_calibration(self, liquid, filler):
+        self._values["liquid_capacitance_over_area"] = liquid
+        self._values["filler_capacitance_over_area"] = filler
 
 
 @pytest.fixture(autouse=True)
-def _reset_calibration_cache():
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
-    yield
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
+def fake_app_globals(monkeypatch):
+    fake = _FakeGlobals()
+    monkeypatch.setattr(force_math, "app_globals", fake)
+    return fake
 
 
 def _build_columns():
@@ -52,13 +58,10 @@ def _build_columns():
         ]
 
 
-def test_voltage_change_repaints_force_cell_on_that_row():
+def test_voltage_change_repaints_force_cell_on_that_row(fake_app_globals):
     cols = _build_columns()
     manager = RowManager(columns=cols)
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+    fake_app_globals.set_calibration(2.0, 0.5)
     manager.add_step(values={"voltage": 100})
 
     qm = MvcTreeModel(manager)
@@ -78,40 +81,27 @@ def test_voltage_change_repaints_force_cell_on_that_row():
     )
 
 
-def test_cache_changed_repaints_force_column():
+def test_calibration_event_repaints_force_column(fake_app_globals):
     cols = _build_columns()
     manager = RowManager(columns=cols)
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+    fake_app_globals.set_calibration(2.0, 0.5)
     manager.add_step(values={"voltage": 100})
     manager.add_step(values={"voltage": 110})
 
     qm = MvcTreeModel(manager)
-    force_idx = [c.model.col_id for c in manager.columns].index("force")
+    force_col = next(c for c in manager.columns if c.model.col_id == "force")
 
     layout_count = {"n": 0}
     qm.layoutChanged.connect(
         lambda: layout_count.__setitem__("n", layout_count["n"] + 1),
     )
-    data_changes: list = []
-    qm.dataChanged.connect(
-        lambda top, bottom, *_: data_changes.append(
-            (top.column(), bottom.column()),
-        ),
-    )
 
     before = layout_count["n"]
-    cache.cache_changed = True
+    # Simulate the dramatiq listener delivering a CALIBRATION_DATA message
+    # to the force column handler; the model is already wired to its signal.
+    force_col.handler._on_calibration_data_triggered(message="{}")
 
-    fired_layout = layout_count["n"] > before
-    fired_force_data = any(
-        top == force_idx and bottom == force_idx
-        for top, bottom in data_changes
-    )
-    assert fired_layout or fired_force_data, (
-        "Expected cache_changed to repaint the force column "
-        f"(layout fires={layout_count['n'] - before}, "
-        f"data-changed cols={data_changes}, force_idx={force_idx})"
+    assert layout_count["n"] > before, (
+        "Expected a calibration event to repaint the force column "
+        f"(layout fires={layout_count['n'] - before})"
     )

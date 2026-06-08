@@ -6,11 +6,14 @@ plugins reuse the same model with different views, or the same view with
 different handlers, with no coupling.
 """
 
+from PySide6.QtCore import Signal
+
 from traits.api import Interface, Str, Any, Int, Bool, Instance, List
 
 
 class IColumnModel(Interface):
     """Semantic definition: what kind of value this column holds."""
+
     col_id = Str
     col_name = Str
     default_value = Any
@@ -35,6 +38,7 @@ class IColumnModel(Interface):
 
 class IColumnView(Interface):
     """How the column looks and edits in the tree grid."""
+
     hidden_by_default = Bool(False)
     renders_on_group = Bool(True)
 
@@ -64,24 +68,45 @@ class IColumnHandler(Interface):
     applies to all five execution hooks in PPT-2 onward. In PPT-1 the
     hooks are defined but never invoked (no executor yet).
     """
+
     priority = Int(50)
-    wait_for_topics = List(Str,
+    wait_for_topics = List(
+        Str,
         desc="Topics this handler may call ctx.wait_for() on. Aggregated "
-             "by core plugin for the executor's dramatiq subscription. "
-             "Unused in PPT-1; reserved for PPT-2.")
+        "by core plugin for the executor's dramatiq subscription. "
+        "Unused in PPT-1; reserved for PPT-2.",
+    )
+
+    column_changed_signal = Instance(
+        Signal, desc="Emit to signal parent tree model column needs refreshing"
+    )
+    trigger_column_change_when_wired = Bool(
+        False,
+        desc="When column_changed_signal is initialized, does it have to be triggered from a missed past event before it was wired to this handler.",
+    )
 
     def on_interact(self, row, model, value):
         """Called when the UI commits an edit. Default: model.set_value."""
 
-    def on_protocol_start(self, ctx): pass
-    def on_pre_step(self, row, ctx): pass
-    def on_step(self, row, ctx): pass
-    def on_post_step(self, row, ctx): pass
-    def on_protocol_end(self, ctx): pass
+    def on_protocol_start(self, ctx):
+        pass
+
+    def on_pre_step(self, row, ctx):
+        pass
+
+    def on_step(self, row, ctx):
+        pass
+
+    def on_post_step(self, row, ctx):
+        pass
+
+    def on_protocol_end(self, ctx):
+        pass
 
 
 class IColumn(Interface):
     """Composition of model + view + handler."""
+
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)

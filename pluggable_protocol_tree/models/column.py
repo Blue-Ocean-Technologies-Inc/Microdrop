@@ -6,12 +6,15 @@ BaseColumnHandler as-is or override only the hooks they need. Column
 itself is the composite that traits-wires model/view/handler together.
 """
 
-from traits.api import (
-    HasTraits, Instance, Str, Any, Int, List, Bool, provides, observe,
-)
+from PySide6.QtCore import Signal
+
+from traits.api import HasTraits, Instance, Str, Any, Int, List, provides, observe, Bool
 
 from pluggable_protocol_tree.interfaces.i_column import (
-    IColumn, IColumnModel, IColumnView, IColumnHandler,
+    IColumn,
+    IColumnModel,
+    IColumnView,
+    IColumnHandler,
 )
 
 
@@ -19,7 +22,9 @@ from pluggable_protocol_tree.interfaces.i_column import (
 class BaseColumnModel(HasTraits):
     col_id = Str(desc="Stable id — used for storage, slicing, hook lookup")
     col_name = Str(desc="Display label for the column header")
-    default_value = Any(None, desc="Value used on new-row insertion and as load-fallback")
+    default_value = Any(
+        None, desc="Value used on new-row insertion and as load-fallback"
+    )
 
     def trait_for_row(self):
         """Default: an Any trait seeded with default_value.
@@ -55,16 +60,46 @@ class BaseColumnHandler(HasTraits):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
 
+    # Bound Qt signal handed to the handler by MvcTreeModel
+    # (_wire_column_handlers_with_column_changed_signal). A handler emits
+    # it to ask the tree model to repaint this whole column — used by
+    # columns whose value derives from external state (e.g. the Force
+    # column, which depends on calibration globals rather than row traits).
+    # None until the model wires it.
+    column_changed_signal = Instance(Signal)
+    # Set when a column-dependency event (e.g. CALIBRATION_DATA) fires
+    # before column_changed_signal has been wired, so the missed repaint
+    # can be replayed the moment the signal arrives.
+    trigger_column_change_when_wired = Bool(False)
+
+    @observe("column_changed_signal")
+    def _on_column_changed_signal_changed(self, event):
+        # Replay a repaint that fired before the signal was wired: the
+        # handler's dramatiq listener is live as soon as the column is
+        # built, but MvcTreeModel wires this signal later, so an event
+        # arriving in that window would otherwise be lost.
+        if event.old is None and event.new and self.trigger_column_change_when_wired:
+            self.column_changed_signal.emit()
+
     def on_interact(self, row, model, value):
         """Default edit behaviour: write through to the model."""
         return model.set_value(row, value)
 
     # The five execution hooks — all no-ops by default.
-    def on_protocol_start(self, ctx): pass
-    def on_pre_step(self, row, ctx): pass
-    def on_step(self, row, ctx): pass
-    def on_post_step(self, row, ctx): pass
-    def on_protocol_end(self, ctx): pass
+    def on_protocol_start(self, ctx):
+        pass
+
+    def on_pre_step(self, row, ctx):
+        pass
+
+    def on_step(self, row, ctx):
+        pass
+
+    def on_post_step(self, row, ctx):
+        pass
+
+    def on_protocol_end(self, ctx):
+        pass
 
 
 @provides(IColumn)
@@ -75,6 +110,7 @@ class Column(HasTraits):
     handler.view are all populated without the plugin author having to
     think about it. Re-assigning any of the three updates the wiring.
     """
+
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)

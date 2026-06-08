@@ -21,8 +21,11 @@ from dropbot_protocol_controls.protocol_columns.frequency_column import (
 from dropbot_protocol_controls.protocol_columns.force_column import (
     make_force_column,
 )
-from dropbot_protocol_controls.services.calibration_cache import cache
-from dropbot_protocol_controls.services.force_math import force_for_step
+from dropbot_protocol_controls.services import force_math
+from dropbot_protocol_controls.services.force_math import (
+    current_capacitance_per_unit_area,
+    force_for_step,
+)
 
 
 def _build_columns():
@@ -61,17 +64,27 @@ def test_voltage_frequency_int_round_trip_through_json():
 # Force column persistence — derived, never stored on rows or in JSON.
 # ---------------------------------------------------------------------------
 
+class _FakeGlobals:
+    """Mutable in-memory stand-in for the Redis app-globals proxy that the
+    Force column reads calibration from, so persistence tests stay
+    deterministic without a Redis server."""
+
+    def __init__(self):
+        self._values = {}
+
+    def get(self, key, default=None):
+        return self._values.get(key, default)
+
+    def set_calibration(self, liquid, filler):
+        self._values["liquid_capacitance_over_area"] = liquid
+        self._values["filler_capacitance_over_area"] = filler
+
+
 @pytest.fixture(autouse=True)
-def _reset_calibration_cache():
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
-    yield
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
+def fake_app_globals(monkeypatch):
+    fake = _FakeGlobals()
+    monkeypatch.setattr(force_math, "app_globals", fake)
+    return fake
 
 
 def _build_seven_columns():
@@ -102,11 +115,8 @@ def _make_seven_col_rm_with_steps():
     return rm
 
 
-def test_force_column_metadata_in_json_payload():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_force_column_metadata_in_json_payload(fake_app_globals):
+    fake_app_globals.set_calibration(2.0, 0.5)
     rm = _make_seven_col_rm_with_steps()
 
     payload = rm.to_json()
@@ -120,11 +130,8 @@ def test_force_column_metadata_in_json_payload():
     )
 
 
-def test_per_row_force_values_are_none_in_json_payload():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_per_row_force_values_are_none_in_json_payload(fake_app_globals):
+    fake_app_globals.set_calibration(2.0, 0.5)
     rm = _make_seven_col_rm_with_steps()
 
     payload = rm.to_json()
@@ -140,11 +147,8 @@ def test_per_row_force_values_are_none_in_json_payload():
         )
 
 
-def test_calibration_values_not_in_json_anywhere():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_calibration_values_not_in_json_anywhere(fake_app_globals):
+    fake_app_globals.set_calibration(2.0, 0.5)
     rm = _make_seven_col_rm_with_steps()
 
     payload = rm.to_json()
@@ -157,11 +161,8 @@ def test_calibration_values_not_in_json_anywhere():
     assert "filler_capacitance_over_area" not in serialized
 
 
-def test_force_round_trip_recomputes_from_voltage_and_cache():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_force_round_trip_recomputes_from_voltage_and_cache(fake_app_globals):
+    fake_app_globals.set_calibration(2.0, 0.5)
     rm = _make_seven_col_rm_with_steps()
 
     payload = rm.to_json()
@@ -172,7 +173,7 @@ def test_force_round_trip_recomputes_from_voltage_and_cache():
     assert [s.voltage for s in steps] == [80, 100, 120]
 
     force_col = next(c for c in rm2.columns if c.model.col_id == "force")
-    c_per_a = cache.capacitance_per_unit_area()
+    c_per_a = current_capacitance_per_unit_area()
     for step in steps:
         expected = force_for_step(float(step.voltage), c_per_a)
         actual = force_col.model.get_value(step)
@@ -182,19 +183,14 @@ def test_force_round_trip_recomputes_from_voltage_and_cache():
         )
 
 
-def test_force_recomputes_when_cache_set_after_load():
-    cache.trait_set(
-        liquid_capacitance_over_area=2.0,
-        filler_capacitance_over_area=0.5,
-    )
+def test_force_recomputes_when_cache_set_after_load(fake_app_globals):
+    fake_app_globals.set_calibration(2.0, 0.5)
     rm = _make_seven_col_rm_with_steps()
     payload = rm.to_json()
     parsed = json.loads(json.dumps(payload))
 
-    cache.trait_set(
-        liquid_capacitance_over_area=0.0,
-        filler_capacitance_over_area=0.0,
-    )
+    # No calibration → Force is unresolved after load.
+    fake_app_globals.set_calibration(0.0, 0.0)
 
     rm2 = RowManager.from_json(parsed, columns=_build_seven_columns())
     force_col = next(c for c in rm2.columns if c.model.col_id == "force")
@@ -202,13 +198,10 @@ def test_force_recomputes_when_cache_set_after_load():
     first_step = rm2.root.children[0]
     assert force_col.model.get_value(first_step) is None
 
-    cache.trait_set(
-        liquid_capacitance_over_area=3.0,
-        filler_capacitance_over_area=1.0,
-    )
+    fake_app_globals.set_calibration(3.0, 1.0)
 
     expected = force_for_step(float(first_step.voltage),
-                              cache.capacitance_per_unit_area())
+                              current_capacitance_per_unit_area())
     assert force_col.model.get_value(first_step) == expected
     assert expected is not None
 

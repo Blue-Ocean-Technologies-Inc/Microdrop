@@ -4,12 +4,18 @@ from collections import defaultdict
 # local
 from ..utils.dmf_utils import SvgUtil
 from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
 
 # enthought
 from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe, Set
 
-logger = get_logger(__name__)
 
+def _update_app_globals_on_trait_change_event(event, value_units=""):
+    app_globals[event.name] = event.new
+    logger.info(f"App Globals Update: {event.name}: {event.new} {value_units}")
 
 class Electrode(HasTraits):
     """
@@ -224,3 +230,7 @@ class Electrodes(HasTraits):
             # apply change in area to this channel's area
             area_change = event.new - event.old
             self.svg_model.electrode_areas_scaled[channel_affected] += area_change
+
+    @observe("channel_electrode_areas_scaled_map")
+    def _channel_electrode_areas_scaled_map_changed(self, event):
+        _update_app_globals_on_trait_change_event(event)

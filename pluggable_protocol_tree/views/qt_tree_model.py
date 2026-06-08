@@ -23,9 +23,10 @@ class MvcTreeModel(QAbstractItemModel):
     In a non-running protocol this stays None.
     """
 
-    structure_changed = Signal()   # high-level "redraw" nudge
+    structure_changed = Signal()  # high-level "redraw" nudge
+    column_changed = Signal()
 
-    _ACTIVE_BG = QBrush(QColor(0, 90, 200))   # solid blue
+    _ACTIVE_BG = QBrush(QColor(0, 90, 200))  # solid blue
     _ACTIVE_FG = QBrush(QColor(255, 255, 255))
 
     def __init__(self, row_manager, parent=None):
@@ -44,9 +45,6 @@ class MvcTreeModel(QAbstractItemModel):
         # by row id() so we can deregister on rebuild without holding
         # a hard ref to detached rows.
         self._row_observer_handles: dict = {}
-        # Cache-event observers wired in __init__; kept so callers (or
-        # tests) can deterministically tear down the model.
-        self._event_observer_handles: list = []
 
         # Rebroadcast manager changes as layoutChanged
         row_manager.observe(self._on_rows_changed, "rows_changed")
@@ -56,7 +54,8 @@ class MvcTreeModel(QAbstractItemModel):
         # only redraw signal they receive on DV-driven write-backs.
         row_manager.observe(self._on_cell_changed, "cell_changed")
 
-        self._wire_event_observers()
+        self.column_changed.connect(self._on_column_changed)
+        self._wire_column_handlers_with_column_changed_signal()
         self._wire_row_observers()
 
     # ------------ Qt structural API ------------
@@ -89,8 +88,9 @@ class MvcTreeModel(QAbstractItemModel):
         if parent_node is None or parent_node is self._manager.root:
             return QModelIndex()
         grandparent = parent_node.parent
-        row_in_grandparent = (grandparent.children.index(parent_node)
-                              if grandparent is not None else 0)
+        row_in_grandparent = (
+            grandparent.children.index(parent_node) if grandparent is not None else 0
+        )
         return self.createIndex(row_in_grandparent, 0, parent_node)
 
     # ------------ data / flags / header ------------
@@ -164,6 +164,16 @@ class MvcTreeModel(QAbstractItemModel):
         # stop emitting against a stale column index.
         self._wire_row_observers()
 
+    def _on_column_changed(self):
+        # Fired when any column handler emits column_changed (e.g. the
+        # Force column on a calibration update). Coarse but correct:
+        # layoutChanged forces Qt to repaint the entire visible area,
+        # which covers nested rows for free. These events are
+        # low-frequency, so the perf cost is negligible compared to
+        # walking every (parent, child) pair to emit per-cell
+        # dataChanged for the affected column.
+        self.layoutChanged.emit()
+
     def _on_cell_changed(self, event):
         """Focused dataChanged for a single (path, col_id) edit.
 
@@ -185,8 +195,11 @@ class MvcTreeModel(QAbstractItemModel):
         except (IndexError, AttributeError):
             return
         col_idx = next(
-            (i for i, c in enumerate(self._manager.columns)
-             if c.model.col_id == col_id),
+            (
+                i
+                for i, c in enumerate(self._manager.columns)
+                if c.model.col_id == col_id
+            ),
             None,
         )
         if col_idx is None:
@@ -203,31 +216,20 @@ class MvcTreeModel(QAbstractItemModel):
                 yield child
                 if isinstance(child, GroupRow):
                     yield from walk(child)
+
         yield from walk(self._manager.root)
 
-    def _wire_event_observers(self):
-        for col_idx, col in enumerate(self._manager.columns):
-            view = col.view
-            source = getattr(view, "depends_on_event_source", None)
-            trait_name = getattr(view, "depends_on_event_trait_name", None)
-            if source is None or not trait_name:
-                continue
-            handler = partial(self._on_event_dependency_fired, col_idx)
-            source.observe(handler, trait_name)
-            self._event_observer_handles.append((source, trait_name, handler))
+    def _wire_column_handlers_with_column_changed_signal(self):
+        """Hand every column handler this model's ``column_changed`` signal.
 
-    def _on_event_dependency_fired(self, col_idx, event):
-        self._emit_column_changed(col_idx)
-
-    def _emit_column_changed(self, col_idx):
-        # Coarse but correct: layoutChanged forces Qt to repaint the
-        # entire visible area, which covers nested rows for free.
-        # cache_changed is low-frequency (calibration updates), so the
-        # perf cost is negligible compared to walking every (parent,
-        # child) pair to emit per-cell dataChanged.
-        if col_idx < 0 or col_idx >= self.columnCount():
-            return
-        self.layoutChanged.emit()
+        A handler emits it to request a full repaint of its column when
+        an external dependency changes (e.g. the Force column handler on
+        a CALIBRATION_DATA message). Assigning the signal also replays
+        any repaint the handler buffered before it was wired — see
+        BaseColumnHandler.trigger_column_change_when_wired.
+        """
+        for col in self._manager.columns:
+            col.handler.column_changed_signal = self.column_changed
 
     def _wire_row_observers(self):
         # Identify per-column row-trait dependencies once.
