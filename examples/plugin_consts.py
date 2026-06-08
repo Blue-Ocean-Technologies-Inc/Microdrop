@@ -22,6 +22,7 @@ from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
+from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
@@ -76,6 +77,7 @@ EXPERIMENTAl_PLUGINS = [
     DropbotProtocolControlsPlugin,
     PeripheralProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
+    VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
 ]
 

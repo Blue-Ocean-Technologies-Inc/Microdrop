@@ -19,7 +19,7 @@ Composed of small one-job helpers so each can be tested in isolation:
 No Traits, no Qt, no broker — testable as plain Python.
 """
 
-from typing import Iterator, List, Set
+from typing import Iterator, List, Optional, Set, Tuple
 
 
 def _is_loop_route(route: List[str]) -> bool:
@@ -34,7 +34,7 @@ def _route_windows(route: List[str], trail_length: int,
 
     Open route: yields ceil((len - trail_length) / step + 1) windows,
     each a set of trail_length consecutive electrodes (or fewer at the
-    tail). Trail_length > len(route) → one window of the whole route.
+    tail). Trail_length > len(route) --> one window of the whole route.
 
     Loop route (first == last): drops the duplicated last electrode,
     yields one full cycle of windows that wrap around the effective
@@ -88,10 +88,10 @@ def _route_with_repeats(
 ) -> Iterator[Set[str]]:
     """Wraps _route_windows with repeat-count + duration-budget logic.
 
-    Open route + linear_repeats=False → one pass of _route_windows.
-    Open route + linear_repeats=True  → n_repeats passes (the row's
+    Open route + linear_repeats=False --> one pass of _route_windows.
+    Open route + linear_repeats=True  --> n_repeats passes (the row's
                                         `route_repetitions` column).
-    Loop route → ``cycles`` full cycles plus one return-to-start phase at
+    Loop route --> ``cycles`` full cycles plus one return-to-start phase at
                  the very end (mirrors the legacy device-viewer route
                  executor: N cycles of a C-phase loop yields N*C + 1
                  phases, the final one being the window at position 0 so a
@@ -133,10 +133,56 @@ def _route_with_repeats(
             yield from cycle
 
 
+def duration_loop_parts(
+    static_electrodes: List[str],
+    routes: List[List[str]],
+    *,
+    trail_length: int = 1,
+    trail_overlay: int = 0,
+    soft_start: bool = False,
+) -> Tuple[List[Set[str]], List[Set[str]], Optional[Set[str]]]:
+    """Decompose a step into the pieces the RoutesHandler needs to drive a
+    *dynamic* duration-mode loop under volume threshold:
+
+        (ramp_up_phases, unit_cycle, return_phase)
+
+    ``unit_cycle`` is ONE pass of the zipped route windows + static set
+    (the repeatable unit). ``ramp_up_phases`` is the soft-start ramp toward
+    ``unit_cycle[0]`` (empty when soft_start is False or the first phase has
+    <= 1 electrode). ``return_phase`` is ``unit_cycle[0]`` (to close the loop
+    back to its origin) or None when there are no routes.
+
+    There is deliberately NO soft-end ramp: volume threshold reaching its
+    target guarantees the droplet's position, so the gentle-release ramp is
+    dropped. See the design spec.
+
+    Open (non-loop) routes are handled by the same machinery — one forward
+    pass becomes the unit_cycle and return_phase is its first window; the
+    helper is designed for loop routes, and an open-route caller is
+    responsible for that semantic.
+    """
+    static = set(static_electrodes or [])
+    if not routes:
+        # Static-only step: the single static set is the repeatable unit;
+        # nothing to "return to", so no closing phase.
+        return [], [set(static)], None
+    per_route = [_route_windows(r, trail_length, trail_overlay)
+                 for r in routes]
+    unit_cycle = list(_zip_with_static(per_route, static))
+    if not unit_cycle:
+        return [], [set(static)], None
+    ramp_up: List[Set[str]] = []
+    first = unit_cycle[0]
+    if soft_start and len(first) > 1:
+        ordered = sorted(first)
+        ramp_up = [set(ordered[:size]) for size in range(1, len(first))]
+    return ramp_up, unit_cycle, unit_cycle[0]
+
+
 def _ramp_up(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
     """Prepend ramp phases that grow from 1 electrode to the size of
-    the first phase. K=1 first phase → no-op. K=3 first phase {a,b,c}
-    → yields {a}, {a,b} BEFORE the original {a,b,c}.
+    the first phase. K=1 first phase --> no-op. K=3 first phase {a,b,c}
+    --> yields {a}, {a,b} BEFORE the original {a,b,c}.
 
     Element ordering within a set is non-deterministic; the ramp picks
     elements in `sorted()` order so the choice is at least stable
@@ -286,8 +332,8 @@ def _zip_with_static(per_route_iters: list,
     window. Routes that exhaust early hold at their last yielded
     window; the iteration stops only when ALL routes are exhausted.
 
-    No routes at all → yield the static set exactly once (the step
-    still gets one phase). No static + no routes → yield one empty
+    No routes at all --> yield the static set exactly once (the step
+    still gets one phase). No static + no routes --> yield one empty
     phase (preserves the 'every step has at least one phase'
     invariant the executor relies on).
     """

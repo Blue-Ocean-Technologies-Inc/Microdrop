@@ -25,7 +25,7 @@ class BaseQuickAction(IQuickAction):
     The @provides decorator separately registers the interface so
     isinstance/adaptation checks work.
 
-    Inherits ``IQuickAction`` directly (which chains to ``Interface`` →
+    Inherits ``IQuickAction`` directly (which chains to ``Interface`` -->
     ``HasTraits``, not ``HasStrictTraits``) so plugin authors can freely
     add their own traits when subclassing without hitting a ``TraitError``
     at class-definition time.

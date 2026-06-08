@@ -184,6 +184,79 @@ class StepContext(HasTraits):
                      desc="step-scoped scratch (cleared per step)")
     _mailboxes = Dict(Str, Instance(Mailbox))
 
+    phase_advance_event = Instance(threading.Event,
+        desc="Set by any handler to cut the current phase short. "
+             "Cleared on each phase boundary by RoutesHandler so a set "
+             "carries through to the current phase only. "
+             "RoutesHandler._cooperative_sleep wakes on it the same way "
+             "it wakes on stop_event.")
+    step_phases_done_event = Instance(threading.Event,
+        desc="Set by RoutesHandler once after its per-phase loop returns. "
+             "Lets sibling handlers in the same parallel bucket (notably "
+             "VolumeThresholdHandler) exit their wait loops instead of "
+             "blocking forever on a never-arriving next phase.")
+
+    def traits_init(self):
+        # Plain (non-trait) coordination state for phase-time buffering,
+        # guarded by a lock so a handler on another worker thread can
+        # extend the current phase safely. See
+        # add_time_buffer_to_current_phase below.
+        self._phase_buffer_lock = threading.Lock()
+        self._phase_buffer_s = 0.0
+        # Cumulative operator-requested extension applied this step. The
+        # duration-mode loop credits this back to its budget so an
+        # extension ADDS to the step's total time instead of displacing
+        # later cycles.
+        self._phase_extension_total_s = 0.0
+
+    def add_time_buffer_to_current_phase(self, seconds: float) -> None:
+        """Ask the phase driver (RoutesHandler) to hold the current phase
+        ``seconds`` longer.
+
+        The general extension hook for columns: a handler that decides
+        mid-phase it needs more time (e.g. VolumeThresholdHandler waiting
+        for the droplet to finish wetting) calls this; RoutesHandler folds
+        the buffer into the current phase's dwell. If the step has no routes
+        the "phase" is the whole step, so this just extends the step's single
+        dwell. Thread-safe; callable from any handler's worker thread.
+        Non-positive values are a no-op.
+        """
+        if not seconds or seconds <= 0:
+            return
+        with self._phase_buffer_lock:
+            self._phase_buffer_s += float(seconds)
+
+    def take_phase_time_buffer(self) -> float:
+        """Atomically read and clear the accumulated phase buffer.
+
+        The phase driver calls this to fold any pending buffer into its
+        dwell. Returns the buffered seconds (0.0 if none)."""
+        with self._phase_buffer_lock:
+            buffered, self._phase_buffer_s = self._phase_buffer_s, 0.0
+        return buffered
+
+    def reset_phase_time_buffer(self) -> None:
+        """Drop any unconsumed buffer. Called at each phase boundary so a
+        leftover from a cut-short phase doesn't bleed into the next one."""
+        with self._phase_buffer_lock:
+            self._phase_buffer_s = 0.0
+
+    def note_phase_extension(self, seconds: float) -> None:
+        """Record that ``seconds`` of operator-requested buffer was actually
+        applied to a phase. The duration-mode loop reads the running total
+        (``phase_extension_total``) to credit these extensions back to its
+        budget — so a 1000s budget plus a 30s stuck-phase extension yields a
+        ~1030s total run, with the full 1000s of cycling preserved."""
+        if not seconds or seconds <= 0:
+            return
+        with self._phase_buffer_lock:
+            self._phase_extension_total_s += float(seconds)
+
+    def phase_extension_total(self) -> float:
+        """Cumulative operator-requested phase extension this step, seconds."""
+        with self._phase_buffer_lock:
+            return self._phase_extension_total_s
+
     def open_mailbox(self, topic: str) -> None:
         """Pre-register a mailbox for ``topic``. Called by the executor
         at step start for every topic in the union of all handlers'
@@ -313,3 +386,58 @@ class StepContext(HasTraits):
             raise TimeoutError(
                 f"Timed out after {timeout}s wait"
             ) from None
+
+    def prompt_gui(self, gui_callable: Callable, *, timeout: float = 86400):
+        """Run ``gui_callable`` on the GUI thread, paused, and return its result.
+
+        The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
+        worker on a bare event (fine for a yes/no prompt whose answer is "the
+        event fired"), this marshals an arbitrary callable onto the GUI thread,
+        pauses the run while it's up, blocks the worker until it returns, and
+        hands its return value back — so a dialog can answer with structured
+        data, not just acknowledge.
+
+        ``gui_callable`` takes no arguments and runs on the GUI thread, so it
+        is safe to build and ``exec()`` a Qt dialog inside it. Whatever it
+        returns becomes this method's return value.
+
+        Headless/test runs have no GUI thread (``qsignals`` is None), so the
+        callable runs inline on the calling thread.
+
+        Args:
+            gui_callable: zero-arg callable invoked on the GUI thread.
+            timeout: seconds before the underlying wait raises TimeoutError.
+
+        Returns the callable's result, or ``None`` if the wait ended without
+        it finishing (external Resume before the user answered). Raises:
+          * ``AbortError`` if ``protocol.stop_event`` fires.
+          * ``TimeoutError`` after ``timeout`` seconds.
+          * whatever ``gui_callable`` raised (re-raised on the worker thread).
+        """
+        done = threading.Event()
+        box = {}
+
+        def _runner():
+            try:
+                box["result"] = gui_callable()
+            except Exception as exc:           # surfaced on the worker below
+                box["error"] = exc
+            finally:
+                done.set()
+
+        qsignals = self.protocol.qsignals
+        if qsignals is None:
+            _runner()
+        else:
+            # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
+            # singleShot with it as context runs _runner there (Qt builds the
+            # dialog on the right thread). Imported lazily to keep this module
+            # Qt-free for headless executor tests.
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, qsignals, _runner)
+
+        self.wait(events=[done, self.protocol.stop_event], timeout=timeout)
+
+        if "error" in box:
+            raise box["error"]
+        return box.get("result")

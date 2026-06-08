@@ -2,7 +2,7 @@
 
 Lives in demos/, not builtins/, because it has no production purpose.
 The Redis integration test in tests_with_redis_server_need/ uses this
-column to prove the round-trip publish → listener → mailbox → wait_for
+column to prove the round-trip publish --> listener --> mailbox --> wait_for
 path works against a real broker.
 """
 

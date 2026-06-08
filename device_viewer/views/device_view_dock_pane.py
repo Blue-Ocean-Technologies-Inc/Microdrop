@@ -36,7 +36,7 @@ from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
 from pyface.api import GUI
 
-from traits.api import Any, Instance, Str, observe, provides
+from traits.api import Any, Instance, Str, observe, provides, Bool, Dict
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.view import View
 
@@ -142,15 +142,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     mode_picker_view = None
 
     # Variables
-    _undoing = False  # Used to prevent changes made in undo() and redo() from being added to the undo stack
-    _disable_state_messages = False  # Used to disable state messages when the model is being updated, to prevent infinite loops
-    _last_applied_step_id = Any()  # Optional[str]; None means no step applied yet
-    _last_published_id_to_channel = Any()  # Optional[dict]; None means geometry never published yet
-    message_buffer = (
-        Str()
-    )  # Buffer to hold the message to be sent when the debounce timer expires
-    video_item = None  # The video item for the camera feed
-    _electrode_publish_timer = None  # Debounce timer for electrode state publish (e.g. arrow-key navigation)
+    _undoing = Bool(False, desc="Used to prevent changes made in undo() and redo() from being added to the undo stack")
+    _disable_state_messages = Bool(False, desc="Used to disable state messages when the model is being updated, to prevent infinite loops")
+    _last_applied_step_id = Instance(str, desc="None means no step applied yet", allow_none=True)
+    _last_published_id_to_channel = Instance(dict, allow_none=True, desc="None means geometry never published yet")
+    message_buffer = Str(desc="Buffer to hold the message to be sent when the debounce timer expires")
+    video_item = Instance(QGraphicsVideoItem, allow_none=True, desc="The video item for the camera feed")
+    # _electrode_publish_timer = None  # Debounce timer for electrode state publish (e.g. arrow-key navigation)
 
     ###################################################################################
     # ------------- IDramatiqControllerBase Interface -------------------- #
@@ -470,6 +468,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._publish_geometry_if_changed()
 
         QApplication.processEvents()
+
+    @observe("_disable_state_messages")
+    def __disable_state_messages_change_log(self, event):
+        if event.new:
+            logger.warning("Device viewer will not be processing device view model state change since state messages are disabled.")
+        else:
+            logger.info("Device viewer will process device view model state changes")
 
     def _apply_step_transition(self, message_model):
         """Pull execution params from the newly-selected step into the sidebar.
@@ -1202,7 +1207,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(f"Model change event received: {event}")
 
         if self._disable_state_messages:
-            logger.warning("Not processing device view model state change since state messages are disabled.")
             return
 
         if not self.model.electrodes.svg_model:

@@ -739,7 +739,7 @@ class MarqueeLabel(QLabel):
         self.update()
 
     def paintEvent(self, event):
-        # No active scroll AND no held offset → default QLabel rendering
+        # No active scroll AND no held offset --> default QLabel rendering
         # (preserves stylesheet/foreground role/alignment behaviour).
         if self._offset == 0 and not self._timer.isActive():
             super().paintEvent(event)
@@ -768,8 +768,8 @@ class _ScalingPixmapLabel(QLabel):
         super().__init__()
         self._source_pixmap = QPixmap()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Ignored vertically → the grid determines the row height.
-        # Preferred horizontally → width is governed by maxWidth set in resizeEvent.
+        # Ignored vertically --> the grid determines the row height.
+        # Preferred horizontally --> width is governed by maxWidth set in resizeEvent.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)
         self.setMinimumSize(120, 120)
         self.setStyleSheet("padding: 5px;")

@@ -230,7 +230,7 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
     html = r.LoggingReport._heatmap(df, ctx, include_plotlyjs=False)
     assert "fake-heatmap" in html
     # No overrides — let the helper use its "seconds" default so
-    # format_time_tooltip auto-scales (sec → min → hours) in the tooltip.
+    # format_time_tooltip auto-scales (sec --> min --> hours) in the tooltip.
     assert "quant_title" not in captured["kw"]
     assert "quant_units" not in captured["kw"]
     assert 1 in captured["channels"] and captured["channels"][1] > 0

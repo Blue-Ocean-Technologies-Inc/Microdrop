@@ -1,4 +1,4 @@
-"""Tests for the compound→single-cell adapter shims used by _assemble_columns."""
+"""Tests for the compound-->single-cell adapter shims used by _assemble_columns."""
 
 from unittest.mock import MagicMock
 

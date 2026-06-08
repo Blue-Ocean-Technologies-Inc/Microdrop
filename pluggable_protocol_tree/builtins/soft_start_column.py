@@ -12,7 +12,7 @@ from pluggable_protocol_tree.views.columns._hidden_view_mixins import (
 class SoftStartColumnModel(BaseColumnModel):
     def trait_for_row(self):
         return Bool(bool(self.default_value or False),
-                    desc="Prepend ramp-up phases (1 electrode → trail_length).")
+                    desc="Prepend ramp-up phases (1 electrode --> trail_length).")
 
 
 def make_soft_start_column():

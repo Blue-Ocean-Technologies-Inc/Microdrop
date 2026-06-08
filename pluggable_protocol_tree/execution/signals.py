@@ -33,3 +33,9 @@ class ExecutorSignals(QObject):
     # update Phase x/y and reset its elapsed-time clock without waiting
     # for the hardware ack.
     phase_started      = Signal(int, int, float)
+    # Extra dwell (seconds) granted to the CURRENT phase via
+    # StepContext.add_time_buffer_to_current_phase — e.g. volume threshold
+    # holding the phase open for more wetting time. The status bar grows
+    # the phase's target time by this amount so "elapsed / target" stays
+    # honest while the phase is held.
+    phase_extended     = Signal(float)

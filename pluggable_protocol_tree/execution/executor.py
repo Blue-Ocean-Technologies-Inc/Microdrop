@@ -68,7 +68,6 @@ class ProtocolExecutor(HasTraits):
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
     _preview_mode = Any
-
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
 
@@ -309,9 +308,15 @@ class ProtocolExecutor(HasTraits):
         broadcast-to-multiple-waiters semantics. Same topic in
         different buckets is fine (sequential).
         """
-        step_ctx = StepContext(row=row, protocol=proto_ctx)
+        # Fresh Events per step — never reused across steps so a stale
+        # `set` from a prior step can't leak in.
+        step_ctx = StepContext(
+            row=row, protocol=proto_ctx,
+            phase_advance_event=threading.Event(),
+            step_phases_done_event=threading.Event(),
+        )
         # Detect within-bucket topic collisions before opening any boxes.
-        per_priority_topics: dict[int, dict[str, str]] = {}  # priority → topic → col_id
+        per_priority_topics: dict[int, dict[str, str]] = {}  # priority --> topic --> col_id
         for col in cols:
             topics = col.handler.wait_for_topics or []
             bucket = per_priority_topics.setdefault(col.handler.priority, {})
