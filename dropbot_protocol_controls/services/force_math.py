@@ -7,7 +7,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
 
-def capacitance_per_unit_area(
+def full_electrode_capacitance_per_unit_area(
     liquid_pf_per_mm2: Optional[float],
     filler_pf_per_mm2: Optional[float],
 ) -> Optional[float]:
@@ -30,7 +30,7 @@ def capacitance_per_unit_area(
     return liquid_pf_per_mm2 - filler_pf_per_mm2
 
 
-def current_capacitance_per_unit_area() -> Optional[float]:
+def current_full_electrode_capacitance_per_unit_area() -> Optional[float]:
     """capacitance_per_unit_area for the latest measured calibration.
 
     Reads liquid/filler capacitances from the process-wide app globals,
