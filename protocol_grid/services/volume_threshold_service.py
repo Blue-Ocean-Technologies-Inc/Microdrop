@@ -3,6 +3,7 @@ import time
 from typing import Dict, List, Optional
 from PySide6.QtCore import QObject, Signal, QTimer
 
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
 from logger.logger_service import get_logger
 from protocol_grid.services.force_calculation_service import ForceCalculationService
 
@@ -42,8 +43,8 @@ class VolumeThresholdService(QObject):
             
             # calculate capacitance per unit area
             c_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
-                calibration_data['liquid_capacitance'],
-                calibration_data['filler_capacitance'],
+                calibration_data[LIQUID_CAPACITANCE_KEY],
+                calibration_data[FILLER_CAPACITANCE_KEY],
             )
             
             if c_unit_area is None:

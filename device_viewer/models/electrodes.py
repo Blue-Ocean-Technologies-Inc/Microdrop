@@ -1,6 +1,7 @@
 # Imports:
 from collections import defaultdict
 
+from ..consts import CHANNEL_AREAS_KEY
 # local
 from ..utils.dmf_utils import SvgUtil
 from logger.logger_service import get_logger
@@ -231,6 +232,6 @@ class Electrodes(HasTraits):
             area_change = event.new - event.old
             self.svg_model.electrode_areas_scaled[channel_affected] += area_change
 
-    @observe("channel_electrode_areas_scaled_map")
+    @observe(CHANNEL_AREAS_KEY)
     def _channel_electrode_areas_scaled_map_changed(self, event):
         _update_app_globals_on_trait_change_event(event)

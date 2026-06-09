@@ -3,6 +3,7 @@ import math
 
 from traits.api import Instance, List, Bool
 
+from device_viewer.consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
 from logger.logger_service import get_logger
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
@@ -138,8 +139,8 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_calibration_data_triggered(self, body_str):
         data = json.loads(body_str)
-        filler_cap = data.get("filler_capacitance_over_area")
-        liquid_cap = data.get("liquid_capacitance_over_area")
+        filler_cap = data.get(FILLER_CAPACITANCE_KEY)
+        liquid_cap = data.get(LIQUID_CAPACITANCE_KEY)
 
         if filler_cap is not None and liquid_cap is not None:
             c_device_value = liquid_cap - filler_cap

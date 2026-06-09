@@ -2,6 +2,7 @@ import copy
 
 from PySide6.QtCore import Qt
 
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
 from protocol_grid.consts import protocol_grid_fields
 from protocol_grid.state.device_state import DeviceState
 
@@ -291,8 +292,8 @@ class ProtocolState:
     def get_calibration_data(self):
         """Get stored calibration data."""
         return {
-            'liquid_capacitance_over_area': self._liquid_capacitance_over_area,
-            'filler_capacitance_over_area': self._filler_capacitance_over_area,
+            LIQUID_CAPACITANCE_KEY: self._liquid_capacitance_over_area,
+            FILLER_CAPACITANCE_KEY: self._filler_capacitance_over_area,
         }
 
     def has_complete_calibration_data(self):

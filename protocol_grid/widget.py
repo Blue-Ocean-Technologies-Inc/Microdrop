@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, information
@@ -777,10 +778,10 @@ class PGCWidget(QWidget):
             calibration_data = json.loads(message)
 
             liquid_capacitance_over_area = calibration_data.get(
-                "liquid_capacitance_over_area"
+                LIQUID_CAPACITANCE_KEY
             )
             filler_capacitance_over_area = calibration_data.get(
-                "filler_capacitance_over_area"
+                FILLER_CAPACITANCE_KEY
             )
 
             self.state.set_calibration_data(
@@ -808,8 +809,8 @@ class PGCWidget(QWidget):
             calibration_data = self.state.get_calibration_data()
 
             c_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
-                calibration_data["liquid_capacitance_over_area"],
-                calibration_data["filler_capacitance_over_area"],
+                calibration_data[LIQUID_CAPACITANCE_KEY],
+                calibration_data[FILLER_CAPACITANCE_KEY],
             )
 
             if c_unit_area is not None:

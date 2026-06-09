@@ -67,7 +67,8 @@ from microdrop_utils.pyside_helpers import (
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
 from protocol_grid.consts import CALIBRATION_DATA, STEP_PARAMS_COMMIT
-from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED
+from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED, FILLER_CAPACITANCE_KEY, \
+    LIQUID_CAPACITANCE_KEY
 from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
@@ -606,8 +607,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         Publish a message with the current calibration values.
         """
         message = {
-            "liquid_capacitance_over_area": self.model.liquid_capacitance_over_area,  # In pF/mm^2
-            "filler_capacitance_over_area": self.model.filler_capacitance_over_area,  # In pF/mm^2
+            LIQUID_CAPACITANCE_KEY: self.model.liquid_capacitance_over_area,  # In pF/mm^2
+            FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,  # In pF/mm^2
         }
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
