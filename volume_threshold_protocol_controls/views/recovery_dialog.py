@@ -8,7 +8,8 @@ out:
     coverage target to Y%, then keep monitoring against the new target.
   * **Proceed anyway** — give up on the threshold for this phase and let
     the protocol continue (the troubleshooting escape hatch).
-  * **Stop** — abort the run.
+  * **Pause Protocol** — pause the run (the operator resumes it later from
+    the toolbar) instead of aborting.
 
 This module is pure Qt widget code: ``show_volume_threshold_recovery_dialog``
 builds a modal dialog, ``exec()``s it, and returns a plain decision dict.
@@ -20,7 +21,7 @@ Decision dict shapes:
     {"action": "retry", "extend_s": float, "new_percent": int,
      "count_toward_duration": bool}   # last key only in duration mode
     {"action": "proceed"}
-    {"action": "stop"}
+    {"action": "pause"}
 
 ``count_toward_duration`` (duration-looping steps only): when True the extra
 time is charged against the loop's duration budget (the run still ends on
@@ -40,11 +41,11 @@ _DEFAULT_EXTEND_S = 5.0
 
 
 class _RecoveryDialog(QDialog):
-    """Two-field recovery prompt with retry / proceed / stop buttons.
+    """Two-field recovery prompt with retry / proceed / pause buttons.
 
     The chosen action is captured in ``self._action``; window-close or Esc
-    defaults to "proceed" — the least destructive outcome (continue the
-    run rather than abort it or hang)."""
+    defaults to "proceed" — the least disruptive outcome (continue the
+    run rather than pause it or hang)."""
 
     def __init__(self, current_percent, current_cap, target_cap,
                  duration_mode=False, parent=None):
@@ -100,17 +101,17 @@ class _RecoveryDialog(QDialog):
         # "&&" renders a literal ampersand (single "&" is a Qt mnemonic).
         retry_btn = QPushButton("Apply && retry")
         proceed_btn = QPushButton("Proceed anyway")
-        stop_btn = QPushButton("Stop")
+        pause_btn = QPushButton("Pause Protocol")
         retry_btn.clicked.connect(lambda: self._choose("retry"))
         proceed_btn.clicked.connect(lambda: self._choose("proceed"))
-        stop_btn.clicked.connect(lambda: self._choose("stop"))
+        pause_btn.clicked.connect(lambda: self._choose("pause"))
         retry_btn.setDefault(True)
 
         buttons = QHBoxLayout()
         buttons.addWidget(retry_btn)
         buttons.addWidget(proceed_btn)
         buttons.addStretch(1)
-        buttons.addWidget(stop_btn)
+        buttons.addWidget(pause_btn)
         layout.addLayout(buttons)
 
     def _choose(self, action: str) -> None:
@@ -152,7 +153,7 @@ def show_volume_threshold_recovery_dialog(
         {"action": "retry", "extend_s": float, "new_percent": int,
          "count_toward_duration": bool}   # last key only when duration_mode
         {"action": "proceed"}
-        {"action": "stop"}
+        {"action": "pause"}
     """
     dialog = _RecoveryDialog(current_percent, current_cap, target_cap,
                              duration_mode=duration_mode, parent=parent)

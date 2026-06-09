@@ -180,7 +180,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
     If the target is NOT reached within the phase's duration, the handler
     opens a recovery dialog via ``ctx.prompt_gui`` (which pauses the run):
     the operator can extend the time + lower the coverage and retry,
-    proceed anyway, or stop the run.
+    proceed anyway, or pause the run.
     """
 
     priority = 30
@@ -308,7 +308,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
                    actuated_area, phase_duration_s):
         """
         Monitor one phase to its deadline; on a miss, open the recovery
-        dialog and apply the operator's choice (retry / proceed / stop).
+        dialog and apply the operator's choice (retry / proceed / pause).
         Returns the (possibly updated) coverage percent to carry forward.
         """
         # calculate threshold capacitance
@@ -343,7 +343,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
             # Phase duration elapsed without reaching target -> ask the
             # operator. ctx.prompt_gui pauses the run, marshals the dialog
             # onto the GUI thread, and blocks here until they answer (or
-            # Stop / external Resume) — no message passing, no actors.
+            # external Resume) — no message passing, no actors.
             def _ask():
                 d = show_volume_threshold_recovery_dialog(
                     int(percent), last_cap, threshold_cap,
@@ -366,8 +366,11 @@ class VolumeThresholdHandler(BaseColumnHandler):
             decision = ctx.prompt_gui(_ask) or {"action": "proceed"}
             action = decision.get("action", "proceed")
 
-            if action == "stop":
-                ctx.protocol.stop_event.set()
+            if action == "pause":
+                # Re-pause after prompt_gui's auto-resume, so the run freezes
+                # (RoutesHandler blocks on pause_event while still holding this
+                # phase) until the operator resumes from the toolbar.
+                ctx.protocol.pause()
                 return percent
             if action == "proceed":
                 ctx.phase_advance_event.set()
