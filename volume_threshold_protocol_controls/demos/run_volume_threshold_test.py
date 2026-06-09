@@ -19,6 +19,9 @@ The verdict (phase hold durations) drives a PASS/FAIL banner.
 Run::
 
     pixi run python -m volume_threshold_protocol_controls.demos.run_volume_threshold_test
+    ... --selftest      # headless (QT_QPA_PLATFORM=offscreen); exit 0 = PASS
+    ... --no-flush      # simulate the pre-fix bug (stale readings advance)
+    ... --pause-test    # pause mid-phase; verify the column stays inert
 """
 
 import sys
@@ -63,6 +66,15 @@ INJECT_INTERVAL_MS = 50      # capacitance stream cadence
 MIN_HOLD_S = 1.0
 MAX_HOLD_S = 2.9
 
+# --pause-test scenario: pause mid-phase, simulate the operator "manually
+# moving around" by streaming an above-target reading, hold paused PAST the
+# dwell (so a non-pause-aware column would time out and pop the dialog), then
+# resume and cross. A pause-aware column must advance only after resume.
+PAUSE_AT_S = 0.3
+RESUME_AT_S = 4.0          # > DWELL_S, so a non-pause-aware run would time out
+PAUSE_CROSS_S = 4.3
+MANUAL_HIGH_PF = 99.0      # "manual move" reading injected during the pause
+
 
 class _Sim:
     """Shared current simulated capacitance (pF). Attribute read/write is
@@ -102,6 +114,9 @@ def main() -> int:
     # auto-quit on the verdict, and exit 0 (PASS) / 1 (FAIL). Lets the demo
     # double as a smoke check without anyone watching the window.
     selftest = "--selftest" in sys.argv
+    # --pause-test: pause mid-phase and verify the column stays inert (no
+    # advance on the manual reading, no recovery dialog) until resumed.
+    pause_test = "--pause-test" in sys.argv
 
     app = QApplication(sys.argv)
     panel = VTTestPanel()
@@ -151,12 +166,32 @@ def main() -> int:
         _vtmod._drain_stale = lambda ctx, topic: None
         L("--no-flush: stale-capacitance flush DISABLED (expect FAIL)")
 
+    # Spy on the recovery dialog: it must NEVER open during a pause. The spy
+    # records the fact and returns "proceed" so a headless run can't block on a
+    # real modal dialog.
+    dialog_fired = {"v": False}
+    _orig_dialog = _vtmod.show_volume_threshold_recovery_dialog
+
+    def _dialog_spy(*args, **kwargs):
+        dialog_fired["v"] = True
+        L("   !!! recovery dialog opened (unexpected during a pause)")
+        return {"action": "proceed"}
+    _vtmod.show_volume_threshold_recovery_dialog = _dialog_spy
+
     # --- per-phase timing + verdict state ---------------------------------
     # phase_starts[i] / reach_times[i] pair by index: phase i+1's start and
     # the time its monitor crossed the target. Latency = reach - start.
     phase_starts: list = []
     reach_times: list = []
+    resume_times: list = []          # pause-test: when each phase was resumed
     total_phases = {"n": 0}
+
+    def _schedule_cross(delay_s):
+        def _cross():
+            sim.value = CROSS_PF
+            L(f"   injected genuine crossing {CROSS_PF:.0f} pF "
+              f"(>= target {target:.1f})")
+        QTimer.singleShot(int(delay_s * 1000), _cross)
 
     def on_phase_started(idx, total, dwell):
         phase_starts.append(time.monotonic())
@@ -165,11 +200,27 @@ def main() -> int:
         L(f"phase {idx}/{total} started (dwell {dwell:.1f}s, "
           f"target {target:.2f} pF)")
 
-        def _cross():
-            sim.value = CROSS_PF
-            L(f"   injected genuine crossing {CROSS_PF:.0f} pF "
-              f"(>= target {target:.1f})")
-        QTimer.singleShot(int(CROSS_DELAY_S * 1000), _cross)
+        if not pause_test:
+            _schedule_cross(CROSS_DELAY_S)
+            return
+
+        # Pause scenario: pause mid-phase, "manually" stream an above-target
+        # reading, hold paused past the dwell, then resume and cross.
+        def _pause():
+            sim.value = MANUAL_HIGH_PF
+            ex.pause()
+            L(f"   PAUSED — operator 'manually' streaming {MANUAL_HIGH_PF:.0f} "
+              f"pF (>= target; must NOT advance or open the dialog)")
+
+        def _resume():
+            ex.resume()
+            sim.value = LOW_PF
+            resume_times.append(time.monotonic())
+            L("   RESUMED — back to a below-target stream")
+
+        QTimer.singleShot(int(PAUSE_AT_S * 1000), _pause)
+        QTimer.singleShot(int(RESUME_AT_S * 1000), _resume)
+        _schedule_cross(PAUSE_CROSS_S)
 
     def on_reached(t):
         idx = len(reach_times)               # 0-based phase this belongs to
@@ -179,26 +230,52 @@ def main() -> int:
 
     def _finish(text_prefix=""):
         injector.stop()
-        n = min(len(reach_times), len(phase_starts))
-        latencies = [reach_times[i] - phase_starts[i] for i in range(n)]
         expected = total_phases["n"] or len(phase_starts)
         missed = expected - len(reach_times)
-        fast = [i + 1 for i, d in enumerate(latencies) if d < MIN_HOLD_S]
-        slow = [i + 1 for i, d in enumerate(latencies) if d > MAX_HOLD_S]
-        ok = expected > 0 and missed == 0 and not fast and not slow
-        if ok:
-            text = (f"all {expected} phases ignored the stale spike and "
-                    f"advanced on the real crossing")
-        elif fast:
-            detail = ", ".join(f"{latencies[i - 1]:.2f}s" for i in fast)
-            text = f"phase(s) {fast} advanced on a STALE reading ({detail})"
-        elif missed:
-            text = f"{missed} phase(s) never reached the target (timed out)"
+        detail_nums: list = []
+
+        if pause_test:
+            # Pass requires: every phase reached the target only AFTER it was
+            # resumed (so it ignored the manual reading during the pause), and
+            # the recovery dialog never opened.
+            n = min(len(reach_times), len(resume_times))
+            during_pause = [i + 1 for i in range(n)
+                            if reach_times[i] < resume_times[i] - 0.1]
+            ok = (expected > 0 and missed == 0
+                  and not during_pause and not dialog_fired["v"])
+            if ok:
+                text = (f"all {expected} phases stayed inert while paused — no "
+                        f"advance on the manual reading, no recovery dialog")
+            elif dialog_fired["v"]:
+                text = "the recovery dialog opened during a pause"
+            elif during_pause:
+                text = f"phase(s) {during_pause} advanced WHILE paused"
+            else:
+                text = f"{missed} phase(s) never reached the target"
+            detail_nums = [round(reach_times[i] - resume_times[i], 2)
+                           for i in range(n)]
+            metric = "reach-after-resume(s)"
         else:
-            text = f"phase(s) {slow} advanced suspiciously late"
+            n = min(len(reach_times), len(phase_starts))
+            latencies = [reach_times[i] - phase_starts[i] for i in range(n)]
+            fast = [i + 1 for i, d in enumerate(latencies) if d < MIN_HOLD_S]
+            slow = [i + 1 for i, d in enumerate(latencies) if d > MAX_HOLD_S]
+            ok = expected > 0 and missed == 0 and not fast and not slow
+            if ok:
+                text = (f"all {expected} phases ignored the stale spike and "
+                        f"advanced on the real crossing")
+            elif fast:
+                d = ", ".join(f"{latencies[i - 1]:.2f}s" for i in fast)
+                text = f"phase(s) {fast} advanced on a STALE reading ({d})"
+            elif missed:
+                text = f"{missed} phase(s) never reached the target (timed out)"
+            else:
+                text = f"phase(s) {slow} advanced suspiciously late"
+            detail_nums = [round(d, 2) for d in latencies]
+            metric = "latencies(s)"
+
         panel.set_verdict(ok, text_prefix + text)
-        L(f"VERDICT: {'PASS' if ok else 'FAIL'} — latencies="
-          f"{[round(d, 2) for d in latencies]}")
+        L(f"VERDICT: {'PASS' if ok else 'FAIL'} — {metric}={detail_nums}")
         harness.teardown()
         result["ok"] = ok
         if selftest:
@@ -206,7 +283,7 @@ def main() -> int:
             print(panel.log_text())
             print("-------------------")
             print(f"SELFTEST {'PASS' if ok else 'FAIL'}: {text} "
-                  f"(latencies={[round(d, 2) for d in latencies]})")
+                  f"({metric}={detail_nums})")
             QTimer.singleShot(50, app.quit)
 
     def on_protocol_error(msg):
