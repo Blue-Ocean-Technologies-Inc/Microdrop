@@ -232,8 +232,19 @@ class VolumeThresholdHandler(BaseColumnHandler):
         phase_duration_s = float(getattr(row, "duration_s", 0.0) or 0.0)
 
         stop_event = ctx.protocol.stop_event
+        pause_event = getattr(ctx.protocol, "pause_event", None)
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
+            # While the run is paused (operator manually moving around the
+            # protocol) the column stays inert: it neither picks up actuations
+            # nor monitors. On resume, discard anything that arrived during the
+            # pause — manual electrode moves and their capacitance — so we only
+            # react to the protocol's own next phase, never a manual move.
+            if pause_event is not None and pause_event.is_set():
+                pause_event.wait_cleared()
+                _drain_stale(ctx, ELECTRODES_STATE_CHANGE)
+                _drain_stale(ctx, CAPACITANCE_UPDATED)
+                continue
             try:
                 payload = ctx.wait_for(
                     ELECTRODES_STATE_CHANGE, timeout=PHASE_POLL_TIMEOUT_S,
@@ -394,16 +405,31 @@ class VolumeThresholdHandler(BaseColumnHandler):
           * "reached" — target met; phase_advance_event set.
           * "timeout" — deadline elapsed without meeting target.
           * "stopped" — stop_event / step_phases_done_event fired.
-        ``last_cap`` is the most recent parsed pF reading (or None)."""
+        ``last_cap`` is the most recent parsed pF reading (or None).
+
+        While the run is paused this blocks without counting toward the
+        deadline or acting on readings, so a pause never advances the phase
+        or pops the recovery dialog (which only opens on a genuine timeout)."""
         # Drop capacitance samples buffered before now — they were measured
         # during the previous phase, before this phase's electrodes were
         # actuated, and would otherwise advance the phase prematurely. We only
         # act on readings produced after monitoring begins.
         _drain_stale(ctx, CAPACITANCE_UPDATED)
         stop_event = ctx.protocol.stop_event
+        pause_event = getattr(ctx.protocol, "pause_event", None)
         last = None
         while (not stop_event.is_set()
                and not ctx.step_phases_done_event.is_set()):
+            # Paused mid-phase: freeze rather than counting down to a timeout
+            # (which would pop the dialog) or advancing on a manual reading.
+            # Paused time is not charged to the deadline; readings taken while
+            # paused are dropped on resume.
+            if pause_event is not None and pause_event.is_set():
+                paused_at = time.monotonic()
+                pause_event.wait_cleared()
+                deadline += time.monotonic() - paused_at
+                _drain_stale(ctx, CAPACITANCE_UPDATED)
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 return "timeout", last

@@ -73,8 +73,10 @@ def _make_handler_ctx(monkeypatch, *, threshold=0, preview=False,
     row = MagicMock()
     row.volume_threshold = threshold
 
+    from pluggable_protocol_tree.execution.events import PauseEvent
     proto = MagicMock()
     proto.stop_event = stop_event or threading.Event()
+    proto.pause_event = PauseEvent()          # not paused by default
     proto.preview_mode = preview
 
     ctx = MagicMock()
@@ -256,6 +258,30 @@ def test_handler_skips_phase_when_actuated_area_is_zero(monkeypatch):
 
     handler.on_step(row, ctx)
     assert ctx.phase_advance_event.is_set() is False
+
+
+def test_handler_inert_while_paused(monkeypatch):
+    """While the run is paused (operator manually moving around the
+    protocol), the column must stay inert: even with a phase actuation
+    queued, it neither advances the phase nor pops the recovery dialog.
+    It blocks until resumed; here it resumes to a finished step."""
+    from electrode_controller.consts import ELECTRODES_STATE_CHANGE
+    handler, row, ctx, enq = _make_handler_ctx(
+        monkeypatch, threshold=50, app_globals=_good_globals())
+    _stub_full_cap(monkeypatch, 5.0)
+    ctx.protocol.pause_event.set()                      # paused before on_step
+    enq(ELECTRODES_STATE_CHANGE,
+        json.dumps({"electrodes": ["e1"], "channels": [1]}))
+
+    def _resume_then_done():
+        time.sleep(0.05)
+        ctx.protocol.pause_event.clear()                # resume...
+        ctx.step_phases_done_event.set()                # ...to a finished step
+    threading.Thread(target=_resume_then_done, daemon=True).start()
+
+    handler.on_step(row, ctx)
+    assert ctx.phase_advance_event.is_set() is False
+    ctx.prompt_gui.assert_not_called()
 
 
 def test_plugin_default_lists_the_column():
