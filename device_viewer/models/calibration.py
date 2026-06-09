@@ -8,6 +8,7 @@ logger = get_logger(__name__)
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
+from ..consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
 
 def _update_app_globals_on_trait_change_event(event, value_units=""):
     app_globals[event.name] = event.new
@@ -43,13 +44,13 @@ class CalibrationModel(HasTraits):
             self.liquid_capacitance_over_area = self.last_capacitance / area
 
     def reset(self):
-        self.reset_traits(["filler_capacitance_over_area", "liquid_capacitance_over_area"])
+        self.reset_traits([FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY])
 
-    @observe("liquid_capacitance_over_area")
+    @observe(LIQUID_CAPACITANCE_KEY)
     def _liquid_capacitance_changed(self, event):
         _update_app_globals_on_trait_change_event(event, "pF/mm^2")
 
-    @observe("filler_capacitance_over_area")
+    @observe(FILLER_CAPACITANCE_KEY)
     def _filler_capacitance_changed(self, event):
         _update_app_globals_on_trait_change_event(event,"pF/mm^2")
 

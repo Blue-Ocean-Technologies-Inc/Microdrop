@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
+
 _TIME_FMT = "%Y-%m-%d %H:%M:%S"
 
 from logger.logger_service import get_logger
@@ -287,8 +289,8 @@ class ProtocolLoggingController:
         if not isinstance(data, dict):
             return
         cpa = _capacitance_per_unit_area(
-            data.get("liquid_capacitance_over_area"),
-            data.get("filler_capacitance_over_area"))
+            data.get(LIQUID_CAPACITANCE_KEY),
+            data.get(FILLER_CAPACITANCE_KEY))
         if cpa is not None:
             ing.update_capacitance_per_unit_area(cpa)
 

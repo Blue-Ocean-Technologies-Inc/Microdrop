@@ -5,8 +5,8 @@ import pytest
 
 from dropbot_protocol_controls.services import force_math
 from dropbot_protocol_controls.services.force_math import (
-    capacitance_per_unit_area,
-    current_capacitance_per_unit_area,
+    full_electrode_capacitance_per_unit_area,
+    current_full_electrode_capacitance_per_unit_area,
     force_for_step,
 )
 from protocol_grid.services.force_calculation_service import (
@@ -27,35 +27,35 @@ class _FakeGlobals:
 
 
 def test_capacitance_per_unit_area_none_liquid_returns_none():
-    assert capacitance_per_unit_area(None, 0.5) is None
+    assert full_electrode_capacitance_per_unit_area(None, 0.5) is None
 
 
 def test_capacitance_per_unit_area_none_filler_returns_none():
-    assert capacitance_per_unit_area(2.0, None) is None
+    assert full_electrode_capacitance_per_unit_area(2.0, None) is None
 
 
 def test_capacitance_per_unit_area_both_none_returns_none():
-    assert capacitance_per_unit_area(None, None) is None
+    assert full_electrode_capacitance_per_unit_area(None, None) is None
 
 
 def test_capacitance_per_unit_area_negative_liquid_returns_none():
-    assert capacitance_per_unit_area(-1.0, 0.5) is None
+    assert full_electrode_capacitance_per_unit_area(-1.0, 0.5) is None
 
 
 def test_capacitance_per_unit_area_negative_filler_returns_none():
-    assert capacitance_per_unit_area(2.0, -0.5) is None
+    assert full_electrode_capacitance_per_unit_area(2.0, -0.5) is None
 
 
 def test_capacitance_per_unit_area_equal_returns_none():
-    assert capacitance_per_unit_area(1.5, 1.5) is None
+    assert full_electrode_capacitance_per_unit_area(1.5, 1.5) is None
 
 
 def test_capacitance_per_unit_area_liquid_less_than_filler_returns_none():
-    assert capacitance_per_unit_area(0.3, 0.5) is None
+    assert full_electrode_capacitance_per_unit_area(0.3, 0.5) is None
 
 
 def test_capacitance_per_unit_area_normal_case():
-    assert capacitance_per_unit_area(2.0, 0.5) == 1.5
+    assert full_electrode_capacitance_per_unit_area(2.0, 0.5) == 1.5
 
 
 def test_force_for_step_zero_voltage_returns_none():
@@ -88,7 +88,7 @@ def test_force_for_step_returns_positive_float():
     (5.0, 4.99),
 ])
 def test_capacitance_per_unit_area_legacy_parity(liquid, filler):
-    assert capacitance_per_unit_area(liquid, filler) == pytest.approx(
+    assert full_electrode_capacitance_per_unit_area(liquid, filler) == pytest.approx(
         ForceCalculationService.calculate_capacitance_per_unit_area(
             liquid, filler,
         ),
@@ -120,7 +120,7 @@ def test_current_reads_both_from_globals(monkeypatch):
         liquid_capacitance_over_area=2.0,
         filler_capacitance_over_area=0.5,
     ))
-    assert current_capacitance_per_unit_area() == 1.5
+    assert current_full_electrode_capacitance_per_unit_area() == 1.5
 
 
 def test_current_missing_global_returns_none(monkeypatch):
@@ -128,9 +128,9 @@ def test_current_missing_global_returns_none(monkeypatch):
         liquid_capacitance_over_area=2.0,
         # filler absent → get() returns None → guard returns None
     ))
-    assert current_capacitance_per_unit_area() is None
+    assert current_full_electrode_capacitance_per_unit_area() is None
 
 
 def test_current_empty_globals_returns_none(monkeypatch):
     monkeypatch.setattr(force_math, "app_globals", _FakeGlobals())
-    assert current_capacitance_per_unit_area() is None
+    assert current_full_electrode_capacitance_per_unit_area() is None

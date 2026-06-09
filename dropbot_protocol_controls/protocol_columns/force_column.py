@@ -33,7 +33,7 @@ from pluggable_protocol_tree.views.columns.readonly_label import (
 )
 from ..consts import PKG_name
 
-from ..services.force_math import force_for_step, current_capacitance_per_unit_area
+from ..services.force_math import force_for_step, current_full_electrode_capacitance_per_unit_area
 
 from logger.logger_service import get_logger
 
@@ -50,7 +50,7 @@ class ForceColumnModel(BaseColumnModel):
         return Float(0.0)
 
     def get_value(self, row):
-        c_per_a = current_capacitance_per_unit_area()
+        c_per_a = current_full_electrode_capacitance_per_unit_area()
         if c_per_a is None:
             return None
         return force_for_step(float(row.voltage), c_per_a)

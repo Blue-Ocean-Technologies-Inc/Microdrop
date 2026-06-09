@@ -23,7 +23,7 @@ from dropbot_protocol_controls.protocol_columns.force_column import (
 )
 from dropbot_protocol_controls.services import force_math
 from dropbot_protocol_controls.services.force_math import (
-    current_capacitance_per_unit_area,
+    current_full_electrode_capacitance_per_unit_area,
     force_for_step,
 )
 
@@ -173,7 +173,7 @@ def test_force_round_trip_recomputes_from_voltage_and_cache(fake_app_globals):
     assert [s.voltage for s in steps] == [80, 100, 120]
 
     force_col = next(c for c in rm2.columns if c.model.col_id == "force")
-    c_per_a = current_capacitance_per_unit_area()
+    c_per_a = current_full_electrode_capacitance_per_unit_area()
     for step in steps:
         expected = force_for_step(float(step.voltage), c_per_a)
         actual = force_col.model.get_value(step)
@@ -201,7 +201,7 @@ def test_force_recomputes_when_cache_set_after_load(fake_app_globals):
     fake_app_globals.set_calibration(3.0, 1.0)
 
     expected = force_for_step(float(first_step.voltage),
-                              current_capacitance_per_unit_area())
+                              current_full_electrode_capacitance_per_unit_area())
     assert force_col.model.get_value(first_step) == expected
     assert expected is not None
 

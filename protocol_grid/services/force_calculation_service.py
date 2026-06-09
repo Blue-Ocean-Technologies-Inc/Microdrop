@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 from PySide6.QtCore import Qt
 
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -104,8 +105,8 @@ class ForceCalculationService:
             
             # Calculate capacitance per unit area
             capacitance_per_unit_area = ForceCalculationService.calculate_capacitance_per_unit_area(
-                calibration_data['liquid_capacitance_over_area'],
-                calibration_data['filler_capacitance_over_area']
+                calibration_data[LIQUID_CAPACITANCE_KEY],
+                calibration_data[FILLER_CAPACITANCE_KEY]
             )
             
             if capacitance_per_unit_area is None:
