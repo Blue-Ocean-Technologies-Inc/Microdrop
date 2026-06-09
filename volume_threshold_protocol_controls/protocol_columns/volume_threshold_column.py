@@ -119,6 +119,25 @@ def _parse_capacitance_pf(raw):
         return None
 
 
+def _drain_stale(ctx, topic):
+    """Discard every message already queued on ``topic`` so the caller only
+    observes readings that arrive afterwards.
+
+    ``CAPACITANCE_UPDATED`` is a continuous stream the DropBot publishes into
+    a per-step mailbox that is never cleared between phases. Without this
+    drain, a phase would be evaluated against capacitance measured during the
+    PREVIOUS phase (before this phase's electrodes were actuated and the
+    droplet settled): an end-of-previous-phase HIGH reading would satisfy the
+    threshold instantly and advance the phase before any liquid arrived. The
+    mailbox is FIFO and returns the oldest item first, so we pop until empty.
+    """
+    while True:
+        try:
+            ctx.wait_for(topic, timeout=0.0)
+        except TimeoutError:
+            return
+
+
 class VolumeThresholdColumnModel(BaseColumnModel):
     """Per-step volume threshold as a PERCENTAGE (0-100; 0 disables).
 
@@ -249,7 +268,38 @@ class VolumeThresholdHandler(BaseColumnHandler):
                        actuated_area):
         """Target capacitance (pF) the actuated electrodes must reach:
         ``((percent/100) * full_cap_over_area + filler_cap_over_area) * actuated_area``
-        (see the module docstring's MATH EXPLAINED block)."""
+        (see the module docstring's MATH EXPLAINED block).
+
+        ``full_cap_over_area`` is the full-electrode (liquid-covered) value,
+        i.e. ``liquid_capacitance_over_area - filler_capacitance_over_area``.
+
+        With liquid=7.5, filler=1.1 (so full=6.4) pF/mm^2 and a 4.35 mm^2
+        electrode, 100% coverage targets the full liquid-covered capacitance
+        (== liquid * area == 7.5 * 4.35):
+
+        >>> round(VolumeThresholdHandler._threshold_cap(100, 6.4, 1.1, 4.35), 3)
+        32.625
+
+        0% coverage falls back to just the filler baseline (1.1 * 4.35):
+
+        >>> round(VolumeThresholdHandler._threshold_cap(0, 6.4, 1.1, 4.35), 3)
+        4.785
+
+        50% coverage sits halfway up the full range above the baseline:
+
+        >>> round(VolumeThresholdHandler._threshold_cap(50, 6.4, 1.1, 4.35), 3)
+        18.705
+
+        Zero actuated area -> no target:
+
+        >>> VolumeThresholdHandler._threshold_cap(100, 6.4, 1.1, 0.0)
+        0.0
+
+        Zero filler baseline -> pure coverage of the full value (6.4 * 4.35):
+
+        >>> round(VolumeThresholdHandler._threshold_cap(100, 6.4, 0.0, 4.35), 3)
+        27.84
+        """
         requested_coverage_cap_over_area = (percent / 100) * full_cap_over_area
         return (requested_coverage_cap_over_area
                 + filler_cap_over_area) * actuated_area
@@ -342,6 +392,11 @@ class VolumeThresholdHandler(BaseColumnHandler):
           * "timeout" — deadline elapsed without meeting target.
           * "stopped" — stop_event / step_phases_done_event fired.
         ``last_cap`` is the most recent parsed pF reading (or None)."""
+        # Drop capacitance samples buffered before now — they were measured
+        # during the previous phase, before this phase's electrodes were
+        # actuated, and would otherwise advance the phase prematurely. We only
+        # act on readings produced after monitoring begins.
+        _drain_stale(ctx, CAPACITANCE_UPDATED)
         stop_event = ctx.protocol.stop_event
         last = None
         while (not stop_event.is_set()
