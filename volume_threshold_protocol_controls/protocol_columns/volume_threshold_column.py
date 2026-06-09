@@ -205,12 +205,6 @@ class VolumeThresholdHandler(BaseColumnHandler):
             return
 
         filler_cap_over_area = app_globals.get(FILLER_CAPACITANCE_KEY)
-        if filler_cap_over_area is None:
-            logger.warning(
-                "volume_threshold: filler capacitance missing in app_globals; "
-                "Defaulting to 0 pF/mm^2")
-
-            filler_cap_over_area = 0
 
         # The phase's wall-clock budget. RoutesHandler dwells this long per
         # phase (per_phase_dwell = row.duration_s); we treat it as the
