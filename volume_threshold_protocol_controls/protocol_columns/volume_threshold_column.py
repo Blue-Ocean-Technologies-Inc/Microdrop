@@ -7,9 +7,29 @@ The column stores a 0-100 PERCENT (Int). Each phase ends early once the
 measured capacitance of the actuated electrodes reaches this percent of
 their calibrated FULL (liquid-covered) capacitance:
 
-    target = (percent / 100) * liquid_capacitance_over_area * actuated_area
+threshold_cap = ((percent / 100) * full_electrode_capacitance_over_area + filler_capacitance_over_area) * actuated_area
 
-The filler/baseline value is NOT used in this formula.
+****** MATH EXPLAINED: WE get this from the following: ****************************************************************
+
+1. Full electrode capacitance over area is liquid_capacitance_over_area - filler_capacitance_over_area from the
+device viewer calibrations published on app globals = full_electrode_capacitance_over_area
+
+2. The current capacitance is from the dropbot's capacitance stream. This needs to be normalized by actuated area,
+and baseline filler cap subtracted = (current_cap / actuated_area) - filler_capacitance_over_area
+
+3. The user provides the threshold percent from which we can get the
+requested_coverage_cap_over_area = (percent / 100) * full_electrode_capacitance_over_area
+
+4. So we need:
+
+(current_cap / actuated_area) - filler_capacitance_over_area >= requested_coverage_cap_over_area
+
+=> current_cap >= (requested_coverage_cap_over_area + filler_capacitance_over_area) * actuated_area
+
+=> threshold_cap = (requested_coverage_cap_over_area + filler_capacitance_over_area) * actuated_area
+= ((percent / 100) * full_electrode_capacitance_over_area + filler_capacitance_over_area) * actuated_area
+
+***********************************************************************************************************************
 
 Calibration + area source: read straight from app_globals (the
 Redis-backed globals manager). The DV models publish there on change
@@ -39,6 +59,8 @@ import time
 
 from traits.api import Int
 
+from device_viewer.consts import CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY
+from dropbot_protocol_controls.services.force_math import current_full_electrode_capacitance_per_unit_area
 from logger.logger_service import get_logger
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
@@ -63,6 +85,8 @@ from ..consts import (
 )
 from ..views.recovery_dialog import show_volume_threshold_recovery_dialog
 
+from microdrop_utils.ureg_helpers import ureg
+
 logger = get_logger(__name__)
 
 # The Redis-backed globals manager, where the device-viewer models publish
@@ -72,49 +96,26 @@ logger = get_logger(__name__)
 # Tests monkeypatch this module attribute with a plain dict.
 app_globals = get_microdrop_redis_globals_manager()
 
-_LIQUID_CAP_KEY = "liquid_capacitance_over_area"
-_CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"
 
-
-def _read_full_cap_over_area(app_globals):
-    """The FULL (liquid-covered) capacitance-per-unit-area from
-    app_globals, or None when absent / non-positive / unparseable."""
-    try:
-        value = app_globals.get(_LIQUID_CAP_KEY)
-    except Exception:                              # pragma: no cover - defensive
-        return None
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return None
-    return value if value > 0 else None
-
-
-def _read_channel_areas(app_globals):
+def _read_channel_areas():
     """channel-id(str) -> summed electrode area (mm^2) from app_globals,
     or {} when absent. Keys are strings because the source Dict(Int,Float)
     is JSON-round-tripped through Redis; callers look up str(channel)."""
     try:
-        areas = app_globals.get(_CHANNEL_AREAS_KEY)
+        areas = app_globals.get(CHANNEL_AREAS_KEY)
     except Exception:                              # pragma: no cover - defensive
         return {}
     return areas if isinstance(areas, dict) else {}
 
 
 def _parse_capacitance_pf(raw):
-    """Pull the numeric pF value out of a CAPACITANCE_UPDATED payload.
-    Returns None on any parse failure (handler skips and waits for the
-    next reading rather than crashing)."""
+    """Pull the capacitance, normalized to pF, out of a CAPACITANCE_UPDATED
+    payload. Returns None on any parse failure (handler skips and waits for
+    the next reading rather than crashing)."""
     try:
-        data = _json.loads(raw)
-    except (TypeError, ValueError):
-        return None
-    cap_str = data.get("capacitance")
-    if not isinstance(cap_str, str):
-        return None
-    try:
-        return float(cap_str.split("pF")[0])
-    except (ValueError, AttributeError):
+        return ureg(_json.loads(raw).get("capacitance")).to("pF").magnitude
+    except Exception as e:
+        logger.debug(f"PROTOCOL TREE (volume_threshold_column): Cannot parse capacitance due to error: {e}", exc_info=True)
         return None
 
 
@@ -124,7 +125,7 @@ class VolumeThresholdColumnModel(BaseColumnModel):
     Each phase ends early once the measured capacitance of the phase's
     actuated electrodes reaches this percent of their calibrated FULL
     (liquid-covered) capacitance:
-        target = (percent / 100) * liquid_capacitance_over_area * actuated_area
+        threshold_cap = ((percent / 100) * full_electrode_capacitance_over_area + filler_capacitance_over_area) * actuated_area
     """
 
     def trait_for_row(self):
@@ -152,8 +153,8 @@ class VolumeThresholdHandler(BaseColumnHandler):
     channel-area map from app_globals (published by the DV models).
     Per phase: read the actuated channels from the ELECTRODES_STATE_CHANGE
     payload RoutesHandler publishes, sum their areas, compute
-    ``target = (percent/100) * full_cap_over_area * actuated_area``, and
-    poll CAPACITANCE_UPDATED until ``current >= target`` -> set
+    ``threshold_cap = ((percent/100) * full_cap_over_area + filler_cap_over_area) * actuated_area``,
+    and poll CAPACITANCE_UPDATED until ``current >= threshold_cap`` -> set
     ctx.phase_advance_event (RoutesHandler's _cooperative_sleep wakes on
     it) -> loop back for the next phase boundary.
 
@@ -191,14 +192,25 @@ class VolumeThresholdHandler(BaseColumnHandler):
         if getattr(ctx.protocol, "preview_mode", False):
             return
 
-        full_cap_over_area = _read_full_cap_over_area(app_globals)
-        channel_areas = _read_channel_areas(app_globals)
+        # get known quants from globals. the liquid_cap - filler_cap = current_full_electrode_capacitance/area
+        # and channel areas to normalize cap readings from dropbot
+        full_cap_over_area = current_full_electrode_capacitance_per_unit_area()
+        channel_areas = _read_channel_areas()
+
         if full_cap_over_area is None or not channel_areas:
             logger.warning(
                 "volume_threshold: missing calibration "
-                "(liquid_capacitance_over_area) or channel areas in "
+                "(liquid + filler capacitance) or channel areas in "
                 "app_globals; calibrate + load a device first. Skipping.")
             return
+
+        filler_cap_over_area = app_globals.get(FILLER_CAPACITANCE_KEY)
+        if filler_cap_over_area is None:
+            logger.warning(
+                "volume_threshold: filler capacitance missing in app_globals; "
+                "Defaulting to 0 pF/mm^2")
+
+            filler_cap_over_area = 0
 
         # The phase's wall-clock budget. RoutesHandler dwells this long per
         # phase (per_phase_dwell = row.duration_s); we treat it as the
@@ -229,7 +241,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
             # A coverage change the operator makes in the recovery dialog
             # carries forward to subsequent phases of this step.
             percent = self._run_phase(
-                ctx, row, percent, full_cap_over_area, actuated_area,
+                ctx, row, percent, full_cap_over_area, filler_cap_over_area, actuated_area,
                 phase_duration_s,
             )
             # Do NOT return — loop back to monitor the next phase.
@@ -238,19 +250,34 @@ class VolumeThresholdHandler(BaseColumnHandler):
             # ELECTRODES_STATE_CHANGE, which our outer loop picks up. The
             # loop exits only on stop_event or step_phases_done_event.
 
-    def _run_phase(self, ctx, row, percent, full_cap_over_area,
+    @staticmethod
+    def _threshold_cap(percent, full_cap_over_area, filler_cap_over_area,
+                       actuated_area):
+        """Target capacitance (pF) the actuated electrodes must reach:
+        ``((percent/100) * full_cap_over_area + filler_cap_over_area) * actuated_area``
+        (see the module docstring's MATH EXPLAINED block)."""
+        requested_coverage_cap_over_area = (percent / 100) * full_cap_over_area
+        return (requested_coverage_cap_over_area
+                + filler_cap_over_area) * actuated_area
+
+    def _run_phase(self, ctx, row, percent, full_cap_over_area, filler_cap_over_area,
                    actuated_area, phase_duration_s):
-        """Monitor one phase to its deadline; on a miss, open the recovery
+        """
+        Monitor one phase to its deadline; on a miss, open the recovery
         dialog and apply the operator's choice (retry / proceed / stop).
-        Returns the (possibly updated) coverage percent to carry forward."""
-        target = (percent / 100.0) * full_cap_over_area * actuated_area
+        Returns the (possibly updated) coverage percent to carry forward.
+        """
+        # calculate threshold capacitance
+        threshold_cap = self._threshold_cap(
+            percent, full_cap_over_area, filler_cap_over_area,
+            actuated_area)
 
         # No phase duration => no meaningful "end of phase": fall back to the
         # legacy re-sync cadence (one CAP_POLL_TIMEOUT_S window, no dialog)
         # and let the outer loop re-read the next phase.
         if phase_duration_s <= 0.0:
             self._monitor_until_threshold(
-                ctx, target, time.monotonic() + CAP_POLL_TIMEOUT_S)
+                ctx, threshold_cap, time.monotonic() + CAP_POLL_TIMEOUT_S)
             return percent
 
         # When the step is looping on a duration budget, the dialog offers a
@@ -264,7 +291,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
         deadline = time.monotonic() + phase_duration_s
         while True:
             status, last_cap = self._monitor_until_threshold(
-                ctx, target, deadline)
+                ctx, threshold_cap, deadline)
             if status != "timeout":
                 # "reached" (phase_advance_event already set) or "stopped".
                 return percent
@@ -275,7 +302,7 @@ class VolumeThresholdHandler(BaseColumnHandler):
             # Stop / external Resume) — no message passing, no actors.
             def _ask():
                 d = show_volume_threshold_recovery_dialog(
-                    int(percent), last_cap, target,
+                    int(percent), last_cap, threshold_cap,
                     duration_mode=in_duration_mode)
                 if d.get("action") == "retry":
                     extend_s = float(d.get("extend_s", 0.0) or 0.0)
@@ -304,7 +331,9 @@ class VolumeThresholdHandler(BaseColumnHandler):
 
             # "retry": apply the new coverage + extension and keep monitoring.
             percent = int(decision.get("new_percent", percent))
-            target = (percent / 100.0) * full_cap_over_area * actuated_area
+            threshold_cap = self._threshold_cap(
+                percent, full_cap_over_area, filler_cap_over_area,
+                actuated_area)
             extend_s = float(decision.get("extend_s", 0.0) or 0.0)
             deadline = time.monotonic() + max(extend_s, 0.0)
 
