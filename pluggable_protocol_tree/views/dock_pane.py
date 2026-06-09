@@ -7,13 +7,21 @@ application so the experiment-bar buttons drive real handlers."""
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance, List, Str
 
+from device_viewer.consts import CHANNEL_AREAS_KEY, DEVICE_SVG_PATH_KEY
 from logger.logger_service import get_logger
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.sticky_notes import StickyWindowManager
 from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
 
 logger = get_logger(__name__)
+
+# Shared Redis-backed state the device viewer publishes to (channel areas, the
+# device SVG path). Read here so the logging context never reaches into the
+# device-viewer pane/model.
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class PluggableProtocolDockPane(TraitsDockPane):
@@ -41,17 +49,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
         sync = DeviceViewerSyncController(row_manager=manager)
 
         def _logging_device_context():
-            from pluggable_protocol_tree.services.logging.models import (
-                LoggingDeviceContext,
-            )
+            # Decoupled: read channel areas + device SVG path from the shared
+            # app_globals (published by the device viewer) rather than reaching
+            # into the device-viewer pane/model.
             channel_areas, svg_path = {}, None
             try:
-                dv_pane = self.task.window.get_dock_pane("device_viewer.dock_pane")
-                model = getattr(dv_pane, "model", None)
-                if model is not None:
-                    channel_areas = dict(
-                        model.electrodes.channel_electrode_areas_scaled_map)
-                    svg_path = getattr(model.electrodes.svg_model, "filename", None)
+                # Redis JSON-stringifies the int channel keys; restore int keys
+                # to match the actuation lookup (areas.get(int(ch))).
+                channel_areas = {
+                    int(k): float(v)
+                    for k, v in (app_globals.get(CHANNEL_AREAS_KEY) or {}).items()
+                }
+                svg_path = app_globals.get(DEVICE_SVG_PATH_KEY)
             except Exception as e:
                 logger.debug(f"logging device-context probe failed: {e}")
             return LoggingDeviceContext(

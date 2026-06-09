@@ -79,8 +79,14 @@ ACTOR_TOPIC_DICT = {
 CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"
 FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area"
 LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area"
+# Full path to the loaded device SVG (the ".name" key below publishes only the
+# stem). Consumers that must load the file — e.g. the protocol logger's device
+# heatmap — read this instead of reaching into the device-viewer model.
+DEVICE_SVG_NAME_KEY = "microdrop.device_svg.name"
+DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path"
 
-APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY]
+APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
+                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
 # GUI configuration
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320

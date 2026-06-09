@@ -11,6 +11,22 @@ import pandas as pd
 
 from logger.logger_service import get_logger
 
+from pluggable_protocol_tree.services.logging.consts import RUN_TIMESTAMP_FMT
+from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
+
+# Optional visualisation deps, hoisted to module top: a missing lib degrades
+# the corresponding report section to a placeholder instead of failing import.
+try:
+    import plotly.express as px
+except Exception:                              # pragma: no cover
+    px = None
+try:
+    from microdrop_utils.plotly_helpers import (
+        create_plotly_svg_dropbot_device_heatmap,
+    )
+except Exception:                              # pragma: no cover
+    create_plotly_svg_dropbot_device_heatmap = None
+
 logger = get_logger(__name__)
 
 _NUMERIC_EXCLUDE = {"step_idx", "utc_time", "instrument_time_us",
@@ -126,9 +142,7 @@ class LoggingReport:
 
     @staticmethod
     def _trends_section(entries: List[dict], columns: List[str], device_context) -> str:
-        try:
-            import plotly.express as px
-        except Exception:                      # pragma: no cover
+        if px is None:                         # pragma: no cover
             return "<h2>Data Trends</h2><p>plotly unavailable.</p>"
         if not entries:
             return "<h2>Data Trends</h2><p>No data.</p>"
@@ -187,12 +201,9 @@ class LoggingReport:
         if not svg or "actuated_channels" not in df:
             return ""
         durations = LoggingReport._channel_durations_seconds(df)
-        if not durations:
+        if not durations or create_plotly_svg_dropbot_device_heatmap is None:
             return ""
         try:
-            from microdrop_utils.plotly_helpers import (
-                create_plotly_svg_dropbot_device_heatmap,
-            )
             # Defaults ("Actuation Times" / "seconds") trigger the helper's
             # format_time_tooltip auto-scaling (sec --> min --> hours). Passing
             # "s" instead of "seconds" disables it and shows raw floats.
@@ -222,9 +233,6 @@ class LoggingReport:
             return {}
         # Reuse the persistence rollover correction so the heatmap agrees
         # with the on-disk corr_instrument_time_us in the data file.
-        from pluggable_protocol_tree.services.logging.persistence import (
-            LoggingPersistence,
-        )
         corr = LoggingPersistence._correct_rollover(
             df["instrument_time_us"].tolist())
         if not corr or len([v for v in corr if v is not None]) < 2:
@@ -316,7 +324,7 @@ class LoggingReport:
     def write_report(experiment_dir, html: str) -> Path:
         reports_dir = Path(experiment_dir) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now().strftime(RUN_TIMESTAMP_FMT)
         path = reports_dir / f"report_{stamp}.html"
         path.write_text(html, encoding="utf-8")
         return path
