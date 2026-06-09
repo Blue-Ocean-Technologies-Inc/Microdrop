@@ -251,6 +251,10 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 )
             except TimeoutError:
                 continue
+            # A pause that landed while we were blocked in wait_for: ignore
+            # this actuation and loop back so the pause branch handles it.
+            if pause_event is not None and pause_event.is_set():
+                continue
             try:
                 channels = _json.loads(payload).get("channels") or []
             except (TypeError, ValueError):
@@ -439,6 +443,10 @@ class VolumeThresholdHandler(BaseColumnHandler):
                     timeout=min(CAP_POLL_TIMEOUT_S, remaining),
                 )
             except TimeoutError:
+                continue
+            # A pause that landed while we were blocked in wait_for: drop this
+            # reading (don't advance on it) and loop back to the pause branch.
+            if pause_event is not None and pause_event.is_set():
                 continue
             current = _parse_capacitance_pf(cap_payload)
             if current is None:
