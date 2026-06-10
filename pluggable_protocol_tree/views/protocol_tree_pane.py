@@ -40,6 +40,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
+from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE, PROTOCOL_TREE_DISPLAY_STATE,
 )
@@ -265,6 +266,13 @@ class ProtocolTreePane(QWidget):
         self._current_run_preview_mode = False
         self._pause_phases: list = []
         self._pause_phase_idx: int = 0
+        # Realtime-mode bookkeeping (legacy protocol_grid parity). True =
+        # leave realtime mode on after the run; default True so a terminal
+        # without a pre-run prep (preview, tests) never turns it off.
+        self._restore_realtime_mode = True
+        # Guards the settling window between play-click and executor.start
+        # so a second play-click can't start a duplicate run.
+        self._start_pending = False
 
         self._status_step_label = self.status_bar.lbl_step_progress
         self._status_step_time_label = self.status_bar.lbl_step_time
@@ -625,6 +633,9 @@ class ProtocolTreePane(QWidget):
         nb.action_preview.setEnabled(False)
 
     def _on_play_clicked(self):
+        if self._start_pending:
+            # Realtime-mode settling window — the run is already on its way.
+            return
         if self._is_protocol_active():
             self._toggle_pause()
             return
@@ -657,10 +668,78 @@ class ProtocolTreePane(QWidget):
                     self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
             except Exception as e:
                 logger.warning(f"could not start protocol logging: {e}")
-        self.executor.start(
-            start_step_path=start_path,
-            preview_mode=preview_mode,
-        )
+        if preview_mode:
+            # Preview runs never touch hardware — no realtime-mode prep.
+            self.executor.start(
+                start_step_path=start_path,
+                preview_mode=preview_mode,
+            )
+            return
+        # Legacy protocol_grid parity: turn realtime mode on (deciding
+        # whether to restore the previous state after the run) and let the
+        # hardware settle for realtime_mode_settling_time_s before the
+        # first step. Repeats (_restart_for_next_rep) skip this — realtime
+        # mode is already on mid-run.
+        settle_ms = self._prepare_realtime_mode()
+        self._start_pending = True
+
+        def _start_after_settling():
+            self._start_pending = False
+            self.executor.start(
+                start_step_path=start_path,
+                preview_mode=preview_mode,
+            )
+
+        QTimer.singleShot(settle_ms, _start_after_settling)
+
+    def _prepare_realtime_mode(self) -> int:
+        """Pre-run realtime-mode handling, ported from legacy
+        protocol_grid's protocol_runner_controller:
+
+        - realtime mode OFF: turn it on for the run and turn it back off
+          at the end (restore = False).
+        - realtime mode ON, prompt enabled: ask whether to keep it after
+          the run; the "don't ask again" checkbox persists the answer to
+          the preferences.
+        - realtime mode ON, prompt disabled: follow the saved
+          keep_realtime_mode_after_protocol preference.
+
+        Returns the settling delay (ms) to wait before the first step.
+        """
+        restore = False
+        try:
+            realtime_on = bool(app_globals.get(REALTIME_MODE_KEY, False))
+        except Exception as e:
+            logger.debug(f"realtime-mode state unavailable: {e}")
+            realtime_on = False
+        if not realtime_on:
+            logger.info("Realtime mode off before protocol start; "
+                        "turning it on...")
+            try:
+                publish_message(topic=SET_REALTIME_MODE, message=str(True))
+            except Exception as e:
+                logger.warning(f"could not enable realtime mode: {e}")
+        elif self.preferences.prompt_to_restore_realtime_mode:
+            user_choice, remember = confirm(
+                None,
+                title="Keep Realtime Mode Enabled Post-Protocol?",
+                message="<b>Realtime mode is currently ON.</b><br><br>"
+                        "Would you like to keep it enabled after the "
+                        "protocol finishes?",
+                cancel=False,
+                checkbox_text="Don't ask again (can be changed in "
+                              "preferences)",
+            )
+            restore = user_choice == YES
+            if remember:
+                self.preferences.prompt_to_restore_realtime_mode = False
+                self.preferences.keep_realtime_mode_after_protocol = restore
+        else:
+            restore = self.preferences.keep_realtime_mode_after_protocol
+            logger.info(f"Realtime mode post-protocol (per preference): "
+                        f"{'keep' if restore else 'disable'}")
+        self._restore_realtime_mode = restore
+        return int(self.preferences.realtime_mode_settling_time_s * 1000)
 
     def _update_repeat_status_label(self):
         self.status_bar.lbl_repeat_protocol_status.setText(
@@ -745,6 +824,13 @@ class ProtocolTreePane(QWidget):
             )
         except Exception as e:
             logger.warning(f"protocol-terminated electrode clear failed: {e}")
+        # Restore realtime mode (legacy parity): turn it back off unless the
+        # user chose / prefers to keep it on. Preview runs never touched it.
+        if not self._current_run_preview_mode and not self._restore_realtime_mode:
+            try:
+                publish_message(topic=SET_REALTIME_MODE, message=str(False))
+            except Exception as e:
+                logger.warning(f"realtime-mode restore failed: {e}")
         # Push free-mode payload to DV: clear_highlights cleared the
         # tree selection but did so with _suppress_publish active, so
         # the controller's currentChanged slot was gated. Explicit

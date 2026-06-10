@@ -44,6 +44,10 @@ VOLTAGE_APPLIED = "dropbot/signals/voltage_applied"
 FREQUENCY_APPLIED = "dropbot/signals/frequency_applied"
 
 SET_REALTIME_MODE = "hardware/requests/set_realtime_mode"
+# app_globals key mirroring the current realtime-mode state (the status
+# panel writes it on every REALTIME_MODE_UPDATED signal); consumers read
+# it instead of tracking the signal themselves.
+REALTIME_MODE_KEY = "microdrop.realtime_mode"
 RUN_ALL_TESTS = "dropbot/requests/run_all_tests"
 TEST_VOLTAGE = "dropbot/requests/test_voltage"
 TEST_ON_BOARD_FEEDBACK_CALIBRATION = "dropbot/requests/test_on_board_feedback_calibration"

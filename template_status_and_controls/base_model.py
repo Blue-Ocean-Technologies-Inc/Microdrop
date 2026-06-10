@@ -20,6 +20,7 @@ Design notes:
 
 from traits.api import HasTraits, Bool, Str, observe, provides
 
+from dropbot_controller.consts import REALTIME_MODE_KEY
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
 
 from .interfaces import IStatusModel
@@ -110,7 +111,7 @@ class BaseStatusModel(HasTraits):
     @observe("realtime_mode")
     def _realtime_mode_updated(self, event=None):
         logger.info(f"Realtime mode status has changed to {self.realtime_mode}; updated in the app globals")
-        app_globals["microdrop.realtime_mode"] = self.realtime_mode
+        app_globals[REALTIME_MODE_KEY] = self.realtime_mode
 
     @observe("halted")
     def _on_halted_changed(self, event):
