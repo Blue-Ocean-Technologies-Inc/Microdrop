@@ -340,7 +340,7 @@ def test_decision_wait_uses_predicate_filtering_by_step_uuid(published):
     assert predicate(json.dumps({"step_uuid": "OTHER_STEP", "choice": "x"})) is False
 
 
-def test_decision_wait_uses_24h_timeout(published):
+def test_decision_wait_uses_infinite_timeout(published):
     handler = DropletCheckHandler()
     row = _FakeRow(uuid="abc", check_droplets=True, electrodes=["e1"])
     ctx = _FakeStepCtx(_FakeProtocolCtx({"e1": 1}))
@@ -354,4 +354,4 @@ def test_decision_wait_uses_24h_timeout(published):
     handler.on_post_step(row, ctx)
 
     _, timeout, _ = ctx.wait_for_calls[1]
-    assert timeout == 86_400.0                  # spec § 4 design note
+    assert timeout == float("inf")              # PPT-18 wait-forever convention
