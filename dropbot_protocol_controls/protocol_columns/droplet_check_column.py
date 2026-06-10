@@ -139,12 +139,12 @@ class DropletCheckHandler(BaseColumnHandler):
                 "missing":   missing,
             }),
         )
-        # 24h is "effectively infinite" for a user-facing dialog;
-        # stop_event is the real cancellation path. wait_for requires
-        # a finite float — None would crash deadline math.
+        # Wait forever for the user's decision — float("inf") is the
+        # wait_for convention for that (PPT-18); stop_event is the
+        # cancellation path.
         decision_raw = ctx.wait_for(
             DROPLET_CHECK_DECISION_RESPONSE,
-            timeout=86_400.0,
+            timeout=float("inf"),
             predicate=lambda payload: json.loads(payload).get("step_uuid") == row.uuid,
         )
         decision = json.loads(decision_raw).get("choice")

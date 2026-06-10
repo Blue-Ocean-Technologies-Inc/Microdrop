@@ -27,6 +27,10 @@ def wait_first(events: list, timeout: float) -> Optional[threading.Event]:
     expose a kqueue/epoll-style multi-event wait, and rolling a
     waker-channel implementation is more code than the executor needs.
 
+    ``timeout=float("inf")`` waits forever — the deadline arithmetic
+    handles it naturally (``remaining`` never reaches zero), so one of
+    ``events`` becomes the only exit path.
+
     The poll interval is small enough that responsiveness is dominated
     by the OS scheduler, not by the polling cadence.
     """
@@ -67,6 +71,10 @@ class Mailbox:
         Raises ``TimeoutError`` if the deadline elapses with no match.
         Raises ``AbortError`` if ``stop_event`` is set, either before
         the call or while the call is blocked.
+
+        ``timeout=float("inf")`` is the convention for "wait forever":
+        no TimeoutError is ever raised and cancellation relies solely
+        on ``stop_event``.
         """
         if stop_event.is_set():
             raise AbortError("stop_event set before wait_for")
@@ -277,6 +285,11 @@ class StepContext(HasTraits):
         """Block until a message on ``topic`` satisfying ``predicate``
         arrives, or the timeout/stop fires.
 
+        ``timeout=float("inf")`` is the convention for "wait forever"
+        (e.g. a user-decision dialog): no TimeoutError is ever raised
+        and the protocol's stop_event becomes the only cancellation
+        path.
+
         Returns the payload. Raises:
           * ``KeyError`` if ``topic`` was not declared in any handler's
             ``wait_for_topics`` (the executor would not have opened a
@@ -308,7 +321,7 @@ class StepContext(HasTraits):
             ) from None
 
 
-    def wait(self, events: list[threading.Event], timeout: float = 86400):
+    def wait(self, events: list[threading.Event], timeout: float = float("inf")):
         """Pause the run and block the worker thread until an event fires.
 
         Used by hooks that hand control to the UI mid-step (e.g. the
@@ -317,14 +330,16 @@ class StepContext(HasTraits):
         them trips. On a normal acknowledge it resumes the protocol before
         returning; on Stop it aborts.
 
-        The default ``timeout`` of 86400s (24h) is "effectively infinite"
-        for an operator-facing wait — the real cancellation path is the
-        protocol's ``stop_event`` (pass it in ``events``).
+        The default ``timeout`` of ``float("inf")`` waits forever — right
+        for an operator-facing wait, where the real cancellation path is
+        the protocol's ``stop_event`` (pass it in ``events``). Pass a
+        finite timeout to bound the wait instead.
 
         Args:
             events: events to wake on. Include ``protocol.stop_event`` to
                 make Stop abort the wait.
-            timeout: seconds before raising ``TimeoutError``.
+            timeout: seconds before raising ``TimeoutError``;
+                ``float("inf")`` (the default) never times out.
 
         Returns ``None``. Raises:
           * ``TimeoutError`` after ``timeout`` seconds with nothing set.
@@ -387,7 +402,8 @@ class StepContext(HasTraits):
                 f"Timed out after {timeout}s wait"
             ) from None
 
-    def prompt_gui(self, gui_callable: Callable, *, timeout: float = 86400):
+    def prompt_gui(self, gui_callable: Callable, *,
+                   timeout: float = float("inf")):
         """Run ``gui_callable`` on the GUI thread, paused, and return its result.
 
         The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
@@ -406,7 +422,9 @@ class StepContext(HasTraits):
 
         Args:
             gui_callable: zero-arg callable invoked on the GUI thread.
-            timeout: seconds before the underlying wait raises TimeoutError.
+            timeout: seconds before the underlying wait raises TimeoutError;
+                ``float("inf")`` (the default) never times out — Stop is
+                the cancellation path.
 
         Returns the callable's result, or ``None`` if the wait ended without
         it finishing (external Resume before the user answered). Raises:

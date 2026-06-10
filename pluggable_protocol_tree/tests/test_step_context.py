@@ -359,3 +359,55 @@ def test_executor_build_step_ctx_seeds_two_fresh_events():
     # And they must be distinct Event instances, not aliases.
     assert ctx_a.phase_advance_event is not ctx_b.phase_advance_event
     assert ctx_a.step_phases_done_event is not ctx_b.step_phases_done_event
+
+
+# --- timeout=float("inf") — the "wait forever" convention (PPT-18) ---
+
+
+def test_wait_first_infinite_timeout_returns_event_when_fired():
+    a = threading.Event()
+    threading.Timer(0.05, a.set).start()
+    fired = wait_first([a], timeout=float("inf"))
+    assert fired is a
+
+
+def test_mailbox_drain_one_infinite_timeout_returns_on_deposit():
+    """inf must survive the deadline math (deadline/remaining both inf)
+    and exit only via a deposit — never via TimeoutError."""
+    mb = Mailbox()
+    stop = threading.Event()
+    threading.Timer(0.05, lambda: mb.deposit("hello")).start()
+    item = mb.drain_one(predicate=None, timeout=float("inf"), stop_event=stop)
+    assert item == "hello"
+
+
+def test_mailbox_drain_one_infinite_timeout_aborts_on_stop():
+    """With an infinite timeout, stop_event is the only cancellation
+    path — it must abort promptly."""
+    mb = Mailbox()
+    stop = threading.Event()
+    threading.Timer(0.05, stop.set).start()
+    start = time.monotonic()
+    import pytest
+    with pytest.raises(AbortError):
+        mb.drain_one(predicate=None, timeout=float("inf"), stop_event=stop)
+    assert time.monotonic() - start < 0.5
+
+
+def test_wait_for_infinite_timeout_returns_payload_when_message_arrives():
+    step = _make_step_ctx(["t/decision"])
+    threading.Timer(
+        0.05, lambda: step.deposit("t/decision", {"choice": "continue"})
+    ).start()
+    payload = step.wait_for("t/decision", timeout=float("inf"))
+    assert payload == {"choice": "continue"}
+
+
+def test_wait_for_infinite_timeout_aborts_when_stop_event_fires():
+    step = _make_step_ctx(["t/decision"])
+    threading.Timer(0.05, step.protocol.stop_event.set).start()
+    start = time.monotonic()
+    import pytest
+    with pytest.raises(AbortError):
+        step.wait_for("t/decision", timeout=float("inf"))
+    assert time.monotonic() - start < 0.5
