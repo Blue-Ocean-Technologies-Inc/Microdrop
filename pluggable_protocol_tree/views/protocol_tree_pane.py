@@ -17,10 +17,8 @@ from __future__ import annotations
 import json
 import threading
 import time
-from functools import wraps
 from pathlib import Path
 import html as _html
-import traceback as _tb
 
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
@@ -37,12 +35,14 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE, PROTOCOL_TREE_DISPLAY_STATE,
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -50,7 +50,13 @@ from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
-from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.logging.controller import (
+    ProtocolLoggingController,
+)
+from pluggable_protocol_tree.services.phase_math import (
+    effective_repetitions_for_duration, estimate_repeat_duration_s,
+    iter_phases,
+)
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
@@ -63,9 +69,10 @@ from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )
+from pluggable_protocol_tree.views.quick_action_bar import (
+    QuickActionBar, QuickActionsController,
+)
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
-
-from microdrop_application.dialogs.pyface_wrapper import error
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -74,64 +81,6 @@ logger = get_logger(__name__)
 # realtime mode mirrored by the status panel). The proxy connects lazily;
 # reads are wrapped in try/except where no-Redis must be tolerated.
 app_globals = get_microdrop_redis_globals_manager()
-
-def _dotted_path(row) -> str:
-    """1-indexed dotted-path id (matches the IdColumnView display)."""
-    return ".".join(str(i + 1) for i in row.path)
-
-def attempt_func_execution_with_error_dialog(func):
-    """Wrap an instance method so any uncaught exception is surfaced to
-    the user as a styled error dialog instead of crashing the pane.
-
-    The dialog uses the existing pyface_wrapper.error layout:
-      * ``message``    — one-line summary: humanised operation name +
-                         exception type. Plain text.
-      * ``informative`` — HTML body: bold op name + red exception type +
-                          escaped exception message (matches the
-                          ``_on_error`` styling for the protocol-error
-                          dialog).
-      * ``detail``     — full traceback, collapsible preformatted.
-
-    Also logs the exception with full traceback via the module logger so
-    the error is captured even when the user dismisses the dialog.
-
-    Intended for top-level user-triggered pane actions (file open / save /
-    import / browse-reports / etc.). Do NOT use on executor callbacks —
-    those handle errors via the executor's own signal chain.
-    """
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        try:
-            return func(self, *args, **kwargs)
-        except Exception as exc:
-            op_name = func.__name__.replace("_", " ").strip().title()
-            logger.error(f"{op_name} failed: {exc}", exc_info=True)
-            detail = "".join(
-                _tb.format_exception(type(exc), exc, exc.__traceback__)
-            )
-            cause = _html.escape(str(exc) or "(no message)").replace(
-                "\n", "<br>")
-            informative = (
-                f"<p style='margin:0 0 6px 0;'>"
-                f"<b>{_html.escape(op_name)}</b> failed.</p>"
-                f"<p style='margin:0;color:#c0392b;'>"
-                f"<b>{_html.escape(type(exc).__name__)}:</b> {cause}</p>"
-            )
-            try:
-                error(
-                    self,
-                    message=f"{op_name} failed: {type(exc).__name__}",
-                    title=f"{op_name} Error",
-                    informative=informative,
-                    detail=detail,
-                )
-            except Exception as dialog_err:
-                logger.error(
-                    f"failed to show error dialog for {op_name}: "
-                    f"{dialog_err}", exc_info=True)
-            return None
-    return wrapper
-
 
 class ProtocolTreePane(QWidget):
     """Hosts the pluggable protocol tree with full UX scaffolding.
@@ -219,9 +168,6 @@ class ProtocolTreePane(QWidget):
         # contributions exist (demo / headless test environments) so the
         # pane stays usable with no chrome below the tree. Constructed
         # before _build_layout() so it can be inserted in the layout.
-        from pluggable_protocol_tree.views.quick_action_bar import (
-            QuickActionBar, QuickActionsController,
-        )
         if quick_actions:
             self.quick_action_bar = QuickActionBar(
                 actions=list(quick_actions), parent=self)
@@ -236,9 +182,6 @@ class ProtocolTreePane(QWidget):
 
         self.executor = self._build_executor(executor_factory)
 
-        from pluggable_protocol_tree.services.logging.controller import (
-            ProtocolLoggingController,
-        )
         # The flush_scheduler shows a "Generating Run Report..." progress
         # dialog around the report build (legacy parity, mirrors
         # protocol_grid's with_loading_screen("Generating Run Report...")).
@@ -443,7 +386,7 @@ class ProtocolTreePane(QWidget):
             self._phase_target = None
         logger.info(
             f"Step started: {self._step_index}/{self._step_total} "
-            f"[{_dotted_path(row)}] {row.name!r}"
+            f"[{row.dotted_path()}] {row.name!r}"
         )
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
@@ -1003,14 +946,14 @@ class ProtocolTreePane(QWidget):
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
-            logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: first step [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
-            logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
+            logger.info(f"Nav: last step [{steps[-1].dotted_path()}]")
             self._select_step(steps[-1])
 
     @attempt_func_execution_with_error_dialog
@@ -1020,11 +963,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: previous (no current) --> [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: previous (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
             return
         if cur > 0:
-            logger.info(f"Nav: previous step --> [{_dotted_path(steps[cur - 1])}]")
+            logger.info(f"Nav: previous step --> [{steps[cur - 1].dotted_path()}]")
             self._select_step(steps[cur - 1])
 
     @attempt_func_execution_with_error_dialog
@@ -1034,14 +977,14 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: next (no current) --> [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: next (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
             return
         if cur < len(steps) - 1:
-            logger.info(f"Nav: next step --> [{_dotted_path(steps[cur + 1])}]")
+            logger.info(f"Nav: next step --> [{steps[cur + 1].dotted_path()}]")
             self._select_step(steps[cur + 1])
             return
-        logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")
+        logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
         self._duplicate_step_after(steps[cur])
 
     def _duplicate_step_after(self, row):
@@ -1253,13 +1196,6 @@ class ProtocolTreePane(QWidget):
         )
         self._reconcile_repeat_duration_for_row(path, col_id)
 
-    # Fields whose change should trigger an auto-recalc of Route Reps Dur
-    # while the row is in Route-Reps-controlled mode.
-    _RECALC_TRIGGERS = frozenset({
-        "route_repetitions", "duration_s", "trail_length", "trail_overlay",
-        "routes", "soft_start", "soft_end", "linear_repeats",
-    })
-
     def _reconcile_repeat_duration_for_row(self, path, col_id):
         """Mirror the legacy auto-recalc / effective-reps coupling:
 
@@ -1292,10 +1228,7 @@ class ProtocolTreePane(QWidget):
         soft_start = bool(getattr(row, "soft_start", False))
         soft_end = bool(getattr(row, "soft_end", False))
 
-        from pluggable_protocol_tree.services.phase_math import (
-            effective_repetitions_for_duration, estimate_repeat_duration_s,
-        )
-        if not controls and col_id in self._RECALC_TRIGGERS:
+        if not controls and col_id in REPEAT_DURATION_RECALC_TRIGGERS:
             n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
             estimated = estimate_repeat_duration_s(
                 routes=routes,
@@ -1307,9 +1240,10 @@ class ProtocolTreePane(QWidget):
             estimated = round(estimated, 2)
             if abs(float(getattr(row, "repeat_duration", 0.0)) - estimated) >= 0.01:
                 row.repeat_duration = estimated
-                # Re-entrancy is bounded: see _RECALC_TRIGGERS guard +
-                # mode-check above; "repeat_duration" is not a trigger
-                # in route-reps-controlled mode so the next pass exits cleanly.
+                # Re-entrancy is bounded: see the
+                # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
+                # "repeat_duration" is not a trigger in
+                # route-reps-controlled mode so the next pass exits cleanly.
                 self.manager.cell_changed = {
                     "path": tuple(path), "col_id": "repeat_duration",
                 }

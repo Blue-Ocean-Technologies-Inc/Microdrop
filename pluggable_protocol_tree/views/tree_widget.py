@@ -1,7 +1,6 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
-import logging
 from enum import Enum
 
 from pyface.qt.QtCore import Qt, QPersistentModelIndex, QModelIndex, Signal
@@ -13,8 +12,8 @@ from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
-
-logger = logging.getLogger(__name__)
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 class _ProtocolTreeView(QTreeView):
