@@ -1,10 +1,10 @@
 """Protocol preferences model + Settings-dialog pane.
 
-Relocated verbatim from ``protocol_grid.preferences`` (#419 / PPT-14.1) so
-the legacy plugin can be deleted in PPT-9 without losing the preferences.
+Ported from ``protocol_grid.preferences`` (#419 / PPT-14.1).
 ``preferences_path`` ("microdrop.protocol") and every field name are kept
-identical so persisted user settings continue to load. ``protocol_grid_tab``
-keeps its legacy name/id for the same reason (renaming is deferred to PPT-9).
+identical to the legacy model so persisted user settings carry over. The
+legacy plugin keeps its own untouched copy — both plugins are standalone
+until PPT-9 deletes protocol_grid.
 """
 
 from pathlib import Path
@@ -92,8 +92,8 @@ class ProtocolPreferences(PreferencesHelper):
         return default_dir
 
 
-protocol_grid_tab = PreferencesCategory(
-    id="microdrop.protocol.preferences",
+protocol_tree_tab = PreferencesCategory(
+    id="microdrop.protocol_tree.preferences",
     name="Protocol Settings",
     after="microdrop.device_viewer.preferences",
     before="microdrop.peripheral_settings"
@@ -109,7 +109,7 @@ class ProtocolPreferencesPane(PreferencesPane):
     # The factory to use for creating the preferences model object.
     model_factory = ProtocolPreferences
 
-    category = protocol_grid_tab.id
+    category = protocol_tree_tab.id
 
     _changed_preferences = List()
 

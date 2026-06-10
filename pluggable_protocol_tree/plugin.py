@@ -87,9 +87,10 @@ class PluggableProtocolTreePlugin(Plugin):
     task_id_to_contribute_view = Str(f"{microdrop_application_PKG}.task")
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
-    # Protocol Settings tab — relocated from the legacy protocol_grid plugin
-    # (#419): same pane, same category id, same tab ordering. Imports are
-    # local so plugin import stays light (the pane pulls traitsui).
+    # Protocol Settings tab (#419) — the tree's own category id, ordered
+    # like the legacy grid tab (after Device Viewer, before Peripheral
+    # Settings). Imports are local so plugin import stays light (the pane
+    # pulls traitsui).
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
@@ -101,9 +102,9 @@ class PluggableProtocolTreePlugin(Plugin):
 
     def _preferences_categories_default(self):
         from pluggable_protocol_tree.services.preferences import (
-            protocol_grid_tab,
+            protocol_tree_tab,
         )
-        return [protocol_grid_tab]
+        return [protocol_tree_tab]
 
     def _contributed_task_extensions_default(self):
         from pluggable_protocol_tree.menus import (
