@@ -49,6 +49,7 @@ from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
 from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -157,6 +158,7 @@ class ProtocolTreePane(QWidget):
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         logging_device_context_provider=None,
+        preferences=None,
         quick_actions=None,
         parent=None,
     ):
@@ -172,6 +174,12 @@ class ProtocolTreePane(QWidget):
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
+        # Protocol preferences model, passed down from the dock pane in the
+        # full app (bound to the application's preferences there). Demos and
+        # headless tests get a standalone instance against the global default
+        # preferences node, so every consumer can rely on it being present.
+        self.preferences = (preferences if preferences is not None
+                            else ProtocolPreferences())
 
         self.widget = ProtocolTreeWidget(self.manager, parent=self)
 
