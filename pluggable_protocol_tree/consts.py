@@ -23,6 +23,12 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
+# ProtocolPreferences defaults (relocated from protocol_grid with the
+# preferences model, #419 / PPT-14.1).
+DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
+DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
+DEFAULT_LOGS_SETTLING_SECONDS = 3.0
+
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
 

@@ -12,7 +12,7 @@ from dropbot_controller.preferences import DropbotPreferences
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.preferences_UI_helpers import create_item_label_group, create_grid_group
-from protocol_grid.preferences import protocol_grid_tab
+from pluggable_protocol_tree.services.preferences import protocol_grid_tab
 from .consts import (
     VOLTAGE_FREQUENCY_RANGE_CHANGED,
 )

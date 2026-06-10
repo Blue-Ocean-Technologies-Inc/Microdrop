@@ -1,5 +1,4 @@
 # enthought imports
-from envisage.ids import PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str
 from envisage.api import Plugin, TASK_EXTENSIONS
@@ -22,18 +21,11 @@ class ProtocolGridControllerUIPlugin(Plugin):
 
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
-    preferences_panes = List(contributes_to=PREFERENCES_PANES)
-    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+    # ProtocolPreferencesPane + protocol_grid_tab are contributed by
+    # PluggableProtocolTreePlugin since #419 relocated the preferences there
+    # (contributing them here too would duplicate the Settings tab).
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
-
-    def _preferences_panes_default(self):
-        from .preferences import ProtocolPreferencesPane
-        return [ProtocolPreferencesPane]
-
-    def _preferences_categories_default(self):
-        from .preferences import protocol_grid_tab
-        return [protocol_grid_tab]
 
     def _contributed_task_extensions_default(self):
         from .dock_pane import PGCDockPane

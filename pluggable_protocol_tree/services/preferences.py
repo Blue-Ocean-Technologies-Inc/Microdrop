@@ -1,0 +1,142 @@
+"""Protocol preferences model + Settings-dialog pane.
+
+Relocated verbatim from ``protocol_grid.preferences`` (#419 / PPT-14.1) so
+the legacy plugin can be deleted in PPT-9 without losing the preferences.
+``preferences_path`` ("microdrop.protocol") and every field name are kept
+identical so persisted user settings continue to load. ``protocol_grid_tab``
+keeps its legacy name/id for the same reason (renaming is deferred to PPT-9).
+"""
+
+from pathlib import Path
+
+# Enthought library imports.
+from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
+from apptools.preferences.api import PreferencesHelper
+from traits.api import Bool, Directory, Enum, List
+from traits.etsconfig.api import ETSConfig
+from traitsui.api import View, Item
+
+from microdrop_style.text_styles import preferences_group_style_sheet
+from microdrop_utils.preferences_UI_helpers import create_grid_group
+from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
+
+from pluggable_protocol_tree.consts import (
+    DEFAULT_CAMERA_PREWARM_SECONDS,
+    DEFAULT_LOGS_SETTLING_SECONDS,
+    DEFAULT_REALTIME_SETTLING_SECONDS,
+)
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
+
+class StepTime(str, Enum):
+    END = "Step End"
+    START = "Step Start"
+
+
+class ProtocolPreferences(PreferencesHelper):
+    """The preferences helper, inspired by envisage one for the Attractors application.
+    The underlying preference object is the global default since we do not pass a
+    Preference object. See source code for PreferencesHelper for more details."""
+
+    #### 'PreferencesHelper' interface ########################################
+
+    # The path to the preference node that contains the preferences.
+    preferences_path = "microdrop.protocol"
+
+    #### Preferences ##########################################################
+    camera_prewarm_seconds = RangeWithViewHints(
+        value=DEFAULT_CAMERA_PREWARM_SECONDS,
+        low=0.2,
+        high=15.0,
+        desc="Camera switch on lead time"
+    )
+
+    realtime_mode_settling_time_s = RangeWithViewHints(
+        value=DEFAULT_REALTIME_SETTLING_SECONDS,
+        low=0.5,
+        high=15.0,
+        desc="Time to allow for realtime mode to settle pre protocol start"
+    )
+
+    logs_settling_time_s = RangeWithViewHints(
+        value=DEFAULT_LOGS_SETTLING_SECONDS,
+        low=0.5,
+        high=15.0,
+        desc="Time to allow logs post protocol end"
+    )
+
+    prompt_to_restore_realtime_mode = Bool(True)
+    keep_realtime_mode_after_protocol = Bool(True)
+
+    capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
+
+    PROTOCOL_REPO_DIR = Directory()
+
+    def _PROTOCOL_REPO_DIR_default(self) -> Path:
+        default_dir = Path(ETSConfig.user_data) / "Protocols"
+
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Default repo directory is: {default_dir}")
+
+        return default_dir
+
+
+protocol_grid_tab = PreferencesCategory(
+    id="microdrop.protocol.preferences",
+    name="Protocol Settings",
+    after="microdrop.device_viewer.preferences",
+    before="microdrop.peripheral_settings"
+)
+
+
+class ProtocolPreferencesPane(PreferencesPane):
+    """Settings-dialog pane for ProtocolPreferences, based on enthought
+    envisage's preferences pane for the Attractors application."""
+
+    #### 'PreferencesPane' interface ##########################################
+
+    # The factory to use for creating the preferences model object.
+    model_factory = ProtocolPreferences
+
+    category = protocol_grid_tab.id
+
+    _changed_preferences = List()
+
+    # Create the grid group for the sidebar items.
+    camera_settings_grid = create_grid_group(
+        ["camera_prewarm_seconds", "capture_time"],
+        label_text = ["Camera On Lead Time (s)", "When to Capture Step Picture?"],
+        group_label="Camera Config",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
+    general_protocol_settings_grid = create_grid_group(
+        items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
+        label_text = ["Realtime Mode Pre-Protocol (s)", "Logs Accepted Post-Protocol (s)"],
+        group_label="Protocol Settling Times",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
+    realtime_mode_settings_grid = create_grid_group(
+        items=["prompt_to_restore_realtime_mode", "keep_realtime_mode_after_protocol"],
+        label_text = ["Prompt to keep Realtime Mode?", "Keep Realtime Mode active?"],
+        group_label="Realtime Mode Persistence",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
+    view = View(
+        Item("_"),  # Separator
+        general_protocol_settings_grid,
+        Item("_"),
+        realtime_mode_settings_grid,
+        Item("_"),
+        camera_settings_grid,
+        Item("_"),  # Separator to space this out from further contributions to the pane.
+        resizable=True
+    )
