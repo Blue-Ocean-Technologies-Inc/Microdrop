@@ -1,7 +1,7 @@
 """Tests for the message-prompt column handler's guard logic.
 
 These cover the two paths that don't touch Qt — the empty-message no-op
-and the already-stopped abort — so they run headless without a running
+and the already-stopped skip — so they run headless without a running
 event loop. The dialog path itself (QTimer.singleShot -> information()
 -> event set -> ctx.wait returns) needs a Qt application and is exercised
 by the StepContext.wait tests in test_step_context.py plus manual/demo
@@ -11,13 +11,10 @@ runs of run_widget.py.
 import threading
 import types
 
-import pytest
-
 from pluggable_protocol_tree.builtins.message_prompt_column import (
     MsgPromptColumnHandler, make_message_prompt_column,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.execution.step_context import ProtocolContext
 
 
@@ -53,15 +50,20 @@ def test_empty_message_is_a_noop():
     assert proto.pause_event.is_set() is False
 
 
-def test_aborts_when_already_stopped_before_prompt():
+def test_skips_prompt_when_already_stopped():
+    """A stopped protocol skips the prompt entirely (logged warning) —
+    on_pre_step returns without showing a dialog or parking the worker;
+    the executor's own stop handling aborts the run."""
     handler = MsgPromptColumnHandler()
     proto = _make_proto()
     proto.stop_event.set()
     ctx = _FakeCtx(proto)
     row = types.SimpleNamespace(message_prompt="Load 100uL")
 
-    with pytest.raises(AbortError):
-        handler.on_pre_step(row, ctx)
+    handler.on_pre_step(row, ctx)
+
+    # No dialog, no wait — the guard returned before the prompt path.
+    assert ctx.waited is None
 
 
 def test_factory_wires_model_view_handler():
