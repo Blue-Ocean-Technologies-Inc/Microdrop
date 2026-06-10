@@ -27,6 +27,10 @@ def wait_first(events: list, timeout: float) -> Optional[threading.Event]:
     expose a kqueue/epoll-style multi-event wait, and rolling a
     waker-channel implementation is more code than the executor needs.
 
+    ``timeout=float("inf")`` waits forever — the deadline arithmetic
+    handles it naturally (``remaining`` never reaches zero), so one of
+    ``events`` becomes the only exit path.
+
     The poll interval is small enough that responsiveness is dominated
     by the OS scheduler, not by the polling cadence.
     """
@@ -67,6 +71,10 @@ class Mailbox:
         Raises ``TimeoutError`` if the deadline elapses with no match.
         Raises ``AbortError`` if ``stop_event`` is set, either before
         the call or while the call is blocked.
+
+        ``timeout=float("inf")`` is the convention for "wait forever":
+        no TimeoutError is ever raised and cancellation relies solely
+        on ``stop_event``.
         """
         if stop_event.is_set():
             raise AbortError("stop_event set before wait_for")
@@ -276,6 +284,11 @@ class StepContext(HasTraits):
                  predicate: Optional[Callable] = None):
         """Block until a message on ``topic`` satisfying ``predicate``
         arrives, or the timeout/stop fires.
+
+        ``timeout=float("inf")`` is the convention for "wait forever"
+        (e.g. a user-decision dialog): no TimeoutError is ever raised
+        and the protocol's stop_event becomes the only cancellation
+        path.
 
         Returns the payload. Raises:
           * ``KeyError`` if ``topic`` was not declared in any handler's
