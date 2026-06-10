@@ -895,7 +895,7 @@ def test_flush_with_report_shows_progress_dialog_and_runs_in_worker(qapp, monkey
     pane = ptp.ProtocolTreePane([make_name_column()])
     controller = pane.logging_controller
     # Force the fast (no-wait) path on the settling timer.
-    controller._settling_provider = lambda: 0.0
+    controller.settling_provider = lambda: 0.0
     controller._generate_report = True
     flush_thread = {}
 
@@ -940,7 +940,7 @@ def test_flush_progress_dialog_appears_before_settling_delay(qapp, monkeypatch):
     controller = pane.logging_controller
     # Pretend settling is non-trivial so the timer wouldn't have fired by
     # the time _schedule_flush_with_progress returns.
-    controller._settling_provider = lambda: 5.0
+    controller.settling_provider = lambda: 5.0
     controller._generate_report = True
     controller._flush = lambda: None
 
@@ -964,7 +964,7 @@ def test_flush_without_report_skips_progress_dialog(qapp, monkeypatch):
 
     pane = ptp.ProtocolTreePane([make_name_column()])
     controller = pane.logging_controller
-    controller._settling_provider = lambda: 0.0
+    controller.settling_provider = lambda: 0.0
     controller._generate_report = False
     flushed = []
     controller._flush = lambda: flushed.append(True)

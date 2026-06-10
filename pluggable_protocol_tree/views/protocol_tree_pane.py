@@ -1338,7 +1338,7 @@ class ProtocolTreePane(QWidget):
         just a quick data-file write — no dialog, no worker thread, fast
         path mirrors the original ``QTimer.singleShot`` scheduler.
         """
-        settling_ms = int(controller._settling_provider() * 1000)
+        settling_ms = int(controller.settling_provider() * 1000)
         if not controller._generate_report:
             QTimer.singleShot(settling_ms, controller._flush)
             return

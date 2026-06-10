@@ -214,10 +214,10 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
         captured["kw"] = dict(kw)
         return _FakeFig()
 
-    # Replace the helper at the import site used inside _heatmap.
-    import microdrop_utils.plotly_helpers as ph
+    # Replace the helper at the binding _heatmap uses (hoisted to the
+    # reporting module's top-level import).
     monkeypatch.setattr(
-        ph, "create_plotly_svg_dropbot_device_heatmap", _fake_helper)
+        r, "create_plotly_svg_dropbot_device_heatmap", _fake_helper)
 
     df = pd.DataFrame([
         {"actuated_channels": [1], "instrument_time_us": 0},

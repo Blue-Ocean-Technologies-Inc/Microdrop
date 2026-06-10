@@ -1,44 +1,54 @@
 """GUI-thread controller that turns executor lifecycle signals into a
 run's worth of logged artifacts. Owns a LoggingIngestion per run; the
 logging listener forwards capacitance/actuation/media to it. Settling
-flush is deferred so in-flight capacitance after 'done' is captured."""
+flush is deferred so in-flight capacitance after 'done' is captured.
 
-import datetime as _dt
+Decoupled: communicates only via the listener (dramatiq) and the shared
+Redis app_globals — it never imports another plugin's classes/panes. The
+Qt-aware flush scheduler is injected by the view; the service default is
+Qt-free."""
+
 import json
-import time
-from pathlib import Path
-from typing import Callable, Optional
+import threading
+from datetime import datetime, timedelta
 
-from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
+from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
 
-_TIME_FMT = "%Y-%m-%d %H:%M:%S"
-
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, MEDIA_CAPTURES_KEY
+from device_viewer.models.media_capture_model import MediaCaptureMessageModel
 from logger.logger_service import get_logger
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 from pluggable_protocol_tree.services.logging import listener as _listener
+from pluggable_protocol_tree.services.logging.consts import (
+    DEFAULT_SETTLING_TIME_S, RUN_TIMESTAMP_FMT, TIME_FMT,
+)
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
 from pluggable_protocol_tree.services.logging.reporting import LoggingReport
 
 logger = get_logger(__name__)
 
+# Redis-backed shared state, bound once at import (the canonical idiom across
+# the repo). The proxy connects lazily, so this is import-safe without Redis;
+# the media-bucket reset/drain below wrap their access in try/except so the
+# feature degrades gracefully when Redis is unreachable (tests/headless).
+app_globals = get_microdrop_redis_globals_manager()
+
 
 def _default_settling_provider() -> float:
-    try:
-        from protocol_grid.preferences import ProtocolPreferences
-        return float(ProtocolPreferences().logs_settling_time_s)
-    except Exception as e:                     # pragma: no cover - defensive
-        logger.debug(f"settling pref unavailable, default 3.0s: {e}")
-        return 3.0
+    """Settling delay (seconds). Need to implement with actual preferences provider. For now return default"""
+    return DEFAULT_SETTLING_TIME_S
 
 
-def _qtimer_flush_scheduler(controller) -> None:
-    from pyface.qt.QtCore import QTimer
-    QTimer.singleShot(int(controller._settling_provider() * 1000),
-                      controller._flush)
+def _threading_flush_scheduler(controller) -> None:
+    """Service-layer default flush scheduler: defer the flush by the settling
+    delay on a plain timer — no Qt (the view injects a Qt/progress-aware
+    scheduler in the full app)."""
+    threading.Timer(controller.settling_provider(), controller._flush).start()
 
 
-def _format_elapsed(delta: _dt.timedelta) -> str:
+def _format_elapsed(delta: timedelta) -> str:
     """`H:MM:SS` for the metadata table (sub-second jitter is noise here)."""
     total = int(delta.total_seconds())
     h, rem = divmod(total, 3600)
@@ -46,24 +56,7 @@ def _format_elapsed(delta: _dt.timedelta) -> str:
     return f"{h}:{m:02d}:{s:02d}"
 
 
-_MEDIA_CAPTURES_KEY = "media_captures"
-
-
-def _get_app_globals():
-    """Open a handle to the shared Redis-backed app globals dict, or None
-    when Redis is unreachable (tests, demos, headless). Caller treats None
-    as "no media to drain"."""
-    try:
-        from microdrop_application.helpers import (
-            get_microdrop_redis_globals_manager,
-        )
-        return get_microdrop_redis_globals_manager()
-    except Exception as e:                     # pragma: no cover - defensive
-        logger.debug(f"app_globals unavailable, media drain skipped: {e}")
-        return None
-
-
-def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
+def _capacitance_per_unit_area(liquid, filler):
     """liquid - filler (pF/mm^2), or None when invalid. Mirrors the legacy
     ForceCalculationService.calculate_capacitance_per_unit_area: both
     values must be present, non-negative, and liquid must exceed filler."""
@@ -79,21 +72,28 @@ def _capacitance_per_unit_area(liquid, filler) -> Optional[float]:
     return liquid - filler
 
 
-class ProtocolLoggingController:
-    def __init__(self, *, settling_provider: Optional[Callable[[], float]] = None,
-                 flush_scheduler: Optional[Callable[["ProtocolLoggingController"], None]] = None,
-                 completion_callback: Optional[Callable[[Optional[Path]], None]] = None):
-        self._settling_provider = settling_provider or _default_settling_provider
-        self._flush_scheduler = flush_scheduler or _qtimer_flush_scheduler
-        self._completion_callback = completion_callback
-        self._ingestion: Optional[LoggingIngestion] = None
-        self._device_context = None
-        self._step_idx = 0
-        self._n_steps = 0
-        self._start_time = ""
-        self._start_dt: Optional[_dt.datetime] = None
-        self._generate_report = True
-        self.all_report_paths: list[Path] = []
+class ProtocolLoggingController(HasTraits):
+    # Injected collaborators (constructor kwargs). settling_provider returns
+    # the settling delay (s); flush_scheduler defers _flush; completion_callback
+    # is notified with the report path (or None) after a flush.
+    settling_provider = Callable
+    flush_scheduler = Callable
+    completion_callback = Callable          # Optional — None when not provided.
+    # Per-run state.
+    _ingestion = Instance(LoggingIngestion)
+    _device_context = Any
+    _step_idx = Int(0)
+    _n_steps = Int(0)
+    _start_time = Str("")
+    _start_dt = Instance(datetime)
+    _generate_report = Bool(True)
+    all_report_paths = List()
+
+    def _settling_provider_default(self):
+        return _default_settling_provider
+
+    def _flush_scheduler_default(self):
+        return _threading_flush_scheduler
 
     # --- executor signal wiring ---
     def attach(self, qsignals) -> None:
@@ -123,28 +123,25 @@ class ProtocolLoggingController:
             getattr(device_context, "capacitance_per_unit_area", None))
         self._step_idx = 0
         self._n_steps = int(n_steps)
-        self._start_time = time.strftime("%Y%m%d_%H%M%S")
-        self._start_dt = _dt.datetime.now()
+        self._start_time = datetime.now().strftime(RUN_TIMESTAMP_FMT)
+        self._start_dt = datetime.now()
         self._ingestion.log_metadata({
             "Experiment Directory": str(device_context.experiment_directory),
             "Device SVG": str(getattr(device_context, "device_svg_path", "")),
             "Steps": f"0 / {self._n_steps}",
         })
         # Reset the shared media-captures bucket so only THIS run's camera
-        # output ends up in this run's report — _flush drains it back.
-        # Camera capture path: device_viewer.views.camera_control_view.utils.
-        # _cache_media_capture is a dramatiq actor that appends serialised
-        # MediaCaptureMessageModel JSON to app_globals["media_captures"]
-        # but never publishes the DEVICE_VIEWER_MEDIA_CAPTURED topic; the
-        # listener wired in start_logging therefore can't see captures
-        # live (legacy parity bug). Reading the bucket at flush time
-        # closes the gap.
-        ag = _get_app_globals()
-        if ag is not None:
-            try:
-                ag[_MEDIA_CAPTURES_KEY] = []
-            except Exception as e:                # pragma: no cover - defensive
-                logger.debug(f"could not reset media_captures bucket: {e}")
+        # output ends up in this run's report — _flush drains it back. The
+        # camera capture path (device_viewer's _cache_media_capture actor)
+        # appends serialised MediaCaptureMessageModel JSON to
+        # app_globals[MEDIA_CAPTURES_KEY] but never publishes the
+        # DEVICE_VIEWER_MEDIA_CAPTURED topic, so the listener can't see
+        # captures live (legacy parity bug); reading the bucket at flush
+        # time closes the gap.
+        try:
+            app_globals[MEDIA_CAPTURES_KEY] = []
+        except Exception as e:                # pragma: no cover - defensive
+            logger.debug(f"could not reset media_captures bucket: {e}")
         _listener.set_active_logger(self)
 
     def _on_step_started(self, row) -> None:
@@ -163,16 +160,16 @@ class ProtocolLoggingController:
         # self._step_idx is the count of step_started signals received,
         # which is the true completed-step count and survives abort/error
         # (unlike the pane's _repeats_completed which resets on abort).
-        stop_dt = _dt.datetime.now()
+        stop_dt = datetime.now()
         meta = {"Steps": f"{self._step_idx} / {self._n_steps}"}
         if self._start_dt is not None:
             elapsed = stop_dt - self._start_dt
-            meta["Start Time"] = self._start_dt.strftime(_TIME_FMT)
-            meta["Stop Time"] = stop_dt.strftime(_TIME_FMT)
+            meta["Start Time"] = self._start_dt.strftime(TIME_FMT)
+            meta["Stop Time"] = stop_dt.strftime(TIME_FMT)
             meta["Elapsed Time"] = _format_elapsed(elapsed)
         self._ingestion.log_metadata(meta)
         _listener.clear_active_logger()
-        self._flush_scheduler(self)
+        self.flush_scheduler(self)
 
     def _drain_media_captures(self) -> None:
         """Pull every camera capture cached this run out of the shared
@@ -183,22 +180,10 @@ class ProtocolLoggingController:
         ing = self._ingestion
         if ing is None:
             return
-        ag = _get_app_globals()
-        if ag is None:
-            return
         try:
-            captures = list(ag.get(_MEDIA_CAPTURES_KEY) or [])
+            captures = list(app_globals.get(MEDIA_CAPTURES_KEY) or [])
         except Exception as e:                    # pragma: no cover - defensive
             logger.debug(f"could not read media_captures bucket: {e}")
-            return
-        if not captures:
-            return
-        try:
-            from device_viewer.models.media_capture_model import (
-                MediaCaptureMessageModel,
-            )
-        except Exception as e:                    # pragma: no cover - defensive
-            logger.warning(f"media model unavailable, skipping drain: {e}")
             return
         for payload in captures:
             try:
@@ -235,9 +220,9 @@ class ProtocolLoggingController:
             self._ingestion = None
         # Notify the GUI (report saved / skipped). Outside the try so a
         # callback error is not misreported as a flush failure.
-        if self._completion_callback is not None:
+        if self.completion_callback is not None:
             try:
-                self._completion_callback(report_path)
+                self.completion_callback(report_path)
             except Exception as e:
                 logger.error(f"logging completion callback failed: {e}")
 
@@ -267,9 +252,6 @@ class ProtocolLoggingController:
         if ing is None:
             return
         try:
-            from device_viewer.models.media_capture_model import (
-                MediaCaptureMessageModel,
-            )
             ing.log_media(MediaCaptureMessageModel.model_validate_json(message))
         except Exception as e:                 # pragma: no cover - defensive
             logger.warning(f"media log failed: {e}")

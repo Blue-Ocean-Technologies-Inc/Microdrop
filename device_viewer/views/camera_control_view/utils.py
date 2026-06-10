@@ -3,13 +3,15 @@ from pathlib import Path
 import dramatiq
 from PySide6.QtCore import QUrl
 
-from device_viewer.models.media_capture_model import MediaType, MediaCaptureMessageModel
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from ...models.media_capture_model import MediaType, MediaCaptureMessageModel
+from ...consts import MEDIA_CAPTURES_KEY
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
 
 
 @dramatiq.actor
@@ -20,13 +22,13 @@ def _cache_media_capture(name: MediaType, save_path: str):
 
     message=media_capture_message.model_dump_json()
 
-    if not app_globals.get("media_captures"):
-        app_globals["media_captures"] = [message]
+    if not app_globals.get(MEDIA_CAPTURES_KEY):
+        app_globals[MEDIA_CAPTURES_KEY] = [message]
 
     else:
-        app_globals["media_captures"] += [message]
+        app_globals[MEDIA_CAPTURES_KEY] += [message]
 
-    logger.info(app_globals["media_captures"])
+    logger.info(app_globals[MEDIA_CAPTURES_KEY])
 
 def _show_media_capture_dialog(
     name: MediaType, save_path: str, status_bar_manager=None

@@ -229,7 +229,7 @@ def test_flush_drains_app_globals_media_captures_into_ingestion(tmp_path, monkey
 
     # In-memory stand-in for the Redis-backed app_globals dict.
     fake_globals = {}
-    monkeypatch.setattr(ctrl_mod, "_get_app_globals", lambda: fake_globals)
+    monkeypatch.setattr(ctrl_mod, "app_globals", fake_globals)
 
     img_path = tmp_path / "captures" / "img.png"
     vid_path = tmp_path / "captures" / "vid.mkv"
@@ -263,7 +263,7 @@ def test_start_logging_resets_app_globals_media_bucket(tmp_path, monkeypatch):
     clears the shared bucket before the run begins."""
     from pluggable_protocol_tree.services.logging import controller as ctrl_mod
     fake_globals = {"media_captures": ["leftover-from-previous-run"]}
-    monkeypatch.setattr(ctrl_mod, "_get_app_globals", lambda: fake_globals)
+    monkeypatch.setattr(ctrl_mod, "app_globals", fake_globals)
 
     c = ProtocolLoggingController(settling_provider=lambda: 0.0,
                                   flush_scheduler=_immediate)

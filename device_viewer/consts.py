@@ -76,11 +76,14 @@ ACTOR_TOPIC_DICT = {
 }
 
 # App globals declared to APP_GLOBALS_REDIS_HASH with redis client
-CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"
-FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area"
-LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area"
+CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map" # channel areas
+FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
+LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
+DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
+MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
 
-APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY]
+APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
+                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
 # GUI configuration
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320

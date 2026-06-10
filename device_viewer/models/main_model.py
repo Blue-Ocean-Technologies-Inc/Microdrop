@@ -10,6 +10,7 @@ from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
+from ..consts import DEVICE_SVG_PATH_KEY
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 
@@ -297,7 +298,10 @@ class DeviceViewMainModel(HasTraits):
         logger.debug(f"push_globals: {event.name}: {event.new}")
 
         if self.electrodes.svg_model:
-            app_globals["microdrop.device_svg.name"] = Path(self.electrodes.svg_model.filename).stem
+            filename = self.electrodes.svg_model.filename
+            # Full path published to globals, so consumers (e.g. the protocol logger's device
+            # heatmap) can load the file without reaching into this model.
+            app_globals[DEVICE_SVG_PATH_KEY] = str(filename)
         else:
             logger.warning("Unable to push svg filename to globals yet. Need svg_model to fully initialize.")
 

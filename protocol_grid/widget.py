@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO, YES, success, error, information
@@ -3676,7 +3676,10 @@ class PGCWidget(QWidget):
             return
 
         # use experiment directory as default save location
-        default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / app_globals.get("microdrop.device_svg.name", "Null")
+        _device_path = app_globals.get(DEVICE_SVG_PATH_KEY, "Null")
+        # .stem (not .name): the per-device folder is named after the device,
+        # without the .svg extension, matching the old device_svg.name global.
+        default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / Path(_device_path).stem
         default_dir.mkdir(parents=True, exist_ok=True)
 
         if not file_name:

@@ -5,26 +5,35 @@ context updates arrive on the GUI thread."""
 
 import json
 import threading
-from typing import Dict, List, Optional
+
+from traits.api import Any, Dict, Float, HasTraits, Int, List, Str
 
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
-class LoggingIngestion:
-    def __init__(self):
+class LoggingIngestion(HasTraits):
+    # Accumulated rows + the column order seen so far. Public — read by
+    # LoggingPersistence / LoggingReport and the test contract.
+    entries = List()
+    columns = List()
+    metadata = Dict()
+    media = Dict()
+    # Current step + phase context stamped onto each capacitance row.
+    _step_id = Str("")
+    _step_idx = Int(0)
+    _actuated_channels = List()
+    _actuated_area = Float(0.0)
+    _cpa = Any()                     # Optional[float]; None -> force is None
+    _lock = Any()                    # threading.Lock, set in traits_init
+
+    def _media_default(self):
+        return {"video": [], "image": [], "other": []}
+
+    def traits_init(self):
+        # Guards the cross-thread appends (dramatiq worker vs GUI thread).
         self._lock = threading.Lock()
-        self._entries: List[dict] = []
-        self._columns: List[str] = []
-        self._metadata: Dict = {}
-        self._media: Dict[str, List[str]] = {"video": [], "image": [], "other": []}
-        # current step + phase context stamped onto each capacitance row
-        self._step_id = ""
-        self._step_idx = 0
-        self._actuated_channels: List[int] = []
-        self._actuated_area: float = 0.0
-        self._cpa: Optional[float] = None
 
     # --- context setters ---
     def set_step(self, *, step_id: str, step_idx: int) -> None:
@@ -35,29 +44,29 @@ class LoggingIngestion:
         self._actuated_channels = list(actuated_channels or [])
         self._actuated_area = float(actuated_area or 0.0)
 
-    def update_capacitance_per_unit_area(self, value: Optional[float]) -> None:
+    def update_capacitance_per_unit_area(self, value) -> None:
         self._cpa = None if value is None else float(value)
 
     # --- collection ---
     def log_data(self, entry: dict) -> None:
         with self._lock:
             for k in entry:
-                if k not in self._columns:
-                    self._columns.append(k)
-            self._entries.append(dict(entry))
+                if k not in self.columns:
+                    self.columns.append(k)
+            self.entries.append(dict(entry))
 
     def log_metadata(self, entry: dict) -> None:
         with self._lock:
-            self._metadata.update(entry)
+            self.metadata.update(entry)
 
     def log_media(self, model) -> None:
         type_obj = getattr(model, "type", None)
         bucket = getattr(type_obj, "value", None) or type_obj or "other"
         bucket = str(bucket).lower()
-        if bucket not in self._media:
+        if bucket not in self.media:
             bucket = "other"
         with self._lock:
-            self._media[bucket].append(str(model.path))
+            self.media[bucket].append(str(model.path))
 
     def log_capacitance(self, message) -> bool:
         """Parse a CAPACITANCE_UPDATED payload and append one row stamped
@@ -93,7 +102,7 @@ class LoggingIngestion:
         return True
 
     # --- force ---
-    def _calculate_force(self, voltage: float) -> Optional[float]:
+    def _calculate_force(self, voltage: float):
         if self._cpa is None or voltage <= 0:
             return None
         try:
@@ -101,23 +110,6 @@ class LoggingIngestion:
         except Exception as e:        # pragma: no cover - defensive
             logger.error(f"force calc failed: {e}")
             return None
-
-    # --- accessors ---
-    @property
-    def entries(self) -> List[dict]:
-        return self._entries
-
-    @property
-    def columns(self) -> List[str]:
-        return self._columns
-
-    @property
-    def metadata(self) -> Dict:
-        return self._metadata
-
-    @property
-    def media(self) -> Dict[str, List[str]]:
-        return self._media
 
 
 def _parse_number(raw, unit: str):
