@@ -26,7 +26,6 @@ from protocol_grid.extra_ui_elements import DropletDetectionFailureDialogAction
 from protocol_grid.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from dropbot_controller.consts import (
     DETECT_DROPLETS,
-    REALTIME_MODE_KEY,
     SET_REALTIME_MODE,
 )
 
@@ -767,7 +766,7 @@ class ProtocolRunnerController(QObject):
         """
         # 1. Initialize hardware states
         ## Set realtime mode; keep old state in memory. Reset to this on protocol end.
-        self._restore_realtime_mode = app_globals.get(REALTIME_MODE_KEY, False)
+        self._restore_realtime_mode = app_globals.get("microdrop.realtime_mode", False)
         logger.info(f"Realtime mode state is {self._restore_realtime_mode} before protocol start")
 
         # turn on realtime mode in case it is not already on.
