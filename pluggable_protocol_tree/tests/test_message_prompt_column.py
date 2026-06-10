@@ -30,7 +30,7 @@ class _FakeCtx:
         self.protocol = protocol
         self.waited = None
 
-    def wait(self, events, timeout=86400):
+    def wait(self, events, timeout=float("inf")):
         self.waited = events
 
 

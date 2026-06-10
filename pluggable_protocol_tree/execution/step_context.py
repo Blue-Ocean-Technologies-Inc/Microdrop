@@ -321,7 +321,7 @@ class StepContext(HasTraits):
             ) from None
 
 
-    def wait(self, events: list[threading.Event], timeout: float = 86400):
+    def wait(self, events: list[threading.Event], timeout: float = float("inf")):
         """Pause the run and block the worker thread until an event fires.
 
         Used by hooks that hand control to the UI mid-step (e.g. the
@@ -330,14 +330,16 @@ class StepContext(HasTraits):
         them trips. On a normal acknowledge it resumes the protocol before
         returning; on Stop it aborts.
 
-        The default ``timeout`` of 86400s (24h) is "effectively infinite"
-        for an operator-facing wait — the real cancellation path is the
-        protocol's ``stop_event`` (pass it in ``events``).
+        The default ``timeout`` of ``float("inf")`` waits forever — right
+        for an operator-facing wait, where the real cancellation path is
+        the protocol's ``stop_event`` (pass it in ``events``). Pass a
+        finite timeout to bound the wait instead.
 
         Args:
             events: events to wake on. Include ``protocol.stop_event`` to
                 make Stop abort the wait.
-            timeout: seconds before raising ``TimeoutError``.
+            timeout: seconds before raising ``TimeoutError``;
+                ``float("inf")`` (the default) never times out.
 
         Returns ``None``. Raises:
           * ``TimeoutError`` after ``timeout`` seconds with nothing set.
@@ -400,7 +402,8 @@ class StepContext(HasTraits):
                 f"Timed out after {timeout}s wait"
             ) from None
 
-    def prompt_gui(self, gui_callable: Callable, *, timeout: float = 86400):
+    def prompt_gui(self, gui_callable: Callable, *,
+                   timeout: float = float("inf")):
         """Run ``gui_callable`` on the GUI thread, paused, and return its result.
 
         The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
@@ -419,7 +422,9 @@ class StepContext(HasTraits):
 
         Args:
             gui_callable: zero-arg callable invoked on the GUI thread.
-            timeout: seconds before the underlying wait raises TimeoutError.
+            timeout: seconds before the underlying wait raises TimeoutError;
+                ``float("inf")`` (the default) never times out — Stop is
+                the cancellation path.
 
         Returns the callable's result, or ``None`` if the wait ended without
         it finishing (external Resume before the user answered). Raises:
