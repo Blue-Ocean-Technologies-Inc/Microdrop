@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Directory, Enum, List
+from traits.api import Bool, Dict, Directory, Enum, List, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import View, Item
 
@@ -73,6 +73,14 @@ class ProtocolPreferences(PreferencesHelper):
     capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
 
     PROTOCOL_REPO_DIR = Directory()
+
+    # Programmatic preference (no Settings-dialog item, like
+    # PROTOCOL_REPO_DIR): {col_name: visible} map persisted by the
+    # protocol tree's header right-click menu. Keyed by col_name (stable
+    # display identity), not column index — indices shift when the column
+    # set changes. A column absent from the map falls back to its
+    # hidden_by_default flag.
+    protocol_tree_column_visibility = Dict(Str, Bool)
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"

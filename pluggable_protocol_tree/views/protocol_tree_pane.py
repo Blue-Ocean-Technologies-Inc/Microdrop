@@ -188,7 +188,8 @@ class ProtocolTreePane(QWidget):
         self.preferences = (preferences if preferences is not None
                             else ProtocolPreferences())
 
-        self.widget = ProtocolTreeWidget(self.manager, parent=self)
+        self.widget = ProtocolTreeWidget(
+            self.manager, preferences=self.preferences, parent=self)
 
         self.device_viewer_sync = device_viewer_sync
         if self.device_viewer_sync is not None:

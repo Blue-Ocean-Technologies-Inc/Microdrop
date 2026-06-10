@@ -9,9 +9,7 @@ from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
 from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.services.column_visibility_store import (
-    load_column_visibility, save_column_visibility,
-)
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
@@ -56,9 +54,14 @@ class _ProtocolTreeView(QTreeView):
 
 
 class ProtocolTreeWidget(QWidget):
-    def __init__(self, row_manager: RowManager, parent=None):
+    def __init__(self, row_manager: RowManager, preferences=None, parent=None):
         super().__init__(parent)
         self._manager = row_manager
+        # Column visibility persists in ProtocolPreferences
+        # (protocol_tree_column_visibility), passed down from the pane in
+        # the full app; standalone fallback for demos/headless tests.
+        self._preferences = (preferences if preferences is not None
+                             else ProtocolPreferences())
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -81,7 +84,7 @@ class ProtocolTreeWidget(QWidget):
         # Restore the user's persisted column visibility, overriding the
         # hidden_by_default defaults for any column they have toggled before.
         # Columns absent from the saved map keep the default applied above.
-        saved_visibility = load_column_visibility()
+        saved_visibility = self._load_column_visibility()
         for i, col in enumerate(self._manager.columns):
             visible = saved_visibility.get(col.model.col_name)
             if visible is not None:
@@ -189,7 +192,8 @@ class ProtocolTreeWidget(QWidget):
         column visibility — does not touch the underlying row data.
 
         Each toggle persists the full visibility map so the choice
-        survives an app restart (see column_visibility_store)."""
+        survives an app restart (see ProtocolPreferences.
+        protocol_tree_column_visibility)."""
         menu = QMenu()
         for i, col in enumerate(self._manager.columns):
             action = menu.addAction(col.model.col_name)
@@ -203,13 +207,28 @@ class ProtocolTreeWidget(QWidget):
             action.toggled.connect(_toggle)
         menu.exec(self.tree.header().viewport().mapToGlobal(pos))
 
+    def _load_column_visibility(self) -> dict:
+        """Return the persisted {col_name: visible} map ({} when nothing
+        was saved yet or the preference is unreadable — callers treat an
+        absent entry as "use the column default")."""
+        try:
+            saved = self._preferences.protocol_tree_column_visibility
+            return {str(name): bool(visible)
+                    for name, visible in (saved or {}).items()}
+        except Exception as exc:
+            logger.warning(f"Could not read column visibility preference: {exc}")
+            return {}
+
     def _persist_column_visibility(self):
         """Save the current {col_name: visible} map for every column."""
         visibility = {
             col.model.col_name: not self.tree.isColumnHidden(i)
             for i, col in enumerate(self._manager.columns)
         }
-        save_column_visibility(visibility)
+        try:
+            self._preferences.protocol_tree_column_visibility = visibility
+        except Exception as exc:
+            logger.warning(f"Could not save column visibility preference: {exc}")
 
     def _add_step_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
