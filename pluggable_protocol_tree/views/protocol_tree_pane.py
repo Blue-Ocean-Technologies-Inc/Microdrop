@@ -250,6 +250,7 @@ class ProtocolTreePane(QWidget):
         self.logging_controller = ProtocolLoggingController(
             completion_callback=self._logging_complete.emit,
             flush_scheduler=self._schedule_flush_with_progress,
+            settling_provider=self._logs_settling_time_s,
         )
         self.logging_controller.attach(self.executor.qsignals)
 
@@ -1122,6 +1123,12 @@ class ProtocolTreePane(QWidget):
         self.status_bar.lbl_next_step.setText("Next Step: -")
         if self._status_phase_time_label is not None:
             self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
+
+    def _logs_settling_time_s(self) -> float:
+        """Settling provider injected into the logging controller. Reads
+        the preference at flush-schedule time, so live preference edits
+        take effect on the next run without re-wiring."""
+        return float(self.preferences.logs_settling_time_s)
 
     # --- save / load -----------------------------------------------
     def _default_save_dir(self) -> str:

@@ -10,4 +10,8 @@ owned by the logger live here.
 TIME_FMT = "%Y-%m-%d %H:%M:%S"        # human-readable metadata (Start/Stop Time)
 RUN_TIMESTAMP_FMT = "%Y%m%d_%H%M%S"   # run id + data/report filenames
 
-DEFAULT_SETTLING_TIME_S = 3.0
+# Aliased to the package-level logs-settling default so the service-layer
+# fallback and ProtocolPreferences.logs_settling_time_s can't drift apart.
+from pluggable_protocol_tree.consts import (  # noqa: E402
+    DEFAULT_LOGS_SETTLING_SECONDS as DEFAULT_SETTLING_TIME_S,
+)
