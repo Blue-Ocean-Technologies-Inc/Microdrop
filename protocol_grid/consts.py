@@ -164,7 +164,3 @@ ALLOWED_group_fields = {
 # Button styling constants (now imported from button_styles)
 BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT = get_button_dimensions("default")
 BUTTON_BORDER_RADIUS = 4
-
-DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
-DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
-DEFAULT_LOGS_SETTLING_SECONDS = 3.0
