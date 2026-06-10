@@ -36,9 +36,10 @@ from microdrop_application.dialogs.pyface_wrapper import (
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import PROTOCOL_RUNNING
+from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE, PROTOCOL_TREE_DISPLAY_STATE,
 )
@@ -67,6 +68,11 @@ from microdrop_application.dialogs.pyface_wrapper import error
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+# Shared Redis-backed state (device SVG path published by the device viewer,
+# realtime mode mirrored by the status panel). The proxy connects lazily;
+# reads are wrapped in try/except where no-Redis must be tolerated.
+app_globals = get_microdrop_redis_globals_manager()
 
 def _dotted_path(row) -> str:
     """1-indexed dotted-path id (matches the IdColumnView display)."""
@@ -1032,6 +1038,20 @@ class ProtocolTreePane(QWidget):
             self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
 
     # --- save / load -----------------------------------------------
+    def _default_save_dir(self) -> str:
+        """Default directory for the save dialog: PROTOCOL_REPO_DIR with a
+        per-device subfolder named after the active SVG's stem (legacy
+        protocol_grid parity). Best-effort — falls back to "" (last-used
+        dir) when prefs/app_globals are unavailable (headless, no Redis)."""
+        try:
+            device = Path(app_globals.get(DEVICE_SVG_PATH_KEY, "Null")).stem
+            default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / device
+            default_dir.mkdir(parents=True, exist_ok=True)
+            return str(default_dir)
+        except Exception as e:
+            logger.debug(f"default protocol save dir unavailable: {e}")
+            return ""
+
     @attempt_func_execution_with_error_dialog
     def save_to_dialog(self, parent=None):
         """Open a file dialog and persist the manager's JSON state.
@@ -1040,7 +1060,8 @@ class ProtocolTreePane(QWidget):
         or the write fails.
         """
         path, _ = QFileDialog.getSaveFileName(
-            parent or self, "Save Protocol", "", "Protocol JSON (*.json)",
+            parent or self, "Save Protocol", self._default_save_dir(),
+            "Protocol JSON (*.json)",
         )
         if not path:
             return None
