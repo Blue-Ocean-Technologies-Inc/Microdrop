@@ -18,7 +18,7 @@ from video_protocol_controls.protocol_columns import (
     make_record_column,
     make_capture_column,
 )
-from protocol_grid.preferences import StepTime
+from pluggable_protocol_tree.services.preferences import StepTime
 
 
 def _build_columns():

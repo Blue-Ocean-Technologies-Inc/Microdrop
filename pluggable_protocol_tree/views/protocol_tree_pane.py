@@ -17,10 +17,8 @@ from __future__ import annotations
 import json
 import threading
 import time
-from functools import wraps
 from pathlib import Path
 import html as _html
-import traceback as _tb
 
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
@@ -36,11 +34,15 @@ from microdrop_application.dialogs.pyface_wrapper import (
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import PROTOCOL_RUNNING
+from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
+from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE, PROTOCOL_TREE_DISPLAY_STATE,
+    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -48,7 +50,14 @@ from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
-from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.logging.controller import (
+    ProtocolLoggingController,
+)
+from pluggable_protocol_tree.services.phase_math import (
+    effective_repetitions_for_duration, estimate_repeat_duration_s,
+    iter_phases,
+)
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -60,70 +69,18 @@ from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )
+from pluggable_protocol_tree.views.quick_action_bar import (
+    QuickActionBar, QuickActionsController,
+)
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
-
-from microdrop_application.dialogs.pyface_wrapper import error
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-def _dotted_path(row) -> str:
-    """1-indexed dotted-path id (matches the IdColumnView display)."""
-    return ".".join(str(i + 1) for i in row.path)
-
-def attempt_func_execution_with_error_dialog(func):
-    """Wrap an instance method so any uncaught exception is surfaced to
-    the user as a styled error dialog instead of crashing the pane.
-
-    The dialog uses the existing pyface_wrapper.error layout:
-      * ``message``    — one-line summary: humanised operation name +
-                         exception type. Plain text.
-      * ``informative`` — HTML body: bold op name + red exception type +
-                          escaped exception message (matches the
-                          ``_on_error`` styling for the protocol-error
-                          dialog).
-      * ``detail``     — full traceback, collapsible preformatted.
-
-    Also logs the exception with full traceback via the module logger so
-    the error is captured even when the user dismisses the dialog.
-
-    Intended for top-level user-triggered pane actions (file open / save /
-    import / browse-reports / etc.). Do NOT use on executor callbacks —
-    those handle errors via the executor's own signal chain.
-    """
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        try:
-            return func(self, *args, **kwargs)
-        except Exception as exc:
-            op_name = func.__name__.replace("_", " ").strip().title()
-            logger.error(f"{op_name} failed: {exc}", exc_info=True)
-            detail = "".join(
-                _tb.format_exception(type(exc), exc, exc.__traceback__)
-            )
-            cause = _html.escape(str(exc) or "(no message)").replace(
-                "\n", "<br>")
-            informative = (
-                f"<p style='margin:0 0 6px 0;'>"
-                f"<b>{_html.escape(op_name)}</b> failed.</p>"
-                f"<p style='margin:0;color:#c0392b;'>"
-                f"<b>{_html.escape(type(exc).__name__)}:</b> {cause}</p>"
-            )
-            try:
-                error(
-                    self,
-                    message=f"{op_name} failed: {type(exc).__name__}",
-                    title=f"{op_name} Error",
-                    informative=informative,
-                    detail=detail,
-                )
-            except Exception as dialog_err:
-                logger.error(
-                    f"failed to show error dialog for {op_name}: "
-                    f"{dialog_err}", exc_info=True)
-            return None
-    return wrapper
-
+# Shared Redis-backed state (device SVG path published by the device viewer,
+# realtime mode mirrored by the status panel). The proxy connects lazily;
+# reads are wrapped in try/except where no-Redis must be tolerated.
+app_globals = get_microdrop_redis_globals_manager()
 
 class ProtocolTreePane(QWidget):
     """Hosts the pluggable protocol tree with full UX scaffolding.
@@ -157,6 +114,7 @@ class ProtocolTreePane(QWidget):
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
         logging_device_context_provider=None,
+        preferences=None,
         quick_actions=None,
         parent=None,
     ):
@@ -172,8 +130,15 @@ class ProtocolTreePane(QWidget):
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
         self._logging_device_context_provider = logging_device_context_provider
+        # Protocol preferences model, passed down from the dock pane in the
+        # full app (bound to the application's preferences there). Demos and
+        # headless tests get a standalone instance against the global default
+        # preferences node, so every consumer can rely on it being present.
+        self.preferences = (preferences if preferences is not None
+                            else ProtocolPreferences())
 
-        self.widget = ProtocolTreeWidget(self.manager, parent=self)
+        self.widget = ProtocolTreeWidget(
+            self.manager, preferences=self.preferences, parent=self)
 
         self.device_viewer_sync = device_viewer_sync
         if self.device_viewer_sync is not None:
@@ -203,9 +168,6 @@ class ProtocolTreePane(QWidget):
         # contributions exist (demo / headless test environments) so the
         # pane stays usable with no chrome below the tree. Constructed
         # before _build_layout() so it can be inserted in the layout.
-        from pluggable_protocol_tree.views.quick_action_bar import (
-            QuickActionBar, QuickActionsController,
-        )
         if quick_actions:
             self.quick_action_bar = QuickActionBar(
                 actions=list(quick_actions), parent=self)
@@ -220,9 +182,6 @@ class ProtocolTreePane(QWidget):
 
         self.executor = self._build_executor(executor_factory)
 
-        from pluggable_protocol_tree.services.logging.controller import (
-            ProtocolLoggingController,
-        )
         # The flush_scheduler shows a "Generating Run Report..." progress
         # dialog around the report build (legacy parity, mirrors
         # protocol_grid's with_loading_screen("Generating Run Report...")).
@@ -235,6 +194,7 @@ class ProtocolTreePane(QWidget):
         self.logging_controller = ProtocolLoggingController(
             completion_callback=self._logging_complete.emit,
             flush_scheduler=self._schedule_flush_with_progress,
+            settling_provider=self._logs_settling_time_s,
         )
         self.logging_controller.attach(self.executor.qsignals)
 
@@ -251,6 +211,13 @@ class ProtocolTreePane(QWidget):
         self._current_run_preview_mode = False
         self._pause_phases: list = []
         self._pause_phase_idx: int = 0
+        # Realtime-mode bookkeeping (legacy protocol_grid parity). True =
+        # leave realtime mode on after the run; default True so a terminal
+        # without a pre-run prep (preview, tests) never turns it off.
+        self._restore_realtime_mode = True
+        # Guards the settling window between play-click and executor.start
+        # so a second play-click can't start a duplicate run.
+        self._start_pending = False
 
         self._status_step_label = self.status_bar.lbl_step_progress
         self._status_step_time_label = self.status_bar.lbl_step_time
@@ -419,7 +386,7 @@ class ProtocolTreePane(QWidget):
             self._phase_target = None
         logger.info(
             f"Step started: {self._step_index}/{self._step_total} "
-            f"[{_dotted_path(row)}] {row.name!r}"
+            f"[{row.dotted_path()}] {row.name!r}"
         )
         self._status_step_label.setText(
             f"Step {self._step_index} / {self._step_total}"
@@ -611,6 +578,9 @@ class ProtocolTreePane(QWidget):
         nb.action_preview.setEnabled(False)
 
     def _on_play_clicked(self):
+        if self._start_pending:
+            # Realtime-mode settling window — the run is already on its way.
+            return
         if self._is_protocol_active():
             self._toggle_pause()
             return
@@ -643,10 +613,78 @@ class ProtocolTreePane(QWidget):
                     self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
             except Exception as e:
                 logger.warning(f"could not start protocol logging: {e}")
-        self.executor.start(
-            start_step_path=start_path,
-            preview_mode=preview_mode,
-        )
+        if preview_mode:
+            # Preview runs never touch hardware — no realtime-mode prep.
+            self.executor.start(
+                start_step_path=start_path,
+                preview_mode=preview_mode,
+            )
+            return
+        # Legacy protocol_grid parity: turn realtime mode on (deciding
+        # whether to restore the previous state after the run) and let the
+        # hardware settle for realtime_mode_settling_time_s before the
+        # first step. Repeats (_restart_for_next_rep) skip this — realtime
+        # mode is already on mid-run.
+        settle_ms = self._prepare_realtime_mode()
+        self._start_pending = True
+
+        def _start_after_settling():
+            self._start_pending = False
+            self.executor.start(
+                start_step_path=start_path,
+                preview_mode=preview_mode,
+            )
+
+        QTimer.singleShot(settle_ms, _start_after_settling)
+
+    def _prepare_realtime_mode(self) -> int:
+        """Pre-run realtime-mode handling, ported from legacy
+        protocol_grid's protocol_runner_controller:
+
+        - realtime mode OFF: turn it on for the run and turn it back off
+          at the end (restore = False).
+        - realtime mode ON, prompt enabled: ask whether to keep it after
+          the run; the "don't ask again" checkbox persists the answer to
+          the preferences.
+        - realtime mode ON, prompt disabled: follow the saved
+          keep_realtime_mode_after_protocol preference.
+
+        Returns the settling delay (ms) to wait before the first step.
+        """
+        restore = False
+        try:
+            realtime_on = bool(app_globals.get(REALTIME_MODE_KEY, False))
+        except Exception as e:
+            logger.debug(f"realtime-mode state unavailable: {e}")
+            realtime_on = False
+        if not realtime_on:
+            logger.info("Realtime mode off before protocol start; "
+                        "turning it on...")
+            try:
+                publish_message(topic=SET_REALTIME_MODE, message=str(True))
+            except Exception as e:
+                logger.warning(f"could not enable realtime mode: {e}")
+        elif self.preferences.prompt_to_restore_realtime_mode:
+            user_choice, remember = confirm(
+                None,
+                title="Keep Realtime Mode Enabled Post-Protocol?",
+                message="<b>Realtime mode is currently ON.</b><br><br>"
+                        "Would you like to keep it enabled after the "
+                        "protocol finishes?",
+                cancel=False,
+                checkbox_text="Don't ask again (can be changed in "
+                              "preferences)",
+            )
+            restore = user_choice == YES
+            if remember:
+                self.preferences.prompt_to_restore_realtime_mode = False
+                self.preferences.keep_realtime_mode_after_protocol = restore
+        else:
+            restore = self.preferences.keep_realtime_mode_after_protocol
+            logger.info(f"Realtime mode post-protocol (per preference): "
+                        f"{'keep' if restore else 'disable'}")
+        self._restore_realtime_mode = restore
+        return int(self.preferences.realtime_mode_settling_time_s * 1000)
 
     def _update_repeat_status_label(self):
         self.status_bar.lbl_repeat_protocol_status.setText(
@@ -731,6 +769,13 @@ class ProtocolTreePane(QWidget):
             )
         except Exception as e:
             logger.warning(f"protocol-terminated electrode clear failed: {e}")
+        # Restore realtime mode (legacy parity): turn it back off unless the
+        # user chose / prefers to keep it on. Preview runs never touched it.
+        if not self._current_run_preview_mode and not self._restore_realtime_mode:
+            try:
+                publish_message(topic=SET_REALTIME_MODE, message=str(False))
+            except Exception as e:
+                logger.warning(f"realtime-mode restore failed: {e}")
         # Push free-mode payload to DV: clear_highlights cleared the
         # tree selection but did so with _suppress_publish active, so
         # the controller's currentChanged slot was gated. Explicit
@@ -901,14 +946,14 @@ class ProtocolTreePane(QWidget):
     def navigate_to_first_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
-            logger.info(f"Nav: first step [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: first step [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
         steps = list(self.manager.iter_execution_steps())
         if steps:
-            logger.info(f"Nav: last step [{_dotted_path(steps[-1])}]")
+            logger.info(f"Nav: last step [{steps[-1].dotted_path()}]")
             self._select_step(steps[-1])
 
     @attempt_func_execution_with_error_dialog
@@ -918,11 +963,11 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: previous (no current) --> [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: previous (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
             return
         if cur > 0:
-            logger.info(f"Nav: previous step --> [{_dotted_path(steps[cur - 1])}]")
+            logger.info(f"Nav: previous step --> [{steps[cur - 1].dotted_path()}]")
             self._select_step(steps[cur - 1])
 
     @attempt_func_execution_with_error_dialog
@@ -932,14 +977,14 @@ class ProtocolTreePane(QWidget):
             return
         cur = self._current_step_in(steps)
         if cur is None:
-            logger.info(f"Nav: next (no current) --> [{_dotted_path(steps[0])}]")
+            logger.info(f"Nav: next (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
             return
         if cur < len(steps) - 1:
-            logger.info(f"Nav: next step --> [{_dotted_path(steps[cur + 1])}]")
+            logger.info(f"Nav: next step --> [{steps[cur + 1].dotted_path()}]")
             self._select_step(steps[cur + 1])
             return
-        logger.info(f"Nav: next at end — duplicating [{_dotted_path(steps[cur])}]")
+        logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
         self._duplicate_step_after(steps[cur])
 
     def _duplicate_step_after(self, row):
@@ -1023,7 +1068,27 @@ class ProtocolTreePane(QWidget):
         if self._status_phase_time_label is not None:
             self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
 
+    def _logs_settling_time_s(self) -> float:
+        """Settling provider injected into the logging controller. Reads
+        the preference at flush-schedule time, so live preference edits
+        take effect on the next run without re-wiring."""
+        return float(self.preferences.logs_settling_time_s)
+
     # --- save / load -----------------------------------------------
+    def _default_save_dir(self) -> str:
+        """Default directory for the save dialog: PROTOCOL_REPO_DIR with a
+        per-device subfolder named after the active SVG's stem (legacy
+        protocol_grid parity). Best-effort — falls back to "" (last-used
+        dir) when prefs/app_globals are unavailable (headless, no Redis)."""
+        try:
+            device = Path(app_globals.get(DEVICE_SVG_PATH_KEY, "Null")).stem
+            default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / device
+            default_dir.mkdir(parents=True, exist_ok=True)
+            return str(default_dir)
+        except Exception as e:
+            logger.debug(f"default protocol save dir unavailable: {e}")
+            return ""
+
     @attempt_func_execution_with_error_dialog
     def save_to_dialog(self, parent=None):
         """Open a file dialog and persist the manager's JSON state.
@@ -1032,7 +1097,8 @@ class ProtocolTreePane(QWidget):
         or the write fails.
         """
         path, _ = QFileDialog.getSaveFileName(
-            parent or self, "Save Protocol", "", "Protocol JSON (*.json)",
+            parent or self, "Save Protocol", self._default_save_dir(),
+            "Protocol JSON (*.json)",
         )
         if not path:
             return None
@@ -1130,13 +1196,6 @@ class ProtocolTreePane(QWidget):
         )
         self._reconcile_repeat_duration_for_row(path, col_id)
 
-    # Fields whose change should trigger an auto-recalc of Route Reps Dur
-    # while the row is in Route-Reps-controlled mode.
-    _RECALC_TRIGGERS = frozenset({
-        "route_repetitions", "duration_s", "trail_length", "trail_overlay",
-        "routes", "soft_start", "soft_end", "linear_repeats",
-    })
-
     def _reconcile_repeat_duration_for_row(self, path, col_id):
         """Mirror the legacy auto-recalc / effective-reps coupling:
 
@@ -1169,10 +1228,7 @@ class ProtocolTreePane(QWidget):
         soft_start = bool(getattr(row, "soft_start", False))
         soft_end = bool(getattr(row, "soft_end", False))
 
-        from pluggable_protocol_tree.services.phase_math import (
-            effective_repetitions_for_duration, estimate_repeat_duration_s,
-        )
-        if not controls and col_id in self._RECALC_TRIGGERS:
+        if not controls and col_id in REPEAT_DURATION_RECALC_TRIGGERS:
             n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
             estimated = estimate_repeat_duration_s(
                 routes=routes,
@@ -1184,9 +1240,10 @@ class ProtocolTreePane(QWidget):
             estimated = round(estimated, 2)
             if abs(float(getattr(row, "repeat_duration", 0.0)) - estimated) >= 0.01:
                 row.repeat_duration = estimated
-                # Re-entrancy is bounded: see _RECALC_TRIGGERS guard +
-                # mode-check above; "repeat_duration" is not a trigger
-                # in route-reps-controlled mode so the next pass exits cleanly.
+                # Re-entrancy is bounded: see the
+                # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
+                # "repeat_duration" is not a trigger in
+                # route-reps-controlled mode so the next pass exits cleanly.
                 self.manager.cell_changed = {
                     "path": tuple(path), "col_id": "repeat_duration",
                 }

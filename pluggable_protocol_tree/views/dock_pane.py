@@ -15,6 +15,7 @@ from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
     columns = List(Instance(IColumn))
     quick_actions = List(desc="Quick actions to mount under the tree.")
 
+    #: Protocol preferences model (the "microdrop.protocol" node). Bound to
+    #: the live application's preferences in create_contents, then passed
+    #: down to ProtocolTreePane, which hands it to whatever needs it (save
+    #: dialogs, realtime-mode settling/restore, logging settling, column
+    #: visibility).
+    preferences = Instance(ProtocolPreferences)
+
     def create_contents(self, parent):
         # Local imports to avoid pulling Qt at plugin-import time.
         from pluggable_protocol_tree.models.row_manager import RowManager
@@ -42,12 +50,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         )
 
         app = self.task.window.application
+        if self.preferences is None:
+            self.preferences = ProtocolPreferences(preferences=app.preferences)
         experiment_manager = ExperimentManager(app.current_experiment_directory)
         sticky_manager = StickyWindowManager()
 
         manager = RowManager(columns=list(self.columns))
         sync = DeviceViewerSyncController(row_manager=manager)
-
         def _logging_device_context():
             # Decoupled: read channel areas + device SVG path from the shared
             # app_globals (published by the device viewer) rather than reaching
@@ -76,6 +85,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             sticky_manager=sticky_manager,
             device_viewer_sync=sync,
             logging_device_context_provider=_logging_device_context,
+            preferences=self.preferences,
             quick_actions=list(self.quick_actions),
             parent=parent,
         )

@@ -6,6 +6,7 @@ by declaring `List(contributes_to=PROTOCOL_COLUMNS)` in their own
 plugin class."""
 
 from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
+from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from envisage.ui.tasks.task_extension import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import Instance, List, Str, Either
@@ -85,6 +86,25 @@ class PluggableProtocolTreePlugin(Plugin):
 
     task_id_to_contribute_view = Str(f"{microdrop_application_PKG}.task")
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+
+    # Protocol Settings tab (#419) — the tree's own category id, ordered
+    # like the legacy grid tab (after Device Viewer, before Peripheral
+    # Settings). Imports are local so plugin import stays light (the pane
+    # pulls traitsui).
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    def _preferences_panes_default(self):
+        from pluggable_protocol_tree.services.preferences import (
+            ProtocolPreferencesPane,
+        )
+        return [ProtocolPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from pluggable_protocol_tree.services.preferences import (
+            protocol_tree_tab,
+        )
+        return [protocol_tree_tab]
 
     def _contributed_task_extensions_default(self):
         from pluggable_protocol_tree.menus import (

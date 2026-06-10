@@ -10,7 +10,7 @@ from video_protocol_controls.protocol_columns.capture_column import (
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
-from protocol_grid.preferences import StepTime
+from pluggable_protocol_tree.services.preferences import StepTime
 
 
 # ---------------------------------------------------------------------------

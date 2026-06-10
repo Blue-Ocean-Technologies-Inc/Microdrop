@@ -29,12 +29,9 @@ from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
-# TODO(PPT-9): ProtocolPreferences / StepTime currently live in protocol_grid;
-# when PPT-9 deletes that plugin they will move to a shared module
-# (likely microdrop_utils or a new protocol_prefs package). Update this
-# import then — this is the only backwards reach into protocol_grid from
-# video_protocol_controls.
-from protocol_grid.preferences import ProtocolPreferences, StepTime
+from pluggable_protocol_tree.services.preferences import (
+    ProtocolPreferences, StepTime,
+)
 
 
 class CaptureColumnModel(BaseColumnModel):

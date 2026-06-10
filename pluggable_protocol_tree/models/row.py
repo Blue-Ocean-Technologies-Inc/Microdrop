@@ -45,6 +45,11 @@ class BaseRow(HasTraits):
             current = current.parent
         return tuple(indices)
 
+    def dotted_path(self) -> str:
+        """1-indexed dotted display id ('1.2.3') for this row — matches
+        the Id column's rendering. Empty string for detached rows."""
+        return ".".join(str(i + 1) for i in self.path) if self.path else ""
+
 
 @provides(IGroupRow)
 class GroupRow(BaseRow):

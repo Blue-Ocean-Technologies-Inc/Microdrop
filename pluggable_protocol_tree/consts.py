@@ -23,6 +23,20 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
+# ProtocolPreferences defaults (ported from protocol_grid with the
+# preferences model, #419 / PPT-14.1).
+DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
+DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
+DEFAULT_LOGS_SETTLING_SECONDS = 3.0
+
+# Fields whose change triggers an auto-recalc of Route Reps Dur while the
+# row is in Route-Reps-controlled mode (see ProtocolTreePane.
+# _reconcile_repeat_duration_for_row).
+REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
+    "route_repetitions", "duration_s", "trail_length", "trail_overlay",
+    "routes", "soft_start", "soft_end", "linear_repeats",
+})
+
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
 

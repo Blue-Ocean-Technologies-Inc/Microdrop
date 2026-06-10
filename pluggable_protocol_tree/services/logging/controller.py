@@ -37,7 +37,9 @@ app_globals = get_microdrop_redis_globals_manager()
 
 
 def _default_settling_provider() -> float:
-    """Settling delay (seconds). Need to implement with actual preferences provider. For now return default"""
+    """Service-layer default settling delay (seconds). The view injects a
+    provider reading ProtocolPreferences.logs_settling_time_s in the full
+    app; this prefs-free default keeps the service layer decoupled."""
     return DEFAULT_SETTLING_TIME_S
 
 

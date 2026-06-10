@@ -43,11 +43,6 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 logger = logging.getLogger(__name__)
 
 
-def _dotted_path(path: tuple) -> str:
-    """1-indexed dotted display ('1.2.3') for a 0-indexed path tuple."""
-    return ".".join(str(i + 1) for i in path) if path else ""
-
-
 class ProtocolExecutor(HasTraits):
     """One executor per RowManager. Reused across runs."""
 
@@ -233,7 +228,7 @@ class ProtocolExecutor(HasTraits):
                 logger.info(
                     "Step %d started: %r (path %s, duration_s=%s)%s",
                     step_index, row.name,
-                    _dotted_path(row.path),
+                    row.dotted_path(),
                     getattr(row, "duration_s", None),
                     rep_str,
                 )

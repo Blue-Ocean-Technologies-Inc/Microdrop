@@ -164,6 +164,9 @@ def test_pane_step_started_updates_status_label(qapp):
         name = "Step A"
         duration_s = 0.0
 
+        def dotted_path(self):
+            return ""   # mirrors BaseRow.dotted_path for an empty path
+
     pane = ProtocolTreePane([make_type_column()])
     pane._step_total = 3
     pane.executor.qsignals.step_started.emit(FakeRow())
@@ -1570,10 +1573,11 @@ def test_import_into_selected_group_robust_to_schema_field_order(qapp,
 def test_attempt_func_execution_returns_wrapped_value_on_success(qapp):
     """Successful call passes through the wrapped function's return value
     with no dialog."""
+    import microdrop_utils.decorators as _dec
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
 
     calls = []
-    ptp_error = ptp.error
+    dec_error = _dec.error
 
     class _Fake:
         @ptp.attempt_func_execution_with_error_dialog
@@ -1584,10 +1588,10 @@ def test_attempt_func_execution_returns_wrapped_value_on_success(qapp):
     # Sanity: the dialog is NOT invoked on success. Replace it with a
     # tripwire that fails the test if called.
     try:
-        ptp.error = lambda *a, **k: calls.append("BUG: dialog called on success")
+        _dec.error = lambda *a, **k: calls.append("BUG: dialog called on success")
         assert f.do(2, 3) == 5
     finally:
-        ptp.error = ptp_error
+        _dec.error = dec_error
     assert calls == []
 
 
@@ -1597,6 +1601,7 @@ def test_attempt_func_execution_shows_html_dialog_and_logs_on_exception(
     logger captures the stack, and the wrapper returns None instead of
     propagating."""
     import logging
+    import microdrop_utils.decorators as _dec
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
 
     captured = {}
@@ -1609,8 +1614,8 @@ def test_attempt_func_execution_shows_html_dialog_and_logs_on_exception(
         captured["informative"] = informative
         captured["detail"] = detail
 
-    monkeypatch.setattr(ptp, "error", _fake_error)
-    caplog.set_level(logging.ERROR, logger="pluggable_protocol_tree.views.protocol_tree_pane")
+    monkeypatch.setattr(_dec, "error", _fake_error)
+    caplog.set_level(logging.ERROR, logger="microdrop_utils.decorators")
 
     class _Fake:
         @ptp.attempt_func_execution_with_error_dialog
@@ -1643,13 +1648,14 @@ def test_attempt_func_execution_handles_dialog_failure_gracefully(
     but the wrapper does NOT propagate — original exception was already
     logged so the caller can carry on."""
     import logging
+    import microdrop_utils.decorators as _dec
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
 
     def _broken_error(*a, **k):
         raise RuntimeError("no event loop")
 
-    monkeypatch.setattr(ptp, "error", _broken_error)
-    caplog.set_level(logging.ERROR, logger="pluggable_protocol_tree.views.protocol_tree_pane")
+    monkeypatch.setattr(_dec, "error", _broken_error)
+    caplog.set_level(logging.ERROR, logger="microdrop_utils.decorators")
 
     class _Fake:
         @ptp.attempt_func_execution_with_error_dialog
@@ -1668,10 +1674,11 @@ def test_attempt_func_execution_html_escapes_exception_message(qapp,
                                                                 monkeypatch):
     """Exception message containing HTML special chars must be escaped
     so the dialog renders it as text, not markup."""
+    import microdrop_utils.decorators as _dec
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
 
     captured = {}
-    monkeypatch.setattr(ptp, "error",
+    monkeypatch.setattr(_dec, "error",
                         lambda parent, **k: captured.update(k))
 
     class _Fake:
