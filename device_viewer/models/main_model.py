@@ -10,7 +10,7 @@ from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
 from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
-from ..consts import DEVICE_SVG_NAME_KEY, DEVICE_SVG_PATH_KEY
+from ..consts import DEVICE_SVG_PATH_KEY
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 
@@ -299,8 +299,7 @@ class DeviceViewMainModel(HasTraits):
 
         if self.electrodes.svg_model:
             filename = self.electrodes.svg_model.filename
-            app_globals[DEVICE_SVG_NAME_KEY] = Path(filename).stem
-            # Full path too, so consumers (e.g. the protocol logger's device
+            # Full path published to globals, so consumers (e.g. the protocol logger's device
             # heatmap) can load the file without reaching into this model.
             app_globals[DEVICE_SVG_PATH_KEY] = str(filename)
         else:

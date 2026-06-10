@@ -14,15 +14,14 @@ from datetime import datetime, timedelta
 
 from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
 
-from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
+from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, MEDIA_CAPTURES_KEY
 from device_viewer.models.media_capture_model import MediaCaptureMessageModel
 from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 from pluggable_protocol_tree.services.logging import listener as _listener
 from pluggable_protocol_tree.services.logging.consts import (
-    DEFAULT_SETTLING_TIME_S, LOGS_SETTLING_TIME_S_KEY, MEDIA_CAPTURES_KEY,
-    RUN_TIMESTAMP_FMT, TIME_FMT,
+    DEFAULT_SETTLING_TIME_S, RUN_TIMESTAMP_FMT, TIME_FMT,
 )
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
@@ -38,17 +37,8 @@ app_globals = get_microdrop_redis_globals_manager()
 
 
 def _default_settling_provider() -> float:
-    """Settling delay (seconds) read from app_globals, falling back to the
-    default so the logger stays decoupled from protocol_grid's preferences.
-    (protocol_grid can mirror its ``logs_settling_time_s`` preference to
-    ``LOGS_SETTLING_TIME_S_KEY`` to make a customised value take effect.)"""
-    try:
-        return float(app_globals.get(LOGS_SETTLING_TIME_S_KEY,
-                                     DEFAULT_SETTLING_TIME_S))
-    except Exception as e:                     # pragma: no cover - defensive
-        logger.debug(f"settling pref unavailable, "
-                     f"default {DEFAULT_SETTLING_TIME_S}s: {e}")
-        return DEFAULT_SETTLING_TIME_S
+    """Settling delay (seconds). Need to implement with actual preferences provider. For now return default"""
+    return DEFAULT_SETTLING_TIME_S
 
 
 def _threading_flush_scheduler(controller) -> None:
