@@ -58,6 +58,7 @@ def make_route_repetitions_column():
             col_id="route_repetitions", col_name="Route Reps",
             default_value=1,
         ),
-        view=IntSpinBoxColumnView(low=1, high=1000),
+        # Bounds mirror the DV sidebar's RouteLayerManager.repetitions.
+        view=IntSpinBoxColumnView(low=1, high=10000),
         handler=RouteRepsHandler(),
     )

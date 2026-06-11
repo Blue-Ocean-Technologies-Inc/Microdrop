@@ -1229,7 +1229,26 @@ class ProtocolTreePane(QWidget):
         self.protocol_state_tracker.on_cell_changed(
             path, col_id, self.manager,
         )
+        self._clamp_trail_overlay_for_row(path, col_id)
         self._reconcile_repeat_duration_for_row(path, col_id)
+
+    def _clamp_trail_overlay_for_row(self, path, col_id):
+        """Mirror the DV sidebar's dynamic bound (trail_overlay can never
+        reach trail_length): shrinking Trail Len drags an out-of-range
+        Trail Overlay down with it. Runs before the repeat-duration
+        reconciliation so the recalc sees the clamped overlay."""
+        if col_id != "trail_length":
+            return
+        try:
+            row = self.manager.get_row(tuple(path))
+        except (IndexError, AttributeError):
+            return
+        max_overlay = max(0, int(getattr(row, "trail_length", 1) or 1) - 1)
+        if int(getattr(row, "trail_overlay", 0) or 0) > max_overlay:
+            row.trail_overlay = max_overlay
+            self.manager.cell_changed = {
+                "path": tuple(path), "col_id": "trail_overlay",
+            }
 
     def _reconcile_repeat_duration_for_row(self, path, col_id):
         """Mirror the legacy auto-recalc / effective-reps coupling:

@@ -92,7 +92,8 @@ def make_repeat_duration_column():
             col_id="repeat_duration", col_name="Route Reps Dur",
             default_value=0.0,
         ),
-        view=DoubleSpinBoxColumnView(low=0.0, high=float("inf"),
+        # Bounds mirror the DV sidebar's RouteLayerManager.repeat_duration.
+        view=DoubleSpinBoxColumnView(low=0.0, high=10000.0,
                                      decimals=2, single_step=10),
         handler=RepeatDurationHandler(),
     )

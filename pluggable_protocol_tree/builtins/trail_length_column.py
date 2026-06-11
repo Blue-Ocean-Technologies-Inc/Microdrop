@@ -21,5 +21,6 @@ def make_trail_length_column():
         model=TrailLengthColumnModel(
             col_id="trail_length", col_name="Trail Len", default_value=1,
         ),
-        view=HiddenIntSpinBoxColumnView(low=1, high=64),
+        # Bounds mirror the DV sidebar's RouteLayerManager.trail_length.
+        view=HiddenIntSpinBoxColumnView(low=1, high=10000),
     )

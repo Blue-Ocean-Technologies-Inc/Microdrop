@@ -14,7 +14,9 @@ class ProtocolItemDelegate(QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         col = self._manager.columns[index.column()]
-        return col.view.create_editor(parent, None)
+        # Context is the row being edited — views with row-dependent
+        # bounds (e.g. trail overlay <= trail length - 1) read it.
+        return col.view.create_editor(parent, index.data(Qt.UserRole))
 
     def setEditorData(self, editor, index):
         if editor is None:

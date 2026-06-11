@@ -69,8 +69,9 @@ def make_duration_column():
         model=DurationColumnModel(
             col_id="duration_s", col_name="Duration (s)", default_value=1.0,
         ),
+        # Bounds mirror the DV sidebar's RouteLayerManager.duration.
         view=DoubleSpinBoxColumnView(
-            low=0.0, high=3600.0, decimals=2, single_step=0.1,
+            low=0.0, high=10000.0, decimals=2, single_step=0.1,
         ),
         handler=DurationColumnHandler(),
     )
