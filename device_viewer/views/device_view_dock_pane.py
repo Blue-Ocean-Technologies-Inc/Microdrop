@@ -309,10 +309,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             for eid in msg.electrodes
             if id_to_channel.get(eid) is not None
         }
-        # execution_params intentionally omitted — tree steps carry no
-        # sidebar params, so apply_message_model will fire
-        # clear_committed_baseline() in its else branch. Matches legacy
-        # behavior when a step (not free mode) is the message source.
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
             routes=[(route, self.model.routes.get_available_color())
@@ -324,6 +320,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 "free_mode": msg.free_mode,
             },
             editable=msg.editable,
+            execution_params=msg.execution_params,
         )
         self.device_view.display_state_signal.emit(rich.serialize())
 
@@ -423,6 +420,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             # The grid's selection remains visually on the new row, but the
             # sidebar stays on the old values — see spec open item re:
             # forcing the grid to revert selection.
+        elif message_model.execution_params and not self.model.protocol_running:
+            # Same-step refresh: the protocol widget echoing back a commit
+            # after its own reconciliation (e.g. the tree recalculating
+            # Route Reps Dur). Reload + rebaseline silently — no
+            # uncommitted-changes prompt, the step did not change.
+            self.model.routes.apply_execution_params(
+                message_model.execution_params
+            )
 
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
