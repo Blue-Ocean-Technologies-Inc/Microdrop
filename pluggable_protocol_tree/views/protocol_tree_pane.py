@@ -30,9 +30,11 @@ from pyface.qt.QtWidgets import (
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, YES, confirm, error as error_dialog, information, success,
+    NO, YES, confirm, error as error_dialog, escape_html_multiline,
+    format_traceback_detail, information, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 
 from microdrop_application.dialogs.decorators import (
     attempt_func_execution_with_error_dialog,
@@ -484,12 +486,7 @@ class ProtocolTreePane(QWidget):
         # stays the plain summary as a fallback.
         exc = getattr(self.executor, "_error", None)
         informative = self._format_error_html(exc, str(msg))
-        detail = None
-        if exc is not None:
-            import traceback
-            detail = "".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
-            )
+        detail = format_traceback_detail(exc) if exc is not None else None
         error_dialog(parent=None, title="Protocol error",
                      message=str(msg), informative=informative, detail=detail)
         # Now prompt for a run summary (error is treated like a force-stop).
@@ -500,7 +497,7 @@ class ProtocolTreePane(QWidget):
         """Build the HTML body shown in the protocol-error dialog. Uses the
         structured StepExecutionError fields (step / column / hook / cause)
         when available, else falls back to the plain message text."""
-        red = "#c0392b"
+        red = DIALOG_ERROR_TEXT_COLOR
         if isinstance(exc, StepExecutionError):
             row = exc.row
             if row is not None:
@@ -518,7 +515,7 @@ class ProtocolTreePane(QWidget):
                 or getattr(getattr(exc.col, "model", None), "col_id", "")
                 or "column"
             )
-            cause = _html.escape(str(exc.cause)).replace("\n", "<br>")
+            cause = escape_html_multiline(str(exc.cause))
             return (
                 f"<p style='margin:0 0 6px 0;'><b>{where}</b></p>"
                 f"<p style='margin:0 0 10px 0;color:#555;'>The "
@@ -527,7 +524,7 @@ class ProtocolTreePane(QWidget):
                 f"<p style='margin:0;color:{red};'>{cause}</p>"
             )
         # Generic fallback (non-annotated errors, or signal emitted directly).
-        safe = _html.escape(fallback_msg).replace("\n", "<br>")
+        safe = escape_html_multiline(fallback_msg)
         return f"<p style='margin:0;color:{red};'>{safe}</p>"
 
     @attempt_func_execution_with_error_dialog

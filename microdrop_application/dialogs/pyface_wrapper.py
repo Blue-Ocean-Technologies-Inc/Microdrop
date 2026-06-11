@@ -17,6 +17,8 @@ Usage:
         do_something()
 """
 
+import html
+import traceback
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
@@ -43,6 +45,19 @@ from .message_dialog_types import (
     SuccessDialog,
     WarningAlertDialog, DisclaimerDialog,
 )
+
+
+def format_traceback_detail(exc: BaseException) -> str:
+    """Full formatted traceback for a dialog's collapsible ``detail`` slot."""
+    return "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__)
+    )
+
+
+def escape_html_multiline(text: str) -> str:
+    """HTML-escape ``text`` for a dialog's HTML body, preserving line
+    breaks as ``<br>``."""
+    return html.escape(text).replace("\n", "<br>")
 
 
 def _prepare_dialog(
