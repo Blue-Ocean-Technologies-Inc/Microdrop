@@ -159,3 +159,53 @@ def test_malformed_data_no_exception():
            "rows": [[0, "u", "step", "A"], [0, "u2", "step", "B", "notalist"]]}
     report = validate_protocol(bad, fake_columns("electrodes"), {"E1": 1})
     assert isinstance(report, ValidationReport)
+
+
+import logging
+
+from pluggable_protocol_tree.services import protocol_validator as pv
+from pluggable_protocol_tree.services.protocol_validator import (
+    log_report, confirm_report, PROCEED, CANCEL,
+)
+
+
+def _report_with_error_and_warning():
+    return ValidationReport(findings=[
+        Finding(SEVERITY_ERROR, "orphan_column", "1 orphan column", ["magnet"]),
+        Finding(SEVERITY_WARNING, "electrode_id", "1 unknown electrode", ["E99  (steps 1)"]),
+    ])
+
+
+def test_log_report_levels(caplog):
+    with caplog.at_level(logging.WARNING):
+        log_report(_report_with_error_and_warning())
+    levels = {r.levelno for r in caplog.records}
+    assert logging.ERROR in levels      # orphan finding logged at ERROR
+    assert logging.WARNING in levels    # electrode finding logged at WARNING
+    text = caplog.text
+    assert "magnet" in text and "E99" in text
+
+
+def test_confirm_report_proceed(monkeypatch):
+    captured = {}
+
+    def fake_confirm(parent=None, message="", title="", **kwargs):
+        captured.update(title=title, kwargs=kwargs)
+        return pv.YES   # user clicked the proceed button
+
+    monkeypatch.setattr(pv, "confirm", fake_confirm, raising=False)
+    decision = confirm_report(_report_with_error_and_warning(), parent=None)
+    assert decision == PROCEED
+    # errors present -> the override-labelled proceed button + error title
+    assert captured["title"] == "Protocol has errors"
+    assert captured["kwargs"]["yes_label"] == "Load anyway (drop columns)"
+    assert captured["kwargs"]["no_label"] == ""
+    assert captured["kwargs"]["cancel"] is True
+
+
+def test_confirm_report_cancel(monkeypatch):
+    monkeypatch.setattr(pv, "confirm", lambda *a, **k: pv.CANCEL, raising=False)
+    report = ValidationReport(findings=[
+        Finding(SEVERITY_WARNING, "electrode_id", "1 unknown electrode", ["E99  (steps 1)"]),
+    ])
+    assert confirm_report(report, parent=None) == CANCEL

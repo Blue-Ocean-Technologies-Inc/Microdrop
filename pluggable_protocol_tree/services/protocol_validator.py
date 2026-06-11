@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from logger.logger_service import get_logger
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 
 logger = get_logger(__name__)
 
@@ -169,3 +170,62 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
             ))
 
     return ValidationReport(findings=findings)
+
+
+def log_report(report) -> None:
+    """Headless presenter: emit each finding via the module logger. Errors at
+    ERROR level, warnings at WARNING level. Never blocks."""
+    for f in report.errors:
+        logger.error("Protocol load: %s", f.title)
+        for item in f.items:
+            logger.error("    - %s", item)
+    for f in report.warnings:
+        logger.warning("Protocol load: %s", f.title)
+        for item in f.items:
+            logger.warning("    - %s", item)
+
+
+def _format_html(report) -> str:
+    parts = []
+    if report.errors:
+        parts.append("<b>Errors</b><br>")
+        parts.extend(f"&bull; {f.title}<br>" for f in report.errors)
+    if report.warnings:
+        parts.append("<b>Warnings</b><br>")
+        parts.extend(f"&bull; {f.title}<br>" for f in report.warnings)
+    return "".join(parts)
+
+
+def _format_detail(report) -> str:
+    lines = []
+    for f in report.errors + report.warnings:
+        lines.append(f"[{f.severity.upper()}] {f.title}")
+        lines.extend(f"    - {item}" for item in f.items)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def confirm_report(report, parent=None) -> str:
+    """GUI presenter: one two-tier summary dialog. Returns PROCEED or CANCEL.
+
+    Uses exactly two buttons - a proceed button (yes_label) and Cancel - by
+    passing no_label="" to suppress confirm()'s default No button. When errors
+    are present the proceed button is the explicit drop-columns override."""
+    if report.errors:
+        title = "Protocol has errors"
+        proceed_label = "Load anyway (drop columns)"
+    else:
+        title = "Protocol warnings"
+        proceed_label = "Proceed anyway"
+    result = confirm(
+        parent,
+        message="",
+        title=title,
+        cancel=True,
+        yes_label=proceed_label,
+        no_label="",
+        cancel_label="Cancel",
+        informative=_format_html(report),
+        detail=_format_detail(report),
+    )
+    return PROCEED if result == YES else CANCEL
