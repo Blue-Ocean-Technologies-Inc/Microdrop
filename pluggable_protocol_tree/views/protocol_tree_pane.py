@@ -691,7 +691,7 @@ class ProtocolTreePane(QWidget):
         idx = self.widget.tree.currentIndex()
         if not idx.isValid():
             return None
-        path = self.widget._index_to_path(idx)
+        path = self.widget.index_to_path(idx)
         for row in self.manager.iter_execution_steps():
             if tuple(row.path) == path:
                 return path
@@ -1002,7 +1002,7 @@ class ProtocolTreePane(QWidget):
         idx = self.widget.tree.currentIndex()
         if not idx.isValid():
             return None
-        path = self.widget._index_to_path(idx)
+        path = self.widget.index_to_path(idx)
         for i, row in enumerate(steps):
             if tuple(row.path) == path:
                 return i
@@ -1027,15 +1027,7 @@ class ProtocolTreePane(QWidget):
         # path, and the user expects the DV to update on those clicks
         # just as on a direct row click. Only clear_highlights (transient
         # state reset) needs to suppress.
-        idx = self.widget._node_to_index(row)
-        if not idx.isValid():
-            return
-        parent = idx.parent()
-        while parent.isValid():
-            self.widget.tree.expand(parent)
-            parent = parent.parent()
-        self.widget.tree.setCurrentIndex(idx)
-        self.widget.tree.scrollTo(idx)
+        self.widget.set_current_row(row)
 
     @attempt_func_execution_with_error_dialog
     def clear_highlights(self):

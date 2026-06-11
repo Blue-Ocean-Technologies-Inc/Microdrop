@@ -132,11 +132,25 @@ class ProtocolTreeWidget(QWidget):
         idx = self._node_to_index(node)
         if idx.isValid():
             self.tree.scrollTo(idx, QTreeView.PositionAtCenter)
-            # Expand any collapsed ancestor groups so the row is visible.
-            parent = idx.parent()
-            while parent.isValid():
-                self.tree.expand(parent)
-                parent = parent.parent()
+            self._expand_ancestors(idx)
+
+    def set_current_row(self, row):
+        """Make ``row`` the tree's current index (expanding any collapsed
+        ancestor groups) and scroll to it. Public API for the pane's
+        step-cursor navigation — fires currentChanged like a user click."""
+        idx = self._node_to_index(row)
+        if not idx.isValid():
+            return
+        self._expand_ancestors(idx)
+        self.tree.setCurrentIndex(idx)
+        self.tree.scrollTo(idx)
+
+    def _expand_ancestors(self, idx):
+        """Expand every collapsed ancestor group so ``idx`` is visible."""
+        parent = idx.parent()
+        while parent.isValid():
+            self.tree.expand(parent)
+            parent = parent.parent()
 
     def _node_to_index(self, node):
         """Walk the row's path to a QModelIndex on the first column."""
