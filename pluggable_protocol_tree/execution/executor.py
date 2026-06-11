@@ -18,11 +18,11 @@ because ExecutorSignals is its own QObject; emissions from any thread
 queue correctly to slots living on the GUI thread.
 """
 
-import logging
 import threading
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Optional
+from typing import Optional
 
 from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
 
@@ -39,8 +39,8 @@ from pluggable_protocol_tree.execution.step_context import (
 )
 from pluggable_protocol_tree.models.row_manager import RowManager
 
-
-logger = logging.getLogger(__name__)
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 class ProtocolExecutor(HasTraits):
@@ -171,7 +171,6 @@ class ProtocolExecutor(HasTraits):
     def run(self) -> None:
         """Main loop. Runs synchronously when called directly (tests),
         or on its worker thread when entered via start()."""
-        import time as _time
         cols = list(self.row_manager.columns)
         proto_ctx = ProtocolContext(
             columns=cols,
@@ -184,7 +183,7 @@ class ProtocolExecutor(HasTraits):
         # into the context's scratch so handlers can reach it without
         # holding a reference to the RowManager.
         proto_ctx.scratch.update(self.row_manager.protocol_metadata)
-        proto_started_at = _time.monotonic()
+        proto_started_at = time.monotonic()
         try:
             # Hide first-publish latency (Redis connect ~2s) from step 1's
             # observed duration by warming the broker connection upfront.
@@ -205,7 +204,7 @@ class ProtocolExecutor(HasTraits):
                         continue
                     skip_until = None
                 if self.pause_event.is_set():
-                    logger.info("Protocol paused at step %d", step_index + 1)
+                    logger.info(f"Protocol paused at step {step_index + 1}")
                     # Emitted here so a hook setting pause_event still
                     # surfaces to the UI. The toolbar's executor.pause()
                     # also emits — slots that toggle UI state on each
@@ -219,18 +218,16 @@ class ProtocolExecutor(HasTraits):
                     logger.info("Protocol resumed")
 
                 step_index += 1
-                step_started_at = _time.monotonic()
+                step_started_at = time.monotonic()
                 rep_str = (
                     " | " + ", ".join(f"rep {i}/{n} of {name!r}"
                                       for name, i, n in rep_chain)
                     if rep_chain else ""
                 )
                 logger.info(
-                    "Step %d started: %r (path %s, duration_s=%s)%s",
-                    step_index, row.name,
-                    row.dotted_path(),
-                    getattr(row, "duration_s", None),
-                    rep_str,
+                    f"Step {step_index} started: {row.name!r} "
+                    f"(path {row.dotted_path()}, "
+                    f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
                 )
 
                 step_ctx = self._build_step_ctx(row, cols, proto_ctx)
@@ -248,8 +245,8 @@ class ProtocolExecutor(HasTraits):
                     clear_active_step()
 
                 logger.info(
-                    "Step %d finished: %r in %.2fs",
-                    step_index, row.name, _time.monotonic() - step_started_at,
+                    f"Step {step_index} finished: {row.name!r} in "
+                    f"{time.monotonic() - step_started_at:.2f}s"
                 )
 
             # on_protocol_end runs even on stop, as best-effort cleanup.
@@ -271,8 +268,8 @@ class ProtocolExecutor(HasTraits):
                 else "finished"
             )
             logger.info(
-                "Protocol %s in %.2fs",
-                outcome, _time.monotonic() - proto_started_at,
+                f"Protocol {outcome} in "
+                f"{time.monotonic() - proto_started_at:.2f}s"
             )
             # threading.Thread terminates naturally when run() returns;
             # nothing to quit() here. start() checks is_alive() to make
