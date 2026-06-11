@@ -30,10 +30,12 @@ from device_viewer.consts import (
     DEVICE_VIEWER_GEOMETRY_CHANGED,
     DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_RUNNING,
+    STEP_PARAMS_COMMIT,
 )
 from device_viewer.models.messages import (
     DeviceViewerMessageModel, GeometryChangedMessage,
 )
+from device_viewer.models.step_params_commit import StepParamsCommitMessage
 from dropbot_controller.consts import REALTIME_MODE_UPDATED
 from electrode_controller.consts import electrode_state_change_publisher
 from logger.logger_service import get_logger
@@ -81,6 +83,7 @@ class _Bridge(QObject):
     dv_state_received        = Signal(str)
     geometry_changed         = Signal(str)
     protocol_running_changed = Signal(bool)
+    step_params_committed    = Signal(str)
 
 
 class DeviceViewerSyncController(HasTraits):
@@ -132,6 +135,7 @@ class DeviceViewerSyncController(HasTraits):
         self.bridge.geometry_changed.connect(self._on_geometry_qt)
         self.bridge.dv_state_received.connect(self._on_dv_state_qt)
         self.bridge.protocol_running_changed.connect(self._on_protocol_running_qt)
+        self.bridge.step_params_committed.connect(self._on_step_params_commit_qt)
         selection_model = tree_widget.tree.selectionModel()
         selection_model.currentChanged.connect(self._on_current_changed)
         self._selection_model = selection_model
@@ -150,6 +154,12 @@ class DeviceViewerSyncController(HasTraits):
         try:
             self.bridge.protocol_running_changed.disconnect(
                 self._on_protocol_running_qt,
+            )
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self.bridge.step_params_committed.disconnect(
+                self._on_step_params_commit_qt,
             )
         except (RuntimeError, TypeError):
             pass
@@ -216,6 +226,8 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.geometry_changed.emit(message)
         elif topic == PROTOCOL_RUNNING:
             self.bridge.protocol_running_changed.emit(message.casefold() == "true")
+        elif topic == STEP_PARAMS_COMMIT:
+            self.bridge.step_params_committed.emit(message)
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
 
@@ -291,6 +303,58 @@ class DeviceViewerSyncController(HasTraits):
             return
 
         self._free_mode_stash = {"electrodes": electrodes, "routes": routes}
+
+    def _on_step_params_commit_qt(self, payload: str) -> None:
+        """Receive STEP_PARAMS_COMMIT on the Qt thread: the DV sidebar's
+        route-executor params pushed onto the step that owns them (the
+        DV commit button, or the commit choice of its step-transition
+        prompt)."""
+        try:
+            commit_msg = StepParamsCommitMessage.deserialize(payload)
+        except Exception as e:
+            logger.warning(f"failed to parse step-params commit: {e}")
+            return
+        row = self.row_manager.get_row_by_uuid(commit_msg.step_id)
+        if row is None or isinstance(row, GroupRow):
+            logger.warning(
+                f"step-params commit for unknown step "
+                f"{commit_msg.step_id!r} dropped"
+            )
+            return
+        path = tuple(row.path)
+
+        new_values = {
+            "duration_s": float(commit_msg.duration),
+            "trail_length": int(commit_msg.trail_length),
+            "trail_overlay": int(commit_msg.trail_overlay),
+            "soft_start": bool(commit_msg.soft_start),
+            "soft_end": bool(commit_msg.soft_terminate),
+            "linear_repeats": bool(commit_msg.linear_repeats),
+        }
+        # Of the Route Reps <-> Route Reps Dur pair, only the row's
+        # controlling knob is written — the pane's reconciliation pass
+        # recalculates the derived one, exactly as for a manual cell
+        # edit. Written last so its reconcile sees the other committed
+        # values already in place.
+        if bool(getattr(row, "repeat_duration_controls", False)):
+            new_values["repeat_duration"] = float(commit_msg.repeat_duration)
+        else:
+            new_values["route_repetitions"] = int(commit_msg.repetitions)
+
+        # Direct trait writes bypass QtTreeModel.setData and the delegate,
+        # so fire cell_changed per changed column — it drives both the
+        # dirty tracker and the pane's repeat-duration reconciliation.
+        for col_id, value in new_values.items():
+            if getattr(row, col_id, None) == value:
+                continue
+            setattr(row, col_id, value)
+            self.row_manager.cell_changed = {"path": path, "col_id": col_id}
+
+        logger.info(f"DV step-params commit applied to Step {row.dotted_path()}")
+        # Echo the final (post-reconciliation) state back so the DV
+        # rebaselines its commit button on what the tree actually stored.
+        if row.uuid == self._last_selected_uuid:
+            self._publish_for_row(row)
 
     def _publish_for_row(self, row) -> None:
         """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
