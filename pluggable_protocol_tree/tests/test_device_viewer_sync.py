@@ -132,7 +132,8 @@ def test_protocol_metadata_round_trip(qapp):
     assert restored.protocol_metadata["electrode_to_channel"] == {"e00": 0}
 
 
-def _make_dv_msg(channels=(), routes=(), step_id=None, id_to_channel=None):
+def _make_dv_msg(channels=(), routes=(), step_id=None, id_to_channel=None,
+                 execution_params=None):
     from device_viewer.models.messages import DeviceViewerMessageModel
     return DeviceViewerMessageModel(
         channels_activated=set(channels),
@@ -140,6 +141,7 @@ def _make_dv_msg(channels=(), routes=(), step_id=None, id_to_channel=None):
         id_to_channel=id_to_channel or {},
         step_info={"step_id": step_id, "step_label": None,
                    "free_mode": step_id is None},
+        execution_params=execution_params,
     )
 
 
@@ -156,6 +158,7 @@ def test_free_mode_message_stashes_electrodes(qapp):
     ctrl._on_dv_state_qt(dv_msg.serialize())
     assert ctrl._free_mode_stash == {
         "electrodes": ["e01", "e02"], "routes": [],
+        "execution_params": None,
     }
 
 
@@ -187,7 +190,9 @@ def test_state_seeds_metadata_when_empty_cold_start(qapp):
     assert ctrl.row_manager.protocol_metadata["electrode_to_channel"] == {
         "e00": 0, "e01": 1,
     }
-    assert ctrl._free_mode_stash == {"electrodes": ["e00"], "routes": []}
+    assert ctrl._free_mode_stash == {
+        "electrodes": ["e00"], "routes": [], "execution_params": None,
+    }
 
 
 def test_state_uses_metadata_for_reverse_lookup(qapp):
@@ -202,6 +207,7 @@ def test_state_uses_metadata_for_reverse_lookup(qapp):
     ctrl._on_dv_state_qt(dv_msg.serialize())
     assert ctrl._free_mode_stash == {
         "electrodes": ["e00", "e01"], "routes": [],
+        "execution_params": None,
     }
 
 
@@ -444,6 +450,58 @@ def test_commit_for_unknown_step_is_dropped(qapp):
     ctrl = DeviceViewerSyncController(row_manager=manager)
     ctrl._on_step_params_commit_qt(_commit_msg("no-such-uuid").serialize())
     assert row.duration_s != 2.5             # untouched
+
+
+def test_free_mode_stash_carries_sidebar_params(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_params_manager())
+    params = {
+        "duration": 4.0, "repetitions": 2, "repeat_duration": 0,
+        "trail_length": 5, "trail_overlay": 3, "soft_start": True,
+        "soft_terminate": False, "linear_repeats": True,
+    }
+    dv_msg = _make_dv_msg(
+        channels=[0], id_to_channel={"e00": 0}, execution_params=params,
+    )
+    ctrl._on_dv_state_qt(dv_msg.serialize())
+    assert ctrl._free_mode_stash["execution_params"] == params
+
+
+def test_insert_free_mode_step_seeds_execution_params(qapp):
+    manager = _make_params_manager()
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._free_mode_stash = {
+        "electrodes": ["e00"],
+        "routes": [["e00", "e01"]],
+        "execution_params": {
+            "duration": 4.0, "repetitions": 2, "repeat_duration": 1,
+            "trail_length": 5, "trail_overlay": 3, "soft_start": True,
+            "soft_terminate": True, "linear_repeats": True,
+        },
+    }
+    ctrl._insert_free_mode_as_new_step()
+    row = manager.get_row((0,))
+    assert row.electrodes == ["e00"]
+    assert row.routes == [["e00", "e01"]]
+    assert row.duration_s == 4.0
+    assert row.route_repetitions == 2        # DV 'repetitions'
+    assert row.repeat_duration == 1.0
+    assert row.trail_length == 5
+    assert row.trail_overlay == 3
+    assert row.soft_start is True
+    assert row.soft_end is True              # DV 'soft_terminate'
+    assert row.linear_repeats is True
+
+
+def test_insert_free_mode_step_without_params_uses_column_defaults(qapp):
+    manager = _make_params_manager()
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._free_mode_stash = {
+        "electrodes": ["e00"], "routes": [], "execution_params": None,
+    }
+    ctrl._insert_free_mode_as_new_step()
+    row = manager.get_row((0,))
+    assert row.duration_s == 1.0             # column default
+    assert row.route_repetitions == 1
 
 
 def test_group_row_emits_free_mode_payload(qapp, monkeypatch):

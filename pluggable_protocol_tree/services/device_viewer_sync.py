@@ -76,6 +76,21 @@ def _execution_params_for_row(row) -> dict:
     }
 
 
+def _col_values_from_execution_params(params: dict) -> dict:
+    """Inverse of _execution_params_for_row: DV sidebar contract keys ->
+    tree column ids/types, ready for setattr onto a row."""
+    return {
+        "duration_s": float(params["duration"]),
+        "route_repetitions": int(params["repetitions"]),
+        "repeat_duration": float(params["repeat_duration"]),
+        "trail_length": int(params["trail_length"]),
+        "trail_overlay": int(params["trail_overlay"]),
+        "soft_start": bool(params["soft_start"]),
+        "soft_end": bool(params["soft_terminate"]),
+        "linear_repeats": bool(params["linear_repeats"]),
+    }
+
+
 class _Bridge(QObject):
     """Qt signal bridge - Dramatiq actor runs on a worker thread, Qt
     mutations must happen on the GUI thread."""
@@ -302,7 +317,14 @@ class DeviceViewerSyncController(HasTraits):
             self._free_mode_stash = None
             return
 
-        self._free_mode_stash = {"electrodes": electrodes, "routes": routes}
+        # Free-mode state messages also carry the sidebar's current
+        # execution params (None otherwise) so an 'Insert as New Step'
+        # seeds them into the new row.
+        self._free_mode_stash = {
+            "electrodes": electrodes,
+            "routes": routes,
+            "execution_params": dv_msg.execution_params,
+        }
 
     def _on_step_params_commit_qt(self, payload: str) -> None:
         """Receive STEP_PARAMS_COMMIT on the Qt thread: the DV sidebar's
@@ -323,23 +345,21 @@ class DeviceViewerSyncController(HasTraits):
             return
         path = tuple(row.path)
 
-        new_values = {
-            "duration_s": float(commit_msg.duration),
-            "trail_length": int(commit_msg.trail_length),
-            "trail_overlay": int(commit_msg.trail_overlay),
-            "soft_start": bool(commit_msg.soft_start),
-            "soft_end": bool(commit_msg.soft_terminate),
-            "linear_repeats": bool(commit_msg.linear_repeats),
-        }
+        new_values = _col_values_from_execution_params(
+            commit_msg.model_dump(exclude={"step_id"})
+        )
         # Of the Route Reps <-> Route Reps Dur pair, only the row's
         # controlling knob is written — the pane's reconciliation pass
         # recalculates the derived one, exactly as for a manual cell
-        # edit. Written last so its reconcile sees the other committed
+        # edit. The pop/reassign moves the controlling knob to the end
+        # of the write order so its reconcile sees the other committed
         # values already in place.
         if bool(getattr(row, "repeat_duration_controls", False)):
-            new_values["repeat_duration"] = float(commit_msg.repeat_duration)
+            del new_values["route_repetitions"]
+            new_values["repeat_duration"] = new_values.pop("repeat_duration")
         else:
-            new_values["route_repetitions"] = int(commit_msg.repetitions)
+            del new_values["repeat_duration"]
+            new_values["route_repetitions"] = new_values.pop("route_repetitions")
 
         # Direct trait writes bypass QtTreeModel.setData and the delegate,
         # so fire cell_changed per changed column — it drives both the
@@ -428,17 +448,21 @@ class DeviceViewerSyncController(HasTraits):
         stash = self._free_mode_stash
         if stash is None:
             return
+        values = {
+            "name": "Step (free-mode capture)",
+            "electrodes": list(stash["electrodes"]),
+            "routes": stash["routes"],
+        }
+        # Seed the sidebar's execution params into the new step (legacy
+        # protocol_grid parity) — the DV carries them on free-mode state
+        # messages for exactly this purpose.
+        if stash.get("execution_params"):
+            values.update(
+                _col_values_from_execution_params(stash["execution_params"])
+            )
         self._suppress_publish = True
         try:
-            self.row_manager.add_step(
-                parent_path=(),
-                index=None,
-                values={
-                    "name": "Step (free-mode capture)",
-                    "electrodes": list(stash["electrodes"]),
-                    "routes": stash["routes"],
-                },
-            )
+            self.row_manager.add_step(parent_path=(), index=None, values=values)
         finally:
             self._suppress_publish = False
 
