@@ -11,8 +11,7 @@ The function is side-effect free (no Qt, no RowManager, no I/O) so it is
 trivially unit-testable.
 """
 
-from dataclasses import dataclass, field
-from typing import List
+from traits.api import HasTraits, Instance, List, Property, Str
 
 from logger.logger_service import get_logger
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
@@ -31,28 +30,27 @@ ROUTES_COL_ID = "routes"
 ELECTRODES_COL_ID = "electrodes"
 
 
-@dataclass
-class Finding:
-    severity: str          # SEVERITY_WARNING | SEVERITY_ERROR
-    category: str          # "orphan_column" | "electrode_id" | "stale_channel"
-    title: str             # short human summary
-    items: List[str] = field(default_factory=list)  # detail lines
+class Finding(HasTraits):
+    severity = Str()       # SEVERITY_WARNING | SEVERITY_ERROR
+    category = Str()       # "orphan_column" | "electrode_id" | "stale_channel"
+    title = Str()          # short human summary
+    items = List(Str)      # detail lines
 
 
-@dataclass
-class ValidationReport:
-    findings: List[Finding] = field(default_factory=list)
+class ValidationReport(HasTraits):
+    findings = List(Instance(Finding))
 
-    @property
-    def errors(self) -> List[Finding]:
+    errors = Property(observe="findings")
+    warnings = Property(observe="findings")
+    is_empty = Property(observe="findings")
+
+    def _get_errors(self):
         return [f for f in self.findings if f.severity == SEVERITY_ERROR]
 
-    @property
-    def warnings(self) -> List[Finding]:
+    def _get_warnings(self):
         return [f for f in self.findings if f.severity == SEVERITY_WARNING]
 
-    @property
-    def is_empty(self) -> bool:
+    def _get_is_empty(self):
         return not self.findings
 
 
@@ -103,7 +101,7 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
     """Validate raw serialized protocol ``data`` against the live ``columns``
     and the device's ``device_electrode_to_channel`` map. Never raises on
     malformed input - returns an empty/partial report instead."""
-    findings: List[Finding] = []
+    findings = []
     if not isinstance(data, dict):
         return ValidationReport(findings=findings)
 

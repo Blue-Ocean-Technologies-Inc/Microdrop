@@ -171,8 +171,10 @@ from pluggable_protocol_tree.services.protocol_validator import (
 
 def _report_with_error_and_warning():
     return ValidationReport(findings=[
-        Finding(SEVERITY_ERROR, "orphan_column", "1 orphan column", ["magnet"]),
-        Finding(SEVERITY_WARNING, "electrode_id", "1 unknown electrode", ["E99  (steps 1)"]),
+        Finding(severity=SEVERITY_ERROR, category="orphan_column",
+                title="1 orphan column", items=["magnet"]),
+        Finding(severity=SEVERITY_WARNING, category="electrode_id",
+                title="1 unknown electrode", items=["E99  (steps 1)"]),
     ])
 
 
@@ -206,7 +208,8 @@ def test_confirm_report_proceed(monkeypatch):
 def test_confirm_report_cancel(monkeypatch):
     monkeypatch.setattr(pv, "confirm", lambda *a, **k: pv.CANCEL, raising=False)
     report = ValidationReport(findings=[
-        Finding(SEVERITY_WARNING, "electrode_id", "1 unknown electrode", ["E99  (steps 1)"]),
+        Finding(severity=SEVERITY_WARNING, category="electrode_id",
+                title="1 unknown electrode", items=["E99  (steps 1)"]),
     ])
     assert confirm_report(report, parent=None) == CANCEL
 
