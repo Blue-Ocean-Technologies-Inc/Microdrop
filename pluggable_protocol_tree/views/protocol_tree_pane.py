@@ -1077,6 +1077,18 @@ class ProtocolTreePane(QWidget):
             logger.debug(f"default protocol save dir unavailable: {e}")
             return ""
 
+    def _write_protocol_json(self, path, parent=None) -> bool:
+        """Persist the manager's JSON state to ``path``. Returns True on
+        success; shows the save-error dialog and returns False on failure."""
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.manager.to_json(), f, indent=2)
+        except Exception as e:
+            error_dialog(parent=parent or self,
+                         title="Save error", message=str(e))
+            return False
+        return True
+
     @attempt_func_execution_with_error_dialog
     def save_to_dialog(self, parent=None):
         """Open a file dialog and persist the manager's JSON state.
@@ -1090,12 +1102,7 @@ class ProtocolTreePane(QWidget):
         )
         if not path:
             return None
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self.manager.to_json(), f, indent=2)
-        except Exception as e:
-            error_dialog(parent=parent or self,
-                         title="Save error", message=str(e))
+        if not self._write_protocol_json(path, parent=parent):
             return None
         return path
 
@@ -1311,11 +1318,7 @@ class ProtocolTreePane(QWidget):
         if not known_path:
             self.save_as_protocol_dialog()
             return
-        try:
-            with open(known_path, "w", encoding="utf-8") as f:
-                json.dump(self.manager.to_json(), f, indent=2)
-        except Exception as e:
-            error_dialog(parent=self, title="Save error", message=str(e))
+        if not self._write_protocol_json(known_path):
             return
         self.protocol_state_tracker.set_saved(known_path)
         self.protocol_state_tracker.reseed_baseline(self.manager)
