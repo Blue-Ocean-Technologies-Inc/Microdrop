@@ -2,6 +2,41 @@
 pluggable protocol tree's full UX (navigation, status, experiment
 bar, executor, button state machine)."""
 
+from pathlib import Path
+
+from traits.api import Directory, Event, HasTraits, Property
+
+
+class FakePausableRow:
+    """Row stub rich enough for the pause-time phase computation."""
+    path = [0]
+    name = "S"
+    duration_s = 1.0
+    electrodes = []
+    routes = []
+    trail_length = 1
+    trail_overlay = 0
+    soft_start = False
+    soft_end = False
+    repeat_duration = 0.0
+    linear_repeats = False
+    repetitions = 1
+
+
+class FakeExperimentApp(HasTraits):
+    """Application stub: current_experiment_directory Property whose
+    setter fires the experiment_changed Event, like the real app."""
+    current_experiment_directory = Property(Directory)
+    experiment_changed = Event()
+    _value = Path("/tmp/initial")
+
+    def _get_current_experiment_directory(self):
+        return self._value
+
+    def _set_current_experiment_directory(self, value):
+        self._value = Path(value)
+        self.experiment_changed = True
+
 
 def test_pane_constructs_with_columns_list(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -238,22 +273,8 @@ def test_pane_pause_splits_play_button_into_phase_nav(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeRow:
-        path = [0]
-        name = "S"
-        duration_s = 1.0
-        electrodes = []
-        routes = []
-        trail_length = 1
-        trail_overlay = 0
-        soft_start = False
-        soft_end = False
-        repeat_duration = 0.0
-        linear_repeats = False
-        repetitions = 1
-
     pane = ProtocolTreePane([make_type_column()])
-    pane._current_row = FakeRow()
+    pane._current_row = FakePausableRow()
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
@@ -263,22 +284,8 @@ def test_pane_resume_merges_phase_nav_back_to_play_button(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeRow:
-        path = [0]
-        name = "S"
-        duration_s = 1.0
-        electrodes = []
-        routes = []
-        trail_length = 1
-        trail_overlay = 0
-        soft_start = False
-        soft_end = False
-        repeat_duration = 0.0
-        linear_repeats = False
-        repetitions = 1
-
     pane = ProtocolTreePane([make_type_column()])
-    pane._current_row = FakeRow()
+    pane._current_row = FakePausableRow()
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
@@ -473,26 +480,10 @@ def test_pane_real_mode_label_click_opens_experiment_directory(qapp):
 def test_pane_observes_experiment_changed_event_to_update_label(qapp):
     """When application.experiment_changed fires, the label re-reads
     application.current_experiment_directory and updates."""
-    from pathlib import Path
-
-    from traits.api import Directory, Event, HasTraits, Property
-
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     pane = ProtocolTreePane([make_type_column()], application=app)
     app.current_experiment_directory = "/tmp/2026-05-08T12-00-00Z"
     assert "2026-05-08T12-00-00Z" in pane.experiment_label.text()
@@ -502,27 +493,12 @@ def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
     """Clicking New Experiment with a real Traits-backed application
     triggers the experiment_changed observer, which updates the label
     — no explicit label update needed in the click handler."""
-    from pathlib import Path
     from unittest.mock import MagicMock
-
-    from traits.api import Directory, Event, HasTraits, Property
 
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     new_dir = Path("/tmp/2026-05-08T13-37-00Z")
     exp_mgr = MagicMock()
     exp_mgr.initialize_new_experiment.return_value = new_dir
@@ -540,26 +516,10 @@ def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
 def test_pane_closeEvent_detaches_experiment_changed_observer(qapp):
     """After closeEvent, the experiment_changed observer is unsubscribed
     so a subsequent fire doesn't dispatch to a deleted widget."""
-    from pathlib import Path
-
-    from traits.api import Directory, Event, HasTraits, Property
-
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     pane = ProtocolTreePane([make_type_column()], application=app)
 
     # Verify observer is wired pre-close.
