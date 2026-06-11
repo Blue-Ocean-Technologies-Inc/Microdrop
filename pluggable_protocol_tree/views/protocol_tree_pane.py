@@ -65,14 +65,15 @@ from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
-from pluggable_protocol_tree.services.protocol_validator import (
-    validate_protocol, confirm_report,
-)
+from pluggable_protocol_tree.services.protocol_validator import validate_protocol
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
+from pluggable_protocol_tree.views.protocol_validator_presenter import (
+    confirm_report,
+)
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )

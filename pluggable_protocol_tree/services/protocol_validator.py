@@ -1,11 +1,11 @@
-"""Pure protocol-load validation + presenters (issue #423, PPT-17).
+"""Pure protocol-load validation (issue #423, PPT-17).
 
 ``validate_protocol`` reads the raw serialized protocol JSON (output of
 ``services.persistence.serialize_tree``) and returns a structured
-``ValidationReport``. The full module will perform three checks (orphan
-column / electrode id / stale channel) and provide two presenters
-(``log_report`` headless, ``confirm_report`` GUI dialog); checks beyond
-orphan-column and the presenters are added in later tasks.
+``ValidationReport`` covering three checks (orphan column / electrode id /
+stale channel). ``log_report`` is the headless presenter (module logger);
+the GUI dialog presenter ``confirm_report`` lives in
+``views.protocol_validator_presenter`` so this service stays Qt-free.
 
 The function is side-effect free (no Qt, no RowManager, no I/O) so it is
 trivially unit-testable.
@@ -14,8 +14,6 @@ trivially unit-testable.
 from traits.api import HasTraits, Instance, List, Property, Str, Enum
 
 from logger.logger_service import get_logger
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES
-from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
 
 logger = get_logger(__name__)
 
@@ -179,49 +177,3 @@ def log_report(report) -> None:
         for item in f.items:
             logger.warning("    - %s", item)
 
-
-def _format_html(report) -> str:
-    parts = []
-    if report.errors:
-        parts.append("<b>Errors</b><br>")
-        parts.extend(f"&bull; {f.title}<br>" for f in report.errors)
-    if report.warnings:
-        parts.append("<b>Warnings</b><br>")
-        parts.extend(f"&bull; {f.title}<br>" for f in report.warnings)
-    return "".join(parts)
-
-
-def _format_detail(report) -> str:
-    lines = []
-    for f in report.errors + report.warnings:
-        lines.append(f"[{f.severity.upper()}] {f.title}")
-        lines.extend(f"    - {item}" for item in f.items)
-        lines.append("")
-    return "\n".join(lines).rstrip()
-
-
-def confirm_report(report, parent=None) -> str:
-    """GUI presenter: one two-tier summary dialog. Returns VALIDATION_PROCEED
-    or VALIDATION_CANCEL.
-
-    Uses exactly two buttons - a proceed button (yes_label) and Cancel - by
-    passing no_label="" to suppress confirm()'s default No button. When errors
-    are present the proceed button is the explicit drop-columns override."""
-    if report.errors:
-        title = "Protocol has errors"
-        proceed_label = "Load anyway (drop columns)"
-    else:
-        title = "Protocol warnings"
-        proceed_label = "Proceed anyway"
-    result = confirm(
-        parent,
-        message="",
-        title=title,
-        cancel=True,
-        yes_label=proceed_label,
-        no_label="",
-        cancel_label="Cancel",
-        informative=_format_html(report),
-        detail=_format_detail(report),
-    )
-    return VALIDATION_PROCEED if result == YES else VALIDATION_CANCEL

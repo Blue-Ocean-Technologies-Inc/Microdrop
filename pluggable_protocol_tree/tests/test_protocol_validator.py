@@ -164,9 +164,10 @@ def test_malformed_data_no_exception():
 import logging
 
 from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
-from pluggable_protocol_tree.services import protocol_validator as pv
-from pluggable_protocol_tree.services.protocol_validator import (
-    log_report, confirm_report,
+from pluggable_protocol_tree.services.protocol_validator import log_report
+from pluggable_protocol_tree.views import protocol_validator_presenter as presenter
+from pluggable_protocol_tree.views.protocol_validator_presenter import (
+    confirm_report,
 )
 
 
@@ -194,9 +195,9 @@ def test_confirm_report_proceed(monkeypatch):
 
     def fake_confirm(parent=None, message="", title="", **kwargs):
         captured.update(title=title, kwargs=kwargs)
-        return pv.YES   # user clicked the proceed button
+        return presenter.YES   # user clicked the proceed button
 
-    monkeypatch.setattr(pv, "confirm", fake_confirm, raising=False)
+    monkeypatch.setattr(presenter, "confirm", fake_confirm)
     decision = confirm_report(_report_with_error_and_warning(), parent=None)
     assert decision == VALIDATION_PROCEED
     # errors present -> the override-labelled proceed button + error title
@@ -210,7 +211,7 @@ def test_confirm_report_cancel(monkeypatch):
     # confirm() returning anything but YES (here: the user hit Cancel) maps
     # to the VALIDATION_CANCEL decision.
     from microdrop_application.dialogs.pyface_wrapper import CANCEL as PYFACE_CANCEL
-    monkeypatch.setattr(pv, "confirm", lambda *a, **k: PYFACE_CANCEL, raising=False)
+    monkeypatch.setattr(presenter, "confirm", lambda *a, **k: PYFACE_CANCEL)
     report = ValidationReport(findings=[
         Finding(severity=SEVERITY_WARNING, category="electrode_id",
                 title="1 unknown electrode", items=["E99  (steps 1)"]),
