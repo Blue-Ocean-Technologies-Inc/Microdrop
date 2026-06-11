@@ -1,9 +1,15 @@
-"""Capture column — Bool checkbox; one-shot screen capture per step
-where row.capture is True. Timing (step start vs step end) is controlled
-by the global ProtocolPreferences.capture_time pref, read ONCE at handler
-construction (factory time). Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE
-has no ack topic; the legacy code in protocol_grid/services/utils.py is
-also fire-and-forget.
+"""Capture compound column — one-shot screen capture per step. Two
+coupled cells (capture Bool + capture_at Step Start / Step End choice)
+sharing one model + one handler via the PPT-11 compound framework (#396).
+
+Timing is PER STEP: each row picks start-of-step or end-of-step capture
+independently. The global ProtocolPreferences.capture_time pref is the
+DEFAULT for newly added steps (read once at factory time) and the
+fill-in for legacy protocols saved before capture_at existed — it never
+overrides a per-step value.
+
+Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic; the
+legacy code in protocol_grid/services/utils.py is also fire-and-forget.
 
 Capture payload format (legacy-compatible — see protocol_grid/services/
 utils.py:19-32):
@@ -20,42 +26,89 @@ needed.
 
 import json
 
-from traits.api import Bool
+from pyface.qt.QtCore import Qt
+from traits.api import Bool, Enum
 
-from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
-)
-from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
+from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
+from pluggable_protocol_tree.models.compound_column import (
+    BaseCompoundColumnHandler, BaseCompoundColumnModel, CompoundColumn,
+    DictCompoundColumnView,
+)
 from pluggable_protocol_tree.services.preferences import (
     ProtocolPreferences, StepTime,
 )
+from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
+from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
 
-class CaptureColumnModel(BaseColumnModel):
-    """Per-step capture flag stored as a Bool on each row."""
+class CaptureCompoundModel(BaseCompoundColumnModel):
+    """Two coupled fields. base_id 'capture' appears as compound_id on
+    each field's column entry in JSON (PPT-11 framework). The first
+    field keeps the legacy 'capture' col_id so protocols saved with the
+    flat pre-#396 column load their per-step flags unchanged."""
+    base_id = "capture"
 
-    def trait_for_row(self):
-        return Bool(bool(self.default_value), desc="Capture image during step")
+    # Default capture_at for newly added steps AND the fill-in for
+    # legacy protocols that have no capture_at field. The factory seeds
+    # it from ProtocolPreferences.capture_time.
+    default_capture_at = Enum(StepTime.START, StepTime.END)
+
+    def field_specs(self):
+        return [
+            FieldSpec("capture", "Capture", False),
+            FieldSpec("capture_at", "Capture At", self.default_capture_at),
+        ]
+
+    def trait_for_field(self, field_id):
+        if field_id == "capture":
+            return Bool(False, desc="Capture image during step")
+        if field_id == "capture_at":
+            return Enum(self.default_capture_at,
+                        [StepTime.START, StepTime.END],
+                        desc="When during the step the capture fires")
+        raise KeyError(field_id)
 
 
-class CaptureHandler(BaseColumnHandler):
-    """Publishes a single image-capture event per step where row.capture is True.
+# Legacy qualname: pre-#396 protocols recorded the flat Capture column as
+# '...capture_column.CaptureColumnModel'. session.resolve_columns imports
+# that name, matches it to make_capture_column, and upgrades the entry to
+# the compound (capture_at fills from the factory default = current pref).
+# Remove once protocols saved before #396 are no longer in circulation.
+CaptureColumnModel = CaptureCompoundModel
+
+
+class CaptureAtComboBoxView(ComboBoxColumnView):
+    """Read-only while row.capture is False — capture_at is meaningless
+    when the step doesn't capture (cross-cell editability via the
+    canonical PPT-11 get_flags(row) pattern, mirroring the magnet
+    height cell)."""
+
+    def get_flags(self, row):
+        flags = super().get_flags(row)
+        if not getattr(row, "capture", False):
+            flags &= ~Qt.ItemIsEditable
+        return flags
+
+    def format_display(self, value, row):
+        # An empty cell reads better than a stale choice on rows that
+        # don't capture.
+        if not getattr(row, "capture", False):
+            return ""
+        return super().format_display(value, row)
+
+
+class CaptureHandler(BaseCompoundColumnHandler):
+    """Publishes a single image-capture event per step where row.capture
+    is True, at the row's chosen moment (row.capture_at).
 
     Priority 10 — same earliest bucket as Video and Record, since the three
     fire to independent topics and parallel execution is safe (see notes in
     VideoHandler / RecordHandler about priority-10 cleanup parallelism;
     Capture has no on_protocol_end so it's not even part of that race).
-
-    Fire timing is fixed at handler construction by reading
-    ProtocolPreferences().capture_time. Mid-protocol pref edits do NOT take
-    effect — to pick up a new pref, recreate the column (which happens on
-    plugin re-load). Conceptually similar to how PPT-4's make_voltage_column
-    reads ProtocolPreferences.last_voltage at factory time, though that
-    column stores the value as a model default rather than a handler trait.
 
     This handler has no cross-step state (no scratch key). Each step is
     fully independent — if row.capture is True, the event fires; if False,
@@ -65,32 +118,27 @@ class CaptureHandler(BaseColumnHandler):
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
-    # Declared at class level as a Trait so HasTraits constructor kwargs
-    # (e.g. CaptureHandler(fire_at_start=False)) work correctly.
-    # Default True --> fire at step start; False → fire at step end.
-    fire_at_start = Bool(True)
-
     def on_pre_step(self, row, ctx):
-        """Fire capture at step start when fire_at_start is True.
+        """Fire at step start when the row's capture_at says Step Start.
 
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
-        if not self.fire_at_start:
+        if not bool(getattr(row, "capture", False)):
             return
-        if not bool(row.capture):
+        if getattr(row, "capture_at", StepTime.START) != StepTime.START:
             return
         self._fire_capture(row, ctx)
 
     def on_post_step(self, row, ctx):
-        """Fire capture at step end when fire_at_start is False.
+        """Fire at step end when the row's capture_at says Step End.
 
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
-        if self.fire_at_start:
+        if not bool(getattr(row, "capture", False)):
             return
-        if not bool(row.capture):
+        if getattr(row, "capture_at", StepTime.START) != StepTime.END:
             return
         self._fire_capture(row, ctx)
 
@@ -109,21 +157,21 @@ class CaptureHandler(BaseColumnHandler):
 
 
 def make_capture_column():
-    """Return a fresh Capture column instance (model + checkbox view + handler).
+    """Return a fresh Capture compound column (capture + capture_at).
 
-    Reads ProtocolPreferences().capture_time once at call time and stores it
-    as fire_at_start on the handler. Mid-protocol pref changes do not affect
-    a running protocol — recreate the column to pick up a new pref value.
+    ProtocolPreferences.capture_time is read once at call time and
+    becomes the capture_at default for newly added steps and for legacy
+    flat-capture protocols; per-step edits are never overridden by the
+    pref.
     """
     prefs = ProtocolPreferences()
-    return Column(
-        model=CaptureColumnModel(
-            col_id="capture",
-            col_name="Capture",
-            default_value=False,
-        ),
-        view=CheckboxColumnView(),
-        handler=CaptureHandler(
-            fire_at_start=(prefs.capture_time == StepTime.START),
-        ),
+    return CompoundColumn(
+        model=CaptureCompoundModel(default_capture_at=prefs.capture_time),
+        view=DictCompoundColumnView(cell_views={
+            "capture": CheckboxColumnView(),
+            "capture_at": CaptureAtComboBoxView(
+                options=[StepTime.START, StepTime.END],
+            ),
+        }),
+        handler=CaptureHandler(),
     )
