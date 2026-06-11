@@ -67,14 +67,15 @@ def _row_dotted_ids(rows):
     return out
 
 
-def _value_index(fields, col_id):
+def _value_slice_index(fields, col_id):
     """Index into a row's value slice (row[4:]) for ``col_id``, or None.
-    The first four fields are fixed row metadata (depth/uuid/type/name)."""
+    The first four fields are fixed row metadata (depth/uuid/type/name) -
+    hence the -4 shift from the position in the full ``fields`` list."""
     try:
-        field_pos = fields.index(col_id)
+        field_list_pos = fields.index(col_id)
     except ValueError:
         return None
-    return field_pos - 4 if field_pos >= 4 else None
+    return field_list_pos - 4 if field_list_pos >= 4 else None
 
 
 def _electrodes_in_row(values, routes_idx, electrodes_idx):
@@ -126,8 +127,8 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
         fields = data.get("fields") or []
         rows = data.get("rows") or []
         dotted = _row_dotted_ids(rows)
-        routes_idx = _value_index(fields, ROUTES_COL_ID)
-        electrodes_idx = _value_index(fields, ELECTRODES_COL_ID)
+        routes_idx = _value_slice_index(fields, ROUTES_COL_ID)
+        electrodes_idx = _value_slice_index(fields, ELECTRODES_COL_ID)
 
         refs = {}   # electrode_id -> set of step dotted-ids
         for i, row in enumerate(rows):
