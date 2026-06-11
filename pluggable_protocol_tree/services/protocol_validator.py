@@ -169,11 +169,11 @@ def log_report(report) -> None:
     """Headless presenter: emit each finding via the module logger. Errors at
     ERROR level, warnings at WARNING level. Never blocks."""
     for f in report.errors:
-        logger.error("Protocol load: %s", f.title)
+        logger.error(f"Protocol load: {f.title}")
         for item in f.items:
-            logger.error("    - %s", item)
+            logger.error(f"    - {item}")
     for f in report.warnings:
-        logger.warning("Protocol load: %s", f.title)
+        logger.warning(f"Protocol load: {f.title}")
         for item in f.items:
-            logger.warning("    - %s", item)
+            logger.warning(f"    - {item}")
 
