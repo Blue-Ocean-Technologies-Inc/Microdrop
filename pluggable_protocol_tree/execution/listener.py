@@ -17,6 +17,7 @@ from typing import Optional
 
 import dramatiq
 
+from pluggable_protocol_tree.consts import EXECUTOR_LISTENER_NAME
 from pluggable_protocol_tree.execution.step_context import StepContext
 
 
@@ -84,8 +85,7 @@ def route_to_active_step(topic: str, payload) -> None:
     ctx.deposit(topic, payload)
 
 
-@dramatiq.actor(actor_name="pluggable_protocol_tree_executor_listener",
-                queue_name="default")
+@dramatiq.actor(actor_name=EXECUTOR_LISTENER_NAME, queue_name="default")
 def executor_listener(message: str, topic: str, timestamp: float = None) -> None:
     """Receives every message routed by message_router_actor on any
     topic the plugin aggregated from contributed handlers'
