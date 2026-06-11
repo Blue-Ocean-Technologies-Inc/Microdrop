@@ -308,7 +308,7 @@ class DeviceViewerSyncController(HasTraits):
             # 1-indexed dotted-path id (matches the ID column display)
             # so the DV's status bar shows e.g. "Editing: Step 1.2"
             # rather than the bare row name (which defaults to "Step").
-            dotted_id = ".".join(str(i + 1) for i in row.path)
+            dotted_id = row.dotted_path()
             msg = ProtocolTreeDisplayMessage(
                 electrodes=list(row.electrodes or []),
                 routes=list(row.routes or []),

@@ -340,8 +340,7 @@ class RoutesHandler(BaseColumnHandler):
         # changes per phase. step_label format matches the dotted-path
         # convention used elsewhere ("Step 1.2").
         step_uuid = getattr(row, "uuid", "") or ""
-        dotted_id = ".".join(str(i + 1) for i in row.path)
-        step_label = f"Step {dotted_id}"
+        step_label = f"Step {row.dotted_path()}"
 
         routes = list(getattr(row, "routes", []) or [])
 

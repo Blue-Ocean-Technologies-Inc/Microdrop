@@ -840,6 +840,10 @@ def test_format_error_html_from_step_execution_error():
         path = (0, 1)          # -> "Step 1.2"
         name = "Engage magnet"
 
+        def dotted_path(self):
+            # mirrors BaseRow.dotted_path
+            return ".".join(str(i + 1) for i in self.path)
+
     exc = StepExecutionError(
         _Col(), "on_step", _Row(),
         TimeoutError("Timed out after 10.0s waiting for a reply on 'topic/x'."),

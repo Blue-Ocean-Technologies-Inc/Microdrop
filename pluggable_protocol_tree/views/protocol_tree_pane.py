@@ -501,9 +501,7 @@ class ProtocolTreePane(QWidget):
         if isinstance(exc, StepExecutionError):
             row = exc.row
             if row is not None:
-                dotted = ".".join(
-                    str(i + 1) for i in (getattr(row, "path", ()) or ())
-                )
+                dotted = row.dotted_path()
                 name = getattr(row, "name", "") or ""
                 where = f"Step {dotted}"
                 if name:
@@ -901,7 +899,7 @@ class ProtocolTreePane(QWidget):
         # even in preview mode. Cached step metadata from _current_row.
         row = self._current_row
         if row is not None:
-            dotted_id = ".".join(str(i + 1) for i in row.path)
+            dotted_id = row.dotted_path()
             display_msg = ProtocolTreeDisplayMessage(
                 electrodes=electrodes,
                 routes=list(getattr(row, "routes", []) or []),
