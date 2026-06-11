@@ -26,7 +26,7 @@ needed.
 import json
 
 from pyface.qt.QtCore import Qt
-from traits.api import Bool, Enum
+from traits.api import Bool, Enum, List
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -43,21 +43,20 @@ from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
+#: The selectable capture moments, in display order — the single
+#: definition; the default/per-row trait validation and the
+#: combobox options all derive from it.
+CHOICES = (StepTime.START, StepTime.END)
 
 class CaptureCompoundModel(BaseCompoundColumnModel):
     """Two coupled fields. base_id 'capture' appears as compound_id on
     each field's column entry in JSON (PPT-11 framework)."""
     base_id = "capture"
 
-    #: The selectable capture moments, in display order — the single
-    #: definition; the default/per-row trait validation and the
-    #: combobox options all derive from it.
-    CAPTURE_AT_CHOICES = (StepTime.START, StepTime.END)
-
     # Default capture_at for newly added steps (and the fill-in for any
     # payload missing the field). The factory seeds it from
     # ProtocolPreferences.capture_time.
-    default_capture_at = Enum(*CAPTURE_AT_CHOICES)
+    default_capture_at = Enum(*CHOICES)
 
     def field_specs(self):
         return [
@@ -70,7 +69,7 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
             return Bool(False, desc="Capture image during step")
         if field_id == "capture_at":
             return Enum(self.default_capture_at,
-                        list(self.CAPTURE_AT_CHOICES),
+                        *CHOICES,
                         desc="When during the step the capture fires")
         raise KeyError(field_id)
 
@@ -80,6 +79,9 @@ class CaptureAtComboBoxView(ComboBoxColumnView):
     when the step doesn't capture (cross-cell editability via the
     canonical PPT-11 get_flags(row) pattern, mirroring the magnet
     height cell)."""
+
+    def _options_default(self):
+        return list(CHOICES)
 
     def get_flags(self, row):
         flags = super().get_flags(row)
@@ -163,9 +165,7 @@ def make_capture_column():
         model=model,
         view=DictCompoundColumnView(cell_views={
             "capture": CheckboxColumnView(),
-            "capture_at": CaptureAtComboBoxView(
-                options=list(model.CAPTURE_AT_CHOICES),
-            ),
+            "capture_at": CaptureAtComboBoxView(),
         }),
         handler=CaptureHandler(),
     )
