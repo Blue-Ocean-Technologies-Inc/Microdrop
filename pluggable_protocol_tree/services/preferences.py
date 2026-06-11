@@ -24,6 +24,7 @@ from pluggable_protocol_tree.consts import (
     DEFAULT_CAMERA_PREWARM_SECONDS,
     DEFAULT_LOGS_SETTLING_SECONDS,
     DEFAULT_REALTIME_SETTLING_SECONDS,
+    PROTOCOL_TREE_PREFERENCES_TAB_ID,
 )
 
 from logger.logger_service import get_logger
@@ -100,7 +101,7 @@ class ProtocolPreferences(PreferencesHelper):
 
 
 protocol_tree_tab = PreferencesCategory(
-    id="microdrop.protocol_tree.preferences",
+    id=PROTOCOL_TREE_PREFERENCES_TAB_ID,
     name="Protocol Settings",
     after="microdrop.device_viewer.preferences",
     before="microdrop.peripheral_settings"

@@ -20,6 +20,11 @@ current_folder_path = os.path.dirname(os.path.abspath(__file__))
 # Envisage extension point id (registered in plugin.py)
 PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 
+# Settings-dialog category id for the tree's Protocol Settings tab.
+# Other plugins anchoring panes to this tab import the constant (the
+# sanctioned constants-only cross-import), not the category object.
+PROTOCOL_TREE_PREFERENCES_TAB_ID = "microdrop.protocol_tree.preferences"
+
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
