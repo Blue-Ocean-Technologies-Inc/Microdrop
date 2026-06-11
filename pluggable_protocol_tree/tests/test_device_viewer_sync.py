@@ -452,6 +452,62 @@ def test_commit_for_unknown_step_is_dropped(qapp):
     assert row.duration_s != 2.5             # untouched
 
 
+def test_tree_param_edit_on_selected_row_republishes(qapp, monkeypatch):
+    """Protocol-originated execution-param edits supersede the DV sidebar:
+    a cell change on the selected step republishes display state."""
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._last_selected_uuid = row.uuid
+
+    manager.set_value((0,), "duration_s", 9.0)
+
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    assert len(publishes) == 1
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.execution_params["duration"] == 9.0
+
+
+def test_tree_non_param_edit_does_not_republish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._last_selected_uuid = row.uuid
+    manager.set_value((0,), "name", "renamed")
+    assert publishes == []
+
+
+def test_tree_param_edit_on_unselected_row_does_not_republish(
+    qapp, monkeypatch,
+):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    manager.add_step(values={"name": "S2"})
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._last_selected_uuid = manager.get_row((0,)).uuid
+    manager.set_value((1,), "duration_s", 9.0)   # edit the OTHER row
+    assert publishes == []
+
+
 def test_free_mode_stash_carries_sidebar_params(qapp):
     ctrl = DeviceViewerSyncController(row_manager=_make_params_manager())
     params = {

@@ -50,6 +50,15 @@ REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
     "routes", "soft_start", "soft_end", "linear_repeats",
 })
 
+# Step columns mirrored into the DV sidebar route executor (the tree side
+# of the ProtocolTreeDisplayMessage.execution_params contract). A change to
+# any of these on the selected step republishes display state so the DV
+# sidebar reloads + rebaselines - protocol values supersede the sidebar.
+DV_EXECUTION_PARAM_COL_IDS = frozenset({
+    "duration_s", "route_repetitions", "repeat_duration", "trail_length",
+    "trail_overlay", "soft_start", "soft_end", "linear_repeats",
+})
+
 # protocol_metadata / executor-scratch key carrying the per-device
 # electrode-id -> channel map (written by the DV sync controller, read
 # by phase publishers).

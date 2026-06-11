@@ -45,7 +45,8 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
-    ELECTRODE_TO_CHANNEL_KEY, PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME,
+    DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
+    PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME,
 )
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
@@ -192,6 +193,29 @@ class DeviceViewerSyncController(HasTraits):
     @observe("electrode_ids_channels_map")
     def _update_metadata(self, event):
         self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
+
+    @observe("row_manager:cell_changed")
+    def _republish_on_param_cell_change(self, event):
+        """Tree-originated edits to an execution-param cell on the selected
+        step republish display state so the DV sidebar reloads + rebaselines
+        - protocol values supersede whatever the sidebar holds. DV-originated
+        writes (the commit handler) suppress this and publish once at the
+        end instead."""
+        if event.new.get("col_id") not in DV_EXECUTION_PARAM_COL_IDS:
+            return
+        if self._suppress_publish or not self._last_selected_uuid:
+            return
+        if self._free_mode_stash is not None:
+            # Never let a cell edit trigger the leave-free-mode prompt
+            # inside _publish_for_row; the next selection change handles it.
+            return
+        try:
+            row = self.row_manager.get_row(tuple(event.new["path"]))
+        except (IndexError, AttributeError):
+            return
+        if isinstance(row, GroupRow) or row.uuid != self._last_selected_uuid:
+            return
+        self._publish_for_row(row)
 
     def _get_channels_electrode_ids_map(self):
         """
@@ -364,11 +388,18 @@ class DeviceViewerSyncController(HasTraits):
         # Direct trait writes bypass QtTreeModel.setData and the delegate,
         # so fire cell_changed per changed column — it drives both the
         # dirty tracker and the pane's repeat-duration reconciliation.
-        for col_id, value in new_values.items():
-            if getattr(row, col_id, None) == value:
-                continue
-            setattr(row, col_id, value)
-            self.row_manager.cell_changed = {"path": path, "col_id": col_id}
+        # Publishing is suppressed for the duration: these cell changes
+        # are DV-originated, so the per-cell republish observer must not
+        # echo intermediate states — one publish at the end instead.
+        self._suppress_publish = True
+        try:
+            for col_id, value in new_values.items():
+                if getattr(row, col_id, None) == value:
+                    continue
+                setattr(row, col_id, value)
+                self.row_manager.cell_changed = {"path": path, "col_id": col_id}
+        finally:
+            self._suppress_publish = False
 
         logger.info(f"DV step-params commit applied to Step {row.dotted_path()}")
         # Echo the final (post-reconciliation) state back so the DV
