@@ -14,6 +14,7 @@ trivially unit-testable.
 from traits.api import Bool, Enum, HasTraits, Instance, List, Property, Str
 
 from logger.logger_service import get_logger
+from pluggable_protocol_tree.consts import ELECTRODE_TO_CHANNEL_KEY
 
 logger = get_logger(__name__)
 
@@ -147,7 +148,7 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
                 items=items,
             ))
 
-        proto_map = (data.get("protocol_metadata") or {}).get("electrode_to_channel") or {}
+        proto_map = (data.get("protocol_metadata") or {}).get(ELECTRODE_TO_CHANNEL_KEY) or {}
         stale = [
             f"{eid}: protocol ch {proto_ch} -> device ch {device_map[eid]}"
             for eid, proto_ch in sorted(proto_map.items())
