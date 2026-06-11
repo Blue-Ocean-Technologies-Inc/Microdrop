@@ -19,6 +19,12 @@ DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
+# Sidebar route-executor execution params -> the selected protocol step.
+# Published by the DV commit button; consumed by the active protocol widget
+# (pluggable_protocol_tree sync controller; protocol_grid keeps its own
+# duplicated literal until PPT-9 deletes it). Schema:
+# device_viewer/models/step_params_commit.py.
+STEP_PARAMS_COMMIT             = "ui/device_viewer/step_params_commit"
 
 # Live gamepad button-capture (remap) request: payload is the action name being
 # rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
