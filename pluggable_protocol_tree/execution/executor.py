@@ -24,7 +24,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-from traits.api import Any, Callable as CallableTrait, HasTraits, Instance
+from traits.api import (
+    Any, Bool, Callable as CallableTrait, HasTraits, Instance, Tuple, Union,
+)
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import (
@@ -52,17 +54,19 @@ class ProtocolExecutor(HasTraits):
     pause_event = Instance(PauseEvent)
     stop_event  = Instance(threading.Event)
 
-    # Internal — set by start() / cleared by run()'s finally.
-    _thread = Any
+    # Internal — reset by start(); _thread liveness gates re-entry
+    # (is_alive()), _error routes _emit_terminal_signal. _error stays Any
+    # on purpose: it holds an arbitrary exception instance.
+    _thread = Instance(threading.Thread)
     _error  = Any
     # Optional row.path tuple — when set, run() skips frames until it
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
-    _start_step_path = Any
+    _start_step_path = Union(None, Tuple)
     # When True, the next run() builds the ProtocolContext with
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
-    _preview_mode = Any
+    _preview_mode = Bool(False)
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
 
@@ -177,7 +181,7 @@ class ProtocolExecutor(HasTraits):
             stop_event=self.stop_event,
             pause_event=self.pause_event,
             qsignals=self.qsignals,
-            preview_mode=bool(self._preview_mode),
+            preview_mode=self._preview_mode,
         )
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
         # into the context's scratch so handlers can reach it without
