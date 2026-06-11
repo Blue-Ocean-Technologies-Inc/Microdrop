@@ -11,7 +11,7 @@ The function is side-effect free (no Qt, no RowManager, no I/O) so it is
 trivially unit-testable.
 """
 
-from traits.api import HasTraits, Instance, List, Property, Str
+from traits.api import HasTraits, Instance, List, Property, Str, Enum
 
 from logger.logger_service import get_logger
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
@@ -31,10 +31,10 @@ ELECTRODES_COL_ID = "electrodes"
 
 
 class Finding(HasTraits):
-    severity = Str()       # SEVERITY_WARNING | SEVERITY_ERROR
-    category = Str()       # "orphan_column" | "electrode_id" | "stale_channel"
-    title = Str()          # short human summary
-    items = List(Str)      # detail lines
+    severity = Enum(SEVERITY_WARNING, SEVERITY_ERROR)
+    category = Enum("orphan_column", "electrode_id", "stale_channel")
+    title = Str()
+    items = List(Str, desc="detail lines")
 
 
 class ValidationReport(HasTraits):
