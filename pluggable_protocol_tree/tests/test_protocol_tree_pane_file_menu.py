@@ -11,8 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from microdrop_application.dialogs.pyface_wrapper import NO, YES
-from pluggable_protocol_tree.services.protocol_validator import CANCEL, PROCEED
+from microdrop_application.dialogs.pyface_wrapper import CANCEL, NO, YES
 
 
 def _build_pane(qapp):
@@ -384,7 +383,7 @@ def test_load_from_dialog_proceed_on_validation_findings_loads_file(
 
     monkeypatch.setattr(
         "pluggable_protocol_tree.views.protocol_tree_pane.confirm_report",
-        lambda report, parent=None: PROCEED,
+        lambda report, parent=None: YES,
     )
 
     with patch(

@@ -17,6 +17,9 @@ from traits.api import (
 from pluggable_protocol_tree.consts import PROTOCOL_ROWS_MIME
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow, build_row_type
+from pluggable_protocol_tree.services.protocol_validator import (
+    validate_protocol, log_report,
+)
 
 
 Path = Tuple[int, ...]
@@ -516,9 +519,6 @@ class RowManager(HasTraits):
         findings are printed via the module logger before loading. The load
         proceeds regardless - headless cannot prompt."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
-        from pluggable_protocol_tree.services.protocol_validator import (
-            validate_protocol, log_report,
-        )
         if report_findings:
             report = validate_protocol(data, columns, device_electrode_to_channel)
             if not report.is_empty:
@@ -542,9 +542,6 @@ class RowManager(HasTraits):
         GUI load path passes ``report_findings=False`` because it has already
         shown them in a dialog."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
-        from pluggable_protocol_tree.services.protocol_validator import (
-            validate_protocol, log_report,
-        )
 
         if report_findings:
             report = validate_protocol(data, columns, device_electrode_to_channel)

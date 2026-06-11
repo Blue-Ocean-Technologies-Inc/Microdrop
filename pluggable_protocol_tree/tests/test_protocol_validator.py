@@ -1,11 +1,21 @@
 """Tests for the pure protocol-load validator and its presenters."""
 
+import logging
 from types import SimpleNamespace
 
+from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
+from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.protocol_validator import (
     validate_protocol, ValidationReport, Finding,
     SEVERITY_ERROR, SEVERITY_WARNING,
-    _row_dotted_ids,
+    log_report, _row_dotted_ids,
+)
+from pluggable_protocol_tree.views import protocol_validator_presenter as presenter
+from pluggable_protocol_tree.views.protocol_validator_presenter import (
+    confirm_report,
 )
 
 
@@ -161,14 +171,6 @@ def test_malformed_data_no_exception():
     assert isinstance(report, ValidationReport)
 
 
-import logging
-
-from pluggable_protocol_tree.services import protocol_validator as pv
-from pluggable_protocol_tree.services.protocol_validator import (
-    log_report, confirm_report, PROCEED, CANCEL,
-)
-
-
 def _report_with_error_and_warning():
     return ValidationReport(findings=[
         Finding(severity=SEVERITY_ERROR, category="orphan_column",
@@ -193,11 +195,11 @@ def test_confirm_report_proceed(monkeypatch):
 
     def fake_confirm(parent=None, message="", title="", **kwargs):
         captured.update(title=title, kwargs=kwargs)
-        return pv.YES   # user clicked the proceed button
+        return YES   # user clicked the proceed button
 
-    monkeypatch.setattr(pv, "confirm", fake_confirm, raising=False)
+    monkeypatch.setattr(presenter, "confirm", fake_confirm)
     decision = confirm_report(_report_with_error_and_warning(), parent=None)
-    assert decision == PROCEED
+    assert decision == YES
     # errors present -> the override-labelled proceed button + error title
     assert captured["title"] == "Protocol has errors"
     assert captured["kwargs"]["yes_label"] == "Load anyway (drop columns)"
@@ -206,20 +208,14 @@ def test_confirm_report_proceed(monkeypatch):
 
 
 def test_confirm_report_cancel(monkeypatch):
-    monkeypatch.setattr(pv, "confirm", lambda *a, **k: pv.CANCEL, raising=False)
+    # confirm()'s result passes straight through; the caller treats anything
+    # but YES as cancel.
+    monkeypatch.setattr(presenter, "confirm", lambda *a, **k: CANCEL)
     report = ValidationReport(findings=[
         Finding(severity=SEVERITY_WARNING, category="electrode_id",
                 title="1 unknown electrode", items=["E99  (steps 1)"]),
     ])
     assert confirm_report(report, parent=None) == CANCEL
-
-
-import logging as _logging
-
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 
 
 def _basic_columns():
@@ -240,7 +236,7 @@ def test_set_state_from_json_logs_orphan_and_still_loads(caplog):
         "fields": ["depth", "uuid", "type", "name", "duration_s", "magnet"],
         "rows": [[0, "u0", "step", "A", 2.0, "ignored"]],
     }
-    with caplog.at_level(_logging.ERROR):
+    with caplog.at_level(logging.ERROR):
         mgr.set_state_from_json(data, columns=_basic_columns())
     assert "magnet" in caplog.text                 # orphan finding printed
     assert len(mgr.root.children) == 1             # load still happened
@@ -254,7 +250,7 @@ def test_report_findings_false_suppresses_logging(caplog):
         "fields": ["depth", "uuid", "type", "name", "magnet"],
         "rows": [[0, "u0", "step", "A", "ignored"]],
     }
-    with caplog.at_level(_logging.WARNING):
+    with caplog.at_level(logging.WARNING):
         mgr.set_state_from_json(data, columns=_basic_columns(), report_findings=False)
     # The validator's log_report prefix must be absent — persistence.py may
     # still log its own column-import warning, but the validator findings
