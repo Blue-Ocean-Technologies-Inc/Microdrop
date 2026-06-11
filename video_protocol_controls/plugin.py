@@ -7,12 +7,13 @@ topic-import dependency; until then this is a pure scaffold.
 """
 
 from envisage.plugin import Plugin
-from traits.api import List, Instance
+from traits.api import Either, List
 
 from logger.logger_service import get_logger
 
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 
 from .consts import PKG, PKG_name
 from .protocol_columns import make_video_column, make_record_column, make_capture_column
@@ -25,8 +26,10 @@ class VideoProtocolControlsPlugin(Plugin):
     id = PKG + '.plugin'
     name = f'{PKG_name} Plugin'
 
+    # Mixed contribution: video/record are flat columns, capture is a
+    # compound (#396) — same Either the extension point itself declares.
     contributed_protocol_columns = List(
-        Instance(IColumn), contributes_to=PROTOCOL_COLUMNS,
+        Either(IColumn, ICompoundColumn), contributes_to=PROTOCOL_COLUMNS,
     )
 
     def _contributed_protocol_columns_default(self):
