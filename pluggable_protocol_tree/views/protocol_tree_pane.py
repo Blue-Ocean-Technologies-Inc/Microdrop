@@ -61,6 +61,9 @@ from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
+from pluggable_protocol_tree.services.protocol_validator import (
+    validate_protocol, confirm_report, CANCEL,
+)
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -1128,7 +1131,18 @@ class ProtocolTreePane(QWidget):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            self.manager.set_state_from_json(data, columns=columns_factory())
+            columns = columns_factory()
+            device_map = None
+            if self.device_viewer_sync is not None:
+                device_map = dict(self.device_viewer_sync.electrode_ids_channels_map)
+            report = validate_protocol(data, columns, device_map)
+            if not report.is_empty:
+                if confirm_report(report, parent=parent or self) == CANCEL:
+                    return None
+            # report already shown in the dialog -> don't re-log it
+            self.manager.set_state_from_json(
+                data, columns=columns, report_findings=False,
+            )
         except Exception as e:
             error_dialog(parent=parent or self,
                          title="Load error", message=str(e))
