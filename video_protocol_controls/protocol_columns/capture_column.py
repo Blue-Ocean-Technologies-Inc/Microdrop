@@ -124,7 +124,7 @@ class CaptureHandler(BaseCompoundColumnHandler):
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
-        if not bool(getattr(row, "capture", False)):
+        if not getattr(row, "capture", False):
             return
         if getattr(row, "capture_at", StepTime.START) != StepTime.START:
             return
@@ -136,7 +136,7 @@ class CaptureHandler(BaseCompoundColumnHandler):
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
-        if not bool(getattr(row, "capture", False)):
+        if not getattr(row, "capture", False):
             return
         if getattr(row, "capture_at", StepTime.START) != StepTime.END:
             return

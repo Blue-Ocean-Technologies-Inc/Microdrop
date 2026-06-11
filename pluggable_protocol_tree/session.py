@@ -26,11 +26,11 @@ publish/wait_for handshake completes end-to-end without hardware
 
 import importlib
 import json
-import logging
 from typing import Callable, List, Optional
 
 import dramatiq
 
+from logger.logger_service import get_logger
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
@@ -38,7 +38,7 @@ from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 from pluggable_protocol_tree.models.row_manager import RowManager
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ColumnResolutionError(Exception):
@@ -80,8 +80,8 @@ def resolve_columns(payload: dict) -> List[IColumn]:
                 # the payload fall back to their declared defaults at
                 # deserialize_tree time — the one-time migration.
                 logger.info(
-                    "legacy flat column %r upgraded to compound %r",
-                    e.get("id"), resolved.model.base_id,
+                    f"legacy flat column {e.get('id')!r} upgraded to "
+                    f"compound {resolved.model.base_id!r}"
                 )
                 out.extend(_expand_compound(resolved))
             else:
@@ -181,11 +181,11 @@ def _purge_stale_subscribers(broker, router, topics) -> None:
                     router.message_router_data.remove_subscriber_from_topic(
                         topic=topic, subscribing_actor_name=actor_name,
                     )
-                    logger.info("purged stale subscriber %s on %s",
-                                actor_name, topic)
+                    logger.info(f"purged stale subscriber {actor_name} "
+                                f"on {topic}")
                 except Exception:
-                    logger.exception("failed to purge %s on %s",
-                                     actor_name, topic)
+                    logger.exception(f"failed to purge {actor_name} "
+                                     f"on {topic}")
 
 
 def _find_factory(module, target_cls) -> Optional[Callable]:
@@ -308,8 +308,8 @@ class ProtocolSession:
             return router, worker
         except Exception as e:
             logger.warning(
-                "demo hardware setup failed (Redis not running?): %s -- "
-                "the actuation handshake will time out at runtime", e,
+                f"demo hardware setup failed (Redis not running?): {e} -- "
+                f"the actuation handshake will time out at runtime",
             )
             return None, None
 

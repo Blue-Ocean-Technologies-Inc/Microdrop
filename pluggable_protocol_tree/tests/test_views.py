@@ -145,8 +145,11 @@ from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 
 
 def test_combobox_stores_options_in_order():
-    v = ComboBoxColumnView(options=["Step Start", "Step End"])
-    assert v.options == ["Step Start", "Step End"]
+    # Neutral option strings on purpose: this view is generic, not tied
+    # to any domain choice set (capture_at coupling lives in
+    # video_protocol_controls tests).
+    v = ComboBoxColumnView(options=["first choice", "second choice"])
+    assert v.options == ["first choice", "second choice"]
 
 
 def test_combobox_format_display_is_value_string():
@@ -163,13 +166,13 @@ def test_combobox_editable_on_step_not_on_group():
 
 
 def test_combobox_editor_round_trip(qapp):
-    v = ComboBoxColumnView(options=["Step Start", "Step End"])
+    v = ComboBoxColumnView(options=["first choice", "second choice"])
     editor = v.create_editor(None, None)
     assert [editor.itemText(i) for i in range(editor.count())] == [
-        "Step Start", "Step End",
+        "first choice", "second choice",
     ]
-    v.set_editor_data(editor, "Step End")
-    assert v.get_editor_data(editor) == "Step End"
+    v.set_editor_data(editor, "second choice")
+    assert v.get_editor_data(editor) == "second choice"
     # Unknown value falls back to the first option rather than -1.
     v.set_editor_data(editor, "bogus")
-    assert v.get_editor_data(editor) == "Step Start"
+    assert v.get_editor_data(editor) == "first choice"
