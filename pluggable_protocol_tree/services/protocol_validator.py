@@ -153,4 +153,19 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
                 items=items,
             ))
 
+        proto_map = (data.get("protocol_metadata") or {}).get("electrode_to_channel") or {}
+        stale = [
+            f"{eid}: protocol ch {proto_ch} -> device ch {device_map[eid]}"
+            for eid, proto_ch in sorted(proto_map.items())
+            if eid in device_map and device_map[eid] != proto_ch
+        ]
+        if stale:
+            findings.append(Finding(
+                severity=SEVERITY_WARNING,
+                category="stale_channel",
+                title=(f"{len(stale)} electrode(s) map to a different channel on "
+                       f"the current device than the protocol expects"),
+                items=stale,
+            ))
+
     return ValidationReport(findings=findings)

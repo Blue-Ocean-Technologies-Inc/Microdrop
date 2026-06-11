@@ -116,3 +116,46 @@ def test_known_electrodes_no_findings():
     report = validate_protocol(make_data(fields=fields, rows=rows),
                                fake_columns("electrodes"), device_map)
     assert report.is_empty
+
+
+def test_stale_channel_mapping_flagged():
+    fields = ["depth", "uuid", "type", "name", "electrodes"]
+    rows = [[0, "u0", "step", "A", ["E1"]]]
+    metadata = {"electrode_to_channel": {"E1": 5}}   # protocol thinks E1 -> ch 5
+    device_map = {"E1": 7}                           # device now maps E1 -> ch 7
+    report = validate_protocol(make_data(fields=fields, rows=rows, metadata=metadata),
+                               fake_columns("electrodes"), device_map)
+    stale = [f for f in report.warnings if f.category == "stale_channel"]
+    assert len(stale) == 1
+    assert stale[0].items == ["E1: protocol ch 5 -> device ch 7"]
+
+
+def test_matching_channel_not_flagged():
+    fields = ["depth", "uuid", "type", "name", "electrodes"]
+    rows = [[0, "u0", "step", "A", ["E1"]]]
+    metadata = {"electrode_to_channel": {"E1": 7}}
+    device_map = {"E1": 7}
+    report = validate_protocol(make_data(fields=fields, rows=rows, metadata=metadata),
+                               fake_columns("electrodes"), device_map)
+    assert report.is_empty
+
+
+def test_no_device_map_skips_device_checks_but_reports_orphan():
+    fields = ["depth", "uuid", "type", "name", "electrodes"]
+    rows = [[0, "u0", "step", "A", ["E_DOES_NOT_EXIST"]]]
+    data = make_data(fields=fields, rows=rows,
+                     columns=[{"id": "electrodes"}, {"id": "ghost"}],
+                     metadata={"electrode_to_channel": {"E1": 1}})
+    report = validate_protocol(data, fake_columns("electrodes"), {})  # no device
+    # device checks skipped -> only the orphan-column error remains
+    assert [f.category for f in report.findings] == ["orphan_column"]
+
+
+def test_malformed_data_no_exception():
+    assert validate_protocol(None, fake_columns("x"), {"E1": 1}).is_empty
+    assert validate_protocol({}, fake_columns("x"), {"E1": 1}).is_empty
+    # rows missing value slots / wrong types must not raise
+    bad = {"columns": [{"id": "electrodes"}], "fields": ["depth", "uuid", "type", "name", "electrodes"],
+           "rows": [[0, "u", "step", "A"], [0, "u2", "step", "B", "notalist"]]}
+    report = validate_protocol(bad, fake_columns("electrodes"), {"E1": 1})
+    assert isinstance(report, ValidationReport)
