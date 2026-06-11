@@ -137,3 +137,39 @@ def test_readonly_label_flags_not_editable():
 def test_readonly_label_create_editor_returns_none():
     v = ReadOnlyLabelColumnView()
     assert v.create_editor(None, None) is None
+
+
+# --- ComboBoxColumnView ---
+
+from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
+
+
+def test_combobox_stores_options_in_order():
+    v = ComboBoxColumnView(options=["Step Start", "Step End"])
+    assert v.options == ["Step Start", "Step End"]
+
+
+def test_combobox_format_display_is_value_string():
+    v = ComboBoxColumnView(options=["a", "b"])
+    assert v.format_display("a", BaseRow()) == "a"
+    assert v.format_display(None, BaseRow()) == ""
+
+
+def test_combobox_editable_on_step_not_on_group():
+    from pyface.qt.QtCore import Qt
+    v = ComboBoxColumnView(options=["a", "b"])
+    assert v.get_flags(BaseRow()) & Qt.ItemIsEditable
+    assert not (v.get_flags(GroupRow()) & Qt.ItemIsEditable)
+
+
+def test_combobox_editor_round_trip(qapp):
+    v = ComboBoxColumnView(options=["Step Start", "Step End"])
+    editor = v.create_editor(None, None)
+    assert [editor.itemText(i) for i in range(editor.count())] == [
+        "Step Start", "Step End",
+    ]
+    v.set_editor_data(editor, "Step End")
+    assert v.get_editor_data(editor) == "Step End"
+    # Unknown value falls back to the first option rather than -1.
+    v.set_editor_data(editor, "bogus")
+    assert v.get_editor_data(editor) == "Step Start"
