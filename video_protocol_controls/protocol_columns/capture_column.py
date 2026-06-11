@@ -32,6 +32,7 @@ from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
 from pluggable_protocol_tree.services.preferences import (
     ProtocolPreferences, StepTime,
 )
+from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
 
 class CaptureColumnModel(BaseColumnModel):
@@ -96,7 +97,7 @@ class CaptureHandler(BaseColumnHandler):
     def _fire_capture(self, row, ctx):
         """Build the legacy-compatible payload and publish it."""
         payload = {
-            "directory": ctx.protocol.scratch.get("experiment_dir", ""),
+            "directory": ctx.protocol.scratch.get(EXPERIMENT_DIR_SCRATCH_KEY, ""),
             "step_description": row.name,
             "step_id": row.uuid,
             "show_dialog": False,

@@ -20,14 +20,27 @@ current_folder_path = os.path.dirname(os.path.abspath(__file__))
 # Envisage extension point id (registered in plugin.py)
 PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 
+# Settings-dialog category id for the tree's Protocol Settings tab.
+# Other plugins anchoring panes to this tab import the constant (the
+# sanctioned constants-only cross-import), not the category object.
+PROTOCOL_TREE_PREFERENCES_TAB_ID = "microdrop.protocol_tree.preferences"
+
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
+
+# QFileDialog name filter shared by save / load / import dialogs
+PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 
 # ProtocolPreferences defaults (ported from protocol_grid with the
 # preferences model, #419 / PPT-14.1).
 DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
 DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
 DEFAULT_LOGS_SETTLING_SECONDS = 3.0
+# Slider bounds for those preference fields.
+CAMERA_PREWARM_MIN_S = 0.2
+CAMERA_PREWARM_MAX_S = 15.0
+SETTLING_TIME_MIN_S = 0.5
+SETTLING_TIME_MAX_S = 15.0
 
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.
@@ -36,6 +49,11 @@ REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
     "route_repetitions", "duration_s", "trail_length", "trail_overlay",
     "routes", "soft_start", "soft_end", "linear_repeats",
 })
+
+# protocol_metadata / executor-scratch key carrying the per-device
+# electrode-id -> channel map (written by the DV sync controller, read
+# by phase publishers).
+ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
 
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
@@ -48,6 +66,7 @@ PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
 PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
+EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
 
 ACTOR_TOPIC_DICT = {
     SYNC_LISTENER_NAME: [

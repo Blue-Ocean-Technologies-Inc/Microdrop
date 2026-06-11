@@ -101,8 +101,10 @@ class BaseStatusModel(HasTraits):
         # push initial app globals based on model values if server is connected
         try:
             self._realtime_mode_updated()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"initial realtime-mode app_globals push skipped "
+                f"(no Redis?): {e}")
 
     # ------------------------------------------------------------------ #
     # Observers

@@ -13,7 +13,7 @@ from traits.api import Instance, provides
 from electrode_controller.consts import electrode_disable_request_publisher, disabled_channels_changed_publisher
 # Local imports.
 from .consts import PKG
-from dropbot_controller.consts import TestEvent
+from dropbot_controller.models.self_tests import TestEvent
 
 from microdrop_utils.pyface_helpers import StatusBarManager
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,

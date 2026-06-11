@@ -32,8 +32,8 @@ from pluggable_protocol_tree.builtins.trail_length_column import make_trail_leng
 from pluggable_protocol_tree.builtins.trail_overlay_column import make_trail_overlay_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
-    ACTOR_TOPIC_DICT, LOGGING_ACTOR_TOPIC_DICT, PKG, PKG_name,
-    PROTOCOL_COLUMNS, PROTOCOL_QUICK_ACTIONS,
+    ACTOR_TOPIC_DICT, EXECUTOR_LISTENER_NAME, LOGGING_ACTOR_TOPIC_DICT,
+    PKG, PKG_name, PROTOCOL_COLUMNS, PROTOCOL_QUICK_ACTIONS,
 )
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -234,7 +234,7 @@ class PluggableProtocolTreePlugin(Plugin):
             for topic in topics:
                 router_data.add_subscriber_to_topic(
                     topic=topic,
-                    subscribing_actor_name="pluggable_protocol_tree_executor_listener",
+                    subscribing_actor_name=EXECUTOR_LISTENER_NAME,
                 )
         except Exception as e:
             # Redis briefly unreachable at startup shouldn't block the

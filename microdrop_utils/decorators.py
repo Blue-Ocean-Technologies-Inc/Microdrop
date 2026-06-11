@@ -2,10 +2,12 @@ import asyncio
 import functools
 import html
 import threading
-import traceback
 from typing import Any, Callable, TypeVar, cast
 
-from microdrop_application.dialogs.pyface_wrapper import error
+from microdrop_application.dialogs.pyface_wrapper import (
+    error, escape_html_multiline, format_traceback_detail,
+)
+from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from logger.logger_service import get_logger
 
@@ -40,15 +42,12 @@ def attempt_func_execution_with_error_dialog(func):
         except Exception as exc:
             op_name = func.__name__.replace("_", " ").strip().title()
             logger.error(f"{op_name} failed: {exc}", exc_info=True)
-            detail = "".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
-            )
-            cause = html.escape(str(exc) or "(no message)").replace(
-                "\n", "<br>")
+            detail = format_traceback_detail(exc)
+            cause = escape_html_multiline(str(exc) or "(no message)")
             informative = (
                 f"<p style='margin:0 0 6px 0;'>"
                 f"<b>{html.escape(op_name)}</b> failed.</p>"
-                f"<p style='margin:0;color:#c0392b;'>"
+                f"<p style='margin:0;color:{DIALOG_ERROR_TEXT_COLOR};'>"
                 f"<b>{html.escape(type(exc).__name__)}:</b> {cause}</p>"
             )
             try:
@@ -128,7 +127,8 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
                     await fn(*args, **kwargs)
                 except Exception as e:
                     # Log the error but don't let it propagate to avoid breaking the timer
-                    print(f"Error in debounced async function: {e}")
+                    logger.warning(f"Error in debounced async function {fn}: {e}",
+                                   exc_info=True)
 
             async with lock:
                 if task and not task.done():

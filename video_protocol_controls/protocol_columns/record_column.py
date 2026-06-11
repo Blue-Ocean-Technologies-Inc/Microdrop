@@ -33,6 +33,7 @@ from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_RECORDING
+from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
 
 RECORDING_ACTIVE_KEY = "video_protocol_controls.record_active"
@@ -84,7 +85,8 @@ class RecordHandler(BaseColumnHandler):
             # Flip-on: send the start payload with step metadata + experiment dir.
             payload = {
                 "action": "start",
-                "directory": ctx.protocol.scratch.get("experiment_dir", ""),
+                "directory": ctx.protocol.scratch.get(
+                    EXPERIMENT_DIR_SCRATCH_KEY, ""),
                 "step_description": row.name,
                 "step_id": row.uuid,
                 "show_dialog": False,

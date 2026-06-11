@@ -19,9 +19,10 @@ from device_viewer.models.media_capture_model import MediaCaptureMessageModel
 from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+from pluggable_protocol_tree.consts import DEFAULT_LOGS_SETTLING_SECONDS
 from pluggable_protocol_tree.services.logging import listener as _listener
 from pluggable_protocol_tree.services.logging.consts import (
-    DEFAULT_SETTLING_TIME_S, RUN_TIMESTAMP_FMT, TIME_FMT,
+    RUN_TIMESTAMP_FMT, TIME_FMT,
 )
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
@@ -40,7 +41,7 @@ def _default_settling_provider() -> float:
     """Service-layer default settling delay (seconds). The view injects a
     provider reading ProtocolPreferences.logs_settling_time_s in the full
     app; this prefs-free default keeps the service layer decoupled."""
-    return DEFAULT_SETTLING_TIME_S
+    return DEFAULT_LOGS_SETTLING_SECONDS
 
 
 def _threading_flush_scheduler(controller) -> None:

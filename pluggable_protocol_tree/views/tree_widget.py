@@ -1,12 +1,13 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
-from enum import Enum
-
-from pyface.qt.QtCore import Qt, QPersistentModelIndex, QModelIndex, Signal
+from pyface.qt.QtCore import (
+    Qt, QItemSelectionModel, QModelIndex, Signal,
+)
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
@@ -59,8 +60,7 @@ class ProtocolTreeWidget(QWidget):
         # Column visibility persists in ProtocolPreferences
         # (protocol_tree_column_visibility), passed down from the pane in
         # the full app; standalone fallback for demos/headless tests.
-        self._preferences = (preferences if preferences is not None
-                             else ProtocolPreferences())
+        self._preferences = ProtocolPreferences.ensure(preferences)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -133,11 +133,25 @@ class ProtocolTreeWidget(QWidget):
         idx = self._node_to_index(node)
         if idx.isValid():
             self.tree.scrollTo(idx, QTreeView.PositionAtCenter)
-            # Expand any collapsed ancestor groups so the row is visible.
-            parent = idx.parent()
-            while parent.isValid():
-                self.tree.expand(parent)
-                parent = parent.parent()
+            self._expand_ancestors(idx)
+
+    def set_current_row(self, row):
+        """Make ``row`` the tree's current index (expanding any collapsed
+        ancestor groups) and scroll to it. Public API for the pane's
+        step-cursor navigation — fires currentChanged like a user click."""
+        idx = self._node_to_index(row)
+        if not idx.isValid():
+            return
+        self._expand_ancestors(idx)
+        self.tree.setCurrentIndex(idx)
+        self.tree.scrollTo(idx)
+
+    def _expand_ancestors(self, idx):
+        """Expand every collapsed ancestor group so ``idx`` is visible."""
+        parent = idx.parent()
+        while parent.isValid():
+            self.tree.expand(parent)
+            parent = parent.parent()
 
     def _node_to_index(self, node):
         """Walk the row's path to a QModelIndex on the first column."""
@@ -242,7 +256,6 @@ class ProtocolTreeWidget(QWidget):
         sibling. No anchor --> root."""
         if not idx.isValid():
             return ()
-        from pluggable_protocol_tree.models.row import GroupRow
         node = idx.internalPointer()
         if isinstance(node, GroupRow):
             return self._index_to_path(idx)
@@ -295,7 +308,6 @@ class ProtocolTreeWidget(QWidget):
             self._manager.remove(valid)
 
             # Post-removal: ensure a sensible selection state.
-            from pyface.qt.QtCore import QItemSelectionModel
             sm = self.tree.selectionModel()
             if not self._manager.root.children:
                 # Empty tree --> free mode.

@@ -31,6 +31,9 @@ SECONDARY_COLOR = SECONDARY_SHADE[500]
 INFO_COLOR = "#2F80ED"
 SUCCESS_COLOR = "#37A953"
 ERROR_COLOR = '#ff0033'
+# Softer red used for exception text inside error-dialog HTML bodies
+# (ERROR_COLOR is too saturated for paragraph text on white).
+DIALOG_ERROR_TEXT_COLOR = "#c0392b"
 WARNING_COLOR = "#F5A623"
 
 GREY = {

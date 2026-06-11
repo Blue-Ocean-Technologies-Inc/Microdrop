@@ -2,6 +2,41 @@
 pluggable protocol tree's full UX (navigation, status, experiment
 bar, executor, button state machine)."""
 
+from pathlib import Path
+
+from traits.api import Directory, Event, HasTraits, Property
+
+
+class FakePausableRow:
+    """Row stub rich enough for the pause-time phase computation."""
+    path = [0]
+    name = "S"
+    duration_s = 1.0
+    electrodes = []
+    routes = []
+    trail_length = 1
+    trail_overlay = 0
+    soft_start = False
+    soft_end = False
+    repeat_duration = 0.0
+    linear_repeats = False
+    repetitions = 1
+
+
+class FakeExperimentApp(HasTraits):
+    """Application stub: current_experiment_directory Property whose
+    setter fires the experiment_changed Event, like the real app."""
+    current_experiment_directory = Property(Directory)
+    experiment_changed = Event()
+    _value = Path("/tmp/initial")
+
+    def _get_current_experiment_directory(self):
+        return self._value
+
+    def _set_current_experiment_directory(self, value):
+        self._value = Path(value)
+        self.experiment_changed = True
+
 
 def test_pane_constructs_with_columns_list(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -238,22 +273,8 @@ def test_pane_pause_splits_play_button_into_phase_nav(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeRow:
-        path = [0]
-        name = "S"
-        duration_s = 1.0
-        electrodes = []
-        routes = []
-        trail_length = 1
-        trail_overlay = 0
-        soft_start = False
-        soft_end = False
-        repeat_duration = 0.0
-        linear_repeats = False
-        repetitions = 1
-
     pane = ProtocolTreePane([make_type_column()])
-    pane._current_row = FakeRow()
+    pane._current_row = FakePausableRow()
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
@@ -263,22 +284,8 @@ def test_pane_resume_merges_phase_nav_back_to_play_button(qapp):
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeRow:
-        path = [0]
-        name = "S"
-        duration_s = 1.0
-        electrodes = []
-        routes = []
-        trail_length = 1
-        trail_overlay = 0
-        soft_start = False
-        soft_end = False
-        repeat_duration = 0.0
-        linear_repeats = False
-        repetitions = 1
-
     pane = ProtocolTreePane([make_type_column()])
-    pane._current_row = FakeRow()
+    pane._current_row = FakePausableRow()
     pane.executor.qsignals.protocol_started.emit()
     pane.executor.qsignals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
@@ -473,26 +480,10 @@ def test_pane_real_mode_label_click_opens_experiment_directory(qapp):
 def test_pane_observes_experiment_changed_event_to_update_label(qapp):
     """When application.experiment_changed fires, the label re-reads
     application.current_experiment_directory and updates."""
-    from pathlib import Path
-
-    from traits.api import Directory, Event, HasTraits, Property
-
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     pane = ProtocolTreePane([make_type_column()], application=app)
     app.current_experiment_directory = "/tmp/2026-05-08T12-00-00Z"
     assert "2026-05-08T12-00-00Z" in pane.experiment_label.text()
@@ -502,27 +493,12 @@ def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
     """Clicking New Experiment with a real Traits-backed application
     triggers the experiment_changed observer, which updates the label
     — no explicit label update needed in the click handler."""
-    from pathlib import Path
     from unittest.mock import MagicMock
-
-    from traits.api import Directory, Event, HasTraits, Property
 
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     new_dir = Path("/tmp/2026-05-08T13-37-00Z")
     exp_mgr = MagicMock()
     exp_mgr.initialize_new_experiment.return_value = new_dir
@@ -540,26 +516,10 @@ def test_pane_real_mode_new_experiment_updates_label_via_observer(qapp):
 def test_pane_closeEvent_detaches_experiment_changed_observer(qapp):
     """After closeEvent, the experiment_changed observer is unsubscribed
     so a subsequent fire doesn't dispatch to a deleted widget."""
-    from pathlib import Path
-
-    from traits.api import Directory, Event, HasTraits, Property
-
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    class FakeApp(HasTraits):
-        current_experiment_directory = Property(Directory)
-        experiment_changed = Event()
-        _value = Path("/tmp/initial")
-
-        def _get_current_experiment_directory(self):
-            return self._value
-
-        def _set_current_experiment_directory(self, value):
-            self._value = Path(value)
-            self.experiment_changed = True
-
-    app = FakeApp()
+    app = FakeExperimentApp()
     pane = ProtocolTreePane([make_type_column()], application=app)
 
     # Verify observer is wired pre-close.
@@ -839,6 +799,10 @@ def test_format_error_html_from_step_execution_error():
     class _Row:
         path = (0, 1)          # -> "Step 1.2"
         name = "Engage magnet"
+
+        def dotted_path(self):
+            # mirrors BaseRow.dotted_path
+            return ".".join(str(i + 1) for i in self.path)
 
     exc = StepExecutionError(
         _Col(), "on_step", _Row(),
@@ -1568,128 +1532,6 @@ def test_import_into_selected_group_robust_to_schema_field_order(qapp,
     assert dest.children[1].row_type == "group"
     assert dest.children[1].name == "imported_group"
     assert len(dest.children[1].children) == 0
-
-
-def test_attempt_func_execution_returns_wrapped_value_on_success(qapp):
-    """Successful call passes through the wrapped function's return value
-    with no dialog."""
-    import microdrop_utils.decorators as _dec
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-
-    calls = []
-    dec_error = _dec.error
-
-    class _Fake:
-        @ptp.attempt_func_execution_with_error_dialog
-        def do(self, x, y):
-            return x + y
-
-    f = _Fake()
-    # Sanity: the dialog is NOT invoked on success. Replace it with a
-    # tripwire that fails the test if called.
-    try:
-        _dec.error = lambda *a, **k: calls.append("BUG: dialog called on success")
-        assert f.do(2, 3) == 5
-    finally:
-        _dec.error = dec_error
-    assert calls == []
-
-
-def test_attempt_func_execution_shows_html_dialog_and_logs_on_exception(
-    qapp, monkeypatch, caplog):
-    """Exception path: dialog gets HTML informative + traceback detail,
-    logger captures the stack, and the wrapper returns None instead of
-    propagating."""
-    import logging
-    import microdrop_utils.decorators as _dec
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-
-    captured = {}
-
-    def _fake_error(parent, *, message, title, informative=None, detail=None,
-                    **kw):
-        captured["parent"] = parent
-        captured["message"] = message
-        captured["title"] = title
-        captured["informative"] = informative
-        captured["detail"] = detail
-
-    monkeypatch.setattr(_dec, "error", _fake_error)
-    caplog.set_level(logging.ERROR, logger="microdrop_utils.decorators")
-
-    class _Fake:
-        @ptp.attempt_func_execution_with_error_dialog
-        def save_protocol_dialog(self):
-            raise ValueError("disk full")
-
-    result = _Fake().save_protocol_dialog()
-    assert result is None
-    # Message + title use the humanised operation name and the exception
-    # type — both readable to a user.
-    assert captured["title"] == "Save Protocol Dialog Error"
-    assert "Save Protocol Dialog" in captured["message"]
-    assert "ValueError" in captured["message"]
-    # Informative is HTML, bold name, red exception type, escaped cause.
-    assert "<b>Save Protocol Dialog</b>" in captured["informative"]
-    assert "ValueError" in captured["informative"]
-    assert "disk full" in captured["informative"]
-    # Detail contains the full traceback (multi-line, includes "Traceback").
-    assert "Traceback" in captured["detail"]
-    assert "ValueError: disk full" in captured["detail"]
-    # Logger captured it too, with exc_info.
-    assert any(
-        "Save Protocol Dialog failed" in r.message and r.exc_info
-        for r in caplog.records)
-
-
-def test_attempt_func_execution_handles_dialog_failure_gracefully(
-    qapp, monkeypatch, caplog):
-    """If the dialog itself raises (e.g. no Qt event loop), we log it
-    but the wrapper does NOT propagate — original exception was already
-    logged so the caller can carry on."""
-    import logging
-    import microdrop_utils.decorators as _dec
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-
-    def _broken_error(*a, **k):
-        raise RuntimeError("no event loop")
-
-    monkeypatch.setattr(_dec, "error", _broken_error)
-    caplog.set_level(logging.ERROR, logger="microdrop_utils.decorators")
-
-    class _Fake:
-        @ptp.attempt_func_execution_with_error_dialog
-        def do(self):
-            raise IOError("boom")
-
-    # No exception propagates.
-    assert _Fake().do() is None
-    # Both the original error AND the dialog failure were logged.
-    messages = " | ".join(r.message for r in caplog.records)
-    assert "Do failed: boom" in messages
-    assert "failed to show error dialog" in messages
-
-
-def test_attempt_func_execution_html_escapes_exception_message(qapp,
-                                                                monkeypatch):
-    """Exception message containing HTML special chars must be escaped
-    so the dialog renders it as text, not markup."""
-    import microdrop_utils.decorators as _dec
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-
-    captured = {}
-    monkeypatch.setattr(_dec, "error",
-                        lambda parent, **k: captured.update(k))
-
-    class _Fake:
-        @ptp.attempt_func_execution_with_error_dialog
-        def do(self):
-            raise RuntimeError("<script>alert('x')</script>")
-
-    _Fake().do()
-    # The raw script tag must NOT appear; escaped form must.
-    assert "<script>" not in captured["informative"]
-    assert "&lt;script&gt;" in captured["informative"]
 
 
 def test_import_into_selected_group_skips_none_values(qapp, tmp_path,

@@ -37,6 +37,7 @@ from traits.api import List, Str
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
+    ELECTRODE_TO_CHANNEL_KEY,
     ELECTRODES_STATE_APPLIED,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
@@ -329,7 +330,7 @@ class RoutesHandler(BaseColumnHandler):
             _cooperative_sleep(remaining, stop_event, pause_event)
 
     def on_step(self, row, ctx):
-        mapping = ctx.protocol.scratch.get("electrode_to_channel", {})
+        mapping = ctx.protocol.scratch.get(ELECTRODE_TO_CHANNEL_KEY, {})
         per_phase_dwell = float(getattr(row, "duration_s", 0.0) or 0.0)
         stop_event = ctx.protocol.stop_event
         pause_event = ctx.protocol.pause_event
@@ -340,8 +341,7 @@ class RoutesHandler(BaseColumnHandler):
         # changes per phase. step_label format matches the dotted-path
         # convention used elsewhere ("Step 1.2").
         step_uuid = getattr(row, "uuid", "") or ""
-        dotted_id = ".".join(str(i + 1) for i in row.path)
-        step_label = f"Step {dotted_id}"
+        step_label = f"Step {row.dotted_path()}"
 
         routes = list(getattr(row, "routes", []) or [])
 

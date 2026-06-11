@@ -21,10 +21,7 @@ class IdColumnModel(BaseColumnModel):
 
 class IdColumnView(ReadOnlyLabelColumnView):
     def format_display(self, value, row):
-        path = row.path
-        if not path:
-            return ""
-        return ".".join(str(i + 1) for i in path)
+        return row.dotted_path()
 
 
 def make_id_column():
