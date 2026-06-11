@@ -506,9 +506,23 @@ class RowManager(HasTraits):
         )
 
     @classmethod
-    def from_json(cls, data: dict, columns: list) -> "RowManager":
-        """Reconstruct a RowManager from a serialized payload."""
+    def from_json(cls, data: dict, columns: list,
+                  device_electrode_to_channel=None,
+                  report_findings: bool = True) -> "RowManager":
+        """Reconstruct a RowManager from a serialized payload.
+
+        When ``report_findings`` is True (headless default) the payload is
+        validated against ``columns`` + ``device_electrode_to_channel`` and any
+        findings are printed via the module logger before loading. The load
+        proceeds regardless - headless cannot prompt."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
+        from pluggable_protocol_tree.services.protocol_validator import (
+            validate_protocol, log_report,
+        )
+        if report_findings:
+            report = validate_protocol(data, columns, device_electrode_to_channel)
+            if not report.is_empty:
+                log_report(report)
         manager = cls(columns=list(columns))
         root, metadata = deserialize_tree(
             data, columns,
@@ -518,9 +532,24 @@ class RowManager(HasTraits):
         manager.protocol_metadata = metadata
         return manager
 
-    def set_state_from_json(self, data: dict, columns: list) -> None:
-        """Reconstruct tree state in-place from a serialized payload dynamically."""
+    def set_state_from_json(self, data: dict, columns: list,
+                            device_electrode_to_channel=None,
+                            report_findings: bool = True) -> None:
+        """Reconstruct tree state in-place from a serialized payload dynamically.
+
+        When ``report_findings`` is True (headless default) findings are
+        validated and printed via the module logger before applying state. The
+        GUI load path passes ``report_findings=False`` because it has already
+        shown them in a dialog."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
+        from pluggable_protocol_tree.services.protocol_validator import (
+            validate_protocol, log_report,
+        )
+
+        if report_findings:
+            report = validate_protocol(data, columns, device_electrode_to_channel)
+            if not report.is_empty:
+                log_report(report)
 
         # 1. Update columns. This triggers _on_columns_change via Traits,
         #    which automatically rebuilds self.step_type and self.group_type.
