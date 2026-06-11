@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from pluggable_protocol_tree.services.protocol_validator import (
     validate_protocol, ValidationReport, Finding,
     SEVERITY_ERROR, SEVERITY_WARNING,
+    _row_dotted_ids,
 )
 
 
@@ -68,3 +69,50 @@ def test_multiple_orphans_one_finding():
     report = validate_protocol(data, fake_columns("duration_s"), {})
     assert len(report.errors) == 1
     assert sorted(report.errors[0].items) == ["a", "b"]
+
+
+def test_dotted_ids_nested():
+    # depths [0,1,1,0] -> ["1","1.1","1.2","2"]
+    rows = [
+        [0, "u0", "group", "G"],
+        [1, "u1", "step", "A"],
+        [1, "u2", "step", "B"],
+        [0, "u3", "step", "C"],
+    ]
+    assert _row_dotted_ids(rows) == ["1", "1.1", "1.2", "2"]
+
+
+def test_unknown_electrode_in_electrodes_column():
+    fields = ["depth", "uuid", "type", "name", "electrodes"]
+    rows = [
+        [0, "u0", "step", "A", ["E1", "E99"]],
+        [0, "u1", "step", "B", ["E1"]],
+    ]
+    device_map = {"E1": 1}   # E99 is unknown
+    report = validate_protocol(make_data(fields=fields, rows=rows),
+                               fake_columns("electrodes"), device_map)
+    warns = report.warnings
+    assert len(warns) == 1
+    assert warns[0].category == "electrode_id"
+    assert warns[0].items == ["E99  (steps 1)"]
+
+
+def test_unknown_electrode_in_routes_column():
+    fields = ["depth", "uuid", "type", "name", "routes"]
+    rows = [
+        [0, "u0", "step", "A", [["E1", "E2"], ["E2", "EX"]]],
+    ]
+    device_map = {"E1": 1, "E2": 2}   # EX unknown
+    report = validate_protocol(make_data(fields=fields, rows=rows),
+                               fake_columns("routes"), device_map)
+    assert [f.category for f in report.warnings] == ["electrode_id"]
+    assert report.warnings[0].items == ["EX  (steps 1)"]
+
+
+def test_known_electrodes_no_findings():
+    fields = ["depth", "uuid", "type", "name", "electrodes"]
+    rows = [[0, "u0", "step", "A", ["E1", "E2"]]]
+    device_map = {"E1": 1, "E2": 2}
+    report = validate_protocol(make_data(fields=fields, rows=rows),
+                               fake_columns("electrodes"), device_map)
+    assert report.is_empty
