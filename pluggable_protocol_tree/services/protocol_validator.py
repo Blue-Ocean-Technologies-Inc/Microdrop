@@ -2,20 +2,13 @@
 
 ``validate_protocol`` reads the raw serialized protocol JSON (output of
 ``services.persistence.serialize_tree``) and returns a structured
-``ValidationReport``. It performs three checks:
-
-  * orphan column   (error)   - a saved col_id has no live column; its
-                                 values are silently dropped by
-                                 ``deserialize_tree``.
-  * electrode id    (warning) - an electrode referenced by a step's
-                                 routes/electrodes doesn't exist on the
-                                 current device.
-  * stale channel   (warning) - the protocol's stored electrode->channel
-                                 disagrees with the device's current map.
+``ValidationReport``. The full module will perform three checks (orphan
+column / electrode id / stale channel) and provide two presenters
+(``log_report`` headless, ``confirm_report`` GUI dialog); checks beyond
+orphan-column and the presenters are added in later tasks.
 
 The function is side-effect free (no Qt, no RowManager, no I/O) so it is
-trivially unit-testable. Two presenters render a report: ``log_report``
-(headless, logger output) and ``confirm_report`` (GUI dialog).
+trivially unit-testable.
 """
 
 from dataclasses import dataclass, field
@@ -70,7 +63,9 @@ def validate_protocol(data, columns, device_electrode_to_channel) -> ValidationR
     if not isinstance(data, dict):
         return ValidationReport(findings=findings)
 
-    col_specs = data.get("columns") or []
+    col_specs = data.get("columns")
+    if not isinstance(col_specs, list):
+        col_specs = []
 
     # --- orphan columns (device-independent) ---
     live_ids = {c.model.col_id for c in (columns or [])}

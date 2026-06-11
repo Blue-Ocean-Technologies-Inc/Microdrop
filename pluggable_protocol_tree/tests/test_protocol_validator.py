@@ -41,3 +41,30 @@ def test_orphan_column_is_error():
     assert finding.category == "orphan_column"
     assert finding.items == ["magnet"]
     assert not report.is_empty
+
+
+def test_non_list_columns_does_not_raise():
+    data = make_data()
+    data["columns"] = "corrupted"   # not a list
+    report = validate_protocol(data, fake_columns("x"), {})
+    assert report.is_empty
+
+
+def test_non_dict_column_spec_is_skipped():
+    data = make_data(columns=[42, {"id": "magnet"}])  # 42 is not a spec dict
+    report = validate_protocol(data, fake_columns("duration_s"), {})
+    assert [f.category for f in report.errors] == ["orphan_column"]
+    assert report.errors[0].items == ["magnet"]
+
+
+def test_none_columns_arg_treated_as_empty():
+    data = make_data(columns=[{"id": "magnet"}])
+    report = validate_protocol(data, None, {})  # no live columns
+    assert report.errors[0].items == ["magnet"]
+
+
+def test_multiple_orphans_one_finding():
+    data = make_data(columns=[{"id": "a"}, {"id": "b"}, {"id": "duration_s"}])
+    report = validate_protocol(data, fake_columns("duration_s"), {})
+    assert len(report.errors) == 1
+    assert sorted(report.errors[0].items) == ["a", "b"]
