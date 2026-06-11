@@ -46,6 +46,7 @@ from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
     ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
     PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
+    VALIDATION_CANCEL,
 )
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -65,7 +66,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import (
-    validate_protocol, confirm_report, CANCEL,
+    validate_protocol, confirm_report,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
@@ -1158,7 +1159,7 @@ class ProtocolTreePane(QWidget):
                 device_map = dict(self.device_viewer_sync.electrode_ids_channels_map)
             report = validate_protocol(data, columns, device_map)
             if not report.is_empty:
-                if confirm_report(report, parent=parent or self) == CANCEL:
+                if confirm_report(report, parent=parent or self) == VALIDATION_CANCEL:
                     return None
             # report already shown in the dialog -> don't re-log it
             self.manager.set_state_from_json(

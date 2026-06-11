@@ -15,12 +15,9 @@ from traits.api import HasTraits, Instance, List, Property, Str, Enum
 
 from logger.logger_service import get_logger
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
 
 logger = get_logger(__name__)
-
-# Presenter decisions.
-PROCEED = "proceed"
-CANCEL = "cancel"
 
 SEVERITY_WARNING = "warning"
 SEVERITY_ERROR = "error"
@@ -204,7 +201,8 @@ def _format_detail(report) -> str:
 
 
 def confirm_report(report, parent=None) -> str:
-    """GUI presenter: one two-tier summary dialog. Returns PROCEED or CANCEL.
+    """GUI presenter: one two-tier summary dialog. Returns VALIDATION_PROCEED
+    or VALIDATION_CANCEL.
 
     Uses exactly two buttons - a proceed button (yes_label) and Cancel - by
     passing no_label="" to suppress confirm()'s default No button. When errors
@@ -226,4 +224,4 @@ def confirm_report(report, parent=None) -> str:
         informative=_format_html(report),
         detail=_format_detail(report),
     )
-    return PROCEED if result == YES else CANCEL
+    return VALIDATION_PROCEED if result == YES else VALIDATION_CANCEL

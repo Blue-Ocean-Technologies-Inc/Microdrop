@@ -163,9 +163,10 @@ def test_malformed_data_no_exception():
 
 import logging
 
+from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
 from pluggable_protocol_tree.services import protocol_validator as pv
 from pluggable_protocol_tree.services.protocol_validator import (
-    log_report, confirm_report, PROCEED, CANCEL,
+    log_report, confirm_report,
 )
 
 
@@ -197,7 +198,7 @@ def test_confirm_report_proceed(monkeypatch):
 
     monkeypatch.setattr(pv, "confirm", fake_confirm, raising=False)
     decision = confirm_report(_report_with_error_and_warning(), parent=None)
-    assert decision == PROCEED
+    assert decision == VALIDATION_PROCEED
     # errors present -> the override-labelled proceed button + error title
     assert captured["title"] == "Protocol has errors"
     assert captured["kwargs"]["yes_label"] == "Load anyway (drop columns)"
@@ -206,12 +207,15 @@ def test_confirm_report_proceed(monkeypatch):
 
 
 def test_confirm_report_cancel(monkeypatch):
-    monkeypatch.setattr(pv, "confirm", lambda *a, **k: pv.CANCEL, raising=False)
+    # confirm() returning anything but YES (here: the user hit Cancel) maps
+    # to the VALIDATION_CANCEL decision.
+    from microdrop_application.dialogs.pyface_wrapper import CANCEL as PYFACE_CANCEL
+    monkeypatch.setattr(pv, "confirm", lambda *a, **k: PYFACE_CANCEL, raising=False)
     report = ValidationReport(findings=[
         Finding(severity=SEVERITY_WARNING, category="electrode_id",
                 title="1 unknown electrode", items=["E99  (steps 1)"]),
     ])
-    assert confirm_report(report, parent=None) == CANCEL
+    assert confirm_report(report, parent=None) == VALIDATION_CANCEL
 
 
 import logging as _logging
