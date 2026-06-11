@@ -17,6 +17,12 @@ class ProtocolTreeDisplayMessage(BaseModel):
     step_label: str | None = None
     free_mode: bool = False
     editable: bool = True
+    # The step's route-execution params keyed by the DV sidebar's names
+    # (duration / repetitions / repeat_duration / trail_length /
+    # trail_overlay / soft_start / soft_terminate / linear_repeats —
+    # same contract as StepParamsCommitMessage minus step_id). None in
+    # free mode; the DV then disables its commit-to-step button.
+    execution_params: dict | None = None
 
     def serialize(self) -> str:
         return self.model_dump_json()

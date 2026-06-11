@@ -66,10 +66,9 @@ from microdrop_utils.pyside_helpers import (
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from protocol_grid.consts import CALIBRATION_DATA, STEP_PARAMS_COMMIT
 from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED, FILLER_CAPACITANCE_KEY, \
-    LIQUID_CAPACITANCE_KEY
-from protocol_grid.models.step_params_commit import StepParamsCommitMessage
+    LIQUID_CAPACITANCE_KEY, CALIBRATION_DATA, STEP_PARAMS_COMMIT
+from ..models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
     PKG,
@@ -310,10 +309,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             for eid in msg.electrodes
             if id_to_channel.get(eid) is not None
         }
-        # execution_params intentionally omitted — tree steps carry no
-        # sidebar params, so apply_message_model will fire
-        # clear_committed_baseline() in its else branch. Matches legacy
-        # behavior when a step (not free mode) is the message source.
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
             routes=[(route, self.model.routes.get_available_color())
@@ -325,6 +320,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 "free_mode": msg.free_mode,
             },
             editable=msg.editable,
+            execution_params=msg.execution_params,
         )
         self.device_view.display_state_signal.emit(rich.serialize())
 
@@ -424,6 +420,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             # The grid's selection remains visually on the new row, but the
             # sidebar stays on the old values — see spec open item re:
             # forcing the grid to revert selection.
+        elif message_model.execution_params and not self.model.protocol_running:
+            # Same-step refresh: the protocol widget echoing back a commit
+            # after its own reconciliation (e.g. the tree recalculating
+            # Route Reps Dur). Reload + rebaseline silently — no
+            # uncommitted-changes prompt, the step did not change.
+            self.model.routes.apply_execution_params(
+                message_model.execution_params
+            )
 
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
@@ -1226,6 +1230,32 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         except Exception as e:
             logger.error(e, exc_info=True)
+
+    @observe(
+        "model.routes.duration, model.routes.repetitions, "
+        "model.routes.repeat_duration, model.routes.trail_length, "
+        "model.routes.trail_overlay, model.routes.soft_start, "
+        "model.routes.soft_terminate, model.routes.linear_repeats"
+    )
+    def execution_params_change_handler(self, event=None):
+        """Free-mode state messages carry the sidebar execution params so
+        the protocol widget can seed them into an inserted step — republish
+        when the user tweaks a param spinner in free mode (the
+        electrode/route observer above doesn't cover the param traits).
+        With a step selected the params travel via STEP_PARAMS_COMMIT
+        instead. Bulk programmatic writes (apply_execution_params on step
+        transition, repeats_frozen resets) run under
+        _suspend_repeat_exclusion and must not publish — they would race
+        the transition with stale free-mode payloads.
+        """
+        if self.model.step_id:
+            return
+        if self._disable_state_messages or self.model.routes._suspend_repeat_exclusion:
+            return
+        if not self.model.electrodes.svg_model:
+            return
+        self.message_buffer = gui_models_to_message_model(self.model).serialize()
+        self.publish_model_message()
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"

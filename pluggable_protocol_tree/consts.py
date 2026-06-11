@@ -6,7 +6,7 @@ defined here, ACTOR_TOPIC_DICT aggregating the listener-->topic map."""
 import os
 
 from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_GEOMETRY_CHANGED, \
-    DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_MEDIA_CAPTURED, CALIBRATION_DATA
+    DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_MEDIA_CAPTURED, CALIBRATION_DATA, STEP_PARAMS_COMMIT
 
 from dropbot_controller.consts import CAPACITANCE_UPDATED, REALTIME_MODE_UPDATED
 
@@ -50,6 +50,15 @@ REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
     "routes", "soft_start", "soft_end", "linear_repeats",
 })
 
+# Step columns mirrored into the DV sidebar route executor (the tree side
+# of the ProtocolTreeDisplayMessage.execution_params contract). A change to
+# any of these on the selected step republishes display state so the DV
+# sidebar reloads + rebaselines - protocol values supersede the sidebar.
+DV_EXECUTION_PARAM_COL_IDS = frozenset({
+    "duration_s", "route_repetitions", "repeat_duration", "trail_length",
+    "trail_overlay", "soft_start", "soft_end", "linear_repeats",
+})
+
 # protocol_metadata / executor-scratch key carrying the per-device
 # electrode-id -> channel map (written by the DV sync controller, read
 # by phase publishers).
@@ -73,7 +82,8 @@ ACTOR_TOPIC_DICT = {
         DEVICE_VIEWER_STATE_CHANGED,
         DEVICE_VIEWER_GEOMETRY_CHANGED,
         PROTOCOL_RUNNING,
-        REALTIME_MODE_UPDATED
+        REALTIME_MODE_UPDATED,
+        STEP_PARAMS_COMMIT,
     ]
 }
 

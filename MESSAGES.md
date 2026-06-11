@@ -130,27 +130,31 @@ The device viewer pushes its full UI state (routes, free-mode electrode state, c
 **Subscriber side (protocol_grid)**
 - `protocol_grid/services/message_listener.py:52-54` — `_on_device_viewer_message_received()` handles the topic, deserializes, and re-emits a Qt signal `device_viewer_message_received` for UI consumption.
 
-### Device Viewer → Protocol Grid: step execution params commit
+### Device Viewer → protocol widgets: step execution params commit
 
 Separate topic used only when the user explicitly commits the sidebar
 execution parameters back to the selected protocol step. Distinct from the
-live route sync so grid cells only mutate on deliberate user action.
+live route sync so step cells only mutate on deliberate user action.
 
 **Topic**
-- `STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"` — defined in `protocol_grid/consts.py`.
+- `STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"` — canonical home `device_viewer/consts.py` (the DV publishes it); `protocol_grid/consts.py` keeps a duplicated literal until PPT-9.
 
 **Publisher side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py` — `_on_commit_to_step_btn_fired` builds a `StepParamsCommitMessage` and publishes via `publish_message.send(topic=STEP_PARAMS_COMMIT, ...)`.
-- Triggered by the Traits Button `commit_to_step_btn` on `RouteLayerManager`.
+- `device_viewer/views/device_view_dock_pane.py` — `_on_commit_to_step_btn_fired` builds a `StepParamsCommitMessage` and publishes via `publish_message.send(topic=STEP_PARAMS_COMMIT, ...)`; the step-transition Commit/Discard/Cancel prompt (`_apply_step_transition`) publishes the same message on "Commit".
+- Triggered by the Traits Button `commit_to_step_btn` on `RouteLayerManager`; enabled only when the sidebar values diverge from the committed baseline.
 
 **Payload schema**
-- Pydantic `StepParamsCommitMessage` at `protocol_grid/models/step_params_commit.py`.
-- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate`.
+- Pydantic `StepParamsCommitMessage` at `device_viewer/models/step_params_commit.py` (canonical; `protocol_grid/models/step_params_commit.py` is the legacy copy).
+- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate, linear_repeats`.
 
-**Subscriber side (protocol_grid)**
+**Subscriber side (protocol_grid, legacy)**
 - `protocol_grid/services/message_listener.py` — `listener_actor_routine` branches on `STEP_PARAMS_COMMIT`, deserializes, emits `step_params_commit_received`.
-- `protocol_grid/widget.py` — `_on_step_params_commit` finds the step by UID and writes the 7 cell values.
+- `protocol_grid/widget.py` — `_on_step_params_commit` finds the step by UID and writes the cell values.
+
+**Subscriber side (pluggable_protocol_tree)**
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_step_params_commit_qt` finds the row by uuid and writes the mapped columns (`repetitions` → `route_repetitions`, `soft_terminate` → `soft_end`, rest 1:1), firing `cell_changed` per column for dirty tracking. Of the Route Reps / Route Reps Dur pair only the row's controlling knob (per `repeat_duration_controls`) is written — the pane reconciliation derives the other. It then re-publishes `PROTOCOL_TREE_DISPLAY_STATE` for the selected row so the DV rebaselines on the post-reconciliation values.
 
 **Companion addition (pull direction)**
-- The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` now carries the target step's params in `DeviceViewerMessageModel.execution_params`. The DV only applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking.
+- The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
+- The tree publishes that same-step refresh in two cases: the post-commit echo (above), and any tree-originated edit to an execution-param cell on the selected step (`_republish_on_param_cell_change`, gated on `DV_EXECUTION_PARAM_COL_IDS`) — protocol values supersede the sidebar, including uncommitted sidebar edits.
 
