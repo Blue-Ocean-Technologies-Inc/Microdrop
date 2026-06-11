@@ -11,7 +11,7 @@ The function is side-effect free (no Qt, no RowManager, no I/O) so it is
 trivially unit-testable.
 """
 
-from traits.api import HasTraits, Instance, List, Property, Str, Enum
+from traits.api import Bool, Enum, HasTraits, Instance, List, Property, Str
 
 from logger.logger_service import get_logger
 
@@ -35,9 +35,9 @@ class Finding(HasTraits):
 class ValidationReport(HasTraits):
     findings = List(Instance(Finding))
 
-    errors = Property(observe="findings")
-    warnings = Property(observe="findings")
-    is_empty = Property(observe="findings")
+    errors = Property(List(Instance(Finding)), observe="findings")
+    warnings = Property(List(Instance(Finding)), observe="findings")
+    is_empty = Property(Bool, observe="findings")
 
     def _get_errors(self):
         return [f for f in self.findings if f.severity == SEVERITY_ERROR]
