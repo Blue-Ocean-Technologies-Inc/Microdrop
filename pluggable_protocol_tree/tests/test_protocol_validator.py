@@ -209,3 +209,51 @@ def test_confirm_report_cancel(monkeypatch):
         Finding(SEVERITY_WARNING, "electrode_id", "1 unknown electrode", ["E99  (steps 1)"]),
     ])
     assert confirm_report(report, parent=None) == CANCEL
+
+
+import logging as _logging
+
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+
+
+def _basic_columns():
+    return [make_type_column(), make_name_column(), make_duration_column()]
+
+
+def test_set_state_from_json_logs_orphan_and_still_loads(caplog):
+    mgr = RowManager(columns=_basic_columns())
+    # A save that references a "magnet" column we don't have loaded.
+    data = {
+        "schema_version": 1,
+        "protocol_metadata": {},
+        "columns": [
+            {"id": "duration_s",
+             "cls": "pluggable_protocol_tree.builtins.duration_column.DurationColumnModel"},
+            {"id": "magnet", "cls": "x.Y"},
+        ],
+        "fields": ["depth", "uuid", "type", "name", "duration_s", "magnet"],
+        "rows": [[0, "u0", "step", "A", 2.0, "ignored"]],
+    }
+    with caplog.at_level(_logging.ERROR):
+        mgr.set_state_from_json(data, columns=_basic_columns())
+    assert "magnet" in caplog.text                 # orphan finding printed
+    assert len(mgr.root.children) == 1             # load still happened
+
+
+def test_report_findings_false_suppresses_logging(caplog):
+    mgr = RowManager(columns=_basic_columns())
+    data = {
+        "schema_version": 1, "protocol_metadata": {},
+        "columns": [{"id": "magnet", "cls": "x.Y"}],
+        "fields": ["depth", "uuid", "type", "name", "magnet"],
+        "rows": [[0, "u0", "step", "A", "ignored"]],
+    }
+    with caplog.at_level(_logging.WARNING):
+        mgr.set_state_from_json(data, columns=_basic_columns(), report_findings=False)
+    # The validator's log_report prefix must be absent — persistence.py may
+    # still log its own column-import warning, but the validator findings
+    # ("Protocol load: ...") are suppressed when report_findings=False.
+    assert "Protocol load:" not in caplog.text
