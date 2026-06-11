@@ -52,7 +52,10 @@ def resolve_columns(payload: dict) -> List[IColumn]:
 
     Two shapes:
     - **Simple column entry** (no ``compound_id``): instantiated via its
-      module's ``make_*_column`` factory, appended as-is.
+      module's ``make_*_column`` factory, appended as-is. If the factory
+      returns an ``ICompoundColumn`` (the plugin upgraded the flat column
+      to a compound since the protocol was saved), it is expanded inline
+      and the new fields take their declared defaults.
     - **Compound field entries** (have ``compound_id``): consecutive
       entries with the same ``(cls, compound_id)`` are grouped; the
       factory is called ONCE and the returned ``CompoundColumn`` is
@@ -69,7 +72,20 @@ def resolve_columns(payload: dict) -> List[IColumn]:
         e = entries[i]
         compound_id = e.get("compound_id")
         if compound_id is None:
-            out.append(_resolve_simple_entry(e))
+            resolved = _resolve_simple_entry(e)
+            if isinstance(resolved, ICompoundColumn):
+                # The plugin upgraded this legacy flat column to a
+                # compound (e.g. the pre-#396 'capture' Bool became
+                # capture + capture_at). Expand it; fields absent from
+                # the payload fall back to their declared defaults at
+                # deserialize_tree time — the one-time migration.
+                logger.info(
+                    "legacy flat column %r upgraded to compound %r",
+                    e.get("id"), resolved.model.base_id,
+                )
+                out.extend(_expand_compound(resolved))
+            else:
+                out.append(resolved)
             i += 1
             continue
         # Group consecutive entries with the same (cls, compound_id).
