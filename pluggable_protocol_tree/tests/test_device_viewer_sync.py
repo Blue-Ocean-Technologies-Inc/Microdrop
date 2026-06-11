@@ -6,7 +6,9 @@ from device_viewer.consts import (
     DEVICE_VIEWER_STATE_CHANGED,
     DEVICE_VIEWER_GEOMETRY_CHANGED,
     PROTOCOL_RUNNING,
+    STEP_PARAMS_COMMIT,
 )
+from device_viewer.models.step_params_commit import StepParamsCommitMessage
 from pluggable_protocol_tree.builtins.electrodes_column import (
     make_electrodes_column,
 )
@@ -55,7 +57,8 @@ def test_listener_routine_emits_protocol_running_bool(qapp):
     spy.assert_any_call(False)
 
 
-def test_actor_subscribes_to_three_topics():
+def test_actor_subscribed_topics():
+    from dropbot_controller.consts import REALTIME_MODE_UPDATED
     ctrl = DeviceViewerSyncController(row_manager=_make_manager())
     from pluggable_protocol_tree.consts import ACTOR_TOPIC_DICT
     topics = ACTOR_TOPIC_DICT[ctrl.listener_name]
@@ -63,6 +66,8 @@ def test_actor_subscribes_to_three_topics():
         DEVICE_VIEWER_STATE_CHANGED,
         DEVICE_VIEWER_GEOMETRY_CHANGED,
         PROTOCOL_RUNNING,
+        REALTIME_MODE_UPDATED,
+        STEP_PARAMS_COMMIT,
     }
 
 
@@ -246,6 +251,199 @@ def test_group_click_emits_free_mode_payload(qapp, monkeypatch):
     assert msg.electrodes == []
     assert msg.routes == []
     assert msg.step_id is None
+    assert msg.execution_params is None    # DV disables its commit button
+
+
+# --- DV sidebar route-executor params (issue #435 / PPT-23) ---------------
+
+def _make_params_manager():
+    """Manager with every route-execution param column the DV sidebar maps."""
+    from pluggable_protocol_tree.builtins.duration_column import (
+        make_duration_column,
+    )
+    from pluggable_protocol_tree.builtins.linear_repeats_column import (
+        make_linear_repeats_column,
+    )
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.soft_end_column import (
+        make_soft_end_column,
+    )
+    from pluggable_protocol_tree.builtins.soft_start_column import (
+        make_soft_start_column,
+    )
+    from pluggable_protocol_tree.builtins.trail_length_column import (
+        make_trail_length_column,
+    )
+    from pluggable_protocol_tree.builtins.trail_overlay_column import (
+        make_trail_overlay_column,
+    )
+    return RowManager(columns=[
+        make_name_column(),
+        make_electrodes_column(),
+        make_routes_column(),
+        make_duration_column(),
+        make_route_repetitions_column(),
+        make_repeat_duration_column(),
+        make_trail_length_column(),
+        make_trail_overlay_column(),
+        make_soft_start_column(),
+        make_soft_end_column(),
+        make_linear_repeats_column(),
+    ])
+
+
+def _commit_msg(step_id, **overrides):
+    values = dict(
+        step_id=step_id, duration=2.5, repetitions=4, repeat_duration=0,
+        trail_length=3, trail_overlay=1, soft_start=True,
+        soft_terminate=True, linear_repeats=True,
+    )
+    values.update(overrides)
+    return StepParamsCommitMessage(**values)
+
+
+def test_step_publish_includes_mapped_execution_params(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={
+        "name": "S1", "duration_s": 2.5, "route_repetitions": 4,
+        "repeat_duration": 6.42, "trail_length": 3, "trail_overlay": 1,
+        "soft_start": True, "soft_end": True, "linear_repeats": False,
+    })
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._publish_for_row(manager.get_row((0,)))
+
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.execution_params == {
+        "duration": 2.5,
+        "repetitions": 4,            # route_repetitions column
+        "repeat_duration": 6,        # rounded to the DV integer spinner
+        "trail_length": 3,
+        "trail_overlay": 1,
+        "soft_start": True,
+        "soft_terminate": True,      # soft_end column
+        "linear_repeats": False,
+    }
+
+
+def test_listener_routine_emits_step_params_committed(qapp):
+    ctrl = DeviceViewerSyncController(row_manager=_make_params_manager())
+    spy = MagicMock()
+    ctrl.bridge.step_params_committed.connect(spy)
+    ctrl._listener_routine("payload", STEP_PARAMS_COMMIT)
+    qapp.processEvents()
+    spy.assert_called_once_with("payload")
+
+
+def test_commit_writes_params_and_fires_cell_changed(qapp):
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+
+    changed_cols = []
+    manager.observe(
+        lambda ev: changed_cols.append(ev.new["col_id"]), "cell_changed",
+    )
+    ctrl._on_step_params_commit_qt(_commit_msg(row.uuid).serialize())
+
+    assert row.duration_s == 2.5
+    assert row.route_repetitions == 4
+    assert row.trail_length == 3
+    assert row.trail_overlay == 1
+    assert row.soft_start is True
+    assert row.soft_end is True              # DV soft_terminate
+    assert row.linear_repeats is True
+    assert set(changed_cols) == {
+        "duration_s", "route_repetitions", "trail_length", "trail_overlay",
+        "soft_start", "soft_end", "linear_repeats",
+    }
+
+
+def test_commit_count_mode_skips_derived_repeat_duration(qapp):
+    """repeat_duration_controls False: Route Reps Dur is derived (the pane
+    reconciliation recalculates it) so the commit must not write it."""
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1", "repeat_duration": 9.99})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_step_params_commit_qt(
+        _commit_msg(row.uuid, repeat_duration=0).serialize()
+    )
+    assert row.repeat_duration == 9.99       # untouched
+    assert row.route_repetitions == 4
+
+
+def test_commit_duration_mode_skips_derived_route_repetitions(qapp):
+    """repeat_duration_controls True: Route Reps is derived instead."""
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1", "route_repetitions": 7})
+    row = manager.get_row((0,))
+    row.repeat_duration_controls = True
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_step_params_commit_qt(
+        _commit_msg(row.uuid, repetitions=1, repeat_duration=12).serialize()
+    )
+    assert row.repeat_duration == 12.0
+    assert row.route_repetitions == 7        # untouched
+
+
+def test_commit_for_selected_row_republishes_display_state(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._last_selected_uuid = row.uuid
+    ctrl._on_step_params_commit_qt(_commit_msg(row.uuid).serialize())
+
+    from pluggable_protocol_tree.models.display_state import (
+        ProtocolTreeDisplayMessage,
+    )
+    assert len(publishes) == 1               # the rebaseline echo
+    msg = ProtocolTreeDisplayMessage.deserialize(publishes[0][1])
+    assert msg.step_id == row.uuid
+    assert msg.execution_params["duration"] == 2.5
+
+
+def test_commit_for_unselected_row_does_not_republish(qapp, monkeypatch):
+    publishes = []
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.services.device_viewer_sync.publish_message",
+        lambda topic, message: publishes.append((topic, message)),
+    )
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)   # nothing selected
+    ctrl._on_step_params_commit_qt(_commit_msg(row.uuid).serialize())
+    assert publishes == []
+    assert row.duration_s == 2.5             # write still happened
+
+
+def test_commit_for_unknown_step_is_dropped(qapp):
+    manager = _make_params_manager()
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    ctrl = DeviceViewerSyncController(row_manager=manager)
+    ctrl._on_step_params_commit_qt(_commit_msg("no-such-uuid").serialize())
+    assert row.duration_s != 2.5             # untouched
 
 
 def test_group_row_emits_free_mode_payload(qapp, monkeypatch):
