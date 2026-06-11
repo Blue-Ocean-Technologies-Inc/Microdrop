@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, List, Str
+from traits.api import Bool, Dict, Directory, Enum, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import View, Item
 
@@ -21,25 +21,39 @@ from microdrop_utils.preferences_UI_helpers import create_grid_group
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from pluggable_protocol_tree.consts import (
+    CAMERA_PREWARM_MAX_S,
+    CAMERA_PREWARM_MIN_S,
     DEFAULT_CAMERA_PREWARM_SECONDS,
     DEFAULT_LOGS_SETTLING_SECONDS,
     DEFAULT_REALTIME_SETTLING_SECONDS,
     PROTOCOL_TREE_PREFERENCES_TAB_ID,
+    SETTLING_TIME_MAX_S,
+    SETTLING_TIME_MIN_S,
 )
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class StepTime(str, Enum):
+class StepTime:
+    """Values for the capture_time preference. Plain str constants, NOT a
+    Python enum — they are persisted and compared as bare strings (e.g.
+    capture_column's ``capture_time == StepTime.START``)."""
+
     END = "Step End"
     START = "Step Start"
 
 
 class ProtocolPreferences(PreferencesHelper):
-    """The preferences helper, inspired by envisage one for the Attractors application.
-    The underlying preference object is the global default since we do not pass a
-    Preference object. See source code for PreferencesHelper for more details."""
+    """Protocol-tree preferences helper.
+
+    Distinct from the legacy ``protocol_grid.preferences.
+    ProtocolPreferences`` but bound to the same "microdrop.protocol"
+    node for settings continuity (see module docstring). In the full app
+    the dock pane binds it to the application's preferences via
+    ``ProtocolPreferences(preferences=app.preferences)``; constructed
+    bare it falls back to the global default node (demos / headless
+    tests — see ``ensure``)."""
 
     #### 'PreferencesHelper' interface ########################################
 
@@ -49,22 +63,22 @@ class ProtocolPreferences(PreferencesHelper):
     #### Preferences ##########################################################
     camera_prewarm_seconds = RangeWithViewHints(
         value=DEFAULT_CAMERA_PREWARM_SECONDS,
-        low=0.2,
-        high=15.0,
+        low=CAMERA_PREWARM_MIN_S,
+        high=CAMERA_PREWARM_MAX_S,
         desc="Camera switch on lead time"
     )
 
     realtime_mode_settling_time_s = RangeWithViewHints(
         value=DEFAULT_REALTIME_SETTLING_SECONDS,
-        low=0.5,
-        high=15.0,
+        low=SETTLING_TIME_MIN_S,
+        high=SETTLING_TIME_MAX_S,
         desc="Time to allow for realtime mode to settle pre protocol start"
     )
 
     logs_settling_time_s = RangeWithViewHints(
         value=DEFAULT_LOGS_SETTLING_SECONDS,
-        low=0.5,
-        high=15.0,
+        low=SETTLING_TIME_MIN_S,
+        high=SETTLING_TIME_MAX_S,
         desc="Time to allow logs post protocol end"
     )
 
@@ -118,8 +132,6 @@ class ProtocolPreferencesPane(PreferencesPane):
     model_factory = ProtocolPreferences
 
     category = protocol_tree_tab.id
-
-    _changed_preferences = List()
 
     # Create the grid group for the sidebar items.
     camera_settings_grid = create_grid_group(

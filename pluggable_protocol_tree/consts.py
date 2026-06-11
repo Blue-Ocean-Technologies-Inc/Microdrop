@@ -36,6 +36,11 @@ PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
 DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
 DEFAULT_LOGS_SETTLING_SECONDS = 3.0
+# Slider bounds for those preference fields.
+CAMERA_PREWARM_MIN_S = 0.2
+CAMERA_PREWARM_MAX_S = 15.0
+SETTLING_TIME_MIN_S = 0.5
+SETTLING_TIME_MAX_S = 15.0
 
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.
