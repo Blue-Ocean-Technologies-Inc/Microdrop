@@ -1,12 +1,13 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
-from enum import Enum
-
-from pyface.qt.QtCore import Qt, QPersistentModelIndex, QModelIndex, Signal
+from pyface.qt.QtCore import (
+    Qt, QItemSelectionModel, QModelIndex, Signal,
+)
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
 
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
@@ -255,7 +256,6 @@ class ProtocolTreeWidget(QWidget):
         sibling. No anchor --> root."""
         if not idx.isValid():
             return ()
-        from pluggable_protocol_tree.models.row import GroupRow
         node = idx.internalPointer()
         if isinstance(node, GroupRow):
             return self._index_to_path(idx)
@@ -308,7 +308,6 @@ class ProtocolTreeWidget(QWidget):
             self._manager.remove(valid)
 
             # Post-removal: ensure a sensible selection state.
-            from pyface.qt.QtCore import QItemSelectionModel
             sm = self.tree.selectionModel()
             if not self._manager.root.children:
                 # Empty tree --> free mode.
