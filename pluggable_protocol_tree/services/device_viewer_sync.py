@@ -54,6 +54,26 @@ from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 logger = get_logger(__name__)
 
+
+def _execution_params_for_row(row) -> dict:
+    """The row's route-execution params keyed/typed per the DV sidebar
+    contract (ProtocolTreeDisplayMessage.execution_params /
+    StepParamsCommitMessage): the DV's ``repetitions`` is the tree's
+    ``route_repetitions`` column, ``soft_terminate`` is ``soft_end``,
+    and its ``repeat_duration`` spinner is integer-granular."""
+    return {
+        "duration": float(getattr(row, "duration_s", 1.0) or 0.0),
+        "repetitions": int(getattr(row, "route_repetitions", 1) or 1),
+        "repeat_duration": int(round(float(
+            getattr(row, "repeat_duration", 0.0) or 0.0))),
+        "trail_length": int(getattr(row, "trail_length", 1) or 1),
+        "trail_overlay": int(getattr(row, "trail_overlay", 0) or 0),
+        "soft_start": bool(getattr(row, "soft_start", False)),
+        "soft_terminate": bool(getattr(row, "soft_end", False)),
+        "linear_repeats": bool(getattr(row, "linear_repeats", False)),
+    }
+
+
 class _Bridge(QObject):
     """Qt signal bridge - Dramatiq actor runs on a worker thread, Qt
     mutations must happen on the GUI thread."""
@@ -320,6 +340,7 @@ class DeviceViewerSyncController(HasTraits):
                 step_label=f"Step {dotted_id}",
                 free_mode=False,
                 editable=True,
+                execution_params=_execution_params_for_row(row),
             )
             if row.uuid != prev_uuid:
                 logger.info(
