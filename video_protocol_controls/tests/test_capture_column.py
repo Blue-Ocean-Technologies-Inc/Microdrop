@@ -1,7 +1,6 @@
 """Tests for the capture compound column (#396 / PPT-19) — per-step
-capture timing (capture Bool + capture_at Step Start/Step End), the
-preference acting as default-only, and migration of legacy flat-capture
-protocols."""
+capture timing (capture Bool + capture_at Step Start/Step End) and the
+preference acting as default-only."""
 
 import json
 from types import SimpleNamespace
@@ -17,8 +16,8 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import StepTime
 from pluggable_protocol_tree.session import resolve_columns
 from video_protocol_controls.protocol_columns.capture_column import (
-    CaptureAtComboBoxView, CaptureColumnModel, CaptureCompoundModel,
-    CaptureHandler, make_capture_column,
+    CaptureAtComboBoxView, CaptureCompoundModel, CaptureHandler,
+    make_capture_column,
 )
 
 CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column"
@@ -58,12 +57,6 @@ def test_capture_at_default_follows_model_default():
     assert specs[1].default_value == StepTime.END
 
 
-def test_legacy_class_name_is_the_compound_model():
-    """Pre-#396 protocols recorded CaptureColumnModel as the cls qualname;
-    the alias keeps them resolvable."""
-    assert CaptureColumnModel is CaptureCompoundModel
-
-
 # --- factory ----------------------------------------------------------------
 
 def test_factory_returns_compound_with_checkbox_and_combobox():
@@ -72,6 +65,8 @@ def test_factory_returns_compound_with_checkbox_and_combobox():
     assert col.model.base_id == "capture"
     at_view = col.view.cell_view_for_field("capture_at")
     assert isinstance(at_view, CaptureAtComboBoxView)
+    # The combobox options come from the model's single definition.
+    assert at_view.options == list(CaptureCompoundModel.CAPTURE_AT_CHOICES)
     assert at_view.options == [StepTime.START, StepTime.END]
 
 
@@ -212,46 +207,27 @@ def test_round_trip_preserves_per_step_capture_at(qapp):
     ]
 
 
-def _legacy_payload(manager):
-    """Downgrade a current to_json payload to the pre-#396 shape: one flat
-    'capture' column entry (CaptureColumnModel qualname, no compound_id)
-    and no capture_at field/values."""
-    data = json.loads(json.dumps(manager.to_json()))
-    at_idx = data["fields"].index("capture_at")
-    cap_idx = data["fields"].index("capture")
-    data["columns"] = [
-        c for c in data["columns"] if c.get("compound_id") != "capture"
-    ] + [{
-        "id": "capture",
-        "cls": f"{CAPTURE_COLUMN_MODULE}.CaptureColumnModel",
-    }]
-    data["rows"] = [
-        row[:4] + [v for i, v in enumerate(row[4:], start=4)
-                   if i not in (at_idx, cap_idx)] + [row[cap_idx]]
-        for row in data["rows"]
-    ]
-    data["fields"] = [f for f in data["fields"]
-                      if f not in ("capture", "capture_at")] + ["capture"]
-    return data
-
-
-def test_legacy_flat_capture_protocol_migrates(qapp):
-    """Acceptance: loading a pre-#396 protocol keeps every step's capture
-    flag and fills capture_at from the current pref."""
+def test_payload_missing_capture_at_fills_from_pref_default(qapp):
+    """A payload without the capture_at field (e.g. written before the
+    column existed) loads with capture flags intact and capture_at
+    falling back to the factory default = current pref."""
     manager = _capture_manager()
     manager.add_step(values={"name": "captures", "capture": True})
     manager.add_step(values={"name": "plain"})
-    legacy = _legacy_payload(manager)
+    data = json.loads(json.dumps(manager.to_json()))
+    at_idx = data["fields"].index("capture_at")
+    data["fields"].remove("capture_at")
+    data["rows"] = [
+        row[:at_idx] + row[at_idx + 1:] for row in data["rows"]
+    ]
 
     with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
         P.return_value = SimpleNamespace(capture_time=StepTime.END)
-        columns = resolve_columns(legacy)
-
-    col_ids = [c.model.col_id for c in columns]
-    assert "capture" in col_ids and "capture_at" in col_ids
-
-    migrated = RowManager.from_json(legacy, columns=columns)
-    captures, plain = migrated.get_row((0,)), migrated.get_row((1,))
+        manager_end_pref = _capture_manager()
+    loaded = RowManager.from_json(
+        data, columns=list(manager_end_pref.columns),
+    )
+    captures, plain = loaded.get_row((0,)), loaded.get_row((1,))
     assert captures.capture is True and plain.capture is False
     assert captures.capture_at == StepTime.END    # filled from the pref
     assert plain.capture_at == StepTime.END

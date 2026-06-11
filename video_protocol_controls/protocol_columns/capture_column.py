@@ -4,8 +4,7 @@ sharing one model + one handler via the PPT-11 compound framework (#396).
 
 Timing is PER STEP: each row picks start-of-step or end-of-step capture
 independently. The global ProtocolPreferences.capture_time pref is the
-DEFAULT for newly added steps (read once at factory time) and the
-fill-in for legacy protocols saved before capture_at existed — it never
+DEFAULT for newly added steps (read once at factory time) — it never
 overrides a per-step value.
 
 Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic; the
@@ -47,15 +46,18 @@ from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
 class CaptureCompoundModel(BaseCompoundColumnModel):
     """Two coupled fields. base_id 'capture' appears as compound_id on
-    each field's column entry in JSON (PPT-11 framework). The first
-    field keeps the legacy 'capture' col_id so protocols saved with the
-    flat pre-#396 column load their per-step flags unchanged."""
+    each field's column entry in JSON (PPT-11 framework)."""
     base_id = "capture"
 
-    # Default capture_at for newly added steps AND the fill-in for
-    # legacy protocols that have no capture_at field. The factory seeds
-    # it from ProtocolPreferences.capture_time.
-    default_capture_at = Enum(StepTime.START, StepTime.END)
+    #: The selectable capture moments, in display order — the single
+    #: definition; the default/per-row trait validation and the
+    #: combobox options all derive from it.
+    CAPTURE_AT_CHOICES = (StepTime.START, StepTime.END)
+
+    # Default capture_at for newly added steps (and the fill-in for any
+    # payload missing the field). The factory seeds it from
+    # ProtocolPreferences.capture_time.
+    default_capture_at = Enum(*CAPTURE_AT_CHOICES)
 
     def field_specs(self):
         return [
@@ -68,17 +70,9 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
             return Bool(False, desc="Capture image during step")
         if field_id == "capture_at":
             return Enum(self.default_capture_at,
-                        [StepTime.START, StepTime.END],
+                        list(self.CAPTURE_AT_CHOICES),
                         desc="When during the step the capture fires")
         raise KeyError(field_id)
-
-
-# Legacy qualname: pre-#396 protocols recorded the flat Capture column as
-# '...capture_column.CaptureColumnModel'. session.resolve_columns imports
-# that name, matches it to make_capture_column, and upgrades the entry to
-# the compound (capture_at fills from the factory default = current pref).
-# Remove once protocols saved before #396 are no longer in circulation.
-CaptureColumnModel = CaptureCompoundModel
 
 
 class CaptureAtComboBoxView(ComboBoxColumnView):
@@ -160,17 +154,17 @@ def make_capture_column():
     """Return a fresh Capture compound column (capture + capture_at).
 
     ProtocolPreferences.capture_time is read once at call time and
-    becomes the capture_at default for newly added steps and for legacy
-    flat-capture protocols; per-step edits are never overridden by the
-    pref.
+    becomes the capture_at default for newly added steps; per-step edits
+    are never overridden by the pref.
     """
     prefs = ProtocolPreferences()
+    model = CaptureCompoundModel(default_capture_at=prefs.capture_time)
     return CompoundColumn(
-        model=CaptureCompoundModel(default_capture_at=prefs.capture_time),
+        model=model,
         view=DictCompoundColumnView(cell_views={
             "capture": CheckboxColumnView(),
             "capture_at": CaptureAtComboBoxView(
-                options=[StepTime.START, StepTime.END],
+                options=list(model.CAPTURE_AT_CHOICES),
             ),
         }),
         handler=CaptureHandler(),
