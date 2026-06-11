@@ -45,9 +45,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
-    PROTOCOL_FILE_DIALOG_FILTER, PROTOCOL_TREE_DISPLAY_STATE,
-    REPEAT_DURATION_RECALC_TRIGGERS,
+    ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
+    ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
+    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -912,7 +912,7 @@ class ProtocolTreePane(QWidget):
             return
         phase = self._pause_phases[self._pause_phase_idx]
         mapping = self.manager.protocol_metadata.get(
-            "electrode_to_channel", {},
+            ELECTRODE_TO_CHANNEL_KEY, {},
         )
         electrodes = sorted(phase)
         channels = sorted(mapping[e] for e in electrodes if e in mapping)

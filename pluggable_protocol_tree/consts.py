@@ -40,6 +40,11 @@ REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
     "routes", "soft_start", "soft_end", "linear_repeats",
 })
 
+# protocol_metadata / executor-scratch key carrying the per-device
+# electrode-id -> channel map (written by the DV sync controller, read
+# by phase publishers).
+ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
+
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
 

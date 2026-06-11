@@ -42,7 +42,9 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME
+from pluggable_protocol_tree.consts import (
+    ELECTRODE_TO_CHANNEL_KEY, PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME,
+)
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
@@ -97,8 +99,10 @@ class DeviceViewerSyncController(HasTraits):
         )
 
         # seed electrode_ids_channels_map from metadata if it exists
-        if self.row_manager.protocol_metadata.get("electrode_to_channel"):
-            self.electrode_ids_channels_map = self.row_manager.protocol_metadata["electrode_to_channel"]
+        if self.row_manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY):
+            self.electrode_ids_channels_map = (
+                self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY]
+            )
 
     # --- public lifecycle ----------------------------------------------
 
@@ -142,7 +146,7 @@ class DeviceViewerSyncController(HasTraits):
     # -------- trait observers --------------
     @observe("electrode_ids_channels_map")
     def _update_metadata(self, event):
-        self.row_manager.protocol_metadata["electrode_to_channel"] = event.new
+        self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
 
     def _get_channels_electrode_ids_map(self):
         """
@@ -220,7 +224,7 @@ class DeviceViewerSyncController(HasTraits):
         # Cold-start seed: populate metadata if empty so reverse-lookup
         # works. Non-empty metadata comes from GEOMETRY_CHANGED, which
         # is authoritative; state msgs only fill the gap at cold-start.
-        if (not self.row_manager.protocol_metadata.get("electrode_to_channel")
+        if (not self.row_manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY)
                 and dv_msg.id_to_channel):
 
             logger.info(f"Protocol Tree: Applying initial id_to_channel to metadata:  {dv_msg.id_to_channel} ")
