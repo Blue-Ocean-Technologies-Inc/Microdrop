@@ -1132,6 +1132,8 @@ class ProtocolTreePane(QWidget):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             columns = columns_factory()
+            # Device's current electrode->channel map (from DEVICE_VIEWER_GEOMETRY_CHANGED);
+            # None when no device/sync is wired -> validator skips device-dependent checks.
             device_map = None
             if self.device_viewer_sync is not None:
                 device_map = dict(self.device_viewer_sync.electrode_ids_channels_map)

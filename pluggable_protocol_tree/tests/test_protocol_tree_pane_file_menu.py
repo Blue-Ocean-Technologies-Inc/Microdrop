@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from microdrop_application.dialogs.pyface_wrapper import NO, YES
+from pluggable_protocol_tree.services.protocol_validator import CANCEL, PROCEED
 
 
 def _build_pane(qapp):
@@ -320,3 +321,78 @@ def test_application_exiting_proceeds_on_dirty_yes(qapp):
     ):
         pane._on_application_exiting(ev)
     assert ev.veto is False
+
+
+# --- validation cancel / proceed branches --------------------------------
+
+def _write_orphan_protocol(path):
+    """Write a protocol JSON that triggers a non-empty ValidationReport.
+
+    The 'definitely_not_a_real_col' column is not registered in the pane's
+    live columns ([type, name]) so it is an orphan column — a device-
+    independent finding that needs no device map to trigger.
+    """
+    data = {
+        "schema_version": 1,
+        "protocol_metadata": {},
+        "columns": [
+            {"id": "definitely_not_a_real_col", "cls": "x.Y"},
+        ],
+        "fields": ["depth", "uuid", "type", "name", "definitely_not_a_real_col"],
+        "rows": [
+            [0, "u0", "step", "loaded-step", "orphan-value"],
+        ],
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+def test_load_from_dialog_cancel_on_validation_findings_aborts_load(
+    qapp, tmp_path, monkeypatch
+):
+    """Findings present + user cancels -> load_from_dialog returns None and
+    the manager is untouched (no new steps from the temp file)."""
+    pane = _build_pane(qapp)
+    fixture = tmp_path / "orphan.json"
+    _write_orphan_protocol(fixture)
+
+    children_before = len(pane.manager.root.children)
+
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.confirm_report",
+        lambda report, parent=None: CANCEL,
+    )
+
+    with patch(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog"
+    ) as QFD:
+        QFD.getOpenFileName.return_value = (str(fixture), "Protocol JSON (*.json)")
+        result = pane.load_from_dialog(lambda: list(pane.manager.columns))
+
+    assert result is None
+    assert len(pane.manager.root.children) == children_before
+
+
+def test_load_from_dialog_proceed_on_validation_findings_loads_file(
+    qapp, tmp_path, monkeypatch
+):
+    """Findings present + user proceeds -> load_from_dialog returns the path
+    and the manager reflects the loaded file (orphan column dropped)."""
+    pane = _build_pane(qapp)
+    fixture = tmp_path / "orphan.json"
+    _write_orphan_protocol(fixture)
+
+    monkeypatch.setattr(
+        "pluggable_protocol_tree.views.protocol_tree_pane.confirm_report",
+        lambda report, parent=None: PROCEED,
+    )
+
+    with patch(
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog"
+    ) as QFD:
+        QFD.getOpenFileName.return_value = (str(fixture), "Protocol JSON (*.json)")
+        result = pane.load_from_dialog(lambda: list(pane.manager.columns))
+
+    assert result == str(fixture)
+    assert len(pane.manager.root.children) == 1
+    assert pane.manager.root.children[0].name == "loaded-step"
