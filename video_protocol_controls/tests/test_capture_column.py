@@ -1,316 +1,257 @@
-"""Tests for the capture column — model, factory, view, handler."""
+"""Tests for the capture compound column (#396 / PPT-19) — per-step
+capture timing (capture Bool + capture_at Step Start/Step End), the
+preference acting as default-only, and migration of legacy flat-capture
+protocols."""
 
 import json
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from traits.api import HasTraits
+from pyface.qt.QtCore import Qt
 
-from video_protocol_controls.protocol_columns.capture_column import (
-    CaptureColumnModel, CaptureHandler, make_capture_column,
-)
-from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
-from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
+from pluggable_protocol_tree.models._compound_adapters import _expand_compound
+from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import StepTime
+from pluggable_protocol_tree.session import resolve_columns
+from video_protocol_controls.protocol_columns.capture_column import (
+    CaptureAtComboBoxView, CaptureColumnModel, CaptureCompoundModel,
+    CaptureHandler, make_capture_column,
+)
+
+CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column"
 
 
-# ---------------------------------------------------------------------------
-# 1. Model trait type / default
-# ---------------------------------------------------------------------------
-
-def test_capture_column_model_trait_for_row_is_bool_with_default_false():
-    """Row trait stores Bool with default False."""
-    m = CaptureColumnModel(col_id="capture", col_name="Capture", default_value=False)
-    trait = m.trait_for_row()
-
-    class Row(HasTraits):
-        capture = trait
-
-    r = Row()
-    assert r.capture is False
-    r.capture = True
-    assert r.capture is True
-    r.capture = False
-    assert r.capture is False
+def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
+    return SimpleNamespace(name=name, uuid=uuid, capture=capture,
+                           capture_at=capture_at)
 
 
-# ---------------------------------------------------------------------------
-# 2. Factory composition
-# ---------------------------------------------------------------------------
+def _ctx(experiment_dir=""):
+    scratch = {"experiment_dir": experiment_dir} if experiment_dir else {}
+    return SimpleNamespace(protocol=SimpleNamespace(scratch=scratch))
 
-def test_make_capture_column_returns_column_with_correct_ids():
-    """Factory yields a Column with col_id='capture', col_name='Capture'."""
+
+def _capture_manager():
+    return RowManager(columns=[
+        make_type_column(), make_name_column(),
+        *_expand_compound(make_capture_column()),
+    ])
+
+
+# --- model ----------------------------------------------------------------
+
+def test_field_specs_capture_then_capture_at():
+    specs = CaptureCompoundModel().field_specs()
+    assert [(s.field_id, s.col_name) for s in specs] == [
+        ("capture", "Capture"), ("capture_at", "Capture At"),
+    ]
+    assert specs[0].default_value is False
+    assert specs[1].default_value == StepTime.START
+
+
+def test_capture_at_default_follows_model_default():
+    specs = CaptureCompoundModel(
+        default_capture_at=StepTime.END).field_specs()
+    assert specs[1].default_value == StepTime.END
+
+
+def test_legacy_class_name_is_the_compound_model():
+    """Pre-#396 protocols recorded CaptureColumnModel as the cls qualname;
+    the alias keeps them resolvable."""
+    assert CaptureColumnModel is CaptureCompoundModel
+
+
+# --- factory ----------------------------------------------------------------
+
+def test_factory_returns_compound_with_checkbox_and_combobox():
     col = make_capture_column()
-    assert col.model.col_id == "capture"
-    assert col.model.col_name == "Capture"
+    assert isinstance(col, ICompoundColumn)
+    assert col.model.base_id == "capture"
+    at_view = col.view.cell_view_for_field("capture_at")
+    assert isinstance(at_view, CaptureAtComboBoxView)
+    assert at_view.options == [StepTime.START, StepTime.END]
 
 
-def test_make_capture_column_view_is_checkbox():
-    col = make_capture_column()
-    assert isinstance(col.view, CheckboxColumnView)
+def test_factory_seeds_capture_at_default_from_pref():
+    for pref_value in (StepTime.START, StepTime.END):
+        with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
+            P.return_value = SimpleNamespace(capture_time=pref_value)
+            col = make_capture_column()
+        assert col.model.default_capture_at == pref_value
 
 
-def test_make_capture_column_handler_is_capture_handler():
-    col = make_capture_column()
-    assert isinstance(col.handler, CaptureHandler)
+def test_new_step_gets_pref_default_without_overriding_edits():
+    """The pref is the DEFAULT for new steps; per-step values stand."""
+    with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
+        P.return_value = SimpleNamespace(capture_time=StepTime.END)
+        manager = _capture_manager()
+    manager.add_step(values={"name": "defaulted"})
+    manager.add_step(values={"name": "explicit", "capture_at": StepTime.START})
+    assert manager.get_row((0,)).capture_at == StepTime.END
+    assert manager.get_row((1,)).capture_at == StepTime.START
 
 
-def test_make_capture_column_default_value_is_false():
-    col = make_capture_column()
-    assert col.model.default_value is False
+# --- handler ----------------------------------------------------------------
 
-
-# ---------------------------------------------------------------------------
-# 3. Handler priority
-# ---------------------------------------------------------------------------
-
-def test_capture_handler_priority_is_10():
-    handler = CaptureHandler()
+def test_handler_priority_and_fire_and_forget():
+    handler = make_capture_column().handler
     assert handler.priority == 10
+    assert list(handler.wait_for_topics) == []
 
 
-# ---------------------------------------------------------------------------
-# 4. Handler has no wait_for_topics (empty list)
-# ---------------------------------------------------------------------------
-
-def test_capture_handler_wait_for_topics_is_empty():
-    handler = CaptureHandler()
-    assert handler.wait_for_topics == []
-
-
-# ---------------------------------------------------------------------------
-# 5. Pref binding — START: fire_at_start is True when capture_time == START
-# ---------------------------------------------------------------------------
-
-def test_make_capture_column_fire_at_start_true_when_pref_is_start():
-    """With capture_time=StepTime.START, handler.fire_at_start should be True."""
-    mock_prefs = MagicMock()
-    mock_prefs.capture_time = StepTime.START
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.ProtocolPreferences",
-        return_value=mock_prefs,
-    ):
-        col = make_capture_column()
-
-    assert col.handler.fire_at_start is True
-
-
-# ---------------------------------------------------------------------------
-# 6. Pref binding — END: fire_at_start is False when capture_time == END
-# ---------------------------------------------------------------------------
-
-def test_make_capture_column_fire_at_start_false_when_pref_is_end():
-    """With capture_time=StepTime.END, handler.fire_at_start should be False."""
-    mock_prefs = MagicMock()
-    mock_prefs.capture_time = StepTime.END
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.ProtocolPreferences",
-        return_value=mock_prefs,
-    ):
-        col = make_capture_column()
-
-    assert col.handler.fire_at_start is False
-
-
-# ---------------------------------------------------------------------------
-# 7. on_pre_step fires with correct JSON when fire_at_start=True, capture=True
-# ---------------------------------------------------------------------------
-
-def test_on_pre_step_fires_capture_when_fire_at_start_true_and_capture_true():
-    """fire_at_start=True, row.capture=True --> publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
-    handler = CaptureHandler(fire_at_start=True)
-
-    row = MagicMock()
-    row.uuid = "step-abc"
-    row.name = "Step 1"
-    row.capture = True
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    published = []
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message",
-        side_effect=lambda **kw: published.append(kw),
-    ):
-        handler.on_pre_step(row, ctx)
-
-    assert len(published) == 1
-    assert published[0]["topic"] == DEVICE_VIEWER_SCREEN_CAPTURE
-    payload = json.loads(published[0]["message"])
-    assert payload["step_id"] == "step-abc"
-    assert payload["step_description"] == "Step 1"
-    assert payload["directory"] == "/tmp/foo"
-    assert payload["show_dialog"] is False
-    # Confirm legacy key name (not "experiment_dir")
-    assert "directory" in payload
-    assert "experiment_dir" not in payload
-
-
-# ---------------------------------------------------------------------------
-# 8. on_pre_step does NOT fire when fire_at_start=False (end-time mode)
-# ---------------------------------------------------------------------------
-
-def test_on_pre_step_does_not_fire_when_fire_at_start_false():
-    """fire_at_start=False --> on_pre_step is a no-op regardless of row.capture."""
-    handler = CaptureHandler(fire_at_start=False)
-
-    row = MagicMock()
-    row.capture = True
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message"
-    ) as mock_pub:
-        handler.on_pre_step(row, ctx)
-
-    mock_pub.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# 9. on_pre_step does NOT fire when row.capture=False (regardless of timing)
-# ---------------------------------------------------------------------------
-
-def test_on_pre_step_does_not_fire_when_capture_false():
-    """fire_at_start=True but row.capture=False --> no publish."""
-    handler = CaptureHandler(fire_at_start=True)
-
-    row = MagicMock()
-    row.capture = False
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message"
-    ) as mock_pub:
-        handler.on_pre_step(row, ctx)
-
-    mock_pub.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# 10. on_post_step fires with correct JSON when fire_at_start=False, capture=True
-# ---------------------------------------------------------------------------
-
-def test_on_post_step_fires_capture_when_fire_at_start_false_and_capture_true():
-    """fire_at_start=False, row.capture=True --> publish to DEVICE_VIEWER_SCREEN_CAPTURE."""
-    handler = CaptureHandler(fire_at_start=False)
-
-    row = MagicMock()
-    row.uuid = "step-xyz"
-    row.name = "Step 2"
-    row.capture = True
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/bar"}
-
-    published = []
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message",
-        side_effect=lambda **kw: published.append(kw),
-    ):
-        handler.on_post_step(row, ctx)
-
-    assert len(published) == 1
-    assert published[0]["topic"] == DEVICE_VIEWER_SCREEN_CAPTURE
-    payload = json.loads(published[0]["message"])
-    assert payload["step_id"] == "step-xyz"
-    assert payload["step_description"] == "Step 2"
-    assert payload["directory"] == "/tmp/bar"
-    assert payload["show_dialog"] is False
-    assert "directory" in payload
-    assert "experiment_dir" not in payload
-
-
-# ---------------------------------------------------------------------------
-# 11. on_post_step does NOT fire when fire_at_start=True (start-time mode)
-# ---------------------------------------------------------------------------
-
-def test_on_post_step_does_not_fire_when_fire_at_start_true():
-    """fire_at_start=True → on_post_step is a no-op regardless of row.capture."""
-    handler = CaptureHandler(fire_at_start=True)
-
-    row = MagicMock()
-    row.capture = True
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message"
-    ) as mock_pub:
-        handler.on_post_step(row, ctx)
-
-    mock_pub.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# 12. on_post_step does NOT fire when row.capture=False
-# ---------------------------------------------------------------------------
-
-def test_on_post_step_does_not_fire_when_capture_false():
-    """fire_at_start=False but row.capture=False → no publish."""
-    handler = CaptureHandler(fire_at_start=False)
-
-    row = MagicMock()
-    row.capture = False
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    with patch(
-        "video_protocol_controls.protocol_columns.capture_column.publish_message"
-    ) as mock_pub:
-        handler.on_post_step(row, ctx)
-
-    mock_pub.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# 13. No cross-step state: calling on_pre_step twice fires two publishes
-#     (no change-detection suppression — capture is per-step, not bracketed)
-# ---------------------------------------------------------------------------
-
-def test_no_cross_step_state_two_calls_fire_two_publishes():
-    """Calling on_pre_step twice with capture=True fires twice (no dedup)."""
-    handler = CaptureHandler(fire_at_start=True)
-
-    row = MagicMock()
-    row.uuid = "s1"
-    row.name = "Step 1"
-    row.capture = True
-
-    ctx = MagicMock()
-    ctx.protocol.scratch = {"experiment_dir": "/tmp/foo"}
-
-    published = []
-    patch_target = (
-        "video_protocol_controls.protocol_columns.capture_column.publish_message"
+def _patched_fires(monkeypatch):
+    fired = []
+    monkeypatch.setattr(
+        f"{CAPTURE_COLUMN_MODULE}.publish_message",
+        lambda topic, message: fired.append((topic, json.loads(message))),
     )
-
-    with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
-        handler.on_pre_step(row, ctx)
-        handler.on_pre_step(row, ctx)
-
-    assert len(published) == 2
+    return fired
 
 
-def test_capture_handler_has_no_active_scratch_key():
-    """CaptureHandler carries no cross-step state attribute.
-
-    Confirms there is no 'active' or similar instance attribute that would
-    imply change-detection state (that would be wrong — Capture is per-step).
-    """
+def test_capture_at_start_fires_only_in_pre_step(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    row = _row(capture=True, capture_at=StepTime.START)
     handler = CaptureHandler()
-    handler_attrs = dir(handler)
-    # Spot-check: none of these change-detection names should exist
-    for name in ("active", "record_active", "camera_on", "_is_recording",
-                 "_is_capturing"):
-        assert name not in handler_attrs, (
-            f"CaptureHandler unexpectedly has attribute '{name}' — "
-            "capture should be stateless (no cross-step dedup)."
-        )
+    handler.on_pre_step(row, _ctx())
+    handler.on_post_step(row, _ctx())
+    assert len(fired) == 1
+
+
+def test_capture_at_end_fires_only_in_post_step(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    row = _row(capture=True, capture_at=StepTime.END)
+    handler = CaptureHandler()
+    handler.on_pre_step(row, _ctx())
+    assert fired == []
+    handler.on_post_step(row, _ctx())
+    assert len(fired) == 1
+
+
+def test_no_fire_when_capture_false(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    for at in (StepTime.START, StepTime.END):
+        row = _row(capture=False, capture_at=at)
+        handler.on_pre_step(row, _ctx())
+        handler.on_post_step(row, _ctx())
+    assert fired == []
+
+
+def test_mixed_timings_in_one_protocol(monkeypatch):
+    """Acceptance: Step 1 fires at START, Step 2 at END, same handler."""
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    s1 = _row(name="S1", uuid="u1", capture=True, capture_at=StepTime.START)
+    s2 = _row(name="S2", uuid="u2", capture=True, capture_at=StepTime.END)
+
+    handler.on_pre_step(s1, _ctx())
+    assert [p["step_description"] for _t, p in fired] == ["S1"]
+    handler.on_post_step(s1, _ctx())
+    assert len(fired) == 1                      # S1 only fires at start
+
+    handler.on_pre_step(s2, _ctx())
+    assert len(fired) == 1                      # S2 silent at start
+    handler.on_post_step(s2, _ctx())
+    assert [p["step_description"] for _t, p in fired] == ["S1", "S2"]
+
+
+def test_payload_uses_legacy_directory_key(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    row = _row(name="snap", uuid="u-9", capture=True)
+    CaptureHandler().on_pre_step(row, _ctx(experiment_dir="exp/dir"))
+    _topic, payload = fired[0]
+    assert payload == {
+        "directory": "exp/dir",
+        "step_description": "snap",
+        "step_id": "u-9",
+        "show_dialog": False,
+    }
+
+
+def test_no_cross_step_state_two_calls_two_publishes(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    row = _row(capture=True)
+    handler = CaptureHandler()
+    handler.on_pre_step(row, _ctx())
+    handler.on_pre_step(row, _ctx())
+    assert len(fired) == 2
+
+
+# --- view (cross-cell editability) ------------------------------------------
+
+def test_capture_at_cell_read_only_until_capture_on():
+    view = make_capture_column().view.cell_view_for_field("capture_at")
+    off = _row(capture=False)
+    on = _row(capture=True)
+    assert not (view.get_flags(off) & Qt.ItemIsEditable)
+    assert view.get_flags(on) & Qt.ItemIsEditable
+    # And the cell reads blank while capture is off.
+    assert view.format_display(StepTime.END, off) == ""
+    assert view.format_display(StepTime.END, on) == StepTime.END
+
+
+# --- persistence + legacy migration ------------------------------------------
+
+def test_round_trip_preserves_per_step_capture_at(qapp):
+    manager = _capture_manager()
+    manager.add_step(values={"name": "S1", "capture": True,
+                             "capture_at": StepTime.START})
+    manager.add_step(values={"name": "S2", "capture": True,
+                             "capture_at": StepTime.END})
+    data = json.loads(json.dumps(manager.to_json()))
+    restored = RowManager.from_json(data, columns=resolve_columns(data))
+    assert restored.get_row((0,)).capture_at == StepTime.START
+    assert restored.get_row((1,)).capture_at == StepTime.END
+    cap_entries = [c for c in data["columns"]
+                   if c.get("compound_id") == "capture"]
+    assert [c["compound_field_id"] for c in cap_entries] == [
+        "capture", "capture_at",
+    ]
+
+
+def _legacy_payload(manager):
+    """Downgrade a current to_json payload to the pre-#396 shape: one flat
+    'capture' column entry (CaptureColumnModel qualname, no compound_id)
+    and no capture_at field/values."""
+    data = json.loads(json.dumps(manager.to_json()))
+    at_idx = data["fields"].index("capture_at")
+    cap_idx = data["fields"].index("capture")
+    data["columns"] = [
+        c for c in data["columns"] if c.get("compound_id") != "capture"
+    ] + [{
+        "id": "capture",
+        "cls": f"{CAPTURE_COLUMN_MODULE}.CaptureColumnModel",
+    }]
+    data["rows"] = [
+        row[:4] + [v for i, v in enumerate(row[4:], start=4)
+                   if i not in (at_idx, cap_idx)] + [row[cap_idx]]
+        for row in data["rows"]
+    ]
+    data["fields"] = [f for f in data["fields"]
+                      if f not in ("capture", "capture_at")] + ["capture"]
+    return data
+
+
+def test_legacy_flat_capture_protocol_migrates(qapp):
+    """Acceptance: loading a pre-#396 protocol keeps every step's capture
+    flag and fills capture_at from the current pref."""
+    manager = _capture_manager()
+    manager.add_step(values={"name": "captures", "capture": True})
+    manager.add_step(values={"name": "plain"})
+    legacy = _legacy_payload(manager)
+
+    with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
+        P.return_value = SimpleNamespace(capture_time=StepTime.END)
+        columns = resolve_columns(legacy)
+
+    col_ids = [c.model.col_id for c in columns]
+    assert "capture" in col_ids and "capture_at" in col_ids
+
+    migrated = RowManager.from_json(legacy, columns=columns)
+    captures, plain = migrated.get_row((0,)), migrated.get_row((1,))
+    assert captures.capture is True and plain.capture is False
+    assert captures.capture_at == StepTime.END    # filled from the pref
+    assert plain.capture_at == StepTime.END
