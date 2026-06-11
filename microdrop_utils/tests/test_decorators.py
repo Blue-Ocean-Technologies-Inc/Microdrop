@@ -1,12 +1,12 @@
-"""Tests for microdrop_application.dialogs.decorators —
+"""Tests for microdrop_utils.decorators —
 attempt_func_execution_with_error_dialog (the styled error-dialog
 wrapper for top-level user-triggered UI actions)."""
 
 import logging
 
-import microdrop_application.dialogs.decorators as _dec
+import microdrop_utils.decorators as _dec
 
-LOGGER_NAME = "microdrop_application.dialogs.decorators"
+LOGGER_NAME = "microdrop_utils.decorators"
 
 
 def test_attempt_func_execution_returns_wrapped_value_on_success():

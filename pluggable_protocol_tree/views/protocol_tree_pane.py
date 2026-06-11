@@ -36,10 +36,8 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 
-from microdrop_application.dialogs.decorators import (
-    attempt_func_execution_with_error_dialog,
-)
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
