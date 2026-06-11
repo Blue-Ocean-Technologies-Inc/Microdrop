@@ -82,6 +82,13 @@ class ProtocolPreferences(PreferencesHelper):
     # hidden_by_default flag.
     protocol_tree_column_visibility = Dict(Str, Bool)
 
+    @classmethod
+    def ensure(cls, preferences=None):
+        """Return ``preferences`` unchanged, or a standalone helper bound
+        to the global default node — the demo / headless-test fallback
+        used by views that may be constructed without the dock pane."""
+        return preferences if preferences is not None else cls()
+
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"
 
