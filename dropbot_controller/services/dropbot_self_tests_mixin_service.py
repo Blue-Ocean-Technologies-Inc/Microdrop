@@ -22,7 +22,8 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from dropbot_controller.consts import SHORTS_DETECTED
 
-from ..consts import SELF_TESTS_PROGRESS, TestEvent, create_test_progress_message
+from ..consts import SELF_TESTS_PROGRESS
+from ..models.self_tests import TestEvent, create_test_progress_message
 
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
