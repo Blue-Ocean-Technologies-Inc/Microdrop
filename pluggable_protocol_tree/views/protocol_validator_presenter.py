@@ -6,9 +6,7 @@ validator service — because it pulls in Qt via the pyface dialog wrapper,
 and the service layer must stay Qt-free.
 """
 
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES
-
-from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
+from microdrop_application.dialogs.pyface_wrapper import confirm
 
 
 def _format_html(report) -> str:
@@ -31,9 +29,10 @@ def _format_detail(report) -> str:
     return "\n".join(lines).rstrip()
 
 
-def confirm_report(report, parent=None) -> str:
-    """GUI presenter: one two-tier summary dialog. Returns VALIDATION_PROCEED
-    or VALIDATION_CANCEL.
+def confirm_report(report, parent=None) -> int:
+    """GUI presenter: one two-tier summary dialog. Returns the pyface
+    confirm() code - YES means proceed with the load, anything else means
+    cancel it.
 
     Uses exactly two buttons - a proceed button (yes_label) and Cancel - by
     passing no_label="" to suppress confirm()'s default No button. When errors
@@ -44,7 +43,7 @@ def confirm_report(report, parent=None) -> str:
     else:
         title = "Protocol warnings"
         proceed_label = "Proceed anyway"
-    result = confirm(
+    return confirm(
         parent,
         message="",
         title=title,
@@ -55,4 +54,3 @@ def confirm_report(report, parent=None) -> str:
         informative=_format_html(report),
         detail=_format_detail(report),
     )
-    return VALIDATION_PROCEED if result == YES else VALIDATION_CANCEL

@@ -45,9 +45,7 @@ from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
     ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
-    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
-    VALIDATION_CANCEL,
-)
+    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS)
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.row import GroupRow
@@ -1160,7 +1158,7 @@ class ProtocolTreePane(QWidget):
                 device_map = dict(self.device_viewer_sync.electrode_ids_channels_map)
             report = validate_protocol(data, columns, device_map)
             if not report.is_empty:
-                if confirm_report(report, parent=parent or self) == VALIDATION_CANCEL:
+                if confirm_report(report, parent=parent or self) != YES:
                     return None
             # report already shown in the dialog -> don't re-log it
             self.manager.set_state_from_json(

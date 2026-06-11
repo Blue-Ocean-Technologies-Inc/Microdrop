@@ -31,11 +31,6 @@ PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 # QFileDialog name filter shared by save / load / import dialogs
 PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 
-# Decision values returned by the protocol-load validation presenter
-# (confirm_report): proceed with the load, or cancel it.
-VALIDATION_PROCEED = "proceed"
-VALIDATION_CANCEL = "cancel"
-
 # ProtocolPreferences defaults (ported from protocol_grid with the
 # preferences model, #419 / PPT-14.1).
 DEFAULT_CAMERA_PREWARM_SECONDS = 3.0

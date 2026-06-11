@@ -3,11 +3,10 @@
 import logging
 from types import SimpleNamespace
 
-from microdrop_application.dialogs.pyface_wrapper import CANCEL as PYFACE_CANCEL
+from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.consts import VALIDATION_PROCEED, VALIDATION_CANCEL
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.protocol_validator import (
     validate_protocol, ValidationReport, Finding,
@@ -196,11 +195,11 @@ def test_confirm_report_proceed(monkeypatch):
 
     def fake_confirm(parent=None, message="", title="", **kwargs):
         captured.update(title=title, kwargs=kwargs)
-        return presenter.YES   # user clicked the proceed button
+        return YES   # user clicked the proceed button
 
     monkeypatch.setattr(presenter, "confirm", fake_confirm)
     decision = confirm_report(_report_with_error_and_warning(), parent=None)
-    assert decision == VALIDATION_PROCEED
+    assert decision == YES
     # errors present -> the override-labelled proceed button + error title
     assert captured["title"] == "Protocol has errors"
     assert captured["kwargs"]["yes_label"] == "Load anyway (drop columns)"
@@ -209,14 +208,14 @@ def test_confirm_report_proceed(monkeypatch):
 
 
 def test_confirm_report_cancel(monkeypatch):
-    # confirm() returning anything but YES (here: the user hit Cancel) maps
-    # to the VALIDATION_CANCEL decision.
-    monkeypatch.setattr(presenter, "confirm", lambda *a, **k: PYFACE_CANCEL)
+    # confirm()'s result passes straight through; the caller treats anything
+    # but YES as cancel.
+    monkeypatch.setattr(presenter, "confirm", lambda *a, **k: CANCEL)
     report = ValidationReport(findings=[
         Finding(severity=SEVERITY_WARNING, category="electrode_id",
                 title="1 unknown electrode", items=["E99  (steps 1)"]),
     ])
-    assert confirm_report(report, parent=None) == VALIDATION_CANCEL
+    assert confirm_report(report, parent=None) == CANCEL
 
 
 def _basic_columns():
