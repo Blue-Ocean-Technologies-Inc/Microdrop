@@ -73,7 +73,8 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
                     await fn(*args, **kwargs)
                 except Exception as e:
                     # Log the error but don't let it propagate to avoid breaking the timer
-                    print(f"Error in debounced async function: {e}")
+                    logger.warning(f"Error in debounced async function {fn}: {e}",
+                                   exc_info=True)
 
             async with lock:
                 if task and not task.done():
