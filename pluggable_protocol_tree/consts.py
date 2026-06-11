@@ -23,6 +23,9 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
+# QFileDialog name filter shared by save / load / import dialogs
+PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
+
 # ProtocolPreferences defaults (ported from protocol_grid with the
 # preferences model, #419 / PPT-14.1).
 DEFAULT_CAMERA_PREWARM_SECONDS = 3.0

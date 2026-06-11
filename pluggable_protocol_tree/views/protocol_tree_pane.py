@@ -46,7 +46,8 @@ from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
-    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS,
+    PROTOCOL_FILE_DIALOG_FILTER, PROTOCOL_TREE_DISPLAY_STATE,
+    REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -85,6 +86,27 @@ logger = get_logger(__name__)
 # realtime mode mirrored by the status panel). The proxy connects lazily;
 # reads are wrapped in try/except where no-Redis must be tolerated.
 app_globals = get_microdrop_redis_globals_manager()
+
+# Tick rate for the elapsed-time status labels (10 Hz).
+STATUS_TICK_INTERVAL_MS = 100
+# Gap between whole-protocol repetitions so the executor's worker thread
+# winds down before the restart.
+NEXT_REP_RESTART_DELAY_MS = 50
+# Auto-dismiss timeout for the preview-complete toast.
+PREVIEW_COMPLETE_TOAST_MS = 3000
+# app_globals value used when no device SVG path has been published
+# (legacy protocol_grid sentinel — saves then land in a "Null" subfolder).
+NO_DEVICE_SVG_SENTINEL = "Null"
+# Run-outcome sentinels threaded from the terminal handlers through
+# _on_protocol_terminated into _run_completion_flow.
+RUN_OUTCOME_FINISHED = "finished"
+RUN_OUTCOME_ABORTED = "aborted"
+RUN_OUTCOME_ERROR = "error"
+# Route-Reps-Dur auto-recalc: display rounding + write-back tolerance
+# that stops estimate jitter from dirtying the cell.
+REPEAT_DURATION_DECIMALS = 2
+REPEAT_DURATION_TOLERANCE_S = 0.01
+
 
 class ProtocolTreePane(QWidget):
     """Hosts the pluggable protocol tree with full UX scaffolding.
@@ -231,7 +253,7 @@ class ProtocolTreePane(QWidget):
         )
 
         self._tick_timer = QTimer(self)
-        self._tick_timer.setInterval(100)
+        self._tick_timer.setInterval(STATUS_TICK_INTERVAL_MS)
         self._tick_timer.timeout.connect(self._refresh_status)
 
         self._wire_executor_signals()
@@ -478,7 +500,7 @@ class ProtocolTreePane(QWidget):
         self._update_repeat_status_label()
         # Immediate teardown only; the completion flow is deferred so the
         # error dialog is shown before the "Generate Run Summary?" prompt.
-        self._on_protocol_terminated("error")
+        self._on_protocol_terminated(RUN_OUTCOME_ERROR)
         # Present a nicely-formatted HTML body (rendered via the dialog's
         # `informative` slot) built from the structured StepExecutionError
         # fields, with the full traceback as collapsible detail. `message`
@@ -489,7 +511,7 @@ class ProtocolTreePane(QWidget):
         error_dialog(parent=None, title="Protocol error",
                      message=str(msg), informative=informative, detail=detail)
         # Now prompt for a run summary (error is treated like a force-stop).
-        self._run_completion_flow("error")
+        self._run_completion_flow(RUN_OUTCOME_ERROR)
 
     @staticmethod
     def _format_error_html(exc, fallback_msg: str) -> str:
@@ -731,9 +753,10 @@ class ProtocolTreePane(QWidget):
         )
         self._update_repeat_status_label()
         if self._repeats_completed < self._repeats_total:
-            QTimer.singleShot(50, self._restart_for_next_rep)
+            QTimer.singleShot(NEXT_REP_RESTART_DELAY_MS,
+                              self._restart_for_next_rep)
             return
-        self._on_protocol_terminated("finished")
+        self._on_protocol_terminated(RUN_OUTCOME_FINISHED)
 
     def _restart_for_next_rep(self):
         self.executor.start(preview_mode=self._current_run_preview_mode)
@@ -744,9 +767,9 @@ class ProtocolTreePane(QWidget):
         self._repeats_total = 0
         self._repeats_completed = 0
         self._update_repeat_status_label()
-        self._on_protocol_terminated("aborted")
+        self._on_protocol_terminated(RUN_OUTCOME_ABORTED)
 
-    def _on_protocol_terminated(self, outcome="finished"):
+    def _on_protocol_terminated(self, outcome=RUN_OUTCOME_FINISHED):
         self.protocol_running_changed.emit(False)
         logger.info("Protocol terminated --> free mode")
         self.clear_highlights()
@@ -785,7 +808,7 @@ class ProtocolTreePane(QWidget):
         # (hardware clear / idle UI) so electrodes de-energize before any modal
         # dialog blocks. For "error", the caller (_on_error) runs the flow after
         # showing the error dialog, so we skip it here.
-        if outcome != "error":
+        if outcome != RUN_OUTCOME_ERROR:
             self._run_completion_flow(outcome)
 
     def _run_completion_flow(self, outcome):
@@ -802,7 +825,8 @@ class ProtocolTreePane(QWidget):
             try:
                 information(parent=None,
                             message="Preview run completed successfully.",
-                            title="Preview Complete", timeout=3000)
+                            title="Preview Complete",
+                            timeout=PREVIEW_COMPLETE_TOAST_MS)
             except Exception as e:
                 logger.warning(f"preview-complete dialog failed: {e}")
             return
@@ -824,7 +848,7 @@ class ProtocolTreePane(QWidget):
                 logger.warning(f"protocol auto-save failed: {e}")
 
         generate_report = True
-        if outcome in ("aborted", "error") and have_exp:
+        if outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR) and have_exp:
             try:
                 if confirm(parent=None,
                            message=("Protocol was stopped before completion."
@@ -834,7 +858,7 @@ class ProtocolTreePane(QWidget):
                     generate_report = False
             except Exception as e:
                 logger.warning(f"run-summary confirm failed: {e}")
-        elif outcome == "finished" and have_exp:
+        elif outcome == RUN_OUTCOME_FINISHED and have_exp:
             try:
                 if confirm(parent=None,
                            message="Would you like to start a new experiment?",
@@ -1069,7 +1093,9 @@ class ProtocolTreePane(QWidget):
         protocol_grid parity). Best-effort — falls back to "" (last-used
         dir) when prefs/app_globals are unavailable (headless, no Redis)."""
         try:
-            device = Path(app_globals.get(DEVICE_SVG_PATH_KEY, "Null")).stem
+            device = Path(
+                app_globals.get(DEVICE_SVG_PATH_KEY, NO_DEVICE_SVG_SENTINEL)
+            ).stem
             default_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / device
             default_dir.mkdir(parents=True, exist_ok=True)
             return str(default_dir)
@@ -1098,7 +1124,7 @@ class ProtocolTreePane(QWidget):
         """
         path, _ = QFileDialog.getSaveFileName(
             parent or self, "Save Protocol", self._default_save_dir(),
-            "Protocol JSON (*.json)",
+            PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
             return None
@@ -1116,7 +1142,7 @@ class ProtocolTreePane(QWidget):
         on success, ``None`` otherwise.
         """
         path, _ = QFileDialog.getOpenFileName(
-            parent or self, "Load Protocol", "", "Protocol JSON (*.json)",
+            parent or self, "Load Protocol", "", PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
             return None
@@ -1232,8 +1258,9 @@ class ProtocolTreePane(QWidget):
                 linear_repeats=linear_repeats,
                 soft_start=soft_start, soft_end=soft_end,
             )
-            estimated = round(estimated, 2)
-            if abs(float(getattr(row, "repeat_duration", 0.0)) - estimated) >= 0.01:
+            estimated = round(estimated, REPEAT_DURATION_DECIMALS)
+            if (abs(float(getattr(row, "repeat_duration", 0.0)) - estimated)
+                    >= REPEAT_DURATION_TOLERANCE_S):
                 row.repeat_duration = estimated
                 # Re-entrancy is bounded: see the
                 # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
@@ -1570,7 +1597,7 @@ class ProtocolTreePane(QWidget):
         if not isinstance(target, GroupRow):
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Protocol", "", "Protocol JSON (*.json)")
+            self, "Import Protocol", "", PROTOCOL_FILE_DIALOG_FILTER)
         if not path:
             return
         try:
