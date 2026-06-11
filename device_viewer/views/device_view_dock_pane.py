@@ -1232,6 +1232,32 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error(e, exc_info=True)
 
     @observe(
+        "model.routes.duration, model.routes.repetitions, "
+        "model.routes.repeat_duration, model.routes.trail_length, "
+        "model.routes.trail_overlay, model.routes.soft_start, "
+        "model.routes.soft_terminate, model.routes.linear_repeats"
+    )
+    def execution_params_change_handler(self, event=None):
+        """Free-mode state messages carry the sidebar execution params so
+        the protocol widget can seed them into an inserted step — republish
+        when the user tweaks a param spinner in free mode (the
+        electrode/route observer above doesn't cover the param traits).
+        With a step selected the params travel via STEP_PARAMS_COMMIT
+        instead. Bulk programmatic writes (apply_execution_params on step
+        transition, repeats_frozen resets) run under
+        _suspend_repeat_exclusion and must not publish — they would race
+        the transition with stale free-mode payloads.
+        """
+        if self.model.step_id:
+            return
+        if self._disable_state_messages or self.model.routes._suspend_repeat_exclusion:
+            return
+        if not self.model.electrodes.svg_model:
+            return
+        self.message_buffer = gui_models_to_message_model(self.model).serialize()
+        self.publish_model_message()
+
+    @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
     )
     def calibration_change_handler(self, event=None):
