@@ -43,11 +43,34 @@ class MessageRouterPlugin(Plugin):
         self.connect_extension_point_traits()
 
         # assign topics to actors when plugin starts
-        for actor_topics_routes in self.actor_topic_routing:
-            # add subscribers to topics
+        self._update_router_subscriptions(added=self.actor_topic_routing,
+                                          removed=[])
+
+    def _update_router_subscriptions(self, added, removed):
+        """Apply contribution deltas to the router's topic->subscriber map.
+
+        Removals run first so a wholesale reassignment (old list removed,
+        new list added in one event) keeps any (actor, topic) pair common
+        to both — the other order would strip the freshly re-added pair.
+        """
+        data = self.router_actor.message_router_data
+        for actor_topics_routes in removed:
             for actor_name, topics_list in actor_topics_routes.items():
                 for topic in topics_list:
-                    self.router_actor.message_router_data.add_subscriber_to_topic(topic, actor_name)
+                    try:
+                        data.remove_subscriber_from_topic(topic, actor_name)
+                        logger.info(f"router unsubscribed {actor_name} from {topic}")
+                    except (KeyError, ValueError):
+                        # Two contributions can declare the same (actor,
+                        # topic) pair; the flat map holds it once, so the
+                        # second removal finds nothing. Not an error.
+                        logger.warning(f"router unsubscribe skipped: "
+                                       f"{actor_name} not subscribed to {topic}")
+        for actor_topics_routes in added:
+            for actor_name, topics_list in actor_topics_routes.items():
+                for topic in topics_list:
+                    data.add_subscriber_to_topic(topic, actor_name)
+                    logger.info(f"router subscribed {actor_name} to {topic}")
 
     @on_trait_change("actor_topic_routing_items")
     def _on_actor_topic_routing_items_changed(self, event):
@@ -63,11 +86,15 @@ class MessageRouterPlugin(Plugin):
         """
         logger.info(f"actor topic routing changed: added={event.added}, "
                     f"removed={event.removed}, index={event.index}")
+        self._update_router_subscriptions(event.added, event.removed)
 
     @observe("actor_topic_routing")
     def _on_actor_topic_routing_changed(self, event):
         """Index-less wholesale replacement of the extension point
         (registry.set_extensions) — never fired for plugin contribution
-        changes; covered for completeness."""
+        changes; covered for completeness. The connect listener delivers
+        removed contributions as ``event.old`` and added as ``event.new``.
+        """
         logger.info(f"actor topic routing replaced: removed={event.old}, "
                     f"added={event.new}")
+        self._update_router_subscriptions(added=event.new, removed=event.old)
