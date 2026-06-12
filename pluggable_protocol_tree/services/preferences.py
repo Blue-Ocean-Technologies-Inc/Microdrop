@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Float, Str
+from traits.api import Bool, Dict, Directory, Enum, Float, Str, observe
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, View, Item
 
@@ -22,22 +22,20 @@ from microdrop_utils.traitsui_qt_helpers import (
     DictFloatTableEditor, RangeWithViewHints,
 )
 
-from pluggable_protocol_tree.consts import (
-    ACK_TIMEOUT_MAX_S,
-    ACK_TIMEOUT_MIN_S,
-    ACK_WAIT_FOREVER,
-    CAMERA_PREWARM_MAX_S,
-    CAMERA_PREWARM_MIN_S,
-    DEFAULT_CAMERA_PREWARM_SECONDS,
-    DEFAULT_LOGS_SETTLING_SECONDS,
-    DEFAULT_REALTIME_SETTLING_SECONDS,
-    PROTOCOL_TREE_PREFERENCES_TAB_ID,
-    SETTLING_TIME_MAX_S,
-    SETTLING_TIME_MIN_S,
-)
+from ..consts import ACK_TIMEOUT_MAX_S, ACK_TIMEOUT_MIN_S, ACK_WAIT_FOREVER, CAMERA_PREWARM_MAX_S, CAMERA_PREWARM_MIN_S, \
+    DEFAULT_CAMERA_PREWARM_SECONDS, DEFAULT_LOGS_SETTLING_SECONDS, DEFAULT_REALTIME_SETTLING_SECONDS, \
+    PROTOCOL_TREE_PREFERENCES_TAB_ID, SETTLING_TIME_MAX_S, SETTLING_TIME_MIN_S
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+
+# Updated every time the ack-times column set changes (see the observer on
+# protocol_tree_ack_times). Reverting the Settings dialog resets the trait
+# to its default — without this backup that default would be an empty dict
+# and the grid would lose its rows; with it, a revert restores the last
+# seeded column set (the plugin-provider defaults).
+BACKUP_PROTOCOL_TREE_ACK_TIMES = {}
 
 
 class StepTime:
@@ -102,14 +100,28 @@ class ProtocolPreferences(PreferencesHelper):
     # hidden_by_default flag.
     protocol_tree_column_visibility = Dict(Str, Bool)
 
-    # {col_name: seconds} acknowledgement-wait time per wait-capable
-    # column (issue #427), keyed by col_name like the visibility map.
-    # Edited in the pane's Column Ack Wait Times grid; 0 = don't wait,
-    # ACK_WAIT_FOREVER = wait forever. The dock pane seeds one entry per
-    # assembled column whose handler declares a default_ack_time_s (see
-    # seed_ack_times) — the plugin provider's value is the default, and
-    # user edits persisted on the node are never overwritten.
+    # {col_id: seconds} acknowledgement-wait time per wait-capable column
+    # (issue #427), keyed by the stable col_id (base_id for compounds),
+    # NOT the display col_name — the same key handlers resolve at run
+    # time. Edited in the pane's Column Ack Wait Times grid; 0 = don't
+    # wait, ACK_WAIT_FOREVER = wait forever. The dock pane seeds one
+    # entry per assembled column whose handler declares a
+    # default_ack_time_s (see seed_ack_times_from_columns) — the plugin
+    # provider's value is the default, and user edits persisted on the
+    # node are never overwritten.
     protocol_tree_ack_times = Dict(Str, Float)
+
+    def _protocol_tree_ack_times_default(self):
+        # Copy: the backup must not alias any helper instance's live
+        # trait dict (writes would leak between instances).
+        return dict(BACKUP_PROTOCOL_TREE_ACK_TIMES)
+
+    @observe("protocol_tree_ack_times")
+    def _protocol_tree_ack_times_observe(self, event):
+        if event.old.keys() != event.new.keys():
+            logger.info(f"Protocol tree ack times columns changed. Revert value set to {event.new}")
+            global BACKUP_PROTOCOL_TREE_ACK_TIMES
+            BACKUP_PROTOCOL_TREE_ACK_TIMES = dict(event.new)
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"
@@ -121,21 +133,26 @@ class ProtocolPreferences(PreferencesHelper):
         return default_dir
 
 
-def seed_ack_times(preferences, columns) -> None:
-    """Seed ``preferences.protocol_tree_ack_times`` from the assembled
-    columns: one entry per wait-capable column (handler declares a
-    positive ``default_ack_time_s``), keyed by col_name with the plugin
-    provider's value as the wait time. Existing entries — user edits
-    persisted on the preferences node — are never overwritten."""
-    ack_times = dict(preferences.protocol_tree_ack_times)
-    for column in columns:
-        col_name = column.model.col_name
-        default_ack_time_s = float(
-            getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
-        if default_ack_time_s > 0 and col_name not in ack_times:
-            ack_times[col_name] = default_ack_time_s
-    if ack_times != preferences.protocol_tree_ack_times:
-        preferences.protocol_tree_ack_times = ack_times
+    def seed_ack_times_from_columns(self, columns) -> None:
+        """Seed ``protocol_tree_ack_times`` from the assembled IColumn /
+        ICompoundColumn list: one entry per wait-capable column (handler
+        declares a positive ``default_ack_time_s``), keyed by col_id with
+        the plugin provider's value as the wait time. Existing entries —
+        user edits persisted on the preferences node — are never
+        overwritten."""
+        ack_times = dict(self.protocol_tree_ack_times)
+        for column in columns:
+            # Single columns key by col_id; compound models have no
+            # col_id, so they key by base_id ("magnet"). Handlers resolve
+            # their wait time under the same key at run time.
+            col_id = (getattr(column.model, "col_id", "")
+                      or getattr(column.model, "base_id", ""))
+            default_ack_time_s = float(
+                getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
+            if default_ack_time_s > 0 and col_id not in ack_times:
+                ack_times[col_id] = default_ack_time_s
+        if ack_times != self.protocol_tree_ack_times:
+            self.protocol_tree_ack_times = ack_times
 
 
 protocol_tree_tab = PreferencesCategory(

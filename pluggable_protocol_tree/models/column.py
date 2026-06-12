@@ -56,7 +56,7 @@ class BaseColumnHandler(HasTraits):
     wait_for_topics = List(Str)
     #: Provider default (seconds) for this handler's acknowledgement
     #: wait, seeded into ProtocolPreferences.protocol_tree_ack_times
-    #: (the Protocol Settings ack-wait grid) under the column's col_name.
+    #: (the Protocol Settings ack-wait grid) under the column's col_id.
     #: 0.0 (the default) = the column has no ack wait to configure.
     default_ack_time_s = Float(0.0)
 

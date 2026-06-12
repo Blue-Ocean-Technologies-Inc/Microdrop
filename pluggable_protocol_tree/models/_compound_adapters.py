@@ -117,8 +117,11 @@ def _expand_compound(c: ICompoundColumn) -> list:
             priority=c.handler.priority,
             wait_for_topics=(list(c.handler.wait_for_topics or [])
                              if idx == 0 else []),
-            # Mirrored on the owner only, like wait_for_topics, so the
-            # ack-wait grid seeds the compound exactly once.
+            # Mirrored on the owner only, like wait_for_topics, so any
+            # consumer iterating the EXPANDED handlers sees the
+            # compound's ack-wait contract exactly once. (The ack-wait
+            # grid itself seeds from the assembled columns, where the
+            # compound handler carries this value directly.)
             default_ack_time_s=(c.handler.default_ack_time_s
                                 if idx == 0 else 0.0),
         )

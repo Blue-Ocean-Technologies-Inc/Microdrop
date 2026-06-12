@@ -58,8 +58,7 @@ class BaseCompoundColumnHandler(HasTraits):
     priority = Int(50)
     wait_for_topics = List(Str)
     #: Same contract as BaseColumnHandler.default_ack_time_s — the
-    #: compound seeds the ack-wait grid once, under its owner field's
-    #: col_name.
+    #: compound seeds the ack-wait grid once, under its model's base_id.
     default_ack_time_s = Float(0.0)
     model = Instance(ICompoundColumnModel)
 
