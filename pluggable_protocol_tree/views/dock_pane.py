@@ -72,8 +72,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
-        # One ack-wait grid entry per wait-capable column, the plugin
-        # provider's default_ack_time_s as the wait time; user-edited
+        # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)
         # Handlers boot with their provider default and the observer
