@@ -123,9 +123,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
 
     ### Trait observers ###########################
-    @observe(["preferences.protocol_tree_ack_times",
-              "preferences.protocol_tree_ack_times.items"],
-             post_init=True)
+    @observe("preferences.protocol_tree_ack_times.items", post_init=True)
     def _sync_handler_ack_times(self, event=None):
         """Push the Protocol Settings ack-wait grid into the column
         handlers — the only bridge from the preference to the running
