@@ -122,8 +122,8 @@ class RoutesHandler(BaseColumnHandler):
     """
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
-    # Matches the hardcoded per-phase ack wait below; seeds the
-    # Protocol Settings ack-wait grid.
+    # Provider default for the Protocol Settings ack-wait grid: 5.0s of
+    # headroom for cold-broker first-publish (~1-2s); typical ack <100ms.
     default_ack_time_s = 5.0
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
@@ -196,11 +196,14 @@ class RoutesHandler(BaseColumnHandler):
         # the sender side, by simply not publishing.
         if not preview_mode:
             electrode_state_change_publisher.publish(actuated_channels=channels)
-            # 5.0s timeout matches ack_roundtrip_column. Cold-
-            # broker first publish pays ~1-2s; typical ack <100ms.
-            # In preview we skip this entirely so the user gets a
-            # snappy visual playback with no per-phase 5s stalls.
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            # Ack wait from the Protocol Settings grid (resolved per
+            # phase so mid-run Settings edits apply); 0 = fire-and-
+            # forget. In preview we skip the publish + wait entirely so
+            # the user gets a snappy visual playback with no per-phase
+            # stalls.
+            ack_wait_s = self.ack_wait_s()
+            if ack_wait_s > 0:
+                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=ack_wait_s)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)

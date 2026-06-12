@@ -3,6 +3,7 @@ of models/column.py for single-cell columns. See spec section 2."""
 
 from traits.api import Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
 
+from ..consts import ACK_WAIT_FOREVER
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
     FieldSpec, ICompoundColumn, ICompoundColumnHandler,
@@ -61,6 +62,15 @@ class BaseCompoundColumnHandler(HasTraits):
     #: compound seeds the ack-wait grid once, under its model's base_id.
     default_ack_time_s = Float(0.0)
     model = Instance(ICompoundColumnModel)
+
+    def ack_wait_s(self):
+        """Mirror of BaseColumnHandler.ack_wait_s, keyed by the compound
+        model's base_id (compound models have no col_id)."""
+        from ..services.preferences import ProtocolPreferences
+        base_id = self.model.base_id if self.model is not None else ""
+        seconds = ProtocolPreferences().protocol_tree_ack_times.get(
+            base_id, self.default_ack_time_s)
+        return float("inf") if seconds == ACK_WAIT_FOREVER else float(seconds)
 
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)

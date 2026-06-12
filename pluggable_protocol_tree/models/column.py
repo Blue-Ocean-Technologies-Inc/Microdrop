@@ -10,6 +10,7 @@ from PySide6.QtCore import Signal
 
 from traits.api import HasTraits, Instance, Str, Any, Float, Int, List, provides, observe, Bool
 
+from pluggable_protocol_tree.consts import ACK_WAIT_FOREVER
 from pluggable_protocol_tree.interfaces.i_column import (
     IColumn,
     IColumnModel,
@@ -85,6 +86,23 @@ class BaseColumnHandler(HasTraits):
         # arriving in that window would otherwise be lost.
         if event.old is None and event.new and self.trigger_column_change_when_wired:
             self.column_changed_signal.emit()
+
+    def ack_wait_s(self):
+        """Seconds ``ctx.wait_for`` should block for this column's
+        hardware ack: the user's Column Ack Wait Times grid value
+        (falling back to ``default_ack_time_s`` when unseeded), read live
+        so mid-run Settings edits apply to the next wait. 0 = don't
+        wait; ACK_WAIT_FOREVER maps to ``float("inf")`` (ctx.wait_for's
+        wait-forever convention)."""
+        # Imported lazily so column construction stays free of
+        # preference/runtime imports.
+        from pluggable_protocol_tree.services.preferences import (
+            ProtocolPreferences,
+        )
+        col_id = self.model.col_id if self.model is not None else ""
+        seconds = ProtocolPreferences().protocol_tree_ack_times.get(
+            col_id, self.default_ack_time_s)
+        return float("inf") if seconds == ACK_WAIT_FOREVER else float(seconds)
 
     def on_interact(self, row, model, value):
         """Default edit behaviour: write through to the model."""
