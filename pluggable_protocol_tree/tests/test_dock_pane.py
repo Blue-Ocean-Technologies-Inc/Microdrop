@@ -23,10 +23,10 @@ def _make_dock_pane_with_mocked_app(qapp, columns):
         preferences = Any()
         current_experiment_directory = Any()
         experiment_changed = Event()
-        application_exiting = Event()
 
     class _WindowStub(HasTraits):
         application = Any()
+        closing = Event()
 
     app_stub = _AppStub(
         # Real (in-memory) preferences node: the dock pane binds

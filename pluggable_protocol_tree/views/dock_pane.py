@@ -3,7 +3,7 @@
 Receives its column set from the plugin on construction and constructs
 the experiment + sticky-note services from the live Envisage
 application so the experiment-bar buttons drive real handlers."""
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+from microdrop_application.dialogs.pyface_wrapper import confirm, NO
 from pluggable_protocol_tree.consts import REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER
 from pluggable_protocol_tree.services.phase_math import effective_repetitions_for_duration, estimate_repeat_duration_s
 from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
@@ -11,7 +11,6 @@ from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance, List, Str, observe
 
 from logger.logger_service import get_logger
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.sticky_notes import StickyWindowManager
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.device_viewer_sync import DeviceViewerSyncController
@@ -25,11 +24,6 @@ from pluggable_protocol_tree.services.preferences import (
 )
 
 logger = get_logger(__name__)
-
-# Shared Redis-backed state the device viewer publishes to (channel areas, the
-# device SVG path). Read here so the logging context never reaches into the
-# device-viewer pane/model.
-app_globals = get_microdrop_redis_globals_manager()
 
 
 class PluggableProtocolDockPane(TraitsDockPane):
@@ -182,25 +176,33 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         self.control.widget()._on_experiment_changed()
 
-    @observe("task.window.application.application_exiting")
-    def _on_application_exiting(self, event):
-        """Veto application exit when the protocol is dirty and the user
-        elects to keep it open.
+    @observe("task.window.closing")
+    def _on_window_closing(self, event):
+        """Veto the window close (title-bar X or File->Exit) when the
+        protocol is dirty and the user elects to keep it open.
 
-        ``event`` is a Pyface Vetoable event — setting ``event.veto = True``
-        cancels the exit.
+        The window's ``closing`` event is the only vetoable point:
+        TasksApplication.exit() fires it per window and aborts when
+        vetoed, and the title-bar X routes through the same event.
+        (``application_exiting`` is NOT vetoable — it fires from
+        _prepare_exit AFTER every closing veto has already passed, so
+        vetoing there let the app quit anyway.) ``event.new`` carries
+        the Vetoable.
         """
         if not self.protocol_state_tracker.is_modified:
             return
         user_choice = confirm(
-            self,
+            None,  # the dock pane is not a QWidget — no dialog parent
             "Current protocol has unsaved changes.\n"
             "Exit without saving?",
             title="Unsaved Protocol Changes",
             cancel=False,
         )
-        if user_choice != YES:
-            event.veto = True
+        # Veto only an explicit "No" — dismissing the dialog via the
+        # window X maps to CANCEL and lets the exit proceed, matching
+        # the original pane behaviour.
+        if user_choice == NO:
+            event.new.veto = True
 
     ######### Helpers ###################
     def _clamp_trail_overlay_for_row(self, path, col_id):
@@ -236,7 +238,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         mode-switch dialog only ever fires for genuine user clicks,
         never for these reconciliation passes.
         """
-        if self.control is None or self.control.widget()._is_protocol_active():
+        if self.protocol_state_tracker.is_active:
             return
         try:
             row = self.manager.get_row(tuple(path))

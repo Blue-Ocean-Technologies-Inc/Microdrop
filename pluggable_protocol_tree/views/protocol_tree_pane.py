@@ -557,6 +557,7 @@ class ProtocolTreePane(QWidget):
     # --- button state machine ----------------------------------------
 
     def _set_idle_button_state(self):
+        self.protocol_state_tracker.is_active = False
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)
         nb.show_play_state()
@@ -566,6 +567,7 @@ class ProtocolTreePane(QWidget):
         nb.action_preview.setEnabled(True)
 
     def _set_running_button_state(self):
+        self.protocol_state_tracker.is_active = True
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)
         nb.show_pause_state()
@@ -717,7 +719,10 @@ class ProtocolTreePane(QWidget):
         return None
 
     def _is_protocol_active(self):
-        return self.navigation_bar.btn_stop.isEnabled()
+        # One source of truth shared with non-view collaborators (the
+        # dock pane observes the same tracker) — kept in lockstep with
+        # the button state machine above, which sets it.
+        return self.protocol_state_tracker.is_active
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
