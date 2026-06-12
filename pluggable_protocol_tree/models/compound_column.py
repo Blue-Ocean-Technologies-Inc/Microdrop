@@ -1,7 +1,9 @@
 """Base classes + composite for compound columns. Mirrors the structure
 of models/column.py for single-cell columns. See spec section 2."""
 
-from traits.api import Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
+from PySide6.QtCore import Signal
+
+from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
 
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
@@ -68,8 +70,22 @@ class BaseCompoundColumnHandler(HasTraits):
 
     model = Instance(ICompoundColumnModel)
 
+    # Repaint-request signal, same contract as BaseColumnHandler: the
+    # tree model wires the EXPANDED field cells, and their adapters
+    # forward the assignment here, so a compound handler can ask for a
+    # repaint when an external dependency changes (Force-column style).
+    column_changed_signal = Instance(Signal)
+    trigger_column_change_when_wired = Bool(False)
+
     def _ack_time_s_default(self):
         return self.default_ack_time_s
+
+    @observe("column_changed_signal")
+    def _on_column_changed_signal_changed(self, event):
+        # Mirror of BaseColumnHandler: replay a repaint that fired
+        # before the signal was wired.
+        if event.old is None and event.new and self.trigger_column_change_when_wired:
+            self.column_changed_signal.emit()
 
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)

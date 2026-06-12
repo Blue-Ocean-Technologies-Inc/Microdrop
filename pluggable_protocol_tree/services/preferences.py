@@ -159,11 +159,13 @@ class ProtocolPreferences(PreferencesHelper):
                 continue
             # Display name for the grid's key column: single columns
             # (incl. compound field cells) carry col_name; an unexpanded
-            # compound shows its owner field's label.
+            # compound shows its owner field's label. setdefault: a
+            # compound's field cells share one id and arrive owner-first,
+            # so the owner's label wins.
             field_specs = getattr(column.model, "field_specs", None)
-            column_names[column.id] = (
+            column_names.setdefault(column.id, (
                 getattr(column.model, "col_name", "")
-                or (field_specs()[0].col_name if field_specs else column.id))
+                or (field_specs()[0].col_name if field_specs else column.id)))
             ack_times[column.id] = self.protocol_tree_ack_times.get(
                 column.id, default_ack_time_s)
         if ack_times != self.protocol_tree_ack_times:

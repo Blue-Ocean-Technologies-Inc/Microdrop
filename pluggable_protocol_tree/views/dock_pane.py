@@ -121,13 +121,23 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # the menu and the toolbutton stay consistent.
         self._pane()._on_new_experiment()
 
-    def _sync_handler_ack_times(self):
+
+    ### Trait observers ###########################
+    @observe(["preferences.protocol_tree_ack_times",
+              "preferences.protocol_tree_ack_times.items"],
+             post_init=True)
+    def _sync_handler_ack_times(self, event=None):
         """Push the Protocol Settings ack-wait grid into the column
         handlers — the only bridge from the preference to the running
         columns (handlers read their own ``ack_time_s`` at wait time).
         Idempotent: equal values are skipped, so re-running on every
-        grid event is free. A compound's field cells share one handler
-        (and one ``col.id``), so its push lands exactly once."""
+        grid event is free; the event payload is never inspected (both
+        patterns are observed because grid edits and node syncs REASSIGN
+        the dict while other writers may mutate items). A compound's
+        field cells share one handler, so its push lands exactly once.
+        post_init: an immediate observer would materialize
+        _preferences_default mid-construction (to compute event.old)
+        before ``task`` exists; traits_init covers the initial sync."""
         ack_times = self.preferences.protocol_tree_ack_times
         for col in self.columns:
             if col.id not in ack_times:
@@ -136,23 +146,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             ack_time_s = (float("inf") if seconds == ACK_WAIT_FOREVER
                           else float(seconds))
             if col.handler.ack_time_s != ack_time_s:
-                logger.info(f"Protocol Tree: ack wait for column {col.id}: "
+                logger.info(f"Protocol Tree: ack wait changed for {col.id} column: "
                             f"{col.handler.ack_time_s}s --> {ack_time_s}s")
                 col.handler.ack_time_s = ack_time_s
-
-    ### Trait observers ###########################
-
-    @observe(["preferences.protocol_tree_ack_times",
-              "preferences.protocol_tree_ack_times.items"],
-             post_init=True)
-    def _protocol_ack_times_changed(self, event):
-        # Covers both grid-edit delivery shapes (whole-dict reassignment
-        # and in-place item changes); the sync itself diffs per handler,
-        # so no event-payload inspection is needed. post_init: an
-        # immediate observer would materialize _preferences_default just
-        # to compute event.old while kwargs are still being applied —
-        # before `task` exists. traits_init covers the initial sync.
-        self._sync_handler_ack_times()
 
     @observe("manager.rows_changed")
     def _on_manager_rows_changed(self, event):

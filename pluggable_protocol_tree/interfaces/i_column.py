@@ -65,23 +65,36 @@ class IColumnHandler(Interface):
     """Runtime behaviour. Five execution hooks + one UI-edit hook.
 
     Priority bucket (lower runs first, equal priorities run in parallel)
-    applies to all five execution hooks in PPT-2 onward. In PPT-1 the
-    hooks are defined but never invoked (no executor yet).
+    applies to all five execution hooks.
     """
 
     priority = Int(50)
     wait_for_topics = List(
         Str,
         desc="Topics this handler may call ctx.wait_for() on. Aggregated "
-        "by core plugin for the executor's dramatiq subscription. "
-        "Unused in PPT-1; reserved for PPT-2.",
+        "by the plugin for the executor's dramatiq subscription.",
     )
     default_ack_time_s = Float(
         0.0,
         desc="Provider default (seconds) for this handler's "
         "acknowledgement wait, seeded into the Protocol Settings "
-        "ack-wait grid under the column's col_name. 0.0 = the column "
+        "ack-wait grid under the column's id. 0.0 = the column "
         "has no ack wait to configure.",
+    )
+    ack_time_s = Float(
+        0.0,
+        desc="Live ack wait (seconds) read at wait time; the protocol "
+        "dock pane pushes the Protocol Settings grid value here "
+        "(ACK_WAIT_FOREVER pre-mapped to float('inf')). Starts at "
+        "default_ack_time_s; 0 = don't wait.",
+    )
+
+    model = Instance(
+        IColumnModel, desc="Wired by Column.traits_init; the handler's "
+        "view of its own column semantics."
+    )
+    view = Instance(
+        IColumnView, desc="Wired by Column.traits_init."
     )
 
     column_changed_signal = Instance(
@@ -118,4 +131,7 @@ class IColumn(Interface):
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
 
-    id = Str(desc="Identifier of this column unit with the model view and handler. Can be deferred to model col_id")
+    id = Str(desc="Identity of this column UNIT (model+view+handler) for "
+                  "unit-level maps like the ack-wait grid. Defaults to the "
+                  "model's col_id; compound expansion overrides it with the "
+                  "compound's base_id on every synthesized field cell.")

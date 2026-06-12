@@ -9,7 +9,9 @@ persistence, MvcTreeModel) keep speaking Column / IColumnModel.
 
 from typing import NamedTuple
 
-from traits.api import Float, Instance, Int, Interface, List, Str
+from PySide6.QtCore import Signal
+
+from traits.api import Bool, Float, Instance, Int, Interface, List, Str
 
 from .i_column import IColumnView
 
@@ -48,12 +50,27 @@ class ICompoundColumnView(Interface):
 
 
 class ICompoundColumnHandler(Interface):
-    """Five execution hooks (same as IColumnHandler) plus field-aware on_interact."""
+    """Five execution hooks (same as IColumnHandler) plus field-aware
+    on_interact. The expanded field-cell adapters share this handler's
+    ack traits and forward the repaint-signal wiring to it, so the
+    IColumnHandler contract holds compound-wide."""
     priority = Int(50)
     wait_for_topics = List(Str)
     # Same contract as IColumnHandler.default_ack_time_s; the compound
-    # seeds the ack-wait grid once, under its owner field's col_name.
+    # seeds the ack-wait grid once, under its base_id.
     default_ack_time_s = Float(0.0)
+    # Same contract as IColumnHandler.ack_time_s — the dock pane's grid
+    # push reaches this object through the field adapters.
+    ack_time_s = Float(0.0)
+
+    model = Instance(ICompoundColumnModel,
+                     desc="Wired by CompoundColumn.traits_init.")
+
+    column_changed_signal = Instance(
+        Signal, desc="Same contract as IColumnHandler: emit to ask the "
+        "tree model to repaint. Wired through the field-cell adapters."
+    )
+    trigger_column_change_when_wired = Bool(False)
 
     def on_interact(self, row, model, field_id, value):
         """Default: model.set_value(row, field_id, value)."""
@@ -71,4 +88,6 @@ class ICompoundColumn(Interface):
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
 
-    id = Str(desc="Identifier for the compound column unit with the model, view and handler. Can be deferred to the model col_id")
+    id = Str(desc="Identity of the compound UNIT, mirroring IColumn.id. "
+                  "Defaults to the model's base_id; the expanded field "
+                  "cells report the same value.")

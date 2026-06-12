@@ -4,7 +4,7 @@ expansion. Not part of the public API — callers should never construct
 these directly; build a CompoundColumn and let _assemble_columns expand it.
 """
 
-from traits.api import Bool, DelegatesTo, Instance, Str
+from traits.api import Bool, DelegatesTo, Instance, Str, observe
 
 from ..interfaces.i_compound_column import (
     ICompoundColumnHandler, ICompoundColumnModel,
@@ -58,10 +58,21 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     field_id = Str
     is_owner = Bool(False)
 
-    #: Shared with the compound handler — its on_step is what actually
-    #: waits, so the dock pane's grid push onto any field cell's handler
-    #: must land there, not on this shim.
+    #: The ack contract is the COMPOUND handler's, shared by all of its
+    #: field cells: its on_step is what actually waits, so the dock
+    #: pane's grid push onto any cell's handler must land there, and the
+    #: ack-wait grid seeds from its provider default. (Seeding keys by
+    #: the unit id, identical for every cell, so seeing the default on
+    #: each cell stays one grid row.)
     ack_time_s = DelegatesTo("compound_handler")
+    default_ack_time_s = DelegatesTo("compound_handler")
+
+    @observe("column_changed_signal")
+    def _forward_column_changed_signal(self, event):
+        # The tree model wires its repaint signal onto the EXPANDED
+        # handlers (this shim); forward it so the compound handler —
+        # the object listening to external state — can emit it too.
+        self.compound_handler.column_changed_signal = event.new
 
     def on_interact(self, row, model, value):
         # `model` is the per-field _CompoundFieldAdapter (passed in by
@@ -120,14 +131,11 @@ def _expand_compound(c: ICompoundColumn) -> list:
             field_id=spec.field_id,
             is_owner=(idx == 0),
             priority=c.handler.priority,
+            # Owner-only so the executor's topic aggregation opens each
+            # compound mailbox once. The ack traits are NOT mirrored
+            # here — they delegate to the compound handler (see above).
             wait_for_topics=(list(c.handler.wait_for_topics or [])
                              if idx == 0 else []),
-            # Mirrored on the owner only, like wait_for_topics: the dock
-            # pane's column list IS this expanded list, so the ack-wait
-            # grid seeds the compound exactly once, under the owner
-            # field's display label.
-            default_ack_time_s=(c.handler.default_ack_time_s
-                                if idx == 0 else 0.0),
         )
         view = c.view.cell_view_for_field(spec.field_id)
         expanded.append(Column(
