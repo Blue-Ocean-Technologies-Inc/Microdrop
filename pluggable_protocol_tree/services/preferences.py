@@ -111,6 +111,13 @@ class ProtocolPreferences(PreferencesHelper):
     # node are never overwritten.
     protocol_tree_ack_times = Dict(Str, Float)
 
+    # Programmatic companion to protocol_tree_ack_times (no Settings
+    # item): {col_id: display col_name} so the ack-wait grid shows
+    # "Electrodes" / "Voltage (V)" while staying keyed by the stable
+    # col_id. Refreshed on every seed — display names follow provider
+    # renames, they are not user edits.
+    protocol_tree_column_names = Dict(Str, Str)
+
     def _protocol_tree_ack_times_default(self):
         # Copy: the backup must not alias any helper instance's live
         # trait dict (writes would leak between instances).
@@ -139,8 +146,10 @@ class ProtocolPreferences(PreferencesHelper):
         declares a positive ``default_ack_time_s``), keyed by col_id with
         the plugin provider's value as the wait time. Existing entries —
         user edits persisted on the preferences node — are never
-        overwritten."""
+        overwritten. ``protocol_tree_column_names`` (col_id -> display
+        name for the grid) is refreshed unconditionally alongside."""
         ack_times = dict(self.protocol_tree_ack_times)
+        column_names = dict(self.protocol_tree_column_names)
         for column in columns:
             # Single columns key by col_id; compound models have no
             # col_id, so they key by base_id ("magnet"). Handlers resolve
@@ -149,10 +158,19 @@ class ProtocolPreferences(PreferencesHelper):
                       or getattr(column.model, "base_id", ""))
             default_ack_time_s = float(
                 getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
-            if default_ack_time_s > 0 and col_id not in ack_times:
-                ack_times[col_id] = default_ack_time_s
+            if default_ack_time_s > 0:
+                # Display name for the grid's key column: single columns
+                # carry col_name; compounds show their owner field's label.
+                field_specs = getattr(column.model, "field_specs", None)
+                column_names[col_id] = (
+                    getattr(column.model, "col_name", "")
+                    or (field_specs()[0].col_name if field_specs else col_id))
+                if col_id not in ack_times:
+                    ack_times[col_id] = default_ack_time_s
         if ack_times != self.protocol_tree_ack_times:
             self.protocol_tree_ack_times = ack_times
+        if column_names != self.protocol_tree_column_names:
+            self.protocol_tree_column_names = column_names
 
 
 protocol_tree_tab = PreferencesCategory(
@@ -203,6 +221,7 @@ class ProtocolPreferencesPane(PreferencesPane):
         Item("protocol_tree_ack_times", show_label=False,
              editor=DictFloatTableEditor(
                  key_label="Column", value_label="Wait Time (s)",
+                 key_labels_name="protocol_tree_column_names",
                  low=ACK_TIMEOUT_MIN_S, high=ACK_TIMEOUT_MAX_S,
                  decimals=1, step=0.5,
                  allow_infinity=True,

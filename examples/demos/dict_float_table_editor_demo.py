@@ -1,7 +1,9 @@
 """Standalone visual demo for DictFloatTableEditor (microdrop_utils.
 traitsui_qt_helpers): a Dict(Str, Float) trait rendered as a two-column
 Column | Wait Time (s) table — read-only names on the left, a float
-spinbox per value on the right.
+spinbox per value on the right. The dict is keyed by stable ids while
+``key_labels_name`` maps them to display labels (mirroring the
+protocol-tree ack-wait grid).
 
 Run:
     pixi run python examples/demos/dict_float_table_editor_demo.py
@@ -18,18 +20,26 @@ from microdrop_utils.traitsui_qt_helpers import DictFloatTableEditor
 
 class AckTimesDemo(HasTraits):
     ack_times = Dict(Str, Float)
+    column_names = Dict(Str, Str)
 
     def _ack_times_default(self):
         # -1.0 is the wait-forever sentinel - rendered as the infinity text.
-        return {"Routes": 5.0, "Voltage (V)": 5.0,
-                "Frequency (Hz)": 5.0, "Magnet": 10.0,
-                "Check Droplets": -1.0}
+        return {"routes": 5.0, "voltage": 5.0,
+                "frequency": 5.0, "magnet": 10.0,
+                "check_droplets": -1.0}
+
+    def _column_names_default(self):
+        # "check_droplets" left out on purpose: unmapped keys display
+        # as themselves.
+        return {"routes": "Electrodes", "voltage": "Voltage (V)",
+                "frequency": "Frequency (Hz)", "magnet": "Magnet"}
 
     view = View(
         Group(
             Item("ack_times", show_label=False,
                  editor=DictFloatTableEditor(
                      key_label="Column", value_label="Wait Time (s)",
+                     key_labels_name="column_names",
                      low=0.0, high=float("inf"), decimals=1, step=0.5,
                      allow_infinity=True, infinity_value=-1.0,
                      infinity_text="∞ (wait forever)",

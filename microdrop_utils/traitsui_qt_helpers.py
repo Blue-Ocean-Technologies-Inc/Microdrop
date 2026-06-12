@@ -311,7 +311,10 @@ class _SentinelDoubleSpinBox(QDoubleSpinBox):
 class _DictFloatTableEditor(QtEditor):
     """Two-column table over a Dict(Str, Float) trait: read-only keys in
     the first column, a float spinbox per value in the second. Keys come
-    from the dict itself; the editor only changes values."""
+    from the dict itself; the editor only changes values. When the
+    factory names a ``key_labels_name`` trait on the edited object, keys
+    are displayed through that {key: label} map (read on each rebuild)
+    while the dict stays keyed by the stable raw key."""
 
     def init(self, parent):
         self.control = QtWidgets.QTableWidget()
@@ -348,10 +351,12 @@ class _DictFloatTableEditor(QtEditor):
         if self._updating_object:
             return   # echo of our own update_object write — widgets are current
         entries = dict(self.value or {})
+        key_labels = (getattr(self.object, self.factory.key_labels_name, {})
+                      if self.factory.key_labels_name else {})
         self.control.clearContents()   # drops stale items AND cell widgets
         self.control.setRowCount(len(entries))
         for row, (key, value) in enumerate(entries.items()):
-            key_item = QtWidgets.QTableWidgetItem(str(key))
+            key_item = QtWidgets.QTableWidgetItem(str(key_labels.get(key, key)))
             key_item.setFlags(Qt.ItemIsEnabled)   # visible, not editable
             self.control.setItem(row, 0, key_item)
 
@@ -391,6 +396,11 @@ class DictFloatTableEditor(BasicEditorFactory):
 
     key_label = Str("Key")
     value_label = Str("Value")
+    #: Optional name of a Dict(Str, Str) trait on the edited object
+    #: mapping dict keys -> display labels for the key column (same
+    #: name-a-companion-trait idiom as RangeEditor's low_name/high_name).
+    #: Keys missing from the map display as themselves.
+    key_labels_name = Str()
     low = Float(0.0)
     high = Float(100.0)
     decimals = Int(1)
