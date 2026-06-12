@@ -283,7 +283,9 @@ class _DictFloatTableEditor(QtEditor):
             QtWidgets.QHeaderView.Stretch)
         self.control.verticalHeader().setVisible(False)
         self._updating_object = False
-        self.update_editor()
+        # No update_editor() call here — TraitsUI invokes it right after
+        # init. A manual extra pass left the replaced cell spinboxes
+        # orphaned (undeleted, stacked over the first cell).
 
     def update_object(self, key, spinbox_value):
         """Sync one spinbox change back to the dict trait (re-assigned
@@ -301,6 +303,7 @@ class _DictFloatTableEditor(QtEditor):
         if self._updating_object:
             return   # echo of our own update_object write — widgets are current
         entries = dict(self.value or {})
+        self.control.clearContents()   # drops stale items AND cell widgets
         self.control.setRowCount(len(entries))
         for row, (key, value) in enumerate(entries.items()):
             key_item = QtWidgets.QTableWidgetItem(str(key))
@@ -316,6 +319,13 @@ class _DictFloatTableEditor(QtEditor):
             spinbox.valueChanged.connect(
                 lambda new_value, k=key: self.update_object(k, new_value))
             self.control.setCellWidget(row, 1, spinbox)
+        # Size the table to its rows — no dead scroll area below the last
+        # entry when embedded in a preferences pane.
+        rows_height = sum(self.control.rowHeight(r)
+                          for r in range(self.control.rowCount()))
+        self.control.setFixedHeight(
+            self.control.horizontalHeader().height() + rows_height
+            + 2 * self.control.frameWidth())
 
 
 class DictFloatTableEditor(BasicEditorFactory):
