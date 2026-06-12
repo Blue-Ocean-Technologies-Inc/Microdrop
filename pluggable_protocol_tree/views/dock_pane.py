@@ -4,7 +4,7 @@ Receives its column set from the plugin on construction and constructs
 the experiment + sticky-note services from the live Envisage
 application so the experiment-bar buttons drive real handlers."""
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
-from pluggable_protocol_tree.consts import REPEAT_DURATION_RECALC_TRIGGERS
+from pluggable_protocol_tree.consts import REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER
 from pluggable_protocol_tree.services.phase_math import effective_repetitions_for_duration, estimate_repeat_duration_s
 from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
 from pyface.tasks.api import TraitsDockPane
@@ -76,6 +76,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # provider's default_ack_time_s as the wait time; user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)
+        # Handlers boot with their provider default and the observer
+        # below only sees edits made from here on — push the persisted
+        # grid values in once so a user-tuned wait survives a relaunch.
+        self._sync_handler_ack_times()
 
     def create_contents(self, parent):
         pane = ProtocolTreePane(
@@ -117,7 +121,39 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # the menu and the toolbutton stay consistent.
         self._pane()._on_new_experiment()
 
+    def _sync_handler_ack_times(self):
+        """Push the Protocol Settings ack-wait grid into the column
+        handlers — the only bridge from the preference to the running
+        columns (handlers read their own ``ack_time_s`` at wait time).
+        Idempotent: equal values are skipped, so re-running on every
+        grid event is free. A compound's field cells share one handler
+        (and one ``col.id``), so its push lands exactly once."""
+        ack_times = self.preferences.protocol_tree_ack_times
+        for col in self.columns:
+            if col.id not in ack_times:
+                continue
+            seconds = ack_times[col.id]
+            ack_time_s = (float("inf") if seconds == ACK_WAIT_FOREVER
+                          else float(seconds))
+            if col.handler.ack_time_s != ack_time_s:
+                logger.info(f"Protocol Tree: ack wait for column {col.id}: "
+                            f"{col.handler.ack_time_s}s --> {ack_time_s}s")
+                col.handler.ack_time_s = ack_time_s
+
     ### Trait observers ###########################
+
+    @observe(["preferences.protocol_tree_ack_times",
+              "preferences.protocol_tree_ack_times.items"],
+             post_init=True)
+    def _protocol_ack_times_changed(self, event):
+        # Covers both grid-edit delivery shapes (whole-dict reassignment
+        # and in-place item changes); the sync itself diffs per handler,
+        # so no event-payload inspection is needed. post_init: an
+        # immediate observer would materialize _preferences_default just
+        # to compute event.old while kwargs are still being applied —
+        # before `task` exists. traits_init covers the initial sync.
+        self._sync_handler_ack_times()
+
     @observe("manager.rows_changed")
     def _on_manager_rows_changed(self, event):
         """Structural mutation — re-check the baseline path set."""

@@ -141,32 +141,31 @@ class ProtocolPreferences(PreferencesHelper):
 
 
     def seed_ack_times_from_columns(self, columns) -> None:
-        """Seed ``protocol_tree_ack_times`` from the assembled IColumn /
-        ICompoundColumn list: one entry per wait-capable column (handler
-        declares a positive ``default_ack_time_s``), keyed by col_id with
-        the plugin provider's value as the wait time. Existing entries —
-        user edits persisted on the preferences node — are never
-        overwritten. ``protocol_tree_column_names`` (col_id -> display
-        name for the grid) is refreshed unconditionally alongside."""
-        ack_times = dict(self.protocol_tree_ack_times)
-        column_names = dict(self.protocol_tree_column_names)
+        """Rebuild ``protocol_tree_ack_times`` from the column list: one
+        entry per wait-capable column (handler declares a positive
+        ``default_ack_time_s``), keyed by ``column.id`` (the model's
+        col_id; base_id for compounds and their expanded field cells).
+        A persisted user edit wins over the provider default; entries
+        whose key matches no current column are dropped, so the grid
+        always mirrors the live column set.
+        ``protocol_tree_column_names`` (column.id -> display name) is
+        rebuilt alongside."""
+        ack_times = {}
+        column_names = {}
         for column in columns:
-            # Single columns key by col_id; compound models have no
-            # col_id, so they key by base_id ("magnet"). Handlers resolve
-            # their wait time under the same key at run time.
-            col_id = (getattr(column.model, "col_id", "")
-                      or getattr(column.model, "base_id", ""))
             default_ack_time_s = float(
                 getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
-            if default_ack_time_s > 0:
-                # Display name for the grid's key column: single columns
-                # carry col_name; compounds show their owner field's label.
-                field_specs = getattr(column.model, "field_specs", None)
-                column_names[col_id] = (
-                    getattr(column.model, "col_name", "")
-                    or (field_specs()[0].col_name if field_specs else col_id))
-                if col_id not in ack_times:
-                    ack_times[col_id] = default_ack_time_s
+            if default_ack_time_s <= 0:
+                continue
+            # Display name for the grid's key column: single columns
+            # (incl. compound field cells) carry col_name; an unexpanded
+            # compound shows its owner field's label.
+            field_specs = getattr(column.model, "field_specs", None)
+            column_names[column.id] = (
+                getattr(column.model, "col_name", "")
+                or (field_specs()[0].col_name if field_specs else column.id))
+            ack_times[column.id] = self.protocol_tree_ack_times.get(
+                column.id, default_ack_time_s)
         if ack_times != self.protocol_tree_ack_times:
             self.protocol_tree_ack_times = ack_times
         if column_names != self.protocol_tree_column_names:
