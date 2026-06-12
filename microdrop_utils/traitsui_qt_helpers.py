@@ -268,6 +268,68 @@ class DoubleSpinBoxEditor(BasicEditorFactory):
     decimals = Int(1)
     step = Float(0.1)  # How much it increments when arrows are clicked
 
+
+class _DictFloatTableEditor(QtEditor):
+    """Two-column table over a Dict(Str, Float) trait: read-only keys in
+    the first column, a float spinbox per value in the second. Keys come
+    from the dict itself; the editor only changes values."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QTableWidget()
+        self.control.setColumnCount(2)
+        self.control.setHorizontalHeaderLabels(
+            [self.factory.key_label, self.factory.value_label])
+        self.control.horizontalHeader().setSectionResizeMode(
+            QtWidgets.QHeaderView.Stretch)
+        self.control.verticalHeader().setVisible(False)
+        self._updating_object = False
+        self.update_editor()
+
+    def update_object(self, key, spinbox_value):
+        """Sync one spinbox change back to the dict trait (re-assigned
+        whole so trait observers and preference persistence fire)."""
+        updated = dict(self.value or {})
+        updated[key] = float(spinbox_value)
+        self._updating_object = True
+        try:
+            self.value = updated
+        finally:
+            self._updating_object = False
+
+    def update_editor(self):
+        """Rebuild the table from the dict trait."""
+        if self._updating_object:
+            return   # echo of our own update_object write — widgets are current
+        entries = dict(self.value or {})
+        self.control.setRowCount(len(entries))
+        for row, (key, value) in enumerate(entries.items()):
+            key_item = QtWidgets.QTableWidgetItem(str(key))
+            key_item.setFlags(Qt.ItemIsEnabled)   # visible, not editable
+            self.control.setItem(row, 0, key_item)
+
+            spinbox = QDoubleSpinBox()
+            spinbox.setMinimum(self.factory.low)
+            spinbox.setMaximum(self.factory.high)
+            spinbox.setDecimals(self.factory.decimals)
+            spinbox.setSingleStep(self.factory.step)
+            spinbox.setValue(float(value))
+            spinbox.valueChanged.connect(
+                lambda new_value, k=key: self.update_object(k, new_value))
+            self.control.setCellWidget(row, 1, spinbox)
+
+
+class DictFloatTableEditor(BasicEditorFactory):
+    """Editor factory for Dict(Str, Float) traits — declare directly in
+    a View: Item("my_dict", editor=DictFloatTableEditor(...))."""
+    klass = _DictFloatTableEditor
+
+    key_label = Str("Key")
+    value_label = Str("Value")
+    low = Float(0.0)
+    high = Float(100.0)
+    decimals = Int(1)
+    step = Float(0.5)
+
 class SafeCancelTableHandler(Handler):
     """
     In tables, we want the cancel event not to close the view. Instead it should deselect all elements.

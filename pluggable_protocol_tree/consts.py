@@ -42,6 +42,11 @@ CAMERA_PREWARM_MAX_S = 15.0
 SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
 
+# Bounds for the per-column acknowledgement-wait times configured in the
+# Protocol Settings tab (#427). 0 = don't wait for the ack.
+ACK_TIMEOUT_MIN_S = 0.0
+ACK_TIMEOUT_MAX_S = 120.0
+
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.
 # _reconcile_repeat_duration_for_row).

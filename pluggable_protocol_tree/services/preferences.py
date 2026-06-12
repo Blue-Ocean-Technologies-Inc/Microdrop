@@ -12,15 +12,19 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Str
+from traits.api import Bool, Dict, Directory, Enum, Float, Str
 from traits.etsconfig.api import ETSConfig
-from traitsui.api import View, Item
+from traitsui.api import Group, View, Item
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_grid_group
-from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
+from microdrop_utils.traitsui_qt_helpers import (
+    DictFloatTableEditor, RangeWithViewHints,
+)
 
 from pluggable_protocol_tree.consts import (
+    ACK_TIMEOUT_MAX_S,
+    ACK_TIMEOUT_MIN_S,
     CAMERA_PREWARM_MAX_S,
     CAMERA_PREWARM_MIN_S,
     DEFAULT_CAMERA_PREWARM_SECONDS,
@@ -97,6 +101,16 @@ class ProtocolPreferences(PreferencesHelper):
     # hidden_by_default flag.
     protocol_tree_column_visibility = Dict(Str, Bool)
 
+    # {col_name: seconds} acknowledgement-wait time per wait-capable
+    # column (#427), keyed by col_name like the visibility map. Edited
+    # in the pane's Column Ack Wait Times grid; 0 = don't wait. Seeded
+    # with the tree's builtin Routes column for now — plugin-provided
+    # defaults register in a later increment.
+    protocol_tree_ack_times = Dict(Str, Float)
+
+    def _protocol_tree_ack_times_default(self):
+        return {"Routes": 5.0}
+
     @classmethod
     def ensure(cls, preferences=None):
         """Return ``preferences`` unchanged, or a standalone helper bound
@@ -158,6 +172,18 @@ class ProtocolPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    ack_times_grid = Group(
+        Item("protocol_tree_ack_times", show_label=False,
+             editor=DictFloatTableEditor(
+                 key_label="Column", value_label="Wait Time (s)",
+                 low=ACK_TIMEOUT_MIN_S, high=ACK_TIMEOUT_MAX_S,
+                 decimals=1, step=0.5,
+             )),
+        label="Column Ack Wait Times (0 = don't wait)",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
+    )
+
     view = View(
         Item("_"),  # Separator
         general_protocol_settings_grid,
@@ -165,6 +191,8 @@ class ProtocolPreferencesPane(PreferencesPane):
         realtime_mode_settings_grid,
         Item("_"),
         camera_settings_grid,
+        Item("_"),
+        ack_times_grid,
         Item("_"),  # Separator to space this out from further contributions to the pane.
         resizable=True
     )
