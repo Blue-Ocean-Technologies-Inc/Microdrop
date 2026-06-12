@@ -102,7 +102,7 @@ class ProtocolPreferences(PreferencesHelper):
     protocol_tree_column_visibility = Dict(Str, Bool)
 
     # {col_name: seconds} acknowledgement-wait time per wait-capable
-    # column (#427), keyed by col_name like the visibility map. Edited
+    # column (issue #427), keyed by col_name like the visibility map. Edited
     # in the pane's Column Ack Wait Times grid; 0 = don't wait. Seeded
     # with the tree's builtin Routes column for now — plugin-provided
     # defaults register in a later increment.
@@ -110,13 +110,6 @@ class ProtocolPreferences(PreferencesHelper):
 
     def _protocol_tree_ack_times_default(self):
         return {"Routes": 5.0}
-
-    @classmethod
-    def ensure(cls, preferences=None):
-        """Return ``preferences`` unchanged, or a standalone helper bound
-        to the global default node — the demo / headless-test fallback
-        used by views that may be constructed without the dock pane."""
-        return preferences if preferences is not None else cls()
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"

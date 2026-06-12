@@ -161,7 +161,7 @@ class ProtocolTreePane(QWidget):
         # full app (bound to the application's preferences there). Demos and
         # headless tests get a standalone instance against the global default
         # preferences node, so every consumer can rely on it being present.
-        self.preferences = ProtocolPreferences.ensure(preferences)
+        self.preferences = preferences or ProtocolPreferences()
 
         self.widget = ProtocolTreeWidget(
             self.manager, preferences=self.preferences, parent=self)

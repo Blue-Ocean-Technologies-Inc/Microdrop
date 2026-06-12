@@ -60,7 +60,7 @@ class ProtocolTreeWidget(QWidget):
         # Column visibility persists in ProtocolPreferences
         # (protocol_tree_column_visibility), passed down from the pane in
         # the full app; standalone fallback for demos/headless tests.
-        self._preferences = ProtocolPreferences.ensure(preferences)
+        self._preferences = preferences or ProtocolPreferences()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
