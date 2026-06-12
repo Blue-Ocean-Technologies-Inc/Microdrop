@@ -48,12 +48,6 @@ class PeripheralPreferencesPane(PreferencesPane):
     view = View(
         Item("_"),  # Separator
         settings_grid,
-        Item("_"),  # Separator
-        Item("wait_for_magnet_ack",
-             label="Wait for magnet acknowledgement",
-             tooltip="When on, each magnet step blocks until the hardware "
-                     "confirms the move. Turn off to run without a magnet "
-                     "responder connected."),
         Item("_"),  # Separator to space this out from further contributions to the pane.
         resizable=True
     )
