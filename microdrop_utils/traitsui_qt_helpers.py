@@ -300,6 +300,13 @@ class _SentinelDoubleSpinBox(QDoubleSpinBox):
         raw = super().value()
         return self._sentinel_value if raw < self._real_low else raw
 
+    def valueFromText(self, text):
+        """Qt calls this to interpret typed text: any typed value below
+        the real range (e.g. -0.2) means the sentinel, so the widget
+        snaps to the sentinel display instead of showing the negative."""
+        value = super().valueFromText(text)
+        return self._sentinel_value if value < self._real_low else value
+
 
 class _DictFloatTableEditor(QtEditor):
     """Two-column table over a Dict(Str, Float) trait: read-only keys in
