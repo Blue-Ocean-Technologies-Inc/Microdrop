@@ -46,6 +46,10 @@ SETTLING_TIME_MAX_S = 15.0
 # Protocol Settings tab (#427). 0 = don't wait for the ack.
 ACK_TIMEOUT_MIN_S = 0.0
 ACK_TIMEOUT_MAX_S = 120.0
+# Stored sentinel for "wait forever" (shown as ∞ in the grid). Finite
+# because the preference dict round-trips through literal_eval, which
+# rejects float("inf"); consumers translate it to an unbounded wait.
+ACK_WAIT_FOREVER = -1.0
 
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.

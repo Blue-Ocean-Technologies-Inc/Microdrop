@@ -3,7 +3,7 @@ from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
 from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Range, List, Str, Int, Property, Float
+from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_,
                           UIInfo, Handler, RangeEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
@@ -269,6 +269,31 @@ class DoubleSpinBoxEditor(BasicEditorFactory):
     step = Float(0.1)  # How much it increments when arrows are clicked
 
 
+class _SentinelDoubleSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox whose minimum is a sentinel value displayed as text
+    (Qt's specialValueText mechanism — applies exactly at the minimum).
+    Stepping snaps between the sentinel and the real range instead of
+    passing through the values in between, and any typed value below the
+    real range lands on the sentinel."""
+
+    def __init__(self, sentinel_value, real_low, parent=None):
+        super().__init__(parent)
+        self._sentinel_value = sentinel_value
+        self._real_low = real_low
+
+    def stepBy(self, steps):
+        if steps < 0 and self.value() <= self._real_low:
+            self.setValue(self._sentinel_value)
+        elif steps > 0 and self.value() < self._real_low:
+            self.setValue(self._real_low)
+        else:
+            super().stepBy(steps)
+
+    def value(self):
+        raw = super().value()
+        return self._sentinel_value if raw < self._real_low else raw
+
+
 class _DictFloatTableEditor(QtEditor):
     """Two-column table over a Dict(Str, Float) trait: read-only keys in
     the first column, a float spinbox per value in the second. Keys come
@@ -310,8 +335,16 @@ class _DictFloatTableEditor(QtEditor):
             key_item.setFlags(Qt.ItemIsEnabled)   # visible, not editable
             self.control.setItem(row, 0, key_item)
 
-            spinbox = QDoubleSpinBox()
-            spinbox.setMinimum(self.factory.low)
+            if self.factory.allow_infinity:
+                spinbox = _SentinelDoubleSpinBox(
+                    sentinel_value=self.factory.infinity_value,
+                    real_low=self.factory.low,
+                )
+                spinbox.setMinimum(self.factory.infinity_value)
+                spinbox.setSpecialValueText(self.factory.infinity_text)
+            else:
+                spinbox = QDoubleSpinBox()
+                spinbox.setMinimum(self.factory.low)
             spinbox.setMaximum(self.factory.high)
             spinbox.setDecimals(self.factory.decimals)
             spinbox.setSingleStep(self.factory.step)
@@ -339,6 +372,15 @@ class DictFloatTableEditor(BasicEditorFactory):
     high = Float(100.0)
     decimals = Int(1)
     step = Float(0.5)
+    #: When True, the spinbox accepts one extra position below ``low`` —
+    #: the finite ``infinity_value`` sentinel, rendered as
+    #: ``infinity_text`` (float("inf") itself can't be stored: apptools
+    #: preference round-trips go through literal_eval). Spinning down
+    #: from ``low`` snaps onto the sentinel; consumers translate it to
+    #: an unbounded wait.
+    allow_infinity = Bool(False)
+    infinity_value = Float(-1.0)
+    infinity_text = Str("∞")
 
 class SafeCancelTableHandler(Handler):
     """

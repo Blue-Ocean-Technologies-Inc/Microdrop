@@ -25,6 +25,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 from pluggable_protocol_tree.consts import (
     ACK_TIMEOUT_MAX_S,
     ACK_TIMEOUT_MIN_S,
+    ACK_WAIT_FOREVER,
     CAMERA_PREWARM_MAX_S,
     CAMERA_PREWARM_MIN_S,
     DEFAULT_CAMERA_PREWARM_SECONDS,
@@ -171,6 +172,9 @@ class ProtocolPreferencesPane(PreferencesPane):
                  key_label="Column", value_label="Wait Time (s)",
                  low=ACK_TIMEOUT_MIN_S, high=ACK_TIMEOUT_MAX_S,
                  decimals=1, step=0.5,
+                 allow_infinity=True,
+                 infinity_value=ACK_WAIT_FOREVER,
+                 infinity_text="∞ (wait forever)",
              )),
         label="Column Ack Wait Times (0 = don't wait)",
         show_border=True,
