@@ -290,6 +290,11 @@ class _SentinelDoubleSpinBox(QDoubleSpinBox):
             self.setValue(self._real_low)
         else:
             super().stepBy(steps)
+            if super().value() < self._real_low:
+                # A multi-notch step (fast wheel scroll, PageDown)
+                # crossed below the real range — clamp to its floor;
+                # the sentinel is only reached deliberately from there.
+                self.setValue(self._real_low)
 
     def value(self):
         raw = super().value()
@@ -317,8 +322,14 @@ class _DictFloatTableEditor(QtEditor):
     def update_object(self, key, spinbox_value):
         """Sync one spinbox change back to the dict trait (re-assigned
         whole so trait observers and preference persistence fire)."""
+        new_value = float(spinbox_value)
+        if self.factory.allow_infinity and new_value < self.factory.low:
+            # valueChanged delivers the RAW spinbox value; anything in
+            # the gap between the sentinel and the real range (typed
+            # negatives, transient step values) means the sentinel.
+            new_value = self.factory.infinity_value
         updated = dict(self.value or {})
-        updated[key] = float(spinbox_value)
+        updated[key] = new_value
         self._updating_object = True
         try:
             self.value = updated
