@@ -42,6 +42,9 @@ class VoltageHandler(BaseColumnHandler):
     """
     priority = 20
     wait_for_topics = [VOLTAGE_APPLIED]
+    # Matches the hardcoded ack wait in on_step; seeds the Protocol
+    # Settings ack-wait grid.
+    default_ack_time_s = 5.0
 
     def on_interact(self, row, model, value):
         """User edited a voltage cell — write through AND persist to prefs.

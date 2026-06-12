@@ -1,7 +1,7 @@
 """Base classes + composite for compound columns. Mirrors the structure
 of models/column.py for single-cell columns. See spec section 2."""
 
-from traits.api import Dict, HasTraits, Instance, Int, List, Str, observe, provides
+from traits.api import Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
 
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
@@ -57,6 +57,10 @@ class DictCompoundColumnView(BaseCompoundColumnView):
 class BaseCompoundColumnHandler(HasTraits):
     priority = Int(50)
     wait_for_topics = List(Str)
+    #: Same contract as BaseColumnHandler.default_ack_time_s — the
+    #: compound seeds the ack-wait grid once, under its owner field's
+    #: col_name.
+    default_ack_time_s = Float(0.0)
     model = Instance(ICompoundColumnModel)
 
     def on_interact(self, row, model, field_id, value):

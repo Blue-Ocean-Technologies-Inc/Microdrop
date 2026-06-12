@@ -9,7 +9,7 @@ persistence, MvcTreeModel) keep speaking Column / IColumnModel.
 
 from typing import NamedTuple
 
-from traits.api import Instance, Int, Interface, List, Str
+from traits.api import Float, Instance, Int, Interface, List, Str
 
 from .i_column import IColumnView
 
@@ -51,6 +51,9 @@ class ICompoundColumnHandler(Interface):
     """Five execution hooks (same as IColumnHandler) plus field-aware on_interact."""
     priority = Int(50)
     wait_for_topics = List(Str)
+    # Same contract as IColumnHandler.default_ack_time_s; the compound
+    # seeds the ack-wait grid once, under its owner field's col_name.
+    default_ack_time_s = Float(0.0)
 
     def on_interact(self, row, model, field_id, value):
         """Default: model.set_value(row, field_id, value)."""

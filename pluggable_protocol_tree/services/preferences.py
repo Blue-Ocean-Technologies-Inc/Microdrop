@@ -103,14 +103,13 @@ class ProtocolPreferences(PreferencesHelper):
     protocol_tree_column_visibility = Dict(Str, Bool)
 
     # {col_name: seconds} acknowledgement-wait time per wait-capable
-    # column (issue #427), keyed by col_name like the visibility map. Edited
-    # in the pane's Column Ack Wait Times grid; 0 = don't wait. Seeded
-    # with the tree's builtin Routes column for now — plugin-provided
-    # defaults register in a later increment.
+    # column (issue #427), keyed by col_name like the visibility map.
+    # Edited in the pane's Column Ack Wait Times grid; 0 = don't wait,
+    # ACK_WAIT_FOREVER = wait forever. The dock pane seeds one entry per
+    # assembled column whose handler declares a default_ack_time_s (see
+    # seed_ack_times) — the plugin provider's value is the default, and
+    # user edits persisted on the node are never overwritten.
     protocol_tree_ack_times = Dict(Str, Float)
-
-    def _protocol_tree_ack_times_default(self):
-        return {"Routes": 5.0}
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"
@@ -120,6 +119,23 @@ class ProtocolPreferences(PreferencesHelper):
         logger.info(f"Default repo directory is: {default_dir}")
 
         return default_dir
+
+
+def seed_ack_times(preferences, columns) -> None:
+    """Seed ``preferences.protocol_tree_ack_times`` from the assembled
+    columns: one entry per wait-capable column (handler declares a
+    positive ``default_ack_time_s``), keyed by col_name with the plugin
+    provider's value as the wait time. Existing entries — user edits
+    persisted on the preferences node — are never overwritten."""
+    ack_times = dict(preferences.protocol_tree_ack_times)
+    for column in columns:
+        col_name = column.model.col_name
+        default_ack_time_s = float(
+            getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
+        if default_ack_time_s > 0 and col_name not in ack_times:
+            ack_times[col_name] = default_ack_time_s
+    if ack_times != preferences.protocol_tree_ack_times:
+        preferences.protocol_tree_ack_times = ack_times
 
 
 protocol_tree_tab = PreferencesCategory(

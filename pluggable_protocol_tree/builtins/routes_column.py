@@ -122,6 +122,9 @@ class RoutesHandler(BaseColumnHandler):
     """
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
+    # Matches the hardcoded per-phase ack wait below; seeds the
+    # Protocol Settings ack-wait grid.
+    default_ack_time_s = 5.0
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,

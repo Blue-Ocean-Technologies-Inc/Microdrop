@@ -8,7 +8,7 @@ different handlers, with no coupling.
 
 from PySide6.QtCore import Signal
 
-from traits.api import Interface, Str, Any, Int, Bool, Instance, List
+from traits.api import Interface, Str, Any, Float, Int, Bool, Instance, List
 
 
 class IColumnModel(Interface):
@@ -75,6 +75,13 @@ class IColumnHandler(Interface):
         desc="Topics this handler may call ctx.wait_for() on. Aggregated "
         "by core plugin for the executor's dramatiq subscription. "
         "Unused in PPT-1; reserved for PPT-2.",
+    )
+    default_ack_time_s = Float(
+        0.0,
+        desc="Provider default (seconds) for this handler's "
+        "acknowledgement wait, seeded into the Protocol Settings "
+        "ack-wait grid under the column's col_name. 0.0 = the column "
+        "has no ack wait to configure.",
     )
 
     column_changed_signal = Instance(

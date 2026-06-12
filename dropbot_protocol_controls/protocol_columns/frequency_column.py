@@ -41,6 +41,9 @@ class FrequencyHandler(BaseColumnHandler):
     """
     priority = 20
     wait_for_topics = [FREQUENCY_APPLIED]
+    # Matches the hardcoded ack wait in on_step; seeds the Protocol
+    # Settings ack-wait grid.
+    default_ack_time_s = 5.0
 
     def on_interact(self, row, model, value):
         """User edited a frequency cell — write through AND persist to prefs.

@@ -15,7 +15,9 @@ from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
-from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.preferences import (
+    ProtocolPreferences, seed_ack_times,
+)
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
         app = self.task.window.application
         if self.preferences is None:
             self.preferences = ProtocolPreferences(preferences=app.preferences)
+
+        # One ack-wait grid entry per wait-capable column, the plugin
+        # provider's default_ack_time_s as the wait time; user-edited
+        # values persisted on the node are kept.
+        seed_ack_times(self.preferences, self.columns)
+
         experiment_manager = ExperimentManager(app.current_experiment_directory)
         sticky_manager = StickyWindowManager()
 

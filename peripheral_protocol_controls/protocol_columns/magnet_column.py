@@ -98,6 +98,9 @@ class MagnetHandler(BaseCompoundColumnHandler):
     """
     priority = 20
     wait_for_topics = [MAGNET_APPLIED]
+    # Docstring-intended magnet ack budget (physical movement is slower
+    # than the v/f RPC writes); seeds the Protocol Settings ack-wait grid.
+    default_ack_time_s = 10.0
 
     def on_step(self, row, ctx):
         # Preview mode: skip the hardware-publish + ack-wait. The

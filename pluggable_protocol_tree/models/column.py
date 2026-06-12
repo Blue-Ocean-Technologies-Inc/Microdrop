@@ -8,7 +8,7 @@ itself is the composite that traits-wires model/view/handler together.
 
 from PySide6.QtCore import Signal
 
-from traits.api import HasTraits, Instance, Str, Any, Int, List, provides, observe, Bool
+from traits.api import HasTraits, Instance, Str, Any, Float, Int, List, provides, observe, Bool
 
 from pluggable_protocol_tree.interfaces.i_column import (
     IColumn,
@@ -54,6 +54,11 @@ class BaseColumnModel(HasTraits):
 class BaseColumnHandler(HasTraits):
     priority = Int(50)
     wait_for_topics = List(Str)
+    #: Provider default (seconds) for this handler's acknowledgement
+    #: wait, seeded into ProtocolPreferences.protocol_tree_ack_times
+    #: (the Protocol Settings ack-wait grid) under the column's col_name.
+    #: 0.0 (the default) = the column has no ack wait to configure.
+    default_ack_time_s = Float(0.0)
 
     # These are re-assigned by Column.traits_init so the handler can
     # reach its peers. Plugin authors generally do not set these.
