@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Float, Str, observe
+from traits.api import Bool, Dict, Directory, Enum, Float, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, View, Item
 
@@ -28,14 +28,6 @@ from ..consts import ACK_TIMEOUT_MAX_S, ACK_TIMEOUT_MIN_S, ACK_WAIT_FOREVER, CAM
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
-
-
-# Updated every time the ack-times column set changes (see the observer on
-# protocol_tree_ack_times). Reverting the Settings dialog resets the trait
-# to its default — without this backup that default would be an empty dict
-# and the grid would lose its rows; with it, a revert restores the last
-# seeded column set (the plugin-provider defaults).
-BACKUP_PROTOCOL_TREE_ACK_TIMES = {}
 
 
 class StepTime:
@@ -118,17 +110,19 @@ class ProtocolPreferences(PreferencesHelper):
     # renames, they are not user edits.
     protocol_tree_column_names = Dict(Str, Str)
 
-    def _protocol_tree_ack_times_default(self):
-        # Copy: the backup must not alias any helper instance's live
-        # trait dict (writes would leak between instances).
-        return dict(BACKUP_PROTOCOL_TREE_ACK_TIMES)
+    # Persisted snapshot of the plugin providers' default_ack_time_s
+    # values ({col_id: seconds}). This is what a Settings-dialog revert
+    # restores: reverting resets protocol_tree_ack_times to its default,
+    # and the default method below reads this trait. Seeding rewrites it
+    # only when the contributed defaults actually differ from what is
+    # stored — the boot-time load of saved USER values never touches it
+    # (a module-global backup tried this before and got overwritten with
+    # the user's values on every launch, making revert a no-op).
+    protocol_tree_default_ack_times = Dict(Str, Float)
 
-    @observe("protocol_tree_ack_times")
-    def _protocol_tree_ack_times_observe(self, event):
-        if event.old.keys() != event.new.keys():
-            logger.info(f"Protocol tree ack times columns changed. Revert value set to {event.new}")
-            global BACKUP_PROTOCOL_TREE_ACK_TIMES
-            BACKUP_PROTOCOL_TREE_ACK_TIMES = dict(event.new)
+    def _protocol_tree_ack_times_default(self):
+        # Copy: the snapshot must not alias the live trait dict.
+        return dict(self.protocol_tree_default_ack_times)
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"
@@ -148,9 +142,10 @@ class ProtocolPreferences(PreferencesHelper):
         A persisted user edit wins over the provider default; entries
         whose key matches no current column are dropped, so the grid
         always mirrors the live column set.
-        ``protocol_tree_column_names`` (column.id -> display name) is
-        rebuilt alongside."""
-        ack_times = {}
+        ``protocol_tree_default_ack_times`` (the revert snapshot) and
+        ``protocol_tree_column_names`` (column.id -> display name) are
+        rebuilt alongside — provider data, not user edits."""
+        default_ack_times = {}
         column_names = {}
         for column in columns:
             default_ack_time_s = float(
@@ -166,8 +161,13 @@ class ProtocolPreferences(PreferencesHelper):
             column_names.setdefault(column.id, (
                 getattr(column.model, "col_name", "")
                 or (field_specs()[0].col_name if field_specs else column.id)))
-            ack_times[column.id] = self.protocol_tree_ack_times.get(
-                column.id, default_ack_time_s)
+            default_ack_times[column.id] = default_ack_time_s
+        ack_times = {
+            col_id: self.protocol_tree_ack_times.get(col_id, default_ack_time_s)
+            for col_id, default_ack_time_s in default_ack_times.items()
+        }
+        if default_ack_times != self.protocol_tree_default_ack_times:
+            self.protocol_tree_default_ack_times = default_ack_times
         if ack_times != self.protocol_tree_ack_times:
             self.protocol_tree_ack_times = ack_times
         if column_names != self.protocol_tree_column_names:
