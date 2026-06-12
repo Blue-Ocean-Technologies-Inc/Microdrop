@@ -85,11 +85,13 @@ class ProtocolPreferences(PreferencesHelper):
     PROTOCOL_REPO_DIR = Directory()
 
     # Programmatic preference (no Settings-dialog item, like
-    # PROTOCOL_REPO_DIR): {col_name: visible} map persisted by the
-    # protocol tree's header right-click menu. Keyed by col_name (stable
-    # display identity), not column index — indices shift when the column
-    # set changes. A column absent from the map falls back to its
-    # hidden_by_default flag.
+    # PROTOCOL_REPO_DIR): {col_id: visible} map persisted by the
+    # protocol tree's header right-click menu. Keyed by the per-cell
+    # col_id — stable across display renames (col_name keying orphaned
+    # saved entries when Routes became "Electrodes") and across column
+    # reordering. A column absent from the map falls back to its
+    # hidden_by_default flag; legacy col_name-keyed entries are read via
+    # a fallback in the tree widget and rewritten on the next toggle.
     protocol_tree_column_visibility = Dict(Str, Bool)
 
     # {col_id: seconds} acknowledgement-wait time per wait-capable column
