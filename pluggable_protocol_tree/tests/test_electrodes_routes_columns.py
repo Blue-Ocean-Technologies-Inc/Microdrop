@@ -65,7 +65,7 @@ from pluggable_protocol_tree.consts import (
 def test_routes_column_metadata():
     col = make_routes_column()
     assert col.model.col_id == "routes"
-    assert col.model.col_name == "Routes"
+    assert col.model.col_name == "Electrodes"
     assert col.model.default_value == []
 
 

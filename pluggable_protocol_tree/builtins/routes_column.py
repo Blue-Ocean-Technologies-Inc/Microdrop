@@ -456,9 +456,13 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
 
 
 def make_routes_column():
+    # Display name "Electrodes" (the column drives electrode actuation,
+    # routes are just one input); col_id stays "routes" — it keys
+    # persistence and the ack-wait grid, so renaming it would orphan
+    # saved protocols and user-tuned wait times.
     return Column(
         model=RoutesColumnModel(
-            col_id="routes", col_name="Routes", default_value=[],
+            col_id="routes", col_name="Electrodes", default_value=[],
         ),
         view=RoutesSummaryView(),
         handler=RoutesHandler(),
