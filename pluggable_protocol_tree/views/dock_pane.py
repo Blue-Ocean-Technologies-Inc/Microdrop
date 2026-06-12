@@ -129,10 +129,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         handlers — the only bridge from the preference to the running
         columns (handlers read their own ``ack_time_s`` at wait time).
         Idempotent: equal values are skipped, so re-running on every
-        grid event is free; the event payload is never inspected (both
-        patterns are observed because grid edits and node syncs REASSIGN
-        the dict while other writers may mutate items). A compound's
-        field cells share one handler, so its push lands exactly once.
+        grid event is free; the event payload is never inspected (the
+        ``.items`` pattern fires for whole-dict reassignment — what grid
+        edits and node syncs do — as well as in-place mutation). A
+        compound's field cells share one handler, so its push lands
+        exactly once.
         post_init: an immediate observer would materialize
         _preferences_default mid-construction (to compute event.old)
         before ``task`` exists; traits_init covers the initial sync."""
