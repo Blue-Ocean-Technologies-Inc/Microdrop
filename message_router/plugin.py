@@ -66,11 +66,13 @@ class MessageRouterPlugin(Plugin):
                         # second removal finds nothing. Not an error.
                         logger.warning(f"router unsubscribe skipped: "
                                        f"{actor_name} not subscribed to {topic}")
+
         for actor_topics_routes in added:
             for actor_name, topics_list in actor_topics_routes.items():
                 for topic in topics_list:
                     data.add_subscriber_to_topic(topic, actor_name)
-                    logger.info(f"router subscribed {actor_name} to {topic}")
+
+                logger.info(f"router subscribed {actor_name} to {topics_list}")
 
     @on_trait_change("actor_topic_routing_items")
     def _on_actor_topic_routing_items_changed(self, event):
