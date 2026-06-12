@@ -63,7 +63,9 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     #: pane's grid push onto any cell's handler must land there, and the
     #: ack-wait grid seeds from its provider default. (Seeding keys by
     #: the unit id, identical for every cell, so seeing the default on
-    #: each cell stays one grid row.)
+    #: each cell stays one grid row.) DelegatesTo replaces the inherited
+    #: trait outright — BaseColumnHandler._ack_time_s_default is inert
+    #: on this class; the compound handler's own default applies.
     ack_time_s = DelegatesTo("compound_handler")
     default_ack_time_s = DelegatesTo("compound_handler")
 

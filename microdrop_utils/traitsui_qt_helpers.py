@@ -19,6 +19,11 @@ from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
+# QDoubleSpinBox rejects math.inf as a bound — this stands in for
+# "unbounded" wherever a spinbox range is conceptually infinite
+# (negate it for an unbounded minimum).
+DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
+
 
 class TableColumn(TableColumn_):
     def __init__(self, *args, **kwargs) -> None:
@@ -370,10 +375,9 @@ class _DictFloatTableEditor(QtEditor):
             else:
                 spinbox = QDoubleSpinBox()
                 spinbox.setMinimum(self.factory.low)
-            # QDoubleSpinBox doesn't accept math.inf — clamp to a very
-            # large value (same idiom as DoubleSpinBoxColumnView).
             spinbox.setMaximum(self.factory.high
-                               if math.isfinite(self.factory.high) else 1e12)
+                               if math.isfinite(self.factory.high)
+                               else DOUBLE_SPINBOX_UNBOUNDED_MAX)
             spinbox.setDecimals(self.factory.decimals)
             spinbox.setSingleStep(self.factory.step)
             spinbox.setValue(float(value))

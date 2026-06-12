@@ -10,6 +10,7 @@ from pyface.qt.QtCore import Qt
 from pyface.qt.QtWidgets import QSpinBox, QDoubleSpinBox
 from traits.api import Float, Int, provides
 
+from microdrop_utils.traitsui_qt_helpers import DOUBLE_SPINBOX_UNBOUNDED_MAX
 from pluggable_protocol_tree.interfaces.i_column import IColumnView
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
@@ -64,9 +65,10 @@ class DoubleSpinBoxColumnView(BaseColumnView):
 
     def create_editor(self, parent, context):
         e = QDoubleSpinBox(parent)
-        # QDoubleSpinBox doesn't accept math.inf — clamp to a very large value.
-        e.setMinimum(self.low if math.isfinite(self.low) else -1e12)
-        e.setMaximum(self.high if math.isfinite(self.high) else 1e12)
+        e.setMinimum(self.low if math.isfinite(self.low)
+                     else -DOUBLE_SPINBOX_UNBOUNDED_MAX)
+        e.setMaximum(self.high if math.isfinite(self.high)
+                     else DOUBLE_SPINBOX_UNBOUNDED_MAX)
         e.setDecimals(self.decimals)
         e.setSingleStep(self.single_step)
         return e
