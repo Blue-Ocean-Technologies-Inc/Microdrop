@@ -1,3 +1,5 @@
+import math
+
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
 from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
@@ -345,7 +347,10 @@ class _DictFloatTableEditor(QtEditor):
             else:
                 spinbox = QDoubleSpinBox()
                 spinbox.setMinimum(self.factory.low)
-            spinbox.setMaximum(self.factory.high)
+            # QDoubleSpinBox doesn't accept math.inf — clamp to a very
+            # large value (same idiom as DoubleSpinBoxColumnView).
+            spinbox.setMaximum(self.factory.high
+                               if math.isfinite(self.factory.high) else 1e12)
             spinbox.setDecimals(self.factory.decimals)
             spinbox.setSingleStep(self.factory.step)
             spinbox.setValue(float(value))

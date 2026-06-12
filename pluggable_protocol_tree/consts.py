@@ -43,9 +43,10 @@ SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
 
 # Bounds for the per-column acknowledgement-wait times configured in the
-# Protocol Settings tab (#427). 0 = don't wait for the ack.
+# Protocol Settings tab (#427). 0 = don't wait for the ack; no upper
+# bound (the grid editor clamps inf to a huge finite spinbox maximum).
 ACK_TIMEOUT_MIN_S = 0.0
-ACK_TIMEOUT_MAX_S = 120.0
+ACK_TIMEOUT_MAX_S = float("inf")
 # Stored sentinel for "wait forever" (shown as ∞ in the grid). Finite
 # because the preference dict round-trips through literal_eval, which
 # rejects float("inf"); consumers translate it to an unbounded wait.

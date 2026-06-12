@@ -30,7 +30,7 @@ class AckTimesDemo(HasTraits):
             Item("ack_times", show_label=False,
                  editor=DictFloatTableEditor(
                      key_label="Column", value_label="Wait Time (s)",
-                     low=0.0, high=120.0, decimals=1, step=0.5,
+                     low=0.0, high=float("inf"), decimals=1, step=0.5,
                      allow_infinity=True, infinity_value=-1.0,
                      infinity_text="∞ (wait forever)",
                  )),
