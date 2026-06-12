@@ -83,7 +83,6 @@ from microdrop_application import consts as _app
 from peripheral_controller import consts as _peripheral
 from ssh_controls import consts as _ssh
 from opendrop_controller import consts as _opendrop
-from pgva_controller_plugin import consts as _pgva
 from mock_dropbot_controller import consts as _mock
 from dropbot_preferences_ui import consts as _prefs_ui
 
@@ -277,51 +276,6 @@ class OpenDropTopics:
 
 
 # ---------------------------------------------------------------------------
-# PGVA Controller  (pgva_controller_plugin/consts.py)
-# ---------------------------------------------------------------------------
-
-class PGVATopics:
-    """Topics owned by the PGVA (Pressure/Vacuum) controller plugin."""
-
-    class Signals:
-        """Signals emitted by the PGVA backend."""
-        CONNECTED                    = _pgva.PGVA_CONNECTED
-        DISCONNECTED                 = _pgva.PGVA_DISCONNECTED
-        PRESSURE_UPDATED             = _pgva.PGVA_PRESSURE_UPDATED
-        VACUUM_UPDATED               = _pgva.PGVA_VACUUM_UPDATED
-        OUTPUT_PRESSURE_UPDATED      = _pgva.PGVA_OUTPUT_PRESSURE_UPDATED
-        STATUS_UPDATED               = _pgva.PGVA_STATUS_UPDATED
-        WARNINGS_UPDATED             = _pgva.PGVA_WARNINGS_UPDATED
-        ERRORS_UPDATED               = _pgva.PGVA_ERRORS_UPDATED
-        COMPREHENSIVE_STATUS_UPDATED = _pgva.PGVA_COMPREHENSIVE_STATUS_UPDATED
-        HEALTH_CHECK_UPDATED         = _pgva.PGVA_HEALTH_CHECK_UPDATED
-        DEVICE_INFO_UPDATED          = _pgva.PGVA_DEVICE_INFO_UPDATED
-        ERROR                        = _pgva.PGVA_ERROR_SIGNAL
-
-    class Requests:
-        """Requests accepted by the PGVA backend."""
-        SET_PRESSURE            = _pgva.SET_PRESSURE
-        SET_VACUUM              = _pgva.SET_VACUUM
-        SET_OUTPUT_PRESSURE     = _pgva.SET_OUTPUT_PRESSURE
-        GET_PRESSURE            = _pgva.GET_PRESSURE
-        GET_VACUUM              = _pgva.GET_VACUUM
-        GET_OUTPUT_PRESSURE     = _pgva.GET_OUTPUT_PRESSURE
-        GET_STATUS              = _pgva.GET_STATUS
-        GET_WARNINGS            = _pgva.GET_WARNINGS
-        GET_ERRORS              = _pgva.GET_ERRORS
-        GET_COMPREHENSIVE_STATUS = _pgva.GET_COMPREHENSIVE_STATUS
-        GET_HEALTH_CHECK        = _pgva.GET_HEALTH_CHECK
-        GET_DEVICE_INFO         = _pgva.GET_DEVICE_INFO
-        ENABLE                  = _pgva.ENABLE_PGVA
-        DISABLE                 = _pgva.DISABLE_PGVA
-        RESET                   = _pgva.RESET_PGVA
-        TRIGGER_MANUAL          = _pgva.TRIGGER_MANUAL
-        STORE_TO_EEPROM         = _pgva.STORE_TO_EEPROM
-        CONNECT                 = _pgva.CONNECT_PGVA
-        DISCONNECT              = _pgva.DISCONNECT_PGVA
-
-
-# ---------------------------------------------------------------------------
 # Mock DropBot Controller  (mock_dropbot_controller/consts.py)
 # ---------------------------------------------------------------------------
 
@@ -359,8 +313,6 @@ class WildcardPatterns:
     ALL_HARDWARE_REQUESTS   = "hardware/requests/#"
     ALL_OPENDROP_SIGNALS    = "opendrop/signals/#"
     ALL_OPENDROP_REQUESTS   = "opendrop/requests/#"
-    ALL_PGVA_SIGNALS        = "pgva/signals/#"
-    ALL_PGVA_REQUESTS       = "pgva/requests/#"
     ALL_MOCK_DROPBOT_SIGNALS    = "mock_dropbot/signals/#"
     ALL_MOCK_DROPBOT_REQUESTS   = "mock_dropbot/requests/#"
     ALL_ZSTAGE_SIGNALS      = "ZStage/signals/#"
@@ -390,7 +342,6 @@ def get_all_topics() -> dict[str, list[str]]:
         ("zstage", ZStageTopics),
         ("ssh", SSHTopics),
         ("opendrop", OpenDropTopics),
-        ("pgva", PGVATopics),
         ("mock_dropbot", MockDropbotTopics),
     ]
 
@@ -436,7 +387,6 @@ __all__ = [
     "ZStageTopics",
     "SSHTopics",
     "OpenDropTopics",
-    "PGVATopics",
     "MockDropbotTopics",
     "WildcardPatterns",
     # Helpers

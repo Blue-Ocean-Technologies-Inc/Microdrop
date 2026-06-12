@@ -8,7 +8,7 @@ itself is the composite that traits-wires model/view/handler together.
 
 from PySide6.QtCore import Signal
 
-from traits.api import HasTraits, Instance, Str, Any, Int, List, provides, observe, Bool
+from traits.api import HasTraits, Instance, Str, Any, Float, Int, List, provides, observe, Bool
 
 from pluggable_protocol_tree.interfaces.i_column import (
     IColumn,
@@ -54,6 +54,16 @@ class BaseColumnModel(HasTraits):
 class BaseColumnHandler(HasTraits):
     priority = Int(50)
     wait_for_topics = List(Str)
+    #: Provider default (seconds) for this handler's acknowledgement
+    #: wait, seeded into ProtocolPreferences.protocol_tree_ack_times
+    #: (the Protocol Settings ack-wait grid) under the column's col_id.
+    #: 0.0 (the default) = the column has no ack wait to configure.
+    default_ack_time_s = Float(0.0)
+    #: Live ack wait in seconds, read by on_step at wait time. The
+    #: protocol dock pane pushes the Protocol Settings grid value here
+    #: (ACK_WAIT_FOREVER arrives pre-mapped to float("inf")); until that
+    #: first push it holds the provider default. 0 = don't wait.
+    ack_time_s = Float(0.0)
 
     # These are re-assigned by Column.traits_init so the handler can
     # reach its peers. Plugin authors generally do not set these.
@@ -71,6 +81,9 @@ class BaseColumnHandler(HasTraits):
     # before column_changed_signal has been wired, so the missed repaint
     # can be replayed the moment the signal arrives.
     trigger_column_change_when_wired = Bool(False)
+
+    def _ack_time_s_default(self):
+        return self.default_ack_time_s
 
     @observe("column_changed_signal")
     def _on_column_changed_signal_changed(self, event):
@@ -114,6 +127,15 @@ class Column(HasTraits):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
+
+    #: Identity of this column UNIT (model+view+handler) for unit-level
+    #: maps like the ack-wait grid. Defaults to the model's col_id;
+    #: compound expansion overrides it so every synthesized field cell
+    #: reports the compound's base_id instead of its own field id.
+    id = Str()
+
+    def _id_default(self):
+        return self.model.col_id
 
     def traits_init(self):
         if self.handler is None:

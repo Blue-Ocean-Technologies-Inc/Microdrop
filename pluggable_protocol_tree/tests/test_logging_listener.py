@@ -30,9 +30,9 @@ def test_route_with_no_active_logger_is_noop():
 
 
 def test_logging_topics_registered_in_consts():
-    from pluggable_protocol_tree.consts import LOGGING_ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME
+    from pluggable_protocol_tree.consts import ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME
     from dropbot_controller.consts import CAPACITANCE_UPDATED
-    topics = LOGGING_ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]
+    topics = ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]
     assert CAPACITANCE_UPDATED in topics
 
 
@@ -54,6 +54,6 @@ def test_route_calibration_dispatches_to_on_calibration():
 
 
 def test_calibration_topic_registered_in_consts():
-    from pluggable_protocol_tree.consts import LOGGING_ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME
+    from pluggable_protocol_tree.consts import ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME
     from device_viewer.consts import CALIBRATION_DATA
-    assert CALIBRATION_DATA in LOGGING_ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]
+    assert CALIBRATION_DATA in ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]

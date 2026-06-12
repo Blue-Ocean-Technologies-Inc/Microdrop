@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 import html as _html
 
+from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
 )
@@ -40,12 +41,12 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
+from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING, CHANNEL_AREAS_KEY
 from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
     ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
-    PROTOCOL_TREE_DISPLAY_STATE, REPEAT_DURATION_RECALC_TRIGGERS)
+    PROTOCOL_TREE_DISPLAY_STATE)
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.row import GroupRow
@@ -55,10 +56,7 @@ from pluggable_protocol_tree.services.persistence import (
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
-from pluggable_protocol_tree.services.phase_math import (
-    effective_repetitions_for_duration, estimate_repeat_duration_s,
-    iter_phases,
-)
+from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
@@ -140,9 +138,9 @@ class ProtocolTreePane(QWidget):
         device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
         executor_factory=None,
-        logging_device_context_provider=None,
         preferences=None,
         quick_actions=None,
+        protocol_state_tracker=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -156,12 +154,13 @@ class ProtocolTreePane(QWidget):
         self.experiment_manager = experiment_manager
         self.sticky_manager = sticky_manager
         self.phase_ack_topic = phase_ack_topic
-        self._logging_device_context_provider = logging_device_context_provider
         # Protocol preferences model, passed down from the dock pane in the
         # full app (bound to the application's preferences there). Demos and
         # headless tests get a standalone instance against the global default
         # preferences node, so every consumer can rely on it being present.
-        self.preferences = ProtocolPreferences.ensure(preferences)
+        self.preferences = preferences or ProtocolPreferences()
+
+        self.protocol_state_tracker = protocol_state_tracker or PluggableProtocolStateTracker()
 
         self.widget = ProtocolTreeWidget(
             self.manager, preferences=self.preferences, parent=self)
@@ -176,15 +175,6 @@ class ProtocolTreePane(QWidget):
         self.widget.tree.selectionModel().selectionChanged.connect(
             lambda *_: self.selection_changed.emit()
         )
-
-        self.protocol_state_tracker = PluggableProtocolStateTracker()
-        # Structural mutations (add/remove/move/paste/new) re-check the
-        # baseline path set and rescan if paths re-aligned (insert+
-        # delete, move+undo).
-        self.manager.observe(self._on_manager_rows_changed, "rows_changed")
-        # Cell edits go through cell_changed (carries path + col_id)
-        # so the tracker can update its diff in O(1).
-        self.manager.observe(self._on_manager_cell_changed, "cell_changed")
 
         self._build_status_bar()
         self._build_navigation_bar()
@@ -262,24 +252,12 @@ class ProtocolTreePane(QWidget):
         self._wire_navigation_buttons()
         self._set_idle_button_state()
 
+        # Set the initial experiment label (application is None in
+        # standalone demos/tests — the label just stays blank there).
         if self.application is not None:
-            self.application.observe(
-                self._on_experiment_changed, "experiment_changed",
-            )
-            try:
-                self.application.observe(
-                    self._on_application_exiting, "application_exiting",
-                )
-            except ValueError as e:
-                # Bare HasTraits test stubs may not declare the trait;
-                # production Envisage apps always do.
-                logger.debug(f"application_exiting observer skipped: {e}")
-            try:
-                cur = self.application.current_experiment_directory
-                if cur is not None:
-                    self.experiment_label.update_experiment_id(cur.stem)
-            except Exception as e:
-                logger.warning(f"could not read initial experiment dir: {e}")
+            cur = self.application.current_experiment_directory
+            if cur is not None:
+                self.experiment_label.update_experiment_id(cur.stem)
 
     def _build_status_bar(self):
         self.status_bar = StatusBar()
@@ -579,6 +557,7 @@ class ProtocolTreePane(QWidget):
     # --- button state machine ----------------------------------------
 
     def _set_idle_button_state(self):
+        self.protocol_state_tracker.is_active = False
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)
         nb.show_play_state()
@@ -588,6 +567,7 @@ class ProtocolTreePane(QWidget):
         nb.action_preview.setEnabled(True)
 
     def _set_running_button_state(self):
+        self.protocol_state_tracker.is_active = True
         nb = self.navigation_bar
         nb.btn_play.setEnabled(True)
         nb.show_pause_state()
@@ -624,14 +604,32 @@ class ProtocolTreePane(QWidget):
         # terminal). So one log spans all repetitions. capacitance_per_unit_area
         # is not seeded here; it arrives live via the controller's
         # on_calibration (CALIBRATION_DATA) so the Force column populates.
-        if self._logging_device_context_provider is not None:
+        try:
+            # Decoupled: read channel areas + device SVG path from the shared
+            # app_globals (published by the device viewer) rather than reaching
+            # into the device-viewer pane/model. The context is rebuilt on
+            # every run start so device/experiment changes are picked up.
+            channel_areas, svg_path = {}, None
             try:
-                _log_ctx = self._logging_device_context_provider()
-                if _log_ctx is not None:
-                    _n_steps = sum(1 for _ in self.manager.iter_execution_frames())
-                    self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
+                # Redis JSON-stringifies the int channel keys; restore int keys
+                # to match the actuation lookup (areas.get(int(ch))).
+                channel_areas = {
+                    int(k): float(v)
+                    for k, v in (app_globals.get(CHANNEL_AREAS_KEY) or {}).items()
+                }
+                svg_path = app_globals.get(DEVICE_SVG_PATH_KEY)
             except Exception as e:
-                logger.warning(f"could not start protocol logging: {e}")
+                logger.critical(f"logging device-context probe failed: {e}")
+
+            _log_ctx = LoggingDeviceContext(
+                experiment_directory=self.experiment_manager.get_experiment_directory(),
+                device_svg_path=svg_path,
+                channel_areas=channel_areas,
+            )
+            _n_steps = sum(1 for _ in self.manager.iter_execution_frames())
+            self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
+        except Exception as e:
+            logger.warning(f"could not start protocol logging: {e}")
         if preview_mode:
             # Preview runs never touch hardware — no realtime-mode prep.
             self.executor.start(
@@ -721,7 +719,10 @@ class ProtocolTreePane(QWidget):
         return None
 
     def _is_protocol_active(self):
-        return self.navigation_bar.btn_stop.isEnabled()
+        # One source of truth shared with non-view collaborators (the
+        # dock pane observes the same tracker) — kept in lockstep with
+        # the button state machine above, which sets it.
+        return self.protocol_state_tracker.is_active
 
     def _toggle_pause(self):
         if self.executor.pause_event.is_set():
@@ -1170,151 +1171,7 @@ class ProtocolTreePane(QWidget):
             return None
         return path
 
-    @attempt_func_execution_with_error_dialog
-    def closeEvent(self, event):
-        """Detach Traits observers before the underlying QWidget is
-        destroyed. Without this, application.experiment_changed firing
-        after pane destruction dispatches to a deleted Qt object."""
-        if self.application is not None:
-            try:
-                self.application.observe(
-                    self._on_experiment_changed,
-                    "experiment_changed",
-                    remove=True,
-                )
-            except Exception as e:
-                logger.warning(f"failed to detach experiment_changed observer: {e}")
-            try:
-                self.application.observe(
-                    self._on_application_exiting,
-                    "application_exiting",
-                    remove=True,
-                )
-            except Exception as e:
-                logger.warning(f"failed to detach application_exiting observer: {e}")
-        try:
-            self.manager.observe(
-                self._on_manager_rows_changed, "rows_changed", remove=True,
-            )
-        except Exception as e:
-            logger.warning(f"failed to detach rows_changed observer: {e}")
-        try:
-            self.manager.observe(
-                self._on_manager_cell_changed, "cell_changed", remove=True,
-            )
-        except Exception as e:
-            logger.warning(f"failed to detach cell_changed observer: {e}")
-        if self.device_viewer_sync is not None:
-            try:
-                self.device_viewer_sync.detach()
-            except Exception as e:
-                logger.warning(f"failed to detach device_viewer_sync: {e}")
-        super().closeEvent(event)
-
     # --- file menu actions ------------------------------------------
-
-    def _on_manager_rows_changed(self, event):
-        """Structural mutation — re-check the baseline path set."""
-        self.protocol_state_tracker.on_structure_changed(self.manager)
-
-    def _on_manager_cell_changed(self, event):
-        """Cell value edit — incremental dirty update for the one cell."""
-        payload = event.new
-        if not isinstance(payload, dict):
-            return
-        path = payload.get("path")
-        col_id = payload.get("col_id")
-        if path is None or col_id is None:
-            return
-        self.protocol_state_tracker.on_cell_changed(
-            path, col_id, self.manager,
-        )
-        self._clamp_trail_overlay_for_row(path, col_id)
-        self._reconcile_repeat_duration_for_row(path, col_id)
-
-    def _clamp_trail_overlay_for_row(self, path, col_id):
-        """Mirror the DV sidebar's dynamic bound (trail_overlay can never
-        reach trail_length): shrinking Trail Len drags an out-of-range
-        Trail Overlay down with it. Runs before the repeat-duration
-        reconciliation so the recalc sees the clamped overlay."""
-        if col_id != "trail_length":
-            return
-        try:
-            row = self.manager.get_row(tuple(path))
-        except (IndexError, AttributeError):
-            return
-        max_overlay = max(0, int(getattr(row, "trail_length", 1) or 1) - 1)
-        if int(getattr(row, "trail_overlay", 0) or 0) > max_overlay:
-            row.trail_overlay = max_overlay
-            self.manager.cell_changed = {
-                "path": tuple(path), "col_id": "trail_overlay",
-            }
-
-    def _reconcile_repeat_duration_for_row(self, path, col_id):
-        """Mirror the legacy auto-recalc / effective-reps coupling:
-
-          * In Route-Reps-controlled mode (``repeat_duration_controls``
-            False): edits to any geometry/timing knob refresh the
-            Route Reps Dur cell with the new estimate.
-          * In Route-Reps-Dur-controlled mode (flag True): edits to
-            Route Reps Dur refresh the Route Reps cell with the effective
-            number of full cycles that fit.
-
-        Programmatic writes here go via ``setattr`` directly (NOT
-        ``model.set_value`` and NOT through ``on_interact``) so the
-        mode-switch dialog only ever fires for genuine user clicks,
-        never for these reconciliation passes.
-        """
-        if self._is_protocol_active():
-            return
-        try:
-            row = self.manager.get_row(tuple(path))
-        except (IndexError, AttributeError):
-            return
-        routes = list(getattr(row, "routes", []) or [])
-        if not routes:
-            return
-        controls = bool(getattr(row, "repeat_duration_controls", False))
-        duration_s = float(getattr(row, "duration_s", 1.0) or 0.0)
-        trail_length = int(getattr(row, "trail_length", 1) or 1)
-        trail_overlay = int(getattr(row, "trail_overlay", 0) or 0)
-        linear_repeats = bool(getattr(row, "linear_repeats", False))
-        soft_start = bool(getattr(row, "soft_start", False))
-        soft_end = bool(getattr(row, "soft_end", False))
-
-        if not controls and col_id in REPEAT_DURATION_RECALC_TRIGGERS:
-            n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
-            estimated = estimate_repeat_duration_s(
-                routes=routes,
-                trail_length=trail_length, trail_overlay=trail_overlay,
-                n_repeats=n_repeats, step_duration_s=duration_s,
-                linear_repeats=linear_repeats,
-                soft_start=soft_start, soft_end=soft_end,
-            )
-            estimated = round(estimated, REPEAT_DURATION_DECIMALS)
-            if (abs(float(getattr(row, "repeat_duration", 0.0)) - estimated)
-                    >= REPEAT_DURATION_TOLERANCE_S):
-                row.repeat_duration = estimated
-                # Re-entrancy is bounded: see the
-                # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
-                # "repeat_duration" is not a trigger in
-                # route-reps-controlled mode so the next pass exits cleanly.
-                self.manager.cell_changed = {
-                    "path": tuple(path), "col_id": "repeat_duration",
-                }
-        elif controls and col_id == "repeat_duration":
-            effective = effective_repetitions_for_duration(
-                routes=routes,
-                trail_length=trail_length, trail_overlay=trail_overlay,
-                step_duration_s=duration_s,
-                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0) or 0.0),
-            )
-            if int(getattr(row, "route_repetitions", 1) or 1) != int(effective):
-                row.route_repetitions = int(effective)
-                self.manager.cell_changed = {
-                    "path": tuple(path), "col_id": "route_repetitions",
-                }
-
     def _confirm_proceed_or_abort(self) -> bool:
         """Returns True if the action should proceed.
 
@@ -1401,29 +1258,6 @@ class ProtocolTreePane(QWidget):
         if path:
             self.protocol_state_tracker.set_loaded(path)
             self.protocol_state_tracker.reseed_baseline(self.manager)
-
-    def _on_application_exiting(self, event):
-        """Veto application exit when the protocol is dirty and the user
-        elects to keep it open.
-
-        ``event`` is a Pyface Vetoable event — setting ``event.veto = True``
-        cancels the exit. Falls back to a non-fatal log if veto plumbing
-        isn't available.
-        """
-        if not self.protocol_state_tracker.is_modified:
-            return
-        user_choice = confirm(
-            self,
-            "Current protocol has unsaved changes.\n"
-            "Exit without saving?",
-            title="Unsaved Protocol Changes",
-            cancel=False,
-        )
-        if user_choice == NO:
-            try:
-                event.veto = True
-            except Exception as e:
-                logger.warning(f"could not veto application exit: {e}")
 
     # --- experiment-bar handlers ------------------------------------
     @attempt_func_execution_with_error_dialog
@@ -1528,7 +1362,7 @@ class ProtocolTreePane(QWidget):
         self.experiment_manager.open_experiment_directory()
 
     @attempt_func_execution_with_error_dialog
-    def _on_experiment_changed(self, _event):
+    def _on_experiment_changed(self):
         if self.experiment_label is None:
             return
         try:

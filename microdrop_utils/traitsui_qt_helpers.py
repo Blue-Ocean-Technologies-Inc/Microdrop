@@ -1,9 +1,11 @@
+import math
+
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
 from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Range, List, Str, Int, Property, Float
+from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_,
                           UIInfo, Handler, RangeEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
@@ -16,6 +18,11 @@ from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+# QDoubleSpinBox rejects math.inf as a bound — this stands in for
+# "unbounded" wherever a spinbox range is conceptually infinite
+# (negate it for an unbounded minimum).
+DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
 
 
 class TableColumn(TableColumn_):
@@ -267,6 +274,150 @@ class DoubleSpinBoxEditor(BasicEditorFactory):
     high = Float(100.0)
     decimals = Int(1)
     step = Float(0.1)  # How much it increments when arrows are clicked
+
+
+class _SentinelDoubleSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox whose minimum is a sentinel value displayed as text
+    (Qt's specialValueText mechanism — applies exactly at the minimum).
+    Stepping snaps between the sentinel and the real range instead of
+    passing through the values in between, and any typed value below the
+    real range lands on the sentinel."""
+
+    def __init__(self, sentinel_value, real_low, parent=None):
+        super().__init__(parent)
+        self._sentinel_value = sentinel_value
+        self._real_low = real_low
+
+    def stepBy(self, steps):
+        if steps < 0 and self.value() <= self._real_low:
+            self.setValue(self._sentinel_value)
+        elif steps > 0 and self.value() < self._real_low:
+            self.setValue(self._real_low)
+        else:
+            super().stepBy(steps)
+            if super().value() < self._real_low:
+                # A multi-notch step (fast wheel scroll, PageDown)
+                # crossed below the real range — clamp to its floor;
+                # the sentinel is only reached deliberately from there.
+                self.setValue(self._real_low)
+
+    def value(self):
+        raw = super().value()
+        return self._sentinel_value if raw < self._real_low else raw
+
+    def valueFromText(self, text):
+        """Qt calls this to interpret typed text: any typed value below
+        the real range (e.g. -0.2) means the sentinel, so the widget
+        snaps to the sentinel display instead of showing the negative."""
+        value = super().valueFromText(text)
+        return self._sentinel_value if value < self._real_low else value
+
+
+class _DictFloatTableEditor(QtEditor):
+    """Two-column table over a Dict(Str, Float) trait: read-only keys in
+    the first column, a float spinbox per value in the second. Keys come
+    from the dict itself; the editor only changes values. When the
+    factory names a ``key_labels_name`` trait on the edited object, keys
+    are displayed through that {key: label} map (read on each rebuild)
+    while the dict stays keyed by the stable raw key."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QTableWidget()
+        self.control.setColumnCount(2)
+        self.control.setHorizontalHeaderLabels(
+            [self.factory.key_label, self.factory.value_label])
+        self.control.horizontalHeader().setSectionResizeMode(
+            QtWidgets.QHeaderView.Stretch)
+        self.control.verticalHeader().setVisible(False)
+        self._updating_object = False
+        # No update_editor() call here — TraitsUI invokes it right after
+        # init. A manual extra pass left the replaced cell spinboxes
+        # orphaned (undeleted, stacked over the first cell).
+
+    def update_object(self, key, spinbox_value):
+        """Sync one spinbox change back to the dict trait (re-assigned
+        whole so trait observers and preference persistence fire)."""
+        new_value = float(spinbox_value)
+        if self.factory.allow_infinity and new_value < self.factory.low:
+            # valueChanged delivers the RAW spinbox value; anything in
+            # the gap between the sentinel and the real range (typed
+            # negatives, transient step values) means the sentinel.
+            new_value = self.factory.infinity_value
+        updated = dict(self.value or {})
+        updated[key] = new_value
+        self._updating_object = True
+        try:
+            self.value = updated
+        finally:
+            self._updating_object = False
+
+    def update_editor(self):
+        """Rebuild the table from the dict trait."""
+        if self._updating_object:
+            return   # echo of our own update_object write — widgets are current
+        entries = dict(self.value or {})
+        key_labels = (getattr(self.object, self.factory.key_labels_name, {})
+                      if self.factory.key_labels_name else {})
+        self.control.clearContents()   # drops stale items AND cell widgets
+        self.control.setRowCount(len(entries))
+        for row, (key, value) in enumerate(entries.items()):
+            key_item = QtWidgets.QTableWidgetItem(str(key_labels.get(key, key)))
+            key_item.setFlags(Qt.ItemIsEnabled)   # visible, not editable
+            self.control.setItem(row, 0, key_item)
+
+            if self.factory.allow_infinity:
+                spinbox = _SentinelDoubleSpinBox(
+                    sentinel_value=self.factory.infinity_value,
+                    real_low=self.factory.low,
+                )
+                spinbox.setMinimum(self.factory.infinity_value)
+                spinbox.setSpecialValueText(self.factory.infinity_text)
+            else:
+                spinbox = QDoubleSpinBox()
+                spinbox.setMinimum(self.factory.low)
+            spinbox.setMaximum(self.factory.high
+                               if math.isfinite(self.factory.high)
+                               else DOUBLE_SPINBOX_UNBOUNDED_MAX)
+            spinbox.setDecimals(self.factory.decimals)
+            spinbox.setSingleStep(self.factory.step)
+            spinbox.setValue(float(value))
+            spinbox.valueChanged.connect(
+                lambda new_value, k=key: self.update_object(k, new_value))
+            self.control.setCellWidget(row, 1, spinbox)
+        # Size the table to its rows — no dead scroll area below the last
+        # entry when embedded in a preferences pane.
+        rows_height = sum(self.control.rowHeight(r)
+                          for r in range(self.control.rowCount()))
+        self.control.setFixedHeight(
+            self.control.horizontalHeader().height() + rows_height
+            + 2 * self.control.frameWidth())
+
+
+class DictFloatTableEditor(BasicEditorFactory):
+    """Editor factory for Dict(Str, Float) traits — declare directly in
+    a View: Item("my_dict", editor=DictFloatTableEditor(...))."""
+    klass = _DictFloatTableEditor
+
+    key_label = Str("Key")
+    value_label = Str("Value")
+    #: Optional name of a Dict(Str, Str) trait on the edited object
+    #: mapping dict keys -> display labels for the key column (same
+    #: name-a-companion-trait idiom as RangeEditor's low_name/high_name).
+    #: Keys missing from the map display as themselves.
+    key_labels_name = Str()
+    low = Float(0.0)
+    high = Float(100.0)
+    decimals = Int(1)
+    step = Float(0.5)
+    #: When True, the spinbox accepts one extra position below ``low`` —
+    #: the finite ``infinity_value`` sentinel, rendered as
+    #: ``infinity_text`` (float("inf") itself can't be stored: apptools
+    #: preference round-trips go through literal_eval). Spinning down
+    #: from ``low`` snaps onto the sentinel; consumers translate it to
+    #: an unbounded wait.
+    allow_infinity = Bool(False)
+    infinity_value = Float(-1.0)
+    infinity_text = Str("∞")
 
 class SafeCancelTableHandler(Handler):
     """

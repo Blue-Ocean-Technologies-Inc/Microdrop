@@ -122,6 +122,9 @@ class RoutesHandler(BaseColumnHandler):
     """
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
+    # Provider default for the Protocol Settings ack-wait grid: 5.0s of
+    # headroom for cold-broker first-publish (~1-2s); typical ack <100ms.
+    default_ack_time_s = 5.0
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
@@ -193,11 +196,13 @@ class RoutesHandler(BaseColumnHandler):
         # the sender side, by simply not publishing.
         if not preview_mode:
             electrode_state_change_publisher.publish(actuated_channels=channels)
-            # 5.0s timeout matches ack_roundtrip_column. Cold-
-            # broker first publish pays ~1-2s; typical ack <100ms.
-            # In preview we skip this entirely so the user gets a
-            # snappy visual playback with no per-phase 5s stalls.
-            ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=5.0)
+            # Ack wait from the Protocol Settings grid (resolved per
+            # phase so mid-run Settings edits apply); 0 = fire-and-
+            # forget. In preview we skip the publish + wait entirely so
+            # the user gets a snappy visual playback with no per-phase
+            # stalls.
+            if self.ack_time_s > 0:
+                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=self.ack_time_s)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)
@@ -450,9 +455,13 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
 
 
 def make_routes_column():
+    # Display name "Electrodes" (the column drives electrode actuation,
+    # routes are just one input); col_id stays "routes" — it keys
+    # persistence and the ack-wait grid, so renaming it would orphan
+    # saved protocols and user-tuned wait times.
     return Column(
         model=RoutesColumnModel(
-            col_id="routes", col_name="Routes", default_value=[],
+            col_id="routes", col_name="Electrodes", default_value=[],
         ),
         view=RoutesSummaryView(),
         handler=RoutesHandler(),

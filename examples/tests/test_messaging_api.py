@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for microdrop_utils.api -- the centralised messaging API module.
 
 These tests verify that the API module:
@@ -32,7 +32,6 @@ from microdrop_utils.api import (
     ZStageTopics,
     SSHTopics,
     OpenDropTopics,
-    PGVATopics,
     MockDropbotTopics,
     WildcardPatterns,
     # Helpers
@@ -289,60 +288,6 @@ class TestMockDropbotTopicsMatchConsts:
         assert MockDropbotTopics.Signals.STREAM_STATUS_UPDATED == MOCK_STREAM_STATUS_UPDATED
 
 
-class TestPGVATopicsMatchConsts:
-
-    def test_signals(self):
-        from pgva_controller_plugin.consts import (
-            PGVA_CONNECTED, PGVA_DISCONNECTED, PGVA_PRESSURE_UPDATED,
-            PGVA_VACUUM_UPDATED, PGVA_OUTPUT_PRESSURE_UPDATED,
-            PGVA_STATUS_UPDATED, PGVA_WARNINGS_UPDATED,
-            PGVA_ERRORS_UPDATED, PGVA_COMPREHENSIVE_STATUS_UPDATED,
-            PGVA_HEALTH_CHECK_UPDATED, PGVA_DEVICE_INFO_UPDATED,
-            PGVA_ERROR_SIGNAL,
-        )
-        assert PGVATopics.Signals.CONNECTED == PGVA_CONNECTED
-        assert PGVATopics.Signals.DISCONNECTED == PGVA_DISCONNECTED
-        assert PGVATopics.Signals.PRESSURE_UPDATED == PGVA_PRESSURE_UPDATED
-        assert PGVATopics.Signals.VACUUM_UPDATED == PGVA_VACUUM_UPDATED
-        assert PGVATopics.Signals.OUTPUT_PRESSURE_UPDATED == PGVA_OUTPUT_PRESSURE_UPDATED
-        assert PGVATopics.Signals.STATUS_UPDATED == PGVA_STATUS_UPDATED
-        assert PGVATopics.Signals.WARNINGS_UPDATED == PGVA_WARNINGS_UPDATED
-        assert PGVATopics.Signals.ERRORS_UPDATED == PGVA_ERRORS_UPDATED
-        assert PGVATopics.Signals.COMPREHENSIVE_STATUS_UPDATED == PGVA_COMPREHENSIVE_STATUS_UPDATED
-        assert PGVATopics.Signals.HEALTH_CHECK_UPDATED == PGVA_HEALTH_CHECK_UPDATED
-        assert PGVATopics.Signals.DEVICE_INFO_UPDATED == PGVA_DEVICE_INFO_UPDATED
-        assert PGVATopics.Signals.ERROR == PGVA_ERROR_SIGNAL
-
-    def test_requests(self):
-        from pgva_controller_plugin.consts import (
-            SET_PRESSURE, SET_VACUUM, SET_OUTPUT_PRESSURE,
-            GET_PRESSURE, GET_VACUUM, GET_OUTPUT_PRESSURE,
-            GET_STATUS, GET_WARNINGS, GET_ERRORS,
-            GET_COMPREHENSIVE_STATUS, GET_HEALTH_CHECK, GET_DEVICE_INFO,
-            ENABLE_PGVA, DISABLE_PGVA, RESET_PGVA, TRIGGER_MANUAL,
-            STORE_TO_EEPROM, CONNECT_PGVA, DISCONNECT_PGVA,
-        )
-        assert PGVATopics.Requests.SET_PRESSURE == SET_PRESSURE
-        assert PGVATopics.Requests.SET_VACUUM == SET_VACUUM
-        assert PGVATopics.Requests.SET_OUTPUT_PRESSURE == SET_OUTPUT_PRESSURE
-        assert PGVATopics.Requests.GET_PRESSURE == GET_PRESSURE
-        assert PGVATopics.Requests.GET_VACUUM == GET_VACUUM
-        assert PGVATopics.Requests.GET_OUTPUT_PRESSURE == GET_OUTPUT_PRESSURE
-        assert PGVATopics.Requests.GET_STATUS == GET_STATUS
-        assert PGVATopics.Requests.GET_WARNINGS == GET_WARNINGS
-        assert PGVATopics.Requests.GET_ERRORS == GET_ERRORS
-        assert PGVATopics.Requests.GET_COMPREHENSIVE_STATUS == GET_COMPREHENSIVE_STATUS
-        assert PGVATopics.Requests.GET_HEALTH_CHECK == GET_HEALTH_CHECK
-        assert PGVATopics.Requests.GET_DEVICE_INFO == GET_DEVICE_INFO
-        assert PGVATopics.Requests.ENABLE == ENABLE_PGVA
-        assert PGVATopics.Requests.DISABLE == DISABLE_PGVA
-        assert PGVATopics.Requests.RESET == RESET_PGVA
-        assert PGVATopics.Requests.TRIGGER_MANUAL == TRIGGER_MANUAL
-        assert PGVATopics.Requests.STORE_TO_EEPROM == STORE_TO_EEPROM
-        assert PGVATopics.Requests.CONNECT == CONNECT_PGVA
-        assert PGVATopics.Requests.DISCONNECT == DISCONNECT_PGVA
-
-
 # ===================================================================
 # 3. get_all_topics() introspection helper
 # ===================================================================
@@ -357,7 +302,7 @@ class TestGetAllTopics:
         result = get_all_topics()
         expected_domains = {
             "dropbot", "hardware", "ui", "application",
-            "zstage", "ssh", "opendrop", "pgva", "mock_dropbot",
+            "zstage", "ssh", "opendrop", "mock_dropbot",
         }
         assert expected_domains == set(result.keys())
 

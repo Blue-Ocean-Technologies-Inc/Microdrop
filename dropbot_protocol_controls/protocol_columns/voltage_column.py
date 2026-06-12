@@ -36,12 +36,15 @@ class VoltageHandler(BaseColumnHandler):
     """Publishes the row's voltage setpoint and waits for the dropbot ack.
 
     Priority 20 — runs in parallel with FrequencyHandler in the same
-    bucket, and strictly before RoutesHandler at priority 30. The
-    timeout matches RoutesHandler's: 5.0s of headroom for cold-broker
-    first-publish (~1-2s) and worker-queue contention.
+    bucket, and strictly before RoutesHandler at priority 30. The ack
+    wait comes from the Protocol Settings grid (0 = fire-and-forget).
     """
     priority = 20
     wait_for_topics = [VOLTAGE_APPLIED]
+    # Provider default for the Protocol Settings ack-wait grid — matches
+    # RoutesHandler's: 5.0s of headroom for cold-broker first-publish
+    # (~1-2s) and worker-queue contention.
+    default_ack_time_s = 5.0
 
     def on_interact(self, row, model, value):
         """User edited a voltage cell — write through AND persist to prefs.
@@ -68,7 +71,8 @@ class VoltageHandler(BaseColumnHandler):
             return
         v = int(row.voltage)
         publish_message(topic=PROTOCOL_SET_VOLTAGE, message=str(v))
-        ctx.wait_for(VOLTAGE_APPLIED, timeout=5.0)
+        if self.ack_time_s > 0:
+            ctx.wait_for(VOLTAGE_APPLIED, timeout=self.ack_time_s)
 
 
 def make_voltage_column():

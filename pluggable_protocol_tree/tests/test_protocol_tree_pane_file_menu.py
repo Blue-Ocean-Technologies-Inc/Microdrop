@@ -1,6 +1,6 @@
 """Integration tests for the PPT-10.3 file-menu plumbing on
 ``ProtocolTreePane`` — dirty bookkeeping, save/load wrappers, guard
-prompts, and the application_exiting veto.
+prompts, and the window-closing veto (on the dock pane).
 
 These use the ``qapp`` fixture so the pane can construct its real Qt
 widgets. File IO and confirm dialogs are patched.
@@ -284,42 +284,74 @@ def test_new_protocol_aborts_on_user_no_when_dirty(qapp):
     assert pane.protocol_state_tracker.is_modified is True
 
 
-# --- application_exiting veto -------------------------------------------
+# --- window-closing veto ---------------------------------------------------
+# Lives on the DOCK PANE (which observes task.window.closing — the only
+# vetoable point; application_exiting fires after the closing vetoes).
 
 class _VetoableEvent:
     def __init__(self):
         self.veto = False
 
 
-def test_application_exiting_does_nothing_when_clean(qapp):
-    pane = _build_pane(qapp)
-    ev = _VetoableEvent()
-    pane._on_application_exiting(ev)
-    assert ev.veto is False
+class _ClosingTraitEvent:
+    """Shape of the traits observe event: .new carries the Vetoable."""
+    def __init__(self):
+        self.new = _VetoableEvent()
 
 
-def test_application_exiting_vetoes_on_dirty_no(qapp):
-    pane = _build_pane(qapp)
-    pane.manager.add_step()                  # dirty
-    ev = _VetoableEvent()
+def _build_dock_pane_for_close(modified):
+    from apptools.preferences.api import Preferences
+    from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+    from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
+
+    # Bare dock pane: explicit preferences so no task chain is needed.
+    dp = PluggableProtocolDockPane(
+        columns=[],
+        preferences=ProtocolPreferences(preferences=Preferences()))
+    dp.protocol_state_tracker.is_modified = modified
+    return dp
+
+
+def test_window_closing_does_nothing_when_clean(qapp):
+    dp = _build_dock_pane_for_close(modified=False)
+    ev = _ClosingTraitEvent()
+    dp._on_window_closing(ev)
+    assert ev.new.veto is False
+
+
+def test_window_closing_vetoes_on_dirty_no(qapp):
+    dp = _build_dock_pane_for_close(modified=True)
+    ev = _ClosingTraitEvent()
     with patch(
-        "pluggable_protocol_tree.views.protocol_tree_pane.confirm",
+        "pluggable_protocol_tree.views.dock_pane.confirm",
         return_value=NO,
     ):
-        pane._on_application_exiting(ev)
-    assert ev.veto is True
+        dp._on_window_closing(ev)
+    assert ev.new.veto is True
 
 
-def test_application_exiting_proceeds_on_dirty_yes(qapp):
-    pane = _build_pane(qapp)
-    pane.manager.add_step()                  # dirty
-    ev = _VetoableEvent()
+def test_window_closing_proceeds_on_dirty_yes(qapp):
+    dp = _build_dock_pane_for_close(modified=True)
+    ev = _ClosingTraitEvent()
     with patch(
-        "pluggable_protocol_tree.views.protocol_tree_pane.confirm",
+        "pluggable_protocol_tree.views.dock_pane.confirm",
         return_value=YES,
     ):
-        pane._on_application_exiting(ev)
-    assert ev.veto is False
+        dp._on_window_closing(ev)
+    assert ev.new.veto is False
+
+
+def test_window_closing_proceeds_on_dirty_dialog_dismissed(qapp):
+    """X-dismiss of the confirm maps to CANCEL — exit proceeds (only an
+    explicit No vetoes)."""
+    dp = _build_dock_pane_for_close(modified=True)
+    ev = _ClosingTraitEvent()
+    with patch(
+        "pluggable_protocol_tree.views.dock_pane.confirm",
+        return_value=CANCEL,
+    ):
+        dp._on_window_closing(ev)
+    assert ev.new.veto is False
 
 
 # --- validation cancel / proceed branches --------------------------------

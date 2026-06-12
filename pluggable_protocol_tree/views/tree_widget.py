@@ -60,7 +60,7 @@ class ProtocolTreeWidget(QWidget):
         # Column visibility persists in ProtocolPreferences
         # (protocol_tree_column_visibility), passed down from the pane in
         # the full app; standalone fallback for demos/headless tests.
-        self._preferences = ProtocolPreferences.ensure(preferences)
+        self._preferences = preferences or ProtocolPreferences()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -83,9 +83,14 @@ class ProtocolTreeWidget(QWidget):
         # Restore the user's persisted column visibility, overriding the
         # hidden_by_default defaults for any column they have toggled before.
         # Columns absent from the saved map keep the default applied above.
+        # Keyed by col_id (stable across display renames — col_name keying
+        # orphaned saved entries when Routes became "Electrodes"); the
+        # col_name fallback reads maps persisted before that change, and
+        # the next persist rewrites them under col_id.
         saved_visibility = self._load_column_visibility()
         for i, col in enumerate(self._manager.columns):
-            visible = saved_visibility.get(col.model.col_name)
+            visible = saved_visibility.get(
+                col.model.col_id, saved_visibility.get(col.model.col_name))
             if visible is not None:
                 self.tree.setColumnHidden(i, not visible)
 
@@ -221,9 +226,11 @@ class ProtocolTreeWidget(QWidget):
         menu.exec(self.tree.header().viewport().mapToGlobal(pos))
 
     def _load_column_visibility(self) -> dict:
-        """Return the persisted {col_name: visible} map ({} when nothing
+        """Return the persisted {col_id: visible} map ({} when nothing
         was saved yet or the preference is unreadable — callers treat an
-        absent entry as "use the column default")."""
+        absent entry as "use the column default"). Maps persisted before
+        the col_id keying are read via the col_name fallback at the call
+        site."""
         try:
             saved = self._preferences.protocol_tree_column_visibility
             return {str(name): bool(visible)
@@ -233,9 +240,9 @@ class ProtocolTreeWidget(QWidget):
             return {}
 
     def _persist_column_visibility(self):
-        """Save the current {col_name: visible} map for every column."""
+        """Save the current {col_id: visible} map for every column."""
         visibility = {
-            col.model.col_name: not self.tree.isColumnHidden(i)
+            col.model.col_id: not self.tree.isColumnHidden(i)
             for i, col in enumerate(self._manager.columns)
         }
         try:

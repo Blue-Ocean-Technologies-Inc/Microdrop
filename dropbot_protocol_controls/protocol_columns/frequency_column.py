@@ -37,10 +37,14 @@ class FrequencyHandler(BaseColumnHandler):
     """Publishes the row's frequency setpoint and waits for the dropbot ack.
 
     Priority 20 — runs in parallel with VoltageHandler in the same bucket,
-    and strictly before RoutesHandler at priority 30.
+    and strictly before RoutesHandler at priority 30. The ack wait comes
+    from the Protocol Settings grid (0 = fire-and-forget).
     """
     priority = 20
     wait_for_topics = [FREQUENCY_APPLIED]
+    # Provider default for the Protocol Settings ack-wait grid — matches
+    # VoltageHandler's 5.0s.
+    default_ack_time_s = 5.0
 
     def on_interact(self, row, model, value):
         """User edited a frequency cell — write through AND persist to prefs.
@@ -60,7 +64,8 @@ class FrequencyHandler(BaseColumnHandler):
             return
         v = int(row.frequency)
         publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(v))
-        ctx.wait_for(FREQUENCY_APPLIED, timeout=5.0)
+        if self.ack_time_s > 0:
+            ctx.wait_for(FREQUENCY_APPLIED, timeout=self.ack_time_s)
 
 
 def make_frequency_column():

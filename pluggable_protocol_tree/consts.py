@@ -42,6 +42,16 @@ CAMERA_PREWARM_MAX_S = 15.0
 SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
 
+# Bounds for the per-column acknowledgement-wait times configured in the
+# Protocol Settings tab (#427). 0 = don't wait for the ack; no upper
+# bound (the grid editor clamps inf to a huge finite spinbox maximum).
+ACK_TIMEOUT_MIN_S = 0.0
+ACK_TIMEOUT_MAX_S = float("inf")
+# Stored sentinel for "wait forever" (shown as ∞ in the grid). Finite
+# because the preference dict round-trips through literal_eval, which
+# rejects float("inf"); consumers translate it to an unbounded wait.
+ACK_WAIT_FOREVER = -1.0
+
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.
 # _reconcile_repeat_duration_for_row).
@@ -76,6 +86,7 @@ PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
+LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
 
 ACTOR_TOPIC_DICT = {
     SYNC_LISTENER_NAME: [
@@ -84,11 +95,8 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_RUNNING,
         REALTIME_MODE_UPDATED,
         STEP_PARAMS_COMMIT,
-    ]
-}
+    ],
 
-LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
-LOGGING_ACTOR_TOPIC_DICT = {
     LOGGING_LISTENER_NAME: [
         CAPACITANCE_UPDATED,
         ELECTRODES_STATE_CHANGE,
@@ -102,4 +110,3 @@ LOGGING_ACTOR_TOPIC_DICT = {
 # pluggable tree's quick-actions toolbar. Tree plugin ships zero
 # builtins; all contributions come from sibling plugins.
 PROTOCOL_QUICK_ACTIONS = f"{PKG}.protocol_quick_actions"
-

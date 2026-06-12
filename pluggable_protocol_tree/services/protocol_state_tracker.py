@@ -58,6 +58,12 @@ class PluggableProtocolStateTracker(HasTraits):
     loaded_protocol_path = File("")
     is_modified = Bool(False)
 
+    # True while a protocol run is in flight. Set by the pane's button
+    # state machine (the same transitions that flip btn_stop), so
+    # non-view collaborators — e.g. the dock pane's repeat-duration
+    # reconciliation — can gate on run state without touching Qt.
+    is_active = Bool(False)
+
     modified_tag = Str(" [modified]")
     pkg_display_name = Str(PKG_name)
 

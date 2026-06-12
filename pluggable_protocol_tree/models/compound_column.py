@@ -1,11 +1,13 @@
 """Base classes + composite for compound columns. Mirrors the structure
 of models/column.py for single-cell columns. See spec section 2."""
 
-from traits.api import Dict, HasTraits, Instance, Int, List, Str, observe, provides
+from PySide6.QtCore import Signal
+
+from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
 
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
-    FieldSpec, ICompoundColumn, ICompoundColumnHandler,
+    ICompoundColumn, ICompoundColumnHandler,
     ICompoundColumnModel, ICompoundColumnView,
 )
 
@@ -57,7 +59,33 @@ class DictCompoundColumnView(BaseCompoundColumnView):
 class BaseCompoundColumnHandler(HasTraits):
     priority = Int(50)
     wait_for_topics = List(Str)
+    #: Same contract as BaseColumnHandler.default_ack_time_s — the
+    #: compound seeds the ack-wait grid once, under its model's base_id.
+    default_ack_time_s = Float(0.0)
+    #: Same contract as BaseColumnHandler.ack_time_s. The dock pane's
+    #: push reaches this object through the field adapters' DelegatesTo
+    #: (see _compound_adapters), so on_step's self.ack_time_s read here
+    #: always sees the current grid value.
+    ack_time_s = Float(0.0)
+
     model = Instance(ICompoundColumnModel)
+
+    # Repaint-request signal, same contract as BaseColumnHandler: the
+    # tree model wires the EXPANDED field cells, and their adapters
+    # forward the assignment here, so a compound handler can ask for a
+    # repaint when an external dependency changes (Force-column style).
+    column_changed_signal = Instance(Signal)
+    trigger_column_change_when_wired = Bool(False)
+
+    def _ack_time_s_default(self):
+        return self.default_ack_time_s
+
+    @observe("column_changed_signal")
+    def _on_column_changed_signal_changed(self, event):
+        # Mirror of BaseColumnHandler: replay a repaint that fired
+        # before the signal was wired.
+        if event.old is None and event.new and self.trigger_column_change_when_wired:
+            self.column_changed_signal.emit()
 
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)
@@ -77,6 +105,13 @@ class CompoundColumn(HasTraits):
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
+
+    #: Unit identity, mirroring Column.id: the compound is ONE unit, so
+    #: it (and every field cell synthesized from it) reports base_id.
+    id = Str()
+
+    def _id_default(self):
+        return self.model.base_id
 
     def traits_init(self):
         if self.handler is None:

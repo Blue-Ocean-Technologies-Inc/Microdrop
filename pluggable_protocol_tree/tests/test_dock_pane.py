@@ -5,26 +5,42 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_dock_pane_with_mocked_app(qapp, columns):
-    """Returns (dock_pane, mock_app, mock_task) — call create_contents
-    after attaching task->window->application chain."""
+    """Returns (dock_pane, app_stub, mock_task) with the task->window->
+    application chain attached at construction — traits_init seeds the
+    ack-wait preferences and needs the chain immediately (matching
+    production, where the dock-pane factory is called with task=task).
+
+    window/application are HasTraits stubs, not MagicMocks: the dock
+    pane's @observe("task.window.application...") chains traverse them
+    at task-assignment time, and traits observation can't walk a mock.
+    """
     from apptools.preferences.api import Preferences
     from pyface.tasks.api import Task
+    from traits.api import Any, Event, HasTraits
     from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
 
-    mock_app = MagicMock()
-    mock_app.current_experiment_directory = Path("/tmp/exp-1")
-    # Real (in-memory) preferences node: create_contents binds
-    # ProtocolPreferences against it, whose trait validates IPreferences.
-    mock_app.preferences = Preferences()
-    mock_window = MagicMock()
-    mock_window.application = mock_app
+    class _AppStub(HasTraits):
+        preferences = Any()
+        current_experiment_directory = Any()
+        experiment_changed = Event()
+
+    class _WindowStub(HasTraits):
+        application = Any()
+        closing = Event()
+
+    app_stub = _AppStub(
+        # Real (in-memory) preferences node: the dock pane binds
+        # ProtocolPreferences against it, whose trait validates
+        # IPreferences.
+        preferences=Preferences(),
+        current_experiment_directory=Path("/tmp/exp-1"),
+    )
     # spec=Task so the strict Instance(Task) trait validator accepts it.
     mock_task = MagicMock(spec=Task)
-    mock_task.window = mock_window
+    mock_task.window = _WindowStub(application=app_stub)
 
-    dp = PluggableProtocolDockPane(columns=columns)
-    dp.task = mock_task
-    return dp, mock_app, mock_task
+    dp = PluggableProtocolDockPane(columns=columns, task=mock_task)
+    return dp, app_stub, mock_task
 
 
 def test_dock_pane_id_and_name(qapp):
