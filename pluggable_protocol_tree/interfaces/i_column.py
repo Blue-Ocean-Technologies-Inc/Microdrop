@@ -117,3 +117,5 @@ class IColumn(Interface):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
+
+    id = Str(desc="Identifier of this column unit with the model view and handler. Can be deferred to model col_id")

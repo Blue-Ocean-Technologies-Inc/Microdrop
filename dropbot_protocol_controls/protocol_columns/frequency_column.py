@@ -64,9 +64,8 @@ class FrequencyHandler(BaseColumnHandler):
             return
         v = int(row.frequency)
         publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(v))
-        ack_wait_s = self.ack_wait_s()
-        if ack_wait_s > 0:
-            ctx.wait_for(FREQUENCY_APPLIED, timeout=ack_wait_s)
+        if self.ack_time_s > 0:
+            ctx.wait_for(FREQUENCY_APPLIED, timeout=self.ack_time_s)
 
 
 def make_frequency_column():

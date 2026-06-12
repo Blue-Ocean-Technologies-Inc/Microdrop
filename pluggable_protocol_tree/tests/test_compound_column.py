@@ -6,7 +6,7 @@ from traits.api import Bool, HasTraits, Int
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
     BaseCompoundColumnHandler, BaseCompoundColumnModel,
-    BaseCompoundColumnView, CompoundColumn, DictCompoundColumnView,
+    CompoundColumn, DictCompoundColumnView,
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView

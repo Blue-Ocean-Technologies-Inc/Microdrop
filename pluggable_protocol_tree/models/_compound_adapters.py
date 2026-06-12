@@ -4,7 +4,7 @@ expansion. Not part of the public API — callers should never construct
 these directly; build a CompoundColumn and let _assemble_columns expand it.
 """
 
-from traits.api import Bool, Instance, Str
+from traits.api import Bool, DelegatesTo, Instance, Str
 
 from ..interfaces.i_compound_column import (
     ICompoundColumnHandler, ICompoundColumnModel,
@@ -57,6 +57,11 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     compound_model = Instance(ICompoundColumnModel)
     field_id = Str
     is_owner = Bool(False)
+
+    #: Shared with the compound handler — its on_step is what actually
+    #: waits, so the dock pane's grid push onto any field cell's handler
+    #: must land there, not on this shim.
+    ack_time_s = DelegatesTo("compound_handler")
 
     def on_interact(self, row, model, value):
         # `model` is the per-field _CompoundFieldAdapter (passed in by
@@ -117,16 +122,19 @@ def _expand_compound(c: ICompoundColumn) -> list:
             priority=c.handler.priority,
             wait_for_topics=(list(c.handler.wait_for_topics or [])
                              if idx == 0 else []),
-            # Mirrored on the owner only, like wait_for_topics, so any
-            # consumer iterating the EXPANDED handlers sees the
-            # compound's ack-wait contract exactly once. (The ack-wait
-            # grid itself seeds from the assembled columns, where the
-            # compound handler carries this value directly.)
+            # Mirrored on the owner only, like wait_for_topics: the dock
+            # pane's column list IS this expanded list, so the ack-wait
+            # grid seeds the compound exactly once, under the owner
+            # field's display label.
             default_ack_time_s=(c.handler.default_ack_time_s
                                 if idx == 0 else 0.0),
         )
         view = c.view.cell_view_for_field(spec.field_id)
         expanded.append(Column(
+            # Every field cell reports the COMPOUND's unit identity, so
+            # unit-level maps (the ack-wait grid) key the compound by
+            # base_id, never by a field id like "magnet_on".
+            id=c.model.base_id,
             model=model_adapter, view=view, handler=handler_adapter,
         ))
     return expanded

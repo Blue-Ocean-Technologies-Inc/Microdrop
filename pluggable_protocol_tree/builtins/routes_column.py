@@ -201,9 +201,8 @@ class RoutesHandler(BaseColumnHandler):
             # forget. In preview we skip the publish + wait entirely so
             # the user gets a snappy visual playback with no per-phase
             # stalls.
-            ack_wait_s = self.ack_wait_s()
-            if ack_wait_s > 0:
-                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=ack_wait_s)
+            if self.ack_time_s > 0:
+                ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=self.ack_time_s)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event)

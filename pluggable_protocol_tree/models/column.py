@@ -10,7 +10,6 @@ from PySide6.QtCore import Signal
 
 from traits.api import HasTraits, Instance, Str, Any, Float, Int, List, provides, observe, Bool
 
-from pluggable_protocol_tree.consts import ACK_WAIT_FOREVER
 from pluggable_protocol_tree.interfaces.i_column import (
     IColumn,
     IColumnModel,
@@ -60,6 +59,11 @@ class BaseColumnHandler(HasTraits):
     #: (the Protocol Settings ack-wait grid) under the column's col_id.
     #: 0.0 (the default) = the column has no ack wait to configure.
     default_ack_time_s = Float(0.0)
+    #: Live ack wait in seconds, read by on_step at wait time. The
+    #: protocol dock pane pushes the Protocol Settings grid value here
+    #: (ACK_WAIT_FOREVER arrives pre-mapped to float("inf")); until that
+    #: first push it holds the provider default. 0 = don't wait.
+    ack_time_s = Float(0.0)
 
     # These are re-assigned by Column.traits_init so the handler can
     # reach its peers. Plugin authors generally do not set these.
@@ -78,6 +82,9 @@ class BaseColumnHandler(HasTraits):
     # can be replayed the moment the signal arrives.
     trigger_column_change_when_wired = Bool(False)
 
+    def _ack_time_s_default(self):
+        return self.default_ack_time_s
+
     @observe("column_changed_signal")
     def _on_column_changed_signal_changed(self, event):
         # Replay a repaint that fired before the signal was wired: the
@@ -86,23 +93,6 @@ class BaseColumnHandler(HasTraits):
         # arriving in that window would otherwise be lost.
         if event.old is None and event.new and self.trigger_column_change_when_wired:
             self.column_changed_signal.emit()
-
-    def ack_wait_s(self):
-        """Seconds ``ctx.wait_for`` should block for this column's
-        hardware ack: the user's Column Ack Wait Times grid value
-        (falling back to ``default_ack_time_s`` when unseeded), read live
-        so mid-run Settings edits apply to the next wait. 0 = don't
-        wait; ACK_WAIT_FOREVER maps to ``float("inf")`` (ctx.wait_for's
-        wait-forever convention)."""
-        # Imported lazily so column construction stays free of
-        # preference/runtime imports.
-        from pluggable_protocol_tree.services.preferences import (
-            ProtocolPreferences,
-        )
-        col_id = self.model.col_id if self.model is not None else ""
-        seconds = ProtocolPreferences().protocol_tree_ack_times.get(
-            col_id, self.default_ack_time_s)
-        return float("inf") if seconds == ACK_WAIT_FOREVER else float(seconds)
 
     def on_interact(self, row, model, value):
         """Default edit behaviour: write through to the model."""
@@ -137,6 +127,15 @@ class Column(HasTraits):
     model = Instance(IColumnModel)
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
+
+    #: Identity of this column UNIT (model+view+handler) for unit-level
+    #: maps like the ack-wait grid. Defaults to the model's col_id;
+    #: compound expansion overrides it so every synthesized field cell
+    #: reports the compound's base_id instead of its own field id.
+    id = Str()
+
+    def _id_default(self):
+        return self.model.col_id
 
     def traits_init(self):
         if self.handler is None:

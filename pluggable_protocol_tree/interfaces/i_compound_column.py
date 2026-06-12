@@ -70,3 +70,5 @@ class ICompoundColumn(Interface):
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
+
+    id = Str(desc="Identifier for the compound column unit with the model, view and handler. Can be deferred to the model col_id")

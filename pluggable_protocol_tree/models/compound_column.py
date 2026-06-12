@@ -3,10 +3,9 @@ of models/column.py for single-cell columns. See spec section 2."""
 
 from traits.api import Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
 
-from ..consts import ACK_WAIT_FOREVER
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
-    FieldSpec, ICompoundColumn, ICompoundColumnHandler,
+    ICompoundColumn, ICompoundColumnHandler,
     ICompoundColumnModel, ICompoundColumnView,
 )
 
@@ -61,16 +60,16 @@ class BaseCompoundColumnHandler(HasTraits):
     #: Same contract as BaseColumnHandler.default_ack_time_s — the
     #: compound seeds the ack-wait grid once, under its model's base_id.
     default_ack_time_s = Float(0.0)
+    #: Same contract as BaseColumnHandler.ack_time_s. The dock pane's
+    #: push reaches this object through the field adapters' DelegatesTo
+    #: (see _compound_adapters), so on_step's self.ack_time_s read here
+    #: always sees the current grid value.
+    ack_time_s = Float(0.0)
+
     model = Instance(ICompoundColumnModel)
 
-    def ack_wait_s(self):
-        """Mirror of BaseColumnHandler.ack_wait_s, keyed by the compound
-        model's base_id (compound models have no col_id)."""
-        from ..services.preferences import ProtocolPreferences
-        base_id = self.model.base_id if self.model is not None else ""
-        seconds = ProtocolPreferences().protocol_tree_ack_times.get(
-            base_id, self.default_ack_time_s)
-        return float("inf") if seconds == ACK_WAIT_FOREVER else float(seconds)
+    def _ack_time_s_default(self):
+        return self.default_ack_time_s
 
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)
@@ -90,6 +89,13 @@ class CompoundColumn(HasTraits):
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
+
+    #: Unit identity, mirroring Column.id: the compound is ONE unit, so
+    #: it (and every field cell synthesized from it) reports base_id.
+    id = Str()
+
+    def _id_default(self):
+        return self.model.base_id
 
     def traits_init(self):
         if self.handler is None:

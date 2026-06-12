@@ -118,23 +118,11 @@ def test_magnet_handler_wait_for_topics_includes_magnet_applied():
     assert MAGNET_APPLIED in handler.wait_for_topics
 
 
-def _patch_ack_times(monkeypatch, ack_times):
-    """Pin ProtocolPreferences().protocol_tree_ack_times to ``ack_times``
-    so the handler's grid-driven ack wait is deterministic regardless of
-    any persisted preference on the dev machine."""
-    class _FakePrefs:
-        protocol_tree_ack_times = ack_times
-    monkeypatch.setattr(
-        "pluggable_protocol_tree.services.preferences.ProtocolPreferences",
-        lambda: _FakePrefs(),
-    )
-
-
-def test_magnet_handler_on_step_publishes_engage_payload(monkeypatch):
+def test_magnet_handler_on_step_publishes_engage_payload():
     """magnet_on=True, magnet_height_mm=5.0 -> JSON
     {'on': True, 'height_mm': 5.0}; wait_for(MAGNET_APPLIED, timeout=10.0)
-    — the unseeded grid falls back to default_ack_time_s."""
-    _patch_ack_times(monkeypatch, {})
+    — ack_time_s boots at the provider default until the dock pane
+    pushes a grid value."""
     handler = make_magnet_column().handler
     row = MagicMock()
     row.magnet_on = True
@@ -156,12 +144,12 @@ def test_magnet_handler_on_step_publishes_engage_payload(monkeypatch):
     ctx.wait_for.assert_called_once_with(MAGNET_APPLIED, timeout=10.0)
 
 
-def test_magnet_handler_skips_ack_wait_when_grid_time_is_zero(monkeypatch):
-    """With the Protocol Settings grid set to 0 for "magnet", the magnet
-    state is still published but the handler does NOT block on the
-    hardware ack (the old wait_for_magnet_ack=False behaviour)."""
-    _patch_ack_times(monkeypatch, {"magnet": 0.0})
+def test_magnet_handler_skips_ack_wait_when_ack_time_zero():
+    """ack_time_s=0 (the grid's "don't wait") still publishes the magnet
+    state but does NOT block on the hardware ack (the old
+    wait_for_magnet_ack=False behaviour)."""
     handler = make_magnet_column().handler
+    handler.ack_time_s = 0.0
     row = MagicMock()
     row.magnet_on = True
     row.magnet_height_mm = 5.0

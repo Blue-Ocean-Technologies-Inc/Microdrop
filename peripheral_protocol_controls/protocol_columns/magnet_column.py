@@ -114,9 +114,8 @@ class MagnetHandler(BaseCompoundColumnHandler):
         })
         publish_message(topic=PROTOCOL_SET_MAGNET, message=payload)
 
-        ack_wait_s = self.ack_wait_s()
-        if ack_wait_s > 0:
-            ctx.wait_for(MAGNET_APPLIED, timeout=ack_wait_s)
+        if self.ack_time_s > 0:
+            ctx.wait_for(MAGNET_APPLIED, timeout=self.ack_time_s)
 
 
 def make_magnet_column():
