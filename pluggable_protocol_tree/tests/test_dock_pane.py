@@ -5,15 +5,17 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_dock_pane_with_mocked_app(qapp, columns):
-    """Returns (dock_pane, mock_app, mock_task) — call create_contents
-    after attaching task->window->application chain."""
+    """Returns (dock_pane, mock_app, mock_task) with the task->window->
+    application chain attached at construction — traits_init seeds the
+    ack-wait preferences and needs the chain immediately (matching
+    production, where the dock-pane factory is called with task=task)."""
     from apptools.preferences.api import Preferences
     from pyface.tasks.api import Task
     from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
 
     mock_app = MagicMock()
     mock_app.current_experiment_directory = Path("/tmp/exp-1")
-    # Real (in-memory) preferences node: create_contents binds
+    # Real (in-memory) preferences node: the dock pane binds
     # ProtocolPreferences against it, whose trait validates IPreferences.
     mock_app.preferences = Preferences()
     mock_window = MagicMock()
@@ -22,8 +24,7 @@ def _make_dock_pane_with_mocked_app(qapp, columns):
     mock_task = MagicMock(spec=Task)
     mock_task.window = mock_window
 
-    dp = PluggableProtocolDockPane(columns=columns)
-    dp.task = mock_task
+    dp = PluggableProtocolDockPane(columns=columns, task=mock_task)
     return dp, mock_app, mock_task
 
 
