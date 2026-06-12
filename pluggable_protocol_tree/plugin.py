@@ -32,7 +32,7 @@ from pluggable_protocol_tree.builtins.trail_length_column import make_trail_leng
 from pluggable_protocol_tree.builtins.trail_overlay_column import make_trail_overlay_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
-    ACTOR_TOPIC_DICT, EXECUTOR_LISTENER_NAME, LOGGING_ACTOR_TOPIC_DICT,
+    ACTOR_TOPIC_DICT, EXECUTOR_LISTENER_NAME,
     PKG, PKG_name, PROTOCOL_COLUMNS, PROTOCOL_QUICK_ACTIONS,
 )
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
@@ -178,9 +178,9 @@ class PluggableProtocolTreePlugin(Plugin):
 
     def start(self):
         """Populate contributed_columns from the extension point, then
-        register the executor listener's subscriptions with the message
-        router. Called by Envisage at plugin start, after extension points
-        have resolved."""
+        contribute the executor listener's topics to the message router's
+        routing extension point. Called by Envisage at plugin start, after
+        extension points have resolved."""
         super().start()
         # Pull contributions from the Envisage extension point into the
         # plain contributed_columns list so _assemble_columns sees them.
@@ -200,49 +200,30 @@ class PluggableProtocolTreePlugin(Plugin):
             logger.warning(
                 f"failed to read PROTOCOL_QUICK_ACTIONS extension point: {e}"
             )
+
         try:
-            from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterData
-        except ImportError:
-            # Headless test environments may not have a broker. Plugin
-            # construction must not require Redis; a missing broker is
-            # only a problem at the moment a protocol actually runs.
-            return
-        # Import the logging listener module so the dramatiq actor is
-        # registered before we wire its subscriptions.
-        from pluggable_protocol_tree.services.logging import listener as _logging_listener  # noqa: F401
-        try:
-            router_data = MessageRouterData()
-            for listener_name, log_topics in LOGGING_ACTOR_TOPIC_DICT.items():
-                for topic in log_topics:
-                    router_data.add_subscriber_to_topic(
-                        topic=topic,
-                        subscribing_actor_name=listener_name,
-                    )
-        except Exception as e:
-            logger.warning(
-                f"failed to wire logging listener subscriptions "
-                f"(Redis unreachable?): {e}"
-            )
-        try:
-            topics = sorted({
-                t for c in self._assemble_columns()
-                for t in (c.handler.wait_for_topics or [])
+            # The executor's wait topics depend on the assembled column
+            # set, so they can't sit in the static ACTOR_TOPIC_DICT
+            # contribution — append them at start. Works in either start
+            # order: a router that starts later reads the full
+            # contribution list; one that started earlier picks the
+            # append up via its extension-point change handler.
+            executor_topics = sorted({
+                topic for col in self._assemble_columns()
+                for topic in (col.handler.wait_for_topics or [])
             })
-            if not topics:
+            if not executor_topics:
                 return
-            router_data = MessageRouterData()
-            for topic in topics:
-                router_data.add_subscriber_to_topic(
-                    topic=topic,
-                    subscribing_actor_name=EXECUTOR_LISTENER_NAME,
-                )
+            self.actor_topic_routing.append(
+                {EXECUTOR_LISTENER_NAME: executor_topics})
         except Exception as e:
-            # Redis briefly unreachable at startup shouldn't block the
-            # plugin from contributing its dock pane. The protocol
-            # itself can't run without Redis but the UI should still
-            # mount so the user gets a meaningful error on play, not
-            # a missing pane.
+            # If the router already started, the append subscribes
+            # synchronously through its change handler — Redis briefly
+            # unreachable at startup shouldn't block the plugin from
+            # contributing its dock pane. The protocol itself can't run
+            # without Redis but the UI should still mount so the user
+            # gets a meaningful error on play, not a missing pane.
             logger.warning(
-                f"failed to wire executor listener subscriptions "
+                f"failed to contribute executor listener subscriptions "
                 f"(Redis unreachable?): {e}"
             )

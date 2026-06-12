@@ -86,6 +86,7 @@ PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
+LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
 
 ACTOR_TOPIC_DICT = {
     SYNC_LISTENER_NAME: [
@@ -94,11 +95,8 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_RUNNING,
         REALTIME_MODE_UPDATED,
         STEP_PARAMS_COMMIT,
-    ]
-}
+    ],
 
-LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
-LOGGING_ACTOR_TOPIC_DICT = {
     LOGGING_LISTENER_NAME: [
         CAPACITANCE_UPDATED,
         ELECTRODES_STATE_CHANGE,
@@ -112,4 +110,3 @@ LOGGING_ACTOR_TOPIC_DICT = {
 # pluggable tree's quick-actions toolbar. Tree plugin ships zero
 # builtins; all contributions come from sibling plugins.
 PROTOCOL_QUICK_ACTIONS = f"{PKG}.protocol_quick_actions"
-
