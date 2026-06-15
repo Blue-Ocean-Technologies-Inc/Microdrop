@@ -5,9 +5,6 @@ from enum import Enum
 from traits.api import HasTraits, Bool, observe
 
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
-
-app_globals = get_microdrop_redis_globals_manager()
 
 
 class MediaType(str, Enum):
@@ -55,10 +52,13 @@ class RecordingStateModel(HasTraits):
 
     @observe("recording")
     def _mirror_recording_state_to_app_globals(self, event):
-        # Lazy import: device_viewer.consts imports this module, so importing
-        # the key at module load would be circular.
+        # Lazy imports: device_viewer.consts imports this module (so importing
+        # the key at module load would be circular), and acquiring the redis
+        # globals manager at import time would force a broker before this
+        # widely-imported module is even constructed.
         from device_viewer.consts import DEVICE_VIEWER_RECORDING_ACTIVE_KEY
-        app_globals[DEVICE_VIEWER_RECORDING_ACTIVE_KEY] = event.new
+        from microdrop_application.helpers import get_microdrop_redis_globals_manager
+        get_microdrop_redis_globals_manager()[DEVICE_VIEWER_RECORDING_ACTIVE_KEY] = event.new
 
 
 if __name__ == "__main__":
