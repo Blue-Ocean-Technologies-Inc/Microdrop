@@ -321,8 +321,7 @@ class ProtocolContext(HasTraits):
         else:
             # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
             # singleShot with it as context runs _runner there (Qt builds the
-            # dialog on the right thread). Imported lazily to keep this module
-            # Qt-free for headless executor tests.
+            # dialog on the right thread).
             QTimer.singleShot(0, self.qsignals, _runner)
 
         self.wait(events=[done, self.stop_event], timeout=timeout)
@@ -335,7 +334,7 @@ class ProtocolContext(HasTraits):
 class StepContext(HasTraits):
     """Spans one row's execution.
 
-    Hooks call ``wait_for(topic, ...)`` on this. Mailboxes are opened byWhy
+    Hooks call ``wait_for(topic, ...)`` on this. Mailboxes are opened by
     the executor before any hook runs (so a hook can publish a request
     and immediately wait for the ack without losing fast replies).
     """
@@ -474,7 +473,10 @@ class StepContext(HasTraits):
             ) from None
 
     def wait(self, *args, **kwargs):
-        self.protocol.wait(*args, **kwargs)
+        return self.protocol.wait(*args, **kwargs)
 
-    def prompt_gui(self,*args, **kwargs):
-        self.protocol.prompt_gui(*args, **kwargs)
+    def prompt_gui(self, *args, **kwargs):
+        # Must return: ProtocolContext.prompt_gui hands back the dialog's
+        # result, which step-level callers (e.g. volume-threshold recovery)
+        # rely on. Without the return they always saw None.
+        return self.protocol.prompt_gui(*args, **kwargs)
