@@ -19,8 +19,9 @@ happen once per run rather than once per repetition.
 import time
 
 from pluggable_protocol_tree.models.column import BaseColumnHandler
-from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+
+from traits.api import Instance
 
 from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
@@ -42,13 +43,14 @@ class RealtimeModeHandler(BaseColumnHandler):
     """Turns realtime mode on before a run and restores it afterward."""
 
     priority = 900  # after every real column's start hooks
+    preferences = Instance(ProtocolPreferences)
 
     def on_pre_protocol_start(self, ctx):
         if ctx.preview_mode:
             # Preview runs never touch hardware — no realtime-mode prep.
             return
 
-        prefs = ProtocolPreferences()
+        prefs = self.preferences
         try:
             realtime_on = bool(app_globals.get(REALTIME_MODE_KEY, False))
         except Exception as e:
@@ -81,9 +83,18 @@ class RealtimeModeHandler(BaseColumnHandler):
 
         ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY] = keep
 
-        # Let the hardware settle before the first step. Stop-aware so a
-        # Stop during the settle aborts the run instead of stalling it.
-        self._settle(ctx, float(prefs.realtime_mode_settling_time_s))
+        # Let the hardware settle before the first step. NOT ctx.wait(): that
+        # pauses the run (emits paused/resumed) and treats reaching its
+        # timeout as a TimeoutError — both wrong for a fixed delay. Just block
+        # briefly, returning early on Stop so the executor aborts cleanly via
+        # its own stop_event check (no AbortError, which would route to
+        # protocol_error).
+        deadline = time.monotonic() + float(prefs.realtime_mode_settling_time_s)
+        while not ctx.stop_event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.05, remaining))
 
     def on_post_protocol_end(self, ctx):
         # If on_pre_protocol_start never ran — preview, or the run was
@@ -109,15 +120,3 @@ class RealtimeModeHandler(BaseColumnHandler):
             cancel=False,
             checkbox_text="Don't ask again (can be changed in preferences)",
         )
-
-    @staticmethod
-    def _settle(ctx, seconds):
-        """Block the worker for ``seconds``, raising AbortError if stopped."""
-        deadline = time.monotonic() + seconds
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return
-            if ctx.stop_event.is_set():
-                raise AbortError("stop_event fired during realtime settle")
-            time.sleep(min(0.05, remaining))

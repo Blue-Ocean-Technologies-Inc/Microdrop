@@ -219,7 +219,7 @@ class ProtocolTreePane(QWidget):
         # mode is enabled + settled (900), then logging starts (1000) right
         # before the first step. The view only wires them (composition root).
         self.executor.lifecycle_handlers = [
-            RealtimeModeHandler(),
+            RealtimeModeHandler(preferences=self.preferences),
             LoggingHandler(
                 controller=self.logging_controller,
                 experiment_dir_provider=(
