@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from device_viewer.models.media import RecordingStatePublisher
 from dropbot_controller.consts import (
     CHIP_INSERTED,
     CAPACITANCE_UPDATED,
@@ -17,8 +18,13 @@ DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
+
+# Publishers
+device_viewer_recording_state_publisher = RecordingStatePublisher(topic=DEVICE_VIEWER_RECORDING_STATE)
+
 # Sidebar route-executor execution params -> the selected protocol step.
 # Published by the DV commit button; consumed by the active protocol widget
 # (pluggable_protocol_tree sync controller; protocol_grid keeps its own
@@ -130,3 +136,4 @@ MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_arra
 # statusbar messages
 camera_place_status_message_text = "Select 4 points on image"
 camera_edit_status_message_text = "Drag vertices to align with device outline"
+

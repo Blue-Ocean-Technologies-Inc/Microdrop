@@ -970,7 +970,7 @@ def _default_settling_provider() -> float:
     try:
         from protocol_grid.preferences import ProtocolPreferences
         return float(ProtocolPreferences().logs_settling_time_s)
-    except Exception as e:                     # pragma: no cover - defensive
+    except Exception as e:  # pragma: no cover - defensive
         logger.debug(f"settling pref unavailable, default 3.0s: {e}")
         return 3.0
 
@@ -993,7 +993,7 @@ class ProtocolLoggingController:
 
     # --- executor signal wiring ---
     def attach(self, qsignals) -> None:
-        qsignals.protocol_started.connect(self._noop)   # start is driven by start_logging
+        qsignals.protocol_started.connect(self._noop)  # start is driven by start_logging
         qsignals.step_started.connect(self._on_step_started)
         qsignals.protocol_finished.connect(lambda: self.stop_logging(self._step_idx))
         qsignals.protocol_aborted.connect(lambda: self.stop_logging(self._step_idx))
@@ -1073,11 +1073,11 @@ class ProtocolLoggingController:
         if self._ingestion is None:
             return
         try:
-            from device_viewer.models.media_capture_model import (
+            from device_viewer.models.media import (
                 MediaCaptureMessageModel,
             )
             self._ingestion.log_media(MediaCaptureMessageModel.model_validate_json(message))
-        except Exception as e:                 # pragma: no cover - defensive
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"media log failed: {e}")
 
     def update_capacitance_per_unit_area(self, value) -> None:

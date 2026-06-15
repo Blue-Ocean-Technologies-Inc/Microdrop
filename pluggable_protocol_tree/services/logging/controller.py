@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
 
 from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, MEDIA_CAPTURES_KEY
-from device_viewer.models.media_capture_model import MediaCaptureMessageModel
+from device_viewer.models.media import MediaCaptureMessageModel
 from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 

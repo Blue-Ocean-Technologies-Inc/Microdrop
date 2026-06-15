@@ -1,5 +1,9 @@
-from pydantic import BaseModel, FilePath
+import json
+
+from pydantic import BaseModel, FilePath, StrictBool
 from enum import Enum
+
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 
 class MediaType(str, Enum):
@@ -15,6 +19,24 @@ class MediaType(str, Enum):
 class MediaCaptureMessageModel(BaseModel):
     path: FilePath  # Validates input points to an existing path
     type: MediaType  # Restricted to the Enum values above
+
+
+class RecordingActiveState(BaseModel):
+    """
+    Validates requests to set recording active state.
+
+    Expects a bool arg.
+    """
+    state: StrictBool
+
+class RecordingStatePublisher(ValidatedTopicPublisher):
+    validator_class = RecordingActiveState
+
+    def publish(self, state: StrictBool):
+        """
+        Constrict payload for publisher to set recording active state.
+        """
+        super().publish({"state": state})
 
 
 if __name__ == "__main__":
@@ -38,3 +60,10 @@ if __name__ == "__main__":
     except ValidationError as e:
         print(e)
         # Input should be 'video', 'image' or 'other' [type=enum, input_value='picture', input_type=str]
+
+    rec_pub_model = RecordingStatePublisher()
+    rec_pub_model.publish(state=True)
+
+    rec_valid_model = RecordingActiveState.model_validate_json(json.dumps({"state": True}))
+
+    print(rec_valid_model.state)

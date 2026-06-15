@@ -10,7 +10,7 @@ from PySide6.QtGui import QImage, QTransform, Qt, QPainter
 from PySide6.QtMultimedia import QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 
-from device_viewer.models.media_capture_model import MediaType
+from device_viewer.models.media import MediaType
 from device_viewer.views.camera_control_view.utils import _cache_media_capture
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
