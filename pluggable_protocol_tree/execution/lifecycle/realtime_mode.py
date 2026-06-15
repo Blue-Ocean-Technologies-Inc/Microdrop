@@ -86,9 +86,12 @@ class RealtimeModeHandler(BaseColumnHandler):
         self._settle(ctx, float(prefs.realtime_mode_settling_time_s))
 
     def on_post_protocol_end(self, ctx):
-        if ctx.preview_mode:
+        # If on_pre_protocol_start never ran — preview, or the run was
+        # cancelled by an earlier pre hook (e.g. the recording dialog) before
+        # this handler's bucket — there's no prep to restore.
+        if _RESTORE_REALTIME_SCRATCH_KEY not in ctx.scratch:
             return
-        if not ctx.scratch.get(_RESTORE_REALTIME_SCRATCH_KEY, False):
+        if not ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY]:
             try:
                 publish_message(topic=SET_REALTIME_MODE, message=str(False))
             except Exception as e:

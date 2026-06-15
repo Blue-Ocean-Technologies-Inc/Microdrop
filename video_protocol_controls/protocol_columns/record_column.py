@@ -98,7 +98,12 @@ class RecordHandler(BaseColumnHandler):
             return True
         return False
 
-    def on_protocol_start(self, ctx):
+    def on_pre_protocol_start(self, ctx):
+        """Once per run, before realtime-mode activation and logging start
+        (priority 10 — the earliest pre-protocol bucket). If a recording is
+        active and the operator cancels, stop the run here so the
+        lower-priority realtime/logging hooks never fire.
+        """
         proceed = ctx.prompt_gui(
             self._check_video_recording_and_show_dialog
         )
