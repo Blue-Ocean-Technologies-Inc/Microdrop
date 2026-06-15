@@ -35,12 +35,16 @@ class StepExecutionError(Exception):
         # execution-only lifecycle handlers have none — fall back to the
         # handler class name, then a generic label.
         model = getattr(handler, "model", None)
-        col_label = (
+        # The display label for the failing handler. Stored so consumers (the
+        # protocol-error dialog) reuse it instead of re-deriving from the
+        # handler — a single source of truth.
+        self.col_label = (
             getattr(model, "col_name", "")
             or getattr(model, "col_id", "")
             or type(handler).__name__
             or "handler"
         )
+        col_label = self.col_label
         if row is not None:
             dotted = ".".join(str(i + 1) for i in (getattr(row, "path", ()) or ()))
             name = getattr(row, "name", "") or ""

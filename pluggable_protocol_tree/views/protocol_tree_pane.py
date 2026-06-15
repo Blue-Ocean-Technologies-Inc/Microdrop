@@ -542,11 +542,7 @@ class ProtocolTreePane(QWidget):
                     where += f" &mdash; &ldquo;{_html.escape(name)}&rdquo;"
             else:
                 where = "Protocol"
-            col_label = (
-                getattr(getattr(exc.col, "model", None), "col_name", "")
-                or getattr(getattr(exc.col, "model", None), "col_id", "")
-                or "column"
-            )
+            col_label = exc.col_label
             cause = escape_html_multiline(str(exc.cause))
             return (
                 f"<p style='margin:0 0 6px 0;'><b>{where}</b></p>"
