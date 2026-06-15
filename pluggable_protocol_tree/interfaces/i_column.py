@@ -62,10 +62,12 @@ class IColumnView(Interface):
 
 
 class IColumnHandler(Interface):
-    """Runtime behaviour. Five execution hooks + one UI-edit hook.
+    """Runtime behaviour: the execution hooks plus one UI-edit hook.
 
     Priority bucket (lower runs first, equal priorities run in parallel)
-    applies to all five execution hooks.
+    applies to all execution hooks. This interface is also implemented by
+    execution-only "lifecycle handlers" (no column/view) that the executor
+    runs alongside columns — see pluggable_protocol_tree/execution/lifecycle/.
     """
 
     priority = Int(50)

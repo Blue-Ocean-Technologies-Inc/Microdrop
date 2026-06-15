@@ -18,9 +18,12 @@ GUI-free, so it runs on the executor's worker thread. Experiment directory
 and step count come from injected providers.
 """
 
-from traits.api import Any, Callable
+from traits.api import Callable, Instance
 
 from pluggable_protocol_tree.models.column import BaseColumnHandler
+from pluggable_protocol_tree.services.logging.controller import (
+    ProtocolLoggingController,
+)
 from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
 
 from logger.logger_service import get_logger
@@ -33,7 +36,7 @@ class LoggingHandler(BaseColumnHandler):
     priority = 1000  # after RealtimeModeHandler (900) — logger starts last
 
     #: The pane-owned ProtocolLoggingController.
-    controller = Any
+    controller = Instance(ProtocolLoggingController)
     #: () -> Path : the active experiment directory.
     experiment_dir_provider = Callable
     #: () -> int : number of execution frames (steps) per repetition.

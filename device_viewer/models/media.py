@@ -39,9 +39,10 @@ class RecordingActiveState(BaseModel):
 class RecordingStatePublisher(ValidatedTopicPublisher):
     validator_class = RecordingActiveState
 
-    def publish(self, state: StrictBool):
+    def publish(self, state: bool):
         """
         Constrict payload for publisher to set recording active state.
+        (Validated as StrictBool by RecordingActiveState on publish.)
         """
         super().publish({"state": state})
 
@@ -55,10 +56,16 @@ class RecordingStateModel(HasTraits):
     """
 
     recording = Bool(False)
-    globals_key = Str("device_viewer.recording_active")
+    # Set at construction to the canonical key (device_viewer.consts
+    # DEVICE_VIEWER_RECORDING_ACTIVE_KEY) — kept defaultless here so that
+    # constant stays the single source of truth (consts imports this module,
+    # so it can't be imported back without a cycle).
+    globals_key = Str()
 
     @observe("recording")
     def _mirror_recording_state_to_app_globals(self, event):
+        if not self.globals_key:
+            return
         app_globals[self.globals_key] = event.new
         logger.info(f"App Globals Update: {self.globals_key}: {event.new}")
 
