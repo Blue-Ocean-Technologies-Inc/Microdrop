@@ -734,8 +734,11 @@ class ProtocolTreePane(QWidget):
         self.protocol_running_changed.emit(False)
         logger.info("Protocol terminated --> free mode")
         # Defensive: the executor normally dismisses the loading screen via
-        # protocol_wait_finished, but make sure it's never left up.
+        # protocol_wait_finished, but make sure it's never left up. Also clear
+        # the start guard in case the run was stopped before protocol_started
+        # fired (which is what normally clears it).
         self._wait_active = False
+        self._start_pending = False
         self.loading_overlay.stop_loading()
         self.clear_highlights()
         self._set_idle_button_state()

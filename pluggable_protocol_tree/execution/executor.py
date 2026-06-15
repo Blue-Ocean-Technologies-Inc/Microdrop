@@ -234,8 +234,13 @@ class ProtocolExecutor(HasTraits):
                 self._wait_pre_protocol(total_wait)
                 self.qsignals.protocol_wait_finished.emit()
 
-            self.qsignals.protocol_started.emit()
-            logger.info("Protocol started")
+            # Don't announce "started" if the run was already stopped during
+            # the pre-protocol phase (e.g. Stop pressed on the loading screen):
+            # that would publish PROTOCOL_RUNNING True for a run that never ran
+            # and race the terminal's False. The terminal signal still fires.
+            if not self.stop_event.is_set():
+                self.qsignals.protocol_started.emit()
+                logger.info("Protocol started")
 
             for rep in range(self._repeats):
                 if self.stop_event.is_set():
