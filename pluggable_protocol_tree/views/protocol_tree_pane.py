@@ -39,6 +39,7 @@ from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pyside_helpers import LoadingOverlay
 
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
@@ -164,6 +165,10 @@ class ProtocolTreePane(QWidget):
         self.widget = ProtocolTreeWidget(
             self.manager, preferences=self.preferences, parent=self)
 
+        # Loading screen shown over the tree during the executor's pre-protocol
+        # wait (realtime settle, etc.). Same widget the old protocol_grid used.
+        self.loading_overlay = LoadingOverlay(self.widget.tree)
+
         self.device_viewer_sync = device_viewer_sync
         if self.device_viewer_sync is not None:
             self.device_viewer_sync.attach(self.widget)
@@ -248,6 +253,9 @@ class ProtocolTreePane(QWidget):
         # signal (the executor's on_pre_protocol_start realtime settle runs
         # in there) so a second play-click can't start a duplicate run.
         self._start_pending = False
+        # True while the pre-protocol wait loading screen is up, so pause/resume
+        # know to freeze/restart its countdown.
+        self._wait_active = False
 
         self._status_step_label = self.status_bar.lbl_step_progress
         self._status_step_time_label = self.status_bar.lbl_step_time
@@ -345,6 +353,10 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.step_started.connect(self._on_step_started)
         self.executor.qsignals.step_finished.connect(self._on_step_finished)
         self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
+        self.executor.qsignals.protocol_wait_started.connect(
+            self._on_protocol_wait_started)
+        self.executor.qsignals.protocol_wait_finished.connect(
+            self._on_protocol_wait_finished)
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
         self.executor.qsignals.protocol_error.connect(self._on_error)
         self.executor.qsignals.phase_started.connect(self._on_phase_started)
@@ -354,6 +366,11 @@ class ProtocolTreePane(QWidget):
 
     def _wire_button_state_machine(self):
         self.executor.qsignals.protocol_started.connect(
+            self._set_running_button_state,
+        )
+        # During the pre-protocol wait, go to the running button state too —
+        # pause + stop stay live, everything else is disabled.
+        self.executor.qsignals.protocol_wait_started.connect(
             self._set_running_button_state,
         )
         self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
@@ -655,10 +672,27 @@ class ProtocolTreePane(QWidget):
         else:
             self.executor.pause()
 
+    def _on_protocol_wait_started(self, total_ms):
+        # The run is on its way; clear the start guard and show the loading
+        # screen countdown over the tree. auto_stop=False — the executor
+        # dismisses it via protocol_wait_finished (it owns the wait clock).
+        self._start_pending = False
+        self._wait_active = True
+        self.loading_overlay.show_loading(
+            "Preparing protocol run…", duration_ms=total_ms, auto_stop=False)
+
+    def _on_protocol_wait_finished(self):
+        self._wait_active = False
+        self.loading_overlay.stop_loading()
+
     def _on_protocol_paused(self):
         logger.info("Protocol paused")
         self.navigation_bar.show_resume_state()
         self._tick_timer.stop()
+        if self._wait_active:
+            # Freeze the loading-screen countdown in lockstep with the
+            # executor's frozen pre-protocol wait.
+            self.loading_overlay.pause()
         if self._current_row is not None:
             self._compute_pause_phase_state(self._current_row)
             self.navigation_bar.split_play_button_to_phase_controls()
@@ -667,6 +701,8 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_resumed(self):
         logger.info("Protocol resumed")
         self.navigation_bar.show_pause_state()
+        if self._wait_active:
+            self.loading_overlay.resume()
         if self._current_row is not None:
             self._tick_timer.start()
         self.navigation_bar.merge_phase_controls_to_play_button()
@@ -697,6 +733,10 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_terminated(self, outcome=RUN_OUTCOME_FINISHED):
         self.protocol_running_changed.emit(False)
         logger.info("Protocol terminated --> free mode")
+        # Defensive: the executor normally dismisses the loading screen via
+        # protocol_wait_finished, but make sure it's never left up.
+        self._wait_active = False
+        self.loading_overlay.stop_loading()
         self.clear_highlights()
         self._set_idle_button_state()
         self._tick_timer.stop()
