@@ -483,6 +483,17 @@ class LoadingOverlay(QWidget):
         self.hide()
         QApplication.processEvents()
 
+    def pause(self):
+        """Freeze the countdown: stop the update timer so _elapsed_ms holds
+        and the displayed remaining time stays put until resume()."""
+        self.update_timer.stop()
+
+    def resume(self):
+        """Resume a frozen countdown (no-op unless visible in determinate
+        mode)."""
+        if self.isVisible() and self._total_duration_ms:
+            self.update_timer.start()
+
     def _update_progress(self):
         """Called every 50ms to update bar and label."""
         self._elapsed_ms += 50
