@@ -265,6 +265,20 @@ class ProtocolExecutor(HasTraits):
             # logging stop, ...).
             self._run_hooks("on_post_protocol_end", handlers, proto_ctx, row=None)
 
+        except AbortError:
+            # A Stop that surfaced as AbortError — e.g. the operator pressed
+            # Stop while a worker-thread hook was blocked in ctx.wait_for /
+            # ctx.prompt_gui (the pre-protocol recording / keep-realtime
+            # dialogs). This is a clean cancellation, NOT a failure: leave
+            # _error unset so _emit_terminal_signal routes to protocol_aborted
+            # rather than protocol_error.
+            logger.info("Protocol aborted (stop during a hook)")
+            self.stop_event.set()
+            try:
+                self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
+                self._run_hooks("on_post_protocol_end", handlers, proto_ctx, row=None)
+            except Exception:
+                logger.exception("protocol-end hooks raised during abort cleanup")
         except Exception as e:
             self._error = e
             logger.exception("Protocol error")
