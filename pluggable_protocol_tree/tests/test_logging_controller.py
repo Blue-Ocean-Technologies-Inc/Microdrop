@@ -334,3 +334,64 @@ def test_all_report_paths_does_not_grow_when_generate_report_is_false(tmp_path):
                                  "instrument_time_us": 1, "reception_time": 2}))
     c.stop_logging(generate_report=False)
     assert c.all_report_paths == []
+
+
+# --- has_data() gates the run-report prompt -------------------------------
+
+def test_has_data_false_before_start_and_in_preview(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    assert c.has_data() is False                       # nothing started
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=True)
+    assert c.has_data() is False                       # preview -> no ingestion
+
+
+def test_has_data_false_when_started_but_no_step_ran(tmp_path):
+    """Stop on the loading screen: logging started, but no step_started — no
+    meaningful data, so no report should be offered."""
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    assert c.has_data() is False
+    c.stop_logging(generate_report=False)
+
+
+def test_has_data_true_once_a_step_started(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    assert c.has_data() is True
+    c.stop_logging(generate_report=False)
+
+
+# --- report_failure_callback surfaces a requested-but-failed report --------
+
+def test_report_failure_callback_fires_when_requested_report_fails(tmp_path):
+    from unittest.mock import patch
+    from pluggable_protocol_tree.services.logging.reporting import LoggingReport
+
+    failures = []
+    c = ProtocolLoggingController(
+        settling_provider=lambda: 0.0, flush_scheduler=_immediate,
+        report_failure_callback=failures.append,
+    )
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    with patch.object(LoggingReport, "build_html",
+                      side_effect=RuntimeError("render boom")):
+        c.stop_logging(generate_report=True)
+    assert len(failures) == 1
+    assert "render boom" in failures[0]
+
+
+def test_report_failure_callback_silent_when_report_not_requested(tmp_path):
+    failures = []
+    c = ProtocolLoggingController(
+        settling_provider=lambda: 0.0, flush_scheduler=_immediate,
+        report_failure_callback=failures.append,
+    )
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(_FakeRow())
+    c.stop_logging(generate_report=False)   # user declined -> no failure notice
+    assert failures == []

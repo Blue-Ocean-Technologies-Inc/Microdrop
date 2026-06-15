@@ -411,3 +411,61 @@ def test_wait_for_infinite_timeout_aborts_when_stop_event_fires():
     with pytest.raises(AbortError):
         step.wait_for("t/decision", timeout=float("inf"))
     assert time.monotonic() - start < 0.5
+
+
+# --- pre-protocol wait contribution + StepContext value-returning wrappers ---
+
+from pluggable_protocol_tree.execution.step_context import (
+    ProtocolContext as _PC, StepContext as _SC,
+)
+
+
+def test_add_pre_protocol_wait_accumulates_and_clamps_negatives():
+    pc = _PC(stop_event=threading.Event(), pause_event=PauseEvent())
+    assert pc.pre_protocol_wait_s == 0.0
+    pc.add_pre_protocol_wait(1.5)
+    pc.add_pre_protocol_wait(0.5)
+    pc.add_pre_protocol_wait(-3.0)        # clamped to 0, not subtracted
+    assert pc.pre_protocol_wait_s == 2.0
+
+
+def test_step_context_prompt_gui_returns_delegated_result():
+    """Regression: the StepContext wrapper must return the dialog result, not
+    drop it (step-level callers like volume-threshold recovery rely on it)."""
+    proto = _PC(stop_event=threading.Event(), pause_event=PauseEvent())  # qsignals None
+    step = _SC(protocol=proto)
+    assert step.prompt_gui(lambda: {"action": "extend"}) == {"action": "extend"}
+
+
+def test_step_context_prompt_gui_propagates_callable_error():
+    proto = _PC(stop_event=threading.Event(), pause_event=PauseEvent())
+    step = _SC(protocol=proto)
+
+    def _boom():
+        raise ValueError("dialog blew up")
+
+    import pytest
+    with pytest.raises(ValueError):
+        step.prompt_gui(_boom)
+
+
+# --- StepExecutionError label (handler-keyed after the col->handler rename) ---
+
+import types
+
+from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+
+
+def test_step_execution_error_label_from_column_model():
+    handler = types.SimpleNamespace(
+        model=types.SimpleNamespace(col_name="Voltage", col_id="voltage"))
+    e = StepExecutionError(handler, "on_step", None, RuntimeError("x"))
+    assert e.col_label == "Voltage"
+    assert "on_step" in str(e)
+
+
+def test_step_execution_error_label_falls_back_to_class_for_lifecycle_handler():
+    handler = types.SimpleNamespace()        # no .model (lifecycle handler)
+    e = StepExecutionError(handler, "on_pre_protocol_start", None,
+                           RuntimeError("y"))
+    assert e.col_label == "SimpleNamespace"

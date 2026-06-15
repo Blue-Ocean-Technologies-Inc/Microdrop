@@ -282,3 +282,87 @@ def test_on_protocol_end_noop_when_scratch_key_absent():
         handler.on_protocol_end(ctx)
 
     mock_pub.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 13. Pre-protocol recording-active dialog gate (issue #398 acceptance)
+# ---------------------------------------------------------------------------
+
+import threading
+
+from microdrop_application.dialogs.pyface_wrapper import YES, NO
+from device_viewer.consts import DEVICE_VIEWER_RECORDING_ACTIVE_KEY
+
+_RECORD_MOD = "video_protocol_controls.protocol_columns.record_column"
+
+
+class _ProtoCtx:
+    """Minimal ProtocolContext stand-in: prompt_gui runs the callable inline,
+    exactly as the real ProtocolContext does headlessly (qsignals is None)."""
+
+    def __init__(self):
+        self.stop_event = threading.Event()
+
+    def prompt_gui(self, fn, **kwargs):
+        return fn()
+
+
+def test_dialog_gate_idle_proceeds_without_dialog():
+    """No recording active → proceed, and the confirm dialog never shows."""
+    handler = RecordHandler()
+    with patch(f"{_RECORD_MOD}.app_globals") as ag, \
+         patch(f"{_RECORD_MOD}.confirm") as mock_confirm:
+        ag.get.return_value = False
+        assert handler._check_video_recording_and_show_dialog() is True
+        mock_confirm.assert_not_called()
+
+
+def test_dialog_gate_active_confirm_publishes_stop_and_proceeds():
+    """Recording active + Continue → publish stop to DEVICE_VIEWER_SCREEN_RECORDING
+    and proceed."""
+    handler = RecordHandler()
+    published = []
+    with patch(f"{_RECORD_MOD}.app_globals") as ag, \
+         patch(f"{_RECORD_MOD}.confirm", return_value=YES), \
+         patch(f"{_RECORD_MOD}.publish_message",
+               side_effect=lambda **kw: published.append(kw)):
+        ag.get.return_value = True
+        assert handler._check_video_recording_and_show_dialog() is True
+    assert len(published) == 1
+    assert published[0]["topic"] == DEVICE_VIEWER_SCREEN_RECORDING
+    assert json.loads(published[0]["message"]) == {"action": "stop"}
+
+
+def test_dialog_gate_active_cancel_does_not_publish_or_proceed():
+    """Recording active + Cancel → no publish, do not proceed."""
+    handler = RecordHandler()
+    with patch(f"{_RECORD_MOD}.app_globals") as ag, \
+         patch(f"{_RECORD_MOD}.confirm", return_value=NO), \
+         patch(f"{_RECORD_MOD}.publish_message") as mock_pub:
+        ag.get.return_value = True
+        assert handler._check_video_recording_and_show_dialog() is False
+        mock_pub.assert_not_called()
+
+
+def test_on_pre_protocol_start_cancel_sets_stop_event():
+    """Cancelling the dialog stops the run (stop_event set)."""
+    handler = RecordHandler()
+    ctx = _ProtoCtx()
+    with patch(f"{_RECORD_MOD}.app_globals") as ag, \
+         patch(f"{_RECORD_MOD}.confirm", return_value=NO), \
+         patch(f"{_RECORD_MOD}.publish_message"):
+        ag.get.return_value = True
+        handler.on_pre_protocol_start(ctx)
+    assert ctx.stop_event.is_set() is True
+
+
+def test_on_pre_protocol_start_idle_does_not_stop():
+    """No recording active → run proceeds (stop_event stays clear)."""
+    handler = RecordHandler()
+    ctx = _ProtoCtx()
+    with patch(f"{_RECORD_MOD}.app_globals") as ag, \
+         patch(f"{_RECORD_MOD}.confirm") as mock_confirm:
+        ag.get.return_value = False
+        handler.on_pre_protocol_start(ctx)
+    assert ctx.stop_event.is_set() is False
+    mock_confirm.assert_not_called()

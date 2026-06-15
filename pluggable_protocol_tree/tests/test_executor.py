@@ -620,3 +620,146 @@ def test_wait_for_timeout_message_names_topic():
     assert "Waiter" in err                    # which column
 
 
+# --- lifecycle hooks, executor-owned repeats, pre-protocol wait (PR #468) ---
+
+from pluggable_protocol_tree.execution.exceptions import AbortError
+
+
+def test_executor_signals_includes_wait_and_repetition_signals():
+    s = ExecutorSignals()
+    for name in ("protocol_wait_started", "protocol_wait_finished",
+                 "protocol_repetition_finished"):
+        assert hasattr(s, name), f"missing signal: {name}"
+
+
+def _lifecycle_handler(name, priority, log, *, on_pre=None):
+    """Execution-only handler that logs the lifecycle hooks. `on_pre` (if
+    given) runs inside on_pre_protocol_start, receiving the ProtocolContext."""
+    class _H(BaseColumnHandler):
+        def on_pre_protocol_start(self, ctx):
+            log.append((name, "pre"))
+            if on_pre is not None:
+                on_pre(ctx)
+        def on_protocol_start(self, ctx):     log.append((name, "start"))
+        def on_protocol_end(self, ctx):       log.append((name, "end"))
+        def on_post_protocol_end(self, ctx):  log.append((name, "post"))
+    h = _H()
+    h.priority = priority
+    return h
+
+
+def test_lifecycle_hooks_once_per_run_while_per_rep_hooks_repeat():
+    """on_pre_protocol_start / on_post_protocol_end fire once per run; the
+    per-rep on_protocol_start / on_protocol_end fire once per repetition;
+    protocol_repetition_finished reports progress."""
+    log = []
+    h = _lifecycle_handler("L", priority=900, log=log)
+    ex = _executor_with([])           # one step
+    ex.lifecycle_handlers = [h]
+    ex._repeats = 3
+    reps = []
+    ex.qsignals.protocol_repetition_finished.connect(
+        lambda done, total: reps.append((done, total)))
+    ex.run()
+    hooks = [hook for (n, hook) in log if n == "L"]
+    assert hooks.count("pre") == 1
+    assert hooks.count("post") == 1
+    assert hooks.count("start") == 3
+    assert hooks.count("end") == 3
+    assert reps == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
+    """A high-priority pre hook that sets stop_event cancels the run before
+    lower-priority pre hooks fire; teardown hooks still run; the run aborts
+    without ever announcing protocol_started."""
+    log = []
+    early = _lifecycle_handler("early", priority=10, log=log,
+                               on_pre=lambda ctx: ctx.stop_event.set())
+    late = _lifecycle_handler("late", priority=900, log=log)
+    ex = _executor_with([])
+    ex.lifecycle_handlers = [early, late]
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    late_hooks = [h for (n, h) in log if n == "late"]
+    assert ("early", "pre") in log          # early ran
+    assert "pre" not in late_hooks          # short-circuited
+    assert "post" in late_hooks             # teardown still runs
+    assert ("protocol_started",) not in spy.events
+    assert spy.events[-1] == ("protocol_aborted",)
+
+
+def test_hook_abort_error_routes_to_aborted_not_error():
+    """AbortError from a hook (e.g. Stop during a pre-protocol dialog) is a
+    clean cancellation, not a protocol_error."""
+    class _Aborter(BaseColumnHandler):
+        def on_step(self, row, ctx):
+            raise AbortError("stop during hook")
+    col = Column(
+        model=BaseColumnModel(col_id="a", col_name="A", default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_Aborter(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.qsignals)
+    ex.run()
+    assert spy.events[-1] == ("protocol_aborted",)
+    assert not any(e[0] == "protocol_error" for e in spy.events)
+
+
+def test_pre_protocol_wait_emits_signals_and_blocks():
+    """A hook contributing wait seconds triggers the wait phase: the executor
+    emits protocol_wait_started(ms) / protocol_wait_finished and blocks."""
+    log = []
+    h = _lifecycle_handler("w", priority=900, log=log,
+                           on_pre=lambda ctx: ctx.add_pre_protocol_wait(0.05))
+    ex = _executor_with([])
+    ex.lifecycle_handlers = [h]
+    events = []
+    ex.qsignals.protocol_wait_started.connect(
+        lambda ms: events.append(("start", ms)))
+    ex.qsignals.protocol_wait_finished.connect(
+        lambda: events.append(("finished",)))
+    t0 = time.monotonic()
+    ex.run()
+    elapsed = time.monotonic() - t0
+    assert events[0] == ("start", 50)        # 0.05 s -> 50 ms
+    assert ("finished",) in events
+    assert elapsed >= 0.05
+
+
+def test_no_wait_phase_when_nothing_contributed():
+    ex = _executor_with([])
+    events = []
+    ex.qsignals.protocol_wait_started.connect(lambda ms: events.append(ms))
+    ex.run()
+    assert events == []
+
+
+def test_wait_pre_protocol_returns_early_on_stop():
+    ex = _make_executor()
+
+    def stopper():
+        time.sleep(0.05)
+        ex.stop_event.set()
+
+    threading.Thread(target=stopper, daemon=True).start()
+    t0 = time.monotonic()
+    ex._wait_pre_protocol(5.0)          # 5 s, but stop fires at ~50 ms
+    assert time.monotonic() - t0 < 1.0
+
+
+def test_wait_pre_protocol_freezes_while_paused():
+    ex = _make_executor()
+    ex.pause_event.set()                 # paused before the wait starts
+
+    def resumer():
+        time.sleep(0.1)
+        ex.pause_event.clear()
+
+    threading.Thread(target=resumer, daemon=True).start()
+    t0 = time.monotonic()
+    ex._wait_pre_protocol(0.05)          # frozen until resume, then 0.05 s
+    assert time.monotonic() - t0 >= 0.1  # paused time did not count down
+
+
