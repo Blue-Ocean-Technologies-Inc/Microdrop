@@ -82,6 +82,9 @@ class ProtocolLoggingController(HasTraits):
     settling_provider = Callable
     flush_scheduler = Callable
     completion_callback = Callable          # Optional — None when not provided.
+    # Optional — notified with the error message when a report the user asked
+    # for could not be generated, so the failure isn't silent. None = not wired.
+    report_failure_callback = Callable
     # Per-run state.
     _ingestion = Instance(LoggingIngestion)
     _device_context = Any
@@ -210,6 +213,7 @@ class ProtocolLoggingController(HasTraits):
         # Captures section sees this run's videos/images.
         self._drain_media_captures()
         report_path = None
+        report_error = None
         try:
             json_path, csv_path = LoggingPersistence.write_data_files(
                 self._device_context.experiment_directory, self._start_time,
@@ -227,6 +231,7 @@ class ProtocolLoggingController(HasTraits):
         except Exception as e:
             logger.error(f"protocol logging flush failed: {e}")
             report_path = None
+            report_error = str(e)
         finally:
             self._ingestion = None
         # Notify the GUI (report saved / skipped). Outside the try so a
@@ -236,6 +241,14 @@ class ProtocolLoggingController(HasTraits):
                 self.completion_callback(report_path)
             except Exception as e:
                 logger.error(f"logging completion callback failed: {e}")
+        # If the user asked for a report and it failed, surface it instead of
+        # leaving them with the same silent no-op as an intentional skip.
+        if (report_error is not None and self._generate_report
+                and self.report_failure_callback is not None):
+            try:
+                self.report_failure_callback(report_error)
+            except Exception as e:
+                logger.error(f"logging failure callback failed: {e}")
 
     # --- listener forwards (may run on a worker thread) ---
     def on_capacitance(self, message) -> None:

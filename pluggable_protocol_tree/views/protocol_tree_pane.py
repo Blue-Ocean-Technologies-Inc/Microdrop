@@ -122,6 +122,10 @@ class ProtocolTreePane(QWidget):
     # deferred flush completes; QueuedConnection in __init__ marshals it
     # back to the GUI thread so the success dialog runs there.
     _logging_complete = Signal(object)
+    # Emitted (from the flush worker thread) with the error message when a
+    # report the user asked for fails to generate; QueuedConnection marshals
+    # it to the GUI thread so the error dialog runs there.
+    _report_failed = Signal(str)
     # Quick-actions toolbar feed: emit True/False on protocol start/end,
     # parameterless selection_changed on each tree selection move.
     # QuickActionsController listens to both to drive button enabled state.
@@ -211,8 +215,11 @@ class ProtocolTreePane(QWidget):
         # the GUI thread.
         self._logging_complete.connect(
             self._on_logging_complete, Qt.QueuedConnection)
+        self._report_failed.connect(
+            self._on_report_failed, Qt.QueuedConnection)
         self.logging_controller = ProtocolLoggingController(
             completion_callback=self._logging_complete.emit,
+            report_failure_callback=self._report_failed.emit,
             flush_scheduler=self._schedule_flush_with_progress,
             settling_provider=self._logs_settling_time_s,
         )
@@ -1277,7 +1284,8 @@ class ProtocolTreePane(QWidget):
     def _on_logging_complete(self, report_path):
         """Controller completion callback (runs on the GUI thread via the
         QTimer-scheduled flush). Shows the report-link success dialog when a
-        report was generated; silent when it was skipped or the flush failed."""
+        report was generated; silent when it was skipped (a requested report
+        that fails is reported separately via _on_report_failed)."""
         if report_path is None:
             return
         try:
@@ -1290,6 +1298,20 @@ class ProtocolTreePane(QWidget):
             )
         except Exception as e:
             logger.warning(f"run-summary success dialog failed: {e}")
+
+    @attempt_func_execution_with_error_dialog
+    def _on_report_failed(self, message):
+        """Surface a requested run-summary that failed to generate, so the
+        user isn't left with the same silence as an intentional skip. The
+        run's data files were still written."""
+        error_dialog(
+            parent=None,
+            message="The run summary could not be generated.<br><br>"
+                    "The run's data files were still saved to the experiment "
+                    "directory.",
+            title="Run Summary Failed",
+            detail=message,
+        )
 
     @attempt_func_execution_with_error_dialog
     def _on_new_experiment(self):
