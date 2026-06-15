@@ -1838,7 +1838,7 @@ class PGCWidget(QWidget):
             device_state, step_uid, step_description, step_id, editable,
             execution_params=execution_params,
         )
-        publish_message.send(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
+        publish_message(topic=PROTOCOL_GRID_DISPLAY_STATE, message=msg_model.serialize())
         logger.info(f"Sending step info: {msg_model.serialize()}") # TODO: CHANGE TO DEBUG
 
         electrode_state_change_publisher.publish(msg_model.channels_activated)

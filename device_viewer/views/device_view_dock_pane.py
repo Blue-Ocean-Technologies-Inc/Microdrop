@@ -495,7 +495,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 prev_id = self._last_applied_step_id
                 params = self.model.routes._current_params()
                 commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
-                publish_message.send(
+                publish_message(
                     topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
                 )
             # "discard" falls through to apply the new step.
@@ -538,7 +538,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         params = self.model.routes._current_params()
         msg = StepParamsCommitMessage(step_id=step_id, **params)
-        publish_message.send(topic=STEP_PARAMS_COMMIT, message=msg.serialize())
+        publish_message(topic=STEP_PARAMS_COMMIT, message=msg.serialize())
 
         # Re-baseline so the button goes back to disabled.
         self.model.routes.mark_params_committed()
@@ -547,7 +547,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         logger.debug(
             f"Publishing message for updated viewer state {self.message_buffer}"
         )
-        publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
+        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
     def _publish_geometry_if_changed(self):
         """Publish DEVICE_VIEWER_GEOMETRY_CHANGED if id_to_channel differs
@@ -561,7 +561,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             return
         self._last_published_id_to_channel = dict(current)
         msg = GeometryChangedMessage(id_to_channel=current)
-        publish_message.send(
+        publish_message(
             topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
         )
 
