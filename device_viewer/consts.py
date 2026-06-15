@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from device_viewer.models.media import RecordingStatePublisher
+from device_viewer.models.media import RecordingStatePublisher, RecordingStateModel
 from dropbot_controller.consts import (
     CHIP_INSERTED,
     CAPACITANCE_UPDATED,
@@ -24,6 +24,9 @@ CALIBRATION_DATA               = "ui/calibration_data"
 
 # Publishers
 device_viewer_recording_state_publisher = RecordingStatePublisher(topic=DEVICE_VIEWER_RECORDING_STATE)
+
+# Mirrors the live recording state to app_globals (see DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
+recording_state_model = RecordingStateModel()
 
 # Sidebar route-executor execution params -> the selected protocol step.
 # Published by the DV commit button; consumed by the active protocol widget
@@ -93,6 +96,7 @@ FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
 LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
 DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
 MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
+DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live video-recording state
 
 APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
                     LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]

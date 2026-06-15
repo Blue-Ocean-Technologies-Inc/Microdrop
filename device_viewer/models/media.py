@@ -2,8 +2,12 @@ import json
 
 from pydantic import BaseModel, FilePath, StrictBool
 from enum import Enum
+from traits.api import HasTraits, Bool, observe
 
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class MediaType(str, Enum):
@@ -37,6 +41,24 @@ class RecordingStatePublisher(ValidatedTopicPublisher):
         Constrict payload for publisher to set recording active state.
         """
         super().publish({"state": state})
+
+
+class RecordingStateModel(HasTraits):
+    """Holds the live video-recording state and mirrors it to app_globals.
+
+    The camera widget sets ``recording`` whenever a recording starts/stops;
+    the observer writes it to app_globals so any plugin can read the state
+    synchronously instead of subscribing to DEVICE_VIEWER_RECORDING_STATE.
+    """
+
+    recording = Bool(False)
+
+    @observe("recording")
+    def _mirror_recording_state_to_app_globals(self, event):
+        # Lazy import: device_viewer.consts imports this module, so importing
+        # the key at module load would be circular.
+        from device_viewer.consts import DEVICE_VIEWER_RECORDING_ACTIVE_KEY
+        app_globals[DEVICE_VIEWER_RECORDING_ACTIVE_KEY] = event.new
 
 
 if __name__ == "__main__":

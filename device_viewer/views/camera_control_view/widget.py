@@ -25,7 +25,11 @@ from microdrop_application.helpers import get_current_experiment_directory
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
-from ...consts import DEVICE_VIEWER_RECORDING_STATE, device_viewer_recording_state_publisher
+from ...consts import (
+    DEVICE_VIEWER_RECORDING_STATE,
+    device_viewer_recording_state_publisher,
+    recording_state_model,
+)
 
 from device_viewer.views.camera_control_view.preferences import CameraPreferences
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
@@ -740,6 +744,7 @@ class CameraControlWidget(QWidget):
             _recording_file_path, _resolution, fps
         )
         device_viewer_recording_state_publisher.publish(state=True)
+        recording_state_model.recording = True
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")
@@ -749,6 +754,7 @@ class CameraControlWidget(QWidget):
     def handle_recording_error(self, error_msg):
         logger.error(f"Recording Error: {error_msg}")
         device_viewer_recording_state_publisher.publish(state=False)
+        recording_state_model.recording = False
         error(
             self,
             "<b>Error</b>: Cannot continue to record video<br><br>Exception raised while recording video.",
@@ -759,6 +765,7 @@ class CameraControlWidget(QWidget):
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
         device_viewer_recording_state_publisher.publish(state=False)
+        recording_state_model.recording = False
         if not self._camera_state_pre_recording:
             # turn off camera if we need to
             if self.camera.isActive():
