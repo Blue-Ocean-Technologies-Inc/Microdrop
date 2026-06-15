@@ -1,16 +1,21 @@
 """Logging lifecycle handler.
 
-Drives ProtocolLoggingController start/stop from the executor's once-per-run
-hooks instead of the protocol tree pane. Logging spans the whole run (all
-repetitions): start_logging once in on_pre_protocol_start (right after the
-RealtimeModeHandler turns realtime mode on, before steps run) and
-stop_logging once in on_post_protocol_end.
+Starts ProtocolLoggingController logging from the executor's once-per-run
+on_pre_protocol_start hook — right after the RealtimeModeHandler turns
+realtime mode on, before any steps run, so one log spans the whole run
+(all repetitions).
 
-The controller itself stays owned by the pane — it carries GUI collaborators
-(report-flush progress dialog, completion callback). This handler only
-triggers it at the right execution points. stop_logging kicks off the
-report flush (a GUI progress dialog), so it's marshalled onto the GUI thread
-via ctx.prompt_gui; start_logging is GUI-free and runs on the worker.
+Only the *start* lives here. Stopping is left to the pane's end-of-run
+completion flow: it is wrapped in genuine UX (protocol auto-save, the
+"generate run summary?" / "start new experiment?" prompts, and the
+generate_report decision) and, now that the executor owns the repeat loop,
+that terminal flow already runs exactly once per run.
+
+The controller stays owned by the pane (it carries GUI collaborators — the
+report-flush progress dialog and completion callback); this handler only
+triggers start_logging at the right execution point. start_logging is
+GUI-free, so it runs on the executor's worker thread. Experiment directory
+and step count come from injected providers.
 """
 
 from traits.api import Any, Callable
@@ -23,7 +28,7 @@ logger = get_logger(__name__)
 
 
 class LoggingHandler(BaseColumnHandler):
-    """Starts/stops protocol logging once per run."""
+    """Starts protocol logging once per run, just before the first step."""
 
     priority = 1000  # after RealtimeModeHandler (900) — logger starts last
 
@@ -44,11 +49,3 @@ class LoggingHandler(BaseColumnHandler):
             self.controller.start_logging(device_ctx, n_steps, ctx.preview_mode)
         except Exception as e:
             logger.warning(f"could not start protocol logging: {e}")
-
-    def on_post_protocol_end(self, ctx):
-        # stop_logging schedules the report flush behind a GUI progress
-        # dialog — marshal it onto the GUI thread.
-        try:
-            ctx.prompt_gui(self.controller.stop_logging)
-        except Exception as e:
-            logger.warning(f"could not stop protocol logging: {e}")
