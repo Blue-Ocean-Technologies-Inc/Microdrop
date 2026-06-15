@@ -397,6 +397,12 @@ class ProtocolExecutor(HasTraits):
         "on_pre_protocol_start", "on_protocol_start",
         "on_protocol_end", "on_post_protocol_end",
     )
+    # Teardown hooks always run every bucket (best-effort cleanup), even once
+    # stop_event is set. Forward hooks instead stop launching lower-priority
+    # buckets the moment a hook sets stop_event — so a high-priority hook (e.g.
+    # the recording-active dialog) can cancel the run before realtime-mode /
+    # logging in lower buckets fire.
+    _TEARDOWN_HOOKS = ("on_protocol_end", "on_post_protocol_end")
 
     def _run_hooks(self, hook_name, handlers, ctx, row) -> None:
         """Priority-bucket fan-out.
@@ -418,7 +424,12 @@ class ProtocolExecutor(HasTraits):
         for handler in handlers:
             buckets[handler.priority].append(handler)
 
+        teardown = hook_name in self._TEARDOWN_HOOKS
         for priority in sorted(buckets):
+            # A forward hook that set stop_event in an earlier bucket cancels
+            # the rest of this phase; teardown hooks always run every bucket.
+            if not teardown and self.stop_event.is_set():
+                break
             bucket = buckets[priority]
             with self.bucket_pool_factory(
                 max_workers=max(1, len(bucket)),
