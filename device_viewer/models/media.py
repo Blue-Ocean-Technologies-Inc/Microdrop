@@ -2,9 +2,15 @@ import json
 
 from pydantic import BaseModel, FilePath, StrictBool
 from enum import Enum
-from traits.api import HasTraits, Bool, observe
+from traits.api import HasTraits, Bool, observe, Str
 
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+app_globals = get_microdrop_redis_globals_manager()
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
 class MediaType(str, Enum):
@@ -49,16 +55,12 @@ class RecordingStateModel(HasTraits):
     """
 
     recording = Bool(False)
+    globals_key = Str("device_viewer.recording_active")
 
     @observe("recording")
     def _mirror_recording_state_to_app_globals(self, event):
-        # Lazy imports: device_viewer.consts imports this module (so importing
-        # the key at module load would be circular), and acquiring the redis
-        # globals manager at import time would force a broker before this
-        # widely-imported module is even constructed.
-        from device_viewer.consts import DEVICE_VIEWER_RECORDING_ACTIVE_KEY
-        from microdrop_application.helpers import get_microdrop_redis_globals_manager
-        get_microdrop_redis_globals_manager()[DEVICE_VIEWER_RECORDING_ACTIVE_KEY] = event.new
+        app_globals[self.globals_key] = event.new
+        logger.info(f"App Globals Update: {self.globals_key}: {event.new}")
 
 
 if __name__ == "__main__":
