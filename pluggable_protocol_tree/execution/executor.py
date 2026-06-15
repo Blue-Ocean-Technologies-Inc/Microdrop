@@ -224,6 +224,16 @@ class ProtocolExecutor(HasTraits):
             # Once per run, before any repetition (realtime-mode prep,
             # logging start, ...) — fires before the per-rep on_protocol_start.
             self._run_hooks("on_pre_protocol_start", handlers, proto_ctx, row=None)
+
+            # Pre-protocol wait: hooks contributed settle seconds via
+            # ctx.add_pre_protocol_wait(); wait the total once here (shown as a
+            # loading screen), pausable and stop-aware, before the first step.
+            total_wait = proto_ctx.pre_protocol_wait_s
+            if total_wait > 0 and not self.stop_event.is_set():
+                self.qsignals.protocol_wait_started.emit(int(total_wait * 1000))
+                self._wait_pre_protocol(total_wait)
+                self.qsignals.protocol_wait_finished.emit()
+
             self.qsignals.protocol_started.emit()
             logger.info("Protocol started")
 
@@ -344,6 +354,28 @@ class ProtocolExecutor(HasTraits):
             if remaining <= 0 or self.stop_event.is_set():
                 return
             time.sleep(min(0.02, remaining))
+
+    def _wait_pre_protocol(self, seconds: float) -> None:
+        """Block for ``seconds`` before the first step — pause- and stop-aware.
+
+        While ``pause_event`` is set, the remaining time is frozen (the
+        deadline is rebased on resume so paused time doesn't count), keeping
+        the wait in lockstep with the paused loading screen. Returns early on
+        ``stop_event`` (no raise — the rep loop then aborts cleanly via its
+        own stop check)."""
+        deadline = time.monotonic() + seconds
+        while not self.stop_event.is_set():
+            if self.pause_event.is_set():
+                remaining = deadline - time.monotonic()
+                self.pause_event.wait_cleared()
+                if self.stop_event.is_set():
+                    return
+                deadline = time.monotonic() + max(0.0, remaining)
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.05, remaining))
 
     def _emit_terminal_signal(self) -> None:
         """Single source of truth for which lifecycle-end signal fires.

@@ -19,6 +19,11 @@ class ExecutorSignals(QObject):
     protocol_finished  = Signal()           # ran to completion
     protocol_aborted   = Signal()           # user pressed Stop
     protocol_error     = Signal(str)        # exception raised in a hook
+    # Pre-protocol settle/wait phase: emitted with the total wait in ms once
+    # the on_pre_protocol_start hooks' contributions are summed, then again
+    # (parameterless) when the wait ends. Drives the loading screen.
+    protocol_wait_started  = Signal(int)    # total wait, milliseconds
+    protocol_wait_finished = Signal()
 
     # Per-step
     step_started       = Signal(object)     # row
