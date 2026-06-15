@@ -178,6 +178,145 @@ class ProtocolContext(HasTraits):
         if self.qsignals is not None:
             self.qsignals.protocol_resumed.emit()
 
+    def wait(self, events: list[threading.Event], timeout: float = float("inf")):
+        """Pause the run and block the worker thread until an event fires.
+
+        Used by hooks that hand control to the UI mid-step (e.g. the
+        message-prompt dialog): pauses the protocol so timers freeze, then
+        polls ``events`` plus an "externally resumed" check until one of
+        them trips. On a normal acknowledge it resumes the protocol before
+        returning; on Stop it aborts.
+
+        The default ``timeout`` of ``float("inf")`` waits forever — right
+        for an operator-facing wait, where the real cancellation path is
+        the protocol's ``stop_event`` (pass it in ``events``). Pass a
+        finite timeout to bound the wait instead.
+
+        Args:
+            events: events to wake on. Include ``protocol.stop_event`` to
+                make Stop abort the wait.
+            timeout: seconds before raising ``TimeoutError``;
+                ``float("inf")`` (the default) never times out.
+
+        Returns ``None``. Raises:
+          * ``TimeoutError`` after ``timeout`` seconds with nothing set.
+          * ``AbortError`` if ``protocol.stop_event`` fires.
+
+        Implementation note: like :func:`wait_first`, this polls on a
+        short slice because the stdlib has no multi-event wait.
+        """
+        try:
+            self.pause()
+
+            deadline = time.monotonic() + timeout
+            poll_interval = 0.01  # 10ms
+            triggered = None
+
+            while True:
+
+                # External resume (e.g. toolbar Resume cleared pause_event)
+                # — treat as "done waiting" and stop immediately.
+                if not self.pause_event.is_set():
+                    triggered = True
+                    break
+
+                # 1. Check if any of the caller's events has fired.
+                for e in events:
+                    if e.is_set():
+                        triggered = e
+                        break  # Break out of the inner 'for' loop
+
+                # 2. If an event triggered, exit immediately (do NOT sleep).
+                if triggered is not None:
+                    break
+
+                # 3. Calculate time left and check for timeout.
+                remaining_time = deadline - time.monotonic()
+                if remaining_time <= 0.0:
+                    break
+
+                # 4. Sleep briefly before checking again.
+                time.sleep(min(poll_interval, remaining_time))
+
+            if triggered is None:
+                raise TimeoutError(
+                    f"wait_for timed out after {timeout}s"
+                )
+            elif triggered is self.stop_event:
+                raise AbortError("stop_event fired while waiting")
+
+            else:
+                # Acknowledged (event set) or externally resumed — clear the
+                # pause and notify the UI before handing control back.
+                self.resume()
+
+
+        except TimeoutError:
+            # Re-raise with a uniform message so the protocol-error dialog
+            # states the wait timed out rather than surfacing the raw poll
+            # internals.
+            raise TimeoutError(
+                f"Timed out after {timeout}s wait"
+            ) from None
+
+    def prompt_gui(self, gui_callable: Callable, *,
+                   timeout: float = float("inf")):
+        """Run ``gui_callable`` on the GUI thread, paused, and return its result.
+
+        The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
+        worker on a bare event (fine for a yes/no prompt whose answer is "the
+        event fired"), this marshals an arbitrary callable onto the GUI thread,
+        pauses the run while it's up, blocks the worker until it returns, and
+        hands its return value back — so a dialog can answer with structured
+        data, not just acknowledge.
+
+        ``gui_callable`` takes no arguments and runs on the GUI thread, so it
+        is safe to build and ``exec()`` a Qt dialog inside it. Whatever it
+        returns becomes this method's return value.
+
+        Headless/test runs have no GUI thread (``qsignals`` is None), so the
+        callable runs inline on the calling thread.
+
+        Args:
+            gui_callable: zero-arg callable invoked on the GUI thread.
+            timeout: seconds before the underlying wait raises TimeoutError;
+                ``float("inf")`` (the default) never times out — Stop is
+                the cancellation path.
+
+        Returns the callable's result, or ``None`` if the wait ended without
+        it finishing (external Resume before the user answered). Raises:
+          * ``AbortError`` if ``protocol.stop_event`` fires.
+          * ``TimeoutError`` after ``timeout`` seconds.
+          * whatever ``gui_callable`` raised (re-raised on the worker thread).
+        """
+        done = threading.Event()
+        box = {}
+
+        def _runner():
+            try:
+                box["result"] = gui_callable()
+            except Exception as exc:           # surfaced on the worker below
+                box["error"] = exc
+            finally:
+                done.set()
+
+        qsignals = self.qsignals
+        if qsignals is None:
+            _runner()
+        else:
+            # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
+            # singleShot with it as context runs _runner there (Qt builds the
+            # dialog on the right thread). Imported lazily to keep this module
+            # Qt-free for headless executor tests.
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, qsignals, _runner)
+
+        self.wait(events=[done, self.stop_event], timeout=timeout)
+
+        if "error" in box:
+            raise box["error"]
+        return box.get("result")
+
 
 class StepContext(HasTraits):
     """Spans one row's execution.
@@ -320,142 +459,8 @@ class StepContext(HasTraits):
                 f"running, or slower than the timeout."
             ) from None
 
+    def wait(self, *args, **kwargs):
+        self.protocol.wait(*args, **kwargs)
 
-    def wait(self, events: list[threading.Event], timeout: float = float("inf")):
-        """Pause the run and block the worker thread until an event fires.
-
-        Used by hooks that hand control to the UI mid-step (e.g. the
-        message-prompt dialog): pauses the protocol so timers freeze, then
-        polls ``events`` plus an "externally resumed" check until one of
-        them trips. On a normal acknowledge it resumes the protocol before
-        returning; on Stop it aborts.
-
-        The default ``timeout`` of ``float("inf")`` waits forever — right
-        for an operator-facing wait, where the real cancellation path is
-        the protocol's ``stop_event`` (pass it in ``events``). Pass a
-        finite timeout to bound the wait instead.
-
-        Args:
-            events: events to wake on. Include ``protocol.stop_event`` to
-                make Stop abort the wait.
-            timeout: seconds before raising ``TimeoutError``;
-                ``float("inf")`` (the default) never times out.
-
-        Returns ``None``. Raises:
-          * ``TimeoutError`` after ``timeout`` seconds with nothing set.
-          * ``AbortError`` if ``protocol.stop_event`` fires.
-
-        Implementation note: like :func:`wait_first`, this polls on a
-        short slice because the stdlib has no multi-event wait.
-        """
-        try:
-            self.protocol.pause()
-
-            deadline = time.monotonic() + timeout
-            poll_interval = 0.01  # 10ms
-            triggered = None
-
-            while True:
-
-                # External resume (e.g. toolbar Resume cleared pause_event)
-                # — treat as "done waiting" and stop immediately.
-                if not self.protocol.pause_event.is_set():
-                    triggered = True
-                    break
-
-                # 1. Check if any of the caller's events has fired.
-                for e in events:
-                    if e.is_set():
-                        triggered = e
-                        break  # Break out of the inner 'for' loop
-
-                # 2. If an event triggered, exit immediately (do NOT sleep).
-                if triggered is not None:
-                    break
-
-                # 3. Calculate time left and check for timeout.
-                remaining_time = deadline - time.monotonic()
-                if remaining_time <= 0.0:
-                    break
-
-                # 4. Sleep briefly before checking again.
-                time.sleep(min(poll_interval, remaining_time))
-
-            if triggered is None:
-                raise TimeoutError(
-                    f"wait_for timed out after {timeout}s"
-                )
-            elif triggered is self.protocol.stop_event:
-                raise AbortError("stop_event fired while waiting")
-
-            else:
-                # Acknowledged (event set) or externally resumed — clear the
-                # pause and notify the UI before handing control back.
-                self.protocol.resume()
-
-
-        except TimeoutError:
-            # Re-raise with a uniform message so the protocol-error dialog
-            # states the wait timed out rather than surfacing the raw poll
-            # internals.
-            raise TimeoutError(
-                f"Timed out after {timeout}s wait"
-            ) from None
-
-    def prompt_gui(self, gui_callable: Callable, *,
-                   timeout: float = float("inf")):
-        """Run ``gui_callable`` on the GUI thread, paused, and return its result.
-
-        The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
-        worker on a bare event (fine for a yes/no prompt whose answer is "the
-        event fired"), this marshals an arbitrary callable onto the GUI thread,
-        pauses the run while it's up, blocks the worker until it returns, and
-        hands its return value back — so a dialog can answer with structured
-        data, not just acknowledge.
-
-        ``gui_callable`` takes no arguments and runs on the GUI thread, so it
-        is safe to build and ``exec()`` a Qt dialog inside it. Whatever it
-        returns becomes this method's return value.
-
-        Headless/test runs have no GUI thread (``qsignals`` is None), so the
-        callable runs inline on the calling thread.
-
-        Args:
-            gui_callable: zero-arg callable invoked on the GUI thread.
-            timeout: seconds before the underlying wait raises TimeoutError;
-                ``float("inf")`` (the default) never times out — Stop is
-                the cancellation path.
-
-        Returns the callable's result, or ``None`` if the wait ended without
-        it finishing (external Resume before the user answered). Raises:
-          * ``AbortError`` if ``protocol.stop_event`` fires.
-          * ``TimeoutError`` after ``timeout`` seconds.
-          * whatever ``gui_callable`` raised (re-raised on the worker thread).
-        """
-        done = threading.Event()
-        box = {}
-
-        def _runner():
-            try:
-                box["result"] = gui_callable()
-            except Exception as exc:           # surfaced on the worker below
-                box["error"] = exc
-            finally:
-                done.set()
-
-        qsignals = self.protocol.qsignals
-        if qsignals is None:
-            _runner()
-        else:
-            # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
-            # singleShot with it as context runs _runner there (Qt builds the
-            # dialog on the right thread). Imported lazily to keep this module
-            # Qt-free for headless executor tests.
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, qsignals, _runner)
-
-        self.wait(events=[done, self.protocol.stop_event], timeout=timeout)
-
-        if "error" in box:
-            raise box["error"]
-        return box.get("result")
+    def prompt_gui(self,*args, **kwargs):
+        self.protocol.prompt_gui(*args, **kwargs)
