@@ -16,6 +16,8 @@ import threading
 import time
 from typing import Callable, Optional
 
+from PySide6.QtCore import QTimer
+
 from pluggable_protocol_tree.execution.exceptions import AbortError
 
 
@@ -110,7 +112,7 @@ class Mailbox:
 
 # --- contexts ---
 
-from traits.api import Any, Bool, Dict, HasTraits, Instance, Str, List
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -153,6 +155,20 @@ class ProtocolContext(HasTraits):
     # iteration, dwells, signals, etc., but does not touch hardware.
     # Mirrors the legacy protocol_grid "Preview Mode" checkbox.
     preview_mode = Bool(False)
+
+    # Aggregated pre-protocol wait (seconds), summed from on_pre_protocol_start
+    # hooks via add_pre_protocol_wait(). The executor waits this long — with a
+    # loading screen — after the pre-start hooks and before the first step.
+    pre_protocol_wait_s = Float(0.0)
+
+    def add_pre_protocol_wait(self, seconds: float) -> None:
+        """Contribute settle/wait time to the pre-protocol wait.
+
+        on_pre_protocol_start hooks call this instead of sleeping themselves;
+        the executor sums all contributions and performs one pausable wait
+        (shown to the user as a loading screen) before steps start.
+        """
+        self.pre_protocol_wait_s += max(0.0, float(seconds))
 
     def pause(self):
         """Pause the run and tell the UI.
@@ -300,16 +316,14 @@ class ProtocolContext(HasTraits):
             finally:
                 done.set()
 
-        qsignals = self.qsignals
-        if qsignals is None:
+        if self.qsignals is None:
             _runner()
         else:
             # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
             # singleShot with it as context runs _runner there (Qt builds the
             # dialog on the right thread). Imported lazily to keep this module
             # Qt-free for headless executor tests.
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, qsignals, _runner)
+            QTimer.singleShot(0, self.qsignals, _runner)
 
         self.wait(events=[done, self.stop_event], timeout=timeout)
 
@@ -321,7 +335,7 @@ class ProtocolContext(HasTraits):
 class StepContext(HasTraits):
     """Spans one row's execution.
 
-    Hooks call ``wait_for(topic, ...)`` on this. Mailboxes are opened by
+    Hooks call ``wait_for(topic, ...)`` on this. Mailboxes are opened byWhy
     the executor before any hook runs (so a hook can publish a request
     and immediately wait for the ack without losing fast replies).
     """
