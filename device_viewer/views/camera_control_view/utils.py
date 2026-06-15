@@ -3,7 +3,7 @@ from pathlib import Path
 import dramatiq
 from PySide6.QtCore import QUrl
 
-from ...models.media_capture_model import MediaType, MediaCaptureMessageModel
+from ...models.media import MediaType, MediaCaptureMessageModel
 from ...consts import MEDIA_CAPTURES_KEY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager

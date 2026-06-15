@@ -5,7 +5,7 @@ from typing import Dict, Optional
 import pandas as pd
 from PySide6.QtCore import QTimer
 
-from device_viewer.models.media_capture_model import MediaCaptureMessageModel, MediaType
+from device_viewer.models.media import MediaCaptureMessageModel, MediaType
 from microdrop_utils.datetime_helpers import (
     TimestampedMessage,
     get_current_utc_datetime,

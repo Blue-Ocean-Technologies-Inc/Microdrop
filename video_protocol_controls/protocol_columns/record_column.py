@@ -26,15 +26,19 @@ import json
 
 from traits.api import Bool
 
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import DEVICE_VIEWER_SCREEN_RECORDING
+from device_viewer.consts import DEVICE_VIEWER_SCREEN_RECORDING, DEVICE_VIEWER_RECORDING_ACTIVE_KEY
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
 
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+app_globals = get_microdrop_redis_globals_manager()
 
 RECORDING_ACTIVE_KEY = "video_protocol_controls.record_active"
 
@@ -69,6 +73,44 @@ class RecordHandler(BaseColumnHandler):
     """
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
+
+    def _check_video_recording_and_show_dialog(self) -> bool:
+        """Check if video recording is active and show warning dialog.
+
+        Returns True if protocol should proceed, False to cancel.
+        """
+        if not app_globals.get(DEVICE_VIEWER_RECORDING_ACTIVE_KEY, False):
+            return True
+
+        result = confirm(
+            None,
+            "A video recording session is currently active.",
+            title="Video Recording In Progress",
+            informative="Starting the protocol will terminate the current recording session "
+                        "and new sessions will be created as dictated by the protocol steps.<br><br>"
+                        "Do you want to continue?",
+            yes_label="Continue",
+            no_label="Cancel",
+        )
+        if result == YES:
+            message_data = {"action": "stop"}
+            publish_message(topic=DEVICE_VIEWER_SCREEN_RECORDING, message=json.dumps(message_data))
+            return True
+        return False
+
+    def on_pre_protocol_start(self, ctx):
+        """Once per run, before realtime-mode activation and logging start
+        (priority 10 — the earliest pre-protocol bucket). If a recording is
+        active and the operator cancels, stop the run here so the
+        lower-priority realtime/logging hooks never fire.
+        """
+        proceed = ctx.prompt_gui(
+            self._check_video_recording_and_show_dialog
+        )
+
+        if not proceed:
+            ctx.stop_event.set()
+
 
     def on_pre_step(self, row, ctx):
         """Publish recording start/stop only when the record flag flips.

@@ -3,7 +3,7 @@ import dramatiq
 from traits.api import HasTraits, Str, Instance
 from PySide6.QtCore import Signal, QObject
 
-from device_viewer.models.media_capture_model import MediaCaptureMessageModel
+from device_viewer.models.media import MediaCaptureMessageModel, RecordingActiveState
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor
@@ -12,10 +12,10 @@ from dropbot_controller.consts import (DROPBOT_DISCONNECTED, CHIP_INSERTED,
                                        DROPBOT_CONNECTED, DROPLETS_DETECTED,
                                        CAPACITANCE_UPDATED)
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
-from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED
+from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED, DEVICE_VIEWER_RECORDING_STATE
 from protocol_grid.consts import (DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_LISTENER_NAME,
                                   CALIBRATION_DATA,
-                                  DEVICE_VIEWER_RECORDING_STATE, ROUTES_EXECUTING,
+                                  ROUTES_EXECUTING,
                                   VOLTAGE_FREQUENCY_RANGE_CHANGED, STEP_PARAMS_COMMIT)
 from protocol_grid.models.step_params_commit import StepParamsCommitMessage
 
@@ -97,7 +97,7 @@ class MessageListener(HasTraits):
                 self.signal_emitter.advanced_mode_changed.emit(message.casefold() == "true")
 
             elif topic == DEVICE_VIEWER_RECORDING_STATE:
-                is_recording = message.casefold() == "true"
+                is_recording = RecordingActiveState.model_validate_json(message).state
                 logger.info(f"Video recording state changed: {is_recording}")
                 self.signal_emitter.video_recording_state_changed.emit(is_recording)
 

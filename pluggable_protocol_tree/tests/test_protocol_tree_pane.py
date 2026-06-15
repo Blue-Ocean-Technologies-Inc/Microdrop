@@ -835,6 +835,7 @@ def test_pane_terminated_stops_logging(qapp):
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
     pane = ProtocolTreePane([make_type_column()])
     pane.logging_controller = MagicMock()
+    pane.logging_controller.has_data.return_value = True   # a step ran
     pane._on_protocol_terminated()
     pane.logging_controller.stop_logging.assert_called_once_with(
         generate_report=True
@@ -984,6 +985,9 @@ def _pane_for_flow(monkeypatch, *, with_exp):
         kwargs["experiment_manager"].auto_save_protocol.return_value = None
     pane = ptp.ProtocolTreePane([make_name_column()], **kwargs)
     pane.logging_controller = MagicMock()
+    # The run executed steps, so the report is offered/generated; has_data()
+    # gates that (a run stopped before any step logs nothing -> no report).
+    pane.logging_controller.has_data.return_value = True
     pane._current_run_preview_mode = False
     pane._repeats_completed = 2
     return ptp, pane

@@ -9,7 +9,7 @@ from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 
-from traits.api import HasTraits, provides, Bool, Str
+from traits.api import HasTraits, provides, Bool, Str, observe
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -17,7 +17,7 @@ from .interfaces.i_peripheral_controller_base import IPeripheralControllerBase
 from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from .preferences import PeripheralPreferences
 
-from .consts import DEVICE_NAME, DISCONNECTED, CONNECTED, START_DEVICE_MONITORING, PKG
+from .consts import DEVICE_NAME, DISCONNECTED, CONNECTED, START_DEVICE_MONITORING, PKG, CONNECTION_STATE_KEY
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__, level="INFO")
@@ -63,6 +63,14 @@ class PeripheralControllerBase(HasTraits):
             finally:
                 self.proxy = None
                 self.connection_active = False
+
+    @observe("connection_active")
+    def _mirror_connection_state_to_app_globals(self, event):
+        """Mirror the connection state to app_globals so any plugin can read
+        it synchronously without subscribing to the connected/disconnected
+        signals."""
+        app_globals[CONNECTION_STATE_KEY] = event.new
+        logger.info(f"App Globals Update: {CONNECTION_STATE_KEY}: {event.new}")
 
     def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """

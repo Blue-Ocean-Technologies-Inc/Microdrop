@@ -27,6 +27,12 @@ UPDATE_CONFIG = f"{DEVICE_NAME}/requests/update_config"
 PROTOCOL_SET_MAGNET = f"{DEVICE_NAME}/requests/protocol_set_magnet"
 MAGNET_APPLIED = f"{DEVICE_NAME}/signals/magnet_applied"
 
+# app_globals key mirroring this device's connection state (the controller
+# writes it whenever connection_active changes); consumers read it instead of
+# tracking the connected/disconnected signals themselves. Keyed by device name
+# so distinct peripherals don't collide.
+CONNECTION_STATE_KEY = f"{DEVICE_NAME}.connection_active"
+
 # Error Topics
 ERROR = f'{DEVICE_NAME}/error'
 

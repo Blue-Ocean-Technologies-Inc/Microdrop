@@ -27,7 +27,7 @@ class AdvancedModeAction(Action):
         app_globals["microdrop.advanced_mode"] = self.checked
         logger.critical("Microdrop Running in Advanced Mode!" if self.checked else "Microdrop Advanced Mode is Off.")
 
-        publish_message.send(
+        publish_message(
             topic=ADVANCED_MODE_CHANGE,
             message=str(self.checked),
         )

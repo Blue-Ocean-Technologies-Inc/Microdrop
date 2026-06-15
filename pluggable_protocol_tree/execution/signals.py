@@ -19,6 +19,11 @@ class ExecutorSignals(QObject):
     protocol_finished  = Signal()           # ran to completion
     protocol_aborted   = Signal()           # user pressed Stop
     protocol_error     = Signal(str)        # exception raised in a hook
+    # Pre-protocol settle/wait phase: emitted with the total wait in ms once
+    # the on_pre_protocol_start hooks' contributions are summed, then again
+    # (parameterless) when the wait ends. Drives the loading screen.
+    protocol_wait_started  = Signal(int)    # total wait, milliseconds
+    protocol_wait_finished = Signal()
 
     # Per-step
     step_started       = Signal(object)     # row
@@ -28,6 +33,11 @@ class ExecutorSignals(QObject):
     # Empty tuple means "no repeating ancestor". Emitted just before
     # each step_started so UI labels can update in lockstep.
     step_repetition    = Signal(object)
+    # Whole-protocol repetition progress: (completed, total). Emitted by the
+    # executor after each repetition finishes so the UI can update its
+    # "rep x/y" label — the executor owns the repeat loop, the view only
+    # reflects it.
+    protocol_repetition_finished = Signal(int, int)
     # Per-phase: (phase_index_1based, phase_total, phase_duration_s).
     # RoutesHandler emits before publishing each phase so the UI can
     # update Phase x/y and reset its elapsed-time clock without waiting

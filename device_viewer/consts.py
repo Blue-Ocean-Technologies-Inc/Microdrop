@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from device_viewer.models.media import RecordingStatePublisher, RecordingStateModel
 from dropbot_controller.consts import (
     CHIP_INSERTED,
     CAPACITANCE_UPDATED,
@@ -10,6 +11,17 @@ from dropbot_controller.consts import (
     DROPBOT_CONNECTED,
     SHORTS_DETECTED, HALTED,
 )
+
+# ---------------------------------------------------------------------------
+# Package identity
+# ---------------------------------------------------------------------------
+PKG = '.'.join(__name__.split('.')[:-1])
+PKG_name = PKG.title().replace("_", " ")
+listener_name = f"{PKG}_listener"
+
+# ---------------------------------------------------------------------------
+# Pub/sub topics
+# ---------------------------------------------------------------------------
 # Device-viewer topics — canonical home (re-exported by protocol_grid.consts for back-compat).
 # Once protocol_grid is deleted in PPT-9, these stay; the re-exports go away.
 DEVICE_VIEWER_STATE_CHANGED    = "ui/device_viewer/state_changed"
@@ -17,8 +29,10 @@ DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
+DEVICE_VIEWER_RECORDING_STATE  = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 CALIBRATION_DATA               = "ui/calibration_data"
+
 # Sidebar route-executor execution params -> the selected protocol step.
 # Published by the DV commit button; consumed by the active protocol widget
 # (pluggable_protocol_tree sync controller; protocol_grid keeps its own
@@ -48,17 +62,9 @@ PROTOCOL_RUNNING               = "microdrop/protocol_running"
 # same handler. Underscore-joined keeps dispatch routed to _on_protocol_tree_display_state_triggered.
 PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree_display_state"
 
-# This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
-PKG_name = PKG.title().replace("_", " ")
-
-listener_name = f"{PKG}_listener"
-
-device_modified_tag = " (modified)"
-
-# Topics actor declared by plugin subscribes to
+# Topics the plugin's actor subscribes to.
 ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [
+    listener_name: [
         CHIP_INSERTED,
         REALTIME_MODE_UPDATED,
         PROTOCOL_GRID_DISPLAY_STATE,
@@ -81,23 +87,41 @@ ACTOR_TOPIC_DICT = {
     ]
 }
 
-# App globals declared to APP_GLOBALS_REDIS_HASH with redis client
+# ---------------------------------------------------------------------------
+# Publishers
+# ---------------------------------------------------------------------------
+device_viewer_recording_state_publisher = RecordingStatePublisher(topic=DEVICE_VIEWER_RECORDING_STATE)
+
+# ---------------------------------------------------------------------------
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+# ---------------------------------------------------------------------------
 CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map" # channel areas
 FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
 LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
 DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
 MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
+DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live video-recording state
+
+# Mirrors the live recording state to app_globals (see DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
+recording_state_model = RecordingStateModel(globals_key=DEVICE_VIEWER_RECORDING_ACTIVE_KEY)
 
 APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
                     LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
+# ---------------------------------------------------------------------------
 # GUI configuration
+# ---------------------------------------------------------------------------
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 
 # Default electrode channel count; configurable in Device Viewer preferences.
 NUMBER_OF_CHANNELS = 120
+
+# device view zoom sensitivity
+ZOOM_SENSITIVITY = 5
+# device view margin when auto fit
+AUTO_FIT_MARGIN_SCALE = 95
 
 # ---------------------------------------------------------------------------
 # Gamepad defaults (configurable in Device Viewer preferences). Env vars of the
@@ -118,14 +142,13 @@ GAMEPAD_DEBOUNCE_FIND_S = 2.0         # find-liquid button debounce
 GAMEPAD_DEBOUNCE_REALTIME_S = 0.4     # realtime-toggle button debounce
 GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation threshold
 
-## device vew zoom sensitivity
-ZOOM_SENSITIVITY = 5
-
-## device view margin when auto fit
-AUTO_FIT_MARGIN_SCALE = 95
-
-# main view config
+# ---------------------------------------------------------------------------
+# Resources & UI text
+# ---------------------------------------------------------------------------
+# main view device layout
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"
+
+device_modified_tag = " (modified)"
 
 # statusbar messages
 camera_place_status_message_text = "Select 4 points on image"

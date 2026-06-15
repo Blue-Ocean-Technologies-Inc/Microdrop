@@ -49,7 +49,7 @@ Frontend handlers (``DramatiqControllerBase``):
 Backend handlers (``DropbotControllerBase``):
     Methods named ``on_{last_topic_segment}_request()`` or ``on_{last_topic_segment}_signal()``.
 """
-
+import device_viewer.consts
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -172,7 +172,7 @@ class UITopics:
     DEVICE_VIEWER_SCREEN_RECORDING  = _device_viewer.DEVICE_VIEWER_SCREEN_RECORDING
     DEVICE_VIEWER_CAMERA_ACTIVE     = _device_viewer.DEVICE_VIEWER_CAMERA_ACTIVE
     DEVICE_VIEWER_MEDIA_CAPTURED    = _device_viewer.DEVICE_VIEWER_MEDIA_CAPTURED
-    DEVICE_VIEWER_RECORDING_STATE   = _protocol.DEVICE_VIEWER_RECORDING_STATE
+    DEVICE_VIEWER_RECORDING_STATE   = device_viewer.consts.DEVICE_VIEWER_RECORDING_STATE
     ROUTES_EXECUTING                = _protocol.ROUTES_EXECUTING
     VOLTAGE_FREQUENCY_RANGE_CHANGED = _prefs_ui.VOLTAGE_FREQUENCY_RANGE_CHANGED
 

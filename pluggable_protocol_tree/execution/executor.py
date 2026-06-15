@@ -25,9 +25,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from traits.api import (
-    Any, Bool, Callable as CallableTrait, HasTraits, Instance, Tuple, Union,
+    Any, Bool, Callable as CallableTrait, HasTraits, Instance, Int, List,
+    Tuple, Union,
 )
 
+from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import (
     AbortError, StepExecutionError,
@@ -44,12 +46,24 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
+# Brief pause between whole-protocol repetitions so the UI repaint/clear
+# between reps lands before the next one starts (was the view's
+# NEXT_REP_RESTART_DELAY_MS before repeats moved into the executor).
+INTER_REP_DELAY_S = 0.05
+
 
 class ProtocolExecutor(HasTraits):
     """One executor per RowManager. Reused across runs."""
 
     row_manager = Instance(RowManager)
     qsignals    = Instance(ExecutorSignals)
+
+    # Execution-only handlers (no column/view) whose hooks run alongside the
+    # column handlers, ordered by the same priority buckets. Used for
+    # once-per-run lifecycle policy (realtime-mode prep, logging start/stop)
+    # via the on_pre_protocol_start / on_post_protocol_end hooks. The
+    # composition root assigns these; the executor stays generic.
+    lifecycle_handlers = List(Instance(IColumnHandler))
 
     pause_event = Instance(PauseEvent)
     stop_event  = Instance(threading.Event)
@@ -67,6 +81,10 @@ class ProtocolExecutor(HasTraits):
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
     _preview_mode = Bool(False)
+    # Whole-protocol repetitions for the next run. The executor owns the
+    # repeat loop: on_pre_protocol_start / on_post_protocol_end bracket all
+    # repetitions, while on_protocol_start / on_protocol_end fire per rep.
+    _repeats = Int(1)
     # Injectable for tests (e.g. a synchronous executor for determinism).
     bucket_pool_factory = CallableTrait
 
@@ -112,6 +130,7 @@ class ProtocolExecutor(HasTraits):
         self,
         start_step_path: Optional[tuple] = None,
         preview_mode: bool = False,
+        repeats: int = 1,
     ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
         a second call while already running is ignored.
@@ -127,6 +146,11 @@ class ProtocolExecutor(HasTraits):
         and column logic all run normally — only the hardware-touching
         side effects are gated. Mirrors the legacy protocol_grid
         "Preview Mode" checkbox semantics.
+
+        ``repeats`` is the number of whole-protocol repetitions; the run
+        loops the step sequence that many times inside a single run(),
+        firing on_pre_protocol_start / on_post_protocol_end once around
+        the whole thing.
         """
         if self._thread is not None and self._thread.is_alive():
             return
@@ -137,6 +161,7 @@ class ProtocolExecutor(HasTraits):
             tuple(start_step_path) if start_step_path is not None else None
         )
         self._preview_mode = bool(preview_mode)
+        self._repeats = max(1, int(repeats))
         self._thread = threading.Thread(
             target=self.run,
             name="pluggable_protocol_tree_executor",
@@ -176,6 +201,10 @@ class ProtocolExecutor(HasTraits):
         """Main loop. Runs synchronously when called directly (tests),
         or on its worker thread when entered via start()."""
         cols = list(self.row_manager.columns)
+        # Column handlers + execution-only lifecycle handlers, ordered
+        # together by priority in _run_hooks. _build_step_ctx stays
+        # column-only (lifecycle handlers declare no wait_for_topics).
+        handlers = [c.handler for c in cols] + list(self.lifecycle_handlers)
         proto_ctx = ProtocolContext(
             columns=cols,
             stop_event=self.stop_event,
@@ -192,77 +221,73 @@ class ProtocolExecutor(HasTraits):
             # Hide first-publish latency (Redis connect ~2s) from step 1's
             # observed duration by warming the broker connection upfront.
             warm_broker_connection()
-            self._run_hooks("on_protocol_start", cols, proto_ctx, row=None)
-            self.qsignals.protocol_started.emit()
-            logger.info("Protocol started")
+            # Once per run, before any repetition (realtime-mode prep,
+            # logging start, ...) — fires before the per-rep on_protocol_start.
+            self._run_hooks("on_pre_protocol_start", handlers, proto_ctx, row=None)
 
-            step_index = 0
-            # Pop into a local — once we've found the start path, the
-            # rest of the loop runs without the per-frame check.
-            skip_until = self._start_step_path
-            for row, rep_chain in self.row_manager.iter_execution_frames():
+            # Pre-protocol wait: hooks contributed settle seconds via
+            # ctx.add_pre_protocol_wait(); wait the total once here (shown as a
+            # loading screen), pausable and stop-aware, before the first step.
+            total_wait = proto_ctx.pre_protocol_wait_s
+            if total_wait > 0 and not self.stop_event.is_set():
+                self.qsignals.protocol_wait_started.emit(int(total_wait * 1000))
+                self._wait_pre_protocol(total_wait)
+                self.qsignals.protocol_wait_finished.emit()
+
+            # Don't announce "started" if the run was already stopped during
+            # the pre-protocol phase (e.g. Stop pressed on the loading screen):
+            # that would publish PROTOCOL_RUNNING True for a run that never ran
+            # and race the terminal's False. The terminal signal still fires.
+            if not self.stop_event.is_set():
+                self.qsignals.protocol_started.emit()
+                logger.info("Protocol started")
+
+            for rep in range(self._repeats):
                 if self.stop_event.is_set():
                     break
-                if skip_until is not None:
-                    if tuple(row.path) != skip_until:
-                        continue
-                    skip_until = None
-                if self.pause_event.is_set():
-                    logger.info(f"Protocol paused at step {step_index + 1}")
-                    # Emitted here so a hook setting pause_event still
-                    # surfaces to the UI. The toolbar's executor.pause()
-                    # also emits — slots that toggle UI state on each
-                    # signal must be idempotent. Worth promoting to a
-                    # single emission point if this proves brittle.
-                    self.qsignals.protocol_paused.emit()
-                    self.pause_event.wait_cleared()
-                    if self.stop_event.is_set():
-                        break
-                    self.qsignals.protocol_resumed.emit()
-                    logger.info("Protocol resumed")
+                if self._repeats > 1:
+                    logger.info(f"Protocol repetition {rep + 1}/{self._repeats}")
+                # Per repetition. on_protocol_start / on_protocol_end keep
+                # their per-rep semantics; on_protocol_end runs even on stop
+                # as best-effort cleanup.
+                self._run_hooks("on_protocol_start", handlers, proto_ctx, row=None)
+                # "Play from selected step" applies to the first repetition
+                # only; later reps run the full sequence.
+                skip_until = self._start_step_path if rep == 0 else None
+                self._run_steps(handlers, cols, proto_ctx, skip_until)
+                self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
+                self.qsignals.protocol_repetition_finished.emit(
+                    rep + 1, self._repeats)
+                if rep + 1 < self._repeats and not self.stop_event.is_set():
+                    self._interruptible_delay(INTER_REP_DELAY_S)
 
-                step_index += 1
-                step_started_at = time.monotonic()
-                rep_str = (
-                    " | " + ", ".join(f"rep {i}/{n} of {name!r}"
-                                      for name, i, n in rep_chain)
-                    if rep_chain else ""
-                )
-                logger.info(
-                    f"Step {step_index} started: {row.name!r} "
-                    f"(path {row.dotted_path()}, "
-                    f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
-                )
+            # Once per run, after the last repetition (realtime-mode restore,
+            # logging stop, ...).
+            self._run_hooks("on_post_protocol_end", handlers, proto_ctx, row=None)
 
-                step_ctx = self._build_step_ctx(row, cols, proto_ctx)
-                set_active_step(step_ctx)
-                try:
-                    # Rep info first so UI labels are populated before the
-                    # row-highlight fires from step_started.
-                    self.qsignals.step_repetition.emit(rep_chain)
-                    self.qsignals.step_started.emit(row)
-                    self._run_hooks("on_pre_step",  cols, step_ctx, row)
-                    self._run_hooks("on_step",      cols, step_ctx, row)
-                    self._run_hooks("on_post_step", cols, step_ctx, row)
-                    self.qsignals.step_finished.emit(row)
-                finally:
-                    clear_active_step()
-
-                logger.info(
-                    f"Step {step_index} finished: {row.name!r} in "
-                    f"{time.monotonic() - step_started_at:.2f}s"
-                )
-
-            # on_protocol_end runs even on stop, as best-effort cleanup.
-            self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
-
+        except AbortError:
+            # A Stop that surfaced as AbortError — e.g. the operator pressed
+            # Stop while a worker-thread hook was blocked in ctx.wait_for /
+            # ctx.prompt_gui (the pre-protocol recording / keep-realtime
+            # dialogs). This is a clean cancellation, NOT a failure: leave
+            # _error unset so _emit_terminal_signal routes to protocol_aborted
+            # rather than protocol_error.
+            logger.info("Protocol aborted (stop during a hook)")
+            self.stop_event.set()
+            try:
+                self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
+                self._run_hooks("on_post_protocol_end", handlers, proto_ctx, row=None)
+            except Exception:
+                logger.exception("protocol-end hooks raised during abort cleanup")
         except Exception as e:
             self._error = e
             logger.exception("Protocol error")
             try:
-                self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
+                # Best-effort teardown for the current repetition and the run.
+                self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
+                self._run_hooks("on_post_protocol_end", handlers, proto_ctx, row=None)
             except Exception:
-                logger.exception("on_protocol_end raised during error cleanup")
+                logger.exception("protocol-end hooks raised during error cleanup")
 
         finally:
             self._emit_terminal_signal()
@@ -280,6 +305,96 @@ class ProtocolExecutor(HasTraits):
             # sure a previous run has completed before starting a new one.
 
     # ------- helpers -------
+
+    def _run_steps(self, handlers, cols, proto_ctx, skip_until) -> None:
+        """Run one repetition: walk execution frames in order, firing the
+        per-step hooks. Honors stop_event (short-circuit) and pause_event
+        (block at step boundaries). ``skip_until`` (a row.path tuple or
+        None) skips frames until that path is reached, then proceeds — used
+        for "play from selected step" on the first repetition."""
+        step_index = 0
+        for row, rep_chain in self.row_manager.iter_execution_frames():
+            if self.stop_event.is_set():
+                break
+            if skip_until is not None:
+                if tuple(row.path) != skip_until:
+                    continue
+                skip_until = None
+            if self.pause_event.is_set():
+                logger.info(f"Protocol paused at step {step_index + 1}")
+                # Emitted here so a hook setting pause_event still surfaces
+                # to the UI. The toolbar's executor.pause() also emits —
+                # slots that toggle UI state on each signal must be
+                # idempotent.
+                self.qsignals.protocol_paused.emit()
+                self.pause_event.wait_cleared()
+                if self.stop_event.is_set():
+                    break
+                self.qsignals.protocol_resumed.emit()
+                logger.info("Protocol resumed")
+
+            step_index += 1
+            step_started_at = time.monotonic()
+            rep_str = (
+                " | " + ", ".join(f"rep {i}/{n} of {name!r}"
+                                  for name, i, n in rep_chain)
+                if rep_chain else ""
+            )
+            logger.info(
+                f"Step {step_index} started: {row.name!r} "
+                f"(path {row.dotted_path()}, "
+                f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
+            )
+
+            step_ctx = self._build_step_ctx(row, cols, proto_ctx)
+            set_active_step(step_ctx)
+            try:
+                # Rep info first so UI labels are populated before the
+                # row-highlight fires from step_started.
+                self.qsignals.step_repetition.emit(rep_chain)
+                self.qsignals.step_started.emit(row)
+                self._run_hooks("on_pre_step",  handlers, step_ctx, row)
+                self._run_hooks("on_step",      handlers, step_ctx, row)
+                self._run_hooks("on_post_step", handlers, step_ctx, row)
+                self.qsignals.step_finished.emit(row)
+            finally:
+                clear_active_step()
+
+            logger.info(
+                f"Step {step_index} finished: {row.name!r} in "
+                f"{time.monotonic() - step_started_at:.2f}s"
+            )
+
+    def _interruptible_delay(self, seconds: float) -> None:
+        """Sleep up to ``seconds``, returning early if stop_event fires."""
+        deadline = time.monotonic() + seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self.stop_event.is_set():
+                return
+            time.sleep(min(0.02, remaining))
+
+    def _wait_pre_protocol(self, seconds: float) -> None:
+        """Block for ``seconds`` before the first step — pause- and stop-aware.
+
+        While ``pause_event`` is set, the remaining time is frozen (the
+        deadline is rebased on resume so paused time doesn't count), keeping
+        the wait in lockstep with the paused loading screen. Returns early on
+        ``stop_event`` (no raise — the rep loop then aborts cleanly via its
+        own stop check)."""
+        deadline = time.monotonic() + seconds
+        while not self.stop_event.is_set():
+            if self.pause_event.is_set():
+                remaining = deadline - time.monotonic()
+                self.pause_event.wait_cleared()
+                if self.stop_event.is_set():
+                    return
+                deadline = time.monotonic() + max(0.0, remaining)
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.05, remaining))
 
     def _emit_terminal_signal(self) -> None:
         """Single source of truth for which lifecycle-end signal fires.
@@ -328,12 +443,28 @@ class ProtocolExecutor(HasTraits):
                 step_ctx.open_mailbox(topic)
         return step_ctx
 
-    def _run_hooks(self, hook_name, cols, ctx, row) -> None:
+    # Protocol-level hooks take (ctx); per-step hooks take (row, ctx).
+    _PROTOCOL_HOOKS = (
+        "on_pre_protocol_start", "on_protocol_start",
+        "on_protocol_end", "on_post_protocol_end",
+    )
+    # Teardown hooks always run every bucket (best-effort cleanup), even once
+    # stop_event is set. Forward hooks instead stop launching lower-priority
+    # buckets the moment a hook sets stop_event — so a high-priority hook (e.g.
+    # the recording-active dialog) can cancel the run before realtime-mode /
+    # logging in lower buckets fire.
+    _TEARDOWN_HOOKS = ("on_protocol_end", "on_post_protocol_end")
+
+    def _run_hooks(self, hook_name, handlers, ctx, row) -> None:
         """Priority-bucket fan-out.
 
         Lower priority runs first. Equal priorities run in parallel
         (one ThreadPoolExecutor per bucket; the executor returns
         only when every future in the bucket has resolved).
+
+        Operates on handlers directly (column handlers + lifecycle
+        handlers) so execution-only lifecycle handlers participate in
+        the same priority ordering as columns.
 
         The first exception in any bucket wins: stop_event is set so
         sibling hooks waiting on ctx.wait_for() return promptly via
@@ -341,17 +472,22 @@ class ProtocolExecutor(HasTraits):
         re-raised out of this method.
         """
         buckets = defaultdict(list)
-        for col in cols:
-            buckets[col.handler.priority].append(col)
+        for handler in handlers:
+            buckets[handler.priority].append(handler)
 
+        teardown = hook_name in self._TEARDOWN_HOOKS
         for priority in sorted(buckets):
-            bucket_cols = buckets[priority]
+            # A forward hook that set stop_event in an earlier bucket cancels
+            # the rest of this phase; teardown hooks always run every bucket.
+            if not teardown and self.stop_event.is_set():
+                break
+            bucket = buckets[priority]
             with self.bucket_pool_factory(
-                max_workers=max(1, len(bucket_cols)),
+                max_workers=max(1, len(bucket)),
             ) as pool:
                 futures = {
-                    pool.submit(self._invoke_hook, col, hook_name, ctx, row): col
-                    for col in bucket_cols
+                    pool.submit(self._invoke_hook, h, hook_name, ctx, row): h
+                    for h in bucket
                 }
                 first_exc = None
                 for f in as_completed(futures):
@@ -365,17 +501,17 @@ class ProtocolExecutor(HasTraits):
                 if first_exc is not None:
                     raise first_exc
 
-    def _invoke_hook(self, col, hook_name, ctx, row) -> None:
+    def _invoke_hook(self, handler, hook_name, ctx, row) -> None:
         """Dispatch to the handler's named hook with the right signature.
 
         Per-step hooks take (row, ctx); protocol-level take (ctx).
         Default handlers from BaseColumnHandler are no-ops, so calling
-        them on every column is safe (and cheaper than introspecting
-        which columns override).
+        them on every handler is safe (and cheaper than introspecting
+        which handlers override).
         """
-        fn = getattr(col.handler, hook_name)
+        fn = getattr(handler, hook_name)
         try:
-            if hook_name in ("on_protocol_start", "on_protocol_end"):
+            if hook_name in self._PROTOCOL_HOOKS:
                 fn(ctx)
             else:
                 fn(row, ctx)
@@ -385,7 +521,7 @@ class ProtocolExecutor(HasTraits):
             # aborted/terminal path, not an error dialog.
             raise
         except Exception as e:
-            # Annotate real failures with the step + column so the
+            # Annotate real failures with the step + handler so the
             # protocol-error dialog can report where and why, not just the
             # bare exception text. Chain so the full traceback survives.
-            raise StepExecutionError(col, hook_name, row, e) from e
+            raise StepExecutionError(handler, hook_name, row, e) from e

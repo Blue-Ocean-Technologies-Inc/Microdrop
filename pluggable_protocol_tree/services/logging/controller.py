@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
 
 from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, MEDIA_CAPTURES_KEY
-from device_viewer.models.media_capture_model import MediaCaptureMessageModel
+from device_viewer.models.media import MediaCaptureMessageModel
 from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
@@ -82,6 +82,9 @@ class ProtocolLoggingController(HasTraits):
     settling_provider = Callable
     flush_scheduler = Callable
     completion_callback = Callable          # Optional — None when not provided.
+    # Optional — notified with the error message when a report the user asked
+    # for could not be generated, so the failure isn't silent. None = not wired.
+    report_failure_callback = Callable
     # Per-run state.
     _ingestion = Instance(LoggingIngestion)
     _device_context = Any
@@ -107,6 +110,14 @@ class ProtocolLoggingController(HasTraits):
         # once at its single terminal point — keeping all repeats in one
         # log instead of stopping after the first.
         qsignals.step_started.connect(self._on_step_started)
+
+    def has_data(self) -> bool:
+        """True when the active run logged something worth reporting — i.e. at
+        least one step started. A run stopped before any step ran (e.g. Stop on
+        the loading screen) has nothing meaningful, so the report can be
+        skipped. ``_step_idx`` counts step_started signals and survives
+        abort/error."""
+        return self._ingestion is not None and self._step_idx > 0
 
     def log_metadata(self, mapping: dict) -> None:
         """Forward extra report metadata to the active run's ingestion.
@@ -202,6 +213,7 @@ class ProtocolLoggingController(HasTraits):
         # Captures section sees this run's videos/images.
         self._drain_media_captures()
         report_path = None
+        report_error = None
         try:
             json_path, csv_path = LoggingPersistence.write_data_files(
                 self._device_context.experiment_directory, self._start_time,
@@ -219,6 +231,7 @@ class ProtocolLoggingController(HasTraits):
         except Exception as e:
             logger.error(f"protocol logging flush failed: {e}")
             report_path = None
+            report_error = str(e)
         finally:
             self._ingestion = None
         # Notify the GUI (report saved / skipped). Outside the try so a
@@ -228,6 +241,14 @@ class ProtocolLoggingController(HasTraits):
                 self.completion_callback(report_path)
             except Exception as e:
                 logger.error(f"logging completion callback failed: {e}")
+        # If the user asked for a report and it failed, surface it instead of
+        # leaving them with the same silent no-op as an intentional skip.
+        if (report_error is not None and self._generate_report
+                and self.report_failure_callback is not None):
+            try:
+                self.report_failure_callback(report_error)
+            except Exception as e:
+                logger.error(f"logging failure callback failed: {e}")
 
     # --- listener forwards (may run on a worker thread) ---
     def on_capacitance(self, message) -> None:
