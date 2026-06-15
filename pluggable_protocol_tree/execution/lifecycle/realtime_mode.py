@@ -16,8 +16,6 @@ on_pre_protocol_start / on_post_protocol_end hooks so the prompt + settle
 happen once per run rather than once per repetition.
 """
 
-import time
-
 from pluggable_protocol_tree.models.column import BaseColumnHandler
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 
@@ -83,18 +81,10 @@ class RealtimeModeHandler(BaseColumnHandler):
 
         ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY] = keep
 
-        # Let the hardware settle before the first step. NOT ctx.wait(): that
-        # pauses the run (emits paused/resumed) and treats reaching its
-        # timeout as a TimeoutError — both wrong for a fixed delay. Just block
-        # briefly, returning early on Stop so the executor aborts cleanly via
-        # its own stop_event check (no AbortError, which would route to
-        # protocol_error).
-        deadline = time.monotonic() + float(prefs.realtime_mode_settling_time_s)
-        while not ctx.stop_event.is_set():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(0.05, remaining))
+        # Contribute the hardware settle time to the executor's aggregated
+        # pre-protocol wait (the executor performs one pausable wait, shown as
+        # a loading screen, before the first step) instead of sleeping here.
+        ctx.add_pre_protocol_wait(float(prefs.realtime_mode_settling_time_s))
 
     def on_post_protocol_end(self, ctx):
         # If on_pre_protocol_start never ran — preview, or the run was
