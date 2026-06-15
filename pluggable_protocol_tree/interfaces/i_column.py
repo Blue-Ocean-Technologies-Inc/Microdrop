@@ -108,6 +108,11 @@ class IColumnHandler(Interface):
     def on_interact(self, row, model, value):
         """Called when the UI commits an edit. Default: model.set_value."""
 
+    def on_pre_protocol_start(self, ctx):
+        """Once per run, before the first repetition (and before any
+        on_protocol_start). For once-per-run setup that must bracket all
+        repetitions (e.g. realtime-mode prep, logging start)."""
+
     def on_protocol_start(self, ctx):
         pass
 
@@ -122,6 +127,11 @@ class IColumnHandler(Interface):
 
     def on_protocol_end(self, ctx):
         pass
+
+    def on_post_protocol_end(self, ctx):
+        """Once per run, after the last repetition (and after every
+        on_protocol_end). For once-per-run teardown (e.g. realtime-mode
+        restore, logging stop)."""
 
 
 class IColumn(Interface):

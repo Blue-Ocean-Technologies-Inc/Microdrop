@@ -98,7 +98,12 @@ class BaseColumnHandler(HasTraits):
         """Default edit behaviour: write through to the model."""
         return model.set_value(row, value)
 
-    # The five execution hooks — all no-ops by default.
+    # The execution hooks — all no-ops by default. on_pre_protocol_start /
+    # on_post_protocol_end fire once per run (bracketing all repetitions);
+    # on_protocol_start / on_protocol_end fire once per repetition.
+    def on_pre_protocol_start(self, ctx):
+        pass
+
     def on_protocol_start(self, ctx):
         pass
 
@@ -112,6 +117,9 @@ class BaseColumnHandler(HasTraits):
         pass
 
     def on_protocol_end(self, ctx):
+        pass
+
+    def on_post_protocol_end(self, ctx):
         pass
 
 
