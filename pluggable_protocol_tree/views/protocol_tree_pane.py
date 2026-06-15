@@ -20,7 +20,6 @@ import time
 from pathlib import Path
 import html as _html
 
-from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
 )
@@ -41,8 +40,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING, CHANNEL_AREAS_KEY
-from dropbot_controller.consts import REALTIME_MODE_KEY, SET_REALTIME_MODE
+from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
     ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
@@ -64,6 +62,10 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
+from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
+    RealtimeModeHandler,
+)
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
@@ -88,9 +90,6 @@ app_globals = get_microdrop_redis_globals_manager()
 
 # Tick rate for the elapsed-time status labels (10 Hz).
 STATUS_TICK_INTERVAL_MS = 100
-# Gap between whole-protocol repetitions so the executor's worker thread
-# winds down before the restart.
-NEXT_REP_RESTART_DELAY_MS = 50
 # Auto-dismiss timeout for the preview-complete toast.
 PREVIEW_COMPLETE_TOAST_MS = 3000
 # app_globals value used when no device SVG path has been published
@@ -214,6 +213,24 @@ class ProtocolTreePane(QWidget):
         )
         self.logging_controller.attach(self.executor.qsignals)
 
+        # Execution lifecycle policy lives in handlers, not the view. These
+        # run once per run (on_pre_protocol_start / on_post_protocol_end) at
+        # high priority so they trail every column's start hooks: realtime
+        # mode is enabled + settled (900), then logging starts (1000) right
+        # before the first step. The view only wires them (composition root).
+        self.executor.lifecycle_handlers = [
+            RealtimeModeHandler(),
+            LoggingHandler(
+                controller=self.logging_controller,
+                experiment_dir_provider=(
+                    lambda: self.experiment_manager.get_experiment_directory()
+                ),
+                n_steps_provider=(
+                    lambda: sum(1 for _ in self.manager.iter_execution_frames())
+                ),
+            ),
+        ]
+
         self._step_index = 0
         self._step_total = 0
         self._step_started_at: float | None = None
@@ -227,12 +244,9 @@ class ProtocolTreePane(QWidget):
         self._current_run_preview_mode = False
         self._pause_phases: list = []
         self._pause_phase_idx: int = 0
-        # Realtime-mode bookkeeping (legacy protocol_grid parity). True =
-        # leave realtime mode on after the run; default True so a terminal
-        # without a pre-run prep (preview, tests) never turns it off.
-        self._restore_realtime_mode = True
-        # Guards the settling window between play-click and executor.start
-        # so a second play-click can't start a duplicate run.
+        # Guards the window between play-click and the protocol_started
+        # signal (the executor's on_pre_protocol_start realtime settle runs
+        # in there) so a second play-click can't start a duplicate run.
         self._start_pending = False
 
         self._status_step_label = self.status_bar.lbl_step_progress
@@ -346,6 +360,8 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
         self.executor.qsignals.protocol_finished.connect(self._on_protocol_finished)
         self.executor.qsignals.protocol_aborted.connect(self._on_protocol_aborted)
+        self.executor.qsignals.protocol_repetition_finished.connect(
+            self._on_protocol_repetition_finished)
 
     def _wire_navigation_buttons(self):
         nb = self.navigation_bar
@@ -367,6 +383,7 @@ class ProtocolTreePane(QWidget):
         publish_message(topic=PROTOCOL_RUNNING, message=value)
 
     def _on_protocol_started(self):
+        self._start_pending = False
         self.protocol_running_changed.emit(True)
         self._publish_protocol_running("True")
         try:
@@ -588,120 +605,28 @@ class ProtocolTreePane(QWidget):
         )
 
     def _start_protocol_run(self, preview_mode):
-        self._repeats_total = self.status_bar.edit_repeat_protocol.value()
+        repeats = self.status_bar.edit_repeat_protocol.value()
+        self._repeats_total = repeats
         self._repeats_completed = 0
         self._current_run_preview_mode = preview_mode
         self._update_repeat_status_label()
         start_path = self._selected_step_path()
         logger.info(
-            f"Protocol run starting: {self._repeats_total} rep(s), "
+            f"Protocol run starting: {repeats} rep(s), "
             f"preview={preview_mode}, start_step={start_path}"
         )
-        # Protocol logging starts once here (run start) and stops once in
-        # _on_protocol_terminated — the single terminal point reached only
-        # after the LAST repetition (whole-protocol repeats restart the
-        # executor via _restart_for_next_rep, which returns before the
-        # terminal). So one log spans all repetitions. capacitance_per_unit_area
-        # is not seeded here; it arrives live via the controller's
-        # on_calibration (CALIBRATION_DATA) so the Force column populates.
-        try:
-            # Decoupled: read channel areas + device SVG path from the shared
-            # app_globals (published by the device viewer) rather than reaching
-            # into the device-viewer pane/model. The context is rebuilt on
-            # every run start so device/experiment changes are picked up.
-            channel_areas, svg_path = {}, None
-            try:
-                # Redis JSON-stringifies the int channel keys; restore int keys
-                # to match the actuation lookup (areas.get(int(ch))).
-                channel_areas = {
-                    int(k): float(v)
-                    for k, v in (app_globals.get(CHANNEL_AREAS_KEY) or {}).items()
-                }
-                svg_path = app_globals.get(DEVICE_SVG_PATH_KEY)
-            except Exception as e:
-                logger.critical(f"logging device-context probe failed: {e}")
-
-            _log_ctx = LoggingDeviceContext(
-                experiment_directory=self.experiment_manager.get_experiment_directory(),
-                device_svg_path=svg_path,
-                channel_areas=channel_areas,
-            )
-            _n_steps = sum(1 for _ in self.manager.iter_execution_frames())
-            self.logging_controller.start_logging(_log_ctx, _n_steps, preview_mode)
-        except Exception as e:
-            logger.warning(f"could not start protocol logging: {e}")
-        if preview_mode:
-            # Preview runs never touch hardware — no realtime-mode prep.
-            self.executor.start(
-                start_step_path=start_path,
-                preview_mode=preview_mode,
-            )
-            return
-        # Legacy protocol_grid parity: turn realtime mode on (deciding
-        # whether to restore the previous state after the run) and let the
-        # hardware settle for realtime_mode_settling_time_s before the
-        # first step. Repeats (_restart_for_next_rep) skip this — realtime
-        # mode is already on mid-run.
-        settle_ms = self._prepare_realtime_mode()
+        # Realtime-mode prep + settle and logging start are once-per-run
+        # executor lifecycle hooks (RealtimeModeHandler / LoggingHandler,
+        # wired in _build_executor); the executor owns the repeat loop, so
+        # the whole run (all repetitions) is a single start() call.
+        # _start_pending guards the play button until protocol_started
+        # fires (after the realtime settle, which now runs on the worker).
         self._start_pending = True
-
-        def _start_after_settling():
-            self._start_pending = False
-            self.executor.start(
-                start_step_path=start_path,
-                preview_mode=preview_mode,
-            )
-
-        QTimer.singleShot(settle_ms, _start_after_settling)
-
-    def _prepare_realtime_mode(self) -> int:
-        """Pre-run realtime-mode handling, ported from legacy
-        protocol_grid's protocol_runner_controller:
-
-        - realtime mode OFF: turn it on for the run and turn it back off
-          at the end (restore = False).
-        - realtime mode ON, prompt enabled: ask whether to keep it after
-          the run; the "don't ask again" checkbox persists the answer to
-          the preferences.
-        - realtime mode ON, prompt disabled: follow the saved
-          keep_realtime_mode_after_protocol preference.
-
-        Returns the settling delay (ms) to wait before the first step.
-        """
-        restore = False
-        try:
-            realtime_on = bool(app_globals.get(REALTIME_MODE_KEY, False))
-        except Exception as e:
-            logger.debug(f"realtime-mode state unavailable: {e}")
-            realtime_on = False
-        if not realtime_on:
-            logger.info("Realtime mode off before protocol start; "
-                        "turning it on...")
-            try:
-                publish_message(topic=SET_REALTIME_MODE, message=str(True))
-            except Exception as e:
-                logger.warning(f"could not enable realtime mode: {e}")
-        elif self.preferences.prompt_to_restore_realtime_mode:
-            user_choice, remember = confirm(
-                None,
-                title="Keep Realtime Mode Enabled Post-Protocol?",
-                message="<b>Realtime mode is currently ON.</b><br><br>"
-                        "Would you like to keep it enabled after the "
-                        "protocol finishes?",
-                cancel=False,
-                checkbox_text="Don't ask again (can be changed in "
-                              "preferences)",
-            )
-            restore = user_choice == YES
-            if remember:
-                self.preferences.prompt_to_restore_realtime_mode = False
-                self.preferences.keep_realtime_mode_after_protocol = restore
-        else:
-            restore = self.preferences.keep_realtime_mode_after_protocol
-            logger.info(f"Realtime mode post-protocol (per preference): "
-                        f"{'keep' if restore else 'disable'}")
-        self._restore_realtime_mode = restore
-        return int(self.preferences.realtime_mode_settling_time_s * 1000)
+        self.executor.start(
+            start_step_path=start_path,
+            preview_mode=preview_mode,
+            repeats=repeats,
+        )
 
     def _update_repeat_status_label(self):
         self.status_bar.lbl_repeat_protocol_status.setText(
@@ -747,21 +672,19 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
+        # The executor owns the repeat loop now, so protocol_finished fires
+        # once at the end of the whole run; the per-rep label is updated by
+        # _on_protocol_repetition_finished during the run.
         self._publish_protocol_running("False")
-        self._repeats_completed += 1
         logger.info(
-            f"Protocol finished (rep {self._repeats_completed}/"
-            f"{self._repeats_total})"
+            f"Protocol finished ({self._repeats_completed}/{self._repeats_total})"
         )
-        self._update_repeat_status_label()
-        if self._repeats_completed < self._repeats_total:
-            QTimer.singleShot(NEXT_REP_RESTART_DELAY_MS,
-                              self._restart_for_next_rep)
-            return
         self._on_protocol_terminated(RUN_OUTCOME_FINISHED)
 
-    def _restart_for_next_rep(self):
-        self.executor.start(preview_mode=self._current_run_preview_mode)
+    def _on_protocol_repetition_finished(self, completed, total):
+        self._repeats_completed = completed
+        self._repeats_total = total
+        self._update_repeat_status_label()
 
     def _on_protocol_aborted(self):
         logger.info("Protocol aborted by user")
@@ -790,13 +713,8 @@ class ProtocolTreePane(QWidget):
             )
         except Exception as e:
             logger.warning(f"protocol-terminated electrode clear failed: {e}")
-        # Restore realtime mode (legacy parity): turn it back off unless the
-        # user chose / prefers to keep it on. Preview runs never touched it.
-        if not self._current_run_preview_mode and not self._restore_realtime_mode:
-            try:
-                publish_message(topic=SET_REALTIME_MODE, message=str(False))
-            except Exception as e:
-                logger.warning(f"realtime-mode restore failed: {e}")
+        # Realtime-mode restore is owned by RealtimeModeHandler's
+        # on_post_protocol_end hook (runs once per run on the executor).
         # Push free-mode payload to DV: clear_highlights cleared the
         # tree selection but did so with _suppress_publish active, so
         # the controller's currentChanged slot was gated. Explicit
