@@ -15,11 +15,11 @@ from microdrop_utils.dramatiq_controller_base import generate_class_method_drama
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
                      RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
-                     SET_REALTIME_MODE)
+                     SET_REALTIME_MODE, DROPBOT_CONNECTION_STATE_KEY)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
-from traits.api import HasTraits, provides, Bool, Str
+from traits.api import HasTraits, provides, Bool, Str, observe
 from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -69,6 +69,14 @@ class DropbotControllerBase(HasTraits):
             finally:
                 self.proxy = None
                 self.dropbot_connection_active = False
+
+    @observe("dropbot_connection_active")
+    def _mirror_connection_state_to_app_globals(self, event):
+        """Mirror the connection state to app_globals so any plugin can read
+        it synchronously without subscribing to the connected/disconnected
+        signals."""
+        app_globals[DROPBOT_CONNECTION_STATE_KEY] = event.new
+        logger.info(f"App Globals Update: {DROPBOT_CONNECTION_STATE_KEY}: {event.new}")
 
     def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
         """

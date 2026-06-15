@@ -48,6 +48,10 @@ SET_REALTIME_MODE = "hardware/requests/set_realtime_mode"
 # panel writes it on every REALTIME_MODE_UPDATED signal); consumers read
 # it instead of tracking the signal themselves.
 REALTIME_MODE_KEY = "microdrop.realtime_mode"
+# app_globals key mirroring the dropbot connection state (the controller
+# writes it whenever dropbot_connection_active changes); consumers read it
+# instead of tracking the connected/disconnected signals themselves.
+DROPBOT_CONNECTION_STATE_KEY = f"{PKG}.connection_active"
 RUN_ALL_TESTS = "dropbot/requests/run_all_tests"
 TEST_VOLTAGE = "dropbot/requests/test_voltage"
 TEST_ON_BOARD_FEEDBACK_CALIBRATION = "dropbot/requests/test_on_board_feedback_calibration"
