@@ -108,6 +108,14 @@ class ProtocolLoggingController(HasTraits):
         # log instead of stopping after the first.
         qsignals.step_started.connect(self._on_step_started)
 
+    def has_data(self) -> bool:
+        """True when the active run logged something worth reporting — i.e. at
+        least one step started. A run stopped before any step ran (e.g. Stop on
+        the loading screen) has nothing meaningful, so the report can be
+        skipped. ``_step_idx`` counts step_started signals and survives
+        abort/error."""
+        return self._ingestion is not None and self._step_idx > 0
+
     def log_metadata(self, mapping: dict) -> None:
         """Forward extra report metadata to the active run's ingestion.
         No-op when no run is logging (e.g. preview, or after flush)."""

@@ -810,8 +810,11 @@ class ProtocolTreePane(QWidget):
             except Exception as e:
                 logger.warning(f"protocol auto-save failed: {e}")
 
-        generate_report = True
-        if outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR) and have_exp:
+        # Only offer / build a report if the run actually logged step data.
+        # A run stopped before any step ran (e.g. Stop on the loading screen)
+        # has nothing meaningful — skip the prompt and generate no report.
+        generate_report = self.logging_controller.has_data()
+        if generate_report and outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR) and have_exp:
             try:
                 if confirm(parent=None,
                            message=("Protocol was stopped before completion."
