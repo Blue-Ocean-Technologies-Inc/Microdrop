@@ -26,15 +26,20 @@ class StepExecutionError(Exception):
     ``raise ... from cause`` so the full traceback is still available.
     """
 
-    def __init__(self, col, hook_name, row, cause):
-        self.col = col
+    def __init__(self, handler, hook_name, row, cause):
+        self.handler = handler
         self.hook_name = hook_name
         self.row = row
         self.cause = cause
+        # Column handlers carry their model (wired by Column.traits_init);
+        # execution-only lifecycle handlers have none — fall back to the
+        # handler class name, then a generic label.
+        model = getattr(handler, "model", None)
         col_label = (
-            getattr(getattr(col, "model", None), "col_name", "")
-            or getattr(getattr(col, "model", None), "col_id", "")
-            or "column"
+            getattr(model, "col_name", "")
+            or getattr(model, "col_id", "")
+            or type(handler).__name__
+            or "handler"
         )
         if row is not None:
             dotted = ".".join(str(i + 1) for i in (getattr(row, "path", ()) or ()))

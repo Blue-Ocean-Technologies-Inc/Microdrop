@@ -25,9 +25,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from traits.api import (
-    Any, Bool, Callable as CallableTrait, HasTraits, Instance, Tuple, Union,
+    Any, Bool, Callable as CallableTrait, HasTraits, Instance, List, Tuple,
+    Union,
 )
 
+from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import (
     AbortError, StepExecutionError,
@@ -50,6 +52,13 @@ class ProtocolExecutor(HasTraits):
 
     row_manager = Instance(RowManager)
     qsignals    = Instance(ExecutorSignals)
+
+    # Execution-only handlers (no column/view) whose hooks run alongside the
+    # column handlers, ordered by the same priority buckets. Used for
+    # once-per-run lifecycle policy (realtime-mode prep, logging start/stop)
+    # via the on_pre_protocol_start / on_post_protocol_end hooks. The
+    # composition root assigns these; the executor stays generic.
+    lifecycle_handlers = List(Instance(IColumnHandler))
 
     pause_event = Instance(PauseEvent)
     stop_event  = Instance(threading.Event)
@@ -176,6 +185,10 @@ class ProtocolExecutor(HasTraits):
         """Main loop. Runs synchronously when called directly (tests),
         or on its worker thread when entered via start()."""
         cols = list(self.row_manager.columns)
+        # Column handlers + execution-only lifecycle handlers, ordered
+        # together by priority in _run_hooks. _build_step_ctx stays
+        # column-only (lifecycle handlers declare no wait_for_topics).
+        handlers = [c.handler for c in cols] + list(self.lifecycle_handlers)
         proto_ctx = ProtocolContext(
             columns=cols,
             stop_event=self.stop_event,
@@ -192,7 +205,7 @@ class ProtocolExecutor(HasTraits):
             # Hide first-publish latency (Redis connect ~2s) from step 1's
             # observed duration by warming the broker connection upfront.
             warm_broker_connection()
-            self._run_hooks("on_protocol_start", cols, proto_ctx, row=None)
+            self._run_hooks("on_protocol_start", handlers, proto_ctx, row=None)
             self.qsignals.protocol_started.emit()
             logger.info("Protocol started")
 
@@ -241,9 +254,9 @@ class ProtocolExecutor(HasTraits):
                     # row-highlight fires from step_started.
                     self.qsignals.step_repetition.emit(rep_chain)
                     self.qsignals.step_started.emit(row)
-                    self._run_hooks("on_pre_step",  cols, step_ctx, row)
-                    self._run_hooks("on_step",      cols, step_ctx, row)
-                    self._run_hooks("on_post_step", cols, step_ctx, row)
+                    self._run_hooks("on_pre_step",  handlers, step_ctx, row)
+                    self._run_hooks("on_step",      handlers, step_ctx, row)
+                    self._run_hooks("on_post_step", handlers, step_ctx, row)
                     self.qsignals.step_finished.emit(row)
                 finally:
                     clear_active_step()
@@ -254,13 +267,13 @@ class ProtocolExecutor(HasTraits):
                 )
 
             # on_protocol_end runs even on stop, as best-effort cleanup.
-            self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
+            self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
 
         except Exception as e:
             self._error = e
             logger.exception("Protocol error")
             try:
-                self._run_hooks("on_protocol_end", cols, proto_ctx, row=None)
+                self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
             except Exception:
                 logger.exception("on_protocol_end raised during error cleanup")
 
@@ -328,12 +341,22 @@ class ProtocolExecutor(HasTraits):
                 step_ctx.open_mailbox(topic)
         return step_ctx
 
-    def _run_hooks(self, hook_name, cols, ctx, row) -> None:
+    # Protocol-level hooks take (ctx); per-step hooks take (row, ctx).
+    _PROTOCOL_HOOKS = (
+        "on_pre_protocol_start", "on_protocol_start",
+        "on_protocol_end", "on_post_protocol_end",
+    )
+
+    def _run_hooks(self, hook_name, handlers, ctx, row) -> None:
         """Priority-bucket fan-out.
 
         Lower priority runs first. Equal priorities run in parallel
         (one ThreadPoolExecutor per bucket; the executor returns
         only when every future in the bucket has resolved).
+
+        Operates on handlers directly (column handlers + lifecycle
+        handlers) so execution-only lifecycle handlers participate in
+        the same priority ordering as columns.
 
         The first exception in any bucket wins: stop_event is set so
         sibling hooks waiting on ctx.wait_for() return promptly via
@@ -341,17 +364,17 @@ class ProtocolExecutor(HasTraits):
         re-raised out of this method.
         """
         buckets = defaultdict(list)
-        for col in cols:
-            buckets[col.handler.priority].append(col)
+        for handler in handlers:
+            buckets[handler.priority].append(handler)
 
         for priority in sorted(buckets):
-            bucket_cols = buckets[priority]
+            bucket = buckets[priority]
             with self.bucket_pool_factory(
-                max_workers=max(1, len(bucket_cols)),
+                max_workers=max(1, len(bucket)),
             ) as pool:
                 futures = {
-                    pool.submit(self._invoke_hook, col, hook_name, ctx, row): col
-                    for col in bucket_cols
+                    pool.submit(self._invoke_hook, h, hook_name, ctx, row): h
+                    for h in bucket
                 }
                 first_exc = None
                 for f in as_completed(futures):
@@ -365,17 +388,17 @@ class ProtocolExecutor(HasTraits):
                 if first_exc is not None:
                     raise first_exc
 
-    def _invoke_hook(self, col, hook_name, ctx, row) -> None:
+    def _invoke_hook(self, handler, hook_name, ctx, row) -> None:
         """Dispatch to the handler's named hook with the right signature.
 
         Per-step hooks take (row, ctx); protocol-level take (ctx).
         Default handlers from BaseColumnHandler are no-ops, so calling
-        them on every column is safe (and cheaper than introspecting
-        which columns override).
+        them on every handler is safe (and cheaper than introspecting
+        which handlers override).
         """
-        fn = getattr(col.handler, hook_name)
+        fn = getattr(handler, hook_name)
         try:
-            if hook_name in ("on_protocol_start", "on_protocol_end"):
+            if hook_name in self._PROTOCOL_HOOKS:
                 fn(ctx)
             else:
                 fn(row, ctx)
@@ -385,7 +408,7 @@ class ProtocolExecutor(HasTraits):
             # aborted/terminal path, not an error dialog.
             raise
         except Exception as e:
-            # Annotate real failures with the step + column so the
+            # Annotate real failures with the step + handler so the
             # protocol-error dialog can report where and why, not just the
             # bare exception text. Chain so the full traceback survives.
-            raise StepExecutionError(col, hook_name, row, e) from e
+            raise StepExecutionError(handler, hook_name, row, e) from e
