@@ -64,11 +64,22 @@ def _execution_params_for_row(row) -> dict:
     StepParamsCommitMessage): the DV's ``repetitions`` is the tree's
     ``route_repetitions`` column, ``soft_terminate`` is ``soft_end``,
     and its ``repeat_duration`` spinner is integer-granular."""
+
+    ## The device viewer only has spinners to set the repeats num or repeat duration.
+    ## It does not have dialogs to change controls, simply indicates by resetting repeat duration to 0 if
+    ## repeat num in control, and repeat num to 1 and repeat duration to some number when duration based repeats.
+    if row.repeat_duration_controls:
+        repeat_duration = row.repeat_duration
+        route_repetitions = 1
+
+    else:
+        repeat_duration = 0.0
+        route_repetitions = row.route_repetitions
+
     return {
         "duration": float(getattr(row, "duration_s", 1.0) or 0.0),
-        "repetitions": int(getattr(row, "route_repetitions", 1) or 1),
-        "repeat_duration": int(round(float(
-            getattr(row, "repeat_duration", 0.0) or 0.0))),
+        "repetitions": int(route_repetitions),
+        "repeat_duration": int(round(float(repeat_duration))),
         "trail_length": int(getattr(row, "trail_length", 1) or 1),
         "trail_overlay": int(getattr(row, "trail_overlay", 0) or 0),
         "soft_start": bool(getattr(row, "soft_start", False)),
@@ -80,7 +91,15 @@ def _execution_params_for_row(row) -> dict:
 def _col_values_from_execution_params(params: dict) -> dict:
     """Inverse of _execution_params_for_row: DV sidebar contract keys ->
     tree column ids/types, ready for setattr onto a row."""
-    return {
+
+    # Of the Route Reps <-> Route Reps Dur pair, only the row's
+    # controlling knob is written — the pane's reconciliation pass
+    # recalculates the derived one, exactly as for a manual cell
+    # edit. The pop/reassign moves the controlling knob to the end
+    # of the write order so its reconcile sees the other committed
+    # values already in place.
+
+    result = {
         "duration_s": float(params["duration"]),
         "route_repetitions": int(params["repetitions"]),
         "repeat_duration": float(params["repeat_duration"]),
@@ -90,6 +109,18 @@ def _col_values_from_execution_params(params: dict) -> dict:
         "soft_end": bool(params["soft_terminate"]),
         "linear_repeats": bool(params["linear_repeats"]),
     }
+
+    result["repeat_duration_controls"] = bool(float(result["repeat_duration"]))
+
+    if result["repeat_duration_controls"]:
+        del result["route_repetitions"]
+        result["repeat_duration"] = result.pop("repeat_duration")
+    else:
+        del result["repeat_duration"]
+        result["route_repetitions"] = result.pop("route_repetitions")
+
+
+    return result
 
 
 class _Bridge(QObject):
@@ -369,22 +400,7 @@ class DeviceViewerSyncController(HasTraits):
             return
         path = tuple(row.path)
 
-        new_values = _col_values_from_execution_params(
-            commit_msg.model_dump(exclude={"step_id"})
-        )
-        # Of the Route Reps <-> Route Reps Dur pair, only the row's
-        # controlling knob is written — the pane's reconciliation pass
-        # recalculates the derived one, exactly as for a manual cell
-        # edit. The pop/reassign moves the controlling knob to the end
-        # of the write order so its reconcile sees the other committed
-        # values already in place.
-        if bool(getattr(row, "repeat_duration_controls", False)):
-            del new_values["route_repetitions"]
-            new_values["repeat_duration"] = new_values.pop("repeat_duration")
-        else:
-            del new_values["repeat_duration"]
-            new_values["route_repetitions"] = new_values.pop("route_repetitions")
-
+        new_values = _col_values_from_execution_params(commit_msg.model_dump(exclude={"step_id"}))
         # Direct trait writes bypass QtTreeModel.setData and the delegate,
         # so fire cell_changed per changed column — it drives both the
         # dirty tracker and the pane's repeat-duration reconciliation.

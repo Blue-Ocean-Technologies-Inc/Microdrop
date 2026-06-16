@@ -109,6 +109,21 @@ def _with_checkbox(dialog, result):
     return result
 
 
+def _apply_ok_cancel_labels(dialog, ok_label: str = "OK", cancel_label: str = "Exit") -> None:
+    """Rename the affirmative ("OK") and dismiss ("Exit") buttons of a styled
+    OK/Cancel dialog.
+
+    A label left at its default, or a button the dialog doesn't have (e.g. no
+    "Exit" when ``cancel=False``), is a no-op: ``set_button_text`` ignores
+    unknown buttons and preserves each button's role styling across the rename,
+    and the dialog's result mapping is keyed on the result code, not the label.
+    """
+    if ok_label != "OK":
+        dialog.set_button_text("OK", ok_label)
+    if cancel_label != "Exit":
+        dialog.set_button_text("Exit", cancel_label)
+
+
 def confirm(
     parent: Optional[QWidget] = None,
     message: str = "",
@@ -181,10 +196,15 @@ def information(
     text_format: Optional[str] = None,
     detail_collapsible: Optional[bool] = True,
     timeout: Optional[int] = 0,
+    ok_label: str = "OK",
+    cancel_label: str = "Exit",
     **kwargs
 ):
     """
     Pyface-compatible information dialog using styled BaseMessageDialog.
+
+    *ok_label* / *cancel_label* rename the affirmative and dismiss buttons
+    (the latter only shown when ``cancel=True``).
 
         If *checkbox_text* is provided (via kwargs), a checkbox is added to the
     dialog and the return value becomes a ``(result, checked)`` tuple.
@@ -196,6 +216,7 @@ def information(
         return InformationDialog(exit=cancel, **opts)
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, detail_collapsible, **kwargs)
+    _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     if timeout: # temp message
         dialog.show()
@@ -217,10 +238,15 @@ def success(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     timeout: Optional[int] = 0,
+    ok_label: str = "OK",
+    cancel_label: str = "Exit",
     **kwargs
 ):
     """
     Pyface-compatible success dialog using styled BaseMessageDialog.
+
+    *ok_label* / *cancel_label* rename the affirmative and dismiss buttons
+    (the latter only shown when ``cancel=True``).
 
         If *checkbox_text* is provided (via kwargs), a checkbox is added to the
     dialog and the return value becomes a ``(result, checked)`` tuple.
@@ -232,6 +258,7 @@ def success(
         return SuccessDialog(exit=cancel, **opts)
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     if timeout: # temp message
         dialog.show()
@@ -252,10 +279,15 @@ def warning(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
+    ok_label: str = "OK",
+    cancel_label: str = "Exit",
     **kwargs
 ):
     """
     Pyface-compatible warning dialog using styled BaseMessageDialog.
+
+    *ok_label* / *cancel_label* rename the affirmative and dismiss buttons
+    (the latter only shown when ``cancel=True``).
 
         If *checkbox_text* is provided (via kwargs), a checkbox is added to the
     dialog and the return value becomes a ``(result, checked)`` tuple.
@@ -267,6 +299,7 @@ def warning(
         return WarningAlertDialog(exit=cancel, **opts)
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     result = dialog.exec()
 
@@ -304,10 +337,14 @@ def error(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
+    ok_label: str = "OK",
+    cancel_label: str = "Exit",
     **kwargs
 ):
     """
     Pyface-compatible error dialog using styled BaseMessageDialog.
+
+    *ok_label* / *cancel_label* rename the affirmative and dismiss buttons.
 
         If *checkbox_text* is provided (via kwargs), a checkbox is added to the
     dialog and the return value becomes a ``(result, checked)`` tuple.
@@ -319,6 +356,7 @@ def error(
         return ErrorAlertDialog(error_details=None, **opts)  # Detail is handled by _prepare_dialog
 
     dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     result = dialog.exec()
 

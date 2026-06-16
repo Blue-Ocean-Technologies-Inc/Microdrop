@@ -285,14 +285,14 @@ class RouteLayerManager(HasTraits):
         """
         with self._suppress_repeat_exclusion():
             self.trait_set(
-                duration=params["duration"],
-                repetitions=params["repetitions"],
-                repeat_duration=params["repeat_duration"],
-                trail_length=params["trail_length"],
-                trail_overlay=params["trail_overlay"],
-                soft_start=params["soft_start"],
-                soft_terminate=params["soft_terminate"],
-                linear_repeats=params["linear_repeats"],
+                duration=float(params["duration"]),
+                repetitions=int(params["repetitions"]),
+                repeat_duration=int(params["repeat_duration"]),
+                trail_length=int(params["trail_length"]),
+                trail_overlay=int(params["trail_overlay"]),
+                soft_start=bool(params["soft_start"]),
+                soft_terminate=bool(params["soft_terminate"]),
+                linear_repeats=bool(params["linear_repeats"]),
             )
         self.mark_params_committed()
 
