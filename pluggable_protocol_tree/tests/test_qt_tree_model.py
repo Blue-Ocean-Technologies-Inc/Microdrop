@@ -56,6 +56,24 @@ def test_header_data(manager):
         assert qm.headerData(col_idx, Qt.Horizontal, Qt.DisplayRole) == col.model.col_name
 
 
+def test_read_only_column_gets_grey_background(qapp, manager):
+    """Read-only columns (type/id) render with the light-grey fill (issue #359)."""
+    from pyface.qt.QtCore import Qt
+    manager.add_step(values={"name": "Hello"})
+    qm = MvcTreeModel(manager)
+    type_idx = [c.model.col_id for c in manager.columns].index("type")
+    assert qm.data(qm.index(0, type_idx), Qt.BackgroundRole) == qm._read_only_brush()
+
+
+def test_editable_column_has_no_read_only_background(qapp, manager):
+    """Editable columns (name) keep the default background — no read-only fill."""
+    from pyface.qt.QtCore import Qt
+    manager.add_step(values={"name": "Hello"})
+    qm = MvcTreeModel(manager)
+    name_idx = [c.model.col_id for c in manager.columns].index("name")
+    assert qm.data(qm.index(0, name_idx), Qt.BackgroundRole) is None
+
+
 def test_widget_exposes_public_index_to_path(qapp):
     """Public alias for the previously-private _index_to_path. PPT-10.2
     needs this for the device-viewer sync controller to resolve tree
