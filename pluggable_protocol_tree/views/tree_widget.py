@@ -5,11 +5,14 @@ from pyface.qt.QtCore import (
     Qt, QItemSelectionModel, QModelIndex, Signal,
 )
 from pyface.qt.QtGui import QKeySequence, QShortcut
-from pyface.qt.QtWidgets import QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView
+from pyface.qt.QtWidgets import (
+    QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView, QDialog,
+)
 
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.views.bulk_set_dialog import BulkSetDialog
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
@@ -201,6 +204,8 @@ class ProtocolTreeWidget(QWidget):
         menu.addAction("Cut", self._cut)
         menu.addAction("Paste", self._paste)
         menu.addSeparator()
+        menu.addAction("Bulk Set Values…", self._bulk_set_values)
+        menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
@@ -289,6 +294,32 @@ class ProtocolTreeWidget(QWidget):
             self._manager.paste(target_path=target)
         except Exception:
             logger.exception("Paste failed")
+
+    def _bulk_set_values(self):
+        """Open the Bulk Set dialog and apply the chosen values to every
+        selected step. Groups expand to their child steps — first level only,
+        or all descendants when 'Apply to all nested groups' is ticked."""
+        paths = [self._index_to_path(i)
+                 for i in self.tree.selectionModel().selectedRows(0)]
+        if not paths:
+            return
+        dialog = BulkSetDialog(self._manager, parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        updates = dialog.values()
+        targets = self._manager.steps_under(paths, recursive=dialog.apply_nested)
+        if not updates or not targets:
+            return
+        # Direct model writes (set_values) rather than per-row handler
+        # on_interact: a bulk action must not pop the per-cell confirm dialogs
+        # some handlers raise (e.g. route_repetitions). The pane's cell_changed
+        # reconciliation still runs for derived columns.
+        for col_id, value in updates.items():
+            self._manager.set_values(targets, col_id, value)
+        logger.info(
+            f"Bulk set {list(updates)} on {len(targets)} step(s) "
+            f"(nested={dialog.apply_nested})"
+        )
 
     def _delete_selection(self):
         """Remove the currently-selected rows. Defensive: stale paths

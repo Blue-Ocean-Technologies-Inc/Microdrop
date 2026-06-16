@@ -472,17 +472,22 @@ class RowManager(HasTraits):
 
     # --- imperative bulk write ---
 
-    def set_value(self, path: Path, col_id: str, value) -> None:
-        col = self._column_by_id(col_id)
+    def _set_value(self, path: Path, col: 'IColumn', value):
         row = self.get_row(path)
         col.model.set_value(row, value)
-        self.cell_changed = {"path": tuple(path), "col_id": col_id}
+        # cell_changed carries the per-cell model col_id (NOT col.id, which is
+        # the compound base_id for synthesized field cells) — that's what the
+        # delegate/setData emit and what the tree model + state tracker match on.
+        self.cell_changed = {"path": tuple(path), "col_id": col.model.col_id}
+
+    def set_value(self, path: Path, col_id: str, value) -> None:
+        col = self._column_by_id(col_id)
+        self._set_value(path, col, value)
 
     def set_values(self, paths: List[Path], col_id: str, value) -> None:
         col = self._column_by_id(col_id)
-        for p in paths:
-            col.model.set_value(self.get_row(p), value)
-            self.cell_changed = {"path": tuple(p), "col_id": col_id}
+        for path in paths:
+            self._set_value(path, col, value)
 
     def apply(self, paths: List[Path], fn) -> None:
         # `fn` is arbitrary — could touch any column on any row, or
@@ -491,6 +496,42 @@ class RowManager(HasTraits):
         for p in paths:
             fn(self.get_row(p))
         self.rows_changed = True
+
+    def steps_under(self, paths: List[Path], recursive: bool = False) -> List[Path]:
+        """Resolve a selection into the step paths a bulk write should target.
+
+        A selected step contributes its own path; a selected group contributes
+        its direct child steps, or every descendant step when ``recursive``.
+        Groups are never targeted directly. The result is order-preserving and
+        de-duplicated — a step both directly selected and reached under a
+        selected group appears once.
+        """
+        targets: List[Path] = []
+        seen = set()
+
+        def add(path: Path) -> None:
+            key = tuple(path)
+            if key not in seen:
+                seen.add(key)
+                targets.append(key)
+
+        for path in paths:
+            try:
+                row = self.get_row(path)
+            except (IndexError, KeyError):
+                continue
+            if not isinstance(row, GroupRow):
+                add(path)
+            elif recursive:
+                # _walk yields the group itself first, then descendants.
+                for sub_path, sub_row in self._walk(row, tuple(path)):
+                    if sub_row is not row and not isinstance(sub_row, GroupRow):
+                        add(sub_path)
+            else:
+                for i, child in enumerate(row.children):
+                    if not isinstance(child, GroupRow):
+                        add(tuple(path) + (i,))
+        return targets
 
     def _column_by_id(self, col_id: str) -> IColumn:
         for c in self.columns:
