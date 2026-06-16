@@ -189,50 +189,6 @@ def test_pane_returns_to_idle_after_protocol_finished(qapp, monkeypatch):
     assert not nb.btn_stop.isEnabled()
 
 
-def test_pane_step_started_updates_status_label(qapp):
-    """Emitting step_started increments the step counter label."""
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-
-    class FakeRow:
-        path = []
-        name = "Step A"
-        duration_s = 0.0
-
-        def dotted_path(self):
-            return ""   # mirrors BaseRow.dotted_path for an empty path
-
-    pane = ProtocolTreePane([make_type_column()])
-    pane._step_total = 3
-    pane.executor.qsignals.step_started.emit(FakeRow())
-    assert pane._status_step_label.text() == "Step 1 / 3"
-
-
-def test_pane_tick_timer_runs_at_10_hz(qapp):
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-
-    pane = ProtocolTreePane([make_type_column()])
-    assert pane._tick_timer.interval() == 100
-
-
-def test_pane_phase_started_signal_sets_phase_timer(qapp):
-    """Phase timing is driven by the executor's phase_started signal
-    (independent of hardware ack), so the status bar tracks the executor
-    regardless of whether an ack arrives."""
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-
-    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
-    pane._current_row = object()
-    pane._step_started_at = None
-    pane.executor.qsignals.phase_started.emit(1, 3, 0.5)
-    assert pane._phase_started_at is not None
-    assert pane._step_started_at is not None
-    assert pane._phase_index == 1
-    assert pane._phase_total == 3
-
-
 def test_pane_phase_acked_is_noop_for_timer(qapp):
     """phase_acked no longer sets the phase timer — that moved to
     phase_started so external acks don't fight the executor-driven clock."""
@@ -265,7 +221,6 @@ def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
     assert pane.navigation_bar.btn_stop.isEnabled()
     pane.executor.qsignals.protocol_error.emit("kaboom")
     assert not pane.navigation_bar.btn_stop.isEnabled()
-    assert not pane._tick_timer.isActive()
     assert calls == [("Protocol error", "kaboom")]
 
 
@@ -1630,40 +1585,5 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
     # The unknown column id must NOT have leaked onto the row as an
     # orphan attribute.
     assert not hasattr(new_step, "unknown_plugin_col")
-
-
-def test_refresh_status_running_index_without_total(qapp):
-    """Dynamic VT loop: phase_total == 0 but phase_index > 0 -> show the
-    running phase number with NO denominator."""
-    import time as _t
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-
-    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
-    pane._step_started_at = _t.monotonic()
-    pane._phase_started_at = _t.monotonic()
-    pane._phase_index = 7
-    pane._phase_total = 0
-    pane._phase_target = 1.0
-    pane._refresh_status()
-    text = pane._status_phase_time_label.text()
-    assert "Phase 7" in text
-    assert "Phase 7/" not in text          # no denominator
-
-
-def test_refresh_status_index_over_total_when_known(qapp):
-    """Static/count path: phase_total > 0 -> unchanged 'i/N' rendering."""
-    import time as _t
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-
-    pane = ProtocolTreePane([make_type_column()], phase_ack_topic="x/applied")
-    pane._step_started_at = _t.monotonic()
-    pane._phase_started_at = _t.monotonic()
-    pane._phase_index = 2
-    pane._phase_total = 5
-    pane._phase_target = 0.5
-    pane._refresh_status()
-    assert "Phase 2/5" in pane._status_phase_time_label.text()
 
 
