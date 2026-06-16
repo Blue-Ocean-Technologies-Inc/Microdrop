@@ -141,10 +141,24 @@ with a fake clock, no executor, no Qt.
 
 ## Component 3 — `ProtocolStatusController` (`services/protocol_status_controller.py`)
 
-Thin adapter. Constructed with `model`, `qsignals` (`ExecutorSignals`),
-`manager` (`RowManager`, for the step count + next-step name), and
-`clock=time.monotonic`. Connects one slot per signal; each slot is a
-near one-liner that reads `now = self.clock()` and calls a model method.
+A small **`HasTraits`** adapter that **owns the model** and links the Qt
+layer to it. Constructed with `qsignals` (`ExecutorSignals`), `manager`
+(`RowManager`, for the step count + next-step name), and
+`clock=time.monotonic`; it creates its own `model = ProtocolStatusModel()`
+(exposed as `.model`). On construction it connects one slot per executor
+signal; each slot reads `now = self.clock()` and calls a model method.
+
+**Ownership / reuse.** The controller is *not* the dock pane itself, but
+the dock pane (the app's `HasTraits` composition root) **instantiates and
+owns it** — satisfying "the dock pane sets up the link between the Qt
+layer and the model." The standalone `BasePluggableProtocolDemoWindow`
+(used by demos and tests, with no dock pane) instantiates the **same**
+controller, so there is one wiring implementation and no duplication.
+This is why the controller is a standalone reusable class rather than
+slots on the dock pane: the pane is reused without a dock pane, and the
+wiring must come along.
+
+Each slot is a near one-liner: `now = self.clock()` then a model call.
 
 | `ExecutorSignals` | model call |
 |---|---|
@@ -160,6 +174,11 @@ near one-liner that reads `now = self.clock()` and calls a model method.
 
 `_count_steps`, `_next_name`, `_fmt_chain` move here from the pane (they
 need `manager`). The controller also exposes `disconnect()` for teardown.
+
+The controller deliberately does **not** subscribe to the demo-only
+`phase_acked` path or `protocol_wait_*`; those stay where they are (the
+pane / demo window own the pre-protocol loading screen and the demo ack
+plumbing). The controller is purely executor-lifecycle → status model.
 
 ## Component 4 — View binding (`StatusBar.bind(model)` in `navigation_bar.py`)
 
@@ -188,19 +207,66 @@ Traits observers is safe per the GUI-thread invariant above.
 
 ## Component 5 — `ProtocolTreePane` refactor (`views/protocol_tree_pane.py`)
 
-Remove the embedded status logic: `_step_index`, `_step_total`,
-`_phase_index`, `_phase_total`, `_phase_target`, `_step_started_at`,
-`_phase_started_at`, `_tick_timer`, `_refresh_status`, and the
-status-only signal slots. In their place the pane:
+Remove the embedded **status** logic: the state vars (`_step_index`,
+`_step_total`, `_phase_index`, `_phase_total`, `_phase_target`,
+`_step_started_at`, `_phase_started_at`, `_current_row`), the
+`_tick_timer`, `_refresh_status`, the `_status_*` label aliases, and the
+status-display bodies of `_on_protocol_started` / `_on_step_started` /
+`_on_phase_started` / `_on_phase_extended` / `_on_step_repetition` /
+`_on_step_finished`. `_next_step_name` moves to the controller.
 
-1. constructs `model = ProtocolStatusModel()`,
-2. constructs `controller = ProtocolStatusController(model=…, qsignals=self.executor.qsignals, manager=self.manager)`,
-3. calls `self.status_bar.bind(model)`.
+The pane does **not** itself create the model/controller — the
+composition root does (Component 6). The pane only needs to expose
+`self.status_bar` (already public) so the root can call
+`status_bar.bind(model)`.
 
-The pane keeps its **non-status** responsibilities that happen to share
-the same signals — e.g. `protocol_running_changed.emit(...)`, publishing
-`PROTOCOL_RUNNING`, error dialogs — on their own slots. Multiple slots
-per signal is fine.
+The pane **keeps** its non-status responsibilities that happen to share
+the same signals — `protocol_running_changed.emit(...)`, publishing
+`PROTOCOL_RUNNING`, the error dialog flow (`_on_error`), the button
+state machine, navigation, pause-phase handling, repeat-count label, and
+the pre-protocol wait/loading screen. Several of these are currently
+interleaved with status pokes in the same slot bodies, so the edit is
+surgical (remove the status lines, keep the rest), not whole-slot
+deletion. Multiple slots per signal is fine.
+
+## Component 6 — Composition roots wire model + controller
+
+Two roots construct and own the controller; neither duplicates logic.
+
+**`PluggableProtocolDockPane`** (`views/dock_pane.py`) — gains
+`status_controller = Instance(ProtocolStatusController)`. In
+`create_contents`, after the pane exists:
+
+```python
+self.status_controller = ProtocolStatusController(
+    qsignals=pane.executor.qsignals, manager=self.manager)
+pane.status_bar.bind(self.status_controller.model)
+```
+
+**`BasePluggableProtocolDemoWindow`** (`demos/base_demo_window.py`) — does
+the same after building `self.pane`, storing `self.status_controller`.
+Its status-internal properties (`_step_index`, `_step_total`,
+`_step_started_at`, `_phase_started_at`, `_current_row`, `_tick_timer`,
+`_status_step_label`, `_status_step_time_label`, `_status_reps_label`,
+`_status_phase_time_label`) are **removed**; demos/tests read
+`window.status_controller.model` instead.
+
+## Test migration
+
+`tests/test_base_demo_window.py` currently asserts on the removed pane
+internals (e.g. `_status_step_label.text()`, `_tick_timer.interval()`,
+`_phase_started_at` set on ack, terminate resets `_step_started_at`,
+`_status_reps_label`, elapsed text). These tests pin the *old*
+implementation. They are migrated:
+
+- Behaviors that are really **model/controller** logic (counters,
+  elapsed/active, rep-chain formatting, reset-on-terminate) move to the
+  new `test_protocol_status_model.py` / `test_protocol_status_controller.py`
+  (pure, no Qt) — which is strictly better coverage.
+- The few genuinely window-level assertions (the StatusBar shows the
+  bound values; the poll timer ticks while running) are rewritten against
+  `window.status_controller.model` and the new combined labels, or
+  deleted if fully superseded.
 
 ## Testing
 
