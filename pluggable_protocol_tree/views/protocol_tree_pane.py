@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 from pathlib import Path
 import html as _html
 
@@ -89,8 +88,6 @@ logger = get_logger(__name__)
 # reads are wrapped in try/except where no-Redis must be tolerated.
 app_globals = get_microdrop_redis_globals_manager()
 
-# Tick rate for the elapsed-time status labels (10 Hz).
-STATUS_TICK_INTERVAL_MS = 100
 # Auto-dismiss timeout for the preview-complete toast.
 PREVIEW_COMPLETE_TOAST_MS = 3000
 # app_globals value used when no device SVG path has been published
@@ -243,16 +240,11 @@ class ProtocolTreePane(QWidget):
             ),
         ]
 
-        self._step_index = 0
-        self._step_total = 0
-        self._step_started_at: float | None = None
-        self._phase_started_at: float | None = None
-        self._phase_target: float | None = None
-        self._phase_index = 0
-        self._phase_total = 0
+        # Status-bar timing/counting now lives in ProtocolStatusModel, driven
+        # by ProtocolStatusController and bound to the StatusBar by the
+        # composition root (dock pane / demo window). The pane keeps only the
+        # nav-relevant current row + pause-phase cursor below.
         self._current_row = None
-        self._repeats_total = 1
-        self._repeats_completed = 0
         self._current_run_preview_mode = False
         self._pause_phases: list = []
         self._pause_phase_idx: int = 0
@@ -263,18 +255,6 @@ class ProtocolTreePane(QWidget):
         # True while the pre-protocol wait loading screen is up, so pause/resume
         # know to freeze/restart its countdown.
         self._wait_active = False
-
-        self._status_step_label = self.status_bar.lbl_step_progress
-        self._status_step_time_label = self.status_bar.lbl_step_time
-        self._status_reps_label = self.status_bar.lbl_step_repetition
-        self._status_phase_time_label = (
-            self.status_bar.lbl_phase_time if self.phase_ack_topic is not None
-            else None
-        )
-
-        self._tick_timer = QTimer(self)
-        self._tick_timer.setInterval(STATUS_TICK_INTERVAL_MS)
-        self._tick_timer.timeout.connect(self._refresh_status)
 
         self._wire_executor_signals()
         self._wire_button_state_machine()
@@ -357,17 +337,15 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.step_started.connect(
             self.widget.highlight_active_row,
         )
+        # Pane keeps the nav-relevant current row; status counters/timers are
+        # owned by ProtocolStatusController.
         self.executor.qsignals.step_started.connect(self._on_step_started)
-        self.executor.qsignals.step_finished.connect(self._on_step_finished)
-        self.executor.qsignals.step_repetition.connect(self._on_step_repetition)
         self.executor.qsignals.protocol_wait_started.connect(
             self._on_protocol_wait_started)
         self.executor.qsignals.protocol_wait_finished.connect(
             self._on_protocol_wait_finished)
         self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
         self.executor.qsignals.protocol_error.connect(self._on_error)
-        self.executor.qsignals.phase_started.connect(self._on_phase_started)
-        self.executor.qsignals.phase_extended.connect(self._on_phase_extended)
         if self.phase_ack_topic is not None:
             self.phase_acked.connect(self._on_phase_ack)
 
@@ -384,8 +362,6 @@ class ProtocolTreePane(QWidget):
         self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
         self.executor.qsignals.protocol_finished.connect(self._on_protocol_finished)
         self.executor.qsignals.protocol_aborted.connect(self._on_protocol_aborted)
-        self.executor.qsignals.protocol_repetition_finished.connect(
-            self._on_protocol_repetition_finished)
 
     def _wire_navigation_buttons(self):
         nb = self.navigation_bar
@@ -410,38 +386,14 @@ class ProtocolTreePane(QWidget):
         self._start_pending = False
         self.protocol_running_changed.emit(True)
         self._publish_protocol_running("True")
-        try:
-            self._step_total = sum(1 for _ in self.manager.iter_execution_steps())
-        except Exception:
-            self._step_total = 0
-        self._step_index = 0
-        self._status_step_label.setText(f"Step 0 / {self._step_total}")
-        logger.info(f"Protocol started ({self._step_total} steps)")
+        logger.info("Protocol started")
 
     def _on_step_started(self, row):
-        self._step_index += 1
+        # The pane keeps only the nav-relevant current row; the status
+        # counters/timers/labels are owned by ProtocolStatusController +
+        # ProtocolStatusModel and bound to the StatusBar by the
+        # composition root.
         self._current_row = row
-        self._step_started_at = time.monotonic()
-        self._phase_started_at = None
-        self._phase_index = 0
-        self._phase_total = 0
-        try:
-            self._phase_target = float(getattr(row, "duration_s", 0.0) or 0.0)
-        except (TypeError, ValueError):
-            self._phase_target = None
-        logger.info(
-            f"Step started: {self._step_index}/{self._step_total} "
-            f"[{row.dotted_path()}] {row.name!r}"
-        )
-        self._status_step_label.setText(
-            f"Step {self._step_index} / {self._step_total}"
-        )
-        self.status_bar.lbl_recent_step.setText(f"Most Recent Step: {row.name}")
-        self.status_bar.lbl_next_step.setText(
-            f"Next Step: {self._next_step_name(row)}"
-        )
-        if not self._tick_timer.isActive():
-            self._tick_timer.start()
 
         # NOTE: we deliberately do NOT publish the static step view to the
         # DV here. RoutesHandler publishes a per-phase display for every
@@ -453,71 +405,15 @@ class ProtocolTreePane(QWidget):
         # editable=True) consistently landed AFTER phase 1 and cleared it,
         # making the animation appear to begin at the second position.
 
-    def _next_step_name(self, current):
-        steps = self.manager.iter_execution_steps()
-        cur_path = tuple(current.path)
-        for row in steps:
-            if tuple(row.path) == cur_path:
-                next_row = next(steps, None)
-                return next_row.name if next_row is not None else "-"
-        return "-"
-
     def _on_phase_ack(self):
         # Phase boundary now comes from the executor's phase_started
         # signal (independent of hardware ack). Kept as a no-op so
-        # external code emitting phase_acked doesn't fight the timer.
+        # external code emitting phase_acked doesn't fight anything.
         return
-
-    def _on_phase_started(self, phase_index, phase_total, phase_duration_s):
-        """Executor signal: a new phase has begun. Reset the elapsed
-        clock and update the Phase x/y label so the status bar tracks
-        the executor regardless of whether a hardware ack arrives."""
-        if self._current_row is None:
-            return
-        now = time.monotonic()
-        if self._step_started_at is None:
-            self._step_started_at = now
-        self._phase_started_at = now
-        self._phase_index = int(phase_index)
-        self._phase_total = int(phase_total)
-        try:
-            self._phase_target = float(phase_duration_s)
-        except (TypeError, ValueError):
-            self._phase_target = None
-        self._refresh_status()
-
-    def _on_phase_extended(self, extra_s):
-        """A handler extended the current phase (e.g. volume threshold
-        holding for more wetting time). Grow the displayed target so the
-        'elapsed / target' readout stays honest while the phase is held."""
-        if self._current_row is None:
-            return
-        try:
-            self._phase_target = (self._phase_target or 0.0) + float(extra_s)
-        except (TypeError, ValueError):
-            return
-        self._refresh_status()
-
-    def _on_step_repetition(self, rep_chain):
-        if not rep_chain:
-            self._status_reps_label.setText("")
-            self._status_reps_label.setVisible(False)
-            return
-        parts = [
-            f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
-        ]
-        self._status_reps_label.setText(" · ".join(parts))
-        self._status_reps_label.setVisible(True)
-
-    def _on_step_finished(self, _row):
-        self._refresh_status()
 
     def _on_error(self, msg):
         logger.error(f"Protocol error: {msg}")
         self._publish_protocol_running("False")
-        self._repeats_total = 0
-        self._repeats_completed = 0
-        self._update_repeat_status_label()
         # Immediate teardown only; the completion flow is deferred so the
         # error dialog is shown before the "Generate Run Summary?" prompt.
         self._on_protocol_terminated(RUN_OUTCOME_ERROR)
@@ -562,35 +458,6 @@ class ProtocolTreePane(QWidget):
         safe = escape_html_multiline(fallback_msg)
         return f"<p style='margin:0;color:{red};'>{safe}</p>"
 
-    @attempt_func_execution_with_error_dialog
-    def _refresh_status(self):
-        if self._step_started_at is None:
-            return
-        step_elapsed = time.monotonic() - self._step_started_at
-        self._status_step_time_label.setText(f"Step {step_elapsed:5.2f}s")
-        if self._status_phase_time_label is not None:
-            phase_elapsed = (
-                0.0 if self._phase_started_at is None
-                else time.monotonic() - self._phase_started_at
-            )
-            target = self._phase_target if self._phase_target is not None else 0.0
-            if self._phase_total > 0:
-                self._status_phase_time_label.setText(
-                    f"Phase {self._phase_index}/{self._phase_total}  "
-                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
-                )
-            elif self._phase_index > 0:
-                # Dynamic duration loop: total is unknown while looping, so
-                # show the running phase number with no misleading denominator.
-                self._status_phase_time_label.setText(
-                    f"Phase {self._phase_index}  "
-                    f"{phase_elapsed:4.2f}s / {target:.2f}s"
-                )
-            else:
-                self._status_phase_time_label.setText(
-                    f"Phase {phase_elapsed:5.2f}s / {target:.2f}s"
-                )
-
     # --- button state machine ----------------------------------------
 
     def _set_idle_button_state(self):
@@ -626,10 +493,7 @@ class ProtocolTreePane(QWidget):
 
     def _start_protocol_run(self, preview_mode):
         repeats = self.status_bar.edit_repeat_protocol.value()
-        self._repeats_total = repeats
-        self._repeats_completed = 0
         self._current_run_preview_mode = preview_mode
-        self._update_repeat_status_label()
         start_path = self._selected_step_path()
         logger.info(
             f"Protocol run starting: {repeats} rep(s), "
@@ -646,11 +510,6 @@ class ProtocolTreePane(QWidget):
             start_step_path=start_path,
             preview_mode=preview_mode,
             repeats=repeats,
-        )
-
-    def _update_repeat_status_label(self):
-        self.status_bar.lbl_repeat_protocol_status.setText(
-            f"{self._repeats_completed}/"
         )
 
     def _selected_step_path(self):
@@ -691,7 +550,6 @@ class ProtocolTreePane(QWidget):
     def _on_protocol_paused(self):
         logger.info("Protocol paused")
         self.navigation_bar.show_resume_state()
-        self._tick_timer.stop()
         if self._wait_active:
             # Freeze the loading-screen countdown in lockstep with the
             # executor's frozen pre-protocol wait.
@@ -706,8 +564,6 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.show_pause_state()
         if self._wait_active:
             self.loading_overlay.resume()
-        if self._current_row is not None:
-            self._tick_timer.start()
         self.navigation_bar.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
@@ -715,22 +571,12 @@ class ProtocolTreePane(QWidget):
         # once at the end of the whole run; the per-rep label is updated by
         # _on_protocol_repetition_finished during the run.
         self._publish_protocol_running("False")
-        logger.info(
-            f"Protocol finished ({self._repeats_completed}/{self._repeats_total})"
-        )
+        logger.info("Protocol finished")
         self._on_protocol_terminated(RUN_OUTCOME_FINISHED)
-
-    def _on_protocol_repetition_finished(self, completed, total):
-        self._repeats_completed = completed
-        self._repeats_total = total
-        self._update_repeat_status_label()
 
     def _on_protocol_aborted(self):
         logger.info("Protocol aborted by user")
         self._publish_protocol_running("False")
-        self._repeats_total = 0
-        self._repeats_completed = 0
-        self._update_repeat_status_label()
         self._on_protocol_terminated(RUN_OUTCOME_ABORTED)
 
     def _on_protocol_terminated(self, outcome=RUN_OUTCOME_FINISHED):
@@ -745,7 +591,6 @@ class ProtocolTreePane(QWidget):
         self.loading_overlay.stop_loading()
         self.clear_highlights()
         self._set_idle_button_state()
-        self._tick_timer.stop()
         self.navigation_bar.merge_phase_controls_to_play_button()
         self._pause_phases = []
         self._pause_phase_idx = 0
@@ -1024,30 +869,15 @@ class ProtocolTreePane(QWidget):
 
     @attempt_func_execution_with_error_dialog
     def clear_highlights(self):
-        """Reset the tree's selection + active-row highlight + per-step
-        labels to the idle visual state."""
+        """Reset the tree's selection + active-row highlight to the idle
+        visual state. Status-bar fields are owned by ProtocolStatusModel and
+        reset on the next run (on_protocol_start)."""
         with self._suppress_sync_publish():
             self.widget.highlight_active_row(None)
             self.widget.tree.clearSelection()
             self.widget.tree.setCurrentIndex(QModelIndex())
 
-        self._step_index = 0
-        self._step_total = 0
-        self._step_started_at = None
-        self._phase_started_at = None
-        self._phase_target = None
-        self._phase_index = 0
-        self._phase_total = 0
         self._current_row = None
-
-        self._status_step_label.setText("Step 0/0")
-        self._status_step_time_label.setText("Step Time: 0 s")
-        self._status_reps_label.setText("Repetition 0/0")
-        self._status_reps_label.setVisible(True)
-        self.status_bar.lbl_recent_step.setText("Most Recent Step: -")
-        self.status_bar.lbl_next_step.setText("Next Step: -")
-        if self._status_phase_time_label is not None:
-            self._status_phase_time_label.setText("Phase 0/0  0.00s / 0.00s")
 
     def _logs_settling_time_s(self) -> float:
         """Settling provider injected into the logging controller. Reads
