@@ -7,6 +7,7 @@ from microdrop_application.dialogs.pyface_wrapper import confirm, NO
 from pluggable_protocol_tree.consts import REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER
 from pluggable_protocol_tree.services.phase_math import effective_repetitions_for_duration, estimate_repeat_duration_s
 from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
+from pluggable_protocol_tree.services.protocol_status_controller import ProtocolStatusController
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance, List, Str, observe
 
@@ -37,6 +38,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
     experiment_manager = Instance(ExperimentManager)
     quick_actions = List(desc="Quick actions to mount under the tree.")
     protocol_state_tracker = Instance(PluggableProtocolStateTracker)
+
+    #: Links the executor's Qt signals to the status model and binds the
+    #: status bar to it (issue #467). The dock pane is the app's HasTraits
+    #: composition root that "sets up the link" between Qt and the model.
+    status_controller = Instance(ProtocolStatusController)
 
     #: Protocol preferences model (the "microdrop.protocol" node). Bound to
     #: the live application's preferences in create_contents, then passed
@@ -86,6 +92,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
             protocol_state_tracker=self.protocol_state_tracker,
             parent=parent,
         )
+
+        # The dock pane owns the status controller (executor signals -> status
+        # model) and binds the (view-only) status bar to that model.
+        self.status_controller = ProtocolStatusController(
+            qsignals=pane.executor.qsignals,
+            manager=self.manager,
+        )
+        pane.status_bar.bind(self.status_controller.model)
+        # Phase trackers are always shown in the full app (issue #467); the
+        # pane only auto-reveals the phase field when a phase_ack_topic is set
+        # (demo path), so make it explicit here.
+        pane.status_bar.lbl_phase_time.setVisible(True)
 
         # Legacy protocol_grid parity: the full app opens with one default
         # step when no protocol is loaded (no-op once a protocol is loaded).

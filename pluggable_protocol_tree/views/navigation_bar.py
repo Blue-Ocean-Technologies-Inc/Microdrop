@@ -6,6 +6,8 @@ until PPT-9 deletes ``protocol_grid``; this module is the canonical
 location going forward.
 """
 
+import time
+
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtGui import QAction
 from pyface.qt.QtWidgets import (
@@ -28,6 +30,11 @@ from microdrop_style.icons.icons import (
 # action at a glance.
 ICON_PREVIEW = "video_search"
 from microdrop_utils.pyside_helpers import MarqueeLabel
+
+# 10 Hz refresh for the live (continuously-changing) time readouts in the
+# status bar. Discrete fields (counters, names) update via Traits observers
+# instead; only the elapsed/active clocks need polling.
+STATUS_POLL_INTERVAL_MS = 100
 
 
 class NavigationBar(QWidget):
@@ -399,20 +406,23 @@ class StatusBar(QScrollArea):
         layout.setContentsMargins(5, 0, 5, 0)
         layout.setSpacing(5)
 
-        self.lbl_total_time = QLabel("Total Time: 0 s")
-        self.lbl_total_time.setFixedWidth(120)
+        # Combined per-scope time readouts (issue #467): each shows the
+        # elapsed (wall) time and, in parens, the active (pause-aware) time.
+        # Driven by bind() from a ProtocolStatusModel.
+        self.lbl_total_time = QLabel("Protocol 0.0s (act 0.0s)")
+        self.lbl_total_time.setFixedWidth(190)
         self.lbl_total_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-        self.lbl_step_time = QLabel("Step Time: 0 s")
-        self.lbl_step_time.setFixedWidth(115)
+        self.lbl_step_time = QLabel("Step 0.0s (act 0.0s)")
+        self.lbl_step_time.setFixedWidth(170)
         self.lbl_step_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-        # Phase time slot — not in the legacy StatusBar layout, but
-        # callers (BasePluggableProtocolDemoWindow) want to surface
-        # the per-phase ack timer here. Hidden by default; the demo
-        # window reveals it iff DemoConfig.phase_ack_topic is set.
-        self.lbl_phase_time = QLabel("Phase 0/0  0.00s / 0.00s")
-        self.lbl_phase_time.setFixedWidth(220)
+        # Phase time slot — "Phase n/N  elapsed/target (act active)". Hidden
+        # by default; the composition root reveals it (the demo window iff
+        # DemoConfig.phase_ack_topic is set; the dock pane when phase
+        # tracking applies).
+        self.lbl_phase_time = QLabel("Phase 0/0  0.0s/0.0s (act 0.0s)")
+        self.lbl_phase_time.setFixedWidth(260)
         self.lbl_phase_time.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.lbl_phase_time.setVisible(False)
 
@@ -492,8 +502,112 @@ class StatusBar(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setFixedHeight(40)
 
+        # Bound lazily via bind(); until then the labels show their neutral
+        # initial text.
+        self._model = None
+        self._poll_timer = None
+
         self._apply_styling()
         QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
+
+    def bind(self, model):
+        """Bind this status bar to a ProtocolStatusModel.
+
+        Discrete traits (counters, names, rep-chain) drive label text via
+        Traits observers; the continuously-changing time readouts are
+        refreshed by a 10 Hz poll timer that runs only while a protocol is
+        active. Safe to touch widgets in the observers: the model is mutated
+        only on the GUI thread (see ProtocolStatusController)."""
+        self._model = model
+        if self._poll_timer is None:
+            self._poll_timer = QTimer(self)
+            self._poll_timer.setInterval(STATUS_POLL_INTERVAL_MS)
+            self._poll_timer.timeout.connect(self._refresh_times)
+
+        model.observe(self._on_counts_changed,
+                      "step_index, step_total, phase_index, phase_total")
+        model.observe(self._on_repeats_changed,
+                      "repeats_completed, repeats_total")
+        model.observe(self._on_names_changed,
+                      "recent_step_name, next_step_name, rep_chain_label")
+        model.observe(self._on_running_changed, "running")
+
+        self._refresh_counts()
+        self._refresh_repeats()
+        self._refresh_names()
+        self._refresh_times()
+
+    # --- observer handlers (discrete) ---
+
+    def _on_counts_changed(self, event):
+        self._refresh_counts()
+
+    def _on_repeats_changed(self, event):
+        self._refresh_repeats()
+
+    def _on_names_changed(self, event):
+        self._refresh_names()
+
+    def _on_running_changed(self, event):
+        if self._poll_timer is None:
+            return
+        if event.new:
+            if not self._poll_timer.isActive():
+                self._poll_timer.start()
+        else:
+            self._refresh_times()        # final freeze-frame
+            self._poll_timer.stop()
+
+    # --- refreshers ---
+
+    def _refresh_counts(self):
+        m = self._model
+        if m is None:
+            return
+        self.lbl_step_progress.setText(f"Step {m.step_index}/{m.step_total}")
+
+    def _refresh_repeats(self):
+        m = self._model
+        if m is None:
+            return
+        self.lbl_repeat_protocol_status.setText(f"{m.repeats_completed}/")
+
+    def _refresh_names(self):
+        m = self._model
+        if m is None:
+            return
+        self.lbl_recent_step.setText(f"Most Recent Step: {m.recent_step_name}")
+        self.lbl_next_step.setText(f"Next Step: {m.next_step_name}")
+        if m.rep_chain_label:
+            self.lbl_step_repetition.setText(m.rep_chain_label)
+            self.lbl_step_repetition.setVisible(True)
+        else:
+            self.lbl_step_repetition.setText("")
+            self.lbl_step_repetition.setVisible(False)
+
+    def _refresh_times(self):
+        m = self._model
+        if m is None:
+            return
+        now = time.monotonic()
+        self.lbl_total_time.setText(
+            f"Protocol {m.protocol_clock.elapsed(now):.1f}s "
+            f"(act {m.protocol_clock.active(now):.1f}s)"
+        )
+        self.lbl_step_time.setText(
+            f"Step {m.step_clock.elapsed(now):.1f}s "
+            f"(act {m.step_clock.active(now):.1f}s)"
+        )
+        if m.phase_total > 0:
+            head = f"Phase {m.phase_index}/{m.phase_total}"
+        elif m.phase_index > 0:
+            head = f"Phase {m.phase_index}"
+        else:
+            head = "Phase"
+        self.lbl_phase_time.setText(
+            f"{head}  {m.phase_clock.elapsed(now):.1f}s/"
+            f"{m.phase_target_s:.1f}s (act {m.phase_clock.active(now):.1f}s)"
+        )
 
     def _apply_styling(self):
         if is_dark_mode():

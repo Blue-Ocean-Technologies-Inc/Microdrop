@@ -199,7 +199,8 @@ def test_window_has_status_bar_with_step_label(qapp):
     w = BasePluggableProtocolDemoWindow(cfg)
     assert w.statusBar() is not None        # bottom (readouts only)
     assert w.status_bar is not None         # top (legacy-look StatusBar)
-    assert w._status_step_label.text() == "Step 0/0"
+    # bind() paints the model's "Step 0/0" via the step-progress label.
+    assert w.status_bar.lbl_step_progress.text() == "Step 0/0"
 
 
 def test_window_status_step_elapsed_label_exists(qapp):
@@ -209,7 +210,7 @@ def test_window_status_step_elapsed_label_exists(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_step_time_label is not None
+    assert w.status_bar.lbl_step_time is not None
 
 
 def test_window_executor_step_started_connected_to_tree_highlight(qapp):
@@ -234,19 +235,34 @@ def test_window_executor_step_started_connected_to_tree_highlight(qapp):
         w.widget.highlight_active_row = orig
 
 
-def test_window_tick_timer_runs_at_10_hz(qapp):
-    """Tick timer interval should be 100 ms (10 Hz)."""
+def test_window_status_poll_timer_runs_at_10_hz(qapp):
+    """The status bar's time-poll timer interval should be 100 ms (10 Hz)."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._tick_timer.interval() == 100
+    assert w.status_bar._poll_timer.interval() == 100
+
+
+def test_window_status_poll_timer_runs_only_while_running(qapp):
+    """The poll timer starts when the model goes running and stops on stop."""
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.demos.base_demo_window import (
+        BasePluggableProtocolDemoWindow,
+    )
+    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
+    w = BasePluggableProtocolDemoWindow(cfg)
+    assert not w.status_bar._poll_timer.isActive()
+    w.status_model.running = True
+    assert w.status_bar._poll_timer.isActive()
+    w.status_model.running = False
+    assert not w.status_bar._poll_timer.isActive()
 
 
 def test_phase_ack_topic_none_hides_phase_timer(qapp):
-    """When phase_ack_topic=None, no phase elapsed label in status bar."""
+    """When phase_ack_topic=None, the phase time label is hidden."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -254,11 +270,11 @@ def test_phase_ack_topic_none_hides_phase_timer(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
                      phase_ack_topic=None)
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_phase_time_label is None
+    assert w.status_bar.lbl_phase_time.isHidden()
 
 
 def test_phase_ack_topic_set_creates_phase_label(qapp):
-    """When phase_ack_topic set, phase elapsed label is in status bar."""
+    """When phase_ack_topic set, the phase time label is shown."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -266,11 +282,11 @@ def test_phase_ack_topic_set_creates_phase_label(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
                      phase_ack_topic="x/applied")
     w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_phase_time_label is not None
+    assert not w.status_bar.lbl_phase_time.isHidden()
 
 
-def test_phase_acked_signal_resets_phase_timer(qapp):
-    """Emitting the phase_acked signal sets _phase_started_at = monotonic()."""
+def test_phase_started_signal_updates_phase_counters(qapp):
+    """phase_started -> controller -> model phase counters + bound label."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -278,15 +294,10 @@ def test_phase_acked_signal_resets_phase_timer(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
                      phase_ack_topic="x/applied")
     w = BasePluggableProtocolDemoWindow(cfg)
-    # Set the current row so phase ack handler doesn't early-return.
-    w._current_row = object()
-    w._step_started_at = None
-    before = w._phase_started_at
-    w.phase_acked.emit()
-    assert w._phase_started_at is not None
-    assert w._phase_started_at != before
-    # First ack also sets step_started_at if it was None.
-    assert w._step_started_at is not None
+    w.executor.qsignals.protocol_started.emit()
+    w.executor.qsignals.phase_started.emit(2, 4, 1.0)
+    assert w.status_model.phase_index == 2
+    assert w.status_model.phase_total == 4
 
 
 def test_status_readout_creates_label_with_initial_text(qapp):
@@ -533,8 +544,12 @@ def test_window_side_panel_uses_splitter(qapp):
     assert w._side_panel is side_widget
 
 
-def test_clear_all_highlights_resets_status(qapp):
-    """After protocol terminates, status labels reset and step counters cleared."""
+def test_protocol_terminated_resets_demo_readouts(qapp):
+    """_on_protocol_terminated resets the demo readout labels to initial.
+
+    (Status-bar counters/timers are owned by ProtocolStatusModel and reset
+    on the next run; that behavior is covered by the model/controller tests.)
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -546,16 +561,8 @@ def test_clear_all_highlights_resets_status(qapp):
         ],
     )
     w = BasePluggableProtocolDemoWindow(cfg)
-    # Simulate state mid-run.
-    w._step_index = 2
-    w._step_total = 3
-    w._step_started_at = 100.0
     w._readout_labels["voltage"].setText("Voltage: 99 V")
-    w._status_step_label.setText("Step 2 / 3")
-    # Terminate.
     w._on_protocol_terminated()
-    assert w._status_step_label.text() == "Step 0/0"
-    assert w._step_started_at is None
     assert w._readout_labels["voltage"].text() == "Voltage: --"
 
 
@@ -637,24 +644,9 @@ def test_post_build_setup_default_is_no_op(qapp):
     BasePluggableProtocolDemoWindow(cfg)
 
 
-def test_status_bar_has_reps_label(qapp):
-    """The status bar exposes _status_reps_label.
-
-    Initial text is the StatusBar widget's "Repetition 0/0" placeholder
-    (legacy protocol_grid look) — was the empty string when the label
-    was a permanent widget on the bottom QStatusBar.
-    """
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.demos.base_demo_window import (
-        BasePluggableProtocolDemoWindow,
-    )
-    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
-    w = BasePluggableProtocolDemoWindow(cfg)
-    assert w._status_reps_label.text() == "Repetition 0/0"
-
-
 def test_step_repetition_renders_chain(qapp):
-    """step_repetition with a non-empty chain renders 'rep i/n of name'."""
+    """step_repetition with a non-empty chain renders 'rep i/n of name'
+    through the controller -> model -> bound rep-chain label."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -662,38 +654,20 @@ def test_step_repetition_renders_chain(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
     w.executor.qsignals.step_repetition.emit([("Wash", 2, 3)])
-    assert w._status_reps_label.text() == "rep 2/3 of 'Wash'"
+    assert w.status_bar.lbl_step_repetition.text() == "rep 2/3 of 'Wash'"
 
 
 def test_step_repetition_empty_chain_clears(qapp):
-    """An empty rep chain clears the reps label."""
+    """An empty rep chain clears the rep-chain label."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w._status_reps_label.setText("rep 1/3 of 'Wash'")
+    w.executor.qsignals.step_repetition.emit([("Wash", 1, 3)])
     w.executor.qsignals.step_repetition.emit([])
-    assert w._status_reps_label.text() == ""
-
-
-def test_step_finished_freezes_step_elapsed_label(qapp):
-    """step_finished calls _refresh_status, which paints the final
-    elapsed value into _status_step_time_label."""
-    import time
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.demos.base_demo_window import (
-        BasePluggableProtocolDemoWindow,
-    )
-    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
-    w = BasePluggableProtocolDemoWindow(cfg)
-    # Simulate mid-step state: started a known duration ago.
-    w._step_started_at = time.monotonic() - 1.5
-    w.executor.qsignals.step_finished.emit(None)
-    text = w._status_step_time_label.text()
-    assert text.startswith("Step ")
-    assert "1." in text or "1.5" in text   # close enough — within tick window
+    assert w.status_bar.lbl_step_repetition.text() == ""
 
 
 def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
@@ -721,5 +695,5 @@ def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     w.executor.qsignals.protocol_error.emit("kaboom")
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
-    assert not w._tick_timer.isActive()
+    assert not w.status_bar._poll_timer.isActive()
     assert calls == [("Protocol error", "kaboom")]
