@@ -472,17 +472,22 @@ class RowManager(HasTraits):
 
     # --- imperative bulk write ---
 
-    def set_value(self, path: Path, col_id: str, value) -> None:
-        col = self._column_by_id(col_id)
+    def _set_value(self, path: Path, col: 'IColumn', value):
         row = self.get_row(path)
         col.model.set_value(row, value)
-        self.cell_changed = {"path": tuple(path), "col_id": col_id}
+        # cell_changed carries the per-cell model col_id (NOT col.id, which is
+        # the compound base_id for synthesized field cells) — that's what the
+        # delegate/setData emit and what the tree model + state tracker match on.
+        self.cell_changed = {"path": tuple(path), "col_id": col.model.col_id}
+
+    def set_value(self, path: Path, col_id: str, value) -> None:
+        col = self._column_by_id(col_id)
+        self._set_value(path, col, value)
 
     def set_values(self, paths: List[Path], col_id: str, value) -> None:
         col = self._column_by_id(col_id)
-        for p in paths:
-            col.model.set_value(self.get_row(p), value)
-            self.cell_changed = {"path": tuple(p), "col_id": col_id}
+        for path in paths:
+            self._set_value(path, col, value)
 
     def apply(self, paths: List[Path], fn) -> None:
         # `fn` is arbitrary — could touch any column on any row, or
