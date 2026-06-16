@@ -413,21 +413,20 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         message_model = DeviceViewerMessageModel.deserialize(message_model_serial)
 
-        if message_model.step_id != self._last_applied_step_id:
-            if self._apply_step_transition(message_model):
-                self._last_applied_step_id = message_model.step_id
-            # On cancel we do NOT update _last_applied_step_id.
-            # The grid's selection remains visually on the new row, but the
-            # sidebar stays on the old values — see spec open item re:
-            # forcing the grid to revert selection.
-        elif message_model.execution_params and not self.model.protocol_running:
-            # Same-step refresh: the protocol widget echoing back a commit
-            # after its own reconciliation (e.g. the tree recalculating
-            # Route Reps Dur). Reload + rebaseline silently — no
-            # uncommitted-changes prompt, the step did not change.
-            self.model.routes.apply_execution_params(
-                message_model.execution_params
-            )
+        step_changed = message_model.step_id != self._last_applied_step_id
+
+        if not step_changed and message_model.execution_params and not self.model.protocol_running:
+            # Same-step refresh: the protocol widget echoing back its own
+            # reconciliation (e.g. the tree recalculating Route Reps Dur
+            # after the DV wrote routes to the step). Reload + rebaseline
+            # the sidebar params, then STOP — falling through to the
+            # reset()/reapply below would clear_routes() in the middle of a
+            # free-hand draw, wiping the in-progress route and selected
+            # layer and kicking the user out of draw mode. Routes only ever
+            # flow DV -> tree, never back, so there is nothing else to sync.
+            logger.info(f"Device Viewer: Applying new execution params from protocol side for step {message_model.step_id};\n\n Params: {message_model.execution_params}\n\n")
+            self.model.routes.apply_execution_params(message_model.execution_params)
+            return
 
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
@@ -465,6 +464,20 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.routes.add_layer(Route(route=route.copy()), None, color)
         self.model.routes.selected_layer = None
 
+        # Pull the step's execution params into the sidebar AFTER the routes
+        # exist. reset() above transiently empties the layers, which flips
+        # repeats_frozen on (no loop present) and pins Repetitions/Repeat Dur
+        # to 1/0; applying the params now — with the real route set in place —
+        # means that pin can't clobber the pulled values (e.g. a loop step's
+        # Repetitions snapping back to 1). Also baselines the sidebar so the
+        # commit button starts disabled.
+        if step_changed:
+            if message_model.execution_params:
+                self.model.routes.apply_execution_params(message_model.execution_params)
+            else:
+                self.model.routes.clear_committed_baseline()
+            self._last_applied_step_id = message_model.step_id
+
         self._disable_state_messages = False  # Re-enable state messages after reset
         self._undoing = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
@@ -480,53 +493,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.warning("Device viewer will not be processing device view model state change since state messages are disabled.")
         else:
             logger.info("Device viewer will process device view model state changes")
-
-    def _apply_step_transition(self, message_model):
-        """Pull execution params from the newly-selected step into the sidebar.
-
-        If the sidebar is dirty, prompt Commit/Discard/Cancel. Returns True if
-        the caller should update _last_applied_step_id, False on cancel.
-        """
-        if self.model.routes.commit_enabled and self._last_applied_step_id:
-            choice = self._prompt_uncommitted_changes()
-            if choice == "cancel":
-                return False
-            if choice == "commit":
-                prev_id = self._last_applied_step_id
-                params = self.model.routes._current_params()
-                commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
-                publish_message(
-                    topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
-                )
-            # "discard" falls through to apply the new step.
-
-        if message_model.execution_params:
-            self.model.routes.apply_execution_params(message_model.execution_params)
-        else:
-            self.model.routes.clear_committed_baseline()
-        return True
-
-    def _prompt_uncommitted_changes(self) -> str:
-        """Modal Commit/Discard/Cancel dialog. Returns 'commit', 'discard', or 'cancel'."""
-        from PySide6.QtWidgets import QMessageBox
-        box = QMessageBox()
-        box.setWindowTitle("Uncommitted execution parameters")
-        box.setText(
-            f"You have uncommitted execution parameter changes for step "
-            f"{self._last_applied_step_id}."
-        )
-        box.setInformativeText("Commit the changes to that step, discard them, or cancel?")
-        commit_btn = box.addButton("Commit", QMessageBox.AcceptRole)
-        discard_btn = box.addButton("Discard", QMessageBox.DestructiveRole)
-        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
-        box.setDefaultButton(cancel_btn)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked is commit_btn:
-            return "commit"
-        if clicked is discard_btn:
-            return "discard"
-        return "cancel"
 
     @observe("model:routes:commit_to_step_btn")
     def _on_commit_to_step_btn_fired(self, event):
