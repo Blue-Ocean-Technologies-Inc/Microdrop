@@ -16,7 +16,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     YES,
     FileDialog,
     confirm,
-    error, warning,
+    error, warning, CANCEL
 )
 from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
@@ -428,6 +428,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.routes.apply_execution_params(message_model.execution_params)
             return
 
+        if step_changed and message_model.execution_params and not self.model.protocol_running:
+            self._check_unsaved_execution_params()
+
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
 
@@ -486,6 +489,36 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._publish_geometry_if_changed()
 
         QApplication.processEvents()
+
+    def _check_unsaved_execution_params(self):
+        # ask user if they want to save changes if there are any before moving on
+        if not self.model.protocol_running:
+            if self.model.routes.commit_enabled and self._last_applied_step_id:
+                logger.warning(f"Unsaved route execution settings for last step {self._last_applied_step_id}")
+
+                choice = warning(
+                    None,
+                    "Save your execution settings to current protocol step?",
+                    title="Uncommitted Execution Settings",
+                    informative=(
+                        f"You've changed this step's execution settings in the device viewer "
+                        f"but haven't committed them to the protocol.<br><br>"
+                        f"<b>Commit</b> writes them to the step. "
+                        f"<b>Discard</b> reverts to the step's saved values."
+                    ),
+                    ok_label="Commit",
+                    cancel_label="Discard",
+                )
+
+                if choice == CANCEL:
+                    logger.debug("Discarding unsaved route execution settings")
+
+                elif choice == OK:
+                    prev_id = self._last_applied_step_id
+                    params = self.model.routes._current_params()
+                    logger.info(f"Sending protocol step: {prev_id} execution settings: {params}")
+                    commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
+                    publish_message(topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize())
 
     @observe("_disable_state_messages")
     def __disable_state_messages_change_log(self, event):
@@ -1185,7 +1218,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             return
 
         try:
-            logger.info("Processing device view model state change...")
+            logger.debug("Processing device view model state change...")
             self.model_change_handler_with_timeout(event)
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
             logger.info(
