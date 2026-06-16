@@ -227,6 +227,18 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         if config.phase_ack_topic is not None:
             self.phase_acked.connect(self.pane._on_phase_ack)
 
+        # Standalone composition root (no dock pane here): own the status
+        # controller that links the executor's Qt signals to the status model
+        # and bind the status bar to it (issue #467).
+        from pluggable_protocol_tree.services.protocol_status_controller import (
+            ProtocolStatusController,
+        )
+        self.status_controller = ProtocolStatusController(
+            qsignals=self.pane.executor.qsignals,
+            manager=self.pane.manager,
+        )
+        self.pane.status_bar.bind(self.status_controller.model)
+
         self._side_panel = None
         if config.side_panel_factory is not None:
             side = config.side_panel_factory(self.pane.manager)
@@ -447,64 +459,13 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         return self.pane.experiment_label
 
     @property
-    def _status_step_label(self):
-        return self.pane._status_step_label
+    def status_model(self):
+        """The ProtocolStatusModel bound to the status bar (issue #467).
 
-    @property
-    def _status_step_time_label(self):
-        return self.pane._status_step_time_label
-
-    @property
-    def _status_reps_label(self):
-        return self.pane._status_reps_label
-
-    @property
-    def _status_phase_time_label(self):
-        return self.pane._status_phase_time_label
-
-    @property
-    def _tick_timer(self):
-        return self.pane._tick_timer
-
-    @property
-    def _step_index(self):
-        return self.pane._step_index
-
-    @_step_index.setter
-    def _step_index(self, value):
-        self.pane._step_index = value
-
-    @property
-    def _step_total(self):
-        return self.pane._step_total
-
-    @_step_total.setter
-    def _step_total(self, value):
-        self.pane._step_total = value
-
-    @property
-    def _step_started_at(self):
-        return self.pane._step_started_at
-
-    @_step_started_at.setter
-    def _step_started_at(self, value):
-        self.pane._step_started_at = value
-
-    @property
-    def _phase_started_at(self):
-        return self.pane._phase_started_at
-
-    @_phase_started_at.setter
-    def _phase_started_at(self, value):
-        self.pane._phase_started_at = value
-
-    @property
-    def _current_row(self):
-        return self.pane._current_row
-
-    @_current_row.setter
-    def _current_row(self, value):
-        self.pane._current_row = value
+        Status counters / timers used to be pane internals proxied here;
+        they now live in the model the controller drives. Tests read this
+        and the bound StatusBar labels instead."""
+        return self.status_controller.model
 
     def _on_protocol_terminated(self):
         """Test hook — calls the pane's terminator + resets demo readouts."""
