@@ -154,15 +154,21 @@ class ProtocolPreferences(PreferencesHelper):
                 getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
             if default_ack_time_s <= 0:
                 continue
-            # Display name for the grid's key column: single columns
-            # (incl. compound field cells) carry col_name; an unexpanded
-            # compound shows its owner field's label. setdefault: a
-            # compound's field cells share one id and arrive owner-first,
-            # so the owner's label wins.
+            # Display name for the grid's key column. An optional
+            # ``preference_display_name`` on the column overrides everything
+            # (lets a column show a different label here than in the tree
+            # header); otherwise single columns (incl. compound field cells)
+            # carry col_name, an unexpanded compound shows its owner field's
+            # label, and the id is the last resort. setdefault: a compound's
+            # field cells share one id and arrive owner-first, so the owner's
+            # label wins.
             field_specs = getattr(column.model, "field_specs", None)
-            column_names.setdefault(column.id, (
-                getattr(column.model, "col_name", "")
-                or (field_specs()[0].col_name if field_specs else column.id)))
+            display_name = (
+                getattr(column, "preference_display_name", "")
+                or getattr(column.model, "col_name", "")
+                or (field_specs()[0].col_name if field_specs else column.id)
+            )
+            column_names.setdefault(column.id, display_name)
             default_ack_times[column.id] = default_ack_time_s
         ack_times = {
             col_id: self.protocol_tree_ack_times.get(col_id, default_ack_time_s)

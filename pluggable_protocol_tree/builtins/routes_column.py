@@ -461,9 +461,10 @@ def make_routes_column():
     # saved protocols and user-tuned wait times.
     return Column(
         model=RoutesColumnModel(
-            col_id="routes", col_name="Electrodes", default_value=[],
+            col_id="routes", col_name="Routes", default_value=[],
         ),
         view=RoutesSummaryView(),
         handler=RoutesHandler(),
+        preference_display_name="Electrodes / Routes"
     )
 

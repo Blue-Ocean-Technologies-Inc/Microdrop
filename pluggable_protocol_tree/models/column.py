@@ -136,11 +136,11 @@ class Column(HasTraits):
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
 
-    #: Identity of this column UNIT (model+view+handler) for unit-level
-    #: maps like the ack-wait grid. Defaults to the model's col_id;
-    #: compound expansion overrides it so every synthesized field cell
-    #: reports the compound's base_id instead of its own field id.
-    id = Str()
+    id = Str(desc="Identity of this column UNIT (model+view+handler) for unit-level; "
+                  "maps like the ack-wait grid. Defaults to the model's col_id; "
+                  "compound expansion overrides it so every synthesized field cell; "
+                  "reports the compound's base_id instead of its own field id.")
+    preference_display_name = Str(desc="Name to use for this column in preferences panes")
 
     def _id_default(self):
         return self.model.col_id
