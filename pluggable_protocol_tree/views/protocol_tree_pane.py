@@ -933,21 +933,21 @@ class ProtocolTreePane(QWidget):
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog
     def navigate_to_first_step(self):
-        steps = list(self.manager.iter_execution_steps())
+        steps = self._navigable_steps()
         if steps:
             logger.info(f"Nav: first step [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
-        steps = list(self.manager.iter_execution_steps())
+        steps = self._navigable_steps()
         if steps:
             logger.info(f"Nav: last step [{steps[-1].dotted_path()}]")
             self._select_step(steps[-1])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_previous_step(self):
-        steps = list(self.manager.iter_execution_steps())
+        steps = self._navigable_steps()
         if not steps:
             return
         cur = self._current_step_in(steps)
@@ -961,7 +961,7 @@ class ProtocolTreePane(QWidget):
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_next_step(self):
-        steps = list(self.manager.iter_execution_steps())
+        steps = self._navigable_steps()
         if not steps:
             return
         cur = self._current_step_in(steps)
@@ -990,6 +990,24 @@ class ProtocolTreePane(QWidget):
         )
         new_row = self.manager.get_row(new_path)
         self._select_step(new_row)
+
+    def _navigable_steps(self):
+        """Distinct steps in execution order for the step cursor.
+
+        iter_execution_steps() expands repetitions — a Reps=N step (or a
+        step nested under a Reps=N group) is yielded N times as the *same*
+        row. The cursor navigates structural steps, so collapse those
+        repeats to one entry per row; otherwise next/prev would re-select
+        the same row and the cursor would never advance past a repeated step.
+        """
+        seen = set()
+        steps = []
+        for row in self.manager.iter_execution_steps():
+            if row.uuid in seen:
+                continue
+            seen.add(row.uuid)
+            steps.append(row)
+        return steps
 
     def _current_step_in(self, steps):
         idx = self.widget.tree.currentIndex()
