@@ -96,10 +96,13 @@ class ProtocolStatusController(HasTraits):
         self.model.on_repetition(completed, total)
 
     def _on_stopped(self):
-        self.model.stop(self.clock())
+        # Terminal signals (finished / aborted) fire immediately after the
+        # executor's on_post_protocol_end teardown, i.e. once the whole run
+        # (all repeats) is done -- reset the trackers back to idle here.
+        self.model.reset()
 
     def _on_error(self, _msg):
-        self.model.stop(self.clock())
+        self.model.reset()
 
     # --- helpers (need manager) ---
 

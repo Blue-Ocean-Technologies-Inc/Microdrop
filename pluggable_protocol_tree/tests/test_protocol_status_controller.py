@@ -101,19 +101,26 @@ def test_rep_chain_formatting():
     assert ctrl.model.rep_chain_label == ""
 
 
-def test_terminal_signals_stop():
+def test_terminal_signals_reset_trackers():
+    # Finished / aborted are the post-protocol teardown: reset to idle.
     for term in ("protocol_finished", "protocol_aborted"):
         ctrl, sigs, clock, rows = _make()
         sigs.protocol_started.emit()
+        sigs.step_started.emit(rows[0])
+        clock["t"] = 5.0
         getattr(sigs, term).emit()
         assert ctrl.model.running is False
+        assert ctrl.model.step_index == 0
+        assert ctrl.model.step_total == 0
+        assert ctrl.model.protocol_clock.elapsed(9.0) == 0.0
 
 
-def test_error_stops():
+def test_error_resets_trackers():
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started.emit()
     sigs.protocol_error.emit("boom")
     assert ctrl.model.running is False
+    assert ctrl.model.step_total == 0
 
 
 def test_disconnect_stops_updates():

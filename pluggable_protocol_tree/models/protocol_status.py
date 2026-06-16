@@ -45,15 +45,22 @@ class ProtocolStatusModel(HasTraits):
     # --- rule methods ---
 
     def reset(self):
+        """Return to idle: zero counters/names and all three clocks.
+
+        Used both at the start of a run (on_protocol_start) and as the
+        post-protocol teardown (the controller calls this on the terminal
+        signals that fire right after the executor's on_post_protocol_end).
+        Clocks are zeroed BEFORE flipping ``running`` so the view's
+        running->False refresh paints 0.0, not the final frozen time."""
+        self.protocol_clock = ScopeStopwatch()
+        self.step_clock = ScopeStopwatch()
+        self.phase_clock = ScopeStopwatch()
         self.trait_set(
             step_index=0, step_total=0, phase_index=0, phase_total=0,
             repeats_completed=0, repeats_total=1,
             recent_step_name="-", next_step_name="-", rep_chain_label="",
             phase_target_s=0.0, running=False, paused=False,
         )
-        self.protocol_clock = ScopeStopwatch()
-        self.step_clock = ScopeStopwatch()
-        self.phase_clock = ScopeStopwatch()
 
     def on_protocol_start(self, now, step_total):
         self.reset()
@@ -108,10 +115,3 @@ class ProtocolStatusModel(HasTraits):
 
     def set_rep_chain(self, label):
         self.rep_chain_label = label
-
-    def stop(self, now):
-        self.running = False
-        self.paused = False
-        self.protocol_clock.stop(now)
-        self.step_clock.stop(now)
-        self.phase_clock.stop(now)

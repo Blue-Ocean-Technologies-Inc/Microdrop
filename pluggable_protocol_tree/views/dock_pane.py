@@ -100,6 +100,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
             manager=self.manager,
         )
         pane.status_bar.bind(self.status_controller.model)
+        # Phase trackers are always shown in the full app (issue #467); the
+        # pane only auto-reveals the phase field when a phase_ack_topic is set
+        # (demo path), so make it explicit here.
+        pane.status_bar.lbl_phase_time.setVisible(True)
 
         # Legacy protocol_grid parity: the full app opens with one default
         # step when no protocol is loaded (no-op once a protocol is loaded).

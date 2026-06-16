@@ -79,17 +79,7 @@ def test_repetition_and_rep_chain():
     assert m.rep_chain_label == "rep 2/3 of 'Wash'"
 
 
-def test_stop_freezes_all_and_clears_running():
-    m = ProtocolStatusModel()
-    m.on_protocol_start(0.0, step_total=1)
-    m.on_step_start(0.0, "A", "-")
-    m.stop(3.0)
-    assert m.running is False
-    assert m.protocol_clock.elapsed(99.0) == 3.0
-    assert m.step_clock.elapsed(99.0) == 3.0
-
-
-def test_reset_restores_defaults():
+def test_reset_restores_defaults_and_zeroes_clocks():
     m = ProtocolStatusModel()
     m.on_protocol_start(0.0, step_total=5)
     m.on_step_start(0.0, "A", "B")
@@ -98,7 +88,10 @@ def test_reset_restores_defaults():
     assert m.step_total == 0
     assert m.recent_step_name == "-"
     assert m.running is False
+    # Clocks zeroed (reset is also the post-protocol teardown).
     assert m.protocol_clock.elapsed(9.0) == 0.0
+    assert m.step_clock.elapsed(9.0) == 0.0
+    assert m.phase_clock.elapsed(9.0) == 0.0
 
 
 def test_observers_fire_on_counter_change():
