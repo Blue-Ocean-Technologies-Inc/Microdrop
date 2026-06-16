@@ -11,6 +11,7 @@ from functools import partial
 from pyface.qt.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
 from pyface.qt.QtGui import QBrush, QColor
 
+from microdrop_style.helpers import is_dark_mode
 from pluggable_protocol_tree.models.row import GroupRow
 
 
@@ -28,6 +29,13 @@ class MvcTreeModel(QAbstractItemModel):
 
     _ACTIVE_BG = QBrush(QColor(0, 90, 200))  # solid blue
     _ACTIVE_FG = QBrush(QColor(255, 255, 255))
+
+    # Light-grey fill for read-only cells so they read as non-editable — the
+    # same cue the legacy protocol_grid used (issue #359). A cell is read-only
+    # here when it is neither editable nor user-checkable: checkbox cells are
+    # non-editable by design but stay interactive, so they keep the normal bg.
+    _READ_ONLY_BG_LIGHT = QBrush(QColor("#E8E8E8"))
+    _READ_ONLY_BG_DARK = QBrush(QColor("#3A3A3A"))
 
     def __init__(self, row_manager, parent=None):
         super().__init__(parent)
@@ -95,6 +103,11 @@ class MvcTreeModel(QAbstractItemModel):
 
     # ------------ data / flags / header ------------
 
+    @classmethod
+    def _read_only_brush(cls):
+        """Background brush for read-only cells, theme-aware (mirror of #359)."""
+        return cls._READ_ONLY_BG_DARK if is_dark_mode() else cls._READ_ONLY_BG_LIGHT
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
@@ -106,6 +119,14 @@ class MvcTreeModel(QAbstractItemModel):
                 return self._ACTIVE_BG
             if role == Qt.ForegroundRole:
                 return self._ACTIVE_FG
+
+        # Read-only cells get the light-grey fill (mirror of protocol_grid
+        # #359): read-only == neither editable nor user-checkable. The
+        # active-row highlight above already returned for that row.
+        if role == Qt.BackgroundRole:
+            flags = col.view.get_flags(node)
+            if not (flags & Qt.ItemIsEditable) and not (flags & Qt.ItemIsUserCheckable):
+                return self._read_only_brush()
 
         value = col.model.get_value(node)
 
