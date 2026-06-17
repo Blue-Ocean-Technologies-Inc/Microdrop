@@ -51,15 +51,15 @@ def expected_channels_for_step(row, electrode_to_channel: dict) -> list:
 
 class DropletCheckColumnModel(BaseColumnModel):
     """Per-step Bool: 'verify expected droplets after this step's phases'.
-    Default True; user can disable per-step via header right-click on the
+    Default False; user can disable per-step via header right-click on the
     hidden column."""
 
     col_id        = Str("check_droplets")
     col_name      = Str("Check Droplets")
-    default_value = Bool(True)
+    default_value = Bool(False)
 
     def trait_for_row(self):
-        return Bool(True)
+        return Bool(self.default_value or False)
 
 
 class DropletCheckColumnView(CheckboxColumnView):
@@ -75,6 +75,7 @@ class DropletCheckHandler(BaseColumnHandler):
 
     priority        = 80
     wait_for_topics = [DROPLETS_DETECTED, DROPLET_CHECK_DECISION_RESPONSE]
+    default_ack_time_s = 12.0
 
     def on_post_step(self, row, ctx):
         if not row.check_droplets:
@@ -91,7 +92,11 @@ class DropletCheckHandler(BaseColumnHandler):
 
         publish_message(topic=DETECT_DROPLETS, message=json.dumps(expected))
         try:
-            ack_raw = ctx.wait_for(DROPLETS_DETECTED, timeout=12.0)
+            if self.ack_time_s > 0:
+                ack_raw = ctx.wait_for(DROPLETS_DETECTED, timeout=self.ack_time_s)
+            else:
+                logger.warning("Avoiding droplet detection. Ack time set to 0s.")
+                return
         except TimeoutError:
             # Backend handles its own internal retries; log + proceed
             # mirrors legacy behavior on the timeout path.
