@@ -91,6 +91,37 @@ class ProtocolStatusModel(HasTraits):
         if self.paused:
             self.phase_clock.pause(now)
 
+    def seek_step(self, now, step_index, recent_name, next_name):
+        """Navigate to an arbitrary step while paused: SET the counter (not
+        increment), reset the phase scope, and reset the step timer. Seek only
+        happens while paused, so the fresh step clock is started then immediately
+        stopped so both elapsed and active read 0 until resume (which re-starts
+        the clock from that moment)."""
+        self.step_index = int(step_index)
+        self.recent_step_name = recent_name
+        self.next_step_name = next_name
+        self.phase_index = 0
+        self.phase_total = 0
+        self.phase_target_s = 0.0
+        self.step_clock = ScopeStopwatch()
+        self.step_clock.start(now)
+        self.step_clock.stop(now)                # freeze elapsed at 0 while paused
+        self.phase_clock = ScopeStopwatch()      # fresh, unstarted
+
+    def seek_phase(self, now, phase_index, phase_total, phase_target_s):
+        """Navigate to an arbitrary phase while paused: SET the counters and
+        reset the phase timer (elapsed AND active), frozen while paused. On
+        resume the clock starts fresh from that moment."""
+        self.phase_index = int(phase_index)
+        self.phase_total = int(phase_total)
+        try:
+            self.phase_target_s = float(phase_target_s)
+        except (TypeError, ValueError):
+            self.phase_target_s = 0.0
+        self.phase_clock = ScopeStopwatch()
+        self.phase_clock.start(now)
+        self.phase_clock.stop(now)               # freeze elapsed at 0 while paused
+
     def on_phase_extended(self, extra_s):
         try:
             self.phase_target_s += float(extra_s)
@@ -106,8 +137,14 @@ class ProtocolStatusModel(HasTraits):
     def resume(self, now):
         self.paused = False
         self.protocol_clock.resume(now)
-        self.step_clock.resume(now)
-        self.phase_clock.resume(now)
+        # Clocks that were stopped by seek (elapsed_anchor is None) need a
+        # fresh start rather than a resume so they begin ticking from now.
+        for clock_attr in ("step_clock", "phase_clock"):
+            clock = getattr(self, clock_attr)
+            if clock._elapsed_anchor is None and clock._elapsed_accum == 0.0:
+                clock.start(now)
+            else:
+                clock.resume(now)
 
     def on_repetition(self, completed, total):
         self.repeats_completed = int(completed)
