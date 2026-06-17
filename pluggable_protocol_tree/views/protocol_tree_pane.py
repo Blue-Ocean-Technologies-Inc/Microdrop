@@ -328,14 +328,13 @@ class ProtocolTreePane(QWidget):
         )
 
     def _wire_executor_signals(self):
-        # highlight_active_row is pure visual decoration — no setCurrentIndex,
-        # so it doesn't fire currentChanged and needs no suppress wrap.
-        self.executor.qsignals.step_started.connect(
-            self.widget.highlight_active_row,
-        )
-        # Pane keeps the nav-relevant current row; status counters/timers are
-        # owned by ProtocolStatusController.
-        self.executor.qsignals.step_started.connect(self._on_step_started)
+        # The tree's active-step highlight, the nav cursor (_current_row), and
+        # editability are driven by the status model (current_step_path /
+        # running) via observers wired by the composition root (the dock pane's
+        # @observe handlers) — so the pane no longer consumes step_started
+        # directly (issue #471). The highlight
+        # is pure visual decoration and never publishes the static step view to
+        # the DV (RoutesHandler's per-phase display is authoritative mid-run).
         self.executor.qsignals.protocol_wait_started.connect(
             self._on_protocol_wait_started)
         self.executor.qsignals.protocol_wait_finished.connect(
@@ -383,23 +382,6 @@ class ProtocolTreePane(QWidget):
         self.protocol_running_changed.emit(True)
         self._publish_protocol_running("True")
         logger.info("Protocol started")
-
-    def _on_step_started(self, row):
-        # The pane keeps only the nav-relevant current row; the status
-        # counters/timers/labels are owned by ProtocolStatusController +
-        # ProtocolStatusModel and bound to the StatusBar by the
-        # composition root.
-        self._current_row = row
-
-        # NOTE: we deliberately do NOT publish the static step view to the
-        # DV here. RoutesHandler publishes a per-phase display for every
-        # phase (carrying step_id/label/routes + the phase's active
-        # electrodes, editable=False), which is the authoritative source
-        # while a protocol runs. Publishing _publish_for_row(row) here too
-        # raced with phase 1: the worker publishes phase 1 to the broker
-        # before this queued slot runs, so the static view (electrodes=[],
-        # editable=True) consistently landed AFTER phase 1 and cleared it,
-        # making the animation appear to begin at the second position.
 
     def _on_phase_ack(self):
         # Phase boundary now comes from the executor's phase_started
@@ -795,6 +777,18 @@ class ProtocolTreePane(QWidget):
         return steps
 
     def _current_step_in(self, steps):
+        # During a run the nav cursor follows the model's current step (the
+        # paused/executing step, synced into _current_row by the highlight
+        # observer) -- NOT the tree's stale selection, which is what made
+        # navigation jump to the first step after a pause (issue #471). Only
+        # when editing do we fall back to the tree selection.
+        sc = self.status_controller
+        if sc is not None and sc.model.running and self._current_row is not None:
+            cur_path = tuple(self._current_row.path)
+            for i, row in enumerate(steps):
+                if tuple(row.path) == cur_path:
+                    return i
+            return None
         idx = self.widget.tree.currentIndex()
         if not idx.isValid():
             return None
