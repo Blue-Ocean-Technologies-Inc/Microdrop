@@ -150,6 +150,11 @@ class RoutesHandler(BaseColumnHandler):
         # buffer left over from a phase that ended early.
         ctx.phase_advance_event.clear()
         ctx.reset_phase_time_buffer()
+        # A pending mid-run seek (operator navigated away while paused) must
+        # cut this phase's dwell/hold short on resume so the leftover time
+        # doesn't run before the executor redirects (#471).
+        def _seek_pending():
+            return ctx.protocol.cursor.resume_target is not None
         if stop_event.is_set():
             return False
         # Pause check at the phase boundary — block here so the
@@ -205,7 +210,8 @@ class RoutesHandler(BaseColumnHandler):
                 ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=self.ack_time_s)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
-                           phase_advance_event=ctx.phase_advance_event)
+                           phase_advance_event=ctx.phase_advance_event,
+                           seek_pending=_seek_pending)
 
         # Consume any phase-time buffer a sibling column added (only relevant
         # when this step opted into holding — see below) and tell the status
@@ -231,6 +237,8 @@ class RoutesHandler(BaseColumnHandler):
             grace_deadline = time.monotonic() + _HOLD_GRACE_S
             while (not stop_event.is_set()
                    and not ctx.phase_advance_event.is_set()):
+                if _seek_pending():
+                    break
                 if pause_event.is_set():
                     pause_event.wait_cleared()
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
@@ -240,7 +248,8 @@ class RoutesHandler(BaseColumnHandler):
                     _cooperative_sleep(
                         extra, stop_event, pause_event,
                         phase_advance_event=ctx.phase_advance_event,
-                        buffer_provider=_take_and_emit)
+                        buffer_provider=_take_and_emit,
+                        seek_pending=_seek_pending)
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
                     continue
                 if time.monotonic() >= grace_deadline:
@@ -332,7 +341,9 @@ class RoutesHandler(BaseColumnHandler):
 
         remaining = budget - _budget_elapsed()
         if remaining > 0 and not stop_event.is_set():
-            _cooperative_sleep(remaining, stop_event, pause_event)
+            _cooperative_sleep(
+                remaining, stop_event, pause_event,
+                seek_pending=lambda: ctx.protocol.cursor.resume_target is not None)
 
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get(ELECTRODE_TO_CHANNEL_KEY, {})
@@ -442,7 +453,9 @@ class RoutesHandler(BaseColumnHandler):
                 pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
                               - len(phases) * per_phase_dwell)
                 if pad > 0:
-                    _cooperative_sleep(pad, stop_event, pause_event)
+                    _cooperative_sleep(
+                        pad, stop_event, pause_event,
+                        seek_pending=lambda: cursor.resume_target is not None)
 
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
@@ -455,7 +468,8 @@ class RoutesHandler(BaseColumnHandler):
 
 
 def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
-                       phase_advance_event=None, buffer_provider=None) -> None:
+                       phase_advance_event=None, buffer_provider=None,
+                       seek_pending=None) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
@@ -475,10 +489,18 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
             return
         if phase_advance_event is not None and phase_advance_event.is_set():
             return
+        # A seek requested while paused (operator navigated to another
+        # step/phase) must abort the leftover dwell on resume — otherwise the
+        # old step's remaining time runs before the redirect (#471).
+        if seek_pending is not None and seek_pending():
+            return
         if pause_event is not None and pause_event.is_set():
             pause_event.wait_cleared()
             if stop_event.is_set():
                 return
+            # Re-check stop/seek/advance at the top before consuming more
+            # dwell; the resume may have a seek queued behind it.
+            continue
         if buffer_provider is not None:
             remaining += buffer_provider()
         slice_dur = min(_SLICE_S, remaining)
