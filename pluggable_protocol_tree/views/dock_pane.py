@@ -8,7 +8,9 @@ import json
 import threading
 import time
 
-from PySide6.QtCore import QTimer
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
+from apscheduler.triggers.interval import IntervalTrigger
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, NO, YES, error as error_dialog, escape_html_multiline,
@@ -36,7 +38,7 @@ from pluggable_protocol_tree.services.phase_math import effective_repetitions_fo
 from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
 from pluggable_protocol_tree.services.protocol_status_controller import ProtocolStatusController
 from pyface.tasks.api import TraitsDockPane
-from traits.api import Any, Bool, Instance, List, Str, observe
+from traits.api import Any, Bool, Event, Float, Instance, List, Str, observe
 
 from logger.logger_service import get_logger
 from microdrop_utils.sticky_notes import StickyWindowManager
@@ -57,6 +59,10 @@ from pluggable_protocol_tree.services.preferences import (
 
 logger = get_logger(__name__)
 
+# The status-time poll job runs at 10 Hz; silence APScheduler's per-execution
+# logs so it doesn't flood the log.
+get_logger('apscheduler.executors.default').setLevel(level="WARNING")
+
 
 class PluggableProtocolDockPane(TraitsDockPane):
     id = "pluggable_protocol_tree.dock_pane"
@@ -74,7 +80,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: status bar to it (issue #467). The dock pane is the app's HasTraits
     #: composition root that "sets up the link" between Qt and the model.
     status_controller = Instance(ProtocolStatusController)
-    _protocol_poll_timer = Instance(QTimer, desc="Update the status controller about the current time")
+    #: 10 Hz background job that ticks the live status-bar time readouts. It
+    #: runs on its own thread and only fires ``time_update_event`` — the actual
+    #: widget writes happen on the GUI thread via the dispatch="ui" observer.
+    _protocol_poll_scheduler = Instance(BackgroundScheduler,
+                                        desc="Ticks the status-bar time readouts at 10 Hz")
+    #: Fired (carrying time.monotonic()) on each poll tick from the scheduler's
+    #: background thread; _update_protocol_time observes it with dispatch="ui".
+    protocol_time_update_event = Event(Float)
 
     #: Protocol preferences model (the "microdrop.protocol" node). Bound to
     #: the live application's preferences in create_contents, then passed
@@ -187,10 +200,16 @@ class PluggableProtocolDockPane(TraitsDockPane):
             ),
         ]
 
-        # setup protocol timer
-        self._protocol_poll_timer = QTimer()
-        self._protocol_poll_timer.setInterval(STATUS_POLL_INTERVAL_MS)
-        self._protocol_poll_timer.timeout.connect(self._update_protocol_time)
+        # Background poll job for the live time readouts. Started paused; the
+        # running observer resumes/pauses it. It only fires time_update_event
+        # from its worker thread — _update_protocol_time runs on the GUI thread
+        # via dispatch="ui".
+        self._protocol_poll_scheduler = BackgroundScheduler()
+        self._protocol_poll_scheduler.add_job(
+            self._emit_time_update_tick,
+            trigger=IntervalTrigger(seconds=STATUS_POLL_INTERVAL_MS / 1000.0),
+        )
+        self._protocol_poll_scheduler.start(paused=True)
 
         # Phase trackers are always shown in the full app (issue #467); the
         # pane only auto-reveals the phase field when a phase_ack_topic is set
@@ -244,6 +263,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
         pane._seed_default_step_if_empty()
 
         return pane
+
+    def destroy(self):
+        """Tear down the background poll job before the pane goes away so its
+        thread doesn't outlive the view (QTimer cleaned up with the widget;
+        APScheduler needs an explicit shutdown)."""
+        sched = self._protocol_poll_scheduler
+        if sched is not None and sched.state != STATE_STOPPED:
+            try:
+                sched.shutdown(wait=False)
+            except Exception as e:
+                logger.warning(f"poll scheduler shutdown failed: {e}")
+        super().destroy()
 
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog
@@ -776,16 +807,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
     @observe("status_controller:model:running", dispatch="ui", post_init=True)
     def _on_protocol_running_changed(self, event):
         # Lock the tree while a run is in progress (issue #471) and drive the
-        # live time-readout poll timer off the same running flag.
+        # live time-readout poll job off the same running flag.
         self._pane.widget.set_editable(not bool(event.new))
-        if self._protocol_poll_timer is None:
+        sched = self._protocol_poll_scheduler
+        if sched is None:
             return
         if event.new:
-            if not self._protocol_poll_timer.isActive():
-                self._protocol_poll_timer.start()
+            if sched.state == STATE_PAUSED:
+                sched.resume()
+            elif sched.state == STATE_STOPPED:
+                sched.start()
         else:
-            self._update_protocol_time()  # final freeze-frame
-            self._protocol_poll_timer.stop()
+            self._update_protocol_time()  # final freeze-frame (GUI thread)
+            if sched.state == STATE_RUNNING:
+                sched.pause()
 
 
     ######### Helpers ###################
@@ -872,11 +907,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
                     "path": tuple(path), "col_id": "route_repetitions",
                 }
 
-    def _update_protocol_time(self, *args, **kwargs):
+    def _emit_time_update_tick(self):
+        # Runs on the scheduler's background thread. Setting the Traits event
+        # hands the GUI-thread refresh off to _update_protocol_time via its
+        # dispatch="ui" observer — no widget access happens here.
+        self.protocol_time_update_event = time.monotonic()
+
+    @observe("protocol_time_update_event", dispatch="ui")
+    def _update_protocol_time(self, event=None):
         model = self.status_controller.model
         status_view = self._pane.status_bar
 
-        now = time.monotonic()
+        # event.new is the tick's monotonic timestamp; direct calls (initial
+        # paint, freeze-frame on stop) pass no event and read the clock here.`
+        now = event.new if event is not None else time.monotonic()
 
         status_view.update_total_time(
             elapsed=model.protocol_clock.elapsed(now),
