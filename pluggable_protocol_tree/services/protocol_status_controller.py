@@ -16,6 +16,7 @@ import time
 from traits.api import Any, Callable, HasTraits, Instance
 
 from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
+from pluggable_protocol_tree.services.phase_math import iter_phases
 
 
 class ProtocolStatusController(HasTraits):
@@ -28,6 +29,9 @@ class ProtocolStatusController(HasTraits):
 
     #: RowManager -- needed for the step count and next-step name.
     manager = Any()
+
+    #: ProtocolExecutor -- needed to record the resume target for a seek.
+    executor = Any()
 
     #: Monotonic clock source; overridable in tests.
     clock = Callable(time.monotonic)
@@ -120,6 +124,62 @@ class ProtocolStatusController(HasTraits):
                 nxt = next(steps, None)
                 return nxt.name if nxt is not None else "-"
         return "-"
+
+    def _step_index_of(self, step_path):
+        """1-based position of step_path in execution order, or 0 if absent."""
+        target = tuple(step_path)
+        for i, row in enumerate(self.manager.iter_execution_steps(), start=1):
+            if tuple(row.path) == target:
+                return i
+        return 0
+
+    def _row_at(self, step_path):
+        target = tuple(step_path)
+        for row in self.manager.iter_execution_steps():
+            if tuple(row.path) == target:
+                return row
+        return None
+
+    @staticmethod
+    def _phase_total_for(row):
+        """Materialized phase count for a row (count/fixed steps). Duration-mode
+        precise phases are deferred (#477); fall back to 1 on any failure."""
+        try:
+            phases = list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=0.0,
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "route_repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+            return max(1, len(phases))
+        except Exception:
+            return 1
+
+    def seek_to(self, step_path, phase_index):
+        """Navigate (while paused) to ``(step_path, phase_index)`` -- 0-based
+        phase. Records the resume target on the executor and updates the model
+        so the counters/timers follow. No-op if the path is gone."""
+        row = self._row_at(step_path)
+        if row is None:
+            return
+        now = self.clock()
+        step_idx = self._step_index_of(step_path)
+        phase_total = self._phase_total_for(row)
+        phase0 = max(0, min(int(phase_index), phase_total - 1))
+
+        if self.executor is not None:
+            self.executor.seek(tuple(step_path), phase0)
+
+        if step_idx != self.model.step_index:
+            self.model.seek_step(now, step_idx, row.name, self._next_name(row))
+        self.model.seek_phase(
+            now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0)))
 
     @staticmethod
     def _fmt_chain(rep_chain):
