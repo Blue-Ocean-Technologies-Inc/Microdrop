@@ -172,7 +172,7 @@ class RoutesHandler(BaseColumnHandler):
                 )
 
         if qsignals is not None:
-            qsignals.phase_started.emit(
+            qsignals.phase_started = (
                 phase_index, phase_total, per_phase_dwell,
             )
 
@@ -215,7 +215,7 @@ class RoutesHandler(BaseColumnHandler):
         def _take_and_emit():
             extra = ctx.take_phase_time_buffer()
             if extra > 0 and qsignals is not None:
-                qsignals.phase_extended.emit(extra)
+                qsignals.phase_extended = extra
             return extra
 
         # Post-dwell hold: a sibling column (e.g. volume threshold) often

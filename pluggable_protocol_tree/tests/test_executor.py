@@ -1,8 +1,9 @@
 """Tests for execution.executor and .signals.
 
-Most tests do NOT require a QApplication — Qt direct-connect signals work
-without an event loop when sender and receiver share a thread. Tests that
-need cross-thread signal delivery construct a QApplication via fixture.
+ExecutorSignals is a HasTraits firing Traits ``Event`` traits: "emitting"
+is setting the trait, consumers ``observe`` it. Default-dispatch observers
+run synchronously on the thread that set the event, so these tests need no
+QApplication / event loop even for the worker-thread runs.
 """
 
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -10,7 +11,7 @@ from pluggable_protocol_tree.execution.signals import ExecutorSignals
 
 def test_executor_signals_constructible_without_qapplication():
     s = ExecutorSignals()
-    # All eight expected signals are present as attributes.
+    # All eight expected events are present as attributes.
     for name in (
         "protocol_started", "step_started", "step_finished",
         "protocol_paused", "protocol_resumed",
@@ -22,25 +23,25 @@ def test_executor_signals_constructible_without_qapplication():
 def test_executor_signals_direct_connect_invokes_slot():
     s = ExecutorSignals()
     received = []
-    s.protocol_finished.connect(lambda: received.append("finished"))
-    s.protocol_finished.emit()
+    s.observe(lambda event: received.append("finished"), "protocol_finished")
+    s.protocol_finished = True
     assert received == ["finished"]
 
 
 def test_executor_signals_step_started_carries_row_and_position():
     s = ExecutorSignals()
     received = []
-    s.step_started.connect(lambda row, idx, total: received.append((row, idx, total)))
+    s.observe(lambda event: received.append(event.new), "step_started")
     sentinel = object()
-    s.step_started.emit(sentinel, 3, 9)
+    s.step_started = (sentinel, 3, 9)
     assert received == [(sentinel, 3, 9)]
 
 
 def test_executor_signals_protocol_error_carries_message():
     s = ExecutorSignals()
     received = []
-    s.protocol_error.connect(lambda msg: received.append(msg))
-    s.protocol_error.emit("oops")
+    s.observe(lambda event: received.append(event.new), "protocol_error")
+    s.protocol_error = "oops"
     assert received == ["oops"]
 
 
@@ -102,7 +103,7 @@ def test_executor_constructible_with_required_traits():
 def test_executor_pause_emits_protocol_paused():
     ex = _make_executor()
     received = []
-    ex.qsignals.protocol_paused.connect(lambda: received.append("paused"))
+    ex.qsignals.observe(lambda event: received.append("paused"), "protocol_paused")
     ex.pause()
     assert ex.pause_event.is_set() is True
     assert received == ["paused"]
@@ -111,7 +112,7 @@ def test_executor_pause_emits_protocol_paused():
 def test_executor_resume_emits_protocol_resumed():
     ex = _make_executor()
     received = []
-    ex.qsignals.protocol_resumed.connect(lambda: received.append("resumed"))
+    ex.qsignals.observe(lambda event: received.append("resumed"), "protocol_resumed")
     ex.pause()
     ex.resume()
     assert ex.pause_event.is_set() is False
@@ -140,16 +141,13 @@ def test_executor_wait_returns_true_when_never_started():
 
 
 def test_executor_wait_blocks_until_run_finishes():
-    from pyface.qt.QtCore import Qt
     cols = [make_type_column(), make_id_command if False else make_id_column(),
             make_name_column(), _fast_duration_column()]
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "A"})
     ex = ProtocolExecutor(row_manager=rm)
     finished = []
-    ex.qsignals.protocol_finished.connect(
-        lambda: finished.append(True), type=Qt.DirectConnection,
-    )
+    ex.qsignals.observe(lambda event: finished.append(True), "protocol_finished")
     ex.start()
     assert ex.wait(timeout=5.0) is True
     assert finished == [True]
@@ -189,13 +187,12 @@ def test_executor_start_runs_protocol_on_worker_thread_and_finishes():
     AttributeError because ProtocolExecutor is a HasTraits, not a
     QObject. Switched to threading.Thread.
     """
-    from pyface.qt.QtCore import Qt
     ex = _make_executor()
     ex.row_manager.add_step(values={"name": "A"})
     finished = threading.Event()
-    # DirectConnection so the slot fires synchronously on the worker
-    # thread without needing a Qt event loop on the receiver side.
-    ex.qsignals.protocol_finished.connect(finished.set, type=Qt.DirectConnection)
+    # Default-dispatch observer fires synchronously on the worker thread
+    # that sets the event — no Qt event loop needed on the receiver side.
+    ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
     ex.start()
     # start() returns immediately; wait for the worker to finish.
     assert finished.wait(timeout=5.0), "protocol_finished did not fire within 5s"
@@ -208,7 +205,6 @@ def test_executor_start_is_idempotent_while_running():
     """A second start() while already running should be a no-op (not
     a TypeError or a duplicate thread)."""
     import time
-    from pyface.qt.QtCore import Qt
     ex = _make_executor()
     started_count = []
     # Make the protocol take a moment so the second start() races with it.
@@ -225,9 +221,8 @@ def test_executor_start_is_idempotent_while_running():
     )
     ex.row_manager.columns = list(ex.row_manager.columns) + [slow_col]
     ex.row_manager.add_step(values={"name": "A"})
-    ex.qsignals.protocol_started.connect(
-        lambda: started_count.append(1), type=Qt.DirectConnection,
-    )
+    ex.qsignals.observe(
+        lambda event: started_count.append(1), "protocol_started")
 
     ex.start()
     # Give the first start a head start before issuing the second one.
@@ -239,7 +234,7 @@ def test_executor_start_is_idempotent_while_running():
     # Let the protocol finish.
     pause_in_step.set()
     finished = threading.Event()
-    ex.qsignals.protocol_finished.connect(finished.set, type=Qt.DirectConnection)
+    ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
     assert finished.wait(timeout=5.0)
     ex._thread.join(timeout=1.0)
     assert sum(started_count) == 1, "protocol_started fired more than once"
@@ -264,15 +259,15 @@ from pluggable_protocol_tree.execution.signals import ExecutorSignals
 
 
 class _SignalSpy:
-    """Collects signal emissions into a list for assertion."""
+    """Collects event emissions into a list for assertion."""
     def __init__(self, sigs: ExecutorSignals):
         self.events = []
-        sigs.protocol_started.connect(lambda: self.events.append(("protocol_started",)))
-        sigs.step_started.connect(lambda r: self.events.append(("step_started", r.name)))
-        sigs.step_finished.connect(lambda r: self.events.append(("step_finished", r.name)))
-        sigs.protocol_finished.connect(lambda: self.events.append(("protocol_finished",)))
-        sigs.protocol_aborted.connect(lambda: self.events.append(("protocol_aborted",)))
-        sigs.protocol_error.connect(lambda m: self.events.append(("protocol_error", m)))
+        sigs.observe(lambda e: self.events.append(("protocol_started",)), "protocol_started")
+        sigs.observe(lambda e: self.events.append(("step_started", e.new[0].name)), "step_started")
+        sigs.observe(lambda e: self.events.append(("step_finished", e.new.name)), "step_finished")
+        sigs.observe(lambda e: self.events.append(("protocol_finished",)), "protocol_finished")
+        sigs.observe(lambda e: self.events.append(("protocol_aborted",)), "protocol_aborted")
+        sigs.observe(lambda e: self.events.append(("protocol_error", e.new)), "protocol_error")
 
 
 def test_run_empty_protocol_emits_started_then_finished():
@@ -658,8 +653,8 @@ def test_lifecycle_hooks_once_per_run_while_per_rep_hooks_repeat():
     ex.lifecycle_handlers = [h]
     ex._repeats = 3
     reps = []
-    ex.qsignals.protocol_repetition_finished.connect(
-        lambda done, total: reps.append((done, total)))
+    ex.qsignals.observe(
+        lambda event: reps.append(event.new), "protocol_repetition_finished")
     ex.run()
     hooks = [hook for (n, hook) in log if n == "L"]
     assert hooks.count("pre") == 1
@@ -716,10 +711,10 @@ def test_pre_protocol_wait_emits_signals_and_blocks():
     ex = _executor_with([])
     ex.lifecycle_handlers = [h]
     events = []
-    ex.qsignals.protocol_wait_started.connect(
-        lambda ms: events.append(("start", ms)))
-    ex.qsignals.protocol_wait_finished.connect(
-        lambda: events.append(("finished",)))
+    ex.qsignals.observe(
+        lambda event: events.append(("start", event.new)), "protocol_wait_started")
+    ex.qsignals.observe(
+        lambda event: events.append(("finished",)), "protocol_wait_finished")
     t0 = time.monotonic()
     ex.run()
     elapsed = time.monotonic() - t0
@@ -731,7 +726,7 @@ def test_pre_protocol_wait_emits_signals_and_blocks():
 def test_no_wait_phase_when_nothing_contributed():
     ex = _executor_with([])
     events = []
-    ex.qsignals.protocol_wait_started.connect(lambda ms: events.append(ms))
+    ex.qsignals.observe(lambda event: events.append(event.new), "protocol_wait_started")
     ex.run()
     assert events == []
 

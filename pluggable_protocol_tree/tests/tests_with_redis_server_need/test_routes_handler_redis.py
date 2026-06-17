@@ -16,7 +16,6 @@ import time
 import dramatiq
 import pytest
 from dramatiq import Worker
-from pyface.qt.QtCore import Qt
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.builtins.duration_column import (
@@ -135,9 +134,7 @@ def test_routes_handler_publishes_phases_and_unblocks_on_ack(router_actor):
             stop_event=threading.Event(),
         )
         finished = threading.Event()
-        ex.qsignals.protocol_finished.connect(
-            finished.set, type=Qt.DirectConnection,
-        )
+        ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
 
         worker = Worker(broker, worker_timeout=100)
         worker.start()

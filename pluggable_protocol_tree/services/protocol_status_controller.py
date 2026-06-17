@@ -1,14 +1,16 @@
 """Links executor lifecycle signals to a ProtocolStatusModel (issue #467).
 
 A small HasTraits adapter owned by the composition root (the dock pane in
-the full app; the demo window standalone). It owns the model, connects one
-slot per ExecutorSignals signal, and translates each into a single model
+the full app; the demo window standalone). It owns the model, observes one
+handler per ExecutorSignals event, and translates each into a single model
 method call stamped with ``now``. No formatting, no widgets -- the view
 binds to ``self.model`` separately.
 
-Invariant: ExecutorSignals is a QObject delivering via queued connections,
-so these slots run on the GUI thread; the model is therefore mutated only
-on the GUI thread and its observers may drive widgets directly.
+ExecutorSignals is now a HasTraits firing Traits ``Event`` traits. These
+handlers observe with the DEFAULT dispatch, so during a run they execute on
+the executor's worker thread (the thread that set the event) -- that is fine
+because they touch only the Qt-free ProtocolStatusModel. Widget-touching
+observers live elsewhere (the dock pane) and use ``dispatch="ui"``.
 """
 
 import json
@@ -37,57 +39,59 @@ class ProtocolStatusController(HasTraits):
     #: signals works -- keeps Qt types out of the signature and tests Qt-free).
     qsignals = Any()
 
-    #: RowManager -- needed for the step count and next-step name.
-    manager = Any()
-
     #: ProtocolExecutor -- needed to record the resume target for a seek.
     executor = Any()
+
+    #: RowManager -- needed for the step count and next-step name.
+    manager = Any()
 
     #: Monotonic clock source; overridable in tests.
     clock = Callable(time.monotonic)
 
     def traits_init(self):
+        if self.executor is not None:
+            self.qsignals = self.executor.qsignals
         self._connect()
 
     # --- wiring ---
 
     def _pairs(self):
-        s = self.qsignals
         return (
-            (s.protocol_started, self._on_protocol_started),
-            (s.step_started, self._on_step_started),
-            (s.step_repetition, self._on_step_repetition),
-            (s.phase_started, self._on_phase_started),
-            (s.phase_extended, self._on_phase_extended),
-            (s.protocol_paused, self._on_paused),
-            (s.protocol_resumed, self._on_resumed),
-            (s.protocol_repetition_finished, self._on_repetition_finished),
-            (s.protocol_finished, self._on_stopped),
-            (s.protocol_aborted, self._on_stopped),
-            (s.protocol_error, self._on_error),
+            ("protocol_started", self._on_protocol_started),
+            ("step_started", self._on_step_started),
+            ("step_repetition", self._on_step_repetition),
+            ("phase_started", self._on_phase_started),
+            ("phase_extended", self._on_phase_extended),
+            ("protocol_paused", self._on_paused),
+            ("protocol_resumed", self._on_resumed),
+            ("protocol_repetition_finished", self._on_repetition_finished),
+            ("protocol_finished", self._on_stopped),
+            ("protocol_aborted", self._on_stopped),
+            ("protocol_error", self._on_error),
         )
 
     def _connect(self):
         if self.qsignals is None:
             return
-        for sig, slot in self._pairs():
-            sig.connect(slot)
+        for name, handler in self._pairs():
+            self.qsignals.observe(handler, name)
 
     def disconnect(self):
         if self.qsignals is None:
             return
-        for sig, slot in self._pairs():
+        for name, handler in self._pairs():
             try:
-                sig.disconnect(slot)
-            except (RuntimeError, TypeError):
+                self.qsignals.observe(handler, name, remove=True)
+            except (ValueError, TypeError):
                 pass
 
-    # --- slots (executor signal -> model) ---
+    # --- handlers (executor event -> model) ---
 
-    def _on_protocol_started(self):
+    def _on_protocol_started(self, event):
         self.model.on_protocol_start(self.clock(), self._count_steps())
 
-    def _on_step_started(self, row, step_index, step_total):
+    def _on_step_started(self, event):
+        row, step_index, step_total = event.new
         self.model.on_step_start(
             self.clock(), step_index, step_total, tuple(row.path),
             row.name, self._next_name(row))
@@ -95,32 +99,34 @@ class ProtocolStatusController(HasTraits):
             f"status: step {step_index}/{step_total} @ {tuple(row.path)} "
             f"({row.name!r})")
 
-    def _on_step_repetition(self, rep_chain):
-        self.model.set_rep_chain(self._fmt_chain(rep_chain))
+    def _on_step_repetition(self, event):
+        self.model.set_rep_chain(self._fmt_chain(event.new))
 
-    def _on_phase_started(self, phase_index, phase_total, phase_duration_s):
+    def _on_phase_started(self, event):
+        phase_index, phase_total, phase_duration_s = event.new
         self.model.on_phase_start(
             self.clock(), phase_index, phase_total, phase_duration_s)
 
-    def _on_phase_extended(self, extra_s):
-        self.model.on_phase_extended(extra_s)
+    def _on_phase_extended(self, event):
+        self.model.on_phase_extended(event.new)
 
-    def _on_paused(self):
+    def _on_paused(self, event):
         self.model.pause(self.clock())
 
-    def _on_resumed(self):
+    def _on_resumed(self, event):
         self.model.resume(self.clock())
 
-    def _on_repetition_finished(self, completed, total):
+    def _on_repetition_finished(self, event):
+        completed, total = event.new
         self.model.on_repetition(completed, total)
 
-    def _on_stopped(self):
-        # Terminal signals (finished / aborted) fire immediately after the
+    def _on_stopped(self, event):
+        # Terminal events (finished / aborted) fire immediately after the
         # executor's on_post_protocol_end teardown, i.e. once the whole run
         # (all repeats) is done -- reset the trackers back to idle here.
         self.model.reset()
 
-    def _on_error(self, _msg):
+    def _on_error(self, event):
         self.model.reset()
 
     # --- helpers (need manager) ---

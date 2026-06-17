@@ -126,14 +126,14 @@ class DropletCheckHandler(BaseColumnHandler):
         if not missing:
             return
 
-        # Failure path: emit protocol_paused BEFORE the dialog wait so the
+        # Failure path: fire protocol_paused BEFORE the dialog wait so the
         # UI freezes step/phase timers immediately. Without this the
         # tick timer keeps incrementing while the dialog is up because
-        # step_finished hasn't fired yet. Qt signals are thread-safe to
-        # emit from worker threads.
+        # step_finished hasn't fired yet. Setting the Traits event from a
+        # worker thread is fine; widget-touching observers use dispatch="ui".
         qsignals = ctx.protocol.qsignals
         if qsignals is not None:
-            qsignals.protocol_paused.emit()
+            qsignals.protocol_paused = True
 
         publish_message(
             topic=DROPLET_CHECK_DECISION_REQUEST,
@@ -170,7 +170,7 @@ class DropletCheckHandler(BaseColumnHandler):
             return
         # "continue" — unfreeze the UI; executor proceeds to next step.
         if qsignals is not None:
-            qsignals.protocol_resumed.emit()
+            qsignals.protocol_resumed = True
 
 
 def make_droplet_check_column() -> Column:

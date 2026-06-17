@@ -12,10 +12,12 @@ Responsibilities:
     protocol_error.
 
 The worker thread is a plain ``threading.Thread``, not ``QThread``. The
-executor itself is a HasTraits, not a QObject — moveToThread only works
-on QObjects. Qt signal marshalling to GUI-thread slots still works
-because ExecutorSignals is its own QObject; emissions from any thread
-queue correctly to slots living on the GUI thread.
+executor and ExecutorSignals are both HasTraits, not QObjects. Lifecycle
+"signals" are Traits ``Event`` traits: the executor SETS them from the
+worker thread and consumers OBSERVE them. Consumers that touch widgets
+observe with ``dispatch="ui"`` so Traits marshals their handler onto the
+GUI thread; Qt-free consumers (the status model adapter) observe with the
+default dispatch and run on the worker thread.
 """
 
 import threading
@@ -185,12 +187,12 @@ class ProtocolExecutor(HasTraits):
     def pause(self) -> None:
         """Set pause_event. Effective at the next step boundary."""
         self.pause_event.set()
-        self.qsignals.protocol_paused.emit()
+        self.qsignals.protocol_paused = True
 
     def resume(self) -> None:
         """Clear pause_event so the main loop unblocks."""
         self.pause_event.clear()
-        self.qsignals.protocol_resumed.emit()
+        self.qsignals.protocol_resumed = True
 
     def seek(self, step_path, phase_index) -> None:
         """Record a mid-run resume target (issue #471). Only meaningful while
@@ -243,16 +245,16 @@ class ProtocolExecutor(HasTraits):
             # loading screen), pausable and stop-aware, before the first step.
             total_wait = proto_ctx.pre_protocol_wait_s
             if total_wait > 0 and not self.stop_event.is_set():
-                self.qsignals.protocol_wait_started.emit(int(total_wait * 1000))
+                self.qsignals.protocol_wait_started = int(total_wait * 1000)
                 self._wait_pre_protocol(total_wait)
-                self.qsignals.protocol_wait_finished.emit()
+                self.qsignals.protocol_wait_finished = True
 
             # Don't announce "started" if the run was already stopped during
             # the pre-protocol phase (e.g. Stop pressed on the loading screen):
             # that would publish PROTOCOL_RUNNING True for a run that never ran
             # and race the terminal's False. The terminal signal still fires.
             if not self.stop_event.is_set():
-                self.qsignals.protocol_started.emit()
+                self.qsignals.protocol_started = True
                 logger.info("Protocol started")
 
             for rep in range(self._repeats):
@@ -269,7 +271,7 @@ class ProtocolExecutor(HasTraits):
                 skip_until = self._start_step_path if rep == 0 else None
                 self._run_steps(handlers, cols, proto_ctx, skip_until)
                 self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
-                self.qsignals.protocol_repetition_finished.emit(
+                self.qsignals.protocol_repetition_finished = (
                     rep + 1, self._repeats)
                 if rep + 1 < self._repeats and not self.stop_event.is_set():
                     self._interruptible_delay(INTER_REP_DELAY_S)
@@ -349,11 +351,11 @@ class ProtocolExecutor(HasTraits):
                 # Emitted here so a hook setting pause_event still surfaces to
                 # the UI. Slots that toggle UI state on each signal must be
                 # idempotent (executor.pause() also emits).
-                self.qsignals.protocol_paused.emit()
+                self.qsignals.protocol_paused = True
                 self.pause_event.wait_cleared()
                 if self.stop_event.is_set():
                     break
-                self.qsignals.protocol_resumed.emit()
+                self.qsignals.protocol_resumed = True
                 logger.info("Protocol resumed")
                 # Different-step seek redirect at the step boundary (same-step
                 # seeks are handled inside the routes phase loop).
@@ -398,12 +400,12 @@ class ProtocolExecutor(HasTraits):
         try:
             # Rep info first so UI labels are populated before the
             # row-highlight fires from step_started.
-            self.qsignals.step_repetition.emit(rep_chain)
-            self.qsignals.step_started.emit(row, step_index, step_total)
+            self.qsignals.step_repetition = rep_chain
+            self.qsignals.step_started = (row, step_index, step_total)
             self._run_hooks("on_pre_step",  handlers, step_ctx, row)
             self._run_hooks("on_step",      handlers, step_ctx, row)
             self._run_hooks("on_post_step", handlers, step_ctx, row)
-            self.qsignals.step_finished.emit(row)
+            self.qsignals.step_finished = row
         finally:
             clear_active_step()
         logger.info(
@@ -449,11 +451,11 @@ class ProtocolExecutor(HasTraits):
         wins over user Stop, which wins over normal completion.
         """
         if self._error is not None:
-            self.qsignals.protocol_error.emit(str(self._error))
+            self.qsignals.protocol_error = str(self._error)
         elif self.stop_event.is_set():
-            self.qsignals.protocol_aborted.emit()
+            self.qsignals.protocol_aborted = True
         else:
-            self.qsignals.protocol_finished.emit()
+            self.qsignals.protocol_finished = True
 
     def _build_step_ctx(self, row, cols, proto_ctx) -> StepContext:
         """Construct a fresh StepContext and pre-open one mailbox per

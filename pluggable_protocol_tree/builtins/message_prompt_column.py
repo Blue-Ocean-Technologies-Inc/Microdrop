@@ -16,17 +16,16 @@ manual checkpoint the operator must clear before the run continues (e.g.
 
 Threading: the handler runs on the executor's worker thread, but Qt
 dialogs must be created on the GUI thread. The confirm() call is therefore
-marshaled onto the GUI thread with ``QTimer.singleShot`` (passing the
-qsignals QObject as the timer's context so the callback runs in that
-object's — i.e. the GUI — thread), while the worker thread blocks in
-``ctx.wait`` on a ``threading.Event`` the dialog callback sets. Priority
-is the default (50); ordering relative to other on_pre_step hooks doesn't
-matter because the prompt gates the whole step.
+marshaled onto the GUI thread with ``GUI.invoke_later`` (pyface posts it to
+the toolkit event loop), while the worker thread blocks in ``ctx.wait`` on
+a ``threading.Event`` the dialog callback sets. Priority is the default
+(50); ordering relative to other on_pre_step hooks doesn't matter because
+the prompt gates the whole step.
 """
 
 import threading
 
-from PySide6.QtCore import QTimer
+from pyface.api import GUI
 from traits.api import Str
 
 from logger.logger_service import get_logger
@@ -101,7 +100,12 @@ class MsgPromptColumnHandler(BaseColumnHandler):
                     logger.info("Message prompt: operator left the step paused "
                                 f"(choice={usr_choice})")
 
-            QTimer.singleShot(0, qsignals, _user_prompt)
+            # Marshal onto the GUI thread (headless/test runs have no event
+            # loop -> run inline, matching ProtocolContext.prompt_gui).
+            if qsignals is None:
+                _user_prompt()
+            else:
+                GUI.invoke_later(_user_prompt)
             # Park the worker thread until the operator acknowledges
             # (event set) or the run is stopped (stop_event).
             ctx.wait(events=[self._wait_for_dialog_event, ctx.protocol.stop_event])

@@ -159,7 +159,6 @@ def test_step_blocks_on_state_apply_before_duration_starts(router_actor):
       * The protocol stays on the active step the entire time (no
         premature step_finished while wait_for is blocked).
     """
-    from pyface.qt.QtCore import Qt
     DURATION_S = 0.40
 
     _responder_log.clear()
@@ -211,17 +210,17 @@ def test_step_blocks_on_state_apply_before_duration_starts(router_actor):
             stop_event=threading.Event(),
         )
 
-        # Capture step boundaries via Qt signals. DirectConnection so
-        # the slot fires synchronously on the worker thread without
-        # needing a QApplication event loop.
+        # Capture step boundaries via Traits events. Default-dispatch
+        # observers fire synchronously on the worker thread that sets the
+        # event — no QApplication event loop needed.
         timing: dict = {}
-        ex.qsignals.step_started.connect(
-            lambda r: timing.update(step_started=time.monotonic()),
-            type=Qt.DirectConnection,
+        ex.qsignals.observe(
+            lambda event: timing.update(step_started=time.monotonic()),
+            "step_started",
         )
-        ex.qsignals.step_finished.connect(
-            lambda r: timing.update(step_finished=time.monotonic()),
-            type=Qt.DirectConnection,
+        ex.qsignals.observe(
+            lambda event: timing.update(step_finished=time.monotonic()),
+            "step_finished",
         )
 
         worker = Worker(broker, worker_timeout=100)
