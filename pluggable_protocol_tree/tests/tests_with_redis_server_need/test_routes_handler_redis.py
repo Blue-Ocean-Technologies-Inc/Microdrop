@@ -129,12 +129,12 @@ def test_routes_handler_publishes_phases_and_unblocks_on_ack(router_actor):
 
         ex = ProtocolExecutor(
             row_manager=rm,
-            qsignals=ExecutorSignals(),
+            signals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
         finished = threading.Event()
-        ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
+        ex.signals.observe(lambda event: finished.set(), "protocol_finished")
 
         worker = Worker(broker, worker_timeout=100)
         worker.start()

@@ -197,7 +197,7 @@ class AutoDemoWindow(QMainWindow):
 
         self.executor = ProtocolExecutor(
             row_manager=self.manager,
-            qsignals=ExecutorSignals(),
+            signals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
@@ -356,7 +356,7 @@ class AutoDemoWindow(QMainWindow):
                               f"{e}", flush=True)
 
     def _wire_verbose_logging(self):
-        sigs = self.executor.qsignals
+        sigs = self.executor.signals
         sigs.protocol_started.connect(
             lambda: print("[PROTOCOL STARTED]", flush=True))
         sigs.step_started.connect(self._on_step_started_status)
@@ -400,7 +400,7 @@ class AutoDemoWindow(QMainWindow):
             self._tick_timer.start()
 
     def _wire_terminate_to_quit(self):
-        sigs = self.executor.qsignals
+        sigs = self.executor.signals
         sigs.protocol_finished.connect(self._on_finished)
         sigs.protocol_aborted.connect(self._on_aborted)
         sigs.protocol_error.connect(self._on_error)

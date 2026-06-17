@@ -116,7 +116,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _executor_default(self):
         return ProtocolExecutor(
             row_manager=self.manager,
-            qsignals=ExecutorSignals(),
+            signals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
@@ -181,7 +181,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             flush_scheduler=pane._schedule_flush_with_progress,
             settling_provider=lambda: float(self.preferences.logs_settling_time_s),
         )
-        self.logging_controller.attach(self.executor.qsignals)
+        self.logging_controller.attach(self.executor.signals)
         # Execution lifecycle policy lives in handlers, not the view. These run
         # once per run (on_pre_protocol_start / on_post_protocol_end) at high
         # priority so they trail every column's start hooks: realtime mode is
@@ -228,7 +228,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # These handlers touch widgets, so observe with dispatch="ui" — the
         # executor sets the events from its worker thread and Traits marshals
         # the handler onto the GUI thread.
-        q = self.executor.qsignals
+        q = self.executor.signals
         q.observe(self._on_protocol_wait_started, "protocol_wait_started", dispatch="ui")
         q.observe(self._on_protocol_wait_finished, "protocol_wait_finished", dispatch="ui")
         q.observe(self._on_protocol_started, "protocol_started", dispatch="ui")

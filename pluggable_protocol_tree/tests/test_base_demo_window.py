@@ -229,7 +229,7 @@ def test_window_executor_step_started_connected_to_tree_highlight(qapp):
     orig = w.widget.highlight_active_row
     w.widget.highlight_active_row = lambda r: received.append(r)
     try:
-        w.executor.qsignals.step_started.emit("fake-row")
+        w.executor.signals.step_started.emit("fake-row")
         assert received == ["fake-row"]
     finally:
         w.widget.highlight_active_row = orig
@@ -294,8 +294,8 @@ def test_phase_started_signal_updates_phase_counters(qapp):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()],
                      phase_ack_topic="x/applied")
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.qsignals.protocol_started.emit()
-    w.executor.qsignals.phase_started.emit(2, 4, 1.0)
+    w.executor.signals.protocol_started.emit()
+    w.executor.signals.phase_started.emit(2, 4, 1.0)
     assert w.status_model.phase_index == 2
     assert w.status_model.phase_total == 4
 
@@ -418,7 +418,7 @@ def test_protocol_started_swaps_buttons(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.qsignals.protocol_started.emit()
+    w.executor.signals.protocol_started.emit()
     nb = w.navigation_bar
     assert nb.btn_play.isEnabled()       # toggles to pause while running
     assert nb.btn_stop.isEnabled()
@@ -434,8 +434,8 @@ def test_protocol_terminated_returns_to_idle(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.qsignals.protocol_started.emit()
-    w.executor.qsignals.protocol_finished.emit()
+    w.executor.signals.protocol_started.emit()
+    w.executor.signals.protocol_finished.emit()
     nb = w.navigation_bar
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
@@ -653,7 +653,7 @@ def test_step_repetition_renders_chain(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.qsignals.step_repetition.emit([("Wash", 2, 3)])
+    w.executor.signals.step_repetition.emit([("Wash", 2, 3)])
     assert w.status_bar.lbl_step_repetition.text() == "rep 2/3 of 'Wash'"
 
 
@@ -665,8 +665,8 @@ def test_step_repetition_empty_chain_clears(qapp):
     )
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.qsignals.step_repetition.emit([("Wash", 1, 3)])
-    w.executor.qsignals.step_repetition.emit([])
+    w.executor.signals.step_repetition.emit([("Wash", 1, 3)])
+    w.executor.signals.step_repetition.emit([])
     assert w.status_bar.lbl_step_repetition.text() == ""
 
 
@@ -690,9 +690,9 @@ def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = bdw.BasePluggableProtocolDemoWindow(cfg)
     nb = w.navigation_bar
-    w.executor.qsignals.protocol_started.emit()
+    w.executor.signals.protocol_started.emit()
     assert nb.btn_stop.isEnabled()
-    w.executor.qsignals.protocol_error.emit("kaboom")
+    w.executor.signals.protocol_error.emit("kaboom")
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
     assert not w.status_bar._poll_timer.isActive()

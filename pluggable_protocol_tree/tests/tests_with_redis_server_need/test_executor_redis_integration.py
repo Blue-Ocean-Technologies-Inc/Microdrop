@@ -83,7 +83,7 @@ def test_publish_then_wait_for_round_trips_via_real_dramatiq(router_actor):
         rm.add_step(values={"name": "S"})
         ex = ProtocolExecutor(
             row_manager=rm,
-            qsignals=ExecutorSignals(),
+            signals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
@@ -205,7 +205,7 @@ def test_step_blocks_on_state_apply_before_duration_starts(router_actor):
         rm.add_step(values={"name": "S", "duration_s": DURATION_S})
         ex = ProtocolExecutor(
             row_manager=rm,
-            qsignals=ExecutorSignals(),
+            signals=ExecutorSignals(),
             pause_event=PauseEvent(),
             stop_event=threading.Event(),
         )
@@ -214,11 +214,11 @@ def test_step_blocks_on_state_apply_before_duration_starts(router_actor):
         # observers fire synchronously on the worker thread that sets the
         # event — no QApplication event loop needed.
         timing: dict = {}
-        ex.qsignals.observe(
+        ex.signals.observe(
             lambda event: timing.update(step_started=time.monotonic()),
             "step_started",
         )
-        ex.qsignals.observe(
+        ex.signals.observe(
             lambda event: timing.update(step_finished=time.monotonic()),
             "step_finished",
         )

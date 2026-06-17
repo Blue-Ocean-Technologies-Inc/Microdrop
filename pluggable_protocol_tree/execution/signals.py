@@ -11,7 +11,7 @@ this); consumers that only touch Qt-free models / do I/O observe with the
 default dispatch and run on the setting thread.
 
 UI consumers observe directly:
-    executor.qsignals.observe(handler, "step_started", dispatch="ui")
+    executor.signals.observe(handler, "step_started", dispatch="ui")
     # handler(event): row, idx, total = event.new
 """
 

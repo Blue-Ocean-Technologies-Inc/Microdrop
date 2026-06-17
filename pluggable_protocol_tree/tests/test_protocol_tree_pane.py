@@ -142,7 +142,7 @@ def test_pane_executor_factory_can_be_overridden(qapp):
     fake_executor = MagicMock()
     captured = {}
 
-    def fake_factory(row_manager, qsignals, pause_event, stop_event):
+    def fake_factory(row_manager, signals, pause_event, stop_event):
         captured["called"] = True
         return fake_executor
 
@@ -168,7 +168,7 @@ def test_pane_running_button_state_after_protocol_started(qapp):
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     pane = ProtocolTreePane([make_type_column()])
-    pane.executor.qsignals.protocol_started.emit()
+    pane.executor.signals.protocol_started.emit()
     nb = pane.navigation_bar
     assert nb.btn_stop.isEnabled()
     for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
@@ -183,8 +183,8 @@ def test_pane_returns_to_idle_after_protocol_finished(qapp, monkeypatch):
     monkeypatch.setattr(ptp, "publish_message", lambda **kwargs: None)
 
     pane = ptp.ProtocolTreePane([make_type_column()])
-    pane.executor.qsignals.protocol_started.emit()
-    pane.executor.qsignals.protocol_finished.emit()
+    pane.executor.signals.protocol_started.emit()
+    pane.executor.signals.protocol_finished.emit()
     nb = pane.navigation_bar
     assert not nb.btn_stop.isEnabled()
 
@@ -217,9 +217,9 @@ def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
     monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)
 
     pane = ptp.ProtocolTreePane([make_type_column()])
-    pane.executor.qsignals.protocol_started.emit()
+    pane.executor.signals.protocol_started.emit()
     assert pane.navigation_bar.btn_stop.isEnabled()
-    pane.executor.qsignals.protocol_error.emit("kaboom")
+    pane.executor.signals.protocol_error.emit("kaboom")
     assert not pane.navigation_bar.btn_stop.isEnabled()
     assert calls == [("Protocol error", "kaboom")]
 
@@ -230,8 +230,8 @@ def test_pane_pause_splits_play_button_into_phase_nav(qapp):
 
     pane = ProtocolTreePane([make_type_column()])
     pane._current_row = FakePausableRow()
-    pane.executor.qsignals.protocol_started.emit()
-    pane.executor.qsignals.protocol_paused.emit()
+    pane.executor.signals.protocol_started.emit()
+    pane.executor.signals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
 
 
@@ -241,10 +241,10 @@ def test_pane_resume_merges_phase_nav_back_to_play_button(qapp):
 
     pane = ProtocolTreePane([make_type_column()])
     pane._current_row = FakePausableRow()
-    pane.executor.qsignals.protocol_started.emit()
-    pane.executor.qsignals.protocol_paused.emit()
+    pane.executor.signals.protocol_started.emit()
+    pane.executor.signals.protocol_paused.emit()
     assert pane.navigation_bar.is_phase_navigation_active()
-    pane.executor.qsignals.protocol_resumed.emit()
+    pane.executor.signals.protocol_resumed.emit()
     assert not pane.navigation_bar.is_phase_navigation_active()
 
 
@@ -274,7 +274,7 @@ def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
     pane.manager.protocol_metadata["electrode_to_channel"] = {"e1": 1, "e2": 2}
 
     sc = ProtocolStatusController(
-        qsignals=None, manager=pane.manager, executor=pane.executor)
+        signals=None, manager=pane.manager, executor=pane.executor)
     pane.status_controller = sc
     sc.model.on_protocol_start(0.0, 1)
     sc.model.on_step_start(0.0, row.name, "-")

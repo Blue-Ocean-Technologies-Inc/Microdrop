@@ -37,7 +37,7 @@ class ProtocolStatusController(HasTraits):
 
     #: ExecutorSignals QObject (duck-typed; any object exposing the
     #: signals works -- keeps Qt types out of the signature and tests Qt-free).
-    qsignals = Any()
+    signals = Any()
 
     #: ProtocolExecutor -- needed to record the resume target for a seek.
     executor = Any()
@@ -50,7 +50,7 @@ class ProtocolStatusController(HasTraits):
 
     def traits_init(self):
         if self.executor is not None:
-            self.qsignals = self.executor.qsignals
+            self.signals = self.executor.signals
         self._connect()
 
     # --- wiring ---
@@ -71,17 +71,17 @@ class ProtocolStatusController(HasTraits):
         )
 
     def _connect(self):
-        if self.qsignals is None:
+        if self.signals is None:
             return
         for name, handler in self._pairs():
-            self.qsignals.observe(handler, name)
+            self.signals.observe(handler, name)
 
     def disconnect(self):
-        if self.qsignals is None:
+        if self.signals is None:
             return
         for name, handler in self._pairs():
             try:
-                self.qsignals.observe(handler, name, remove=True)
+                self.signals.observe(handler, name, remove=True)
             except (ValueError, TypeError):
                 pass
 

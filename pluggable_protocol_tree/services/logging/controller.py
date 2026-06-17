@@ -102,14 +102,14 @@ class ProtocolLoggingController(HasTraits):
         return _threading_flush_scheduler
 
     # --- executor signal wiring ---
-    def attach(self, qsignals) -> None:
+    def attach(self, signals) -> None:
         # Only the per-step context comes from the executor signals.
         # start_logging / stop_logging are driven by the pane: a
         # whole-protocol repeat run restarts the executor per repetition
         # (firing protocol_finished each time), so the pane stops logging
         # once at its single terminal point — keeping all repeats in one
         # log instead of stopping after the first.
-        qsignals.observe(self._on_step_started, "step_started")
+        signals.observe(self._on_step_started, "step_started")
 
     def has_data(self) -> bool:
         """True when the active run logged something worth reporting — i.e. at

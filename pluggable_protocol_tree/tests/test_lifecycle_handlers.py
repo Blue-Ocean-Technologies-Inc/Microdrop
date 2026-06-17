@@ -3,7 +3,7 @@
 RealtimeModeHandler and LoggingHandler are execution-only handlers driven by
 the once-per-run on_pre_protocol_start / on_post_protocol_end hooks. These
 tests exercise them with a real ProtocolContext (prompt_gui runs inline when
-qsignals is None) and patched app_globals / publish_message — no Qt, no Redis.
+signals is None) and patched app_globals / publish_message — no Qt, no Redis.
 """
 
 import threading

@@ -309,10 +309,10 @@ def main() -> int:
 
     # --- wire signals -----------------------------------------------------
     ex = ProtocolExecutor(row_manager=_build_protocol())
-    ex.qsignals.phase_started.connect(on_phase_started)
-    ex.qsignals.protocol_finished.connect(lambda: _finish())
-    ex.qsignals.protocol_aborted.connect(lambda: _finish("aborted — "))
-    ex.qsignals.protocol_error.connect(on_protocol_error)
+    ex.signals.phase_started.connect(on_phase_started)
+    ex.signals.protocol_finished.connect(lambda: _finish())
+    ex.signals.protocol_aborted.connect(lambda: _finish("aborted — "))
+    ex.signals.protocol_error.connect(on_protocol_error)
     bridge.reached.connect(on_reached)
     bridge.seeded.connect(
         lambda n: L(f"   (seeded {n} stale {STALE_PF:.0f} pF readings "

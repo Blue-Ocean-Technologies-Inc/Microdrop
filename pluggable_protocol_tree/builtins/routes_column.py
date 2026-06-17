@@ -128,7 +128,7 @@ class RoutesHandler(BaseColumnHandler):
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
-                   pause_event, qsignals, phase_index, phase_total,
+                   pause_event, signals, phase_index, phase_total,
                    hold_for_buffer=False, honor_pause=True):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
@@ -176,8 +176,8 @@ class RoutesHandler(BaseColumnHandler):
                     f"actuation channel skipped"
                 )
 
-        if qsignals is not None:
-            qsignals.phase_started = (
+        if signals is not None:
+            signals.phase_started = (
                 phase_index, phase_total, per_phase_dwell,
             )
 
@@ -220,8 +220,8 @@ class RoutesHandler(BaseColumnHandler):
         # ctx.note_phase_extension), not RoutesHandler's — we only hold + report.
         def _take_and_emit():
             extra = ctx.take_phase_time_buffer()
-            if extra > 0 and qsignals is not None:
-                qsignals.phase_extended = extra
+            if extra > 0 and signals is not None:
+                signals.phase_extended = extra
             return extra
 
         # Post-dwell hold: a sibling column (e.g. volume threshold) often
@@ -260,7 +260,7 @@ class RoutesHandler(BaseColumnHandler):
     def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
                                    step_uuid, step_label, preview_mode,
                                    per_phase_dwell, stop_event, pause_event,
-                                   qsignals, budget):
+                                   signals, budget):
         """Duration mode + a phase-hold hook: loop the unit cycle as long as
         another FULL-duration cycle still fits the budget, then close with
         the return-to-start phase and idle any sub-cycle remainder.
@@ -314,7 +314,7 @@ class RoutesHandler(BaseColumnHandler):
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals, phase_index=running_idx, phase_total=0,
+                signals=signals, phase_index=running_idx, phase_total=0,
                 hold_for_buffer=True)
 
         for phase in ramp_up:
@@ -372,7 +372,7 @@ class RoutesHandler(BaseColumnHandler):
             and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
         )
 
-        qsignals = getattr(ctx.protocol, "qsignals", None)
+        signals = getattr(ctx.protocol, "signals", None)
         # Generic opt-in: a sibling column (e.g. volume threshold) requested in
         # on_pre_step that this step's phases be held open for buffering /
         # threshold-driven advancement. RoutesHandler honours the flag without
@@ -385,7 +385,7 @@ class RoutesHandler(BaseColumnHandler):
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals,
+                signals=signals,
                 budget=float(getattr(row, "repeat_duration", 0.0) or 0.0))
         else:
             phases = list(iter_phases(
@@ -435,7 +435,7 @@ class RoutesHandler(BaseColumnHandler):
                         static_routes=routes, step_uuid=step_uuid,
                         step_label=step_label, preview_mode=preview_mode,
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
-                        pause_event=pause_event, qsignals=qsignals,
+                        pause_event=pause_event, signals=signals,
                         phase_index=phase_i + 1, phase_total=total_phases,
                         hold_for_buffer=phase_hold, honor_pause=False):
                     break

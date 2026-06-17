@@ -86,7 +86,7 @@ def _make_executor():
     rm = RowManager(columns=cols)
     return ProtocolExecutor(
         row_manager=rm,
-        qsignals=ExecutorSignals(),
+        signals=ExecutorSignals(),
         pause_event=PauseEvent(),
         stop_event=threading.Event(),
     )
@@ -95,7 +95,7 @@ def _make_executor():
 def test_executor_constructible_with_required_traits():
     ex = _make_executor()
     assert ex.row_manager is not None
-    assert ex.qsignals is not None
+    assert ex.signals is not None
     assert ex.pause_event is not None
     assert ex.stop_event is not None
 
@@ -103,7 +103,7 @@ def test_executor_constructible_with_required_traits():
 def test_executor_pause_emits_protocol_paused():
     ex = _make_executor()
     received = []
-    ex.qsignals.observe(lambda event: received.append("paused"), "protocol_paused")
+    ex.signals.observe(lambda event: received.append("paused"), "protocol_paused")
     ex.pause()
     assert ex.pause_event.is_set() is True
     assert received == ["paused"]
@@ -112,7 +112,7 @@ def test_executor_pause_emits_protocol_paused():
 def test_executor_resume_emits_protocol_resumed():
     ex = _make_executor()
     received = []
-    ex.qsignals.observe(lambda event: received.append("resumed"), "protocol_resumed")
+    ex.signals.observe(lambda event: received.append("resumed"), "protocol_resumed")
     ex.pause()
     ex.resume()
     assert ex.pause_event.is_set() is False
@@ -121,12 +121,12 @@ def test_executor_resume_emits_protocol_resumed():
 
 def test_executor_constructible_with_only_row_manager():
     """Headless / scripting use: pass just the row_manager and let
-    qsignals / pause_event / stop_event default."""
+    signals / pause_event / stop_event default."""
     cols = [make_type_column(), make_id_column(),
             make_name_column(), _fast_duration_column()]
     rm = RowManager(columns=cols)
     ex = ProtocolExecutor(row_manager=rm)
-    assert ex.qsignals is not None
+    assert ex.signals is not None
     assert ex.pause_event is not None
     assert ex.stop_event is not None
 
@@ -147,7 +147,7 @@ def test_executor_wait_blocks_until_run_finishes():
     rm.add_step(values={"name": "A"})
     ex = ProtocolExecutor(row_manager=rm)
     finished = []
-    ex.qsignals.observe(lambda event: finished.append(True), "protocol_finished")
+    ex.signals.observe(lambda event: finished.append(True), "protocol_finished")
     ex.start()
     assert ex.wait(timeout=5.0) is True
     assert finished == [True]
@@ -192,7 +192,7 @@ def test_executor_start_runs_protocol_on_worker_thread_and_finishes():
     finished = threading.Event()
     # Default-dispatch observer fires synchronously on the worker thread
     # that sets the event — no Qt event loop needed on the receiver side.
-    ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
+    ex.signals.observe(lambda event: finished.set(), "protocol_finished")
     ex.start()
     # start() returns immediately; wait for the worker to finish.
     assert finished.wait(timeout=5.0), "protocol_finished did not fire within 5s"
@@ -221,7 +221,7 @@ def test_executor_start_is_idempotent_while_running():
     )
     ex.row_manager.columns = list(ex.row_manager.columns) + [slow_col]
     ex.row_manager.add_step(values={"name": "A"})
-    ex.qsignals.observe(
+    ex.signals.observe(
         lambda event: started_count.append(1), "protocol_started")
 
     ex.start()
@@ -234,7 +234,7 @@ def test_executor_start_is_idempotent_while_running():
     # Let the protocol finish.
     pause_in_step.set()
     finished = threading.Event()
-    ex.qsignals.observe(lambda event: finished.set(), "protocol_finished")
+    ex.signals.observe(lambda event: finished.set(), "protocol_finished")
     assert finished.wait(timeout=5.0)
     ex._thread.join(timeout=1.0)
     assert sum(started_count) == 1, "protocol_started fired more than once"
@@ -272,7 +272,7 @@ class _SignalSpy:
 
 def test_run_empty_protocol_emits_started_then_finished():
     ex = _make_executor()
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()       # synchronous; bypasses start()/QThread
     assert spy.events[0] == ("protocol_started",)
     assert spy.events[-1] == ("protocol_finished",)
@@ -283,7 +283,7 @@ def test_run_three_steps_emits_step_signals_in_order():
     a = ex.row_manager.add_step(values={"name": "A"})
     b = ex.row_manager.add_step(values={"name": "B"})
     c = ex.row_manager.add_step(values={"name": "C"})
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     step_events = [e for e in spy.events if e[0] in ("step_started", "step_finished")]
     assert step_events == [
@@ -298,7 +298,7 @@ def test_run_stop_pre_set_aborts_immediately():
     ex.row_manager.add_step(values={"name": "A"})
     ex.row_manager.add_step(values={"name": "B"})
     ex.stop_event.set()
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     # No step events; terminal is aborted, not finished.
     assert ("step_started", "A") not in spy.events
@@ -312,7 +312,7 @@ def test_run_pause_then_resume_blocks_then_continues():
     ex = _make_executor()
     ex.row_manager.add_step(values={"name": "A"})
     ex.pause_event.set()
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
 
     def resumer():
         time.sleep(0.05)
@@ -332,7 +332,7 @@ def test_run_stop_while_paused_breaks_out():
     ex = _make_executor()
     ex.row_manager.add_step(values={"name": "A"})
     ex.pause_event.set()
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
 
     def stopper():
         time.sleep(0.05)
@@ -396,7 +396,7 @@ def _executor_with(cols):
     rm.add_step(values={"name": "A"})
     return ProtocolExecutor(
         row_manager=rm,
-        qsignals=ExecutorSignals(),
+        signals=ExecutorSignals(),
         pause_event=PauseEvent(),
         stop_event=threading.Event(),
     )
@@ -483,7 +483,7 @@ def test_same_topic_in_same_priority_bucket_raises():
     a = _column_with_topic_handler("a", 20, "shared/topic", log)
     b = _column_with_topic_handler("b", 20, "shared/topic", log)
     ex = _executor_with([a, b])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     # Surfaces as a protocol_error (the _build_step_ctx assertion raises).
     assert spy.events[-1][0] == "protocol_error"
@@ -496,7 +496,7 @@ def test_same_topic_different_priority_buckets_is_fine():
     a = _column_with_topic_handler("a", 10, "shared/topic", log)
     b = _column_with_topic_handler("b", 30, "shared/topic", log)
     ex = _executor_with([a, b])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     assert spy.events[-1] == ("protocol_finished",)
 
@@ -514,7 +514,7 @@ def test_hook_exception_emits_protocol_error_not_finished():
         handler=_Boom(),
     )
     ex = _executor_with([col])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     err_events = [e for e in spy.events if e[0] == "protocol_error"]
     assert len(err_events) == 1
@@ -563,7 +563,7 @@ def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
         handler=_DoubleBoom(),
     )
     ex = _executor_with([col])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     err_events = [e for e in spy.events if e[0] == "protocol_error"]
     assert len(err_events) == 1
@@ -584,7 +584,7 @@ def test_hook_error_message_names_step_column_and_hook():
         handler=_Boom(),
     )
     ex = _executor_with([col])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
     assert "Step 1" in err          # which step
@@ -607,7 +607,7 @@ def test_wait_for_timeout_message_names_topic():
         handler=_Waiter(),
     )
     ex = _executor_with([col])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
     assert "dropbot/applied" in err          # WHAT timed out (topic)
@@ -653,7 +653,7 @@ def test_lifecycle_hooks_once_per_run_while_per_rep_hooks_repeat():
     ex.lifecycle_handlers = [h]
     ex._repeats = 3
     reps = []
-    ex.qsignals.observe(
+    ex.signals.observe(
         lambda event: reps.append(event.new), "protocol_repetition_finished")
     ex.run()
     hooks = [hook for (n, hook) in log if n == "L"]
@@ -674,7 +674,7 @@ def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
     late = _lifecycle_handler("late", priority=900, log=log)
     ex = _executor_with([])
     ex.lifecycle_handlers = [early, late]
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     late_hooks = [h for (n, h) in log if n == "late"]
     assert ("early", "pre") in log          # early ran
@@ -696,7 +696,7 @@ def test_hook_abort_error_routes_to_aborted_not_error():
         handler=_Aborter(),
     )
     ex = _executor_with([col])
-    spy = _SignalSpy(ex.qsignals)
+    spy = _SignalSpy(ex.signals)
     ex.run()
     assert spy.events[-1] == ("protocol_aborted",)
     assert not any(e[0] == "protocol_error" for e in spy.events)
@@ -711,9 +711,9 @@ def test_pre_protocol_wait_emits_signals_and_blocks():
     ex = _executor_with([])
     ex.lifecycle_handlers = [h]
     events = []
-    ex.qsignals.observe(
+    ex.signals.observe(
         lambda event: events.append(("start", event.new)), "protocol_wait_started")
-    ex.qsignals.observe(
+    ex.signals.observe(
         lambda event: events.append(("finished",)), "protocol_wait_finished")
     t0 = time.monotonic()
     ex.run()
@@ -726,7 +726,7 @@ def test_pre_protocol_wait_emits_signals_and_blocks():
 def test_no_wait_phase_when_nothing_contributed():
     ex = _executor_with([])
     events = []
-    ex.qsignals.observe(lambda event: events.append(event.new), "protocol_wait_started")
+    ex.signals.observe(lambda event: events.append(event.new), "protocol_wait_started")
     ex.run()
     assert events == []
 

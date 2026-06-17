@@ -9,9 +9,9 @@ from pluggable_protocol_tree.services.protocol_status_controller import (
 
 
 class _Executor:
-    """Minimal executor stand-in: the controller reads .qsignals off it."""
-    def __init__(self, qsignals):
-        self.qsignals = qsignals
+    """Minimal executor stand-in: the controller reads .signals off it."""
+    def __init__(self, signals):
+        self.signals = signals
 
 
 class _Row:
@@ -127,7 +127,7 @@ from pluggable_protocol_tree.services.protocol_status_controller import (
 class _StubExecutor:
     def __init__(self):
         self.seek_calls = []
-        self.qsignals = None    # this test drives seek_to directly, no events
+        self.signals = None    # this test drives seek_to directly, no events
 
     def seek(self, step_path, phase_index):
         self.seek_calls.append((tuple(step_path), phase_index))
@@ -147,7 +147,7 @@ def test_seek_to_calls_executor_and_updates_model():
         iter_execution_steps=lambda: iter([row]),
     )
     ex = _StubExecutor()
-    c = ProtocolStatusController(qsignals=None, manager=manager, executor=ex,
+    c = ProtocolStatusController(signals=None, manager=manager, executor=ex,
                                  clock=lambda: 7.0)
     c.model.on_protocol_start(0.0, 1)
     c.model.on_step_start(0.0, 1, 1, (0,), "Wash", "-")

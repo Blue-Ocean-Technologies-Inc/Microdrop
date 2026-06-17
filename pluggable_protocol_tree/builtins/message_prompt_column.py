@@ -70,7 +70,7 @@ class MsgPromptColumnHandler(BaseColumnHandler):
         stopped; the step/phase timers stay frozen while parked.
         """
         val = row.message_prompt
-        qsignals = ctx.protocol.qsignals
+        signals = ctx.protocol.signals
 
         if ctx.protocol.stop_event.is_set():
             logger.warning("Message prompt skipped since protocol stopped")
@@ -102,7 +102,7 @@ class MsgPromptColumnHandler(BaseColumnHandler):
 
             # Marshal onto the GUI thread (headless/test runs have no event
             # loop -> run inline, matching ProtocolContext.prompt_gui).
-            if qsignals is None:
+            if signals is None:
                 _user_prompt()
             else:
                 GUI.invoke_later(_user_prompt)

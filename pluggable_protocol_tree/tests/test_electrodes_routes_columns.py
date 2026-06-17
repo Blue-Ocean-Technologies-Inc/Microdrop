@@ -632,7 +632,7 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True          # skip hardware publish + ack wait
     proto.scratch = {"electrode_to_channel": {"e1": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -684,7 +684,7 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
     proto.scratch = {"electrode_to_channel": {"e1": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -736,7 +736,7 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True           # skip hardware publish + ack wait
     proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -810,7 +810,7 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
     proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -829,7 +829,7 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
          patch.object(mod, "publish_message", lambda **kw: None):
         handler.on_step(row, ctx)
 
-    calls = proto.qsignals.phase_started.emit.call_args_list
+    calls = proto.signals.phase_started.emit.call_args_list
     indices = [c.args[0] for c in calls]
     totals = [c.args[1] for c in calls]
     assert indices == list(range(1, len(indices) + 1))   # 1,2,3,... no gaps
@@ -867,7 +867,7 @@ def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
     proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -918,7 +918,7 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
     proto.scratch = {"electrode_to_channel": {"a": 0}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto
@@ -981,7 +981,7 @@ def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
     proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
-    proto.qsignals = MagicMock()
+    proto.signals = MagicMock()
 
     ctx = MagicMock()
     ctx.protocol = proto

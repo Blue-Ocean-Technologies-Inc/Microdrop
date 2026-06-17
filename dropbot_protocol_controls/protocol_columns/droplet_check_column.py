@@ -131,9 +131,9 @@ class DropletCheckHandler(BaseColumnHandler):
         # tick timer keeps incrementing while the dialog is up because
         # step_finished hasn't fired yet. Setting the Traits event from a
         # worker thread is fine; widget-touching observers use dispatch="ui".
-        qsignals = ctx.protocol.qsignals
-        if qsignals is not None:
-            qsignals.protocol_paused = True
+        signals = ctx.protocol.signals
+        if signals is not None:
+            signals.protocol_paused = True
 
         publish_message(
             topic=DROPLET_CHECK_DECISION_REQUEST,
@@ -169,8 +169,8 @@ class DropletCheckHandler(BaseColumnHandler):
                 )
             return
         # "continue" — unfreeze the UI; executor proceeds to next step.
-        if qsignals is not None:
-            qsignals.protocol_resumed = True
+        if signals is not None:
+            signals.protocol_resumed = True
 
 
 def make_droplet_check_column() -> Column:
