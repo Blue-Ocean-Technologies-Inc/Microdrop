@@ -27,13 +27,13 @@ def test_executor_signals_direct_connect_invokes_slot():
     assert received == ["finished"]
 
 
-def test_executor_signals_step_started_carries_row():
+def test_executor_signals_step_started_carries_row_and_position():
     s = ExecutorSignals()
     received = []
-    s.step_started.connect(lambda row: received.append(row))
+    s.step_started.connect(lambda row, idx, total: received.append((row, idx, total)))
     sentinel = object()
-    s.step_started.emit(sentinel)
-    assert received == [sentinel]
+    s.step_started.emit(sentinel, 3, 9)
+    assert received == [(sentinel, 3, 9)]
 
 
 def test_executor_signals_protocol_error_carries_message():
