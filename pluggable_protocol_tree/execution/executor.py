@@ -37,6 +37,7 @@ from pluggable_protocol_tree.execution.exceptions import (
 from pluggable_protocol_tree.execution.listener import (
     set_active_step, clear_active_step, warm_broker_connection,
 )
+from pluggable_protocol_tree.execution.seek import resolve_seek
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.execution.step_context import (
     ProtocolContext, StepContext,
@@ -77,6 +78,12 @@ class ProtocolExecutor(HasTraits):
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
     _start_step_path = Union(None, Tuple)
+    # Live ProtocolContext for the current run; seek() writes resume_target on
+    # it. None between runs.
+    _active_proto_ctx = Any
+    # Position the frame walk last reported (path tuple) -- used to decide
+    # same-step vs different-step on resume.
+    _current_step_path = Union(None, Tuple)
     # When True, the next run() builds the ProtocolContext with
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
@@ -189,6 +196,16 @@ class ProtocolExecutor(HasTraits):
         self.pause_event.clear()
         self.qsignals.protocol_resumed.emit()
 
+    def seek(self, step_path, phase_index) -> None:
+        """Record a mid-run resume target (issue #471). Only meaningful while
+        paused; ignored otherwise. The frame walk / phase loop consult it on
+        resume. Qt-free: writes a plain tuple onto the live ProtocolContext."""
+        if not self.pause_event.is_set():
+            return
+        if self._active_proto_ctx is not None:
+            self._active_proto_ctx.resume_target = (tuple(step_path),
+                                                    int(phase_index))
+
     def stop(self) -> None:
         """Set stop_event AND clear pause_event so a Stop-while-paused
         doesn't deadlock the main loop in pause_event.wait_cleared()."""
@@ -212,6 +229,7 @@ class ProtocolExecutor(HasTraits):
             qsignals=self.qsignals,
             preview_mode=self._preview_mode,
         )
+        self._active_proto_ctx = proto_ctx
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
         # into the context's scratch so handlers can reach it without
         # holding a reference to the RowManager.
@@ -300,6 +318,7 @@ class ProtocolExecutor(HasTraits):
                 f"Protocol {outcome} in "
                 f"{time.monotonic() - proto_started_at:.2f}s"
             )
+            self._active_proto_ctx = None
             # threading.Thread terminates naturally when run() returns;
             # nothing to quit() here. start() checks is_alive() to make
             # sure a previous run has completed before starting a new one.
@@ -307,19 +326,30 @@ class ProtocolExecutor(HasTraits):
     # ------- helpers -------
 
     def _run_steps(self, handlers, cols, proto_ctx, skip_until) -> None:
-        """Run one repetition: walk execution frames in order, firing the
-        per-step hooks. Honors stop_event (short-circuit) and pause_event
-        (block at step boundaries). ``skip_until`` (a row.path tuple or
-        None) skips frames until that path is reached, then proceeds — used
-        for "play from selected step" on the first repetition."""
+        """Run one repetition. Honors stop_event, pause_event (step + phase
+        checkpoints), skip_until (start-of-run), and resume_target (#471
+        mid-run seek)."""
+        frames = list(self.row_manager.iter_execution_frames())
+        frame_paths = [tuple(row.path) for row, _ in frames]
+
+        i = 0
         step_index = 0
-        for row, rep_chain in self.row_manager.iter_execution_frames():
+        start_phase_index = 0
+        if skip_until is not None:
+            # Generalised skip: jump to the first frame matching skip_until.
+            for j, p in enumerate(frame_paths):
+                if p == skip_until:
+                    i = j
+                    break
+            else:
+                return  # skip target absent -> nothing to run
+
+        while i < len(frames):
             if self.stop_event.is_set():
                 break
-            if skip_until is not None:
-                if tuple(row.path) != skip_until:
-                    continue
-                skip_until = None
+            row, rep_chain = frames[i]
+            self._current_step_path = tuple(row.path)
+
             if self.pause_event.is_set():
                 logger.info(f"Protocol paused at step {step_index + 1}")
                 # Emitted here so a hook setting pause_event still surfaces
@@ -332,38 +362,64 @@ class ProtocolExecutor(HasTraits):
                     break
                 self.qsignals.protocol_resumed.emit()
                 logger.info("Protocol resumed")
+                # On resume, honor a mid-run seek to a DIFFERENT step here at
+                # the step boundary (same-step seeks are handled inside the
+                # phase loop). resolve_seek clamps + locates the target frame.
+                target = proto_ctx.resume_target
+                resolved = resolve_seek(frame_paths, target)
+                if resolved is not None and tuple(target[0]) != tuple(row.path):
+                    i, start_phase_index = resolved
+                    proto_ctx.resume_target = None
+                    step_index = i  # keep the counter roughly aligned
+                    continue
 
             step_index += 1
-            step_started_at = time.monotonic()
-            rep_str = (
-                " | " + ", ".join(f"rep {i}/{n} of {name!r}"
-                                  for name, i, n in rep_chain)
-                if rep_chain else ""
-            )
-            logger.info(
-                f"Step {step_index} started: {row.name!r} "
-                f"(path {row.dotted_path()}, "
-                f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
-            )
+            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain,
+                                step_index, start_phase_index)
+            start_phase_index = 0
 
-            step_ctx = self._build_step_ctx(row, cols, proto_ctx)
-            set_active_step(step_ctx)
-            try:
-                # Rep info first so UI labels are populated before the
-                # row-highlight fires from step_started.
-                self.qsignals.step_repetition.emit(rep_chain)
-                self.qsignals.step_started.emit(row)
-                self._run_hooks("on_pre_step",  handlers, step_ctx, row)
-                self._run_hooks("on_step",      handlers, step_ctx, row)
-                self._run_hooks("on_post_step", handlers, step_ctx, row)
-                self.qsignals.step_finished.emit(row)
-            finally:
-                clear_active_step()
+            # A seek raised DURING the step (different step) aborts the phase
+            # loop; redirect from here.
+            target = proto_ctx.resume_target
+            resolved = resolve_seek(frame_paths, target)
+            if resolved is not None:
+                i, start_phase_index = resolved
+                proto_ctx.resume_target = None
+                step_index = i
+                continue
+            i += 1
 
-            logger.info(
-                f"Step {step_index} finished: {row.name!r} in "
-                f"{time.monotonic() - step_started_at:.2f}s"
-            )
+    def _run_one_frame(self, handlers, cols, proto_ctx, row, rep_chain,
+                       step_index, start_phase_index) -> None:
+        step_started_at = time.monotonic()
+        rep_str = (
+            " | " + ", ".join(f"rep {i}/{n} of {name!r}"
+                              for name, i, n in rep_chain)
+            if rep_chain else ""
+        )
+        logger.info(
+            f"Step {step_index} started: {row.name!r} "
+            f"(path {row.dotted_path()}, "
+            f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
+        )
+        step_ctx = self._build_step_ctx(row, cols, proto_ctx)
+        step_ctx.start_phase_index = int(start_phase_index)
+        set_active_step(step_ctx)
+        try:
+            # Rep info first so UI labels are populated before the
+            # row-highlight fires from step_started.
+            self.qsignals.step_repetition.emit(rep_chain)
+            self.qsignals.step_started.emit(row)
+            self._run_hooks("on_pre_step",  handlers, step_ctx, row)
+            self._run_hooks("on_step",      handlers, step_ctx, row)
+            self._run_hooks("on_post_step", handlers, step_ctx, row)
+            self.qsignals.step_finished.emit(row)
+        finally:
+            clear_active_step()
+        logger.info(
+            f"Step {step_index} finished: {row.name!r} in "
+            f"{time.monotonic() - step_started_at:.2f}s"
+        )
 
     def _interruptible_delay(self, seconds: float) -> None:
         """Sleep up to ``seconds``, returning early if stop_event fires."""
