@@ -129,7 +129,7 @@ class RoutesHandler(BaseColumnHandler):
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
                    pause_event, qsignals, phase_index, phase_total,
-                   hold_for_buffer=False):
+                   hold_for_buffer=False, honor_pause=True):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -157,7 +157,7 @@ class RoutesHandler(BaseColumnHandler):
         # resumes. The executor's between-step pause check
         # doesn't reach inside on_step's phase loop, so without
         # this the routes keep playing through a Pause click.
-        if pause_event.is_set():
+        if honor_pause and pause_event.is_set():
             pause_event.wait_cleared()
             if stop_event.is_set():
                 return False
@@ -390,17 +390,49 @@ class RoutesHandler(BaseColumnHandler):
                 n_repeats=int(getattr(row, "route_repetitions", 1)),
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
+            cursor = ctx.protocol.cursor
             total_phases = len(phases)
-            for phase_idx, phase in enumerate(phases, start=1):
+            cursor.phase_total = total_phases
+            # Begin at the cursor's phase (0 normally; the re-entry phase after
+            # a different-step seek). Clamp into range.
+            phase_i = max(0, min(int(cursor.phase_index), max(0, total_phases - 1)))
+            seek_abort = False
+            while phase_i < total_phases:
+                if stop_event.is_set():
+                    break
+                cursor.phase_index = phase_i
+                # Pause checkpoint (this loop owns it; _run_phase is called with
+                # honor_pause=False so it won't block again at its top).
+                if pause_event.is_set():
+                    pause_event.wait_cleared()
+                    if stop_event.is_set():
+                        break
+                # Honor a pending seek whenever one is set -- covers a pause that
+                # landed HERE and one that landed mid-dwell (inside _run_phase)
+                # then resumed (pause_event is already clear by now).
+                if cursor.resume_target is not None:
+                    action, target_phase = cursor.decision_at_phase(phase_i)
+                    if action == "jump":          # same step -> jump in place
+                        cursor.clear_seek()
+                        phase_i = max(0, min(int(target_phase), total_phases - 1))
+                        continue
+                    if action == "abort":         # different step -> let the
+                        seek_abort = True         # executor's frame walk redirect
+                        break
                 if not self._run_phase(
-                        phase, ctx=ctx, mapping=mapping,
+                        phases[phase_i], ctx=ctx, mapping=mapping,
                         static_routes=routes, step_uuid=step_uuid,
                         step_label=step_label, preview_mode=preview_mode,
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
                         pause_event=pause_event, qsignals=qsignals,
-                        phase_index=phase_idx, phase_total=total_phases,
-                        hold_for_buffer=phase_hold):
+                        phase_index=phase_i + 1, phase_total=total_phases,
+                        hold_for_buffer=phase_hold, honor_pause=False):
                     break
+                phase_i += 1
+            if seek_abort:
+                # Leave resume_target set; the executor re-enters the target step.
+                ctx.step_phases_done_event.set()
+                return
             # Route Reps Dur mode: after the full cycles, hold the last
             # phase's electrodes (no new publish) for the exact leftover so
             # total step time lands on the budget precisely. Based on the
