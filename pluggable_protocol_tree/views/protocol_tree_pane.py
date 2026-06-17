@@ -42,11 +42,9 @@ from microdrop_utils.pyside_helpers import LoadingOverlay
 
 from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
-    ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_APPLIED,
-    ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER,
-    PROTOCOL_TREE_DISPLAY_STATE)
+    ELECTRODES_STATE_APPLIED,
+    ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER)
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
-from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
@@ -54,7 +52,6 @@ from pluggable_protocol_tree.services.persistence import (
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
-from pluggable_protocol_tree.services.phase_math import iter_phases
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
@@ -246,8 +243,7 @@ class ProtocolTreePane(QWidget):
         # nav-relevant current row + pause-phase cursor below.
         self._current_row = None
         self._current_run_preview_mode = False
-        self._pause_phases: list = []
-        self._pause_phase_idx: int = 0
+        self.status_controller = None  # set by the composition root (#471)
         # Guards the window between play-click and the protocol_started
         # signal (the executor's on_pre_protocol_start realtime settle runs
         # in there) so a second play-click can't start a duplicate run.
@@ -554,9 +550,11 @@ class ProtocolTreePane(QWidget):
             # Freeze the loading-screen countdown in lockstep with the
             # executor's frozen pre-protocol wait.
             self.loading_overlay.pause()
+        nb = self.navigation_bar
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(True)
         if self._current_row is not None:
-            self._compute_pause_phase_state(self._current_row)
-            self.navigation_bar.split_play_button_to_phase_controls()
+            nb.split_play_button_to_phase_controls()
             self._update_phase_nav_buttons()
 
     def _on_protocol_resumed(self):
@@ -564,7 +562,10 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.show_pause_state()
         if self._wait_active:
             self.loading_overlay.resume()
-        self.navigation_bar.merge_phase_controls_to_play_button()
+        nb = self.navigation_bar
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(False)
+        nb.merge_phase_controls_to_play_button()
 
     def _on_protocol_finished(self):
         # The executor owns the repeat loop now, so protocol_finished fires
@@ -592,8 +593,6 @@ class ProtocolTreePane(QWidget):
         self.clear_highlights()
         self._set_idle_button_state()
         self.navigation_bar.merge_phase_controls_to_play_button()
-        self._pause_phases = []
-        self._pause_phase_idx = 0
         # Clear hardware actuation: independent of the DV's free-mode
         # publish below, which can race with PROTOCOL_RUNNING and leave
         # the last step's channels energized after abort/error.
@@ -689,91 +688,30 @@ class ProtocolTreePane(QWidget):
 
     # --- pause-time phase navigation ---------------------------------
 
-    def _compute_pause_phase_state(self, row):
-        try:
-            self._pause_phases = list(iter_phases(
-                static_electrodes=list(getattr(row, "electrodes", []) or []),
-                routes=list(getattr(row, "routes", []) or []),
-                trail_length=int(getattr(row, "trail_length", 1)),
-                trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                soft_start=bool(getattr(row, "soft_start", False)),
-                soft_end=bool(getattr(row, "soft_end", False)),
-                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0)),
-                linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=int(getattr(row, "route_repetitions", 1)),
-                step_duration_s=float(getattr(row, "duration_s", 1.0)),
-            ))
-        except Exception as e:
-            logger.warning(f"phase navigation: iter_phases failed: {e}")
-            self._pause_phases = []
-        self._pause_phase_idx = 0
-
     def _on_prev_phase(self):
-        if self._pause_phases and self._pause_phase_idx > 0:
-            self._pause_phase_idx -= 1
-            self._publish_paused_phase()
-            self._update_phase_nav_buttons()
+        self._seek_relative_phase(-1)
 
     def _on_next_phase(self):
-        if (self._pause_phases
-                and self._pause_phase_idx < len(self._pause_phases) - 1):
-            self._pause_phase_idx += 1
-            self._publish_paused_phase()
-            self._update_phase_nav_buttons()
+        self._seek_relative_phase(+1)
 
-    def _publish_paused_phase(self):
-        if not self._pause_phases:
+    def _seek_relative_phase(self, delta):
+        sc = self.status_controller
+        if sc is None or self._current_row is None:
             return
-        phase = self._pause_phases[self._pause_phase_idx]
-        mapping = self.manager.protocol_metadata.get(
-            ELECTRODE_TO_CHANNEL_KEY, {},
-        )
-        electrodes = sorted(phase)
-        channels = sorted(mapping[e] for e in electrodes if e in mapping)
-
-        # Display path: always publishes to PROTOCOL_TREE_DISPLAY_STATE
-        # so the DV's overlay tracks Prev/Next phase clicks instantly,
-        # even in preview mode. Cached step metadata from _current_row.
-        row = self._current_row
-        if row is not None:
-            dotted_id = row.dotted_path()
-            display_msg = ProtocolTreeDisplayMessage(
-                electrodes=electrodes,
-                routes=list(getattr(row, "routes", []) or []),
-                step_id=getattr(row, "uuid", "") or "",
-                step_label=f"Step {dotted_id}",
-                free_mode=False,
-                editable=False,
-            )
-            try:
-                publish_message(
-                    topic=PROTOCOL_TREE_DISPLAY_STATE,
-                    message=display_msg.serialize(),
-                )
-            except Exception as e:
-                logger.warning(f"phase navigation display publish failed: {e}")
-
-        # Hardware path: gated on preview. Matches RoutesHandler — the
-        # backend has no preview awareness, we just don't publish.
-        if not self._current_run_preview_mode:
-            payload = {"electrodes": electrodes, "channels": channels}
-            try:
-                publish_message(
-                    topic=ELECTRODES_STATE_CHANGE,
-                    message=json.dumps(payload),
-                )
-            except Exception as e:
-                logger.warning(f"phase navigation hardware publish failed: {e}")
+        target0 = (sc.model.phase_index - 1) + delta   # model phase_index is 1-based
+        path = tuple(self._current_row.path)
+        sc.seek_to(path, target0)
+        sc.preview_phase(path, target0, self._current_run_preview_mode)
+        self._update_phase_nav_buttons()
 
     def _update_phase_nav_buttons(self):
-        prev_enabled = self._pause_phase_idx > 0
-        next_enabled = (
-            bool(self._pause_phases)
-            and self._pause_phase_idx < len(self._pause_phases) - 1
-        )
-        self.navigation_bar.set_phase_navigation_enabled(
-            prev_enabled, next_enabled,
-        )
+        m = self.status_controller.model if self.status_controller else None
+        if m is None:
+            self.navigation_bar.set_phase_navigation_enabled(False, False)
+            return
+        prev_enabled = m.phase_index > 1
+        next_enabled = 0 < m.phase_index < m.phase_total
+        self.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
 
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog
@@ -817,6 +755,8 @@ class ProtocolTreePane(QWidget):
         if cur < len(steps) - 1:
             logger.info(f"Nav: next step --> [{steps[cur + 1].dotted_path()}]")
             self._select_step(steps[cur + 1])
+            return
+        if self.status_controller is not None and self.status_controller.model.paused:
             return
         logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
         self._duplicate_step_after(steps[cur])
@@ -884,6 +824,13 @@ class ProtocolTreePane(QWidget):
         # just as on a direct row click. Only clear_highlights (transient
         # state reset) needs to suppress.
         self.widget.set_current_row(row)
+        sc = self.status_controller
+        if sc is not None and sc.model.paused:
+            self._current_row = row
+            path = tuple(row.path)
+            sc.seek_to(path, 0)
+            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._update_phase_nav_buttons()
 
     @attempt_func_execution_with_error_dialog
     def clear_highlights(self):

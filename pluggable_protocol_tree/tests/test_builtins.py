@@ -176,7 +176,7 @@ def test_route_repetitions_column_metadata():
     assert col.model.col_name == "Route Reps"
     assert col.model.default_value == 1
     assert col.view.hidden_by_default is False
-    assert col.view.low == 1 and col.view.high == 1000
+    assert col.view.low == 1 and col.view.high == 10000
 
 
 def test_route_repetitions_editable_on_step_not_group():
