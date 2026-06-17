@@ -11,12 +11,22 @@ so these slots run on the GUI thread; the model is therefore mutated only
 on the GUI thread and its observers may drive widgets directly.
 """
 
+import json
 import time
 
 from traits.api import Any, Callable, HasTraits, Instance
 
+from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from pluggable_protocol_tree.consts import (
+    ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_CHANGE,
+    PROTOCOL_TREE_DISPLAY_STATE,
+)
+from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
 from pluggable_protocol_tree.services.phase_math import iter_phases
+
+logger = get_logger(__name__)
 
 
 class ProtocolStatusController(HasTraits):
@@ -141,25 +151,73 @@ class ProtocolStatusController(HasTraits):
         return None
 
     @staticmethod
-    def _phase_total_for(row):
-        """Materialized phase count for a row (count/fixed steps). Duration-mode
-        precise phases are deferred (#477); fall back to 1 on any failure."""
+    def _phases_for(row):
+        """Materialized phase sequence for a row, mirroring the executor's
+        iter_phases call (count/fixed steps). [] on failure. Duration-mode
+        precise phases are deferred (#477)."""
         try:
-            phases = list(iter_phases(
+            in_duration_mode = (
+                bool(getattr(row, "repeat_duration_controls", False))
+                and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
+            )
+            return list(iter_phases(
                 static_electrodes=list(getattr(row, "electrodes", []) or []),
                 routes=list(getattr(row, "routes", []) or []),
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),
                 soft_start=bool(getattr(row, "soft_start", False)),
                 soft_end=bool(getattr(row, "soft_end", False)),
-                repeat_duration_s=0.0,
+                repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
+                                   if in_duration_mode else 0.0),
                 linear_repeats=bool(getattr(row, "linear_repeats", False)),
                 n_repeats=int(getattr(row, "route_repetitions", 1)),
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
-            return max(1, len(phases))
         except Exception:
-            return 1
+            return []
+
+    def _phase_total_for(self, row):
+        return max(1, len(self._phases_for(row)))
+
+    def preview_phase(self, step_path, phase_index, preview):
+        """Publish the selected phase's electrodes to the DV overlay (always)
+        and to hardware (unless ``preview``) while paused. ``phase_index`` is
+        0-based. Best-effort -- publish failures are logged, never raised."""
+        row = self._row_at(step_path)
+        if row is None:
+            return
+        phases = self._phases_for(row)
+        if not phases:
+            return
+        idx = max(0, min(int(phase_index), len(phases) - 1))
+        try:
+            mapping = self.manager.protocol_metadata.get(
+                ELECTRODE_TO_CHANNEL_KEY, {})
+        except Exception:
+            mapping = {}
+        electrodes = sorted(phases[idx])
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        display_msg = ProtocolTreeDisplayMessage(
+            electrodes=electrodes,
+            routes=list(getattr(row, "routes", []) or []),
+            step_id=getattr(row, "uuid", "") or "",
+            step_label=f"Step {row.dotted_path()}",
+            free_mode=False,
+            editable=False,
+        )
+        try:
+            publish_message(topic=PROTOCOL_TREE_DISPLAY_STATE,
+                            message=display_msg.serialize())
+        except Exception as e:
+            logger.warning(f"seek display publish failed: {e}")
+        if not preview:
+            try:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(
+                        {"electrodes": electrodes, "channels": channels}))
+            except Exception as e:
+                logger.warning(f"seek hardware publish failed: {e}")
 
     def seek_to(self, step_path, phase_index):
         """Navigate (while paused) to ``(step_path, phase_index)`` -- 0-based
