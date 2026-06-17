@@ -60,6 +60,7 @@ from pluggable_protocol_tree.builtins.routes_column import (
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
 )
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
 
 
 def test_routes_column_metadata():
@@ -125,6 +126,10 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
     row.repetitions = 1
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.preview_mode = False
     ctx.scratch = {}
@@ -192,6 +197,10 @@ def test_routes_handler_preview_mode_skips_hardware_and_ack():
     row.repetitions = 1
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
     ctx.scratch = {}
@@ -231,6 +240,10 @@ def test_routes_handler_unmapped_electrode_logs_warning_and_skips_channel():
     row.repetitions = 1
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.preview_mode = False
     ctx.scratch = {}
@@ -268,6 +281,10 @@ def test_routes_handler_uses_route_repetitions_for_loop_count():
     row.duration_s = 0.0         # zero dwell so the test is instant
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
     ctx.protocol.preview_mode = True     # skip hardware publish + ack wait
@@ -314,6 +331,10 @@ def test_routes_handler_hold_pad_uses_total_emitted_phase_count():
     fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
@@ -355,6 +376,10 @@ def test_routes_handler_no_hold_pad_in_count_mode():
     fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
@@ -394,6 +419,10 @@ def test_routes_handler_no_pad_sleep_when_phases_fill_budget():
     fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
@@ -432,6 +461,10 @@ def _captured_repeat_duration_s(controls):
     row.repeat_duration_controls = controls
 
     ctx = MagicMock()
+    # Real cursor so on_step's no-seek static loop sees phase_index=0,
+    # resume_target=None (a bare MagicMock attr would be truthy and
+    # spuriously trigger the seek branch).
+    ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
@@ -534,6 +567,7 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True          # skip hardware publish + ack wait
@@ -585,6 +619,7 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
@@ -636,6 +671,7 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True           # skip hardware publish + ack wait
@@ -709,6 +745,7 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
@@ -765,6 +802,7 @@ def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
@@ -815,6 +853,7 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
@@ -877,6 +916,7 @@ def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
     row.path = (0,)
 
     proto = MagicMock()
+    proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
     proto.preview_mode = True
