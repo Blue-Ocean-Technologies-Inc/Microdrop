@@ -236,7 +236,9 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         self.status_controller = ProtocolStatusController(
             qsignals=self.pane.executor.qsignals,
             manager=self.pane.manager,
+            executor=self.pane.executor,
         )
+        self.pane.status_controller = self.status_controller
         self.pane.status_bar.bind(self.status_controller.model)
 
         self._side_panel = None

@@ -98,7 +98,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self.status_controller = ProtocolStatusController(
             qsignals=pane.executor.qsignals,
             manager=self.manager,
+            executor=pane.executor,
         )
+        pane.status_controller = self.status_controller
         pane.status_bar.bind(self.status_controller.model)
         # Phase trackers are always shown in the full app (issue #467); the
         # pane only auto-reveals the phase field when a phase_ack_topic is set
