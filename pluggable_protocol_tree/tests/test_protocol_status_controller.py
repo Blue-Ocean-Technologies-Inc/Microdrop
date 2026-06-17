@@ -128,3 +128,48 @@ def test_disconnect_stops_updates():
     ctrl.disconnect()
     sigs.protocol_started.emit()
     assert ctrl.model.step_total == 0   # not wired anymore
+
+
+# ---------------------------------------------------------------------------
+# seek_to (#471)
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace
+from pluggable_protocol_tree.services.protocol_status_controller import (
+    ProtocolStatusController,
+)
+
+
+class _StubExecutor:
+    def __init__(self):
+        self.seek_calls = []
+
+    def seek(self, step_path, phase_index):
+        self.seek_calls.append((tuple(step_path), phase_index))
+
+
+def _row(path, name="S", **kw):
+    return SimpleNamespace(path=tuple(path), name=name, dotted_path=lambda: "1",
+                           **kw)
+
+
+def test_seek_to_calls_executor_and_updates_model():
+    row = _row((0,), name="Wash", electrodes=[], routes=[], trail_length=1,
+               trail_overlay=0, soft_start=False, soft_end=False,
+               repeat_duration=0.0, repeat_duration_controls=False,
+               linear_repeats=False, route_repetitions=1, duration_s=1.0)
+    manager = SimpleNamespace(
+        iter_execution_steps=lambda: iter([row]),
+    )
+    ex = _StubExecutor()
+    c = ProtocolStatusController(qsignals=None, manager=manager, executor=ex,
+                                 clock=lambda: 7.0)
+    c.model.on_protocol_start(0.0, 1)
+    c.model.on_step_start(0.0, "Wash", "-")
+    c.model.pause(0.0)
+
+    c.seek_to((0,), 0)
+
+    assert ex.seek_calls == [((0,), 0)]
+    assert c.model.step_index == 1          # step (0,) is the 1st step
+    assert c.model.phase_index == 1         # phases are 1-based in the model
