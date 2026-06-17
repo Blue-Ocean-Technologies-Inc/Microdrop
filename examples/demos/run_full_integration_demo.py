@@ -152,7 +152,7 @@ def _post_build(window):
             cur.data(Qt.UserRole) if cur.isValid() else None
         )
     )
-    window.executor.qsignals.step_started.connect(device_view.set_active_row)
+    window.executor.signals.step_started.connect(device_view.set_active_row)
 
 
 config = DemoConfig(

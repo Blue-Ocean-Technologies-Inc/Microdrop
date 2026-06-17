@@ -298,7 +298,7 @@ _RECORD_MOD = "video_protocol_controls.protocol_columns.record_column"
 
 class _ProtoCtx:
     """Minimal ProtocolContext stand-in: prompt_gui runs the callable inline,
-    exactly as the real ProtocolContext does headlessly (qsignals is None)."""
+    exactly as the real ProtocolContext does headlessly (signals is None)."""
 
     def __init__(self):
         self.stop_event = threading.Event()

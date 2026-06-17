@@ -36,11 +36,11 @@ class _FakePauseEvent:
 
 class _FakeProtocolCtx:
     def __init__(self, electrode_to_channel=None, pause_event=None,
-                 qsignals=None):
+                 signals=None):
         self.scratch = {"electrode_to_channel": electrode_to_channel or {}}
         # Mirrors the real ProtocolContext traits the executor populates.
         self.pause_event = pause_event if pause_event is not None else _FakePauseEvent()
-        self.qsignals = qsignals  # None for tests that don't care about UI signals
+        self.signals = signals  # None for tests that don't care about UI signals
 
 
 class _FakeStepCtx:

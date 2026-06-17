@@ -46,12 +46,12 @@ def test_preference_defaults_to_empty_map(prefs):
 
 
 def test_preference_round_trip_across_helper_instances(prefs, prefs_node):
-    prefs.protocol_tree_column_visibility = {"Name": False, "Trail Len": True}
+    prefs.protocol_tree_column_visibility = {"name": False, "trail_length": True}
     # A fresh helper against the same node sees the persisted map —
     # i.e. the value survives "restart" (helper reconstruction).
     reread = ProtocolPreferences(preferences=prefs_node)
     assert reread.protocol_tree_column_visibility == {
-        "Name": False, "Trail Len": True,
+        "name": False, "trail_length": True,
     }
 
 
@@ -82,16 +82,13 @@ def test_widget_restores_persisted_visibility(qapp, prefs):
 
 
 def test_toggle_persists_full_visibility_map(qapp, prefs):
-    name_col = make_name_column().model.col_name
-    trail_col = make_trail_length_column().model.col_name
-
     manager = RowManager(columns=[make_name_column(), make_trail_length_column()])
     widget = ProtocolTreeWidget(manager, preferences=prefs)
 
     # Reveal the hidden-by-default column, then persist as the menu does.
-    widget.tree.setColumnHidden(_index_of(manager, trail_col), False)
+    widget.tree.setColumnHidden(_index_of(manager, "Trail Len"), False)
     widget._persist_column_visibility()
 
     assert prefs.protocol_tree_column_visibility == {
-        name_col: True, trail_col: True,
+        "name": True, "trail_length": True,
     }

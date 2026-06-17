@@ -16,7 +16,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from PySide6.QtCore import QTimer
+from pyface.api import GUI
 
 from pluggable_protocol_tree.execution.exceptions import AbortError
 
@@ -114,6 +114,7 @@ class Mailbox:
 
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow
@@ -141,11 +142,11 @@ class ProtocolContext(HasTraits):
     stop_event  = Instance(threading.Event)
     pause_event = Instance(PauseEvent)
 
-    # Hooks may emit UI signals (e.g. droplet check publishing
-    # protocol_paused while it waits on a user dialog so the step
-    # timer freezes). Qt signals are thread-safe to emit from worker
-    # threads; the slot runs on the GUI thread via QueuedConnection.
-    qsignals    = Any(desc="ExecutorSignals (QObject) — hooks may emit "
+    # Hooks may set UI events (e.g. droplet check setting protocol_paused
+    # while it waits on a user dialog so the step timer freezes). Setting a
+    # Traits Event is thread-safe; widget-touching observers run on the GUI
+    # thread via dispatch="ui".
+    signals    = Any(desc="ExecutorSignals (HasTraits) — hooks may set "
                            "protocol_paused / protocol_resumed for "
                            "in-hook waits the UI should reflect")
 
@@ -161,6 +162,11 @@ class ProtocolContext(HasTraits):
     # loading screen — after the pre-start hooks and before the first step.
     pre_protocol_wait_s = Float(0.0)
 
+    # Live execution position + pending mid-run seek (#471): one model the
+    # executor and routes handler both drive (replaces the old scattered
+    # resume_target / StepContext.start_phase_index / executor._current_step_path).
+    cursor = Instance(ExecutionCursor, ())
+
     def add_pre_protocol_wait(self, seconds: float) -> None:
         """Contribute settle/wait time to the pre-protocol wait.
 
@@ -174,25 +180,25 @@ class ProtocolContext(HasTraits):
         """Pause the run and tell the UI.
 
         Sets ``pause_event`` (the executor blocks on it at the next step
-        boundary) and emits ``protocol_paused`` so the UI freezes its
-        step/phase timers. Safe to call from a worker thread — the signal
-        is delivered to GUI slots via a queued connection. ``qsignals`` may
+        boundary) and sets ``protocol_paused`` so the UI freezes its
+        step/phase timers. Safe to call from a worker thread — widget-touching
+        observers run on the GUI thread via dispatch="ui". ``signals`` may
         be None in headless/test runs, in which case only the event is set.
         """
         self.pause_event.set()
-        if self.qsignals is not None:
-            self.qsignals.protocol_paused.emit()
+        if self.signals is not None:
+            self.signals.protocol_paused = True
 
     def resume(self):
         """Clear the pause and tell the UI.
 
         Inverse of :meth:`pause`: clears ``pause_event`` (waking the
-        executor's ``wait_cleared``) and emits ``protocol_resumed``.
-        ``qsignals`` may be None in headless/test runs.
+        executor's ``wait_cleared``) and sets ``protocol_resumed``.
+        ``signals`` may be None in headless/test runs.
         """
         self.pause_event.clear()
-        if self.qsignals is not None:
-            self.qsignals.protocol_resumed.emit()
+        if self.signals is not None:
+            self.signals.protocol_resumed = True
 
     def wait(self, events: list[threading.Event], timeout: float = float("inf")):
         """Pause the run and block the worker thread until an event fires.
@@ -290,7 +296,7 @@ class ProtocolContext(HasTraits):
         is safe to build and ``exec()`` a Qt dialog inside it. Whatever it
         returns becomes this method's return value.
 
-        Headless/test runs have no GUI thread (``qsignals`` is None), so the
+        Headless/test runs have no GUI thread (``signals`` is None), so the
         callable runs inline on the calling thread.
 
         Args:
@@ -316,13 +322,13 @@ class ProtocolContext(HasTraits):
             finally:
                 done.set()
 
-        if self.qsignals is None:
+        if self.signals is None:
             _runner()
         else:
-            # Marshal onto the GUI thread: qsignals is a GUI-thread QObject, so
-            # singleShot with it as context runs _runner there (Qt builds the
-            # dialog on the right thread).
-            QTimer.singleShot(0, self.qsignals, _runner)
+            # Marshal onto the GUI thread via pyface's GUI dispatcher so the
+            # dialog is built on the right thread (signals is no longer a
+            # QObject — GUI.invoke_later posts to the toolkit event loop).
+            GUI.invoke_later(_runner)
 
         self.wait(events=[done, self.stop_event], timeout=timeout)
 

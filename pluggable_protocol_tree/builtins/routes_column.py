@@ -128,8 +128,8 @@ class RoutesHandler(BaseColumnHandler):
 
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
-                   pause_event, qsignals, phase_index, phase_total,
-                   hold_for_buffer=False):
+                   pause_event, signals, phase_index, phase_total,
+                   hold_for_buffer=False, honor_pause=True):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -150,6 +150,11 @@ class RoutesHandler(BaseColumnHandler):
         # buffer left over from a phase that ended early.
         ctx.phase_advance_event.clear()
         ctx.reset_phase_time_buffer()
+        # A pending mid-run seek (operator navigated away while paused) must
+        # cut this phase's dwell/hold short on resume so the leftover time
+        # doesn't run before the executor redirects (#471).
+        def _seek_pending():
+            return ctx.protocol.cursor.resume_target is not None
         if stop_event.is_set():
             return False
         # Pause check at the phase boundary — block here so the
@@ -157,7 +162,7 @@ class RoutesHandler(BaseColumnHandler):
         # resumes. The executor's between-step pause check
         # doesn't reach inside on_step's phase loop, so without
         # this the routes keep playing through a Pause click.
-        if pause_event.is_set():
+        if honor_pause and pause_event.is_set():
             pause_event.wait_cleared()
             if stop_event.is_set():
                 return False
@@ -171,8 +176,8 @@ class RoutesHandler(BaseColumnHandler):
                     f"actuation channel skipped"
                 )
 
-        if qsignals is not None:
-            qsignals.phase_started.emit(
+        if signals is not None:
+            signals.phase_started = (
                 phase_index, phase_total, per_phase_dwell,
             )
 
@@ -205,7 +210,8 @@ class RoutesHandler(BaseColumnHandler):
                 ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=self.ack_time_s)
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
-                           phase_advance_event=ctx.phase_advance_event)
+                           phase_advance_event=ctx.phase_advance_event,
+                           seek_pending=_seek_pending)
 
         # Consume any phase-time buffer a sibling column added (only relevant
         # when this step opted into holding — see below) and tell the status
@@ -214,8 +220,8 @@ class RoutesHandler(BaseColumnHandler):
         # ctx.note_phase_extension), not RoutesHandler's — we only hold + report.
         def _take_and_emit():
             extra = ctx.take_phase_time_buffer()
-            if extra > 0 and qsignals is not None:
-                qsignals.phase_extended.emit(extra)
+            if extra > 0 and signals is not None:
+                signals.phase_extended = extra
             return extra
 
         # Post-dwell hold: a sibling column (e.g. volume threshold) often
@@ -231,6 +237,8 @@ class RoutesHandler(BaseColumnHandler):
             grace_deadline = time.monotonic() + _HOLD_GRACE_S
             while (not stop_event.is_set()
                    and not ctx.phase_advance_event.is_set()):
+                if _seek_pending():
+                    break
                 if pause_event.is_set():
                     pause_event.wait_cleared()
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
@@ -240,7 +248,8 @@ class RoutesHandler(BaseColumnHandler):
                     _cooperative_sleep(
                         extra, stop_event, pause_event,
                         phase_advance_event=ctx.phase_advance_event,
-                        buffer_provider=_take_and_emit)
+                        buffer_provider=_take_and_emit,
+                        seek_pending=_seek_pending)
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
                     continue
                 if time.monotonic() >= grace_deadline:
@@ -251,7 +260,7 @@ class RoutesHandler(BaseColumnHandler):
     def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
                                    step_uuid, step_label, preview_mode,
                                    per_phase_dwell, stop_event, pause_event,
-                                   qsignals, budget):
+                                   signals, budget):
         """Duration mode + a phase-hold hook: loop the unit cycle as long as
         another FULL-duration cycle still fits the budget, then close with
         the return-to-start phase and idle any sub-cycle remainder.
@@ -305,7 +314,7 @@ class RoutesHandler(BaseColumnHandler):
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals, phase_index=running_idx, phase_total=0,
+                signals=signals, phase_index=running_idx, phase_total=0,
                 hold_for_buffer=True)
 
         for phase in ramp_up:
@@ -332,7 +341,9 @@ class RoutesHandler(BaseColumnHandler):
 
         remaining = budget - _budget_elapsed()
         if remaining > 0 and not stop_event.is_set():
-            _cooperative_sleep(remaining, stop_event, pause_event)
+            _cooperative_sleep(
+                remaining, stop_event, pause_event,
+                seek_pending=lambda: ctx.protocol.cursor.resume_target is not None)
 
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get(ELECTRODE_TO_CHANNEL_KEY, {})
@@ -361,7 +372,7 @@ class RoutesHandler(BaseColumnHandler):
             and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
         )
 
-        qsignals = getattr(ctx.protocol, "qsignals", None)
+        signals = getattr(ctx.protocol, "signals", None)
         # Generic opt-in: a sibling column (e.g. volume threshold) requested in
         # on_pre_step that this step's phases be held open for buffering /
         # threshold-driven advancement. RoutesHandler honours the flag without
@@ -374,7 +385,7 @@ class RoutesHandler(BaseColumnHandler):
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                qsignals=qsignals,
+                signals=signals,
                 budget=float(getattr(row, "repeat_duration", 0.0) or 0.0))
         else:
             phases = list(iter_phases(
@@ -390,17 +401,49 @@ class RoutesHandler(BaseColumnHandler):
                 n_repeats=int(getattr(row, "route_repetitions", 1)),
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
+            cursor = ctx.protocol.cursor
             total_phases = len(phases)
-            for phase_idx, phase in enumerate(phases, start=1):
+            cursor.phase_total = total_phases
+            # Begin at the cursor's phase (0 normally; the re-entry phase after
+            # a different-step seek). Clamp into range.
+            phase_i = max(0, min(int(cursor.phase_index), max(0, total_phases - 1)))
+            seek_abort = False
+            while phase_i < total_phases:
+                if stop_event.is_set():
+                    break
+                cursor.phase_index = phase_i
+                # Pause checkpoint (this loop owns it; _run_phase is called with
+                # honor_pause=False so it won't block again at its top).
+                if pause_event.is_set():
+                    pause_event.wait_cleared()
+                    if stop_event.is_set():
+                        break
+                # Honor a pending seek whenever one is set -- covers a pause that
+                # landed HERE and one that landed mid-dwell (inside _run_phase)
+                # then resumed (pause_event is already clear by now).
+                if cursor.resume_target is not None:
+                    action, target_phase = cursor.decision_at_phase(phase_i)
+                    if action == "jump":          # same step -> jump in place
+                        cursor.clear_seek()
+                        phase_i = max(0, min(int(target_phase), total_phases - 1))
+                        continue
+                    if action == "abort":         # different step -> let the
+                        seek_abort = True         # executor's frame walk redirect
+                        break
                 if not self._run_phase(
-                        phase, ctx=ctx, mapping=mapping,
+                        phases[phase_i], ctx=ctx, mapping=mapping,
                         static_routes=routes, step_uuid=step_uuid,
                         step_label=step_label, preview_mode=preview_mode,
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
-                        pause_event=pause_event, qsignals=qsignals,
-                        phase_index=phase_idx, phase_total=total_phases,
-                        hold_for_buffer=phase_hold):
+                        pause_event=pause_event, signals=signals,
+                        phase_index=phase_i + 1, phase_total=total_phases,
+                        hold_for_buffer=phase_hold, honor_pause=False):
                     break
+                phase_i += 1
+            if seek_abort:
+                # Leave resume_target set; the executor re-enters the target step.
+                ctx.step_phases_done_event.set()
+                return
             # Route Reps Dur mode: after the full cycles, hold the last
             # phase's electrodes (no new publish) for the exact leftover so
             # total step time lands on the budget precisely. Based on the
@@ -410,7 +453,9 @@ class RoutesHandler(BaseColumnHandler):
                 pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
                               - len(phases) * per_phase_dwell)
                 if pad > 0:
-                    _cooperative_sleep(pad, stop_event, pause_event)
+                    _cooperative_sleep(
+                        pad, stop_event, pause_event,
+                        seek_pending=lambda: cursor.resume_target is not None)
 
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
@@ -423,7 +468,8 @@ class RoutesHandler(BaseColumnHandler):
 
 
 def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
-                       phase_advance_event=None, buffer_provider=None) -> None:
+                       phase_advance_event=None, buffer_provider=None,
+                       seek_pending=None) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
@@ -443,10 +489,18 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
             return
         if phase_advance_event is not None and phase_advance_event.is_set():
             return
+        # A seek requested while paused (operator navigated to another
+        # step/phase) must abort the leftover dwell on resume — otherwise the
+        # old step's remaining time runs before the redirect (#471).
+        if seek_pending is not None and seek_pending():
+            return
         if pause_event is not None and pause_event.is_set():
             pause_event.wait_cleared()
             if stop_event.is_set():
                 return
+            # Re-check stop/seek/advance at the top before consuming more
+            # dwell; the resume may have a seek queued behind it.
+            continue
         if buffer_provider is not None:
             remaining += buffer_provider()
         slice_dur = min(_SLICE_S, remaining)

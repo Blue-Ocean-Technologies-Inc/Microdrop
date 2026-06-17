@@ -432,7 +432,7 @@ def test_add_pre_protocol_wait_accumulates_and_clamps_negatives():
 def test_step_context_prompt_gui_returns_delegated_result():
     """Regression: the StepContext wrapper must return the dialog result, not
     drop it (step-level callers like volume-threshold recovery rely on it)."""
-    proto = _PC(stop_event=threading.Event(), pause_event=PauseEvent())  # qsignals None
+    proto = _PC(stop_event=threading.Event(), pause_event=PauseEvent())  # signals None
     step = _SC(protocol=proto)
     assert step.prompt_gui(lambda: {"action": "extend"}) == {"action": "extend"}
 

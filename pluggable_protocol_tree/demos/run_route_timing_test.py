@@ -295,9 +295,9 @@ def main() -> int:
     # there is no Qt event loop here, so a queued (default) connection
     # would never deliver. Direct => the slot runs synchronously in the
     # emitting thread.
-    ex.qsignals.step_started.connect(
+    ex.signals.step_started.connect(
         lambda row: state.update(t0=time.monotonic()), Qt.DirectConnection)
-    ex.qsignals.step_finished.connect(
+    ex.signals.step_finished.connect(
         lambda row: timings.append(time.monotonic() - state["t0"]),
         Qt.DirectConnection)
 

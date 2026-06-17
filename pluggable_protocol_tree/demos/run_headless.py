@@ -12,10 +12,14 @@ Run:
 
 Press Ctrl+C to stop the running protocol.
 
-The executor itself is Qt-aware (ExecutorSignals subclasses QObject) but
-no QApplication / event loop is required — Qt direct-connected slots
-fire synchronously on the worker thread. So this script runs anywhere
-PySide6 can be imported, headless servers included.
+The executor is Qt-free: ``ExecutorSignals`` is now a Traits ``HasTraits``
+with ``Event`` traits (not a ``QObject``), and the executor SETS those events
+from its worker thread. No QApplication / event loop is required — observers
+fire synchronously on the worker thread (default Traits dispatch); only
+widget-touching observers in the GUI app opt into ``dispatch="ui"``. (PySide6
+must still be importable because the column *view* classes import
+``pyface.qt``, but no Qt runtime is used here.) So this script runs on
+headless servers.
 
 Redis behaviour
 ---------------

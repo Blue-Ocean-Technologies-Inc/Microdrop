@@ -102,14 +102,14 @@ class ProtocolLoggingController(HasTraits):
         return _threading_flush_scheduler
 
     # --- executor signal wiring ---
-    def attach(self, qsignals) -> None:
+    def attach(self, signals) -> None:
         # Only the per-step context comes from the executor signals.
         # start_logging / stop_logging are driven by the pane: a
         # whole-protocol repeat run restarts the executor per repetition
         # (firing protocol_finished each time), so the pane stops logging
         # once at its single terminal point — keeping all repeats in one
         # log instead of stopping after the first.
-        qsignals.step_started.connect(self._on_step_started)
+        signals.observe(self._on_step_started, "step_started")
 
     def has_data(self) -> bool:
         """True when the active run logged something worth reporting — i.e. at
@@ -158,9 +158,10 @@ class ProtocolLoggingController(HasTraits):
             logger.debug(f"could not reset media_captures bucket: {e}")
         _listener.set_active_logger(self)
 
-    def _on_step_started(self, row) -> None:
+    def _on_step_started(self, event) -> None:
         if self._ingestion is None:
             return
+        row, _step_index, _step_total = event.new
         self._step_idx += 1
         self._ingestion.set_step(step_id=getattr(row, "uuid", ""),
                                  step_idx=self._step_idx)
