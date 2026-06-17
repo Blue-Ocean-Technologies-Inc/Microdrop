@@ -65,7 +65,7 @@ def test_protocol_started_counts_steps():
 def test_step_started_sets_name_and_next():
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started.emit()
-    sigs.step_started.emit(rows[0])
+    sigs.step_started.emit(rows[0], 1, 2)
     assert ctrl.model.step_index == 1
     assert ctrl.model.recent_step_name == "A"
     assert ctrl.model.next_step_name == "B"
@@ -74,7 +74,7 @@ def test_step_started_sets_name_and_next():
 def test_pause_resume_drive_model_with_clock():
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started.emit()
-    sigs.step_started.emit(rows[0])
+    sigs.step_started.emit(rows[0], 1, 2)
     clock["t"] = 1.0
     sigs.protocol_paused.emit()
     assert ctrl.model.paused is True
@@ -84,7 +84,7 @@ def test_pause_resume_drive_model_with_clock():
 def test_phase_started_and_extended():
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started.emit()
-    sigs.step_started.emit(rows[0])
+    sigs.step_started.emit(rows[0], 1, 2)
     sigs.phase_started.emit(2, 4, 1.5)
     assert ctrl.model.phase_index == 2
     assert ctrl.model.phase_total == 4
@@ -106,7 +106,7 @@ def test_terminal_signals_reset_trackers():
     for term in ("protocol_finished", "protocol_aborted"):
         ctrl, sigs, clock, rows = _make()
         sigs.protocol_started.emit()
-        sigs.step_started.emit(rows[0])
+        sigs.step_started.emit(rows[0], 1, 2)
         clock["t"] = 5.0
         getattr(sigs, term).emit()
         assert ctrl.model.running is False
@@ -165,11 +165,13 @@ def test_seek_to_calls_executor_and_updates_model():
     c = ProtocolStatusController(qsignals=None, manager=manager, executor=ex,
                                  clock=lambda: 7.0)
     c.model.on_protocol_start(0.0, 1)
-    c.model.on_step_start(0.0, "Wash", "-")
+    c.model.on_step_start(0.0, 1, 1, (0,), "Wash", "-")
     c.model.pause(0.0)
 
     c.seek_to((0,), 0)
 
     assert ex.seek_calls == [((0,), 0)]
     assert c.model.step_index == 1          # step (0,) is the 1st step
+    assert c.model.step_total == 1
+    assert c.model.current_step_path == (0,)
     assert c.model.phase_index == 1         # phases are 1-based in the model

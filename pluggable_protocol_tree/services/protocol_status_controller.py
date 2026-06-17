@@ -87,8 +87,13 @@ class ProtocolStatusController(HasTraits):
     def _on_protocol_started(self):
         self.model.on_protocol_start(self.clock(), self._count_steps())
 
-    def _on_step_started(self, row):
-        self.model.on_step_start(self.clock(), row.name, self._next_name(row))
+    def _on_step_started(self, row, step_index, step_total):
+        self.model.on_step_start(
+            self.clock(), step_index, step_total, tuple(row.path),
+            row.name, self._next_name(row))
+        logger.debug(
+            f"status: step {step_index}/{step_total} @ {tuple(row.path)} "
+            f"({row.name!r})")
 
     def _on_step_repetition(self, rep_chain):
         self.model.set_rep_chain(self._fmt_chain(rep_chain))
@@ -225,17 +230,25 @@ class ProtocolStatusController(HasTraits):
         so the counters/timers follow. No-op if the path is gone."""
         row = self._row_at(step_path)
         if row is None:
+            logger.debug(f"seek_to: no row at {tuple(step_path)} -- ignored")
             return
         now = self.clock()
         step_idx = self._step_index_of(step_path)
+        step_total = self._count_steps()
         phase_total = self._phase_total_for(row)
         phase0 = max(0, min(int(phase_index), phase_total - 1))
+        logger.debug(
+            f"seek_to: step {step_idx}/{step_total} @ {tuple(step_path)} "
+            f"phase={phase0}")
 
         if self.executor is not None:
             self.executor.seek(tuple(step_path), phase0)
 
-        if step_idx != self.model.step_index:
-            self.model.seek_step(now, step_idx, row.name, self._next_name(row))
+        # Only re-seat the step (and reset its timer) when the step actually
+        # changes; a phase-only nav within the same step keeps the step clock.
+        if tuple(step_path) != self.model.current_step_path:
+            self.model.seek_step(now, step_idx, step_total, tuple(step_path),
+                                 row.name, self._next_name(row))
         self.model.seek_phase(
             now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0)))
 

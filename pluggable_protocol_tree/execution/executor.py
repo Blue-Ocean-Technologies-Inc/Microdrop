@@ -366,7 +366,8 @@ class ProtocolExecutor(HasTraits):
 
             step_index += 1
             cursor.enter_step(row.path, start_phase_index)
-            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain, step_index)
+            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain,
+                                step_index, len(frames))
             start_phase_index = 0
 
             # A seek raised during the step (different step aborted the phase
@@ -380,7 +381,7 @@ class ProtocolExecutor(HasTraits):
             i += 1
 
     def _run_one_frame(self, handlers, cols, proto_ctx, row, rep_chain,
-                       step_index) -> None:
+                       step_index, step_total) -> None:
         step_started_at = time.monotonic()
         rep_str = (
             " | " + ", ".join(f"rep {i}/{n} of {name!r}"
@@ -398,7 +399,7 @@ class ProtocolExecutor(HasTraits):
             # Rep info first so UI labels are populated before the
             # row-highlight fires from step_started.
             self.qsignals.step_repetition.emit(rep_chain)
-            self.qsignals.step_started.emit(row)
+            self.qsignals.step_started.emit(row, step_index, step_total)
             self._run_hooks("on_pre_step",  handlers, step_ctx, row)
             self._run_hooks("on_step",      handlers, step_ctx, row)
             self._run_hooks("on_post_step", handlers, step_ctx, row)

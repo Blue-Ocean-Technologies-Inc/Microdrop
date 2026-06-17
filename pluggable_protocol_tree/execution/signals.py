@@ -25,8 +25,11 @@ class ExecutorSignals(QObject):
     protocol_wait_started  = Signal(int)    # total wait, milliseconds
     protocol_wait_finished = Signal()
 
-    # Per-step
-    step_started       = Signal(object)     # row
+    # Per-step. step_started carries the executor's AUTHORITATIVE 1-based
+    # position so the status model can SET (never increment) its step index —
+    # robust across a mid-run seek (issue #471). Payload: (row, step_index,
+    # step_total).
+    step_started       = Signal(object, int, int)   # row, step_index, step_total
     step_finished      = Signal(object)     # row
     # Tuple of (group_name, rep_idx_1based, rep_total) entries describing
     # the active rep context for the current step (outermost-first).
