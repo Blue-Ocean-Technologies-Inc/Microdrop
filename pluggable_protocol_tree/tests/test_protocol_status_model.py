@@ -101,3 +101,29 @@ def test_observers_fire_on_counter_change():
     m.on_protocol_start(0.0, 2)
     m.on_step_start(0.0, "A", "B")
     assert 1 in seen
+
+
+def test_seek_step_sets_index_and_resets_step_timer_frozen_while_paused():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(now=0.0, step_total=5)
+    m.on_step_start(now=0.0, recent_name="A", next_name="B")   # step_index=1
+    m.on_step_start(now=1.0, recent_name="B", next_name="C")   # step_index=2
+    m.pause(now=2.0)
+    m.seek_step(now=2.0, step_index=4, recent_name="D", next_name="E")
+    assert m.step_index == 4                      # set, not incremented
+    assert m.recent_step_name == "D"
+    assert m.phase_index == 0 and m.phase_total == 0
+    assert m.step_clock.elapsed(now=9.0) == 0.0
+    assert m.step_clock.active(now=9.0) == 0.0
+
+
+def test_seek_phase_resets_phase_timer_frozen_while_paused():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(now=0.0, step_total=1)
+    m.on_step_start(now=0.0, recent_name="A", next_name="-")
+    m.on_phase_start(now=0.0, phase_index=1, phase_total=4, phase_target_s=2.0)
+    m.pause(now=1.0)
+    m.seek_phase(now=1.0, phase_index=3, phase_total=4, phase_target_s=2.0)
+    assert m.phase_index == 3 and m.phase_total == 4
+    assert m.phase_clock.elapsed(now=9.0) == 0.0
+    assert m.phase_clock.active(now=9.0) == 0.0
