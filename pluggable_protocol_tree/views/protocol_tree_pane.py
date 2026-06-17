@@ -15,9 +15,7 @@ PPT-10.1 for the full wiring rules.
 from __future__ import annotations
 
 import json
-import threading
 from pathlib import Path
-import html as _html
 
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
@@ -29,41 +27,26 @@ from pyface.qt.QtWidgets import (
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, YES, confirm, error as error_dialog, escape_html_multiline,
-    format_traceback_detail, information, success,
+    NO, YES, confirm, error as error_dialog, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY, PROTOCOL_RUNNING
+from device_viewer.consts import DEVICE_SVG_PATH_KEY
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED,
-    ELECTRODES_STATE_CHANGE, PROTOCOL_FILE_DIALOG_FILTER)
-from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+    ELECTRODES_STATE_APPLIED, PROTOCOL_FILE_DIALOG_FILTER)
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
-)
-from pluggable_protocol_tree.services.logging.controller import (
-    ProtocolLoggingController,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
-from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.execution.executor import ProtocolExecutor
-from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
-from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
-    RealtimeModeHandler,
-)
-from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.protocol_validator_presenter import (
@@ -135,7 +118,6 @@ class ProtocolTreePane(QWidget):
         sticky_manager=None,
         device_viewer_sync=None,
         phase_ack_topic=ELECTRODES_STATE_APPLIED,
-        executor_factory=None,
         preferences=None,
         quick_actions=None,
         protocol_state_tracker=None,
@@ -198,64 +180,30 @@ class ProtocolTreePane(QWidget):
 
         self._build_layout()
 
-        self.executor = self._build_executor(executor_factory)
-
         # The flush_scheduler shows a "Generating Run Report..." progress
         # dialog around the report build (legacy parity, mirrors
         # protocol_grid's with_loading_screen("Generating Run Report...")).
         # The flush runs in a QThread to keep the GUI responsive while
-        # plotly renders charts; the controller's completion_callback is
-        # routed through a Qt signal so the success dialog ends up back on
-        # the GUI thread.
+        # plotly renders charts; the completion_callback is routed through a
+        # Qt signal so the success dialog ends up back on the GUI thread.
+        # The logging controller + executor lifecycle handlers that drive
+        # these signals are owned by the composition root (the dock pane),
+        # which constructs the ProtocolLoggingController pointing at the
+        # _logging_complete / _report_failed / _schedule_flush_with_progress /
+        # _logs_settling_time_s members below — those stay here because they
+        # are the GUI-thread bridge + dialog presentation (pure view).
         self._logging_complete.connect(
             self._on_logging_complete, Qt.QueuedConnection)
         self._report_failed.connect(
             self._on_report_failed, Qt.QueuedConnection)
-        self.logging_controller = ProtocolLoggingController(
-            completion_callback=self._logging_complete.emit,
-            report_failure_callback=self._report_failed.emit,
-            flush_scheduler=self._schedule_flush_with_progress,
-            settling_provider=self._logs_settling_time_s,
-        )
-        self.logging_controller.attach(self.executor.qsignals)
 
-        # Execution lifecycle policy lives in handlers, not the view. These
-        # run once per run (on_pre_protocol_start / on_post_protocol_end) at
-        # high priority so they trail every column's start hooks: realtime
-        # mode is enabled + settled (900), then logging starts (1000) right
-        # before the first step. The view only wires them (composition root).
-        self.executor.lifecycle_handlers = [
-            RealtimeModeHandler(preferences=self.preferences),
-            LoggingHandler(
-                controller=self.logging_controller,
-                experiment_dir_provider=(
-                    lambda: self.experiment_manager.get_experiment_directory()
-                ),
-                n_steps_provider=(
-                    lambda: sum(1 for _ in self.manager.iter_execution_frames())
-                ),
-            ),
-        ]
+        # The nav cursor (_current_row), preview-mode flag, and run guards
+        # now live on the composition root (the dock pane), which owns the
+        # executor and all run control. The pane is a pure view.
 
-        # Status-bar timing/counting now lives in ProtocolStatusModel, driven
-        # by ProtocolStatusController and bound to the StatusBar by the
-        # composition root (dock pane / demo window). The pane keeps only the
-        # nav-relevant current row + pause-phase cursor below.
-        self._current_row = None
-        self._current_run_preview_mode = False
-        self.status_controller = None  # set by the composition root (#471)
-        # Guards the window between play-click and the protocol_started
-        # signal (the executor's on_pre_protocol_start realtime settle runs
-        # in there) so a second play-click can't start a duplicate run.
-        self._start_pending = False
-        # True while the pre-protocol wait loading screen is up, so pause/resume
-        # know to freeze/restart its countdown.
-        self._wait_active = False
-
-        self._wire_executor_signals()
-        self._wire_button_state_machine()
-        self._wire_navigation_buttons()
-        self._set_idle_button_state()
+        # The active-step highlight + the nav cursor follow the status model
+        # (current_step_path / running) via observers wired by the dock pane;
+        # button state + executor signals are wired there too.
 
         # Set the initial experiment label (application is None in
         # standalone demos/tests — the label just stays blank there).
@@ -309,188 +257,18 @@ class ProtocolTreePane(QWidget):
         if self.quick_action_bar is not None:
             layout.addWidget(self.quick_action_bar)
 
-    def _build_executor(self, executor_factory):
-        factory = executor_factory or self._default_executor_factory
-        return factory(
-            row_manager=self.manager,
-            qsignals=ExecutorSignals(),
-            pause_event=PauseEvent(),
-            stop_event=threading.Event(),
-        )
+    # --- thin view ops (driven by the dock-pane controller) ----------
+    # The dock pane owns the executor, the status controller, and all run
+    # control (issue #471). It drives these pure-view methods; the pane never
+    # touches the executor or status controller itself.
 
-    @staticmethod
-    def _default_executor_factory(row_manager, qsignals, pause_event, stop_event):
-        return ProtocolExecutor(
-            row_manager=row_manager,
-            qsignals=qsignals,
-            pause_event=pause_event,
-            stop_event=stop_event,
-        )
+    def select_row(self, row):
+        """Move the tree's current selection to ``row`` (pure view)."""
+        self.widget.set_current_row(row)
 
-    def _wire_executor_signals(self):
-        # The tree's active-step highlight, the nav cursor (_current_row), and
-        # editability are driven by the status model (current_step_path /
-        # running) via observers wired by the composition root (the dock pane's
-        # @observe handlers) — so the pane no longer consumes step_started
-        # directly (issue #471). The highlight
-        # is pure visual decoration and never publishes the static step view to
-        # the DV (RoutesHandler's per-phase display is authoritative mid-run).
-        self.executor.qsignals.protocol_wait_started.connect(
-            self._on_protocol_wait_started)
-        self.executor.qsignals.protocol_wait_finished.connect(
-            self._on_protocol_wait_finished)
-        self.executor.qsignals.protocol_started.connect(self._on_protocol_started)
-        self.executor.qsignals.protocol_error.connect(self._on_error)
-        if self.phase_ack_topic is not None:
-            self.phase_acked.connect(self._on_phase_ack)
-
-    def _wire_button_state_machine(self):
-        self.executor.qsignals.protocol_started.connect(
-            self._set_running_button_state,
-        )
-        # During the pre-protocol wait, go to the running button state too —
-        # pause + stop stay live, everything else is disabled.
-        self.executor.qsignals.protocol_wait_started.connect(
-            self._set_running_button_state,
-        )
-        self.executor.qsignals.protocol_paused.connect(self._on_protocol_paused)
-        self.executor.qsignals.protocol_resumed.connect(self._on_protocol_resumed)
-        self.executor.qsignals.protocol_finished.connect(self._on_protocol_finished)
-        self.executor.qsignals.protocol_aborted.connect(self._on_protocol_aborted)
-
-    def _wire_navigation_buttons(self):
-        nb = self.navigation_bar
-        nb.btn_play.clicked.connect(self._on_play_clicked)
-        nb.btn_resume.clicked.connect(self._toggle_pause)
-        nb.btn_stop.clicked.connect(self.executor.stop)
-        nb.btn_first.clicked.connect(self.navigate_to_first_step)
-        nb.btn_prev.clicked.connect(self.navigate_to_previous_step)
-        nb.btn_next.clicked.connect(self.navigate_to_next_step)
-        nb.btn_last.clicked.connect(self.navigate_to_last_step)
-        nb.btn_prev_phase.clicked.connect(self._on_prev_phase)
-        nb.btn_next_phase.clicked.connect(self._on_next_phase)
-        nb.set_phase_navigation_enabled(False, False)
-
-    # --- step lifecycle handlers --------------------------------------
-
-    def _publish_protocol_running(self, value: str) -> None:
-        logger.info("Protocol Tree: Publishing Protocol Running")
-        publish_message(topic=PROTOCOL_RUNNING, message=value)
-
-    def _on_protocol_started(self):
-        self._start_pending = False
-        self.protocol_running_changed.emit(True)
-        self._publish_protocol_running("True")
-        logger.info("Protocol started")
-
-    def _on_phase_ack(self):
-        # Phase boundary now comes from the executor's phase_started
-        # signal (independent of hardware ack). Kept as a no-op so
-        # external code emitting phase_acked doesn't fight anything.
-        return
-
-    def _on_error(self, msg):
-        logger.error(f"Protocol error: {msg}")
-        self._publish_protocol_running("False")
-        # Immediate teardown only; the completion flow is deferred so the
-        # error dialog is shown before the "Generate Run Summary?" prompt.
-        self._on_protocol_terminated(RUN_OUTCOME_ERROR)
-        # Present a nicely-formatted HTML body (rendered via the dialog's
-        # `informative` slot) built from the structured StepExecutionError
-        # fields, with the full traceback as collapsible detail. `message`
-        # stays the plain summary as a fallback.
-        exc = getattr(self.executor, "_error", None)
-        informative = self._format_error_html(exc, str(msg))
-        detail = format_traceback_detail(exc) if exc is not None else None
-        error_dialog(parent=None, title="Protocol error",
-                     message=str(msg), informative=informative, detail=detail)
-        # Now prompt for a run summary (error is treated like a force-stop).
-        self._run_completion_flow(RUN_OUTCOME_ERROR)
-
-    @staticmethod
-    def _format_error_html(exc, fallback_msg: str) -> str:
-        """Build the HTML body shown in the protocol-error dialog. Uses the
-        structured StepExecutionError fields (step / column / hook / cause)
-        when available, else falls back to the plain message text."""
-        red = DIALOG_ERROR_TEXT_COLOR
-        if isinstance(exc, StepExecutionError):
-            row = exc.row
-            if row is not None:
-                dotted = row.dotted_path()
-                name = getattr(row, "name", "") or ""
-                where = f"Step {dotted}"
-                if name:
-                    where += f" &mdash; &ldquo;{_html.escape(name)}&rdquo;"
-            else:
-                where = "Protocol"
-            col_label = exc.col_label
-            cause = escape_html_multiline(str(exc.cause))
-            return (
-                f"<p style='margin:0 0 6px 0;'><b>{where}</b></p>"
-                f"<p style='margin:0 0 10px 0;color:#555;'>The "
-                f"<b>{_html.escape(col_label)}</b> column failed during "
-                f"<code>{_html.escape(exc.hook_name)}</code>.</p>"
-                f"<p style='margin:0;color:{red};'>{cause}</p>"
-            )
-        # Generic fallback (non-annotated errors, or signal emitted directly).
-        safe = escape_html_multiline(fallback_msg)
-        return f"<p style='margin:0;color:{red};'>{safe}</p>"
-
-    # --- button state machine ----------------------------------------
-
-    def _set_idle_button_state(self):
-        self.protocol_state_tracker.is_active = False
-        nb = self.navigation_bar
-        nb.btn_play.setEnabled(True)
-        nb.show_play_state()
-        nb.btn_stop.setEnabled(False)
-        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
-            btn.setEnabled(True)
-        nb.action_preview.setEnabled(True)
-
-    def _set_running_button_state(self):
-        self.protocol_state_tracker.is_active = True
-        nb = self.navigation_bar
-        nb.btn_play.setEnabled(True)
-        nb.show_pause_state()
-        nb.btn_stop.setEnabled(True)
-        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
-            btn.setEnabled(False)
-        nb.action_preview.setEnabled(False)
-
-    def _on_play_clicked(self):
-        if self._start_pending:
-            # Realtime-mode settling window — the run is already on its way.
-            return
-        if self._is_protocol_active():
-            self._toggle_pause()
-            return
-        self._start_protocol_run(
-            preview_mode=self.navigation_bar.is_preview_mode(),
-        )
-
-    def _start_protocol_run(self, preview_mode):
-        repeats = self.status_bar.edit_repeat_protocol.value()
-        self._current_run_preview_mode = preview_mode
-        start_path = self._selected_step_path()
-        logger.info(
-            f"Protocol run starting: {repeats} rep(s), "
-            f"preview={preview_mode}, start_step={start_path}"
-        )
-        # Realtime-mode prep + settle and logging start are once-per-run
-        # executor lifecycle hooks (RealtimeModeHandler / LoggingHandler,
-        # wired in _build_executor); the executor owns the repeat loop, so
-        # the whole run (all repetitions) is a single start() call.
-        # _start_pending guards the play button until protocol_started
-        # fires (after the realtime settle, which now runs on the worker).
-        self._start_pending = True
-        self.executor.start(
-            start_step_path=start_path,
-            preview_mode=preview_mode,
-            repeats=repeats,
-        )
-
-    def _selected_step_path(self):
+    def selected_step_path(self):
+        """Path tuple of the tree's currently-selected execution step, or
+        None when the selection isn't a step."""
         idx = self.widget.tree.currentIndex()
         if not idx.isValid():
             return None
@@ -500,263 +278,55 @@ class ProtocolTreePane(QWidget):
                 return path
         return None
 
-    def _is_protocol_active(self):
-        # One source of truth shared with non-view collaborators (the
-        # dock pane observes the same tracker) — kept in lockstep with
-        # the button state machine above, which sets it.
-        return self.protocol_state_tracker.is_active
+    # --- button state (view) -----------------------------------------
 
-    def _toggle_pause(self):
-        if self.executor.pause_event.is_set():
-            self.executor.resume()
-        else:
-            self.executor.pause()
-
-    def _on_protocol_wait_started(self, total_ms):
-        # The run is on its way; clear the start guard and show the loading
-        # screen countdown over the tree. auto_stop=False — the executor
-        # dismisses it via protocol_wait_finished (it owns the wait clock).
-        self._start_pending = False
-        self._wait_active = True
-        self.loading_overlay.show_loading(
-            "Preparing protocol run…", duration_ms=total_ms, auto_stop=False)
-
-    def _on_protocol_wait_finished(self):
-        self._wait_active = False
-        self.loading_overlay.stop_loading()
-
-    def _on_protocol_paused(self):
-        logger.info("Protocol paused")
-        self.navigation_bar.show_resume_state()
-        if self._wait_active:
-            # Freeze the loading-screen countdown in lockstep with the
-            # executor's frozen pre-protocol wait.
-            self.loading_overlay.pause()
+    def enter_idle_buttons(self):
         nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)
+        nb.show_play_state()
+        nb.btn_stop.setEnabled(False)
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(True)
-        if self._current_row is not None:
-            nb.split_play_button_to_phase_controls()
-            self._update_phase_nav_buttons()
+        nb.action_preview.setEnabled(True)
 
-    def _on_protocol_resumed(self):
-        logger.info("Protocol resumed")
-        self.navigation_bar.show_pause_state()
-        if self._wait_active:
-            self.loading_overlay.resume()
+    def enter_running_buttons(self):
         nb = self.navigation_bar
+        nb.btn_play.setEnabled(True)
+        nb.show_pause_state()
+        nb.btn_stop.setEnabled(True)
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(False)
+        nb.action_preview.setEnabled(False)
+
+    def enter_paused_buttons(self):
+        nb = self.navigation_bar
+        nb.show_resume_state()
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(True)
+
+    def enter_resumed_buttons(self):
+        nb = self.navigation_bar
+        nb.show_pause_state()
         for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
             btn.setEnabled(False)
         nb.merge_phase_controls_to_play_button()
 
-    def _on_protocol_finished(self):
-        # The executor owns the repeat loop now, so protocol_finished fires
-        # once at the end of the whole run; the per-rep label is updated by
-        # _on_protocol_repetition_finished during the run.
-        self._publish_protocol_running("False")
-        logger.info("Protocol finished")
-        self._on_protocol_terminated(RUN_OUTCOME_FINISHED)
+    def split_to_phase_controls(self):
+        self.navigation_bar.split_play_button_to_phase_controls()
 
-    def _on_protocol_aborted(self):
-        logger.info("Protocol aborted by user")
-        self._publish_protocol_running("False")
-        self._on_protocol_terminated(RUN_OUTCOME_ABORTED)
+    # --- loading overlay (view) --------------------------------------
 
-    def _on_protocol_terminated(self, outcome=RUN_OUTCOME_FINISHED):
-        self.protocol_running_changed.emit(False)
-        logger.info("Protocol terminated --> free mode")
-        # Defensive: the executor normally dismisses the loading screen via
-        # protocol_wait_finished, but make sure it's never left up. Also clear
-        # the start guard in case the run was stopped before protocol_started
-        # fired (which is what normally clears it).
-        self._wait_active = False
-        self._start_pending = False
+    def show_loading(self, msg, ms):
+        self.loading_overlay.show_loading(msg, duration_ms=ms, auto_stop=False)
+
+    def stop_loading(self):
         self.loading_overlay.stop_loading()
-        self.clear_highlights()
-        self._set_idle_button_state()
-        self.navigation_bar.merge_phase_controls_to_play_button()
-        # Clear hardware actuation: independent of the DV's free-mode
-        # publish below, which can race with PROTOCOL_RUNNING and leave
-        # the last step's channels energized after abort/error.
-        try:
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps({"electrodes": [], "channels": []}),
-            )
-        except Exception as e:
-            logger.warning(f"protocol-terminated electrode clear failed: {e}")
-        # Realtime-mode restore is owned by RealtimeModeHandler's
-        # on_post_protocol_end hook (runs once per run on the executor).
-        # Push free-mode payload to DV: clear_highlights cleared the
-        # tree selection but did so with _suppress_publish active, so
-        # the controller's currentChanged slot was gated. Explicit
-        # publish here puts the DV back in free mode after the run.
-        if self.device_viewer_sync is not None:
-            try:
-                self.device_viewer_sync._publish_for_row(None)
-            except Exception as e:
-                logger.warning(f"protocol-terminated DV publish failed: {e}")
-        # Logging stop + end-of-run dialogs run last, after immediate teardown
-        # (hardware clear / idle UI) so electrodes de-energize before any modal
-        # dialog blocks. For "error", the caller (_on_error) runs the flow after
-        # showing the error dialog, so we skip it here.
-        if outcome != RUN_OUTCOME_ERROR:
-            self._run_completion_flow(outcome)
 
-    def _run_completion_flow(self, outcome):
-        """End-of-run UX: auto-save the protocol, prompt per outcome, and
-        stop logging (which schedules the deferred flush). ``outcome`` is one
-        of "finished", "aborted", "error". Every dialog is best-effort —
-        failures are logged, never raised, so terminal cleanup is unaffected."""
-        # Preview runs produce no artifacts; just confirm completion.
-        if self._current_run_preview_mode:
-            try:
-                self.logging_controller.stop_logging()
-            except Exception as e:
-                logger.warning(f"stop_logging (preview) failed: {e}")
-            try:
-                information(parent=None,
-                            message="Preview run completed successfully.",
-                            title="Preview Complete",
-                            timeout=PREVIEW_COMPLETE_TOAST_MS)
-            except Exception as e:
-                logger.warning(f"preview-complete dialog failed: {e}")
-            return
+    def freeze_loading(self):
+        self.loading_overlay.pause()
 
-        have_exp = (self.experiment_manager is not None
-                    and self.application is not None)
-
-        # Auto-save the protocol + record its path into the report metadata,
-        # before stop_logging so the metadata is present when _flush builds
-        # the report.
-        if have_exp:
-            try:
-                saved = self.experiment_manager.auto_save_protocol(
-                    self.manager.to_json())
-                if saved:
-                    self.logging_controller.log_metadata(
-                        {"Protocol Path": str(saved)})
-            except Exception as e:
-                logger.warning(f"protocol auto-save failed: {e}")
-
-        # Only offer / build a report if the run actually logged step data.
-        # A run stopped before any step ran (e.g. Stop on the loading screen)
-        # has nothing meaningful — skip the prompt and generate no report.
-        generate_report = self.logging_controller.has_data()
-        if generate_report and outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR) and have_exp:
-            try:
-                if confirm(parent=None,
-                           message=("Protocol was stopped before completion."
-                                    "<br><br>Press <b>YES</b> to create run "
-                                    "summary."),
-                           title="Generate Run Summary?", cancel=False) == NO:
-                    generate_report = False
-            except Exception as e:
-                logger.warning(f"run-summary confirm failed: {e}")
-        elif outcome == RUN_OUTCOME_FINISHED and have_exp:
-            try:
-                if confirm(parent=None,
-                           message="Would you like to start a new experiment?",
-                           title="Create New Experiment?",
-                           cancel=False) == YES:
-                    self._on_new_experiment()
-            except Exception as e:
-                logger.warning(f"new-experiment confirm failed: {e}")
-
-        try:
-            self.logging_controller.stop_logging(generate_report=generate_report)
-        except Exception as e:
-            logger.warning(f"stop_logging failed: {e}")
-
-    # --- pause-time phase navigation ---------------------------------
-
-    def _on_prev_phase(self):
-        self._seek_relative_phase(-1)
-
-    def _on_next_phase(self):
-        self._seek_relative_phase(+1)
-
-    def _seek_relative_phase(self, delta):
-        sc = self.status_controller
-        if sc is None or self._current_row is None:
-            return
-        target0 = (sc.model.phase_index - 1) + delta   # model phase_index is 1-based
-        path = tuple(self._current_row.path)
-        sc.seek_to(path, target0)
-        sc.preview_phase(path, target0, self._current_run_preview_mode)
-        self._update_phase_nav_buttons()
-
-    def _update_phase_nav_buttons(self):
-        m = self.status_controller.model if self.status_controller else None
-        if m is None:
-            self.navigation_bar.set_phase_navigation_enabled(False, False)
-            return
-        prev_enabled = m.phase_index > 1
-        next_enabled = 0 < m.phase_index < m.phase_total
-        self.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
-
-    # --- step-cursor navigation -------------------------------------
-    @attempt_func_execution_with_error_dialog
-    def navigate_to_first_step(self):
-        steps = self._navigable_steps()
-        if steps:
-            logger.info(f"Nav: first step [{steps[0].dotted_path()}]")
-            self._select_step(steps[0])
-
-    @attempt_func_execution_with_error_dialog
-    def navigate_to_last_step(self):
-        steps = self._navigable_steps()
-        if steps:
-            logger.info(f"Nav: last step [{steps[-1].dotted_path()}]")
-            self._select_step(steps[-1])
-
-    @attempt_func_execution_with_error_dialog
-    def navigate_to_previous_step(self):
-        steps = self._navigable_steps()
-        if not steps:
-            return
-        cur = self._current_step_in(steps)
-        if cur is None:
-            logger.info(f"Nav: previous (no current) --> [{steps[0].dotted_path()}]")
-            self._select_step(steps[0])
-            return
-        if cur > 0:
-            logger.info(f"Nav: previous step --> [{steps[cur - 1].dotted_path()}]")
-            self._select_step(steps[cur - 1])
-
-    @attempt_func_execution_with_error_dialog
-    def navigate_to_next_step(self):
-        steps = self._navigable_steps()
-        if not steps:
-            return
-        cur = self._current_step_in(steps)
-        if cur is None:
-            logger.info(f"Nav: next (no current) --> [{steps[0].dotted_path()}]")
-            self._select_step(steps[0])
-            return
-        if cur < len(steps) - 1:
-            logger.info(f"Nav: next step --> [{steps[cur + 1].dotted_path()}]")
-            self._select_step(steps[cur + 1])
-            return
-        if self.status_controller is not None and self.status_controller.model.paused:
-            return
-        logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
-        self._duplicate_step_after(steps[cur])
-
-    def _duplicate_step_after(self, row):
-        path = tuple(row.path)
-        parent_path = path[:-1]
-        insert_idx = path[-1] + 1
-        values = {}
-        for col in self.manager.columns:
-            cid = col.model.col_id
-            if hasattr(row, cid):
-                values[cid] = getattr(row, cid)
-        new_path = self.manager.add_step(
-            parent_path=parent_path, index=insert_idx, values=values,
-        )
-        new_row = self.manager.get_row(new_path)
-        self._select_step(new_row)
+    def resume_loading(self):
+        self.loading_overlay.resume()
 
     def _navigable_steps(self):
         """Distinct steps in execution order for the step cursor.
@@ -776,28 +346,6 @@ class ProtocolTreePane(QWidget):
             steps.append(row)
         return steps
 
-    def _current_step_in(self, steps):
-        # During a run the nav cursor follows the model's current step (the
-        # paused/executing step, synced into _current_row by the highlight
-        # observer) -- NOT the tree's stale selection, which is what made
-        # navigation jump to the first step after a pause (issue #471). Only
-        # when editing do we fall back to the tree selection.
-        sc = self.status_controller
-        if sc is not None and sc.model.running and self._current_row is not None:
-            cur_path = tuple(self._current_row.path)
-            for i, row in enumerate(steps):
-                if tuple(row.path) == cur_path:
-                    return i
-            return None
-        idx = self.widget.tree.currentIndex()
-        if not idx.isValid():
-            return None
-        path = self.widget.index_to_path(idx)
-        for i, row in enumerate(steps):
-            if tuple(row.path) == path:
-                return i
-        return None
-
     def _suppress_sync_publish(self):
         """Context manager wrapping a programmatic selection move so the
         sync controller's currentChanged slot does not trigger a publish."""
@@ -812,31 +360,15 @@ class ProtocolTreePane(QWidget):
         return _Guard()
 
     @attempt_func_execution_with_error_dialog
-    def _select_step(self, row):
-        # No suppress wrap: nav buttons (next/prev/first/last) call this
-        # path, and the user expects the DV to update on those clicks
-        # just as on a direct row click. Only clear_highlights (transient
-        # state reset) needs to suppress.
-        self.widget.set_current_row(row)
-        sc = self.status_controller
-        if sc is not None and sc.model.paused:
-            self._current_row = row
-            path = tuple(row.path)
-            sc.seek_to(path, 0)
-            sc.preview_phase(path, 0, self._current_run_preview_mode)
-            self._update_phase_nav_buttons()
-
-    @attempt_func_execution_with_error_dialog
     def clear_highlights(self):
         """Reset the tree's selection + active-row highlight to the idle
         visual state. Status-bar fields are owned by ProtocolStatusModel and
-        reset on the next run (on_protocol_start)."""
+        reset on the next run (on_protocol_start). The nav cursor
+        (_current_row) lives on the dock pane, which resets it alongside."""
         with self._suppress_sync_publish():
             self.widget.highlight_active_row(None)
             self.widget.tree.clearSelection()
             self.widget.tree.setCurrentIndex(QModelIndex())
-
-        self._current_row = None
 
     def _logs_settling_time_s(self) -> float:
         """Settling provider injected into the logging controller. Reads
