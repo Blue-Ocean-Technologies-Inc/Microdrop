@@ -591,12 +591,12 @@ class StatusBar(QScrollArea):
             return
         now = time.monotonic()
         self.lbl_total_time.setText(
-            f"Protocol {m.protocol_clock.elapsed(now):.1f}s "
-            f"(act {m.protocol_clock.active(now):.1f}s)"
+            f"Protocol {m.protocol_clock.active(now):.1f}s "
+            f"({m.protocol_clock.elapsed(now):.1f}s)"
         )
         self.lbl_step_time.setText(
-            f"Step {m.step_clock.elapsed(now):.1f}s "
-            f"(act {m.step_clock.active(now):.1f}s)"
+            f"Step {m.step_clock.active(now):.1f}s "
+            f"({m.step_clock.elapsed(now):.1f}s)"
         )
         if m.phase_total > 0:
             head = f"Phase {m.phase_index}/{m.phase_total}"
@@ -605,8 +605,8 @@ class StatusBar(QScrollArea):
         else:
             head = "Phase"
         self.lbl_phase_time.setText(
-            f"{head}  {m.phase_clock.elapsed(now):.1f}s/"
-            f"{m.phase_target_s:.1f}s (act {m.phase_clock.active(now):.1f}s)"
+            f"{head}  {m.phase_clock.active(now):.1f}s/"
+            f"{m.phase_target_s:.1f}s ({m.phase_clock.elapsed(now):.1f}s)"
         )
 
     def _apply_styling(self):
