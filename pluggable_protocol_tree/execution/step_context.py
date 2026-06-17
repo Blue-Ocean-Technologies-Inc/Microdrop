@@ -112,7 +112,7 @@ class Mailbox:
 
 # --- contexts ---
 
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List, Int
 
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -160,6 +160,12 @@ class ProtocolContext(HasTraits):
     # hooks via add_pre_protocol_wait(). The executor waits this long — with a
     # loading screen — after the pre-start hooks and before the first step.
     pre_protocol_wait_s = Float(0.0)
+
+    # Mid-run seek target (issue #471): (step_path, phase_index) or None.
+    # Set by ProtocolExecutor.seek() while paused; consulted at the pause
+    # checkpoints on resume via execution.seek.seek_decision. Plain attribute
+    # semantics are fine -- a single GUI-thread write, worker-thread read.
+    resume_target = Any(None)
 
     def add_pre_protocol_wait(self, seconds: float) -> None:
         """Contribute settle/wait time to the pre-protocol wait.
@@ -355,6 +361,9 @@ class StepContext(HasTraits):
              "Lets sibling handlers in the same parallel bucket (notably "
              "VolumeThresholdHandler) exit their wait loops instead of "
              "blocking forever on a never-arriving next phase.")
+    start_phase_index = Int(0,
+        desc="0-based phase to begin this step at. Non-zero only when the "
+             "executor re-enters a step after a different-step seek (#471).")
 
     def traits_init(self):
         # Plain (non-trait) coordination state for phase-time buffering,
