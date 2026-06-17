@@ -3,6 +3,10 @@
 Receives its column set from the plugin on construction and constructs
 the experiment + sticky-note services from the live Envisage
 application so the experiment-bar buttons drive real handlers."""
+import time
+
+from PySide6.QtCore import QTimer
+
 from microdrop_application.dialogs.pyface_wrapper import confirm, NO
 from pluggable_protocol_tree.consts import REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER
 from pluggable_protocol_tree.services.phase_math import effective_repetitions_for_duration, estimate_repeat_duration_s
@@ -17,6 +21,7 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.device_viewer_sync import DeviceViewerSyncController
 from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane, REPEAT_DURATION_TOLERANCE_S, \
     REPEAT_DURATION_DECIMALS
+from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -43,6 +48,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: status bar to it (issue #467). The dock pane is the app's HasTraits
     #: composition root that "sets up the link" between Qt and the model.
     status_controller = Instance(ProtocolStatusController)
+    _protocol_poll_timer = Instance(QTimer, desc="Update the status controller about the current time")
 
     #: Protocol preferences model (the "microdrop.protocol" node). Bound to
     #: the live application's preferences in create_contents, then passed
@@ -81,7 +87,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._sync_handler_ack_times()
 
     def create_contents(self, parent):
-        pane = ProtocolTreePane(
+        self._pane = pane = ProtocolTreePane(
             self.manager,
             application=self.task.window.application,
             experiment_manager=self.experiment_manager,
@@ -101,38 +107,47 @@ class PluggableProtocolDockPane(TraitsDockPane):
             executor=pane.executor,
         )
         pane.status_controller = self.status_controller
-        pane.status_bar.bind(self.status_controller.model)
+
+        # setup protocol timer
+        self._protocol_poll_timer = QTimer()
+        self._protocol_poll_timer.setInterval(STATUS_POLL_INTERVAL_MS)
+        self._protocol_poll_timer.timeout.connect(self._update_protocol_time)
+
         # Phase trackers are always shown in the full app (issue #467); the
         # pane only auto-reveals the phase field when a phase_ack_topic is set
         # (demo path), so make it explicit here.
         pane.status_bar.lbl_phase_time.setVisible(True)
 
+        # initial values for status bar
+        self._on_counts_changed()
+        self._on_repeats_changed()
+        self._on_names_changed()
+        self._update_protocol_time()
+
         # Legacy protocol_grid parity: the full app opens with one default
         # step when no protocol is loaded (no-op once a protocol is loaded).
         pane._seed_default_step_if_empty()
+
         return pane
 
     # --- &Protocol menu action delegates ----------------------------
 
-    def _pane(self):
-        return self.control.widget()
-
     def new_protocol(self):
-        self._pane().new_protocol()
+        self._pane.new_protocol()
 
     def load_protocol_dialog(self):
-        self._pane().load_protocol_dialog()
+        self._pane.load_protocol_dialog()
 
     def save_protocol_dialog(self):
-        self._pane().save_protocol_dialog()
+        self._pane.save_protocol_dialog()
 
     def save_as_protocol_dialog(self):
-        self._pane().save_as_protocol_dialog()
+        self._pane.save_as_protocol_dialog()
 
     def setup_new_experiment(self):
         # Reuses the same handler the experiment-bar button drives so
         # the menu and the toolbutton stay consistent.
-        self._pane()._on_new_experiment()
+        self._pane._on_new_experiment()
 
 
     ### Trait observers ###########################
@@ -167,7 +182,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         """Structural mutation — re-check the baseline path set."""
         self.protocol_state_tracker.on_structure_changed(self.manager)
 
-    @observe("manager.cell_changed")
+    @observe("manager.cell_changed", dispatch="ui")
     def _on_manager_cell_changed(self, event):
         """Cell value edit — incremental dirty update for the one cell."""
         payload = event.new
@@ -188,15 +203,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._clamp_trail_overlay_for_row(path, col_id)
         self._reconcile_repeat_duration_for_row(path, col_id)
 
-    @observe("task.window.application.experiment_changed")
+    @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
         # control is None until create_contents has run (the application
         # can switch experiments before this pane is mounted).
-        if self.control is None:
-            return
-        self.control.widget()._on_experiment_changed()
+        self._pane._on_experiment_changed()
 
-    @observe("task.window.closing")
+    @observe("task.window.closing", dispatch="ui")
     def _on_window_closing(self, event):
         """Veto the window close (title-bar X or File->Exit) when the
         protocol is dirty and the user elects to keep it open.
@@ -223,6 +236,53 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # the original pane behaviour.
         if user_choice == NO:
             event.new.veto = True
+
+    # Wire the pane to the status model — the single source of truth for
+    # the current step (issue #471). The tree's active-step highlight and the
+    # nav cursor (_current_row) follow ``model.current_step_path``; tree
+    # editability follows ``model.running``. Called by the composition root
+    # after the controller is built.
+    @observe("status_controller:model:current_step_path", dispatch="ui")
+    def _on_current_step_path_changed(self, event):
+        path = event.new
+        row = None
+        if path is not None:
+            try:
+                row = self._pane.manager.get_row(tuple(path))
+            except (IndexError, KeyError):
+                row = None
+        self._pane._current_row = row
+        self._pane.widget.highlight_active_row(row)
+
+    ## Observe status bar model changes and modify view accordingly
+    @observe("status_controller:model:[step_index, step_total, phase_index, phase_total]", dispatch="ui", post_init=True)
+    def _on_counts_changed(self, event=None):
+        model = self.status_controller.model
+        self._pane.status_bar._refresh_counts(current=model.step_index, total=model.step_total)
+
+    @observe("status_controller:model:[repeats_completed, repeats_total]", dispatch="ui", post_init=True)
+    def _on_repeats_changed(self, event=None):
+        self._pane.status_bar._refresh_repeats(self.status_controller.model.repeats_completed)
+
+    @observe("status_controller:model:[recent_step_name, next_step_name, rep_chain_label]", dispatch="ui", post_init=True)
+    def _on_names_changed(self, event=None):
+        model = self.status_controller.model
+        self._pane.status_bar._refresh_names(model.recent_step_name, model.next_step_name, model.rep_chain_label)
+
+    @observe("status_controller:model:running", dispatch="ui", post_init=True)
+    def _on_protocol_running_changed(self, event):
+        # Lock the tree while a run is in progress (issue #471) and drive the
+        # live time-readout poll timer off the same running flag.
+        self._pane.widget.set_editable(not bool(event.new))
+        if self._protocol_poll_timer is None:
+            return
+        if event.new:
+            if not self._protocol_poll_timer.isActive():
+                self._protocol_poll_timer.start()
+        else:
+            self._update_protocol_time()  # final freeze-frame
+            self._protocol_poll_timer.stop()
+
 
     ######### Helpers ###################
     def _clamp_trail_overlay_for_row(self, path, col_id):
@@ -307,3 +367,27 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 self.manager.cell_changed = {
                     "path": tuple(path), "col_id": "route_repetitions",
                 }
+
+    def _update_protocol_time(self, *args, **kwargs):
+        model = self.status_controller.model
+        status_view = self._pane.status_bar
+
+        now = time.monotonic()
+
+        status_view.update_total_time(
+            elapsed=model.protocol_clock.elapsed(now),
+            active=model.protocol_clock.active(now),
+        )
+
+        status_view.update_step_time(
+            elapsed=model.step_clock.elapsed(now),
+            active=model.step_clock.active(now),
+        )
+
+        status_view.update_phase_status(
+            elapsed=model.phase_clock.elapsed(now),
+            active=model.phase_clock.active(now),
+            target=model.phase_target_s,
+            current_phase_idx=model.phase_index,
+            total_phases=model.phase_total
+        )

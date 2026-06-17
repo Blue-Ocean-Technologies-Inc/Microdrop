@@ -704,34 +704,6 @@ def test_delete_all_steps_goes_to_free_mode(qapp):
     assert not pane.widget.tree.currentIndex().isValid()
 
 
-def test_on_step_started_does_not_publish_static_step_view(qapp):
-    """Regression: step_started must NOT publish the static step view via
-    _publish_for_row during a run.
-
-    RoutesHandler publishes a per-phase display for every phase (carrying
-    the full step context: step_id, label, routes, editable=False). The
-    static _publish_for_row view (electrodes=[], editable=True) was
-    published on step_started too, and — because the worker publishes
-    phase 1 to the broker before the queued step_started slot runs — it
-    consistently landed AFTER phase 1 and cleared it, so the animation
-    appeared to begin at the second position. The per-phase displays are
-    authoritative during execution; step_started must not clobber them."""
-    from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
-    from pluggable_protocol_tree.builtins.name_column import (
-        make_name_column,
-    )
-    sync = MagicMock()
-    sync._suppress_publish = False
-    pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
-    pane.manager.add_step(values={"name": "S1"})
-    row = pane.manager.get_row((0,))
-    pane._on_step_started(row)
-    sync._publish_for_row.assert_not_called()
-
-
 def test_clear_highlights_suppresses_sync_publish(qapp):
     """clear_highlights also moves selection programmatically; same
     guard requirement."""

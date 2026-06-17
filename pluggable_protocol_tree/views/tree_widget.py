@@ -70,8 +70,10 @@ class ProtocolTreeWidget(QWidget):
 
         self.tree = _ProtocolTreeView()
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.tree.setEditTriggers(QAbstractItemView.DoubleClicked
-                                  | QAbstractItemView.EditKeyPressed)
+        self._default_edit_triggers = (QAbstractItemView.DoubleClicked
+                                       | QAbstractItemView.EditKeyPressed)
+        self._editable = True
+        self.tree.setEditTriggers(self._default_edit_triggers)
         self.tree.delete_pressed.connect(self._delete_selection)
         layout.addWidget(self.tree)
 
@@ -154,6 +156,15 @@ class ProtocolTreeWidget(QWidget):
         self.tree.setCurrentIndex(idx)
         self.tree.scrollTo(idx)
 
+    def set_editable(self, editable: bool):
+        """Lock/unlock cell editing + the structural context menu. Driven by
+        the status model's ``running`` flag — the protocol is read-only while a
+        run is in progress (issue #471)."""
+        self._editable = bool(editable)
+        self.tree.setEditTriggers(
+            self._default_edit_triggers if editable
+            else QAbstractItemView.NoEditTriggers)
+
     def _expand_ancestors(self, idx):
         """Expand every collapsed ancestor group so ``idx`` is visible."""
         parent = idx.parent()
@@ -195,6 +206,9 @@ class ProtocolTreeWidget(QWidget):
     # --- context menu actions ---
 
     def _on_context_menu(self, pos):
+        # No structural edits while a run is in progress (issue #471).
+        if not self._editable:
+            return
         idx = self.tree.indexAt(pos)
         menu = QMenu()
         menu.addAction("Add Step", lambda: self._add_step_at(idx))
