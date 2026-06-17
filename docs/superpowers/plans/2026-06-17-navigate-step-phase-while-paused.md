@@ -683,48 +683,245 @@ git commit -m "Routes: honor start_phase_index + same-step phase jump on resume 
 ## Task 7: Thin the pane — delegate nav to the controller
 
 **Files:**
+- Modify: `src/pluggable_protocol_tree/services/protocol_status_controller.py`
 - Modify: `src/pluggable_protocol_tree/views/protocol_tree_pane.py`
 
-The pane currently owns paused-phase state (`_pause_phases`, `_pause_phase_idx`, `_compute_pause_phase_state`, `_publish_paused_phase`, `_on_prev_phase`/`_on_next_phase`, `_update_phase_nav_buttons`). Move the phase materialization + publish into the controller (Task 3 added the phase-total helper; add the publish there too), and reduce the pane handlers to controller calls.
+The pane currently owns paused-phase state (`_pause_phases`, `_pause_phase_idx`, `_compute_pause_phase_state`, `_publish_paused_phase`, `_update_phase_nav_buttons`). The phase materialization + display/hardware publish move into the controller; the pane's nav handlers become controller calls. Step navigation while paused reuses the existing step-cursor buttons (enabled only while paused), seeking via `_select_step` and suppressing the at-end "duplicate" behavior.
 
-- [ ] **Step 1: Move `_publish_paused_phase` into the controller**
+- [ ] **Step 1: Controller — materialize phases + publish display/hardware**
 
-Add to `ProtocolStatusController` a `publish_phase_display(row, phase_index, preview)` that mirrors the pane's current `_publish_paused_phase` body (publish `PROTOCOL_TREE_DISPLAY_STATE`; if not preview, `ELECTRODES_STATE_CHANGE`). Have `seek_to` accept an optional `preview` flag and call it. (Use the exact publish bodies from the current pane method — copy the topic constants + message construction verbatim so behavior is identical.)
-
-- [ ] **Step 2: Reduce the pane phase handlers to controller calls**
+Add to the top imports of `protocol_status_controller.py`:
 
 ```python
-    def _on_prev_phase(self):
-        if self._current_row is None:
-            return
-        self.status_controller.seek_to(tuple(self._current_row.path),
-                                       self.status_controller.model.phase_index - 2)
+import json
 
-    def _on_next_phase(self):
-        if self._current_row is None:
-            return
-        self.status_controller.seek_to(tuple(self._current_row.path),
-                                       self.status_controller.model.phase_index)
+from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from pluggable_protocol_tree.consts import (
+    ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_CHANGE,
+    PROTOCOL_TREE_DISPLAY_STATE,
+)
+from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
+from pluggable_protocol_tree.services.phase_math import iter_phases
 ```
 
-(`model.phase_index` is 1-based; `seek_to` takes 0-based — Next = current 1-based index maps to 0-based "next"; Prev = current-2.)
+Add a module logger after the imports:
 
-Remove `_pause_phases`, `_pause_phase_idx`, `_compute_pause_phase_state`, and the body of `_update_phase_nav_buttons` that read them; drive button enabled-state from `model.phase_index`/`model.phase_total` instead.
+```python
+logger = get_logger(__name__)
+```
 
-- [ ] **Step 3: Enable step selection while paused → seek**
+Replace the Task 3 `_phase_total_for` staticmethod with a list-returning helper and a thin total wrapper, and add `preview_phase`:
 
-In the paused state, connect tree `currentChanged` (or reuse the existing selection signal) to: `self.status_controller.seek_to(selected_step_path, 0)`. Gate it on `model.paused` so a live run isn't perturbed (and `executor.seek` already no-ops when not paused as a backstop).
+```python
+    @staticmethod
+    def _phases_for(row):
+        """Materialized phase sequence for a row, mirroring the executor's
+        iter_phases call (count/fixed steps). [] on failure. Duration-mode
+        precise phases are deferred (#477)."""
+        try:
+            in_duration_mode = (
+                bool(getattr(row, "repeat_duration_controls", False))
+                and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
+            )
+            return list(iter_phases(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)),
+                soft_end=bool(getattr(row, "soft_end", False)),
+                repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
+                                   if in_duration_mode else 0.0),
+                linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                n_repeats=int(getattr(row, "route_repetitions", 1)),
+                step_duration_s=float(getattr(row, "duration_s", 1.0)),
+            ))
+        except Exception:
+            return []
 
-- [ ] **Step 4: Give the pane a controller reference**
+    def _phase_total_for(self, row):
+        return max(1, len(self._phases_for(row)))
 
-The pane needs `self.status_controller`. The composition root (Task 8) sets it after constructing the controller. Add `status_controller = Instance(object, allow_none=True)` (or a plain attribute) and a guard so demos without a controller don't crash.
+    def preview_phase(self, step_path, phase_index, preview):
+        """Publish the selected phase's electrodes to the DV overlay (always)
+        and to hardware (unless ``preview``) while paused. ``phase_index`` is
+        0-based. Best-effort — publish failures are logged, never raised. This
+        is the body lifted from the pane's old ``_publish_paused_phase``."""
+        row = self._row_at(step_path)
+        if row is None:
+            return
+        phases = self._phases_for(row)
+        if not phases:
+            return
+        idx = max(0, min(int(phase_index), len(phases) - 1))
+        try:
+            mapping = self.manager.protocol_metadata.get(
+                ELECTRODE_TO_CHANNEL_KEY, {})
+        except Exception:
+            mapping = {}
+        electrodes = sorted(phases[idx])
+        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        display_msg = ProtocolTreeDisplayMessage(
+            electrodes=electrodes,
+            routes=list(getattr(row, "routes", []) or []),
+            step_id=getattr(row, "uuid", "") or "",
+            step_label=f"Step {row.dotted_path()}",
+            free_mode=False,
+            editable=False,
+        )
+        try:
+            publish_message(topic=PROTOCOL_TREE_DISPLAY_STATE,
+                            message=display_msg.serialize())
+        except Exception as e:
+            logger.warning(f"seek display publish failed: {e}")
+        if not preview:
+            try:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps(
+                        {"electrodes": electrodes, "channels": channels}))
+            except Exception as e:
+                logger.warning(f"seek hardware publish failed: {e}")
+```
 
-- [ ] **Step 5: Run the pane/window tests**
+Note: `seek_to` (Task 3) already calls `self._phase_total_for(row)`; it now resolves to the instance method above with no signature change at the call site. `seek_to` stays publish-free so its pure unit test (Task 3) is unaffected — the pane calls `preview_phase` separately.
 
-Run: `cd /c/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py && QT_QPA_PLATFORM=offscreen pixi run python -m pytest src/pluggable_protocol_tree/tests/ -q -k "pane or demo_window or navigation"`
-Expected: PASS (update any test that asserted the removed pane internals to read `status_controller.model`).
+- [ ] **Step 2: Pane — declarations (lines ~247-250)**
 
-- [ ] **Step 6: Commit**
+Replace:
+```python
+        self._current_row = None
+        self._current_run_preview_mode = False
+        self._pause_phases: list = []
+        self._pause_phase_idx: int = 0
+```
+with:
+```python
+        self._current_row = None
+        self._current_run_preview_mode = False
+        self.status_controller = None  # set by the composition root (#471)
+```
+
+- [ ] **Step 3: Pane — pause/resume enable step buttons (lines ~550-567)**
+
+Replace `_on_protocol_paused`:
+```python
+    def _on_protocol_paused(self):
+        logger.info("Protocol paused")
+        self.navigation_bar.show_resume_state()
+        if self._wait_active:
+            self.loading_overlay.pause()
+        # Enable step-cursor navigation while paused so the operator can seek
+        # to a different step (#471).
+        nb = self.navigation_bar
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(True)
+        if self._current_row is not None:
+            nb.split_play_button_to_phase_controls()
+            self._update_phase_nav_buttons()
+```
+Replace `_on_protocol_resumed`:
+```python
+    def _on_protocol_resumed(self):
+        logger.info("Protocol resumed")
+        self.navigation_bar.show_pause_state()
+        if self._wait_active:
+            self.loading_overlay.resume()
+        nb = self.navigation_bar
+        for btn in (nb.btn_first, nb.btn_prev, nb.btn_next, nb.btn_last):
+            btn.setEnabled(False)
+        nb.merge_phase_controls_to_play_button()
+```
+
+- [ ] **Step 4: Pane — remove the moved phase machinery**
+
+Delete `_compute_pause_phase_state` (lines ~692-709) and `_publish_paused_phase` (lines ~724-766) entirely. In `_on_protocol_terminated`, delete the two lines (lines ~595-596):
+```python
+        self._pause_phases = []
+        self._pause_phase_idx = 0
+```
+
+- [ ] **Step 5: Pane — phase nav handlers become seeks (lines ~711-722)**
+
+Replace `_on_prev_phase` / `_on_next_phase`:
+```python
+    def _on_prev_phase(self):
+        self._seek_relative_phase(-1)
+
+    def _on_next_phase(self):
+        self._seek_relative_phase(+1)
+
+    def _seek_relative_phase(self, delta):
+        sc = self.status_controller
+        if sc is None or self._current_row is None:
+            return
+        # model.phase_index is 1-based; seek_to takes 0-based.
+        target0 = (sc.model.phase_index - 1) + delta
+        path = tuple(self._current_row.path)
+        sc.seek_to(path, target0)
+        sc.preview_phase(path, target0, self._current_run_preview_mode)
+        self._update_phase_nav_buttons()
+```
+
+- [ ] **Step 6: Pane — `_update_phase_nav_buttons` reads the model (lines ~768-776)**
+
+Replace with:
+```python
+    def _update_phase_nav_buttons(self):
+        m = self.status_controller.model if self.status_controller else None
+        if m is None:
+            self.navigation_bar.set_phase_navigation_enabled(False, False)
+            return
+        prev_enabled = m.phase_index > 1
+        next_enabled = 0 < m.phase_index < m.phase_total
+        self.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
+```
+
+- [ ] **Step 7: Pane — `_select_step` seeks while paused (lines ~881-886)**
+
+Replace `_select_step` with:
+```python
+    @attempt_func_execution_with_error_dialog
+    def _select_step(self, row):
+        self.widget.set_current_row(row)
+        # While paused, selecting a step seeks the run to it (#471). Update
+        # _current_row so subsequent phase-nav targets the navigated step.
+        sc = self.status_controller
+        if sc is not None and sc.model.paused:
+            self._current_row = row
+            path = tuple(row.path)
+            sc.seek_to(path, 0)
+            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._update_phase_nav_buttons()
+```
+
+- [ ] **Step 8: Pane — don't duplicate at end while paused (lines ~821-822)**
+
+Replace the tail of `navigate_to_next_step`:
+```python
+        logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
+        self._duplicate_step_after(steps[cur])
+```
+with:
+```python
+        # While paused the step buttons are seek controls — never duplicate.
+        if self.status_controller is not None and self.status_controller.model.paused:
+            return
+        logger.info(f"Nav: next at end — duplicating [{steps[cur].dotted_path()}]")
+        self._duplicate_step_after(steps[cur])
+```
+
+- [ ] **Step 9: Run pane/window tests (migrate any that asserted removed internals)**
+
+Run: `cd /c/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py && QT_QPA_PLATFORM=offscreen pixi run python -m pytest src/pluggable_protocol_tree/tests/ -q -k "pane or demo_window or navigation or status"`
+Expected: PASS. Any test asserting `_pause_phases` / `_pause_phase_idx` / `_compute_pause_phase_state` / `_publish_paused_phase` is migrated to drive `status_controller` and assert `status_controller.model` (or deleted if superseded by Tasks 1-3 unit tests).
+
+- [ ] **Step 10: Manual integration check (DV-sync ordering)**
+
+Pause mid-run; use Prev/Next Phase and the step buttons to navigate; resume. Confirm counters follow, the chosen step/phase timer reads 0 then ticks on resume, and playback continues from the chosen position. Note specifically: `_select_step` fires `currentChanged`, which the device-viewer sync also reacts to — verify `preview_phase` (published right after) is the last word on the DV overlay. If the sync overwrites it, gate the sync's `currentChanged` publish while `model.paused` (follow-up note, not a blocker for the executor seek itself).
+
+- [ ] **Step 11: Commit**
 
 ```bash
 git add src/pluggable_protocol_tree/views/protocol_tree_pane.py src/pluggable_protocol_tree/services/protocol_status_controller.py
