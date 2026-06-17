@@ -974,3 +974,45 @@ git commit -m "Wire executor into ProtocolStatusController at composition roots 
 - [ ] Manual: pause mid-run, navigate step + phase, resume → continues from chosen (step, phase); chosen step/phase timer reset; counters follow; elapsed-vs-active semantics from #467 intact.
 - [ ] `ProtocolTreePane` holds no `_pause_phases`/`_pause_phase_idx`; nav/seek logic lives in the controller/executor.
 - [ ] Duration-mode steps re-enter at phase 1 on a phase-seek (deferred precise behavior tracked in #477).
+
+---
+
+## Amendment A — Consolidate execution position into ExecutionCursor
+
+Tightens model/handler separation (the seek position was smeared across the
+executor + two contexts). One Qt-free `ExecutionCursor` owns it; the pure rules
+stay in `execution/seek.py`. Reworks the already-committed Tasks 4 & 5 and shapes
+Task 6. Task 3 (controller) is unchanged — it still calls `executor.seek(...)`.
+
+### Task A1: `execution/cursor.py` (new, TDD)
+
+`ExecutionCursor(HasTraits)` — traits `step_path = Any(None)`, `phase_index = Int(0)`,
+`phase_total = Int(0)`, `resume_target = Any(None)`; methods `request_seek(step_path,
+phase_index)`, `clear_seek()`, `enter_step(step_path, phase_index=0)` (sets step_path,
+phase_index, phase_total=0), `decision_at_phase(current_phase_index)` → delegates to
+`seek_decision(self.resume_target, self.step_path, current_phase_index)`,
+`frame_for_seek(frame_paths)` → delegates to `resolve_seek(frame_paths, self.resume_target)`.
+Pure unit tests for each (no Qt/threads).
+
+### Task A2: contexts use the cursor (`execution/step_context.py`)
+- `ProtocolContext`: replace `resume_target = Any(None)` with
+  `cursor = Instance(ExecutionCursor, ())`.
+- `StepContext`: remove `start_phase_index` (the cursor's `phase_index` carries the
+  re-entry start). Drop the now-unused `Int` import if nothing else uses it.
+
+### Task A3: executor drives the cursor (`execution/executor.py`)
+- `seek()`: `if paused and self._active_proto_ctx is not None:
+  self._active_proto_ctx.cursor.request_seek(step_path, phase_index)`.
+- Remove the `_current_step_path` trait.
+- `_run_steps`: on entering a frame call `proto_ctx.cursor.enter_step(row.path,
+  start_phase_index)`; resolve redirects via `proto_ctx.cursor.frame_for_seek(frame_paths)`
+  and clear via `cursor.clear_seek()`. `_run_one_frame` drops its `start_phase_index`
+  param and the `step_ctx.start_phase_index = ...` line (the cursor carries it).
+- Keep `_active_proto_ctx` (seek() reaches the live cursor through it).
+
+### Task 6 (routes) is written against the cursor
+- `cursor = ctx.protocol.cursor`; static loop starts at `cursor.phase_index` (clamped),
+  sets `cursor.phase_total = total_phases`, updates `cursor.phase_index = phase_i` as it
+  loops; at the pause checkpoint `action, target = cursor.decision_at_phase(phase_i)` →
+  `jump` (clear_seek + set phase_i) / `abort` (return, executor redirects) / `continue`.
+  `_run_phase` still gains `honor_pause=False` for the static path.
