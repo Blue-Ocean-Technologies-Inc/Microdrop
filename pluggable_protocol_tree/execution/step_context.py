@@ -112,8 +112,9 @@ class Mailbox:
 
 # --- contexts ---
 
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List, Int
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow
@@ -161,11 +162,10 @@ class ProtocolContext(HasTraits):
     # loading screen — after the pre-start hooks and before the first step.
     pre_protocol_wait_s = Float(0.0)
 
-    # Mid-run seek target (issue #471): (step_path, phase_index) or None.
-    # Set by ProtocolExecutor.seek() while paused; consulted at the pause
-    # checkpoints on resume via execution.seek.seek_decision. Plain attribute
-    # semantics are fine -- a single GUI-thread write, worker-thread read.
-    resume_target = Any(None)
+    # Live execution position + pending mid-run seek (#471): one model the
+    # executor and routes handler both drive (replaces the old scattered
+    # resume_target / StepContext.start_phase_index / executor._current_step_path).
+    cursor = Instance(ExecutionCursor, ())
 
     def add_pre_protocol_wait(self, seconds: float) -> None:
         """Contribute settle/wait time to the pre-protocol wait.
@@ -361,9 +361,6 @@ class StepContext(HasTraits):
              "Lets sibling handlers in the same parallel bucket (notably "
              "VolumeThresholdHandler) exit their wait loops instead of "
              "blocking forever on a never-arriving next phase.")
-    start_phase_index = Int(0,
-        desc="0-based phase to begin this step at. Non-zero only when the "
-             "executor re-enters a step after a different-step seek (#471).")
 
     def traits_init(self):
         # Plain (non-trait) coordination state for phase-time buffering,

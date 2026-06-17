@@ -37,7 +37,6 @@ from pluggable_protocol_tree.execution.exceptions import (
 from pluggable_protocol_tree.execution.listener import (
     set_active_step, clear_active_step, warm_broker_connection,
 )
-from pluggable_protocol_tree.execution.seek import resolve_seek
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.execution.step_context import (
     ProtocolContext, StepContext,
@@ -78,12 +77,9 @@ class ProtocolExecutor(HasTraits):
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
     _start_step_path = Union(None, Tuple)
-    # Live ProtocolContext for the current run; seek() writes resume_target on
-    # it. None between runs.
+    # Live ProtocolContext for the current run; seek() drives its cursor.
+    # None between runs.
     _active_proto_ctx = Any
-    # Position the frame walk last reported (path tuple) -- used to decide
-    # same-step vs different-step on resume.
-    _current_step_path = Union(None, Tuple)
     # When True, the next run() builds the ProtocolContext with
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
@@ -198,13 +194,12 @@ class ProtocolExecutor(HasTraits):
 
     def seek(self, step_path, phase_index) -> None:
         """Record a mid-run resume target (issue #471). Only meaningful while
-        paused; ignored otherwise. The frame walk / phase loop consult it on
-        resume. Qt-free: writes a plain tuple onto the live ProtocolContext."""
+        paused; ignored otherwise. Qt-free: delegates to the live run's
+        ExecutionCursor."""
         if not self.pause_event.is_set():
             return
         if self._active_proto_ctx is not None:
-            self._active_proto_ctx.resume_target = (tuple(step_path),
-                                                    int(phase_index))
+            self._active_proto_ctx.cursor.request_seek(step_path, phase_index)
 
     def stop(self) -> None:
         """Set stop_event AND clear pause_event so a Stop-while-paused
@@ -327,16 +322,16 @@ class ProtocolExecutor(HasTraits):
 
     def _run_steps(self, handlers, cols, proto_ctx, skip_until) -> None:
         """Run one repetition. Honors stop_event, pause_event (step + phase
-        checkpoints), skip_until (start-of-run), and resume_target (#471
-        mid-run seek)."""
+        checkpoints), skip_until (start-of-run), and the cursor's resume target
+        (#471 mid-run seek)."""
         frames = list(self.row_manager.iter_execution_frames())
         frame_paths = [tuple(row.path) for row, _ in frames]
+        cursor = proto_ctx.cursor
 
         i = 0
         step_index = 0
         start_phase_index = 0
         if skip_until is not None:
-            # Generalised skip: jump to the first frame matching skip_until.
             for j, p in enumerate(frame_paths):
                 if p == skip_until:
                     i = j
@@ -348,49 +343,44 @@ class ProtocolExecutor(HasTraits):
             if self.stop_event.is_set():
                 break
             row, rep_chain = frames[i]
-            self._current_step_path = tuple(row.path)
 
             if self.pause_event.is_set():
                 logger.info(f"Protocol paused at step {step_index + 1}")
-                # Emitted here so a hook setting pause_event still surfaces
-                # to the UI. The toolbar's executor.pause() also emits —
-                # slots that toggle UI state on each signal must be
-                # idempotent.
+                # Emitted here so a hook setting pause_event still surfaces to
+                # the UI. Slots that toggle UI state on each signal must be
+                # idempotent (executor.pause() also emits).
                 self.qsignals.protocol_paused.emit()
                 self.pause_event.wait_cleared()
                 if self.stop_event.is_set():
                     break
                 self.qsignals.protocol_resumed.emit()
                 logger.info("Protocol resumed")
-                # On resume, honor a mid-run seek to a DIFFERENT step here at
-                # the step boundary (same-step seeks are handled inside the
-                # phase loop). resolve_seek clamps + locates the target frame.
-                target = proto_ctx.resume_target
-                resolved = resolve_seek(frame_paths, target)
-                if resolved is not None and tuple(target[0]) != tuple(row.path):
+                # Different-step seek redirect at the step boundary (same-step
+                # seeks are handled inside the routes phase loop).
+                resolved = cursor.frame_for_seek(frame_paths)
+                if resolved is not None and tuple(cursor.resume_target[0]) != tuple(row.path):
                     i, start_phase_index = resolved
-                    proto_ctx.resume_target = None
-                    step_index = i  # keep the counter roughly aligned
+                    cursor.clear_seek()
+                    step_index = i
                     continue
 
             step_index += 1
-            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain,
-                                step_index, start_phase_index)
+            cursor.enter_step(row.path, start_phase_index)
+            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain, step_index)
             start_phase_index = 0
 
-            # A seek raised DURING the step (different step) aborts the phase
-            # loop; redirect from here.
-            target = proto_ctx.resume_target
-            resolved = resolve_seek(frame_paths, target)
+            # A seek raised during the step (different step aborted the phase
+            # loop) -> redirect from here.
+            resolved = cursor.frame_for_seek(frame_paths)
             if resolved is not None:
                 i, start_phase_index = resolved
-                proto_ctx.resume_target = None
+                cursor.clear_seek()
                 step_index = i
                 continue
             i += 1
 
     def _run_one_frame(self, handlers, cols, proto_ctx, row, rep_chain,
-                       step_index, start_phase_index) -> None:
+                       step_index) -> None:
         step_started_at = time.monotonic()
         rep_str = (
             " | " + ", ".join(f"rep {i}/{n} of {name!r}"
@@ -403,7 +393,6 @@ class ProtocolExecutor(HasTraits):
             f"duration_s={getattr(row, 'duration_s', None)}){rep_str}"
         )
         step_ctx = self._build_step_ctx(row, cols, proto_ctx)
-        step_ctx.start_phase_index = int(start_phase_index)
         set_active_step(step_ctx)
         try:
             # Rep info first so UI labels are populated before the
