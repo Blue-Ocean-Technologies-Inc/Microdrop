@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Float, Str, observe
+from traits.api import Bool, Dict, Directory, Enum, Float, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, View, Item
 
@@ -27,6 +27,7 @@ from ..consts import ACK_TIMEOUT_MAX_S, ACK_TIMEOUT_MIN_S, ACK_WAIT_FOREVER, CAM
     PROTOCOL_TREE_PREFERENCES_TAB_ID, SETTLING_TIME_MAX_S, SETTLING_TIME_MIN_S
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -145,7 +146,6 @@ class ProtocolPreferences(PreferencesHelper):
 
         return default_dir
 
-
     def seed_ack_times_from_columns(self, columns) -> None:
         """Rebuild ``protocol_tree_ack_times`` from the column list: one
         entry per wait-capable column (handler declares a positive
@@ -176,9 +176,9 @@ class ProtocolPreferences(PreferencesHelper):
             # label wins.
             field_specs = getattr(column.model, "field_specs", None)
             display_name = (
-                getattr(column, "preference_display_name", "")
-                or getattr(column.model, "col_name", "")
-                or (field_specs()[0].col_name if field_specs else column.id)
+                    getattr(column, "preference_display_name", "")
+                    or getattr(column.model, "col_name", "")
+                    or (field_specs()[0].col_name if field_specs else column.id)
             )
             default_column_names.setdefault(column.id, display_name)
             default_ack_times[column.id] = default_ack_time_s
@@ -220,7 +220,7 @@ class ProtocolPreferencesPane(PreferencesPane):
     # Create the grid group for the sidebar items.
     camera_settings_grid = create_grid_group(
         ["camera_prewarm_seconds", "capture_time"],
-        label_text = ["Camera On Lead Time (s)", "When to Capture Step Picture?"],
+        label_text=["Camera On Lead Time (s)", "When to Capture Step Picture?"],
         group_label="Camera Config",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,
@@ -228,7 +228,7 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     general_protocol_settings_grid = create_grid_group(
         items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
-        label_text = ["Realtime Mode Pre-Protocol (s)", "Logs Accepted Post-Protocol (s)"],
+        label_text=["Realtime Mode Pre-Protocol (s)", "Logs Accepted Post-Protocol (s)"],
         group_label="Protocol Settling Times",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,
@@ -236,7 +236,7 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     realtime_mode_settings_grid = create_grid_group(
         items=["prompt_to_restore_realtime_mode", "keep_realtime_mode_after_protocol"],
-        label_text = ["Prompt to keep Realtime Mode?", "Keep Realtime Mode active?"],
+        label_text=["Prompt to keep Realtime Mode?", "Keep Realtime Mode active?"],
         group_label="Realtime Mode Persistence",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,

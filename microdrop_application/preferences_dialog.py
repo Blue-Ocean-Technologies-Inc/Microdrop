@@ -9,6 +9,7 @@ advanced_mode_tab = PreferencesCategory(
     name="Advanced Mode",
 )
 
+
 class PreferencesDialog(_PreferencesDialog):
     """A dialog for editing preferences."""
 
@@ -18,7 +19,7 @@ class PreferencesDialog(_PreferencesDialog):
     show_apply = Bool(True)
 
     #### Private interface ####################################################
-    _tabs_filtered =  List(PreferencesTab)
+    _tabs_filtered = List(PreferencesTab)
 
     ###########################################################################
     # Public interface
@@ -105,6 +106,7 @@ class PreferencesDialog(_PreferencesDialog):
         """
         Revert preferences on a tab by tab basis
         """
+
         # Only handle calls when the dialog is visible. Envisage / traitsui backend has set up livemodal dialogs to call
         # revert on closing the dialog window which did not even do anything since the super class revert returned nothing.
         # Since we are changing the revert to do changes, we need to make sure to avoid the revert call on dialog close.
@@ -114,23 +116,20 @@ class PreferencesDialog(_PreferencesDialog):
             # tagged `no_revert=True` in their declaration, which keep their
             # current value when the user presses Revert.
             return (
-                pane._model._is_preference_trait(trait_name)
-                and not pane._model.trait(trait_name).no_revert
+                    pane._model._is_preference_trait(trait_name)
+                    and not pane._model.trait(trait_name).no_revert
             )
 
         if info.ui.control.isVisible():
 
             # find all the panes in the selected tab, and reset their preference traits.
             for pane in self._selected.panes:
-
                 trait_names = list(
                     filter(
                         _choose_preference_trait_for_revert,
                         pane._model.trait_names(),
                     )
                 )
-
-
 
                 pane._model.reset_traits(trait_names)
 
