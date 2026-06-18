@@ -37,13 +37,13 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
     def __init__(self, key, src: QPointF, dst: QPointF):
         super().__init__()
 
-        # Generate path
-        path = QPainterPath()
+        # Plain line, no arrowhead. Used by the white base layer of possible connections.
+        self._line_path = QPainterPath()
+        self._line_path.moveTo(src)
+        self._line_path.lineTo(dst)
 
-        
-        # Generate line
-        path.moveTo(src)
-        path.lineTo(dst)
+        # Line plus a directional arrowhead. Used by coloured route segments.
+        self._arrow_path = QPainterPath(self._line_path)
 
         # Arrow start point (2/3 of the way along the line)
         start = QPointF(
@@ -53,11 +53,11 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
 
         # Arrow end 'level' (along the line, 8 pixels behind start)
         # We abuse the fact that QPointF addition/scaling works exactly as vector addition/scaling for a bit cleaner computation
-        end_diff = src - dst # Backwards! 
+        end_diff = src - dst # Backwards!
         end_diff /= math.hypot(end_diff.x(), end_diff.y()) # Normalize
         end_diff *= 4 # Scale
         end = start + end_diff
-        
+
         # Generate ticks
         con_vec = dst - src
         perp_vec = QPointF(con_vec.y(), -con_vec.x())
@@ -68,22 +68,25 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         second_tick = end - perp_vec
 
         # Build arrowhead triangle
-        path.moveTo(first_tick)
-        path.lineTo(start)
-        path.lineTo(second_tick)
+        self._arrow_path.moveTo(first_tick)
+        self._arrow_path.lineTo(start)
+        self._arrow_path.lineTo(second_tick)
 
-        self.setPath(path)
-   
+        self.setPath(self._arrow_path)
+
         # Add a new variable specific to this class
         self.key = key
         self.set_inactive()
 
-    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0, width=3, show_arrow=True):
         """
-        Set connection item to visually active
+        Set connection item to visually active. ``width`` lets the thin white base layer
+        (possible connections) sit beneath the thicker coloured route segments, and
+        ``show_arrow=False`` drops the directional arrowhead for that base layer.
         """
+        self.setPath(self._arrow_path if show_arrow else self._line_path)
         color.setAlphaF(alpha)
-        self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
+        self.setPen(QPen(color, width))
 
     def set_inactive(self):
         """

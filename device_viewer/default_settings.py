@@ -21,6 +21,7 @@ ROUTE_COLOR_POOL = (PRIMARY_SHADE[300], PRIMARY_SHADE[400], PRIMARY_SHADE[500], 
 AUTOROUTE_COLOR = "pink"
 
 routes_key = "Route"
+connections_key = "Connections"
 electrode_fill_key = "Electrode fill"
 actuated_electrodes_key = "Actuated electrodes"
 electrode_text_key = "Electrode text"
@@ -32,7 +33,7 @@ hovered_actuation_key = "Hovered Actuation"
 hovered_electrode_lightness = 20
 hovered_actuated_lightness = 30
 
-alpha_keys = [routes_key, electrode_fill_key, actuated_electrodes_key,
+alpha_keys = [routes_key, connections_key, electrode_fill_key, actuated_electrodes_key,
               electrode_text_key, electrode_outline_key, video_key, hovered_electrode_key, hovered_actuation_key]
 
 values = [100] * len(alpha_keys[:-2]) + [20, 30]

@@ -9,7 +9,8 @@ from .perspective import PerspectiveModel
 from .calibration import CalibrationModel
 from .route import RouteLayerManager
 from .electrodes import Electrodes
-from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key
+from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key, default_alphas, \
+    default_visibility
 from ..consts import DEVICE_SVG_PATH_KEY
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
@@ -155,9 +156,19 @@ class DeviceViewMainModel(HasTraits):
 
         # Initialize the alpha map with default values
         if self.preferences:
-            self.alpha_map = [AlphaValue(key=key, alpha=self.preferences.default_alphas[key],
-                                         visible=self.preferences.default_visibility[key])
-                              for key in self.preferences.default_alphas.keys()]
+            # construct alpha map from preferences
+            _alpha_map = []
+            for key in default_alphas.keys():
+                # sync default alphas with pre-existing preferences alphas dict
+                if key not in self.preferences.default_alphas:
+                    self.preferences.default_alphas[key] = default_alphas[key]
+                    self.preferences.default_visibility[key] = default_visibility[key]
+
+                _alpha_value = AlphaValue(key=key, alpha=self.preferences.default_alphas[key], visible=self.preferences.default_visibility[key])
+
+                _alpha_map.append(_alpha_value)
+
+            self.alpha_map = _alpha_map
 
     # ------------------------- Properties ------------------------
 
