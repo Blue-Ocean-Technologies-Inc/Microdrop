@@ -371,11 +371,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if sc is not None and sc.model.running and not sc.model.paused:
             # B1: preview-only while actively running. Move the selection and
             # preview the target; the executor reasserts at the next boundary.
-            self._pane.select_row(row)
-            self._current_row = row
-            path = tuple(row.path)
-            sc.seek_to(path, 0)
-            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._seek_and_preview_step(row)
         else:
             # Paused -> real seek; idle -> selection only (matches nav buttons).
             self._select_step(row)
@@ -416,19 +412,31 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._pane.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
 
     # --- step-cursor selection (drives the view + a paused seek) ------
+    def _seek_and_preview_step(self, row):
+        """Move the selection/cursor to ``row`` and preview its first phase
+        (DeviceViewer overlay + hardware unless preview mode). Shared by the
+        timeline's running-preview branch and _select_step's paused branch.
+        seek_to's executor side is paused-guarded, so while actively running
+        this only updates the model + preview and the executor reasserts at
+        the next boundary."""
+        self._pane.select_row(row)
+        self._current_row = row
+        path = tuple(row.path)
+        sc = self.status_controller
+        sc.seek_to(path, 0)
+        sc.preview_phase(path, 0, self._current_run_preview_mode)
+
     @attempt_func_execution_with_error_dialog
     def _select_step(self, row):
         # Move the tree selection (view), then — only while paused — re-seat
         # the model + DV preview to the chosen step. Nav buttons call this; the
         # user expects the DV to follow just as on a direct row click.
-        self._pane.select_row(row)
         sc = self.status_controller
         if sc is not None and sc.model.paused:
-            self._current_row = row
-            path = tuple(row.path)
-            sc.seek_to(path, 0)
-            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._seek_and_preview_step(row)
             self._update_phase_nav_buttons()
+        else:
+            self._pane.select_row(row)
 
     def _current_step_in(self, steps):
         # During a run the nav cursor follows the model's current step (the
@@ -879,6 +887,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Lock the tree while a run is in progress (issue #471) and drive the
         # live time-readout poll job off the same running flag.
         self._pane.widget.set_editable(not bool(event.new))
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is not None:
+            tb.set_running(bool(event.new))
         sched = self._protocol_poll_scheduler
         if sched is None:
             return
@@ -891,10 +902,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._update_protocol_time()  # final freeze-frame (GUI thread)
             if sched.state == STATE_RUNNING:
                 sched.pause()
-        tb = getattr(self._pane, "timeline_bar", None)
-        if tb is not None:
-            tb.set_running(bool(event.new))
-
 
     ######### Helpers ###################
     def _clamp_trail_overlay_for_row(self, path, col_id):
