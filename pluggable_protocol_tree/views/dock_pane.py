@@ -372,6 +372,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             # B1: preview-only while actively running. Move the selection and
             # preview the target; the executor reasserts at the next boundary.
             self._seek_and_preview_step(row)
+            self._refresh_timeline_position()
         else:
             # Paused -> real seek; idle -> selection only (matches nav buttons).
             self._select_step(row)
@@ -388,9 +389,23 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         steps = self._pane._navigable_steps()
         cur = self._current_step_in(steps)
-        model = self.status_controller.model if self.status_controller else None
-        phase_index0 = (model.phase_index - 1) if (model and model.phase_index > 0) else 0
-        phase_total = model.phase_total if model else 0
+        sc = self.status_controller
+        phase_index0 = 0
+        phase_total = 0
+        if cur is not None and sc is not None:
+            model = sc.model
+            on_current_step = (
+                model.current_step_path is not None
+                and tuple(model.current_step_path) == tuple(steps[cur].path)
+            )
+            if on_current_step and model.phase_total > 0:
+                # Executing/paused on this step: the model holds the live counts.
+                phase_total = model.phase_total
+                phase_index0 = max(0, model.phase_index - 1)
+            else:
+                # Idle or merely selected: derive the step's phase count so its
+                # phase ticks still show even though no run is driving the model.
+                phase_total = sc._phase_total_for(steps[cur])
         tb.set_position(cur if cur is not None else -1, len(steps),
                         phase_index0, phase_total)
 
@@ -437,6 +452,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._update_phase_nav_buttons()
         else:
             self._pane.select_row(row)
+        # Idle/paused selection isn't a model run-state change, so the model
+        # observers won't fire — move the timeline playhead to match here.
+        self._refresh_timeline_position()
 
     def _current_step_in(self, steps):
         # During a run the nav cursor follows the model's current step (the

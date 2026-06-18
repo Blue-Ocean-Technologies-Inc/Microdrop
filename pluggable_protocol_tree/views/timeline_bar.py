@@ -11,7 +11,7 @@ re-applies theme colours on colorSchemeChanged (deferred one event-loop
 tick, since is_dark_mode() can be briefly stale at signal time).
 """
 
-from pyface.qt.QtCore import Qt, QRect, QTimer, Signal
+from pyface.qt.QtCore import Qt, QPoint, QRect, QTimer, Signal
 from pyface.qt.QtGui import QColor, QPainter, QPen
 from pyface.qt.QtWidgets import QApplication, QSizePolicy, QWidget
 
@@ -160,7 +160,12 @@ class TimelineBar(QWidget):
             head_x = self._tick_center_x(position, count)
             head_color = colors["running_head"] if self._running else colors["head"]
             painter.setPen(QPen(QColor(head_color), 3))
-            painter.drawLine(head_x, rect.top() - 2, head_x, rect.bottom() + 2)
+            painter.drawLine(head_x, rect.top() - 3, head_x, rect.bottom() + 3)
+            # Filled marker so the current tick clearly reads as the playhead,
+            # not just a slightly-taller tick among its neighbours.
+            painter.setBrush(QColor(head_color))
+            painter.drawEllipse(QPoint(head_x, rect.center().y()), 4, 4)
+            painter.setBrush(Qt.NoBrush)
 
     def paintEvent(self, event):
         if self.step_count <= 0:
