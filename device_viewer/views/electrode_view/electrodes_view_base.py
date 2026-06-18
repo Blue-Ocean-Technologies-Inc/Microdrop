@@ -78,12 +78,13 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         self.key = key
         self.set_inactive()
 
-    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0):
+    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0, width=3):
         """
-        Set connection item to visually active
+        Set connection item to visually active. ``width`` lets the thin white base layer
+        (possible connections) sit beneath the thicker coloured route segments.
         """
         color.setAlphaF(alpha)
-        self.setPen(QPen(color, 3))  # Example: Set pen color to green with thickness 5
+        self.setPen(QPen(color, width))
 
     def set_inactive(self):
         """
