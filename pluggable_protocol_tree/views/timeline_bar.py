@@ -11,7 +11,7 @@ re-applies theme colours on colorSchemeChanged (deferred one event-loop
 tick, since is_dark_mode() can be briefly stale at signal time).
 """
 
-from pyface.qt.QtCore import Qt, QPoint, QRect, QTimer, Signal
+from pyface.qt.QtCore import Qt, QRect, QTimer, Signal
 from pyface.qt.QtGui import QColor, QPainter, QPen
 from pyface.qt.QtWidgets import QApplication, QSizePolicy, QWidget
 
@@ -144,27 +144,28 @@ class TimelineBar(QWidget):
 
     # --- paint ------------------------------------------------------
 
-    def _tick_center_x(self, index, count):
-        seg = self._usable_width() / max(1, count)
-        return int(SIDE_MARGIN + (index + 0.5) * seg)
-
     def _paint_track(self, painter, rect, count, position, colors):
+        # Video-timeline look: a track bar divided into one cell per item by
+        # thin separators, with the current item drawn as a filled, outlined
+        # box (the "you are here" cell) rather than a single tick.
+        seg = self._usable_width() / max(1, count)
         painter.setPen(QPen(QColor(colors["track"]), 2))
         mid_y = rect.center().y()
         painter.drawLine(rect.left(), mid_y, rect.right(), mid_y)
         painter.setPen(QPen(QColor(colors["tick"]), 1))
-        for i in range(count):
-            x = self._tick_center_x(i, count)
+        for i in range(count + 1):
+            x = int(SIDE_MARGIN + i * seg)
             painter.drawLine(x, rect.top(), x, rect.bottom())
         if 0 <= position < count:
-            head_x = self._tick_center_x(position, count)
+            left = int(SIDE_MARGIN + position * seg)
+            right = int(SIDE_MARGIN + (position + 1) * seg)
             head_color = colors["running_head"] if self._running else colors["head"]
-            painter.setPen(QPen(QColor(head_color), 3))
-            painter.drawLine(head_x, rect.top() - 3, head_x, rect.bottom() + 3)
-            # Filled marker so the current tick clearly reads as the playhead,
-            # not just a slightly-taller tick among its neighbours.
-            painter.setBrush(QColor(head_color))
-            painter.drawEllipse(QPoint(head_x, rect.center().y()), 4, 4)
+            fill = QColor(head_color)
+            fill.setAlpha(90)
+            painter.setBrush(fill)
+            painter.setPen(QPen(QColor(head_color), 2))
+            painter.drawRoundedRect(
+                QRect(left, rect.top(), max(1, right - left), rect.height()), 3, 3)
             painter.setBrush(Qt.NoBrush)
 
     def paintEvent(self, event):
