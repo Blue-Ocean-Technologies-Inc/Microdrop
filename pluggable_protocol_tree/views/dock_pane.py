@@ -251,6 +251,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
         nb.btn_first.clicked.connect(self.navigate_to_first_step)
         nb.btn_last.clicked.connect(self.navigate_to_last_step)
 
+        # Timeline seek bar: clicks redirect through the status controller; the
+        # model observers below push the playhead position back.
+        tb = pane.timeline_bar
+        tb.step_seek_requested.connect(self._on_timeline_step_seek)
+        tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
+
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
         nb.btn_stop.clicked.connect(self.executor.stop)
@@ -261,6 +267,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Legacy protocol_grid parity: the full app opens with one default
         # step when no protocol is loaded (no-op once a protocol is loaded).
         pane._seed_default_step_if_empty()
+
+        # Initial timeline render (structure + position).
+        self._rebuild_timeline()
 
         return pane
 
@@ -332,15 +341,70 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _on_next_phase(self):
         self._seek_relative_phase(+1)
 
-    def _seek_relative_phase(self, delta):
+    def _seek_to_phase(self, target0):
+        """Seek the current step to absolute 0-based phase ``target0`` and
+        preview it. Shared by the nav-bar prev/next-phase buttons and the
+        timeline's phase track."""
         sc = self.status_controller
         if sc is None or self._current_row is None:
             return
-        target0 = (sc.model.phase_index - 1) + delta   # model phase_index is 1-based
         path = tuple(self._current_row.path)
         sc.seek_to(path, target0)
         sc.preview_phase(path, target0, self._current_run_preview_mode)
         self._update_phase_nav_buttons()
+
+    def _seek_relative_phase(self, delta):
+        sc = self.status_controller
+        if sc is None:
+            return
+        # model phase_index is 1-based; convert to a 0-based absolute target.
+        self._seek_to_phase((sc.model.phase_index - 1) + delta)
+
+    # --- timeline seek bar (view -> controller) ----------------------
+
+    def _on_timeline_step_seek(self, step_index):
+        steps = self._pane._navigable_steps()
+        if not (0 <= step_index < len(steps)):
+            return
+        row = steps[step_index]
+        sc = self.status_controller
+        if sc is not None and sc.model.running and not sc.model.paused:
+            # B1: preview-only while actively running. Move the selection and
+            # preview the target; the executor reasserts at the next boundary.
+            self._pane.select_row(row)
+            self._current_row = row
+            path = tuple(row.path)
+            sc.seek_to(path, 0)
+            sc.preview_phase(path, 0, self._current_run_preview_mode)
+        else:
+            # Paused -> real seek; idle -> selection only (matches nav buttons).
+            self._select_step(row)
+
+    def _on_timeline_phase_seek(self, phase_index):
+        # The bar emits a 0-based phase index, exactly what _seek_to_phase wants.
+        self._seek_to_phase(phase_index)
+
+    # --- timeline seek bar (model -> view) ---------------------------
+
+    def _refresh_timeline_position(self):
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is None:
+            return
+        steps = self._pane._navigable_steps()
+        cur = self._current_step_in(steps)
+        model = self.status_controller.model if self.status_controller else None
+        phase_index0 = (model.phase_index - 1) if (model and model.phase_index > 0) else 0
+        phase_total = model.phase_total if model else 0
+        tb.set_position(cur if cur is not None else -1, len(steps),
+                        phase_index0, phase_total)
+
+    def _rebuild_timeline(self, event=None):
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is None:
+            return
+        steps = self._pane._navigable_steps()
+        tb.rebuild([(row.name or row.dotted_path()) for row in steps])
+        self._refresh_timeline_position()
 
     def _update_phase_nav_buttons(self):
         m = self.status_controller.model if self.status_controller else None
@@ -717,6 +781,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
         """Structural mutation — re-check the baseline path set."""
         self.protocol_state_tracker.on_structure_changed(self.manager)
 
+    @observe("manager.rows_changed", dispatch="ui", post_init=True)
+    def _on_rows_changed_rebuild_timeline(self, event=None):
+        self._rebuild_timeline()
+
     @observe("manager.cell_changed", dispatch="ui")
     def _on_manager_cell_changed(self, event):
         """Cell value edit — incremental dirty update for the one cell."""
@@ -788,12 +856,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 row = None
         self._current_row = row
         self._pane.widget.highlight_active_row(row)
+        self._refresh_timeline_position()
 
     ## Observe status bar model changes and modify view accordingly
     @observe("status_controller:model:[step_index, step_total, phase_index, phase_total]", dispatch="ui", post_init=True)
     def _on_counts_changed(self, event=None):
         model = self.status_controller.model
         self._pane.status_bar._refresh_counts(current=model.step_index, total=model.step_total)
+        self._refresh_timeline_position()
 
     @observe("status_controller:model:[repeats_completed, repeats_total]", dispatch="ui", post_init=True)
     def _on_repeats_changed(self, event=None):
@@ -821,6 +891,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._update_protocol_time()  # final freeze-frame (GUI thread)
             if sched.state == STATE_RUNNING:
                 sched.pause()
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is not None:
+            tb.set_running(bool(event.new))
 
 
     ######### Helpers ###################
