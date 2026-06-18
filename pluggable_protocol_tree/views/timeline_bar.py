@@ -15,7 +15,7 @@ from pyface.qt.QtCore import Qt, QRect, QTimer, Signal
 from pyface.qt.QtGui import QColor, QPainter, QPen
 from pyface.qt.QtWidgets import QApplication, QSizePolicy, QWidget
 
-from microdrop_style.colors import BLACK, GREY, SECONDARY_SHADE, WHITE
+from microdrop_style.colors import GREY, SECONDARY_SHADE
 from microdrop_style.helpers import is_dark_mode
 
 # Layout geometry (px). The widget is a fixed-height strip; the step track
@@ -137,10 +137,10 @@ class TimelineBar(QWidget):
 
     def _colors(self):
         if is_dark_mode():
-            return dict(track=GREY["dark"], tick=GREY["lighter"], text=WHITE,
-                        head=SECONDARY_SHADE[300])
-        return dict(track=GREY["light"], tick=GREY["dark"], text=BLACK,
-                    head=SECONDARY_SHADE[700])
+            return dict(track=GREY["dark"], tick=GREY["lighter"],
+                        head=SECONDARY_SHADE[300], running_head=SECONDARY_SHADE[100])
+        return dict(track=GREY["light"], tick=GREY["dark"],
+                    head=SECONDARY_SHADE[700], running_head=SECONDARY_SHADE[900])
 
     # --- paint ------------------------------------------------------
 
@@ -158,7 +158,7 @@ class TimelineBar(QWidget):
             painter.drawLine(x, rect.top(), x, rect.bottom())
         if 0 <= position < count:
             head_x = self._tick_center_x(position, count)
-            head_color = SECONDARY_SHADE[300] if self._running else colors["head"]
+            head_color = colors["running_head"] if self._running else colors["head"]
             painter.setPen(QPen(QColor(head_color), 3))
             painter.drawLine(head_x, rect.top() - 2, head_x, rect.bottom() + 2)
 

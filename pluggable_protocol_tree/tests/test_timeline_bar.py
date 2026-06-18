@@ -60,6 +60,14 @@ def test_click_on_phase_track_emits_phase_seek(qapp):
     assert captured == [4]
 
 
+def test_phase_index_at_x_maps_across_width(qapp):
+    bar = _bar(qapp)
+    bar.set_position(1, 4, 0, 5)  # current step has 5 phases
+    # 5 phases across the usable width -> first is phase 0, last is 4.
+    assert bar._phase_index_at_x(bar._phase_track_rect().left() + 1) == 0
+    assert bar._phase_index_at_x(bar._phase_track_rect().right() - 1) == 4
+
+
 def test_set_running_does_not_break_interaction(qapp):
     bar = _bar(qapp)
     bar.set_position(0, 4, 0, 0)
