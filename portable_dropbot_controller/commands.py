@@ -109,6 +109,20 @@ class MotorBoard:
     PMT_READ = (HEAD << 8) | 0x29  # Read PMT status → returns status
 
     # -------------------------------
+    # Power & Fan Control
+    # -------------------------------
+    POWER_CTRL = (HEAD << 8) | 0x2A  # Power control (u8: 0=off, 1=on/reset)
+    FAN_CTRL = (HEAD << 8) | 0x2B    # Fan control (u8: 0=off, 1=on)
+
+    # -------------------------------
+    # Motor Reset Commands
+    # -------------------------------
+    CABIN_MAG_RESET = (HEAD << 8) | 0x30  # Chip tray & magnet reset
+    PMT_RESET = (HEAD << 8) | 0x31        # PMT motor reset
+    FLU_RESET = (HEAD << 8) | 0x32        # Fluorescence filter reset
+    PUSHPAD_RESET = (HEAD << 8) | 0x33    # Pogo pin plate reset
+
+    # -------------------------------
     # Motor Control Commands
     # -------------------------------
     MOTOR_CONTROL = (HEAD << 8) | 0xB0  # Motor control command
@@ -117,6 +131,21 @@ class MotorBoard:
     MOTOR_OPTO_QUERY = (
         HEAD << 8
     ) | 0xB4  # Query all motor opto-isolators, returns u8[12]
+
+    # -------------------------------
+    # PMT Motor Commands (cross-board)
+    # -------------------------------
+    PMT_MT_CTRL = (HEAD << 8) | 0x40       # PMT motor control (routed from signal board)
+    PMT_MT_SPEED_SET = (HEAD << 8) | 0x41  # PMT motor speed setting: i32 (BE)
+
+    # -------------------------------
+    # Alarm & Log Commands
+    # -------------------------------
+    SET_LOG_LEVEL = (HEAD << 8) | 0x71     # Set log reporting level: u8
+    REPORT_LOG = (HEAD << 8) | 0x70        # Log report (device → host)
+    SET_ALARM_LEVEL = (HEAD << 8) | 0x73   # Set alarm level: u8
+    REPORT_ALARM = (HEAD << 8) | 0x72      # Alarm report (device → host)
+    CLEAR_ALARM = (HEAD << 8) | 0x74       # Clear/confirm alarm: 5-byte alarm code
 
     MOTOR_ACTION_ABSOLUTE = 0
     MOTOR_ACTION_RELATIVE = 1
@@ -133,7 +162,7 @@ class MotorBoard:
     PARAMS = {
         "filter_defaults": "_dp_flu",
         "tray_defaults": "_dp_chip",
-        "magnet_defaults": "_dp_magic",
+        "magnet_defaults": "_dp_magnet",
         "pmt_defaults": "_dp_pmt",
         "pogo_defaults": "_dp_pushpad",
         #   'heater': '_dp_temp',                # TEC parameters (not used)
@@ -170,8 +199,17 @@ class SignalBoard:
     # Data Reporting Commands
     # -------------------------------
     DATA_REPORT = (HEAD << 8) | 0x05  # Data reporting command
-    SET_REPORT_CYCLE = (HEAD << 8) | 0xF6  # Set data reporting period
-    SET_REPORT_CYCLE2 = (HEAD << 8) | 0xF7  # Set data reporting period 2
+    SET_REPORT_CYCLE = (HEAD << 8) | 0xF6  # Set event mask: u32 big-endian
+    SET_REPORT_CYCLE2 = (HEAD << 8) | 0xF7  # Set interval ms: u32 big-endian (100-60000)
+
+    # Event mask bits for SET_REPORT_CYCLE
+    EVT_STATUS = 0x0001        # Periodic full status report
+    EVT_TEMPERATURE = 0x0002   # Temperature change events
+    EVT_HV_VOLTAGE = 0x0004    # HV voltage change events
+    EVT_CHIP_DETECT = 0x0008   # Chip presence change events
+    EVT_SHORT_CIRCUIT = 0x0010 # Short circuit events
+    EVT_CAPACITANCE = 0x0020   # Capacitance measurement events
+    EVT_ALL = 0xFFFF           # All events enabled
 
     # -------------------------------
     # Temperature Control Commands
@@ -215,6 +253,10 @@ class SignalBoard:
     PMT_STATUS_REPORT = (
         HEAD << 8
     ) | 0x2A  # Device reports status: u8 state (0 start, 1 finished, 2 aborted)
+    PMT_POWER = (HEAD << 8) | 0x2B          # PMT power control: u8 0=off, 1=on → resp u8 status
+    PMT_START_DEBUG = (HEAD << 8) | 0x2C    # PMT debug start: u16 sample limit (LE) → resp u16 echo
+    PMT_STOP_DEBUG = (HEAD << 8) | 0x2D     # PMT debug stop
+    PMT_DATA_UPLOAD_DEBUG = (HEAD << 8) | 0x2E  # PMT debug upload → resp u16 packet count (LE)
 
     # -------------------------------
     # Capacitance / HV / Chip Loaded / Short Detection
@@ -231,9 +273,11 @@ class SignalBoard:
     CAP_PROGRESS_REPORT = (
         HEAD << 8
     ) | 0x34  # Capacitance detection progress: data[0]=index, data[1]=value
+    CAP_SHORT_DETECT = (HEAD << 8) | 0x30    # Capacitor short detect → resp u8 (0=ok, 1=short)
     LOADED_SHORT_DETECT = (
         HEAD << 8
     ) | 0xAC  # Chip load status & short detection → returns u8 chip loaded (0/1), u8 short(0/1)
+    SHORT_CIRCUIT_DETECT = (HEAD << 8) | 0xAD  # Full 120-ch short circuit scan → resp u8[120]
 
     # -------------------------------
     # Parameter Commands
@@ -249,6 +293,7 @@ class SignalBoard:
     # -------------------------------
     SET_ALARM_LEVEL = (HEAD << 8) | 0x73  # Set alarm level
     REPORT_ALARM = (HEAD << 8) | 0x72  # Report alarm
+    CLEAR_ALARM = (HEAD << 8) | 0x74   # Clear/confirm alarm: 5-byte alarm code
 
     # -------------------------------
     # Log Commands

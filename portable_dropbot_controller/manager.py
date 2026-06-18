@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from threading import Event
 
@@ -35,7 +36,15 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from peripheral_controller.consts import ZSTAGE_POSITION_UPDATED
-from .consts import PORT_DROPBOT_STATUS_UPDATE, PKG
+from .consts import (
+    PORT_DROPBOT_STATUS_UPDATE,
+    PORT_DROPBOT_DIAGNOSTICS_RESULT,
+    PORT_DROPBOT_TEMPERATURE_UPDATE,
+    PORT_DROPBOT_SWEEP_RESULT,
+    PORT_DROPBOT_DROPS_RESULT,
+    PORT_DROPBOT_CAPACITANCE_RESULT,
+    PKG,
+)
 from .utils import (
     decode_login_response,
     decode_status_data,
@@ -43,6 +52,8 @@ from .utils import (
 )
 
 from .portable_dropbot_service import DropletBotUart
+from .session import DropletBotSession, DropletBotError
+from .commands import SignalBoard
 
 from logger.logger_service import get_logger
 
@@ -199,6 +210,41 @@ def require_realtime_mode(func):
     return wrapper
 
 
+def run_in_background(func):
+    """
+    Run a (potentially long) handler on the manager's single-worker task
+    executor instead of the calling dramatiq actor thread, so the actor
+    returns immediately.
+
+    Tasks are serialized (max_workers=1), and driver access inside the task
+    is still protected by require_active_driver's lock, so concurrent serial
+    transactions cannot interleave. Falls back to inline execution if the
+    executor is unavailable (e.g. during shutdown).
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        executor = getattr(self, "_task_executor", None)
+        if executor is None or getattr(self, "_shutting_down", False):
+            return func(self, *args, **kwargs)
+
+        def _job():
+            try:
+                func(self, *args, **kwargs)
+            except Exception as e:
+                logger.error(
+                    f"Background task '{func.__name__}' failed: {e}", exc_info=True
+                )
+
+        try:
+            executor.submit(_job)
+        except RuntimeError:
+            # Executor already shut down; run inline as a last resort.
+            return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 @provides(IDramatiqControllerBase)
 class ConnectionManager(HasTraits):
     """
@@ -281,6 +327,13 @@ class ConnectionManager(HasTraits):
         self.driver = DropletBotUart()
         self._stop_event = Event()
 
+        # High-level session API (self-test, ramp, drops, feedback actuation,
+        # sweep, ...) bound to the SAME live, manager-owned driver. Constructed
+        # without a port so it does not open its own serial connection; we then
+        # rebind its UART to the managed driver.
+        self.session = DropletBotSession()
+        self.session._uart = self.driver
+
         # Wire up driver callbacks to our internal handlers
         self.driver.on_ready_read = _handle_ready_read
         self.driver.on_error = self._handle_driver_error
@@ -289,6 +342,11 @@ class ConnectionManager(HasTraits):
         self._driver_lock = threading.RLock()
         self._shutting_down = False
         self._error_shown = False
+        # Single-worker executor for long-running session ops (self-test,
+        # sweeps, feedback actuation) so they don't block the dramatiq actor.
+        self._task_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="dropbot-task"
+        )
         self.channel_states_arr = np.zeros(120, dtype=bool)
 
         self.dropbot_preferences = DropbotPreferences(preferences=self.app_preferences)
@@ -781,6 +839,318 @@ class ConnectionManager(HasTraits):
         logger.info(f"Moving magnet to {pos_mm}mm position")
         self.driver.motorAbsoluteMove("magnet", int(pos_mm * 1000))
         publish_message(content, ZSTAGE_POSITION_UPDATED)
+
+    ######## Session-API request handlers ###################################
+    # All of these block in the dramatiq actor thread for the duration of the
+    # operation (matching the existing tray/motor handlers). They drive the
+    # high-level session API bound to the live driver.
+
+    @staticmethod
+    def _msg_to_dict(message) -> dict:
+        """Parse an incoming message into a dict. Scalars become {'value': x}."""
+        if message is None:
+            return {}
+        content = str(message).strip()
+        if not content:
+            return {}
+        try:
+            data = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return {"value": content}
+        return data if isinstance(data, dict) else {"value": data}
+
+    @staticmethod
+    def _msg_to_bool(value, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        content = str(value).strip().lower()
+        if content in ("true", "1", "on", "yes"):
+            return True
+        if content in ("false", "0", "off", "no"):
+            return False
+        return default
+
+    # --- Diagnostics & detection ---
+    @run_in_background
+    @require_active_driver
+    def _on_self_test_request(self, message=None):
+        if not self.connected:
+            logger.warning("Self-test ignored: DropBot not connected.")
+            return
+        params = self._msg_to_dict(message)
+        try:
+            results = self.session.self_test_electrodes(
+                switch_time_ms=int(params.get("switch_time_ms", 20)),
+                thresholds=params.get("thresholds"),
+            )
+        except Exception as e:
+            logger.error(f"Self-test failed: {e}", exc_info=True)
+            return
+        failed = sorted(ch for ch, r in results.items() if not r["passed"])
+        logger.info(f"Self-test complete: {len(failed)} failed channel(s)")
+        publish_message(
+            json.dumps({
+                "type": "self_test",
+                "passed": len(results) - len(failed),
+                "failed_channels": failed,
+                "results": {str(ch): r for ch, r in results.items()},
+            }),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+
+    @run_in_background
+    @require_active_driver
+    def _on_short_circuit_scan_request(self, message=None):
+        if not self.connected:
+            return
+        scan = self.driver.short_circuit_detect()
+        if scan is None:
+            logger.error("Short-circuit scan returned no data")
+            return
+        shorted = [i for i, v in enumerate(scan) if v]
+        logger.info(f"Short-circuit scan: {len(shorted)} shorted channel(s)")
+        publish_message(
+            json.dumps({"type": "short_circuit_scan", "shorted_channels": shorted}),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+
+    @require_active_driver
+    def _on_detect_shorts_request(self, message=None):
+        """Chip-on-pad presence + short detection (single quick check)."""
+        if not self.connected:
+            return
+        chip_loaded, short = self.session.detect_shorts()
+        publish_message(
+            json.dumps({"type": "detect_shorts", "chip_on_pad": chip_loaded, "short": short}),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+        # Keep chip-inserted UI state in sync with detected presence
+        publish_message("True" if chip_loaded else "False", CHIP_INSERTED)
+
+    @run_in_background
+    @require_active_driver
+    def _on_calibrate_capacitors_request(self, message=None):
+        if not self.connected:
+            return
+        result = self.session.calibrate()
+        publish_message(
+            json.dumps({"type": "calibrate_capacitors", "result": result}),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+
+    @require_active_driver
+    def _on_measure_capacitance_request(self, message=None):
+        """Measure active-electrode capacitance with full signal-quality stats."""
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        n_averages = int(params.get("n_averages", 1))
+        stats = self.session.measure_active_capacitance_stats(n_averages)
+        publish_message(
+            json.dumps({
+                "type": "measure_capacitance",
+                "n_averages": n_averages,
+                "result": stats,
+            }),
+            PORT_DROPBOT_CAPACITANCE_RESULT,
+        )
+
+    # --- Feedback-controlled actuation ---
+    @run_in_background
+    @require_active_driver
+    @require_realtime_mode
+    def _on_ramp_voltage_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        target_v = params.get("target_v", params.get("value"))
+        if target_v is None:
+            logger.error("ramp_voltage missing target_v")
+            return
+        self.session.ramp_voltage(
+            float(target_v),
+            start_v=params.get("start_v"),
+            step_v=float(params.get("step_v", 5.0)),
+            delay_s=float(params.get("delay_s", 0.05)),
+        )
+        logger.info(f"Ramped voltage to {target_v} V")
+
+    @run_in_background
+    @require_active_driver
+    def _on_calibrate_baseline_request(self, message=None):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        baseline = self.session.calibrate_baseline(
+            switch_time_ms=int(params.get("switch_time_ms", 20))
+        )
+        publish_message(
+            json.dumps({"type": "calibrate_baseline", "channels": len(baseline)}),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+
+    @run_in_background
+    @require_active_driver
+    def _on_detect_drops_request(self, message=None):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        try:
+            drops = self.session.detect_drops(
+                channels=params.get("channels"),
+                threshold_pf=float(params.get("threshold_pf", 5.0)),
+                switch_time_ms=int(params.get("switch_time_ms", 20)),
+            )
+        except DropletBotError as e:
+            logger.error(f"detect_drops: {e}")
+            return
+        present = sorted(ch for ch, has in drops.items() if has)
+        publish_message(
+            json.dumps({"type": "detect_drops", "drops": present}),
+            PORT_DROPBOT_DROPS_RESULT,
+        )
+
+    @run_in_background
+    @require_active_driver
+    @require_realtime_mode
+    def _on_actuate_and_verify_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        channels = params.get("channels")
+        if not channels:
+            logger.error("actuate_and_verify missing channels")
+            return
+        ok = self.session.actuate_and_verify(
+            channels,
+            expected_pf=float(params.get("expected_pf", 10.0)),
+            max_retries=int(params.get("max_retries", 3)),
+            voltage_step_v=float(params.get("voltage_step_v", 10.0)),
+            initial_voltage_v=float(params.get("initial_voltage_v", 50.0)),
+            frequency_hz=int(params.get("frequency_hz", 10000)),
+        )
+        publish_message(
+            json.dumps({"type": "actuate_and_verify", "channels": channels, "success": bool(ok)}),
+            PORT_DROPBOT_DIAGNOSTICS_RESULT,
+        )
+
+    # --- Temperature control ---
+    @require_active_driver
+    def _on_set_temperature_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        target = params.get("target_c", params.get("value"))
+        if target is None:
+            logger.error("set_temperature missing target_c")
+            return
+        channel = int(params.get("channel", 0))
+        self.session.set_temperature(
+            float(target), enable=self._msg_to_bool(params.get("enable", True), True),
+            channel=channel,
+        )
+        logger.info(f"Heater ch{channel} target set to {target} C")
+
+    @require_active_driver
+    def _on_stop_heater_request(self, message=None):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        self.session.stop_heater(channel=int(params.get("channel", 0)))
+
+    @require_active_driver
+    def _on_get_temperature_request(self, message=None):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        channel = int(params.get("channel", 0))
+        info = self.session.get_temperature(channel=channel)
+        publish_message(
+            json.dumps({"type": "temperature", "channel": channel, "info": info}),
+            PORT_DROPBOT_TEMPERATURE_UPDATE,
+        )
+
+    # --- Frequency sweep & event streaming ---
+    @run_in_background
+    @require_active_driver
+    @require_realtime_mode
+    def _on_frequency_sweep_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        channels = params.get("channels")
+        if not channels:
+            logger.error("frequency_sweep missing channels")
+            return
+        results = self.session.frequency_sweep(
+            channels,
+            freqs=params.get("freqs"),
+            voltage_v=float(params.get("voltage_v", 100)),
+            settle_s=float(params.get("settle_s", 0.1)),
+        )
+        publish_message(
+            json.dumps({
+                "type": "frequency_sweep",
+                "results": {str(f): c for f, c in results.items()},
+            }),
+            PORT_DROPBOT_SWEEP_RESULT,
+        )
+
+    @require_active_driver
+    def _on_enable_streaming_request(self, message=None):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        mask = int(params.get("mask", SignalBoard.EVT_ALL))
+        interval_ms = int(params.get("interval_ms", 1000))
+        self.session.enable_streaming(mask=mask, interval_ms=interval_ms)
+        logger.info(f"Event streaming enabled (mask=0x{mask:04X}, {interval_ms} ms)")
+
+    @require_active_driver
+    def _on_disable_streaming_request(self, message=None):
+        if not self.connected:
+            return
+        self.session.disable_streaming()
+        logger.info("Event streaming disabled")
+
+    # --- Fans / buzzer / alarms / motor-board power ---
+    @require_active_driver
+    def _on_set_fan_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        on = self._msg_to_bool(params.get("on", params.get("value")), default=True)
+        self.session.set_fan(on, board=params.get("board", "motor"))
+
+    @require_active_driver
+    def _on_set_buzzer_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        on = self._msg_to_bool(params.get("on", params.get("value")), default=True)
+        self.session.set_buzzer(on)
+
+    @require_active_driver
+    def _on_clear_alarm_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        board, code = params.get("board"), params.get("code")
+        if not board or not code:
+            logger.error("clear_alarm requires board and code")
+            return
+        ok = self.session.clear_alarm(board, str(code))
+        logger.info(f"Clear alarm {code} on {board}: {'ok' if ok else 'failed'}")
+
+    @require_active_driver
+    def _on_motor_board_power_request(self, message):
+        if not self.connected:
+            return
+        params = self._msg_to_dict(message)
+        on = self._msg_to_bool(params.get("on", params.get("value")), default=True)
+        self.driver.motorBoardPowerCtrl(on)
 
     ################################# Protected methods ######################################
     def _device_found(self, event):

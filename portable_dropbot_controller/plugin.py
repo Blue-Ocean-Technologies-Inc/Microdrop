@@ -38,6 +38,12 @@ class PortDropbotControllerPlugin(Plugin):
                 except Exception as e:
                     logger.warning(f"Monitor scheduler shutdown: {e}")
                 mc.monitor_scheduler = None
+            if getattr(mc, "_task_executor", None) is not None:
+                try:
+                    mc._task_executor.shutdown(wait=False, cancel_futures=True)
+                except Exception as e:
+                    logger.warning(f"Task executor shutdown: {e}")
+                mc._task_executor = None
             if mc.connected:
                 mc.connected = False
                 publish_message("", DROPBOT_DISCONNECTED)
