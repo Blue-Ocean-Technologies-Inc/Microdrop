@@ -55,6 +55,7 @@ from pluggable_protocol_tree.views.protocol_validator_presenter import (
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )
+from pluggable_protocol_tree.views.timeline_bar import TimelineBar
 from pluggable_protocol_tree.views.quick_action_bar import (
     QuickActionBar, QuickActionsController,
 )
@@ -162,6 +163,7 @@ class ProtocolTreePane(QWidget):
 
         self._build_status_bar()
         self._build_navigation_bar()
+        self.timeline_bar = TimelineBar()
         self._build_experiment_bar()
 
         # Quick-actions toolbar (bar + controller). Both are None when no
@@ -251,6 +253,7 @@ class ProtocolTreePane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.navigation_bar)
+        layout.addWidget(self.timeline_bar)
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.widget)

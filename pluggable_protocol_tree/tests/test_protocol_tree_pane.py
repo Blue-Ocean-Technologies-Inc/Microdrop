@@ -1576,3 +1576,16 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
     assert not hasattr(new_step, "unknown_plugin_col")
 
 
+def test_pane_has_timeline_bar_under_nav_bar(qapp):
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+    from pluggable_protocol_tree.views.timeline_bar import TimelineBar
+
+    pane = ProtocolTreePane([make_type_column()])
+    assert isinstance(pane.timeline_bar, TimelineBar)
+
+    layout = pane.layout()
+    nav_idx = layout.indexOf(pane.navigation_bar)
+    timeline_idx = layout.indexOf(pane.timeline_bar)
+    status_idx = layout.indexOf(pane.status_bar)
+    assert nav_idx < timeline_idx < status_idx
