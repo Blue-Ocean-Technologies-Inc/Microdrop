@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Float, Str
+from traits.api import Bool, Dict, Directory, Enum, Float, Str, observe
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, View, Item
 
@@ -109,22 +109,32 @@ class ProtocolPreferences(PreferencesHelper):
     # item): {col_id: display col_name} so the ack-wait grid shows
     # "Electrodes" / "Voltage (V)" while staying keyed by the stable
     # col_id. Refreshed on every seed — display names follow provider
-    # renames, they are not user edits.
+    # renames, they are not user edits. Reverts to
+    # protocol_tree_default_column_names (the default method below) so a
+    # Settings-dialog revert rebuilds the grid with the right display
+    # names alongside the reverted values, instead of blanking them.
     protocol_tree_column_names = Dict(Str, Str)
 
-    # Persisted snapshot of the plugin providers' default_ack_time_s
-    # values ({col_id: seconds}). This is what a Settings-dialog revert
-    # restores: reverting resets protocol_tree_ack_times to its default,
-    # and the default method below reads this trait. Seeding rewrites it
-    # only when the contributed defaults actually differ from what is
-    # stored — the boot-time load of saved USER values never touches it
-    # (a module-global backup tried this before and got overwritten with
+    # Persisted snapshots of the plugin providers' contributed values:
+    # default_ack_time_s ({col_id: seconds}) and display name
+    # ({col_id: col_name}). These are what a Settings-dialog revert
+    # restores: reverting resets protocol_tree_ack_times /
+    # protocol_tree_column_names to their defaults, and the default
+    # methods below read these traits. Seeding rewrites each only when
+    # the contributed values actually differ from what is stored — the
+    # boot-time load of saved USER values never touches them (a
+    # module-global backup tried this before and got overwritten with
     # the user's values on every launch, making revert a no-op).
-    protocol_tree_default_ack_times = Dict(Str, Float)
+    protocol_tree_default_ack_times = Dict(Str, Float, no_revert=True)
+    protocol_tree_default_column_names = Dict(Str, Str, no_revert=True)
 
     def _protocol_tree_ack_times_default(self):
-        # Copy: the snapshot must not alias the live trait dict.
+        # Copy: the live dict must not alias the snapshot dict.
         return dict(self.protocol_tree_default_ack_times)
+
+    def _protocol_tree_column_names_default(self):
+        # Copy: the live dict must not alias the snapshot dict.
+        return dict(self.protocol_tree_default_column_names)
 
     def _PROTOCOL_REPO_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Protocols"
@@ -144,11 +154,13 @@ class ProtocolPreferences(PreferencesHelper):
         A persisted user edit wins over the provider default; entries
         whose key matches no current column are dropped, so the grid
         always mirrors the live column set.
-        ``protocol_tree_default_ack_times`` (the revert snapshot) and
+        ``protocol_tree_default_ack_times`` /
+        ``protocol_tree_default_column_names`` (the revert snapshots) and
         ``protocol_tree_column_names`` (column.id -> display name) are
         rebuilt alongside — provider data, not user edits."""
         default_ack_times = {}
-        column_names = {}
+        default_column_names = {}
+
         for column in columns:
             default_ack_time_s = float(
                 getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
@@ -168,18 +180,22 @@ class ProtocolPreferences(PreferencesHelper):
                 or getattr(column.model, "col_name", "")
                 or (field_specs()[0].col_name if field_specs else column.id)
             )
-            column_names.setdefault(column.id, display_name)
+            default_column_names.setdefault(column.id, display_name)
             default_ack_times[column.id] = default_ack_time_s
+        # User edits win over provider defaults for ack times; display
+        # names are provider-only, so the live map mirrors the defaults.
         ack_times = {
             col_id: self.protocol_tree_ack_times.get(col_id, default_ack_time_s)
             for col_id, default_ack_time_s in default_ack_times.items()
         }
         if default_ack_times != self.protocol_tree_default_ack_times:
             self.protocol_tree_default_ack_times = default_ack_times
+        if default_column_names != self.protocol_tree_default_column_names:
+            self.protocol_tree_default_column_names = default_column_names
         if ack_times != self.protocol_tree_ack_times:
             self.protocol_tree_ack_times = ack_times
-        if column_names != self.protocol_tree_column_names:
-            self.protocol_tree_column_names = column_names
+        if default_column_names != self.protocol_tree_column_names:
+            self.protocol_tree_column_names = default_column_names
 
 
 protocol_tree_tab = PreferencesCategory(
