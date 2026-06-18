@@ -152,11 +152,12 @@ class ElectrodeLayer():
                 connection_item.set_active(color, alpha)
                 connection_item.setZValue(z) # We want to make sure the whole route is on the same z value
             elif connection_alpha > 0:
-                # Base layer: paint every possible connection in white so users can see
-                # where routes can be drawn. A thin line and negative z keep it beneath the
-                # thicker, coloured route segments. get_alpha returns 0 when this layer is hidden.
+                # Base layer: paint every possible connection in white so users can see where
+                # routes can be drawn. z=0 keeps it above the electrode fill (connections are
+                # added to the scene after electrodes) yet beneath the coloured route segments.
+                # get_alpha returns 0 when this layer is hidden.
                 connection_item.set_active(QColor(CONNECTION_LINE_OFF), connection_alpha, width=1, show_arrow=False)
-                connection_item.setZValue(-1)
+                connection_item.setZValue(0)
             else:
                 connection_item.set_inactive()
         
