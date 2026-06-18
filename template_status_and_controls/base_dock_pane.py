@@ -111,6 +111,12 @@ class BaseStatusDockPane(TraitsDockPane):
     # ------------------------------------------------------------------ #
     # Status-bar icon                                                       #
     # ------------------------------------------------------------------ #
+    @observe("model.icon_color", dispatch="ui")
+    def _sync_model_icon_color(self, event):
+        """Keep the icon color in sync with the model's connection state."""
+        if hasattr(self, "status_bar_icon"):
+            self.status_bar_icon.setStyleSheet(f"color: {event.new}")
+
     @observe("task:window:status_bar_manager")
     def _setup_statusbar_icon(self, event):
 
@@ -122,9 +128,6 @@ class BaseStatusDockPane(TraitsDockPane):
         icon = QLabel(ICON_DROP_EC)
         icon.setFont(font)
         icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
-
-        # Keep the icon color in sync with the model's connection state.
-        self.model.observe(lambda e: icon.setStyleSheet(f"color: {e.new}"), "icon_color")
 
         self.status_bar_icon = icon
 
@@ -150,7 +153,8 @@ class BaseStatusDockPane(TraitsDockPane):
             "Click to <b>enable</b> realtime mode",
             "Cannot enable realtime mode. No device <b>connection</b>",
         )
-        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips)
+        realtime_mode_locked_tooltip = "Realtime mode is locked while a <b>protocol</b> is running"
+        self.realtime_mode_icon = ClickableToggleIcon("live_tv", active_inactive_disabled_styles, active_inactive_disabled_tooltips, locked_tooltip=realtime_mode_locked_tooltip)
         self.realtime_mode_icon.setFont(font)
         self.realtime_mode_icon.toggled.connect(lambda is_active: publish_message(topic=SET_REALTIME_MODE, message=str(is_active)))
 
@@ -160,19 +164,22 @@ class BaseStatusDockPane(TraitsDockPane):
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, horizontal_spacer_widget(10))
 
         # initial check: enable / disable icon based on initial connection status
-        self._enable_relatime_icon_based_on_modes()
+        self._enable_realtime_icon_based_on_modes()
 
-    @observe("model.connected")
-    @observe("model.protocol_running")
-    def _enable_relatime_icon_based_on_modes(self, event=None):
-        self.realtime_mode_icon.setEnabled(self.model.connected and not self.model.protocol_running)
+    @observe("model.connected", dispatch="ui")
+    @observe("model.protocol_running", dispatch="ui")
+    def _enable_realtime_icon_based_on_modes(self, event=None):
+        # Disabled (greyed + "no connection" tooltip) reflects connection only.
+        # While connected and a protocol is running, lock the icon instead:
+        # it keeps its normal appearance but is non-interactive.
+        self.realtime_mode_icon.setEnabled(self.model.connected)
+        self.realtime_mode_icon.setLocked(self.model.connected and self.model.protocol_running)
 
     # Sync icon state with model
-    @observe("model.realtime_mode")
+    @observe("model.realtime_mode", dispatch="ui")
     def _sync_realtime_icon(self, event):
         self.realtime_mode_icon.is_active = event.new
         self.realtime_mode_icon.update_style()
-
 
 def _build_status_icon_tooltip(
         disconnected_color,

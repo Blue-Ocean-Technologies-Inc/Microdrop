@@ -572,9 +572,10 @@ class ClickableToggleIcon(QLabel):
     """
     toggled = Signal(bool)
 
-    def __init__(self, icon_str, active_inactive_stylesheets: tuple, active_inactive_tooptips: tuple, parent=None):
+    def __init__(self, icon_str, active_inactive_stylesheets: tuple, active_inactive_tooptips: tuple, locked_tooltip: str = None, parent=None):
         super().__init__(icon_str, parent)
         self.is_active = False
+        self._locked = False
 
         self._active_stylesheet = active_inactive_stylesheets[0]
         self._inactive_stylesheet = active_inactive_stylesheets[1]
@@ -583,6 +584,7 @@ class ClickableToggleIcon(QLabel):
         self._active_tooltip = active_inactive_tooptips[0]
         self._inactive_tooltip = active_inactive_tooptips[1]
         self._disabled_tooltip = active_inactive_tooptips[2] if len(active_inactive_tooptips) > 2 else self._inactive_tooltip
+        self._locked_tooltip = locked_tooltip
 
         self.setCursor(Qt.PointingHandCursor)
         self.update_style()
@@ -591,11 +593,27 @@ class ClickableToggleIcon(QLabel):
 
     def setEnabled(self, enabled):
         super().setEnabled(enabled)
-        self.setCursor(Qt.PointingHandCursor if enabled else Qt.ArrowCursor)
+        self._update_cursor()
         self.update_style()
 
+    def setLocked(self, locked):
+        """Lock the icon: keep its active/inactive appearance but ignore clicks.
+
+        Distinct from disabling — used when the control is temporarily
+        unavailable for a reason other than being offline/greyed-out
+        (e.g. a protocol is running), so greying it out or showing the
+        "disconnected" tooltip would be misleading.
+        """
+        self._locked = locked
+        self._update_cursor()
+        self.update_style()
+
+    def _update_cursor(self):
+        interactive = self.isEnabled() and not self._locked
+        self.setCursor(Qt.PointingHandCursor if interactive else Qt.ArrowCursor)
+
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self.isEnabled():
+        if event.button() == Qt.LeftButton and self.isEnabled() and not self._locked:
             self.is_active = not self.is_active
             self.update_style()
             self.toggled.emit(self.is_active)
@@ -608,6 +626,9 @@ class ClickableToggleIcon(QLabel):
         if not self.isEnabled():
             self.setToolTip(self._disabled_tooltip)
             self.setStyleSheet(self._disabled_stylesheet + _tooltip_style)
+        elif self._locked:
+            self.setToolTip(self._locked_tooltip)
+            self.setStyleSheet((self._active_stylesheet if self.is_active else self._inactive_stylesheet) + _tooltip_style)
         elif self.is_active:
             self.setToolTip(self._active_tooltip)
             self.setStyleSheet(self._active_stylesheet + _tooltip_style)
