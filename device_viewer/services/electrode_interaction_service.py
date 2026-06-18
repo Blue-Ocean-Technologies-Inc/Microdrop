@@ -31,7 +31,7 @@ from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, \
     ElectrodeEndpointItem
 from device_viewer.default_settings import AUTOROUTE_COLOR, electrode_outline_key, \
-    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key
+    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, connections_key
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
@@ -1974,7 +1974,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if changed_key == electrode_text_key:
             self.electrode_channel_change(None)
 
-        if changed_key == routes_key:
+        if changed_key in (routes_key, connections_key):
             self.route_redraw(None)
 
     @observe("model:zoom_in_event", post_init=True)

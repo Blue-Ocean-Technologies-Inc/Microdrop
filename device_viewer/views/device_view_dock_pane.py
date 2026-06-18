@@ -644,6 +644,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
         self.scene.interaction_service.electrode_state_recolor(None)
+        # Paint the white "possible connections" base layer for the freshly loaded device.
+        self.scene.interaction_service.route_redraw(None)
 
         logger.debug(
             f"Setting up handlers for new layer for new electrodes model {new_model}"
