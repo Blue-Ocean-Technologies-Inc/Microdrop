@@ -252,10 +252,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         nb.btn_last.clicked.connect(self.navigate_to_last_step)
 
         # Timeline seek bar: clicks redirect through the status controller; the
-        # model observers below push the playhead position back.
+        # model observers below push the playhead position back. Also follow
+        # direct tree selection moves (clicking a row in the tree) so the
+        # playhead reflects the latest selected step when idle.
         tb = pane.timeline_bar
         tb.step_seek_requested.connect(self._on_timeline_step_seek)
         tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
+        pane.selection_changed.connect(self._refresh_timeline_position)
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
