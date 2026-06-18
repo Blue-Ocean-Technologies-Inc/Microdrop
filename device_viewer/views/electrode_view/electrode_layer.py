@@ -8,8 +8,8 @@ from .electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, Electr
 from .electrode_view_helpers import loop_is_ccw
 from ...default_settings import ROUTE_CW_LOOP, ROUTE_CCW_LOOP, ROUTE_SELECTED, ELECTRODE_CHANNEL_EDITING, ELECTRODE_OFF, \
     ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_DISABLED, PERSPECTIVE_RECT_COLOR, PERSPECTIVE_RECT_COLOR_EDITING, \
-    electrode_outline_key, electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, \
-    hovered_actuation_key, hovered_electrode_key
+    CONNECTION_LINE_OFF, electrode_outline_key, electrode_fill_key, actuated_electrodes_key, electrode_text_key, \
+    routes_key, connections_key, hovered_actuation_key, hovered_electrode_key
 from logger.logger_service import get_logger
 from device_viewer.models.main_model import DeviceViewMainModel
 
@@ -144,12 +144,19 @@ class ElectrodeLayer():
         
         # Apply map
         alpha = model.get_alpha(routes_key)
+        connection_alpha = model.get_alpha(connections_key)
 
         for key, connection_item in self.connection_items.items():
             (color, z) = connection_map.get(key, (None, None))
             if color:
                 connection_item.set_active(color, alpha)
                 connection_item.setZValue(z) # We want to make sure the whole route is on the same z value
+            elif connection_alpha > 0:
+                # Base layer: paint every possible connection in white so users can see
+                # where routes can be drawn. A thin line and negative z keep it beneath the
+                # thicker, coloured route segments. get_alpha returns 0 when this layer is hidden.
+                connection_item.set_active(QColor(CONNECTION_LINE_OFF), connection_alpha, width=1)
+                connection_item.setZValue(-1)
             else:
                 connection_item.set_inactive()
         
