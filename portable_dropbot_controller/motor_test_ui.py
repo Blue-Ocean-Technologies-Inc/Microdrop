@@ -24,6 +24,8 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+from serial.tools import list_ports
+
 # Allow running this script directly: put the package parent on sys.path and
 # import the driver via the installed package (falling back to flat imports
 # when run from inside the package directory).
@@ -77,6 +79,12 @@ class MotorTestUI:
         conn.pack(fill="x", padx=10, pady=3)
         self.status_var = tk.StringVar(value="Disconnected")
         ttk.Label(conn, textvariable=self.status_var, font=("Menlo", 11)).pack(side="left")
+        ttk.Label(conn, text="   Port:").pack(side="left")
+        self.port_var = tk.StringVar(value=PORT)
+        self.port_combo = ttk.Combobox(conn, textvariable=self.port_var, width=26)
+        self.port_combo.pack(side="left", padx=3)
+        ttk.Button(conn, text="↻", width=3, command=self._refresh_ports).pack(side="left")
+        self._refresh_ports()
         ttk.Button(conn, text="Connect", command=self._connect_async).pack(side="right")
         ttk.Button(conn, text="Connect + Home", command=lambda: self._connect_async(home=True)).pack(side="right", padx=3)
         ttk.Button(conn, text="Disconnect", command=self._disconnect).pack(side="right", padx=5)
@@ -209,15 +217,30 @@ class MotorTestUI:
         self.log.see("end")
         self.log.configure(state="disabled")
 
+    def _list_ports(self):
+        """Return the device paths of all currently-attached serial ports."""
+        try:
+            return [p.device for p in list_ports.comports()]
+        except Exception:
+            return []
+
+    def _refresh_ports(self):
+        """Repopulate the port dropdown with live serial ports."""
+        ports = self._list_ports()
+        self.port_combo["values"] = ports
+        if self.port_var.get() not in ports and ports:
+            self.port_var.set(ports[0])
+
     def _connect_async(self, home=False):
         threading.Thread(target=self._connect, args=(home,), daemon=True).start()
 
     def _connect(self, home=False):
         self.status_var.set("Connecting...")
-        self._log(f"Connecting to {PORT}...")
+        port = self.port_var.get()
+        self._log(f"Connecting to {port}...")
         try:
             self.uart = DropletBotUart()
-            self.uart.init(PORT, 115200)
+            self.uart.init(port, 115200)
             time.sleep(2)
             self.proxy = SignalBoardProxy(self.uart)
             self.drv = MotorBoardProxy(self.uart)

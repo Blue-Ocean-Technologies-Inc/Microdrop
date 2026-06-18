@@ -16,6 +16,7 @@ from tkinter import ttk, scrolledtext
 from datetime import datetime
 
 import numpy as np
+from serial.tools import list_ports
 
 # Allow running this script directly: put the package parent on sys.path and
 # import the driver via the installed package (falling back to flat imports
@@ -57,7 +58,10 @@ class CapTestUI:
         conn.pack(fill=tk.X, padx=5, pady=3)
         self.port_var = tk.StringVar(value=PORT)
         ttk.Label(conn, text="Port:").pack(side=tk.LEFT)
-        ttk.Entry(conn, textvariable=self.port_var, width=28).pack(side=tk.LEFT, padx=3)
+        self.port_combo = ttk.Combobox(conn, textvariable=self.port_var, width=28)
+        self.port_combo.pack(side=tk.LEFT, padx=3)
+        ttk.Button(conn, text="↻", width=3, command=self._refresh_ports).pack(side=tk.LEFT)
+        self._refresh_ports()
         self.btn_connect = ttk.Button(conn, text="Connect", command=self._on_connect)
         self.btn_connect.pack(side=tk.LEFT, padx=3)
         self.lbl_status = ttk.Label(conn, text="Disconnected", foreground="red")
@@ -152,6 +156,20 @@ class CapTestUI:
         threading.Thread(target=fn, daemon=True).start()
 
     # ------------------------------------------------------------------ Connection
+    def _list_ports(self):
+        """Return the device paths of all currently-attached serial ports."""
+        try:
+            return [p.device for p in list_ports.comports()]
+        except Exception:
+            return []
+
+    def _refresh_ports(self):
+        """Repopulate the port dropdown with live serial ports."""
+        ports = self._list_ports()
+        self.port_combo["values"] = ports
+        if self.port_var.get() not in ports and ports:
+            self.port_var.set(ports[0])
+
     def _on_connect(self):
         if self._connected:
             self.bot.disconnect()
