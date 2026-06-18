@@ -46,13 +46,27 @@ def test_click_on_step_track_emits_step_seek(qapp):
 
 def test_phase_track_hidden_without_multiple_phases(qapp):
     bar = _bar(qapp)
+    bar.set_running(True)
     bar.set_position(1, 4, 0, 1)  # phase_total == 1 -> no phase track
     assert bar._phase_track_visible() is False
 
 
+def test_phase_track_hidden_when_not_running(qapp):
+    bar = _bar(qapp)
+    bar.set_position(1, 4, 0, 5)  # 5 phases, but idle -> phase track hidden
+    assert bar._phase_track_visible() is False
+    captured = []
+    bar.phase_seek_requested.connect(captured.append)
+    r = bar._phase_track_rect()
+    bar._seek_at_point(QPoint(r.right() - 1, r.center().y()))
+    assert captured == []  # clicks in the phase band don't seek when hidden
+
+
 def test_click_on_phase_track_emits_phase_seek(qapp):
     bar = _bar(qapp)
-    bar.set_position(1, 4, 0, 5)  # current step has 5 phases
+    bar.set_running(True)
+    bar.set_position(1, 4, 0, 5)  # running on a step with 5 phases
+    assert bar._phase_track_visible() is True
     captured = []
     bar.phase_seek_requested.connect(captured.append)
     r = bar._phase_track_rect()

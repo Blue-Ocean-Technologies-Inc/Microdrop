@@ -1,8 +1,9 @@
 """TimelineBar — a video-style seek strip for the pluggable protocol tree.
 
-Pure view: it paints a step track (one tick per navigable step) with a
-playhead, and — only when the current step has more than one phase — a
-secondary phase track beneath it. Clicking either track emits an intent
+Pure view: it paints a step track (one cell per navigable step) with the
+current step highlighted, and — only while a protocol is running and the
+current step has more than one phase — a secondary phase track beneath
+it. Clicking either track emits an intent
 signal; the dock-pane controller translates that into a status-controller
 seek. The widget holds no engine references and never seeks itself.
 
@@ -84,7 +85,9 @@ class TimelineBar(QWidget):
                      self._usable_width(), PHASE_TRACK_BOTTOM - PHASE_TRACK_TOP)
 
     def _phase_track_visible(self):
-        return self._phase_total > 1
+        # Phase scrubbing only makes sense during a run (incl. paused); when
+        # idle the phase track is hidden even on a multi-phase step.
+        return self._running and self._phase_total > 1
 
     def _index_at_x(self, x, count):
         if count <= 0:
