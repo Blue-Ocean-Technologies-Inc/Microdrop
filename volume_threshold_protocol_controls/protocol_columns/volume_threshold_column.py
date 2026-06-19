@@ -65,12 +65,17 @@ from logger.logger_service import get_logger
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
-from dropbot_controller.consts import CAPACITANCE_UPDATED
+from dropbot_controller.consts import (
+    CAPACITANCE_UPDATED, DETECT_DROPLETS, DROPLETS_DETECTED,
+)
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE
 
+from microdrop_application.dialogs.pyface_wrapper import information
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.builtins.routes_column import (
     PHASE_HOLD_REQUESTED_KEY,
 )
+from pluggable_protocol_tree.consts import ELECTRODE_TO_CHANNEL_KEY
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
@@ -80,9 +85,11 @@ from pluggable_protocol_tree.views.columns.spinbox import (
 
 from ..consts import (
     CAP_POLL_TIMEOUT_S, PHASE_POLL_TIMEOUT_S,
+    REWIND_DROPLET_CHECK_TIMEOUT_S,
     VOLUME_THRESHOLD_COL_ID, VOLUME_THRESHOLD_COL_NAME,
     VOLUME_THRESHOLD_DEFAULT,
 )
+from ..rewind import rewind_target_phase, route_channels, step_route_phases
 from ..views.recovery_dialog import show_volume_threshold_recovery_dialog
 
 from microdrop_utils.ureg_helpers import ureg
@@ -184,7 +191,9 @@ class VolumeThresholdHandler(BaseColumnHandler):
     """
 
     priority = 30
-    wait_for_topics = [ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED]
+    # DROPLETS_DETECTED opens a mailbox for the Rewind action's droplet check.
+    wait_for_topics = [ELECTRODES_STATE_CHANGE, CAPACITANCE_UPDATED,
+                       DROPLETS_DETECTED]
 
     def on_pre_step(self, row, ctx):
         """Hook into RoutesHandler's generic phase-hold mechanism.
@@ -390,6 +399,11 @@ class VolumeThresholdHandler(BaseColumnHandler):
             if action == "proceed":
                 ctx.phase_advance_event.set()
                 return percent
+            if action == "rewind":
+                # Droplet-check the route, infer the droplet's phase, and seek
+                # back there (auto-continue) -- or notice + stay paused.
+                self._rewind_to_droplet(ctx, row)
+                return percent
 
             # "retry": apply the new coverage + extension and keep monitoring.
             percent = int(decision.get("new_percent", percent))
@@ -398,6 +412,64 @@ class VolumeThresholdHandler(BaseColumnHandler):
                 actuated_area)
             extend_s = float(decision.get("extend_s", 0.0) or 0.0)
             deadline = time.monotonic() + max(extend_s, 0.0)
+
+    def _rewind_to_droplet(self, ctx, row):
+        """Droplet-check the step's route channels, infer the phase the droplet
+        is at, and seek execution back there so the run continues from it. If
+        the droplet can't be located unambiguously, show a notice and leave the
+        run paused for the operator to decide.
+
+        Uses the proven paused-seek flow (pause -> cursor.request_seek ->
+        resume): RoutesHandler honours the same-step jump on resume. Scoped to
+        static steps -- the dialog hides Rewind in duration mode."""
+        # Keep the run paused while we probe + seek (prompt_gui auto-resumed
+        # when the dialog returned).
+        ctx.protocol.pause()
+        e2c = ctx.protocol.scratch.get(ELECTRODE_TO_CHANNEL_KEY, {}) or {}
+        channels = route_channels(row, e2c)
+        target = None
+        if channels:
+            detected = self._droplet_check(ctx, channels)
+            if detected is not None:
+                target = rewind_target_phase(step_route_phases(row), e2c, detected)
+
+        if target is None:
+            ctx.prompt_gui(lambda: information(
+                None,
+                "Could not locate the droplet on this step's route, so the run "
+                "was not rewound. Resume from the toolbar or choose another "
+                "action.",
+                title="Rewind"))
+            ctx.protocol.pause()      # prompt_gui auto-resumes; stay paused
+            return
+
+        logger.info(f"volume_threshold rewind: seeking to phase {target} of "
+                    f"step {tuple(row.path)}")
+        ctx.protocol.cursor.request_seek(tuple(row.path), int(target))
+        ctx.protocol.resume()         # auto-continue from the located phase
+
+    def _droplet_check(self, ctx, channels):
+        """Request a droplet check across ``channels`` and return the channels
+        with liquid, or None on failure / timeout. Mirrors DropletCheckHandler's
+        request/await pattern."""
+        try:
+            _drain_stale(ctx, DROPLETS_DETECTED)
+            publish_message(topic=DETECT_DROPLETS, message=_json.dumps(channels))
+            raw = ctx.wait_for(DROPLETS_DETECTED,
+                               timeout=REWIND_DROPLET_CHECK_TIMEOUT_S)
+            ack = _json.loads(raw)
+            if not ack.get("success", False):
+                logger.warning("volume_threshold rewind: droplet check "
+                               f"failed: {ack.get('error')}")
+                return None
+            return [int(c) for c in ack.get("detected_channels", [])]
+        except TimeoutError:
+            logger.warning("volume_threshold rewind: droplet check timed out")
+            return None
+        except Exception as e:
+            logger.warning(f"volume_threshold rewind: droplet check error: {e}",
+                           exc_info=True)
+            return None
 
     @staticmethod
     def _monitor_until_threshold(ctx, target, deadline):
