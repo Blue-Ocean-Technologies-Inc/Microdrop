@@ -175,7 +175,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._timeline_base_count = 0
         self._timeline_base_index = 0
         self._timeline_cur_rep = 1
-        self._timeline_context = None
         self._timeline_step_rows = []
 
         self.status_controller = ProtocolStatusController(
@@ -271,7 +270,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
         tb.step_seek_requested.connect(self._on_timeline_step_seek)
         tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
         pane.selection_changed.connect(self._refresh_timeline_position)
-        pane.timeline_rep_combo.currentIndexChanged.connect(self._on_timeline_rep_selected)
+        pane.timeline_step_rep_combo.currentIndexChanged.connect(self._on_timeline_step_rep_selected)
+        pane.timeline_phase_rep_combo.currentIndexChanged.connect(self._on_timeline_phase_rep_selected)
         pane.timeline_show_full_check.toggled.connect(self._on_timeline_show_full_toggled)
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
@@ -412,18 +412,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
         cur = self._current_step_in(steps)
         return steps[cur] if cur is not None else None
 
-    def _timeline_active_context(self, row):
-        """Which rep dimension the controls act on for the current step:
-        'phase' when the step's routes repeat (phase seeks are supported, idle
-        or running), else 'step' when the step itself repeats, else None."""
-        if row is None:
-            return None
-        if int(getattr(row, "route_repetitions", 1) or 1) > 1:
-            return "phase"
-        if int(getattr(row, "repetitions", 1) or 1) > 1:
-            return "step"
-        return None
-
     def _refresh_timeline_position(self):
         tb = getattr(self._pane, "timeline_bar", None)
         if tb is None:
@@ -469,62 +457,57 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._update_timeline_controls(current_row, view)
 
     def _update_timeline_controls(self, current_row, view):
+        # Two independent selectors, side by side: step reps and phase reps.
+        # Each shows when its dimension applies (a step may have both); the row
+        # is visible if either does. Both hide when the full timeline is shown.
         pane = self._pane
-        combo = getattr(pane, "timeline_rep_combo", None)
         controls = getattr(pane, "timeline_controls", None)
         check = getattr(pane, "timeline_show_full_check", None)
-        label = getattr(pane, "timeline_rep_label", None)
-        if combo is None or controls is None or check is None:
+        if controls is None or check is None:
             return
-        context = self._timeline_active_context(current_row)
-        self._timeline_context = context
         model = self.status_controller.model if self.status_controller else None
-        if context == "phase":
-            visible = view["can_collapse"]
-            rep_count = view["rep_count"]
-            cur_rep = view["cur_rep"]
-        elif context == "step":
-            visible = True
-            rep_count = max(1, int(getattr(current_row, "repetitions", 1) or 1))
-            cur_rep = model.step_rep_index if (model and model.step_rep_index > 0) else 1
-        else:
-            visible = False
-            rep_count = 1
-            cur_rep = 1
-        controls.setVisible(visible)
-        if not visible:
-            return
-        combo.blockSignals(True)
-        if combo.count() != rep_count:
-            combo.clear()
-            combo.addItems([f"Rep {i}/{rep_count}" for i in range(1, rep_count + 1)])
-        combo.setCurrentIndex(max(0, min(rep_count - 1, cur_rep - 1)))
-        # Both phase reps and step reps can be jumped to (while paused). The
-        # combo + label hide when the full timeline is shown.
-        combo.setEnabled(True)
-        combo.setVisible(not self._timeline_show_full)
-        if label is not None:
-            label.setVisible(not self._timeline_show_full)
-        combo.blockSignals(False)
+        phase_possible = view["can_collapse"]
+        self._fill_rep_combo(pane.timeline_phase_rep_combo, pane.timeline_phase_rep_label,
+                             phase_possible, view["rep_count"], view["cur_rep"])
+        step_total = (max(1, int(getattr(current_row, "repetitions", 1) or 1))
+                      if current_row is not None else 1)
+        step_cur = model.step_rep_index if (model and model.step_rep_index > 0) else 1
+        step_possible = step_total > 1
+        self._fill_rep_combo(pane.timeline_step_rep_combo, pane.timeline_step_rep_label,
+                             step_possible, step_total, step_cur)
+        controls.setVisible(phase_possible or step_possible)
         check.blockSignals(True)
         check.setChecked(self._timeline_show_full)
         check.blockSignals(False)
 
-    def _on_timeline_rep_selected(self, index):
-        if self._timeline_context == "phase":
-            # Keep the position within the base loop: index*base + base_index is
-            # the absolute phase to seek.
-            if not self._timeline_can_collapse or self._timeline_base_count <= 0:
-                return
-            self._seek_to_phase(index * self._timeline_base_count
-                                + self._timeline_base_index)
-        elif self._timeline_context == "step":
-            row = self._current_step_row()
-            if row is None or self.status_controller is None:
-                return
-            rep_total = max(1, int(getattr(row, "repetitions", 1) or 1))
-            self.status_controller.seek_to_step_rep(
-                tuple(row.path), index + 1, rep_total)
+    def _fill_rep_combo(self, combo, label, possible, rep_count, cur_rep):
+        show = possible and not self._timeline_show_full
+        combo.setVisible(show)
+        label.setVisible(show)
+        if not show:
+            return
+        combo.blockSignals(True)
+        if combo.count() != rep_count:
+            combo.clear()
+            combo.addItems([f"{i}/{rep_count}" for i in range(1, rep_count + 1)])
+        combo.setCurrentIndex(max(0, min(rep_count - 1, cur_rep - 1)))
+        combo.blockSignals(False)
+
+    def _on_timeline_phase_rep_selected(self, index):
+        # Keep the position within the base loop: index*base + base_index is the
+        # absolute phase to seek.
+        if not self._timeline_can_collapse or self._timeline_base_count <= 0:
+            return
+        self._seek_to_phase(index * self._timeline_base_count
+                            + self._timeline_base_index)
+
+    def _on_timeline_step_rep_selected(self, index):
+        row = self._current_step_row()
+        if row is None or self.status_controller is None:
+            return
+        rep_total = max(1, int(getattr(row, "repetitions", 1) or 1))
+        self.status_controller.seek_to_step_rep(
+            tuple(row.path), index + 1, rep_total)
 
     def _on_timeline_show_full_toggled(self, checked):
         # The step track layout (distinct vs per-frame) changes, so rebuild.

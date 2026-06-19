@@ -224,22 +224,27 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar = NavigationBar()
 
     def _build_timeline_controls(self):
-        """Rep selector + 'show full timeline' toggle shown beneath the
-        timeline when the current step has phase repetitions. The dock-pane
-        controller populates, shows/hides, and wires these."""
+        """Step-rep and phase-rep selectors (side by side) + a 'show full
+        timeline' toggle, shown beneath the timeline when the current step has
+        repetitions. The dock-pane controller populates, shows/hides, wires."""
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(6)
-        self.timeline_rep_combo = QComboBox()
-        self.timeline_rep_combo.setToolTip("Jump to a repetition")
-        self.timeline_rep_label = QLabel("Rep")
+        self.timeline_step_rep_label = QLabel("Step Rep")
+        self.timeline_step_rep_combo = QComboBox()
+        self.timeline_step_rep_combo.setToolTip("Jump to a step repetition")
+        self.timeline_phase_rep_label = QLabel("Phase Rep")
+        self.timeline_phase_rep_combo = QComboBox()
+        self.timeline_phase_rep_combo.setToolTip("Jump to a phase repetition")
         self.timeline_show_full_check = QCheckBox("Show full timeline")
         self.timeline_show_full_check.setToolTip(
             "Show every phase/step across all repetitions instead of a "
             "collapsed base loop")
-        layout.addWidget(self.timeline_rep_label)
-        layout.addWidget(self.timeline_rep_combo)
+        layout.addWidget(self.timeline_step_rep_label)
+        layout.addWidget(self.timeline_step_rep_combo)
+        layout.addWidget(self.timeline_phase_rep_label)
+        layout.addWidget(self.timeline_phase_rep_combo)
         layout.addWidget(self.timeline_show_full_check)
         layout.addStretch()
         row.setVisible(False)
