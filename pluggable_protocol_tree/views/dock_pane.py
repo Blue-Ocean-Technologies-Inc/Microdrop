@@ -385,7 +385,16 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         row = rows[step_index]
         sc = self.status_controller
-        if sc is not None and sc.model.running and not sc.model.paused:
+        if self._timeline_show_full and sc is not None:
+            # Frames view: the cell index IS the execution-frame index, so seek
+            # to that exact repetition frame (not just its path).
+            self._pane.select_row(row)
+            self._current_row = row
+            path = tuple(row.path)
+            sc.seek_to_frame(path, step_index)
+            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._refresh_timeline_position()
+        elif sc is not None and sc.model.running and not sc.model.paused:
             # B1: preview-only while actively running. Move the selection and
             # preview the target; the executor reasserts at the next boundary.
             self._seek_and_preview_step(row)
@@ -469,8 +478,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         phase_possible = view["can_collapse"]
         self._fill_rep_combo(pane.timeline_phase_rep_combo, pane.timeline_phase_rep_label,
                              phase_possible, view["rep_count"], view["cur_rep"])
-        step_total = (max(1, int(getattr(current_row, "repetitions", 1) or 1))
-                      if current_row is not None else 1)
+        step_reps_attr = (max(1, int(getattr(current_row, "repetitions", 1) or 1))
+                          if current_row is not None else 1)
+        # The running rep count comes from the executor's rep_chain (covers a
+        # repeated GROUP, whose step's own ``repetitions`` is 1); the trait is
+        # the idle fallback for a directly-repeated step.
+        model_total = model.step_rep_total if model else 0
+        step_total = max(step_reps_attr, model_total)
         step_cur = model.step_rep_index if (model and model.step_rep_index > 0) else 1
         step_possible = step_total > 1
         self._fill_rep_combo(pane.timeline_step_rep_combo, pane.timeline_step_rep_label,
@@ -1031,6 +1045,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _on_names_changed(self, event=None):
         model = self.status_controller.model
         self._pane.status_bar._refresh_names(model.recent_step_name, model.next_step_name, model.rep_chain_label)
+        # rep_chain_label changes on every repetition (step or group), so this
+        # reliably advances the Step Rep combo even when no step/phase counter
+        # moved (a no-phase repeated step).
+        self._refresh_timeline_position()
 
     @observe("status_controller:model:running", dispatch="ui", post_init=True)
     def _on_protocol_running_changed(self, event):

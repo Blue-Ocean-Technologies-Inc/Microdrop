@@ -305,6 +305,24 @@ class ProtocolStatusController(HasTraits):
                     return i
         return None
 
+    def seek_to_frame(self, step_path, frame_index):
+        """Seek (while paused) to an exact execution frame -- used by the
+        full-view step timeline, where each cell is one frame. The executor
+        honours it on resume; the model's frame/step-rep are set optimistically
+        so the view follows the drag immediately."""
+        target = tuple(step_path)
+        if self.executor is not None:
+            self.executor.seek(target, 0, frame_index=int(frame_index))
+        rep = 0
+        total = 0
+        for i, (row, _chain) in enumerate(self.manager.iter_execution_frames()):
+            if tuple(row.path) == target:
+                total += 1
+                if i <= frame_index:
+                    rep = total
+        self.model.frame_index = int(frame_index) + 1
+        self.model.set_step_rep(rep, total)
+
     def seek_to_step_rep(self, step_path, rep, rep_total):
         """Seek (while paused) to repetition ``rep`` (1-based) of the step at
         ``step_path`` -- a specific execution frame. The executor honours it on
