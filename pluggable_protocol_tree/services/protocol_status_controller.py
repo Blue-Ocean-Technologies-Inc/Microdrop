@@ -189,15 +189,18 @@ class ProtocolStatusController(HasTraits):
         return None
 
     @staticmethod
-    def _phases_for(row):
+    def _phases_for(row, n_repeats=None):
         """Materialized phase sequence for a row, mirroring the executor's
         iter_phases call (count/fixed steps). [] on failure. Duration-mode
-        precise phases are deferred (#477)."""
+        precise phases are deferred (#477). Pass ``n_repeats`` to override the
+        row's route_repetitions (e.g. 1 for a single base loop)."""
         try:
             in_duration_mode = (
                 bool(getattr(row, "repeat_duration_controls", False))
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
             )
+            reps = (int(getattr(row, "route_repetitions", 1))
+                    if n_repeats is None else int(n_repeats))
             return list(iter_phases(
                 static_electrodes=list(getattr(row, "electrodes", []) or []),
                 routes=list(getattr(row, "routes", []) or []),
@@ -208,7 +211,7 @@ class ProtocolStatusController(HasTraits):
                 repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
                                    if in_duration_mode else 0.0),
                 linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=int(getattr(row, "route_repetitions", 1)),
+                n_repeats=reps,
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
         except Exception:
@@ -216,6 +219,11 @@ class ProtocolStatusController(HasTraits):
 
     def _phase_total_for(self, row):
         return max(1, len(self._phases_for(row)))
+
+    def _base_phase_total_for(self, row):
+        """Phase count for ONE route loop (n_repeats=1) -- the base loop a
+        route-repeated step cycles through."""
+        return max(1, len(self._phases_for(row, n_repeats=1)))
 
     def preview_phase(self, step_path, phase_index, preview):
         """Publish the selected phase's electrodes to the DV overlay (always)

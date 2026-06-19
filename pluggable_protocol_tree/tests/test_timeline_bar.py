@@ -9,10 +9,9 @@ from pluggable_protocol_tree.views.timeline_bar import (
 )
 
 
-def test_collapse_phase_view_collapses_even_reps():
-    # 12 phases = 3 reps x 4 base phases; at full index 6 we're in rep 2,
-    # base position 2.
-    v = collapse_phase_view(12, 6, 3, show_full=False)
+def test_collapse_phase_view_collapses_with_base_loop():
+    # base loop = 4 phases, 3 reps; at full index 6 we're in rep 2, base pos 2.
+    v = collapse_phase_view(12, 6, 4, 3, show_full=False)
     assert v["can_collapse"] is True
     assert v["phase_total"] == 4          # one base loop
     assert v["phase_index"] == 2          # position within the loop
@@ -21,21 +20,31 @@ def test_collapse_phase_view_collapses_even_reps():
     assert v["rep_count"] == 3
 
 
+def test_collapse_phase_view_handles_uneven_full_count():
+    # Ramp phases make the full count not a multiple of reps (53 != 5*10):
+    # collapse still applies off the real base-loop size.
+    v = collapse_phase_view(53, 7, 5, 10, show_full=False)
+    assert v["can_collapse"] is True
+    assert v["phase_total"] == 5
+    assert v["phase_index"] == 2          # 7 % 5
+    assert v["cur_rep"] == 2              # 7 // 5 + 1
+
+
 def test_collapse_phase_view_show_full_expands():
-    v = collapse_phase_view(12, 6, 3, show_full=True)
+    v = collapse_phase_view(12, 6, 4, 3, show_full=True)
     assert v["can_collapse"] is True      # controls still apply
     assert v["phase_total"] == 12         # but every phase is shown
     assert v["phase_index"] == 6
     assert v["cur_rep"] == 2
 
 
-def test_collapse_phase_view_no_collapse_when_uneven_or_single_base():
-    # Not divisible by reps -> no collapse (e.g. soft-start ramp phases).
-    assert collapse_phase_view(13, 0, 3, show_full=False)["can_collapse"] is False
-    # Divisible but only 1 base phase per rep -> not worth collapsing.
-    assert collapse_phase_view(3, 0, 3, show_full=False)["can_collapse"] is False
+def test_collapse_phase_view_no_collapse_edge_cases():
+    # Base loop of a single phase -> not worth collapsing.
+    assert collapse_phase_view(8, 0, 1, 4, show_full=False)["can_collapse"] is False
     # No reps -> no collapse.
-    assert collapse_phase_view(8, 0, 1, show_full=False)["can_collapse"] is False
+    assert collapse_phase_view(8, 0, 8, 1, show_full=False)["can_collapse"] is False
+    # Fewer phases than one base loop -> no collapse.
+    assert collapse_phase_view(3, 0, 5, 3, show_full=False)["can_collapse"] is False
 
 WIDTH = 400
 
@@ -76,27 +85,24 @@ def test_click_on_step_track_emits_step_seek(qapp):
 
 
 def test_phase_track_hidden_without_multiple_phases(qapp):
+    # Visibility is purely phase_total > 1 now; the controller feeds 0/1 to
+    # hide the track (e.g. idle on a non-repeating step).
     bar = _bar(qapp)
-    bar.set_running(True)
     bar.set_position(1, 4, 0, 1)  # phase_total == 1 -> no phase track
     assert bar._phase_track_visible() is False
-
-
-def test_phase_track_hidden_when_not_running(qapp):
-    bar = _bar(qapp)
-    bar.set_position(1, 4, 0, 5)  # 5 phases, but idle -> phase track hidden
+    bar.set_position(1, 4, 0, 0)  # phase_total == 0 (hidden by controller)
     assert bar._phase_track_visible() is False
-    captured = []
-    bar.phase_seek_requested.connect(captured.append)
-    r = bar._phase_track_rect()
-    bar._seek_at_point(QPoint(r.right() - 1, r.center().y()))
-    assert captured == []  # clicks in the phase band don't seek when hidden
+
+
+def test_phase_track_visible_with_multiple_phases(qapp):
+    bar = _bar(qapp)
+    bar.set_position(1, 4, 0, 5)  # 5 phases handed in -> track shows
+    assert bar._phase_track_visible() is True
 
 
 def test_click_on_phase_track_emits_phase_seek(qapp):
     bar = _bar(qapp)
-    bar.set_running(True)
-    bar.set_position(1, 4, 0, 5)  # running on a step with 5 phases
+    bar.set_position(1, 4, 0, 5)  # step with 5 phases
     assert bar._phase_track_visible() is True
     captured = []
     bar.phase_seek_requested.connect(captured.append)

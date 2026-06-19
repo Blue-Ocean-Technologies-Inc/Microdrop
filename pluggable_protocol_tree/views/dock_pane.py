@@ -414,12 +414,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     def _timeline_active_context(self, row):
         """Which rep dimension the controls act on for the current step:
-        'phase' while running on a step whose routes repeat (seek supported),
-        else 'step' when the step itself repeats, else None."""
-        if row is None or self.status_controller is None:
+        'phase' when the step's routes repeat (phase seeks are supported, idle
+        or running), else 'step' when the step itself repeats, else None."""
+        if row is None:
             return None
-        running = bool(self.status_controller.model.running)
-        if running and int(getattr(row, "route_repetitions", 1) or 1) > 1:
+        if int(getattr(row, "route_repetitions", 1) or 1) > 1:
             return "phase"
         if int(getattr(row, "repetitions", 1) or 1) > 1:
             return "step"
@@ -444,6 +443,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         full_count = 0
         full_index = 0
         rep_count = 1
+        base_count = 0
         if current_row is not None and model is not None:
             on_current = (model.current_step_path is not None
                           and tuple(model.current_step_path) == tuple(current_row.path))
@@ -453,14 +453,19 @@ class PluggableProtocolDockPane(TraitsDockPane):
             else:
                 full_count = sc._phase_total_for(current_row)
             rep_count = max(1, int(getattr(current_row, "route_repetitions", 1) or 1))
-        view = collapse_phase_view(full_count, full_index, rep_count,
+            base_count = sc._base_phase_total_for(current_row) if rep_count > 1 else full_count
+        view = collapse_phase_view(full_count, full_index, base_count, rep_count,
                                    self._timeline_show_full)
         self._timeline_can_collapse = view["can_collapse"]
         self._timeline_base_count = view["base_count"]
         self._timeline_base_index = view["base_index"]
         self._timeline_cur_rep = view["cur_rep"]
+        # Show the phase track while running, or idle on a collapsible repeat
+        # step so its base loop + rep controls are visible without running.
+        show_phase = running or view["can_collapse"]
+        phase_total = view["phase_total"] if show_phase else 0
         tb.set_position(cur if cur is not None else -1, len(rows),
-                        view["phase_index"], view["phase_total"])
+                        view["phase_index"], phase_total)
         self._update_timeline_controls(current_row, view)
 
     def _update_timeline_controls(self, current_row, view):

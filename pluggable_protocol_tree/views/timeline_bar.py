@@ -40,12 +40,13 @@ GROUP_TINT_ALPHA = 60
 DRAG_THROTTLE_MS = 75
 
 
-def collapse_phase_view(full_count, full_index, rep_count, show_full):
+def collapse_phase_view(full_count, full_index, base_count, rep_count, show_full):
     """Collapse route-repeat phases to one base loop + a repetition number.
 
-    Given a step's full phase count and 0-based index plus its phase-rep count,
-    decide whether the phases collapse to a single base loop (they do only when
-    the count divides evenly into >= 2 base phases per rep). Returns a dict:
+    ``base_count`` is the size of one route loop (computed once with
+    n_repeats=1, so soft-start/trail ramps are handled rather than assuming the
+    full count divides evenly). Collapsing applies when the step repeats
+    (rep_count > 1) and the base loop has >= 2 phases. Returns a dict:
       phase_total / phase_index -- what to feed TimelineBar.set_position
       can_collapse              -- whether the rep controls apply at all
       base_count / base_index   -- one base loop's size and the position in it
@@ -54,14 +55,12 @@ def collapse_phase_view(full_count, full_index, rep_count, show_full):
     every rep is shown at once.
     """
     rep_count = max(1, int(rep_count))
-    can_collapse = (rep_count > 1 and full_count > 0
-                    and full_count % rep_count == 0
-                    and full_count // rep_count >= 2)
+    base_count = int(base_count)
+    can_collapse = rep_count > 1 and base_count >= 2 and full_count >= base_count
     if not can_collapse:
         return dict(phase_total=full_count, phase_index=full_index,
                     can_collapse=False, base_count=full_count,
                     base_index=full_index, cur_rep=1, rep_count=rep_count)
-    base_count = full_count // rep_count
     base_index = full_index % base_count
     cur_rep = min(rep_count, full_index // base_count + 1)
     collapsed = not show_full
@@ -161,9 +160,10 @@ class TimelineBar(QWidget):
                      self._usable_width(), PHASE_TRACK_BOTTOM - PHASE_TRACK_TOP)
 
     def _phase_track_visible(self):
-        # Phase scrubbing only makes sense during a run (incl. paused); when
-        # idle the phase track is hidden even on a multi-phase step.
-        return self._running and self._phase_total > 1
+        # Visibility policy lives in the controller (it knows run state + reps);
+        # the widget simply shows the phase track whenever it is given >1 phase.
+        # The controller feeds phase_total=0 when the track should be hidden.
+        return self._phase_total > 1
 
     def _index_at_x(self, x, count):
         if count <= 0:
