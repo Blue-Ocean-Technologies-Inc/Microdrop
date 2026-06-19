@@ -40,6 +40,38 @@ GROUP_TINT_ALPHA = 60
 DRAG_THROTTLE_MS = 75
 
 
+def collapse_phase_view(full_count, full_index, rep_count, show_full):
+    """Collapse route-repeat phases to one base loop + a repetition number.
+
+    Given a step's full phase count and 0-based index plus its phase-rep count,
+    decide whether the phases collapse to a single base loop (they do only when
+    the count divides evenly into >= 2 base phases per rep). Returns a dict:
+      phase_total / phase_index -- what to feed TimelineBar.set_position
+      can_collapse              -- whether the rep controls apply at all
+      base_count / base_index   -- one base loop's size and the position in it
+      cur_rep / rep_count       -- 1-based current rep and the total
+    ``show_full`` keeps can_collapse True but expands the displayed phases so
+    every rep is shown at once.
+    """
+    rep_count = max(1, int(rep_count))
+    can_collapse = (rep_count > 1 and full_count > 0
+                    and full_count % rep_count == 0
+                    and full_count // rep_count >= 2)
+    if not can_collapse:
+        return dict(phase_total=full_count, phase_index=full_index,
+                    can_collapse=False, base_count=full_count,
+                    base_index=full_index, cur_rep=1, rep_count=rep_count)
+    base_count = full_count // rep_count
+    base_index = full_index % base_count
+    cur_rep = min(rep_count, full_index // base_count + 1)
+    collapsed = not show_full
+    return dict(
+        phase_total=base_count if collapsed else full_count,
+        phase_index=base_index if collapsed else full_index,
+        can_collapse=True, base_count=base_count, base_index=base_index,
+        cur_rep=cur_rep, rep_count=rep_count)
+
+
 class TimelineBar(QWidget):
     step_seek_requested = Signal(int)
     phase_seek_requested = Signal(int)

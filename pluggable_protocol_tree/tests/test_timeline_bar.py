@@ -4,7 +4,38 @@ step_seek_requested / phase_seek_requested when the user clicks a track.
 It holds no engine references and performs no seeking itself."""
 
 from pyface.qt.QtCore import QPoint
-from pluggable_protocol_tree.views.timeline_bar import SIDE_MARGIN, TimelineBar
+from pluggable_protocol_tree.views.timeline_bar import (
+    SIDE_MARGIN, TimelineBar, collapse_phase_view,
+)
+
+
+def test_collapse_phase_view_collapses_even_reps():
+    # 12 phases = 3 reps x 4 base phases; at full index 6 we're in rep 2,
+    # base position 2.
+    v = collapse_phase_view(12, 6, 3, show_full=False)
+    assert v["can_collapse"] is True
+    assert v["phase_total"] == 4          # one base loop
+    assert v["phase_index"] == 2          # position within the loop
+    assert v["base_count"] == 4
+    assert v["cur_rep"] == 2
+    assert v["rep_count"] == 3
+
+
+def test_collapse_phase_view_show_full_expands():
+    v = collapse_phase_view(12, 6, 3, show_full=True)
+    assert v["can_collapse"] is True      # controls still apply
+    assert v["phase_total"] == 12         # but every phase is shown
+    assert v["phase_index"] == 6
+    assert v["cur_rep"] == 2
+
+
+def test_collapse_phase_view_no_collapse_when_uneven_or_single_base():
+    # Not divisible by reps -> no collapse (e.g. soft-start ramp phases).
+    assert collapse_phase_view(13, 0, 3, show_full=False)["can_collapse"] is False
+    # Divisible but only 1 base phase per rep -> not worth collapsing.
+    assert collapse_phase_view(3, 0, 3, show_full=False)["can_collapse"] is False
+    # No reps -> no collapse.
+    assert collapse_phase_view(8, 0, 1, show_full=False)["can_collapse"] is False
 
 WIDTH = 400
 

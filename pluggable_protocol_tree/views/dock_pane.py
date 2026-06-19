@@ -50,6 +50,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
+from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
 from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -166,6 +167,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # The dock pane is the composition root: it owns the executor, the
         # status controller (executor signals -> status model), the logging
         # controller, and all run control. The pane is a pure view.
+        # Timeline phase-rep collapse state (set before the controller so a
+        # model observer firing on assignment finds it). Collapsed by default:
+        # the phase track shows one base loop and the Rep combo picks the rep.
+        self._timeline_show_full = False
+        self._timeline_can_collapse = False
+        self._timeline_base_count = 0
+        self._timeline_base_index = 0
+        self._timeline_cur_rep = 1
+
         self.status_controller = ProtocolStatusController(
             manager=self.manager,
             executor=self.executor,
@@ -259,6 +269,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
         tb.step_seek_requested.connect(self._on_timeline_step_seek)
         tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
         pane.selection_changed.connect(self._refresh_timeline_position)
+        pane.timeline_rep_combo.currentIndexChanged.connect(self._on_timeline_rep_selected)
+        pane.timeline_show_full_check.toggled.connect(self._on_timeline_show_full_toggled)
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
@@ -381,7 +393,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._select_step(row)
 
     def _on_timeline_phase_seek(self, phase_index):
-        # The bar emits a 0-based phase index, exactly what _seek_to_phase wants.
+        # The bar emits a 0-based phase index within whatever it is showing.
+        # When collapsed, that is an index into the base loop -> map it into the
+        # current repetition; otherwise it is already the absolute phase.
+        if self._timeline_can_collapse and not self._timeline_show_full:
+            phase_index = ((self._timeline_cur_rep - 1) * self._timeline_base_count
+                           + phase_index)
         self._seek_to_phase(phase_index)
 
     # --- timeline seek bar (model -> view) ---------------------------
@@ -393,24 +410,69 @@ class PluggableProtocolDockPane(TraitsDockPane):
         steps = self._pane._navigable_steps()
         cur = self._current_step_in(steps)
         sc = self.status_controller
-        phase_index0 = 0
-        phase_total = 0
+        full_count = 0
+        full_index = 0
+        rep_count = 1
         if cur is not None and sc is not None:
+            row = steps[cur]
             model = sc.model
             on_current_step = (
                 model.current_step_path is not None
-                and tuple(model.current_step_path) == tuple(steps[cur].path)
+                and tuple(model.current_step_path) == tuple(row.path)
             )
             if on_current_step and model.phase_total > 0:
                 # Executing/paused on this step: the model holds the live counts.
-                phase_total = model.phase_total
-                phase_index0 = max(0, model.phase_index - 1)
+                full_count = model.phase_total
+                full_index = max(0, model.phase_index - 1)
             else:
                 # Idle or merely selected: derive the step's phase count so its
                 # phase ticks still show even though no run is driving the model.
-                phase_total = sc._phase_total_for(steps[cur])
+                full_count = sc._phase_total_for(row)
+            rep_count = max(1, int(getattr(row, "route_repetitions", 1) or 1))
+        view = collapse_phase_view(full_count, full_index, rep_count,
+                                   self._timeline_show_full)
+        self._timeline_can_collapse = view["can_collapse"]
+        self._timeline_base_count = view["base_count"]
+        self._timeline_base_index = view["base_index"]
+        self._timeline_cur_rep = view["cur_rep"]
         tb.set_position(cur if cur is not None else -1, len(steps),
-                        phase_index0, phase_total)
+                        view["phase_index"], view["phase_total"])
+        self._update_timeline_controls(view)
+
+    def _update_timeline_controls(self, view):
+        pane = self._pane
+        combo = getattr(pane, "timeline_rep_combo", None)
+        controls = getattr(pane, "timeline_controls", None)
+        check = getattr(pane, "timeline_show_full_check", None)
+        if combo is None or controls is None or check is None:
+            return
+        running = bool(self.status_controller.model.running) if self.status_controller else False
+        # The phase-rep controls only matter during a run on a collapsible step.
+        controls.setVisible(view["can_collapse"] and running)
+        if not (view["can_collapse"] and running):
+            return
+        rep_count = view["rep_count"]
+        combo.blockSignals(True)
+        if combo.count() != rep_count:
+            combo.clear()
+            combo.addItems([f"Rep {i}/{rep_count}" for i in range(1, rep_count + 1)])
+        combo.setCurrentIndex(max(0, min(rep_count - 1, view["cur_rep"] - 1)))
+        combo.blockSignals(False)
+        check.blockSignals(True)
+        check.setChecked(self._timeline_show_full)
+        check.blockSignals(False)
+
+    def _on_timeline_rep_selected(self, index):
+        # Jump to repetition (index+1), keeping the current position within the
+        # base loop. index*base + base_index is the absolute phase to seek.
+        if not self._timeline_can_collapse or self._timeline_base_count <= 0:
+            return
+        self._seek_to_phase(index * self._timeline_base_count
+                            + self._timeline_base_index)
+
+    def _on_timeline_show_full_toggled(self, checked):
+        self._timeline_show_full = bool(checked)
+        self._refresh_timeline_position()
 
     def _rebuild_timeline(self, event=None):
         tb = getattr(self._pane, "timeline_bar", None)
@@ -924,6 +986,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         tb = getattr(self._pane, "timeline_bar", None)
         if tb is not None:
             tb.set_running(bool(event.new))
+            self._refresh_timeline_position()  # show/hide rep controls
         sched = self._protocol_poll_scheduler
         if sched is None:
             return
