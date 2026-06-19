@@ -46,8 +46,11 @@ def test_off_route_only_returns_none():
     assert rewind_target_phase(_PHASES_T1, E2C, [99]) is None
 
 
-def test_multiple_distinct_on_route_channels_are_ambiguous():
-    assert rewind_target_phase(_PHASES_T1, E2C, [11, 13]) is None
+def test_multiple_channels_rewind_to_furthest_leading_edge():
+    # A droplet spanning electrodes lights up several channels; rewind to the
+    # furthest one along the route (channel 13 -> phase 3), its leading edge.
+    assert rewind_target_phase(_PHASES_T1, E2C, [11, 13]) == 3
+    assert rewind_target_phase(_PHASES_T1, E2C, [10, 11, 12]) == 2
 
 
 def test_leading_edge_with_trail_window():

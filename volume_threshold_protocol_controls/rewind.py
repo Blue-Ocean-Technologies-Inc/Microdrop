@@ -57,10 +57,11 @@ def rewind_target_phase(phases, electrode_to_channel,
     ``phases`` is the ordered list of electrode-id sets (``step_route_phases``).
     Each detected channel is translated back to the route and resolved to the
     phase where it FIRST appears -- its leading-edge phase (for ``trail_length``
-    1 this is just the phase that actuates it). Returns that index only when all
-    on-route detected channels resolve to a SINGLE phase; returns None when no
-    detected channel lies on the route, or they map to more than one phase
-    (ambiguous -- the caller shows a notice and does not rewind)."""
+    1 this is just the phase that actuates it). A droplet commonly spans several
+    electrodes, so multiple channels light up; rewind to the FURTHEST one along
+    the route -- the droplet's leading edge -- so the run resumes from where the
+    droplet actually reached. Returns None only when no detected channel lies on
+    this route (the caller shows a notice and does not rewind)."""
     detected = {int(c) for c in detected_channels}
     if not detected:
         return None
@@ -76,6 +77,6 @@ def rewind_target_phase(phases, electrode_to_channel,
             if channel in cp and (index == 0 or channel not in chan_phases[index - 1]):
                 targets.add(index)
                 break
-    if len(targets) != 1:
+    if not targets:
         return None
-    return next(iter(targets))
+    return max(targets)
