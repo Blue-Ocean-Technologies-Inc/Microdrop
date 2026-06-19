@@ -417,8 +417,21 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if tb is None:
             return
         steps = self._pane._navigable_steps()
-        tb.rebuild([(row.name or row.dotted_path()) for row in steps])
+        labels = [(row.name or row.dotted_path()) for row in steps]
+        group_keys = [self._group_key_for(row) for row in steps]
+        tb.rebuild(labels, group_keys)
         self._refresh_timeline_position()
+
+    @staticmethod
+    def _group_key_for(row):
+        """Identity of the step's containing group for timeline tinting: the
+        parent group's path, or None for a top-level step (parent is the root
+        group, whose path is empty)."""
+        parent = getattr(row, "parent", None)
+        if parent is None:
+            return None
+        parent_path = tuple(parent.path)
+        return parent_path or None
 
     def _update_phase_nav_buttons(self):
         m = self.status_controller.model if self.status_controller else None

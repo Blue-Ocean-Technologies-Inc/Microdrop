@@ -4,7 +4,7 @@ step_seek_requested / phase_seek_requested when the user clicks a track.
 It holds no engine references and performs no seeking itself."""
 
 from pyface.qt.QtCore import QPoint
-from pluggable_protocol_tree.views.timeline_bar import TimelineBar
+from pluggable_protocol_tree.views.timeline_bar import SIDE_MARGIN, TimelineBar
 
 WIDTH = 400
 
@@ -91,3 +91,25 @@ def test_set_running_does_not_break_interaction(qapp):
     r = bar._step_track_rect()
     bar._seek_at_point(QPoint(r.left() + 1, r.center().y()))
     assert captured == [0]
+
+
+def test_group_cells_get_alternating_colors(qapp):
+    bar = TimelineBar()
+    bar.rebuild(["A", "B", "C", "D"], group_keys=[None, (1,), (1,), (2,)])
+    assert bar._cell_colors[0] is None                  # ungrouped step
+    assert bar._cell_colors[1] == bar._cell_colors[2]   # same group -> same colour
+    assert bar._cell_colors[1] != bar._cell_colors[3]   # different group -> different
+
+
+def test_drag_moves_relative_to_current_step(qapp):
+    bar = _bar(qapp)
+    bar.set_position(1, 4, 0, 0)   # current step index 1 (the drag anchor)
+    captured = []
+    bar.step_seek_requested.connect(captured.append)
+    y = bar._step_track_rect().center().y()
+    seg = bar._usable_width() / bar.step_count
+    bar._begin_drag(QPoint(int(SIDE_MARGIN + 0.5 * seg), y))
+    # Drag right by ~2 cells from the press point -> anchor 1 + 2 = 3,
+    # regardless of which absolute cell the cursor is over.
+    bar._drag_update(QPoint(int(SIDE_MARGIN + 2.5 * seg), y))
+    assert captured[-1] == 3
