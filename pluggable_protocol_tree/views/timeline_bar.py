@@ -35,6 +35,10 @@ PHASE_TRACK_BOTTOM = 29
 GROUP_PALETTE = ("#4F9DDE", "#E0A23B", "#5FBF77", "#C56BD6", "#E06C75", "#46B5A8")
 GROUP_TINT_ALPHA = 60
 
+# Minimum gap between drag-seek emits, so a fast scrub steps through cells at a
+# steady rate instead of firing a burst that visually skips steps/phases.
+DRAG_THROTTLE_MS = 75
+
 
 class TimelineBar(QWidget):
     step_seek_requested = Signal(int)
@@ -62,7 +66,12 @@ class TimelineBar(QWidget):
         self._drag_press_x = 0
         self._drag_anchor_index = 0
         self._drag_moved = False
-        self._drag_last_target = None
+        self._pending_target = None
+        self._emitted_target = None
+        self._drag_throttle = QTimer(self)
+        self._drag_throttle.setSingleShot(True)
+        self._drag_throttle.setInterval(DRAG_THROTTLE_MS)
+        self._drag_throttle.timeout.connect(self._on_throttle_timeout)
 
         QApplication.styleHints().colorSchemeChanged.connect(
             self._on_color_scheme_changed,
@@ -166,6 +175,12 @@ class TimelineBar(QWidget):
             if not self._drag_moved:
                 # A press with no drag is a plain click: jump to that cell.
                 self._seek_at_point(self._event_point(event))
+            else:
+                # Flush the final drag position immediately on release.
+                self._drag_throttle.stop()
+                if (self._pending_target is not None
+                        and self._pending_target != self._emitted_target):
+                    self._emit_target(self._pending_target)
             self._drag_track = None
         super().mouseReleaseEvent(event)
 
@@ -183,7 +198,8 @@ class TimelineBar(QWidget):
             return
         self._drag_press_x = point.x()
         self._drag_moved = False
-        self._drag_last_target = None
+        self._pending_target = None
+        self._emitted_target = None
 
     def _drag_update(self, point):
         count = self._phase_total if self._drag_track == "phase" else self.step_count
@@ -195,9 +211,24 @@ class TimelineBar(QWidget):
             self._drag_moved = True
         anchor = self._drag_anchor_index if self._drag_anchor_index >= 0 else 0
         target = max(0, min(count - 1, anchor + delta))
-        if target == self._drag_last_target:
-            return
-        self._drag_last_target = target
+        self._request_seek(target)
+
+    def _request_seek(self, target):
+        # Throttle: emit the first change immediately (responsive), then at most
+        # one emit per DRAG_THROTTLE_MS while the drag keeps changing.
+        self._pending_target = target
+        if not self._drag_throttle.isActive():
+            self._emit_target(target)
+            self._drag_throttle.start()
+
+    def _on_throttle_timeout(self):
+        if (self._pending_target is not None
+                and self._pending_target != self._emitted_target):
+            self._emit_target(self._pending_target)
+            self._drag_throttle.start()   # keep pacing while the drag advances
+
+    def _emit_target(self, target):
+        self._emitted_target = target
         if self._drag_track == "phase":
             self.phase_seek_requested.emit(target)
         else:
