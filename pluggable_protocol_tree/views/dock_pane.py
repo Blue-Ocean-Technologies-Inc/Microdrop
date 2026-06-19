@@ -514,14 +514,22 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         self._seek_to_phase(index * self._timeline_base_count
                             + self._timeline_base_index)
+        # Refresh the status bar's phase readout now, not on the next play.
+        self._update_protocol_time()
 
     def _on_timeline_step_rep_selected(self, index):
         row = self._current_step_row()
-        if row is None or self.status_controller is None:
+        sc = self.status_controller
+        if row is None or sc is None:
             return
-        rep_total = max(1, int(getattr(row, "repetitions", 1) or 1))
-        self.status_controller.seek_to_step_rep(
-            tuple(row.path), index + 1, rep_total)
+        # Cover a repeated group (the step's own ``repetitions`` is 1) by using
+        # the running rep total too -- same source the combo was filled from.
+        rep_total = max(int(getattr(row, "repetitions", 1) or 1),
+                        int(sc.model.step_rep_total or 0))
+        sc.seek_to_step_rep(tuple(row.path), index + 1, rep_total)
+        # The Step Rep status label follows rep_chain_label (set by the seek);
+        # refresh the time readouts now too rather than waiting for play.
+        self._update_protocol_time()
 
     def _on_timeline_show_full_toggled(self, checked):
         # The step track layout (distinct vs per-frame) changes, so rebuild.

@@ -322,6 +322,8 @@ class ProtocolStatusController(HasTraits):
                     rep = total
         self.model.frame_index = int(frame_index) + 1
         self.model.set_step_rep(rep, total)
+        self.model.set_rep_chain(
+            self._fmt_chain([("", rep, total)]) if total > 1 else "")
 
     def seek_to_step_rep(self, step_path, rep, rep_total):
         """Seek (while paused) to repetition ``rep`` (1-based) of the step at
@@ -334,6 +336,7 @@ class ProtocolStatusController(HasTraits):
         if self.executor is not None:
             self.executor.seek(tuple(step_path), 0, frame_index=frame_index)
         self.model.set_step_rep(int(rep), int(rep_total))
+        self.model.set_rep_chain(self._fmt_chain([("", int(rep), int(rep_total))]))
 
     @staticmethod
     def _fmt_chain(rep_chain):
