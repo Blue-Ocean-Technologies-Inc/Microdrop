@@ -1015,6 +1015,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._pane.status_bar._refresh_counts(current=model.step_index, total=model.step_total)
         self._refresh_timeline_position()
 
+    @observe("status_controller:model:[frame_index, step_rep_index]", dispatch="ui", post_init=True)
+    def _on_timeline_frame_changed(self, event=None):
+        # A step's repetitions advance the execution frame / step-rep without
+        # changing the distinct step or phase counters, so _on_counts_changed
+        # never fires for them. Refresh here so the Step Rep combo and the
+        # full-view playhead track the running repetition.
+        self._refresh_timeline_position()
+
     @observe("status_controller:model:[repeats_completed, repeats_total]", dispatch="ui", post_init=True)
     def _on_repeats_changed(self, event=None):
         self._pane.status_bar._refresh_repeats(self.status_controller.model.repeats_completed)
