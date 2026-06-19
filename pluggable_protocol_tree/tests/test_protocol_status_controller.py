@@ -80,9 +80,21 @@ def test_phase_started_and_extended():
 def test_rep_chain_formatting():
     ctrl, sigs, clock, rows = _make()
     sigs.step_repetition = [("Wash", 2, 3)]
-    assert ctrl.model.rep_chain_label == "rep 2/3 of 'Wash'"
+    assert ctrl.model.rep_chain_label == "Step Rep 2/3"
     sigs.step_repetition = []
     assert ctrl.model.rep_chain_label == ""
+
+
+def test_step_count_collapses_repetitions():
+    # One step yielded 3 times (Reps=3) reads as a single step, not 3 -- the
+    # rep progress lives in the separate step_repetition label.
+    shared = _Row("Wash", (0,))
+    ctrl, sigs, clock, rows = _make(rows=[shared, shared, shared])
+    sigs.protocol_started = True
+    assert ctrl.model.step_total == 1
+    sigs.step_started = (shared, 2, 3)   # executor's 2nd of 3 frames
+    assert ctrl.model.step_index == 1    # still the only distinct step
+    assert ctrl.model.step_total == 1
 
 
 def test_terminal_signals_reset_trackers():

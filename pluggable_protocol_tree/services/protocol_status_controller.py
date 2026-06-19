@@ -91,7 +91,12 @@ class ProtocolStatusController(HasTraits):
         self.model.on_protocol_start(self.clock(), self._count_steps())
 
     def _on_step_started(self, event):
-        row, step_index, step_total = event.new
+        # The executor reports one frame per repetition; collapse to distinct
+        # steps so the status bar reads "Step 1/1" for a single 8x-repeated
+        # step. The rep count is shown separately via step_repetition.
+        row, _frame_index, _frame_total = event.new
+        step_index = self._step_index_of(row.path)
+        step_total = self._count_steps()
         self.model.on_step_start(
             self.clock(), step_index, step_total, tuple(row.path),
             row.name, self._next_name(row))
@@ -131,9 +136,22 @@ class ProtocolStatusController(HasTraits):
 
     # --- helpers (need manager) ---
 
+    def _distinct_steps(self):
+        """Step rows in execution order with repetitions collapsed (one entry
+        per row), so the status bar counts steps -- not per-rep frames."""
+        seen = set()
+        out = []
+        for row in self.manager.iter_execution_steps():
+            key = tuple(row.path)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(row)
+        return out
+
     def _count_steps(self):
         try:
-            return sum(1 for _ in self.manager.iter_execution_steps())
+            return len(self._distinct_steps())
         except Exception:
             return 0
 
@@ -147,9 +165,10 @@ class ProtocolStatusController(HasTraits):
         return "-"
 
     def _step_index_of(self, step_path):
-        """1-based position of step_path in execution order, or 0 if absent."""
+        """1-based position of step_path among the distinct steps, or 0 if
+        absent. Distinct (not per-rep) so a repeated step keeps one index."""
         target = tuple(step_path)
-        for i, row in enumerate(self.manager.iter_execution_steps(), start=1):
+        for i, row in enumerate(self._distinct_steps(), start=1):
             if tuple(row.path) == target:
                 return i
         return 0
@@ -260,8 +279,11 @@ class ProtocolStatusController(HasTraits):
 
     @staticmethod
     def _fmt_chain(rep_chain):
+        # Compact "Step Rep i/n" (per repeating level) -- the old
+        # "rep i/n of 'name'" overflowed the fixed-width status label and
+        # double-counted the step itself in the count beside it.
         if not rep_chain:
             return ""
         return " · ".join(
-            f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
+            f"Step Rep {idx}/{total}" for _name, idx, total in rep_chain
         )
