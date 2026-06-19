@@ -293,6 +293,30 @@ class ProtocolStatusController(HasTraits):
         self.model.seek_phase(
             now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0)))
 
+    def _frame_index_for_rep(self, step_path, rep):
+        """Execution-frame index of the ``rep``-th (1-based) occurrence of the
+        step at ``step_path``, or None if absent."""
+        target = tuple(step_path)
+        seen = 0
+        for i, (row, _chain) in enumerate(self.manager.iter_execution_frames()):
+            if tuple(row.path) == target:
+                seen += 1
+                if seen == int(rep):
+                    return i
+        return None
+
+    def seek_to_step_rep(self, step_path, rep, rep_total):
+        """Seek (while paused) to repetition ``rep`` (1-based) of the step at
+        ``step_path`` -- a specific execution frame. The executor honours it on
+        resume; the model reflects the chosen rep optimistically. No-op if the
+        rep frame is absent."""
+        frame_index = self._frame_index_for_rep(step_path, rep)
+        if frame_index is None:
+            return
+        if self.executor is not None:
+            self.executor.seek(tuple(step_path), 0, frame_index=frame_index)
+        self.model.set_step_rep(int(rep), int(rep_total))
+
     @staticmethod
     def _fmt_chain(rep_chain):
         # Compact "Step Rep i/n" (per repeating level) -- the old

@@ -194,14 +194,15 @@ class ProtocolExecutor(HasTraits):
         self.pause_event.clear()
         self.signals.protocol_resumed = True
 
-    def seek(self, step_path, phase_index) -> None:
+    def seek(self, step_path, phase_index, frame_index=None) -> None:
         """Record a mid-run resume target (issue #471). Only meaningful while
         paused; ignored otherwise. Qt-free: delegates to the live run's
-        ExecutionCursor."""
+        ExecutionCursor. ``frame_index`` targets a specific repetition frame."""
         if not self.pause_event.is_set():
             return
         if self._active_proto_ctx is not None:
-            self._active_proto_ctx.cursor.request_seek(step_path, phase_index)
+            self._active_proto_ctx.cursor.request_seek(
+                step_path, phase_index, frame_index=frame_index)
 
     def stop(self) -> None:
         """Set stop_event AND clear pause_event so a Stop-while-paused
@@ -360,14 +361,21 @@ class ProtocolExecutor(HasTraits):
                 # Different-step seek redirect at the step boundary (same-step
                 # seeks are handled inside the routes phase loop).
                 resolved = cursor.frame_for_seek(frame_paths)
-                if resolved is not None and tuple(cursor.resume_target[0]) != tuple(row.path):
+                # A step-rep seek (resume_frame set) redirects to a different
+                # frame even within the same path; a path seek redirects only
+                # to a different step.
+                if resolved is not None and (
+                    (cursor.resume_frame is not None and resolved[0] != i)
+                    or (cursor.resume_frame is None
+                        and tuple(cursor.resume_target[0]) != tuple(row.path))
+                ):
                     i, start_phase_index = resolved
                     cursor.clear_seek()
                     step_index = i
                     continue
 
             step_index += 1
-            cursor.enter_step(row.path, start_phase_index)
+            cursor.enter_step(row.path, start_phase_index, frame_index=i)
             self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain,
                                 step_index, len(frames))
             start_phase_index = 0

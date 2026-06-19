@@ -499,10 +499,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             combo.clear()
             combo.addItems([f"Rep {i}/{rep_count}" for i in range(1, rep_count + 1)])
         combo.setCurrentIndex(max(0, min(rep_count - 1, cur_rep - 1)))
-        # Phase reps can be jumped to; step reps are display-only for now (the
-        # executor seek is path-based, so jumping to a specific step rep needs
-        # executor support). The combo + label hide when showing the full view.
-        combo.setEnabled(context == "phase")
+        # Both phase reps and step reps can be jumped to (while paused). The
+        # combo + label hide when the full timeline is shown.
+        combo.setEnabled(True)
         combo.setVisible(not self._timeline_show_full)
         if label is not None:
             label.setVisible(not self._timeline_show_full)
@@ -512,14 +511,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
         check.blockSignals(False)
 
     def _on_timeline_rep_selected(self, index):
-        # Only phase reps support jumping; keep the current position within the
-        # base loop: index*base + base_index is the absolute phase to seek.
-        if self._timeline_context != "phase":
-            return
-        if not self._timeline_can_collapse or self._timeline_base_count <= 0:
-            return
-        self._seek_to_phase(index * self._timeline_base_count
-                            + self._timeline_base_index)
+        if self._timeline_context == "phase":
+            # Keep the position within the base loop: index*base + base_index is
+            # the absolute phase to seek.
+            if not self._timeline_can_collapse or self._timeline_base_count <= 0:
+                return
+            self._seek_to_phase(index * self._timeline_base_count
+                                + self._timeline_base_index)
+        elif self._timeline_context == "step":
+            row = self._current_step_row()
+            if row is None or self.status_controller is None:
+                return
+            rep_total = max(1, int(getattr(row, "repetitions", 1) or 1))
+            self.status_controller.seek_to_step_rep(
+                tuple(row.path), index + 1, rep_total)
 
     def _on_timeline_show_full_toggled(self, checked):
         # The step track layout (distinct vs per-frame) changes, so rebuild.
