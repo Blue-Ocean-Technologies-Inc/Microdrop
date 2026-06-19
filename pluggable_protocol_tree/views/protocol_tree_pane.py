@@ -233,10 +233,12 @@ class ProtocolTreePane(QWidget):
         layout.setSpacing(6)
         self.timeline_rep_combo = QComboBox()
         self.timeline_rep_combo.setToolTip("Jump to a repetition")
+        self.timeline_rep_label = QLabel("Rep")
         self.timeline_show_full_check = QCheckBox("Show full timeline")
         self.timeline_show_full_check.setToolTip(
-            "Show every phase across all repetitions instead of one base loop")
-        layout.addWidget(QLabel("Rep"))
+            "Show every phase/step across all repetitions instead of a "
+            "collapsed base loop")
+        layout.addWidget(self.timeline_rep_label)
         layout.addWidget(self.timeline_rep_combo)
         layout.addWidget(self.timeline_show_full_check)
         layout.addStretch()

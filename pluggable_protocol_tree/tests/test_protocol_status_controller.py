@@ -97,6 +97,27 @@ def test_step_count_collapses_repetitions():
     assert ctrl.model.step_total == 1
 
 
+def test_frame_index_tracked_alongside_distinct_step():
+    # The per-rep execution frame is kept for the timeline's "show full" view,
+    # separate from the collapsed step counter.
+    ctrl, sigs, clock, rows = _make()
+    sigs.protocol_started = True
+    sigs.step_started = (rows[0], 3, 5)   # executor frame 3 of 5
+    assert ctrl.model.frame_index == 3
+    assert ctrl.model.frame_total == 5
+    assert ctrl.model.step_index == 1     # distinct step still 1
+
+
+def test_step_rep_tracked_from_chain():
+    ctrl, sigs, clock, rows = _make()
+    sigs.step_repetition = [("Wash", 2, 8)]
+    assert ctrl.model.step_rep_index == 2
+    assert ctrl.model.step_rep_total == 8
+    sigs.step_repetition = []             # non-repeating step clears it
+    assert ctrl.model.step_rep_index == 0
+    assert ctrl.model.step_rep_total == 0
+
+
 def test_terminal_signals_reset_trackers():
     # Finished / aborted are the post-protocol teardown: reset to idle.
     for term in ("protocol_finished", "protocol_aborted"):

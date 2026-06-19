@@ -94,18 +94,26 @@ class ProtocolStatusController(HasTraits):
         # The executor reports one frame per repetition; collapse to distinct
         # steps so the status bar reads "Step 1/1" for a single 8x-repeated
         # step. The rep count is shown separately via step_repetition.
-        row, _frame_index, _frame_total = event.new
+        row, frame_index, frame_total = event.new
         step_index = self._step_index_of(row.path)
         step_total = self._count_steps()
         self.model.on_step_start(
             self.clock(), step_index, step_total, tuple(row.path),
-            row.name, self._next_name(row))
+            row.name, self._next_name(row),
+            frame_index=frame_index, frame_total=frame_total)
         logger.debug(
             f"status: step {step_index}/{step_total} @ {tuple(row.path)} "
             f"({row.name!r})")
 
     def _on_step_repetition(self, event):
-        self.model.set_rep_chain(self._fmt_chain(event.new))
+        chain = event.new
+        self.model.set_rep_chain(self._fmt_chain(chain))
+        # Innermost rep entry is the step's own repetition (outermost-first).
+        if chain:
+            _name, idx, total = chain[-1]
+            self.model.set_step_rep(idx, total)
+        else:
+            self.model.set_step_rep(0, 0)
 
     def _on_phase_started(self, event):
         phase_index, phase_total, phase_duration_s = event.new
