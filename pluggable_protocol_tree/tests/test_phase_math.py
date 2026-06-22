@@ -6,6 +6,7 @@ gets its own section. Sections grow as later tasks land more helpers.
 
 from pluggable_protocol_tree.services.phase_math import (
     _is_loop_route, _route_windows,
+    unit_cycle_len, another_loop_fits, loop_completion_fits, idle_cell_index,
 )
 
 
@@ -406,3 +407,38 @@ def test_duration_loop_parts_no_routes_static_only():
     assert cycle == [{"x"}]
     assert ret is None
     assert ramp == []
+
+
+# --- unit_cycle_len ---
+
+def test_unit_cycle_len_loop_route():
+    # one loop route a-b-c-d, trail_length 1 -> 4 windows in the unit cycle
+    n = unit_cycle_len([], [["a", "b", "c", "d"]], trail_length=1, trail_overlay=0)
+    assert n == 4
+
+
+def test_unit_cycle_len_static_only_is_one():
+    assert unit_cycle_len(["a", "b"], []) == 1
+
+
+# --- another_loop_fits ---
+
+def test_another_loop_fits_boundary():
+    # cycle_len 4 * dwell 2.0 = 8.0 worst loop; budget 20
+    assert another_loop_fits(raw_elapsed=12.0, cycle_len=4, phase_dwell=2.0, budget=20.0) is True   # 12+8=20 exact fit
+    assert another_loop_fits(raw_elapsed=12.001, cycle_len=4, phase_dwell=2.0, budget=20.0) is False
+    assert another_loop_fits(raw_elapsed=0.0, cycle_len=0, phase_dwell=2.0, budget=20.0) is False    # no phases -> never
+
+
+# --- loop_completion_fits ---
+
+def test_loop_completion_fits_from_mid_cycle():
+    # from phase k=1 of a 4-phase loop, 3 phases remain * 2.0 = 6.0
+    assert loop_completion_fits(raw_elapsed=14.0, phase_in_cycle=1, cycle_len=4, phase_dwell=2.0, budget=20.0) is True  # 14+6=20
+    assert loop_completion_fits(raw_elapsed=14.5, phase_in_cycle=1, cycle_len=4, phase_dwell=2.0, budget=20.0) is False
+
+
+# --- idle_cell_index ---
+
+def test_idle_cell_index_is_cycle_len():
+    assert idle_cell_index(4) == 4

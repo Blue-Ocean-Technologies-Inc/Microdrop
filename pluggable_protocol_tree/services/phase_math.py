@@ -179,6 +179,43 @@ def duration_loop_parts(
     return ramp_up, unit_cycle, unit_cycle[0]
 
 
+def unit_cycle_len(static_electrodes, routes, *, trail_length=1,
+                   trail_overlay=0, soft_start=False) -> int:
+    """Number of phases in one unit loop (the unique, navigable phases)."""
+    _ramp, unit_cycle, _ret = duration_loop_parts(
+        static_electrodes, routes, trail_length=trail_length,
+        trail_overlay=trail_overlay, soft_start=soft_start)
+    return len(unit_cycle)
+
+
+def another_loop_fits(raw_elapsed: float, cycle_len: int,
+                      phase_dwell: float, budget: float) -> bool:
+    """True if a FULL fresh loop is guaranteed to finish within budget.
+
+    Worst case assumes every phase runs its full ``phase_dwell`` (the
+    volume-threshold timeout equals the duration-column value). Uses raw
+    wall-clock elapsed (pauses/holds already spent count against budget)."""
+    if cycle_len <= 0:
+        return False
+    return raw_elapsed + cycle_len * phase_dwell <= budget
+
+
+def loop_completion_fits(raw_elapsed: float, phase_in_cycle: int,
+                         cycle_len: int, phase_dwell: float,
+                         budget: float) -> bool:
+    """True if finishing the CURRENT loop from ``phase_in_cycle`` (0-based)
+    back to the start still fits the budget. Used for the mid-loop-expiry
+    check on resume after a seek."""
+    remaining = max(0, cycle_len - phase_in_cycle)
+    return raw_elapsed + remaining * phase_dwell <= budget
+
+
+def idle_cell_index(cycle_len: int) -> int:
+    """0-based index of the trailing idle cell on the phase bar
+    (the bar shows ``cycle_len`` unique phases + this idle cell)."""
+    return cycle_len
+
+
 def _ramp_up(phases: Iterator[Set[str]]) -> Iterator[Set[str]]:
     """Prepend ramp phases that grow from 1 electrode to the size of
     the first phase. K=1 first phase --> no-op. K=3 first phase {a,b,c}
