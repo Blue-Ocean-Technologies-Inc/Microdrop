@@ -22,8 +22,8 @@ from pyface.qt.QtCore import (
 )
 from pyface.qt.QtGui import QFont
 from pyface.qt.QtWidgets import (
-    QApplication, QFileDialog, QProgressDialog, QToolButton, QVBoxLayout,
-    QWidget,
+    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel,
+    QProgressDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
@@ -55,6 +55,7 @@ from pluggable_protocol_tree.views.protocol_validator_presenter import (
 from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )
+from pluggable_protocol_tree.views.timeline_bar import TimelineBar
 from pluggable_protocol_tree.views.quick_action_bar import (
     QuickActionBar, QuickActionsController,
 )
@@ -162,6 +163,8 @@ class ProtocolTreePane(QWidget):
 
         self._build_status_bar()
         self._build_navigation_bar()
+        self.timeline_bar = TimelineBar()
+        self.timeline_controls = self._build_timeline_controls()
         self._build_experiment_bar()
 
         # Quick-actions toolbar (bar + controller). Both are None when no
@@ -220,6 +223,33 @@ class ProtocolTreePane(QWidget):
     def _build_navigation_bar(self):
         self.navigation_bar = NavigationBar()
 
+    def _build_timeline_controls(self):
+        """Step-rep and phase-rep selectors (side by side) + a 'show full
+        timeline' toggle, shown beneath the timeline when the current step has
+        repetitions. The dock-pane controller populates, shows/hides, wires."""
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(6)
+        self.timeline_step_rep_label = QLabel("Step Rep")
+        self.timeline_step_rep_combo = QComboBox()
+        self.timeline_step_rep_combo.setToolTip("Jump to a step repetition")
+        self.timeline_phase_rep_label = QLabel("Phase Rep")
+        self.timeline_phase_rep_combo = QComboBox()
+        self.timeline_phase_rep_combo.setToolTip("Jump to a phase repetition")
+        self.timeline_show_full_check = QCheckBox("Show full timeline")
+        self.timeline_show_full_check.setToolTip(
+            "Show every phase/step across all repetitions instead of a "
+            "collapsed base loop")
+        layout.addWidget(self.timeline_step_rep_label)
+        layout.addWidget(self.timeline_step_rep_combo)
+        layout.addWidget(self.timeline_phase_rep_label)
+        layout.addWidget(self.timeline_phase_rep_combo)
+        layout.addWidget(self.timeline_show_full_check)
+        layout.addStretch()
+        row.setVisible(False)
+        return row
+
     def _build_experiment_bar(self):
         icon_font = QFont(ICON_FONT_FAMILY)
         icon_font.setPixelSize(20)
@@ -251,6 +281,8 @@ class ProtocolTreePane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.navigation_bar)
+        layout.addWidget(self.timeline_bar)
+        layout.addWidget(self.timeline_controls)
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.widget)

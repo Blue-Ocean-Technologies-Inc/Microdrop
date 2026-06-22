@@ -464,7 +464,7 @@ class StatusBar(QScrollArea):
         self.lbl_step_progress.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.lbl_step_repetition = QLabel("Repetition 0/0")
-        self.lbl_step_repetition.setFixedWidth(100)
+        self.lbl_step_repetition.setFixedWidth(120)
         self.lbl_step_repetition.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         # Recent / next step labels: fixed width truncates long step

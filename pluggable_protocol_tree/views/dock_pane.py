@@ -50,6 +50,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
+from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
 from protocol_grid.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
@@ -166,6 +167,16 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # The dock pane is the composition root: it owns the executor, the
         # status controller (executor signals -> status model), the logging
         # controller, and all run control. The pane is a pure view.
+        # Timeline phase-rep collapse state (set before the controller so a
+        # model observer firing on assignment finds it). Collapsed by default:
+        # the phase track shows one base loop and the Rep combo picks the rep.
+        self._timeline_show_full = False
+        self._timeline_can_collapse = False
+        self._timeline_base_count = 0
+        self._timeline_base_index = 0
+        self._timeline_cur_rep = 1
+        self._timeline_step_rows = []
+
         self.status_controller = ProtocolStatusController(
             manager=self.manager,
             executor=self.executor,
@@ -251,6 +262,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
         nb.btn_first.clicked.connect(self.navigate_to_first_step)
         nb.btn_last.clicked.connect(self.navigate_to_last_step)
 
+        # Timeline seek bar: clicks redirect through the status controller; the
+        # model observers below push the playhead position back. Also follow
+        # direct tree selection moves (clicking a row in the tree) so the
+        # playhead reflects the latest selected step when idle.
+        tb = pane.timeline_bar
+        tb.step_seek_requested.connect(self._on_timeline_step_seek)
+        tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
+        pane.selection_changed.connect(self._refresh_timeline_position)
+        pane.timeline_step_rep_combo.currentIndexChanged.connect(self._on_timeline_step_rep_selected)
+        pane.timeline_phase_rep_combo.currentIndexChanged.connect(self._on_timeline_phase_rep_selected)
+        pane.timeline_show_full_check.toggled.connect(self._on_timeline_show_full_toggled)
+
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
         nb.btn_stop.clicked.connect(self.executor.stop)
@@ -261,6 +284,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Legacy protocol_grid parity: the full app opens with one default
         # step when no protocol is loaded (no-op once a protocol is loaded).
         pane._seed_default_step_if_empty()
+
+        # Initial timeline render (structure + position).
+        self._rebuild_timeline()
 
         return pane
 
@@ -332,15 +358,210 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _on_next_phase(self):
         self._seek_relative_phase(+1)
 
-    def _seek_relative_phase(self, delta):
+    def _seek_to_phase(self, target0):
+        """Seek the current step to absolute 0-based phase ``target0`` and
+        preview it. Shared by the nav-bar prev/next-phase buttons and the
+        timeline's phase track."""
         sc = self.status_controller
         if sc is None or self._current_row is None:
             return
-        target0 = (sc.model.phase_index - 1) + delta   # model phase_index is 1-based
         path = tuple(self._current_row.path)
         sc.seek_to(path, target0)
         sc.preview_phase(path, target0, self._current_run_preview_mode)
         self._update_phase_nav_buttons()
+
+    def _seek_relative_phase(self, delta):
+        sc = self.status_controller
+        if sc is None:
+            return
+        # model phase_index is 1-based; convert to a 0-based absolute target.
+        self._seek_to_phase((sc.model.phase_index - 1) + delta)
+
+    # --- timeline seek bar (view -> controller) ----------------------
+
+    def _on_timeline_step_seek(self, step_index):
+        rows = self._timeline_step_rows or self._pane._navigable_steps()
+        if not (0 <= step_index < len(rows)):
+            return
+        row = rows[step_index]
+        sc = self.status_controller
+        if self._timeline_show_full and sc is not None:
+            # Frames view: the cell index IS the execution-frame index, so seek
+            # to that exact repetition frame (not just its path).
+            self._pane.select_row(row)
+            self._current_row = row
+            path = tuple(row.path)
+            sc.seek_to_frame(path, step_index)
+            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._refresh_timeline_position()
+        elif sc is not None and sc.model.running and not sc.model.paused:
+            # B1: preview-only while actively running. Move the selection and
+            # preview the target; the executor reasserts at the next boundary.
+            self._seek_and_preview_step(row)
+            self._refresh_timeline_position()
+        else:
+            # Paused -> real seek; idle -> selection only (matches nav buttons).
+            self._select_step(row)
+
+    def _on_timeline_phase_seek(self, phase_index):
+        # The bar emits a 0-based phase index within whatever it is showing.
+        # When collapsed, that is an index into the base loop -> map it into the
+        # current repetition; otherwise it is already the absolute phase.
+        if self._timeline_can_collapse and not self._timeline_show_full:
+            phase_index = ((self._timeline_cur_rep - 1) * self._timeline_base_count
+                           + phase_index)
+        self._seek_to_phase(phase_index)
+
+    # --- timeline seek bar (model -> view) ---------------------------
+
+    def _current_step_row(self):
+        """The distinct current step (drives phase collapse + the rep combo),
+        independent of whether the step track is showing frames."""
+        steps = self._pane._navigable_steps()
+        cur = self._current_step_in(steps)
+        return steps[cur] if cur is not None else None
+
+    def _refresh_timeline_position(self):
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is None:
+            return
+        rows = self._timeline_step_rows or self._pane._navigable_steps()
+        sc = self.status_controller
+        model = sc.model if sc else None
+        running = bool(model.running) if model else False
+        # Step playhead: the exact execution frame when fully expanded mid-run,
+        # otherwise the step's position in whatever the track is showing.
+        if self._timeline_show_full and running and model and model.frame_index > 0:
+            cur = model.frame_index - 1
+        else:
+            cur = self._current_step_in(rows)
+        # Phase collapse + rep combo are driven by the distinct current step.
+        current_row = self._current_step_row()
+        full_count = 0
+        full_index = 0
+        rep_count = 1
+        base_count = 0
+        if current_row is not None and model is not None:
+            on_current = (model.current_step_path is not None
+                          and tuple(model.current_step_path) == tuple(current_row.path))
+            if on_current and model.phase_total > 0:
+                full_count = model.phase_total
+                full_index = max(0, model.phase_index - 1)
+            else:
+                full_count = sc._phase_total_for(current_row)
+            rep_count = max(1, int(getattr(current_row, "route_repetitions", 1) or 1))
+            base_count = sc._base_phase_total_for(current_row) if rep_count > 1 else full_count
+        view = collapse_phase_view(full_count, full_index, base_count, rep_count,
+                                   self._timeline_show_full)
+        self._timeline_can_collapse = view["can_collapse"]
+        self._timeline_base_count = view["base_count"]
+        self._timeline_base_index = view["base_index"]
+        self._timeline_cur_rep = view["cur_rep"]
+        # Show the phase track while running, or idle on a collapsible repeat
+        # step so its base loop + rep controls are visible without running.
+        show_phase = running or view["can_collapse"]
+        phase_total = view["phase_total"] if show_phase else 0
+        tb.set_position(cur if cur is not None else -1, len(rows),
+                        view["phase_index"], phase_total)
+        self._update_timeline_controls(current_row, view)
+
+    def _update_timeline_controls(self, current_row, view):
+        # Two independent selectors, side by side: step reps and phase reps.
+        # Each shows when its dimension applies (a step may have both); the row
+        # is visible if either does. Both hide when the full timeline is shown.
+        pane = self._pane
+        controls = getattr(pane, "timeline_controls", None)
+        check = getattr(pane, "timeline_show_full_check", None)
+        if controls is None or check is None:
+            return
+        model = self.status_controller.model if self.status_controller else None
+        phase_possible = view["can_collapse"]
+        self._fill_rep_combo(pane.timeline_phase_rep_combo, pane.timeline_phase_rep_label,
+                             phase_possible, view["rep_count"], view["cur_rep"])
+        step_reps_attr = (max(1, int(getattr(current_row, "repetitions", 1) or 1))
+                          if current_row is not None else 1)
+        # The running rep count comes from the executor's rep_chain (covers a
+        # repeated GROUP, whose step's own ``repetitions`` is 1); the trait is
+        # the idle fallback for a directly-repeated step.
+        model_total = model.step_rep_total if model else 0
+        step_total = max(step_reps_attr, model_total)
+        step_cur = model.step_rep_index if (model and model.step_rep_index > 0) else 1
+        step_possible = step_total > 1
+        self._fill_rep_combo(pane.timeline_step_rep_combo, pane.timeline_step_rep_label,
+                             step_possible, step_total, step_cur)
+        controls.setVisible(phase_possible or step_possible)
+        check.blockSignals(True)
+        check.setChecked(self._timeline_show_full)
+        check.blockSignals(False)
+
+    def _fill_rep_combo(self, combo, label, possible, rep_count, cur_rep):
+        show = possible and not self._timeline_show_full
+        combo.setVisible(show)
+        label.setVisible(show)
+        if not show:
+            return
+        combo.blockSignals(True)
+        if combo.count() != rep_count:
+            combo.clear()
+            combo.addItems([f"{i}/{rep_count}" for i in range(1, rep_count + 1)])
+        combo.setCurrentIndex(max(0, min(rep_count - 1, cur_rep - 1)))
+        combo.blockSignals(False)
+
+    def _on_timeline_phase_rep_selected(self, index):
+        # Keep the position within the base loop: index*base + base_index is the
+        # absolute phase to seek.
+        if not self._timeline_can_collapse or self._timeline_base_count <= 0:
+            return
+        self._seek_to_phase(index * self._timeline_base_count
+                            + self._timeline_base_index)
+        # Refresh the status bar's phase readout now, not on the next play.
+        self._update_protocol_time()
+
+    def _on_timeline_step_rep_selected(self, index):
+        row = self._current_step_row()
+        sc = self.status_controller
+        if row is None or sc is None:
+            return
+        # Cover a repeated group (the step's own ``repetitions`` is 1) by using
+        # the running rep total too -- same source the combo was filled from.
+        rep_total = max(int(getattr(row, "repetitions", 1) or 1),
+                        int(sc.model.step_rep_total or 0))
+        sc.seek_to_step_rep(tuple(row.path), index + 1, rep_total)
+        # The Step Rep status label follows rep_chain_label (set by the seek);
+        # refresh the time readouts now too rather than waiting for play.
+        self._update_protocol_time()
+
+    def _on_timeline_show_full_toggled(self, checked):
+        # The step track layout (distinct vs per-frame) changes, so rebuild.
+        self._timeline_show_full = bool(checked)
+        self._rebuild_timeline()
+
+    def _rebuild_timeline(self, event=None):
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is None:
+            return
+        if self._timeline_show_full:
+            # "Show full timeline": one cell per execution frame (every rep of
+            # every step), so step repetitions are visible end to end.
+            rows = [row for row, _chain in self.manager.iter_execution_frames()]
+        else:
+            rows = self._pane._navigable_steps()
+        self._timeline_step_rows = rows
+        labels = [(row.name or row.dotted_path()) for row in rows]
+        group_keys = [self._group_key_for(row) for row in rows]
+        tb.rebuild(labels, group_keys)
+        self._refresh_timeline_position()
+
+    @staticmethod
+    def _group_key_for(row):
+        """Identity of the step's containing group for timeline tinting: the
+        parent group's path, or None for a top-level step (parent is the root
+        group, whose path is empty)."""
+        parent = getattr(row, "parent", None)
+        if parent is None:
+            return None
+        parent_path = tuple(parent.path)
+        return parent_path or None
 
     def _update_phase_nav_buttons(self):
         m = self.status_controller.model if self.status_controller else None
@@ -352,19 +573,34 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._pane.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
 
     # --- step-cursor selection (drives the view + a paused seek) ------
+    def _seek_and_preview_step(self, row):
+        """Move the selection/cursor to ``row`` and preview its first phase
+        (DeviceViewer overlay + hardware unless preview mode). Shared by the
+        timeline's running-preview branch and _select_step's paused branch.
+        seek_to's executor side is paused-guarded, so while actively running
+        this only updates the model + preview and the executor reasserts at
+        the next boundary."""
+        self._pane.select_row(row)
+        self._current_row = row
+        path = tuple(row.path)
+        sc = self.status_controller
+        sc.seek_to(path, 0)
+        sc.preview_phase(path, 0, self._current_run_preview_mode)
+
     @attempt_func_execution_with_error_dialog
     def _select_step(self, row):
         # Move the tree selection (view), then — only while paused — re-seat
         # the model + DV preview to the chosen step. Nav buttons call this; the
         # user expects the DV to follow just as on a direct row click.
-        self._pane.select_row(row)
         sc = self.status_controller
         if sc is not None and sc.model.paused:
-            self._current_row = row
-            path = tuple(row.path)
-            sc.seek_to(path, 0)
-            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            self._seek_and_preview_step(row)
             self._update_phase_nav_buttons()
+        else:
+            self._pane.select_row(row)
+        # Idle/paused selection isn't a model run-state change, so the model
+        # observers won't fire — move the timeline playhead to match here.
+        self._refresh_timeline_position()
 
     def _current_step_in(self, steps):
         # During a run the nav cursor follows the model's current step (the
@@ -717,6 +953,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
         """Structural mutation — re-check the baseline path set."""
         self.protocol_state_tracker.on_structure_changed(self.manager)
 
+    @observe("manager.rows_changed", dispatch="ui", post_init=True)
+    def _on_rows_changed_rebuild_timeline(self, event=None):
+        self._rebuild_timeline()
+
     @observe("manager.cell_changed", dispatch="ui")
     def _on_manager_cell_changed(self, event):
         """Cell value edit — incremental dirty update for the one cell."""
@@ -788,12 +1028,22 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 row = None
         self._current_row = row
         self._pane.widget.highlight_active_row(row)
+        self._refresh_timeline_position()
 
     ## Observe status bar model changes and modify view accordingly
     @observe("status_controller:model:[step_index, step_total, phase_index, phase_total]", dispatch="ui", post_init=True)
     def _on_counts_changed(self, event=None):
         model = self.status_controller.model
         self._pane.status_bar._refresh_counts(current=model.step_index, total=model.step_total)
+        self._refresh_timeline_position()
+
+    @observe("status_controller:model:[frame_index, step_rep_index]", dispatch="ui", post_init=True)
+    def _on_timeline_frame_changed(self, event=None):
+        # A step's repetitions advance the execution frame / step-rep without
+        # changing the distinct step or phase counters, so _on_counts_changed
+        # never fires for them. Refresh here so the Step Rep combo and the
+        # full-view playhead track the running repetition.
+        self._refresh_timeline_position()
 
     @observe("status_controller:model:[repeats_completed, repeats_total]", dispatch="ui", post_init=True)
     def _on_repeats_changed(self, event=None):
@@ -803,12 +1053,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _on_names_changed(self, event=None):
         model = self.status_controller.model
         self._pane.status_bar._refresh_names(model.recent_step_name, model.next_step_name, model.rep_chain_label)
+        # rep_chain_label changes on every repetition (step or group), so this
+        # reliably advances the Step Rep combo even when no step/phase counter
+        # moved (a no-phase repeated step).
+        self._refresh_timeline_position()
 
     @observe("status_controller:model:running", dispatch="ui", post_init=True)
     def _on_protocol_running_changed(self, event):
         # Lock the tree while a run is in progress (issue #471) and drive the
         # live time-readout poll job off the same running flag.
         self._pane.widget.set_editable(not bool(event.new))
+        tb = getattr(self._pane, "timeline_bar", None)
+        if tb is not None:
+            tb.set_running(bool(event.new))
+            self._refresh_timeline_position()  # show/hide rep controls
         sched = self._protocol_poll_scheduler
         if sched is None:
             return
@@ -821,7 +1079,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._update_protocol_time()  # final freeze-frame (GUI thread)
             if sched.state == STATE_RUNNING:
                 sched.pause()
-
 
     ######### Helpers ###################
     def _clamp_trail_overlay_for_row(self, path, col_id):

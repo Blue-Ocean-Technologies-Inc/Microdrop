@@ -24,6 +24,15 @@ class ProtocolStatusModel(HasTraits):
     phase_total = Int(0)
     repeats_completed = Int(0)
     repeats_total = Int(1)
+    # Per-rep execution-frame position (reps expanded), distinct from the
+    # collapsed step_index/step_total above. Drives the timeline's "show full"
+    # step view, which lays out one cell per frame.
+    frame_index = Int(0)
+    frame_total = Int(0)
+    # Current step's own repetition (1-based) and its total, from the innermost
+    # entry of the executor's rep_chain. 0 when the step does not repeat.
+    step_rep_index = Int(0)
+    step_rep_total = Int(0)
 
     # --- current step identity (single source of truth) ---
     # Path tuple of the step the run is on, SET from the executor's
@@ -65,6 +74,7 @@ class ProtocolStatusModel(HasTraits):
         self.trait_set(
             step_index=0, step_total=0, phase_index=0, phase_total=0,
             repeats_completed=0, repeats_total=1,
+            frame_index=0, frame_total=0, step_rep_index=0, step_rep_total=0,
             recent_step_name="-", next_step_name="-", rep_chain_label="",
             phase_target_s=0.0, running=False, paused=False,
         )
@@ -76,11 +86,13 @@ class ProtocolStatusModel(HasTraits):
         self.protocol_clock.start(now)
 
     def on_step_start(self, now, step_index, step_total, step_path,
-                      recent_name, next_name):
+                      recent_name, next_name, frame_index=0, frame_total=0):
         # SET the position from the executor's authoritative report (never
         # increment) so a mid-run seek can't drift the counter (issue #471).
         self.step_index = int(step_index)
         self.step_total = int(step_total)
+        self.frame_index = int(frame_index)
+        self.frame_total = int(frame_total)
         self.current_step_path = tuple(step_path) if step_path is not None else None
         self.recent_step_name = recent_name
         self.next_step_name = next_name
@@ -168,3 +180,7 @@ class ProtocolStatusModel(HasTraits):
 
     def set_rep_chain(self, label):
         self.rep_chain_label = label
+
+    def set_step_rep(self, index, total):
+        self.step_rep_index = int(index)
+        self.step_rep_total = int(total)

@@ -91,16 +91,29 @@ class ProtocolStatusController(HasTraits):
         self.model.on_protocol_start(self.clock(), self._count_steps())
 
     def _on_step_started(self, event):
-        row, step_index, step_total = event.new
+        # The executor reports one frame per repetition; collapse to distinct
+        # steps so the status bar reads "Step 1/1" for a single 8x-repeated
+        # step. The rep count is shown separately via step_repetition.
+        row, frame_index, frame_total = event.new
+        step_index = self._step_index_of(row.path)
+        step_total = self._count_steps()
         self.model.on_step_start(
             self.clock(), step_index, step_total, tuple(row.path),
-            row.name, self._next_name(row))
+            row.name, self._next_name(row),
+            frame_index=frame_index, frame_total=frame_total)
         logger.debug(
             f"status: step {step_index}/{step_total} @ {tuple(row.path)} "
             f"({row.name!r})")
 
     def _on_step_repetition(self, event):
-        self.model.set_rep_chain(self._fmt_chain(event.new))
+        chain = event.new
+        self.model.set_rep_chain(self._fmt_chain(chain))
+        # Innermost rep entry is the step's own repetition (outermost-first).
+        if chain:
+            _name, idx, total = chain[-1]
+            self.model.set_step_rep(idx, total)
+        else:
+            self.model.set_step_rep(0, 0)
 
     def _on_phase_started(self, event):
         phase_index, phase_total, phase_duration_s = event.new
@@ -131,9 +144,22 @@ class ProtocolStatusController(HasTraits):
 
     # --- helpers (need manager) ---
 
+    def _distinct_steps(self):
+        """Step rows in execution order with repetitions collapsed (one entry
+        per row), so the status bar counts steps -- not per-rep frames."""
+        seen = set()
+        out = []
+        for row in self.manager.iter_execution_steps():
+            key = tuple(row.path)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(row)
+        return out
+
     def _count_steps(self):
         try:
-            return sum(1 for _ in self.manager.iter_execution_steps())
+            return len(self._distinct_steps())
         except Exception:
             return 0
 
@@ -147,9 +173,10 @@ class ProtocolStatusController(HasTraits):
         return "-"
 
     def _step_index_of(self, step_path):
-        """1-based position of step_path in execution order, or 0 if absent."""
+        """1-based position of step_path among the distinct steps, or 0 if
+        absent. Distinct (not per-rep) so a repeated step keeps one index."""
         target = tuple(step_path)
-        for i, row in enumerate(self.manager.iter_execution_steps(), start=1):
+        for i, row in enumerate(self._distinct_steps(), start=1):
             if tuple(row.path) == target:
                 return i
         return 0
@@ -162,15 +189,18 @@ class ProtocolStatusController(HasTraits):
         return None
 
     @staticmethod
-    def _phases_for(row):
+    def _phases_for(row, n_repeats=None):
         """Materialized phase sequence for a row, mirroring the executor's
         iter_phases call (count/fixed steps). [] on failure. Duration-mode
-        precise phases are deferred (#477)."""
+        precise phases are deferred (#477). Pass ``n_repeats`` to override the
+        row's route_repetitions (e.g. 1 for a single base loop)."""
         try:
             in_duration_mode = (
                 bool(getattr(row, "repeat_duration_controls", False))
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
             )
+            reps = (int(getattr(row, "route_repetitions", 1))
+                    if n_repeats is None else int(n_repeats))
             return list(iter_phases(
                 static_electrodes=list(getattr(row, "electrodes", []) or []),
                 routes=list(getattr(row, "routes", []) or []),
@@ -181,7 +211,7 @@ class ProtocolStatusController(HasTraits):
                 repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
                                    if in_duration_mode else 0.0),
                 linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=int(getattr(row, "route_repetitions", 1)),
+                n_repeats=reps,
                 step_duration_s=float(getattr(row, "duration_s", 1.0)),
             ))
         except Exception:
@@ -189,6 +219,11 @@ class ProtocolStatusController(HasTraits):
 
     def _phase_total_for(self, row):
         return max(1, len(self._phases_for(row)))
+
+    def _base_phase_total_for(self, row):
+        """Phase count for ONE route loop (n_repeats=1) -- the base loop a
+        route-repeated step cycles through."""
+        return max(1, len(self._phases_for(row, n_repeats=1)))
 
     def preview_phase(self, step_path, phase_index, preview):
         """Publish the selected phase's electrodes to the DV overlay (always)
@@ -258,10 +293,58 @@ class ProtocolStatusController(HasTraits):
         self.model.seek_phase(
             now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0)))
 
+    def _frame_index_for_rep(self, step_path, rep):
+        """Execution-frame index of the ``rep``-th (1-based) occurrence of the
+        step at ``step_path``, or None if absent."""
+        target = tuple(step_path)
+        seen = 0
+        for i, (row, _chain) in enumerate(self.manager.iter_execution_frames()):
+            if tuple(row.path) == target:
+                seen += 1
+                if seen == int(rep):
+                    return i
+        return None
+
+    def seek_to_frame(self, step_path, frame_index):
+        """Seek (while paused) to an exact execution frame -- used by the
+        full-view step timeline, where each cell is one frame. The executor
+        honours it on resume; the model's frame/step-rep are set optimistically
+        so the view follows the drag immediately."""
+        target = tuple(step_path)
+        if self.executor is not None:
+            self.executor.seek(target, 0, frame_index=int(frame_index))
+        rep = 0
+        total = 0
+        for i, (row, _chain) in enumerate(self.manager.iter_execution_frames()):
+            if tuple(row.path) == target:
+                total += 1
+                if i <= frame_index:
+                    rep = total
+        self.model.frame_index = int(frame_index) + 1
+        self.model.set_step_rep(rep, total)
+        self.model.set_rep_chain(
+            self._fmt_chain([("", rep, total)]) if total > 1 else "")
+
+    def seek_to_step_rep(self, step_path, rep, rep_total):
+        """Seek (while paused) to repetition ``rep`` (1-based) of the step at
+        ``step_path`` -- a specific execution frame. The executor honours it on
+        resume; the model reflects the chosen rep optimistically. No-op if the
+        rep frame is absent."""
+        frame_index = self._frame_index_for_rep(step_path, rep)
+        if frame_index is None:
+            return
+        if self.executor is not None:
+            self.executor.seek(tuple(step_path), 0, frame_index=frame_index)
+        self.model.set_step_rep(int(rep), int(rep_total))
+        self.model.set_rep_chain(self._fmt_chain([("", int(rep), int(rep_total))]))
+
     @staticmethod
     def _fmt_chain(rep_chain):
+        # Compact "Step Rep i/n" (per repeating level) -- the old
+        # "rep i/n of 'name'" overflowed the fixed-width status label and
+        # double-counted the step itself in the count beside it.
         if not rep_chain:
             return ""
         return " · ".join(
-            f"rep {idx}/{total} of '{name}'" for name, idx, total in rep_chain
+            f"Step Rep {idx}/{total}" for _name, idx, total in rep_chain
         )
