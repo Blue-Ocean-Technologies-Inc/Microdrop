@@ -477,8 +477,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
                         view["phase_index"], phase_total)
         # Dynamic duration step (#477): the last phase cell is the idle phase.
         # Paint it dark yellow so the user can see the parking cell at a glance.
-        if (running and model.phase_total > 1 and self._current_row is not None
-                and bool(getattr(self._current_row, "repeat_duration_controls", False))):
+        # Gate on the live dyn_loop_active flag (not repeat_duration_controls) so
+        # a STATIC duration step — which has no real idle cell — isn't mislabeled.
+        if (running and model is not None and model.dyn_loop_active
+                and model.phase_total > 1 and self._current_row is not None):
             tb.set_idle_cell(model.phase_total - 1)
         else:
             tb.set_idle_cell(None)
