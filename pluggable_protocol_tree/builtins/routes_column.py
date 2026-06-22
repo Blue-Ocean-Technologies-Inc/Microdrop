@@ -195,6 +195,14 @@ class RoutesHandler(BaseColumnHandler):
             if stop_event.is_set():
                 return False
 
+        # Phase wall-clock origin: used to cap the post-dwell automatic grace
+        # so a single phase's nominal dwell + grace never exceeds
+        # per_phase_dwell, keeping worst_loop = cycle_len * per_phase_dwell a
+        # TRUE upper bound for the dynamic duration loop (#477 §10). Deliberate
+        # operator holds (pause / buffer extension) refresh past this cap and
+        # are credited back to the budget separately — they are not bounded here.
+        phase_start = time.monotonic()
+
         electrodes = sorted(phase)
         channels = sorted(mapping[e] for e in electrodes if e in mapping)
         for e in electrodes:
@@ -265,7 +273,16 @@ class RoutesHandler(BaseColumnHandler):
         # (dialog up) we refresh the grace each loop so a deliberate operator
         # never triggers an early advance.
         if hold_for_buffer and not preview_mode:
-            grace_deadline = time.monotonic() + _HOLD_GRACE_S
+            # Cap the AUTOMATIC grace so dwell + grace <= per_phase_dwell: the
+            # threshold timeout equals the duration-column value, so a phase
+            # that never reaches threshold must still end by per_phase_dwell
+            # (#477 §10). Once the dwell has already consumed per_phase_dwell,
+            # this cap is the phase start + dwell <= now, so the loop breaks at
+            # once and adds nothing. A non-zero gap (e.g. the dwell ended early
+            # on a stale advance) still gets the bounded grace. Deliberate
+            # operator holds below (pause / buffer) refresh past this cap.
+            grace_deadline = min(time.monotonic() + _HOLD_GRACE_S,
+                                 phase_start + per_phase_dwell)
             while (not stop_event.is_set()
                    and not ctx.phase_advance_event.is_set()):
                 if _seek_pending():
