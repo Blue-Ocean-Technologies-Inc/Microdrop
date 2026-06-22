@@ -157,6 +157,15 @@ class ProtocolContext(HasTraits):
     # Mirrors the legacy protocol_grid "Preview Mode" checkbox.
     preview_mode = Bool(False)
 
+    # When True, the operator has Advanced Mode on, which keeps the
+    # protocol tree and device viewer editable DURING a run (issue #434).
+    # Snapshotted from is_advanced_mode() at run start and kept live by the
+    # dock pane (which writes it on ADVANCED_MODE_CHANGE) so hooks that stamp
+    # editability into per-step messages (e.g. RoutesHandler's display state)
+    # reflect the current toggle. Parallels preview_mode's flow through the
+    # context.
+    advanced_mode = Bool(False)
+
     # Aggregated pre-protocol wait (seconds), summed from on_pre_protocol_start
     # hooks via add_pre_protocol_wait(). The executor waits this long — with a
     # loading screen — after the pre-start hooks and before the first step.

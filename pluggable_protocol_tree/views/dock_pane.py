@@ -16,6 +16,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     confirm, NO, YES, error as error_dialog, escape_html_multiline,
     format_traceback_detail, information,
 )
+from microdrop_application.menus import is_advanced_mode
 from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -663,10 +664,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _start_protocol_run(self, preview_mode):
         repeats = self._pane.status_bar.edit_repeat_protocol.value()
         self._current_run_preview_mode = preview_mode
+        advanced_mode = is_advanced_mode()
         start_path = self._pane.selected_step_path()
         logger.info(
             f"Protocol run starting: {repeats} rep(s), "
-            f"preview={preview_mode}, start_step={start_path}"
+            f"preview={preview_mode}, advanced={advanced_mode}, "
+            f"start_step={start_path}"
         )
         # Realtime-mode prep + settle and logging start are once-per-run
         # executor lifecycle hooks (RealtimeModeHandler / LoggingHandler, wired
@@ -678,6 +681,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self.executor.start(
             start_step_path=start_path,
             preview_mode=preview_mode,
+            advanced_mode=advanced_mode,
             repeats=repeats,
         )
 

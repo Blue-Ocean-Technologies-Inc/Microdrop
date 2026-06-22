@@ -86,6 +86,11 @@ class ProtocolExecutor(HasTraits):
     # preview_mode=True so hardware-publishing hooks skip their
     # broker writes (legacy protocol_grid "Preview Mode" semantics).
     _preview_mode = Bool(False)
+    # When True, the next run() builds the ProtocolContext with
+    # advanced_mode=True, keeping the tree + device viewer editable during
+    # the run (issue #434). Snapshotted at start(); the dock pane updates the
+    # live ctx on ADVANCED_MODE_CHANGE so mid-run toggles take effect.
+    _advanced_mode = Bool(False)
     # Whole-protocol repetitions for the next run. The executor owns the
     # repeat loop: on_pre_protocol_start / on_post_protocol_end bracket all
     # repetitions, while on_protocol_start / on_protocol_end fire per rep.
@@ -135,6 +140,7 @@ class ProtocolExecutor(HasTraits):
         self,
         start_step_path: Optional[tuple] = None,
         preview_mode: bool = False,
+        advanced_mode: bool = False,
         repeats: int = 1,
     ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
@@ -152,6 +158,11 @@ class ProtocolExecutor(HasTraits):
         side effects are gated. Mirrors the legacy protocol_grid
         "Preview Mode" checkbox semantics.
 
+        ``advanced_mode`` snapshots the operator's Advanced Mode toggle into
+        the ProtocolContext (issue #434); hooks that stamp editability into
+        per-step messages (RoutesHandler's display state) read it so the
+        device viewer / tree stay editable during the run.
+
         ``repeats`` is the number of whole-protocol repetitions; the run
         loops the step sequence that many times inside a single run(),
         firing on_pre_protocol_start / on_post_protocol_end once around
@@ -166,6 +177,7 @@ class ProtocolExecutor(HasTraits):
             tuple(start_step_path) if start_step_path is not None else None
         )
         self._preview_mode = bool(preview_mode)
+        self._advanced_mode = bool(advanced_mode)
         self._repeats = max(1, int(repeats))
         self._thread = threading.Thread(
             target=self.run,
@@ -226,6 +238,7 @@ class ProtocolExecutor(HasTraits):
             pause_event=self.pause_event,
             signals=self.signals,
             preview_mode=self._preview_mode,
+            advanced_mode=self._advanced_mode,
         )
         self._active_proto_ctx = proto_ctx
         # PPT-3: hydrate per-protocol metadata (e.g. electrode_to_channel)
