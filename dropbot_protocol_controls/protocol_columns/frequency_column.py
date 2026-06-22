@@ -67,6 +67,14 @@ class FrequencyHandler(BaseColumnHandler):
         if self.ack_time_s > 0:
             ctx.wait_for(FREQUENCY_APPLIED, timeout=self.ack_time_s)
 
+    def on_live_edit(self, row, ctx):
+        # Advanced-mode edit to the running step's frequency (#434): re-apply
+        # the new setpoint now, fire-and-forget. Preview skips, like on_step.
+        # ctx is the ProtocolContext (preview_mode is a direct attribute).
+        if getattr(ctx, "preview_mode", False):
+            return
+        publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(int(row.frequency)))
+
 
 def make_frequency_column():
     prefs = DropbotPreferences()

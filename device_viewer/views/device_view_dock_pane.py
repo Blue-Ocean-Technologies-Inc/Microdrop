@@ -330,6 +330,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model:
             self.model.protocol_running = True if message.lower() == "true" else False
 
+    def _on_advanced_mode_change_triggered(self, message: TimestampedMessage):
+        """Operator toggled Advanced Mode. While a protocol is running, this
+        is what keeps the viewer editable: Advanced on -> editable (the user
+        can actuate electrodes, reflected to hardware); off -> locked back to
+        display. Idle editability is selection/mode-driven, so only act during
+        a run (#434)."""
+        advanced = message.lower() == "true"
+        if self.model and self.model.protocol_running:
+            self.model.editable = advanced
+
     def _on_capacitance_updated_triggered(self, message):
         """
         Handle capacitance updates from the device viewer.
@@ -568,6 +578,14 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("model.realtime_mode")
     @observe("model.connected")
     def publish_electrode_update(self, event=None):
+        # Don't re-publish actuation we're applying FROM an inbound display/
+        # state message (the executor's own per-phase actuation during a run)
+        # back to hardware — only a genuine user actuation should. With the
+        # viewer editable mid-run in Advanced Mode the apply path mutates
+        # actuated_channels too, so without this guard every phase would echo
+        # a redundant hardware publish (#434).
+        if self._disable_state_messages:
+            return
         if self.model.realtime_mode and self.model.connected:
 
             if (not self.model.protocol_running and self.model.free_mode) or (

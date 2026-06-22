@@ -74,6 +74,15 @@ class VoltageHandler(BaseColumnHandler):
         if self.ack_time_s > 0:
             ctx.wait_for(VOLTAGE_APPLIED, timeout=self.ack_time_s)
 
+    def on_live_edit(self, row, ctx):
+        # Advanced-mode edit to the running step's voltage (#434): re-apply
+        # the new setpoint now. Fire-and-forget (GUI thread — no mailbox to
+        # wait on); the next on_step would re-publish anyway. Preview skips,
+        # same as on_step. ctx is the ProtocolContext (preview_mode direct).
+        if getattr(ctx, "preview_mode", False):
+            return
+        publish_message(topic=PROTOCOL_SET_VOLTAGE, message=str(int(row.voltage)))
+
 
 def make_voltage_column():
     prefs = DropbotPreferences()

@@ -42,7 +42,9 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+from microdrop_application.menus import is_advanced_mode
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
@@ -157,6 +159,15 @@ class DeviceViewerSyncController(HasTraits):
 
     realtime_mode = Bool()
     actuated_channels = Set(Int)
+    # Mirror of the operator's Advanced Mode toggle (ADVANCED_MODE_CHANGE).
+    # The dock pane observes this to keep the live run's context + the tree's
+    # editability in step with a mid-run toggle (#434). Seeded from the
+    # persisted value: the topic only fires on a toggle, so a session that
+    # starts with Advanced Mode already on must not read a stale False.
+    advanced_mode = Bool()
+
+    def _advanced_mode_default(self):
+        return bool(is_advanced_mode())
 
     def _bridge_default(self) -> _Bridge:
         return _Bridge()
@@ -300,6 +311,10 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.step_params_committed.emit(message)
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
+        elif topic == ADVANCED_MODE_CHANGE:
+            # Qt-free trait — the dock pane's dispatch="ui" observer marshals
+            # the GUI-thread work (tree editability, live ctx update).
+            self.advanced_mode = (message.casefold() == "true")
 
     # --- Qt-thread handlers --------------------------------------------
 
@@ -351,6 +366,21 @@ class DeviceViewerSyncController(HasTraits):
 
             # trigger actuations if possible
             self.actuated_channels = set(dv_msg.channels_activated)
+
+            # During a run (Advanced Mode keeps the viewer editable, #434) the
+            # viewer only shows the CURRENT PHASE's electrodes, which for a
+            # route/multi-phase step is a subset of the step's full set.
+            # Writing that subset back would clobber the rest of the step, so
+            # restrict the live write-back to routeless (static) steps, where
+            # the actuated set IS the whole step. Editing geometry/routes of a
+            # route step is an idle-only operation.
+            if self._protocol_running and (row.routes or routes):
+                logger.info(
+                    f"Skipping live electrode write-back for route step "
+                    f"{dv_msg.step_id} during a run; actuation reflected to "
+                    f"hardware only."
+                )
+                return
 
             # Direct trait writes bypass both QtTreeModel.setData and
             # the delegate, so fire cell_changed for each column the
@@ -452,10 +482,17 @@ class DeviceViewerSyncController(HasTraits):
                 self._insert_free_mode_as_new_step()
             self._free_mode_stash = None
 
+        # While a protocol is running (incl. paused), selection-driven
+        # publishes still fire so the DV follows the executor/nav — but they
+        # must NOT hand the operator an editable viewer unless Advanced Mode is
+        # on (#434). Without this, selecting a step mid-run unlocked electrode
+        # actuation and route drawing. Idle: always editable.
+        editable = (not self._protocol_running) or bool(self.advanced_mode)
+
         prev_uuid = self._last_selected_uuid
         if row is None or isinstance(row, GroupRow):
             self.actuated_channels = set()
-            msg = ProtocolTreeDisplayMessage(free_mode=True)
+            msg = ProtocolTreeDisplayMessage(free_mode=True, editable=editable)
             self._last_selected_uuid = ""
             if prev_uuid:
                 logger.info("DV display --> free mode")
@@ -470,7 +507,7 @@ class DeviceViewerSyncController(HasTraits):
                 step_id=row.uuid,
                 step_label=f"Step {dotted_id}",
                 free_mode=False,
-                editable=True,
+                editable=editable,
                 execution_params=_execution_params_for_row(row),
             )
             if row.uuid != prev_uuid:

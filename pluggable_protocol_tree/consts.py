@@ -10,6 +10,8 @@ from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE, 
 
 from dropbot_controller.consts import CAPACITANCE_UPDATED, REALTIME_MODE_UPDATED
 
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
+
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED
 
 PKG = ".".join(__name__.split(".")[:-1])
@@ -95,6 +97,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_RUNNING,
         REALTIME_MODE_UPDATED,
         STEP_PARAMS_COMMIT,
+        ADVANCED_MODE_CHANGE,
     ],
 
     LOGGING_LISTENER_NAME: [

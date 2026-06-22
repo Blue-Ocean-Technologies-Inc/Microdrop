@@ -56,6 +56,10 @@ GAMEPAD_RECONNECT_REQUEST      = "ui/device_viewer/gamepad_reconnect_request"
 # in protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
 PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
 PROTOCOL_RUNNING               = "microdrop/protocol_running"
+# Literal here (matching PROTOCOL_TREE_DISPLAY_STATE below) to avoid importing
+# microdrop_application.consts. Canonical home is microdrop_application.consts;
+# value must stay in sync. Keeps the viewer editable mid-run in Advanced Mode (#434).
+ADVANCED_MODE_CHANGE           = "microdrop/advanced_mode_change"
 # Literal here to avoid circular import: pluggable_protocol_tree.consts imports from this module.
 # NB: last segment must be unique vs PROTOCOL_GRID_DISPLAY_STATE — the dramatiq listener base
 # dispatches by topic.split("/")[-1], so two topics ending in "display_state" collide on the
@@ -74,6 +78,7 @@ ACTOR_TOPIC_DICT = {
         DEVICE_VIEWER_SCREEN_RECORDING,
         DROPLETS_DETECTED,
         PROTOCOL_RUNNING,
+        ADVANCED_MODE_CHANGE,
         DROPBOT_DISCONNECTED,
         DROPBOT_CONNECTED,
         DISABLED_CHANNELS_CHANGED,
