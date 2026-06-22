@@ -157,3 +157,26 @@ def test_seek_then_step_report_does_not_drift_index():
     m.on_step_start(3.0, 6, 9, (5,), "s6", "s7")
     assert m.step_index == 6                         # advances normally
     assert m.step_index <= m.step_total             # never exceeds total
+
+
+def test_on_dyn_phase_sets_unique_phase_plus_idle_total():
+    m = ProtocolStatusModel()
+    m.on_dyn_phase(now=0.0, cycle_pos=2, cycle_len=4, phase_target_s=2.0)
+    assert m.phase_index == 2
+    assert m.phase_total == 5          # 4 unique + 1 idle cell
+    assert m.dyn_idle is False
+
+
+def test_on_dyn_idle_parks_on_idle_cell():
+    m = ProtocolStatusModel()
+    m.on_dyn_idle(now=0.0, cycle_len=4)
+    assert m.phase_index == 5          # idle cell is the last (1-based)
+    assert m.phase_total == 5
+    assert m.dyn_idle is True
+
+
+def test_reset_clears_dyn_idle():
+    m = ProtocolStatusModel()
+    m.on_dyn_idle(now=0.0, cycle_len=4)
+    m.reset()
+    assert m.dyn_idle is False

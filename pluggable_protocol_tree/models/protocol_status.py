@@ -51,6 +51,9 @@ class ProtocolStatusModel(HasTraits):
     # --- run state ---
     running = Bool(False)
     paused = Bool(False)
+    # True while a dynamic duration-mode step is parked in its idle phase
+    # (the trailing dark-yellow cell). Drives the leaving-idle warning (#477).
+    dyn_idle = Bool(False)
 
     # --- clocks (plain helpers; default-constructed per model) ---
     protocol_clock = Instance(ScopeStopwatch, ())
@@ -76,7 +79,7 @@ class ProtocolStatusModel(HasTraits):
             repeats_completed=0, repeats_total=1,
             frame_index=0, frame_total=0, step_rep_index=0, step_rep_total=0,
             recent_step_name="-", next_step_name="-", rep_chain_label="",
-            phase_target_s=0.0, running=False, paused=False,
+            phase_target_s=0.0, running=False, paused=False, dyn_idle=False,
         )
 
     def on_protocol_start(self, now, step_total):
@@ -114,6 +117,19 @@ class ProtocolStatusModel(HasTraits):
         self.phase_clock.start(now)
         if self.paused:
             self.phase_clock.pause(now)
+
+    def on_dyn_phase(self, now, cycle_pos, cycle_len, phase_target_s):
+        """Dynamic duration loop: park the bar on unique phase ``cycle_pos``
+        (1-based) of a ``cycle_len``-phase loop. phase_total carries the extra
+        trailing idle cell so the bar renders cycle_len + 1 cells (#477)."""
+        self.dyn_idle = False
+        self.on_phase_start(now, cycle_pos, cycle_len + 1, phase_target_s)
+
+    def on_dyn_idle(self, now, cycle_len):
+        """Dynamic duration loop: park on the trailing idle cell (electrodes
+        off). The idle cell is the last of cycle_len + 1 cells (#477)."""
+        self.on_phase_start(now, cycle_len + 1, cycle_len + 1, 0.0)
+        self.dyn_idle = True
 
     def seek_step(self, now, step_index, step_total, step_path,
                   recent_name, next_name):
