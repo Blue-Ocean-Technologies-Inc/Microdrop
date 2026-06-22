@@ -88,6 +88,7 @@ class TimelineBar(QWidget):
         self._phase_total = 0
         self._running = False
         self._cell_colors = []
+        self._idle_cell = None
 
         # Relative-drag state: a press anchors at the current playhead, and a
         # drag moves it by the number of cells the pointer travels -- so
@@ -145,6 +146,12 @@ class TimelineBar(QWidget):
     def set_running(self, running):
         self._running = bool(running)
         self.update()
+
+    def set_idle_cell(self, index):
+        """Index of the dark-yellow idle cell on the phase track, or None."""
+        if self._idle_cell != index:
+            self._idle_cell = index
+            self.update()
 
     # --- geometry / hit testing --------------------------------------
 
@@ -279,13 +286,16 @@ class TimelineBar(QWidget):
     def _colors(self):
         if is_dark_mode():
             return dict(track=GREY["dark"], tick=GREY["lighter"],
-                        head=SECONDARY_SHADE[300], running_head=SECONDARY_SHADE[100])
+                        head=SECONDARY_SHADE[300], running_head=SECONDARY_SHADE[100],
+                        idle="#9a7d0a")
         return dict(track=GREY["light"], tick=GREY["dark"],
-                    head=SECONDARY_SHADE[700], running_head=SECONDARY_SHADE[900])
+                    head=SECONDARY_SHADE[700], running_head=SECONDARY_SHADE[900],
+                    idle="#b8860b")
 
     # --- paint ------------------------------------------------------
 
-    def _paint_track(self, painter, rect, count, position, colors, cell_colors=None):
+    def _paint_track(self, painter, rect, count, position, colors,
+                     cell_colors=None, idle_cell=None):
         # Video-timeline look: a track bar divided into one cell per item by
         # thin separators, with the current item drawn as a filled, outlined
         # box (the "you are here" cell) rather than a single tick.
@@ -311,6 +321,16 @@ class TimelineBar(QWidget):
         for i in range(count + 1):
             x = int(SIDE_MARGIN + i * seg)
             painter.drawLine(x, rect.top(), x, rect.bottom())
+        # Idle cell tint (phase track only, dynamic duration steps): fill the
+        # last cell dark yellow before the playhead box so the box draws on top.
+        if idle_cell is not None and 0 <= idle_cell < count:
+            left = int(SIDE_MARGIN + idle_cell * seg)
+            right = int(SIDE_MARGIN + (idle_cell + 1) * seg)
+            idle_fill = QColor(colors["idle"])
+            idle_fill.setAlpha(120)
+            painter.fillRect(
+                QRect(left, rect.top(), max(1, right - left), rect.height()),
+                idle_fill)
         if 0 <= position < count:
             left = int(SIDE_MARGIN + position * seg)
             right = int(SIDE_MARGIN + (position + 1) * seg)
@@ -334,5 +354,6 @@ class TimelineBar(QWidget):
                           cell_colors=self._cell_colors)
         if self._phase_track_visible():
             self._paint_track(painter, self._phase_track_rect(),
-                              self._phase_total, self._phase_index, colors)
+                              self._phase_total, self._phase_index, colors,
+                              idle_cell=self._idle_cell)
         painter.end()
