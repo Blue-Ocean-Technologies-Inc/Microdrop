@@ -27,7 +27,9 @@ from pluggable_protocol_tree.consts import (
 )
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
-from pluggable_protocol_tree.services.phase_math import iter_phases
+from pluggable_protocol_tree.services.phase_math import (
+    duration_loop_parts, iter_phases,
+)
 
 logger = get_logger(__name__)
 
@@ -242,17 +244,32 @@ class ProtocolStatusController(HasTraits):
         row = self._row_at(step_path)
         if row is None:
             return
-        phases = self._phases_for(row)
-        if not phases:
-            return
-        idx = max(0, min(int(phase_index), len(phases) - 1))
         try:
             mapping = self.manager.protocol_metadata.get(
                 ELECTRODE_TO_CHANNEL_KEY, {})
         except Exception:
             mapping = {}
-        electrodes = sorted(phases[idx])
-        channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        if self.model.dyn_loop_active:
+            # Dynamic duration step (#477): the unique navigable phases are the
+            # UNIT CYCLE and the trailing cell is the idle phase (electrodes
+            # off). Preview from the unit cycle, not the materialized phases.
+            _ramp, unit_cycle, _ret = duration_loop_parts(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)))
+            idle_idx = len(unit_cycle)
+            electrodes = ([] if int(phase_index) >= idle_idx
+                          else sorted(unit_cycle[int(phase_index)]))
+            channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        else:
+            phases = self._phases_for(row)
+            if not phases:
+                return
+            idx = max(0, min(int(phase_index), len(phases) - 1))
+            electrodes = sorted(phases[idx])
+            channels = sorted(mapping[e] for e in electrodes if e in mapping)
         # Navigation happens while paused (mid-run), so the viewer must stay
         # editable only in Advanced Mode — same rule the run-time and
         # selection-driven publishes use (#434). Without this, stepping to the
@@ -291,6 +308,10 @@ class ProtocolStatusController(HasTraits):
         step_idx = self._step_index_of(step_path)
         step_total = self._count_steps()
         phase_total = self._phase_total_for(row)
+        if self.model.dyn_loop_active:
+            # Mid-dynamic-loop: keep the live cycle_len+1 phase bar rather than
+            # flipping to the materialized duration count (#477).
+            phase_total = self.model.phase_total
         phase0 = max(0, min(int(phase_index), phase_total - 1))
         logger.debug(
             f"seek_to: step {step_idx}/{step_total} @ {tuple(step_path)} "
