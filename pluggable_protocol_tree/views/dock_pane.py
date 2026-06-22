@@ -464,6 +464,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         phase_total = view["phase_total"] if show_phase else 0
         tb.set_position(cur if cur is not None else -1, len(rows),
                         view["phase_index"], phase_total)
+        # Dynamic duration step (#477): the last phase cell is the idle phase.
+        # Paint it dark yellow so the user can see the parking cell at a glance.
+        if (running and model.phase_total > 1 and self._current_row is not None
+                and bool(getattr(self._current_row, "repeat_duration_controls", False))):
+            tb.set_idle_cell(model.phase_total - 1)
+        else:
+            tb.set_idle_cell(None)
         self._update_timeline_controls(current_row, view)
 
     def _update_timeline_controls(self, current_row, view):
@@ -569,6 +576,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if m is None:
             self._pane.navigation_bar.set_phase_navigation_enabled(False, False)
             return
+        # The idle cell is the last phase: index phase_total (1-based) / 0-based
+        # index phase_total-1. next_enabled becomes False at idle (phase_index ==
+        # phase_total), so the user can land on it via next and leave via prev.
         prev_enabled = m.phase_index > 1
         next_enabled = 0 < m.phase_index < m.phase_total
         self._pane.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
