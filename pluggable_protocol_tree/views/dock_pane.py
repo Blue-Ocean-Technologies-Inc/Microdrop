@@ -981,6 +981,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         self._clamp_trail_overlay_for_row(path, col_id)
         self._reconcile_repeat_duration_for_row(path, col_id)
+        self._maybe_live_reapply(path, col_id)
 
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
@@ -1065,8 +1066,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     @observe("status_controller:model:running", dispatch="ui", post_init=True)
     def _on_protocol_running_changed(self, event):
         # Lock the tree while a run is in progress (issue #471) and drive the
-        # live time-readout poll job off the same running flag.
-        self._pane.widget.set_editable(not bool(event.new))
+        # live time-readout poll job off the same running flag. Advanced Mode
+        # reopens cell-value editing mid-run (#434) — see _recompute_tree_editable.
+        self._recompute_tree_editable()
         tb = getattr(self._pane, "timeline_bar", None)
         if tb is not None:
             tb.set_running(bool(event.new))
@@ -1084,7 +1086,58 @@ class PluggableProtocolDockPane(TraitsDockPane):
             if sched.state == STATE_RUNNING:
                 sched.pause()
 
+    @observe("sync:advanced_mode", dispatch="ui", post_init=True)
+    def _on_advanced_mode_changed(self, event):
+        """Operator toggled Advanced Mode (ADVANCED_MODE_CHANGE). Keep the
+        live run's context in step so RoutesHandler stamps the right
+        editability into its per-step display message, and re-evaluate the
+        tree's editability so a mid-run toggle takes effect at once (#434)."""
+        ctx = self.executor._active_proto_ctx
+        if ctx is not None:
+            ctx.advanced_mode = bool(event.new)
+        self._recompute_tree_editable()
+
     ######### Helpers ###################
+    def _recompute_tree_editable(self):
+        """Set tree editability from (running, advanced_mode). Idle: fully
+        editable. Running: cell-value editing only when Advanced Mode is on,
+        and structural edits (Add/Delete/Paste) locked regardless (#434/#471)."""
+        running = bool(self.status_controller.model.running)
+        ctx = self.executor._active_proto_ctx
+        advanced = (bool(ctx.advanced_mode) if ctx is not None
+                    else bool(self.sync.advanced_mode))
+        self._pane.widget.set_editable(
+            editable=(not running) or advanced,
+            structural=not running,
+        )
+
+    def _column_by_id(self, col_id):
+        for col in self.manager.columns:
+            if col.model.col_id == col_id:
+                return col
+        return None
+
+    def _maybe_live_reapply(self, path, col_id):
+        """Advanced-mode edit to the running step's cell: re-apply it to
+        hardware now via the column's on_live_edit hook (#434). No-op unless a
+        run is active in Advanced Mode and the edited row is the current step."""
+        ctx = self.executor._active_proto_ctx
+        if ctx is None or not bool(ctx.advanced_mode):
+            return
+        current = self.status_controller.model.current_step_path
+        if current is None or tuple(path) != tuple(current):
+            return
+        col = self._column_by_id(col_id)
+        row = self._current_row
+        if col is None or row is None:
+            return
+        try:
+            col.handler.on_live_edit(row, ctx)
+        except Exception:
+            logger.exception(
+                f"live re-apply of {col_id!r} on the running step failed"
+            )
+
     def _clamp_trail_overlay_for_row(self, path, col_id):
         """Mirror the DV sidebar's dynamic bound (trail_overlay can never
         reach trail_length): shrinking Trail Len drags an out-of-range

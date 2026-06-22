@@ -1,0 +1,5 @@
+step_idx,utc_time,instrument_time_us,step_id,Capacitance (pF),Voltage (V),Force Over Unit Area (mN/mm^2),Actuated Area (mm^2),actuated_channels
+1,1700000001,1000,step-walk,12.0,100.0,10000.0,1.0,[1]
+1,1700000002,2000,step-walk,14.0,100.0,10000.0,2.0,[2]
+1,1700000003,3000,step-walk,12.5,100.0,10000.0,1.0,[1]
+2,1700000004,4000,step-hold,20.0,120.0,14400.0,3.0,"[5, 6]"

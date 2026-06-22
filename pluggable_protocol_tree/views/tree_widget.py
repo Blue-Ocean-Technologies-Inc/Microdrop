@@ -73,6 +73,10 @@ class ProtocolTreeWidget(QWidget):
         self._default_edit_triggers = (QAbstractItemView.DoubleClicked
                                        | QAbstractItemView.EditKeyPressed)
         self._editable = True
+        # Structural edits (Add/Delete/Paste via the context menu) are gated
+        # separately from cell-value editing: Advanced Mode reopens value
+        # editing during a run but never the structural menu (#434).
+        self._structural_editable = True
         self.tree.setEditTriggers(self._default_edit_triggers)
         self.tree.delete_pressed.connect(self._delete_selection)
         layout.addWidget(self.tree)
@@ -156,11 +160,20 @@ class ProtocolTreeWidget(QWidget):
         self.tree.setCurrentIndex(idx)
         self.tree.scrollTo(idx)
 
-    def set_editable(self, editable: bool):
-        """Lock/unlock cell editing + the structural context menu. Driven by
-        the status model's ``running`` flag — the protocol is read-only while a
-        run is in progress (issue #471)."""
+    def set_editable(self, editable: bool, structural: bool = None):
+        """Lock/unlock cell editing and (separately) the structural context
+        menu. Driven by the status model's ``running`` flag — the protocol is
+        read-only while a run is in progress (issue #471), except Advanced
+        Mode reopens cell-value editing mid-run (issue #434).
+
+        ``editable`` gates cell-value edit triggers. ``structural`` gates the
+        Add/Delete/Paste context menu; it defaults to ``editable`` so existing
+        callers keep their all-or-nothing behaviour. Pass them apart to allow
+        value edits while keeping structural changes locked (advanced mode
+        during a run)."""
         self._editable = bool(editable)
+        self._structural_editable = bool(editable if structural is None
+                                          else structural)
         self.tree.setEditTriggers(
             self._default_edit_triggers if editable
             else QAbstractItemView.NoEditTriggers)
@@ -206,8 +219,9 @@ class ProtocolTreeWidget(QWidget):
     # --- context menu actions ---
 
     def _on_context_menu(self, pos):
-        # No structural edits while a run is in progress (issue #471).
-        if not self._editable:
+        # No structural edits while a run is in progress (issue #471) — not
+        # even in Advanced Mode, which only reopens cell-value editing (#434).
+        if not self._structural_editable:
             return
         idx = self.tree.indexAt(pos)
         menu = QMenu()

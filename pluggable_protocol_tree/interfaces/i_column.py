@@ -110,6 +110,13 @@ class IColumnHandler(Interface):
     def on_interact(self, row, model, value):
         """Called when the UI commits an edit. Default: model.set_value."""
 
+    def on_live_edit(self, row, ctx):
+        """Re-apply this cell's value to hardware mid-run (issue #434).
+
+        Called when the operator edits this column's cell on the currently-
+        running step while Advanced Mode is on. Runs on the GUI thread —
+        publish fire-and-forget, no ack wait. Default: no-op."""
+
     def on_pre_protocol_start(self, ctx):
         """Once per run, before the first repetition (and before any
         on_protocol_start). For once-per-run setup that must bracket all

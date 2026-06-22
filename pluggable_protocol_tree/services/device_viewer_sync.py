@@ -42,6 +42,7 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_application.dialogs.pyface_wrapper import confirm, YES
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
@@ -157,6 +158,10 @@ class DeviceViewerSyncController(HasTraits):
 
     realtime_mode = Bool()
     actuated_channels = Set(Int)
+    # Mirror of the operator's Advanced Mode toggle (ADVANCED_MODE_CHANGE).
+    # The dock pane observes this to keep the live run's context + the tree's
+    # editability in step with a mid-run toggle (#434).
+    advanced_mode = Bool(False)
 
     def _bridge_default(self) -> _Bridge:
         return _Bridge()
@@ -300,6 +305,10 @@ class DeviceViewerSyncController(HasTraits):
             self.bridge.step_params_committed.emit(message)
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
+        elif topic == ADVANCED_MODE_CHANGE:
+            # Qt-free trait — the dock pane's dispatch="ui" observer marshals
+            # the GUI-thread work (tree editability, live ctx update).
+            self.advanced_mode = (message.casefold() == "true")
 
     # --- Qt-thread handlers --------------------------------------------
 
