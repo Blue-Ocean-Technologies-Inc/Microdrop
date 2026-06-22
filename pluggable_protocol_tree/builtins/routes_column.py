@@ -48,7 +48,7 @@ from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
 from pluggable_protocol_tree.services.phase_math import (
-    duration_loop_parts, iter_phases,
+    another_loop_fits, duration_loop_parts, iter_phases, loop_completion_fits,
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
@@ -87,6 +87,34 @@ _HOLD_GRACE_S = 0.5
 # replaced with a deterministic fake clock in tests. Production uses
 # time.monotonic unchanged.
 _monotonic = time.monotonic
+
+
+def dyn_resume_start(cursor_phase_index: int, cycle_len: int):
+    """Resolve a paused-seek cursor phase to a dynamic-loop start.
+
+    Returns (start_phase_in_cycle, start_idle). cursor_phase_index is the
+    0-based unique-phase the operator toggled to; an index at/over cycle_len
+    is the trailing idle cell. Negative clamps to phase 0 (#477)."""
+    if cycle_len <= 0:
+        return 0, False
+    if cursor_phase_index >= cycle_len:
+        return 0, True
+    return max(0, int(cursor_phase_index)), False
+
+
+def _confirm_finish_loop_over_budget():
+    """Operator prompt when a seek-resume lands partway through a loop that
+    can no longer finish within the route-rep budget (#477). Returns True to
+    finish the loop and advance, False to leave the run paused."""
+    from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+    return confirm(
+        None,
+        "The set route-rep time is up, but the current loop is not back at its "
+        "start position. Finish this loop (electrodes return to start) and then "
+        "move to the next step?",
+        title="Loop needs more time",
+        cancel=False,
+    ) == YES
 
 
 class RoutesColumnModel(BaseColumnModel):
@@ -264,26 +292,33 @@ class RoutesHandler(BaseColumnHandler):
                                    step_uuid, step_label, preview_mode,
                                    per_phase_dwell, stop_event, pause_event,
                                    signals, budget):
-        """Duration mode + a phase-hold hook: loop the unit cycle as long as
-        another FULL-duration cycle still fits the budget, then close with
-        the return-to-start phase and idle any sub-cycle remainder.
+        """Duration mode + a phase-hold hook: run full unit cycles while a
+        guaranteed FULL loop still fits the RAW wall-clock budget, then enter
+        an explicit idle phase (electrodes off) until the budget elapses.
+
+        Budget accounting is RAW wall-clock since step start (#477): pauses
+        and holds count against the budget — there is no extension credit-back.
+        At each loop boundary ``another_loop_fits`` gates whether one more
+        worst-case loop (every phase at ``per_phase_dwell``) finishes in time;
+        when it won't, the loop closes back at the unit-cycle start and idles.
+        Because every loop ends at phase 0, there is no separate return phase —
+        the next loop's phase 0 IS the return.
 
         A hook column (e.g. volume threshold) cuts each phase short via
         phase_advance_event, so wall-clock elapses slower than
-        ``per_phase_dwell`` would predict and more cycles fit -> the freed
-        time becomes more loops, not idle. The soft-end ramp-down is
-        intentionally absent (duration_loop_parts does not produce it):
-        reaching the hook's advance condition guarantees droplet position.
-        The phase index is a running counter with total 0 (unknown while
-        looping) so the status bar shows the advancing phase number.
+        ``per_phase_dwell`` predicts and more loops fit. The phase index is a
+        running counter with total 0 (unknown while looping) so the status bar
+        shows the advancing phase number.
 
-        Operator-requested phase extensions (the recovery dialog's "extend by
-        X") are CREDITED BACK to the budget: they add to the step's total
-        time rather than displacing later cycles. A 1000s budget with a 30s
-        stuck-phase extension therefore runs ~1030s total, keeping the full
-        1000s of cycling. ``ctx.phase_extension_total()`` accumulates those
-        extensions; ``_budget_elapsed`` subtracts them from wall-clock."""
-        ramp_up, unit_cycle, return_phase = duration_loop_parts(
+        Seek re-entry: on a paused seek the cursor's phase resolves via
+        ``dyn_resume_start`` to a start phase or the idle cell. If the seek
+        lands partway through a loop that can no longer finish in budget, the
+        operator is prompted (``_confirm_finish_loop_over_budget``): YES runs
+        the partial loop to its end then advances; NO pauses."""
+        # return_phase is unused now: every loop closes back at the unit-cycle
+        # start (the next loop's phase 0 IS the return), and idle replaces the
+        # old soft-end remainder (#477).
+        ramp_up, unit_cycle, _return_phase = duration_loop_parts(
             static_electrodes=list(getattr(row, "electrodes", []) or []),
             routes=list(getattr(row, "routes", []) or []),
             trail_length=int(getattr(row, "trail_length", 1)),
@@ -294,59 +329,95 @@ class RoutesHandler(BaseColumnHandler):
         # is None; the loop below repeats that static actuation across the
         # budget (holding the droplet, re-checking the threshold each dwell)
         # rather than yielding it once. Intentional for VT static-merge steps.
-        cycle_full_time = len(unit_cycle) * per_phase_dwell
+        # cycle_len phases at per_phase_dwell each = one worst-case loop; the
+        # guaranteed-loop gate (another_loop_fits) computes that bound itself.
+        cycle_len = len(unit_cycle)
         step_start = _monotonic()
         running_idx = 0
 
-        def _budget_elapsed():
-            # Wall-clock since step start MINUS operator-requested phase
-            # extensions, so those add to the total run time rather than
-            # eating into the duration budget.
-            return _monotonic() - step_start - ctx.phase_extension_total()
+        def raw_elapsed():
+            # RAW wall-clock since step start: pauses and holds count against
+            # the budget (NOT pause-aware, NOT extension-credited) — #477.
+            return _monotonic() - step_start
 
-        def _run(phase):
+        cursor = ctx.protocol.cursor
+        start_k, start_idle = dyn_resume_start(int(cursor.phase_index), cycle_len)
+        came_from_seek = cursor.resume_target is not None
+        cursor.clear_seek()
+
+        def _run_cycle_phase(phase, cycle_pos):
             nonlocal running_idx
             running_idx += 1
+            if signals is not None:
+                signals.dyn_phase_started = (cycle_pos + 1, cycle_len,
+                                             per_phase_dwell)
             # hold_for_buffer=True: this loop only runs when a column requested
             # the phase-hold hook, so honour the same post-dwell hold/dialog as
-            # the static path. A phase whose hook advances early is still cut
-            # short by phase_advance_event (so cycles keep fitting the budget);
-            # only a held phase can extend / open the dialog.
+            # the static path. honor_pause=False: this loop owns the pause/seek
+            # checkpoints (the executor re-enters the step on a seek).
             return self._run_phase(
                 phase, ctx=ctx, mapping=mapping, static_routes=static_routes,
                 step_uuid=step_uuid, step_label=step_label,
                 preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
                 stop_event=stop_event, pause_event=pause_event,
-                signals=signals, phase_index=running_idx, phase_total=0,
-                hold_for_buffer=True)
+                signals=signals, phase_index=cycle_pos + 1,
+                phase_total=cycle_len + 1, hold_for_buffer=True,
+                honor_pause=False)
 
-        for phase in ramp_up:
-            if not _run(phase):
-                return
+        def _go_idle():
+            # Explicit idle: electrodes off once, then hold to the budget. A
+            # seek (operator toggled away from idle) returns so the executor's
+            # pause/seek path re-enters this step.
+            if not preview_mode:
+                electrode_state_change_publisher.publish(actuated_channels=[])
+            if signals is not None:
+                signals.dyn_idle_entered = cycle_len
+            while not stop_event.is_set() and raw_elapsed() < budget:
+                if cursor.resume_target is not None:
+                    return
+                _cooperative_sleep(
+                    min(0.1, budget - raw_elapsed()), stop_event, pause_event,
+                    seek_pending=lambda: cursor.resume_target is not None)
 
-        while not stop_event.is_set():
-            # Only add a cycle if there's room for a COMPLETE one at full
-            # per-phase dwell. cycle_full_time <= 0 (degenerate 0-dwell
-            # config) would never gate, so run a single cycle and stop.
-            if cycle_full_time <= 0:
-                for phase in unit_cycle:
-                    if not _run(phase):
-                        return
-                break
-            if _budget_elapsed() + cycle_full_time > budget:
-                break
-            for phase in unit_cycle:
-                if not _run(phase):
+        # Soft-start ramp only on a fresh (non-seek) entry that isn't idle.
+        if not came_from_seek and not start_idle:
+            for phase in ramp_up:
+                if not _run_cycle_phase(phase, 0):
                     return
 
-        if return_phase is not None and not stop_event.is_set():
-            _run(return_phase)
+        # Mid-loop-expiry guard: a seek re-entry partway through the loop where
+        # finishing won't fit the budget (operator toggled to a bad spot).
+        if came_from_seek and not start_idle and start_k > 0 \
+                and not loop_completion_fits(raw_elapsed(), start_k, cycle_len,
+                                             per_phase_dwell, budget):
+            if not ctx.prompt_gui(lambda: _confirm_finish_loop_over_budget()):
+                ctx.protocol.pause()
+                return
+            # Run the partial loop to its end, then advance to the next step.
+            for i in range(start_k, cycle_len):
+                if not _run_cycle_phase(unit_cycle[i], i):
+                    return
+            ctx.step_phases_done_event.set()
+            return
 
-        remaining = budget - _budget_elapsed()
-        if remaining > 0 and not stop_event.is_set():
-            _cooperative_sleep(
-                remaining, stop_event, pause_event,
-                seek_pending=lambda: ctx.protocol.cursor.resume_target is not None)
+        if start_idle:
+            _go_idle()
+            return
+
+        # First (possibly partial) loop from start_k, then full loops while
+        # another guaranteed loop fits; otherwise idle.
+        i = start_k
+        while not stop_event.is_set():
+            while i < cycle_len:
+                if not _run_cycle_phase(unit_cycle[i], i):
+                    return
+                i += 1
+            i = 0
+            if not another_loop_fits(raw_elapsed(), cycle_len, per_phase_dwell,
+                                     budget):
+                break
+        if not stop_event.is_set():
+            _go_idle()
 
     def on_step(self, row, ctx):
         mapping = ctx.protocol.scratch.get(ELECTRODE_TO_CHANNEL_KEY, {})
