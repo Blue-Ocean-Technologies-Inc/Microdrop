@@ -19,6 +19,7 @@ import time
 from traits.api import Any, Callable, HasTraits, Instance
 
 from logger.logger_service import get_logger
+from microdrop_application.menus import is_advanced_mode
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_CHANGE,
@@ -243,13 +244,17 @@ class ProtocolStatusController(HasTraits):
             mapping = {}
         electrodes = sorted(phases[idx])
         channels = sorted(mapping[e] for e in electrodes if e in mapping)
+        # Navigation happens while paused (mid-run), so the viewer must stay
+        # editable only in Advanced Mode — same rule the run-time and
+        # selection-driven publishes use (#434). Without this, stepping to the
+        # next/prev phase relocked the viewer until the next cell edit.
         display_msg = ProtocolTreeDisplayMessage(
             electrodes=electrodes,
             routes=list(getattr(row, "routes", []) or []),
             step_id=getattr(row, "uuid", "") or "",
             step_label=f"Step {row.dotted_path()}",
             free_mode=False,
-            editable=False,
+            editable=bool(is_advanced_mode()),
         )
         try:
             publish_message(topic=PROTOCOL_TREE_DISPLAY_STATE,
