@@ -412,8 +412,9 @@ def test_duration_loop_parts_no_routes_static_only():
 # --- unit_cycle_len ---
 
 def test_unit_cycle_len_loop_route():
-    # one loop route a-b-c-d, trail_length 1 -> 4 windows in the unit cycle
-    n = unit_cycle_len([], [["a", "b", "c", "d"]], trail_length=1, trail_overlay=0)
+    # a genuine loop route (first == last) a-b-c-d-a exercises the loop branch
+    # of _route_windows: 4 unique nodes -> 4 windows in the unit cycle.
+    n = unit_cycle_len([], [["a", "b", "c", "d", "a"]], trail_length=1, trail_overlay=0)
     assert n == 4
 
 
