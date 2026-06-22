@@ -17,3 +17,8 @@ PHASE_POLL_TIMEOUT_S = 2.0
 # Polling interval while monitoring CAPACITANCE_UPDATED during a phase.
 # Lets the handler re-check stop_event between samples.
 CAP_POLL_TIMEOUT_S = 1.0
+
+# How long the Rewind action waits for the droplet check (DROPLETS_DETECTED)
+# to come back before giving up and showing the "couldn't locate" notice.
+# Matches DropletCheckHandler's default ack window.
+REWIND_DROPLET_CHECK_TIMEOUT_S = 12.0

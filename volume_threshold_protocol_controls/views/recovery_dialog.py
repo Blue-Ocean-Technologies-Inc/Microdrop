@@ -10,6 +10,10 @@ out:
     the protocol continue (the troubleshooting escape hatch).
   * **Pause Protocol** — pause the run (the operator resumes it later from
     the toolbar) instead of aborting.
+  * **Rewind** (static steps only) — locate the droplet via a droplet check
+    across the route channels and rewind execution to that phase, then
+    continue. The dialog only returns the intent; the locating + seek happen
+    at the call site (it has no route/phase context).
 
 This module is pure Qt widget code: ``show_volume_threshold_recovery_dialog``
 builds a modal dialog, ``exec()``s it, and returns a plain decision dict.
@@ -22,6 +26,7 @@ Decision dict shapes:
      "count_toward_duration": bool}   # last key only in duration mode
     {"action": "proceed"}
     {"action": "pause"}
+    {"action": "rewind"}              # only offered when not duration_mode
 
 ``count_toward_duration`` (duration-looping steps only): when True the extra
 time is charged against the loop's duration budget (the run still ends on
@@ -110,6 +115,17 @@ class _RecoveryDialog(QDialog):
         buttons = QHBoxLayout()
         buttons.addWidget(retry_btn)
         buttons.addWidget(proceed_btn)
+        # Rewind locates the droplet (droplet check across the route channels)
+        # and rewinds to that phase, then continues. Only offered for static
+        # steps; a duration-mode step's phase loop can't honour a same-step
+        # rewind yet, so the button is hidden there.
+        if not duration_mode:
+            rewind_btn = QPushButton("Rewind")
+            rewind_btn.setToolTip(
+                "Find the droplet (droplet check across the route) and rewind "
+                "to that phase, then continue.")
+            rewind_btn.clicked.connect(lambda: self._choose("rewind"))
+            buttons.addWidget(rewind_btn)
         buttons.addStretch(1)
         buttons.addWidget(pause_btn)
         layout.addLayout(buttons)
