@@ -340,10 +340,28 @@ class RoutesHandler(BaseColumnHandler):
             # the budget (NOT pause-aware, NOT extension-credited) — #477.
             return _monotonic() - step_start
 
+        # Resolve the resume phase (#477 review fix). A SAME-STEP seek leaves
+        # cursor.phase_index at 0 — the real target lives in resume_target,
+        # recovered via decision_at_phase exactly like the static phase loop.
+        # A DIFFERENT-STEP seek is pre-resolved by the executor into
+        # cursor.phase_index with resume_target already cleared. A fresh entry
+        # is phase_index 0 with no resume_target.
         cursor = ctx.protocol.cursor
-        start_k, start_idle = dyn_resume_start(int(cursor.phase_index), cycle_len)
-        came_from_seek = cursor.resume_target is not None
-        cursor.clear_seek()
+        if cursor.resume_target is not None:
+            action, target_phase = cursor.decision_at_phase(0)
+            if action == "abort":
+                # Different step/frame: unwind so the executor's frame walk
+                # re-enters the correct target.
+                ctx.step_phases_done_event.set()
+                return
+            # ("jump", target_phase): same-step seek — consume it here.
+            seek_phase = int(target_phase)
+            came_from_seek = True
+            cursor.clear_seek()
+        else:
+            seek_phase = int(cursor.phase_index)
+            came_from_seek = seek_phase > 0
+        start_k, start_idle = dyn_resume_start(seek_phase, cycle_len)
 
         def _run_cycle_phase(phase, cycle_pos):
             nonlocal running_idx
@@ -413,8 +431,8 @@ class RoutesHandler(BaseColumnHandler):
                     return
                 i += 1
             i = 0
-            if not another_loop_fits(raw_elapsed(), cycle_len, per_phase_dwell,
-                                     budget):
+            if per_phase_dwell <= 0 or not another_loop_fits(
+                    raw_elapsed(), cycle_len, per_phase_dwell, budget):
                 break
         if not stop_event.is_set():
             _go_idle()
