@@ -162,6 +162,7 @@ class DeviceViewMainModel(HasTraits):
                 # sync default alphas with pre-existing preferences alphas dict
                 if key not in self.preferences.default_alphas:
                     self.preferences.default_alphas[key] = default_alphas[key]
+                if key not in self.preferences.default_visibility:
                     self.preferences.default_visibility[key] = default_visibility[key]
 
                 _alpha_value = AlphaValue(key=key, alpha=self.preferences.default_alphas[key], visible=self.preferences.default_visibility[key])
