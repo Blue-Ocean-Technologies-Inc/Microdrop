@@ -378,7 +378,7 @@ class RoutesHandler(BaseColumnHandler):
         else:
             seek_phase = int(cursor.phase_index)
             came_from_seek = seek_phase > 0
-        start_k, start_idle = dyn_resume_start(seek_phase, cycle_len)
+        _, start_idle = dyn_resume_start(seek_phase, cycle_len)
 
         def _run_cycle_phase(phase, cycle_pos):
             nonlocal running_idx
@@ -414,36 +414,69 @@ class RoutesHandler(BaseColumnHandler):
                     min(0.1, budget - raw_elapsed()), stop_event, pause_event,
                     seek_pending=lambda: cursor.resume_target is not None)
 
+        def _resume_at(target):
+            """Resolve a (just-cleared) same-step seek to phase ``target`` to
+            the loop index to run from, or None when the step finishes here.
+
+            ``target`` >= cycle_len is the idle cell -> idle to the budget. A
+            mid-loop target that can no longer finish within the budget prompts
+            the operator (finish-then-advance vs stay paused) — the same rule a
+            fresh seek-resume uses. A fresh non-seek entry passes 0 and just
+            runs from the loop start."""
+            k = max(0, int(target))
+            if k >= cycle_len:
+                _go_idle()
+                return None
+            if k > 0 and not loop_completion_fits(
+                    raw_elapsed(), k, cycle_len, per_phase_dwell, budget):
+                if ctx.prompt_gui(lambda: _confirm_finish_loop_over_budget()):
+                    # Finish this loop (back to start), then advance.
+                    for j in range(k, cycle_len):
+                        if not _run_cycle_phase(unit_cycle[j], j):
+                            return None
+                    ctx.step_phases_done_event.set()
+                    return None
+                # Declined: stay paused on this step at k. A plain resume runs
+                # from k; a re-toggle is picked up by the loop's seek checkpoint.
+                ctx.protocol.pause()
+            return k
+
         # Soft-start ramp only on a fresh (non-seek) entry that isn't idle.
         if not came_from_seek and not start_idle:
             for phase in ramp_up:
                 if not _run_cycle_phase(phase, 0):
                     return
 
-        # Mid-loop-expiry guard: a seek re-entry partway through the loop where
-        # finishing won't fit the budget (operator toggled to a bad spot).
-        if came_from_seek and not start_idle and start_k > 0 \
-                and not loop_completion_fits(raw_elapsed(), start_k, cycle_len,
-                                             per_phase_dwell, budget):
-            if not ctx.prompt_gui(lambda: _confirm_finish_loop_over_budget()):
-                ctx.protocol.pause()
-                return
-            # Run the partial loop to its end, then advance to the next step.
-            for i in range(start_k, cycle_len):
-                if not _run_cycle_phase(unit_cycle[i], i):
-                    return
-            ctx.step_phases_done_event.set()
+        # Resolve the entry position (idle / over-budget prompt / run-from-k);
+        # for a fresh entry this is just phase 0.
+        i = _resume_at(seek_phase)
+        if i is None:
             return
 
-        if start_idle:
-            _go_idle()
-            return
-
-        # First (possibly partial) loop from start_k, then full loops while
-        # another guaranteed loop fits; otherwise idle.
-        i = start_k
+        # Run full unit cycles while another guaranteed loop still fits. The
+        # in-loop pause + seek checkpoint repositions a mid-loop toggle IN PLACE
+        # (mirrors the static phase loop): without it a pending seek would leave
+        # resume_target stuck, collapsing every remaining dwell to ~0 (strobing
+        # the rest of the cycle) and skipping idle, so the step would race to
+        # the next one (#477).
         while not stop_event.is_set():
             while i < cycle_len:
+                if pause_event.is_set():
+                    pause_event.wait_cleared()
+                    if stop_event.is_set():
+                        return
+                if cursor.resume_target is not None:
+                    action, target_phase = cursor.decision_at_phase(i)
+                    if action == "abort":
+                        # Different step: unwind; the executor re-enters the
+                        # target step (leave resume_target set).
+                        ctx.step_phases_done_event.set()
+                        return
+                    cursor.clear_seek()
+                    i = _resume_at(int(target_phase))
+                    if i is None:
+                        return
+                    continue
                 if not _run_cycle_phase(unit_cycle[i], i):
                     return
                 i += 1
