@@ -361,6 +361,21 @@ class DeviceViewerSyncController(HasTraits):
             # trigger actuations if possible
             self.actuated_channels = set(dv_msg.channels_activated)
 
+            # During a run (Advanced Mode keeps the viewer editable, #434) the
+            # viewer only shows the CURRENT PHASE's electrodes, which for a
+            # route/multi-phase step is a subset of the step's full set.
+            # Writing that subset back would clobber the rest of the step, so
+            # restrict the live write-back to routeless (static) steps, where
+            # the actuated set IS the whole step. Editing geometry/routes of a
+            # route step is an idle-only operation.
+            if self._protocol_running and (row.routes or routes):
+                logger.info(
+                    f"Skipping live electrode write-back for route step "
+                    f"{dv_msg.step_id} during a run; actuation reflected to "
+                    f"hardware only."
+                )
+                return
+
             # Direct trait writes bypass both QtTreeModel.setData and
             # the delegate, so fire cell_changed for each column the
             # user actually changed — the protocol state tracker uses

@@ -181,15 +181,18 @@ class RoutesHandler(BaseColumnHandler):
                 phase_index, phase_total, per_phase_dwell,
             )
 
-        # 1. Display: synchronous, no ack. editable=False so the DV won't
-        # echo a hardware publish back at us during a run.
+        # 1. Display: synchronous, no ack. editable tracks Advanced Mode so
+        # the operator can edit the running step in the device viewer (#434);
+        # the echo-back of our own actuation is prevented on the DV side
+        # (publish_electrode_update ignores apply-time mutations), not by
+        # forcing editable False.
         display_msg = ProtocolTreeDisplayMessage(
             electrodes=electrodes,
             routes=static_routes,
             step_id=step_uuid,
             step_label=step_label,
             free_mode=False,
-            editable=False,
+            editable=bool(getattr(ctx.protocol, "advanced_mode", False)),
         )
         publish_message(
             topic=PROTOCOL_TREE_DISPLAY_STATE,
