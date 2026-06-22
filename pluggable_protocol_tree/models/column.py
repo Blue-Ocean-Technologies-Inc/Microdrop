@@ -102,11 +102,12 @@ class BaseColumnHandler(HasTraits):
         """Re-apply this cell's value to hardware mid-run (issue #434).
 
         Called by the dock pane when the operator edits this column's cell
-        on the CURRENTLY-RUNNING step while Advanced Mode is on. Runs on the
-        GUI thread, so overrides should publish their setpoint fire-and-
-        forget (no ctx.wait_for ack — there is no StepContext mailbox here).
-        Honour ``ctx.protocol.preview_mode`` the same way ``on_step`` does.
-        Default: no-op (the value applies the next time the step executes)."""
+        on the CURRENTLY-RUNNING step while Advanced Mode is on. ``ctx`` is the
+        live ``ProtocolContext`` (NOT a StepContext), so read ``ctx.preview_mode``
+        directly. Runs on the GUI thread, so overrides should publish their
+        setpoint fire-and-forget (no ctx.wait_for ack — there is no StepContext
+        mailbox here). Default: no-op (the value applies the next time the step
+        executes)."""
         pass
 
     # The execution hooks — all no-ops by default. on_pre_protocol_start /
