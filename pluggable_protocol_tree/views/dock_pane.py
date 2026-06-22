@@ -366,6 +366,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
         sc = self.status_controller
         if sc is None or self._current_row is None:
             return
+        idle_cell = sc.model.phase_total - 1
+        if sc.model.dyn_idle and target0 != idle_cell:
+            if confirm(
+                None,
+                "The protocol is paused in the idle phase.\n"
+                "Seeking to a non-idle phase will leave the idle phase.\n\n"
+                "Continue?",
+                title="Leave idle phase?",
+                cancel=False,
+            ) != YES:
+                return
         path = tuple(self._current_row.path)
         sc.seek_to(path, target0)
         sc.preview_phase(path, target0, self._current_run_preview_mode)
