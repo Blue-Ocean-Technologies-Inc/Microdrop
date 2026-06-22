@@ -63,6 +63,8 @@ class ProtocolStatusController(HasTraits):
             ("step_repetition", self._on_step_repetition),
             ("phase_started", self._on_phase_started),
             ("phase_extended", self._on_phase_extended),
+            ("dyn_phase_started", self._on_dyn_phase_started),
+            ("dyn_idle_entered", self._on_dyn_idle_entered),
             ("protocol_paused", self._on_paused),
             ("protocol_resumed", self._on_resumed),
             ("protocol_repetition_finished", self._on_repetition_finished),
@@ -123,6 +125,13 @@ class ProtocolStatusController(HasTraits):
 
     def _on_phase_extended(self, event):
         self.model.on_phase_extended(event.new)
+
+    def _on_dyn_phase_started(self, event):
+        cycle_pos, cycle_len, phase_dwell = event.new
+        self.model.on_dyn_phase(self.clock(), cycle_pos, cycle_len, phase_dwell)
+
+    def _on_dyn_idle_entered(self, event):
+        self.model.on_dyn_idle(self.clock(), int(event.new))
 
     def _on_paused(self, event):
         self.model.pause(self.clock())

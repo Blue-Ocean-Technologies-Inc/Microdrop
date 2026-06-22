@@ -56,3 +56,8 @@ class ExecutorSignals(HasTraits):
     # the phase's target time by this amount so "elapsed / target" stays
     # honest while the phase is held.
     phase_extended     = Event()            # payload: extra_s
+    # Dynamic duration loop (#477).
+    #: (cycle_pos 1-based, cycle_len, phase_dwell_s) — a unique phase is active.
+    dyn_phase_started  = Event()
+    #: cycle_len — the loop has entered its idle (electrodes-off) phase.
+    dyn_idle_entered   = Event()
