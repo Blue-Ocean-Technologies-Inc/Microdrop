@@ -114,7 +114,7 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
         """Clear sensor displays when realtime mode is disabled."""
         if not event.new:
             self.reset_traits([
-                "capacitance", "voltage_readback", "c_device",
+                "capacitance", "voltage_readback",
                 "force", "dielectric_thickness",
             ])
             self.frequency_display = "-"
