@@ -11,7 +11,6 @@ from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
-from protocol_grid.plugin import ProtocolGridControllerUIPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
@@ -64,21 +63,17 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     LoggerUIPlugin,
-    ProtocolGridControllerUIPlugin,
     DeviceViewerPlugin,
     PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
-
-]
-
-EXPERIMENTAl_PLUGINS = [
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     PeripheralProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
+
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [

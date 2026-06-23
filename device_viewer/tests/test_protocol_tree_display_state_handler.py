@@ -46,9 +46,6 @@ def test_handler_emits_adapted_message_via_display_state_signal():
         "step_id": "uuid-abc", "step_label": "Wash", "free_mode": False,
     }
     assert rich.editable is True
-    assert rich.id_to_channel == {
-        "e00": 0, "e01": 1, "e02": 2, "missing": None,
-    }
 
 
 def test_free_mode_payload_clears_display():

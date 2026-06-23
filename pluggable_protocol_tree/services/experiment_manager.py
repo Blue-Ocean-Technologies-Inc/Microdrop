@@ -1,3 +1,11 @@
+"""Experiment lifecycle / directory management for the protocol tree.
+
+Relocated from the deleted ``protocol_grid.services.experiment_manager`` in
+PPT-9 (#371): the new ``pluggable_protocol_tree`` dock pane is its sole live
+consumer. The class carries no ``protocol_grid`` dependency (stdlib + Qt +
+logging only), so the move is a verbatim lift.
+"""
+
 import sys
 import shutil
 import subprocess
@@ -14,24 +22,24 @@ logger = get_logger(__name__)
 
 class ExperimentManager:
     """manage experiment lifecycle, directory creation, and cleanup."""
-    
+
     def __init__(self, experiment_directory: Path):
         self._initialized = False
         self._experiment_directory = experiment_directory
-        self._register_cleanup_on_exit() # on app exit
+        self._register_cleanup_on_exit()  # on app exit
         logger.info(f"Experiment initialized: Directory={self._experiment_directory}")
-    
+
     def _register_cleanup_on_exit(self):
         """cleanup function to run when application exits."""
         app = QApplication.instance()
         if app:
             app.aboutToQuit.connect(self._cleanup_on_exit)
-    
+
     def _cleanup_on_exit(self):
         """cleanup experiment directory if empty on application exit."""
         if not self._experiment_directory or not self._experiment_directory.exists():
             return
-            
+
         try:
             if self._is_directory_empty(self._experiment_directory):
                 shutil.rmtree(self._experiment_directory)
@@ -40,7 +48,7 @@ class ExperimentManager:
                 logger.info(f"Experiment directory not empty, keeping: {self._experiment_directory}")
         except Exception as e:
             logger.error(f"Failed to cleanup experiment directory: {e}")
-    
+
     def _is_directory_empty(self, directory):
         """check if directory is completely empty."""
         try:
@@ -50,11 +58,11 @@ class ExperimentManager:
 
     def get_experiment_directory(self):
         return self._experiment_directory or Path.cwd()
-    
+
     def open_experiment_directory(self):
         """open experiment directory in file explorer."""
         directory = self.get_experiment_directory()
-        if directory.exists():            
+        if directory.exists():
             try:
                 if sys.platform.startswith("win"):
                     subprocess.run(["explorer", str(directory)])
@@ -64,13 +72,13 @@ class ExperimentManager:
                     subprocess.run(["xdg-open", str(directory)])
             except Exception as e:
                 logger.error(f"Failed to open experiment directory: {e}")
-    
+
     def is_save_in_experiment_directory(self, file_path):
         """check if the file path is exactly in the current experiment directory."""
         try:
             file_path = Path(file_path)
             experiment_dir = self.get_experiment_directory()
-            
+
             return file_path.parent.resolve() == experiment_dir.resolve()
         except Exception as e:
             logger.error(f"Error checking if save is in experiment directory: {e}")

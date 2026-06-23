@@ -409,11 +409,12 @@ class ProtocolTreePane(QWidget):
         return float(self.preferences.logs_settling_time_s)
 
     # --- save / load -----------------------------------------------
-    def _default_save_dir(self) -> str:
-        """Default directory for the save dialog: PROTOCOL_REPO_DIR with a
-        per-device subfolder named after the active SVG's stem (legacy
-        protocol_grid parity). Best-effort — falls back to "" (last-used
-        dir) when prefs/app_globals are unavailable (headless, no Redis)."""
+    def _default_protocol_dir(self) -> str:
+        """Default directory for the protocol save AND load/import dialogs:
+        PROTOCOL_REPO_DIR with a per-device subfolder named after the active
+        SVG's stem ("Null" when no device), created if missing (legacy
+        protocol_grid parity). Best-effort — falls back to "" (last-used dir)
+        when prefs/app_globals are unavailable (headless, no Redis)."""
         try:
             device = Path(
                 app_globals.get(DEVICE_SVG_PATH_KEY, NO_DEVICE_SVG_SENTINEL)
@@ -445,7 +446,7 @@ class ProtocolTreePane(QWidget):
         or the write fails.
         """
         path, _ = QFileDialog.getSaveFileName(
-            parent or self, "Save Protocol", self._default_save_dir(),
+            parent or self, "Save Protocol", self._default_protocol_dir(),
             PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
@@ -464,7 +465,8 @@ class ProtocolTreePane(QWidget):
         on success, ``None`` otherwise.
         """
         path, _ = QFileDialog.getOpenFileName(
-            parent or self, "Load Protocol", "", PROTOCOL_FILE_DIALOG_FILTER,
+            parent or self, "Load Protocol", self._default_protocol_dir(),
+            PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
             return None
@@ -799,7 +801,8 @@ class ProtocolTreePane(QWidget):
         if not isinstance(target, GroupRow):
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Protocol", "", PROTOCOL_FILE_DIALOG_FILTER)
+            self, "Import Protocol", self._default_protocol_dir(),
+            PROTOCOL_FILE_DIALOG_FILTER)
         if not path:
             return
         try:

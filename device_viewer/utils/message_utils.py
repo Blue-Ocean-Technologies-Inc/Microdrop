@@ -2,11 +2,12 @@ from ..models.messages import DeviceViewerMessageModel
 from ..models.main_model import DeviceViewMainModel
 
 def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessageModel:
-    """Returns a deep-copied DeviceViewerMessageModel from our existing models"""
+    """Returns a deep-copied DeviceViewerMessageModel from our existing models.
 
-    id_to_channel = {}
-    for electrode_id, electrode in model.electrodes.electrodes.items():
-        id_to_channel[electrode_id] = electrode.channel
+    The electrode->channel mapping is intentionally NOT included (PPT-9 / #415):
+    it is published once, change-gated, on DEVICE_VIEWER_GEOMETRY_CHANGED and
+    cached by consumers (the protocol tree stores it once in metadata), rather
+    than re-sent on every state change."""
 
     # In free mode, carry the sidebar's current execution params so the grid
     # can seed them into a newly-created step. With a step selected, the grid
@@ -18,7 +19,6 @@ def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessa
     return DeviceViewerMessageModel(
         channels_activated=model.electrodes.actuated_channels,
         routes=[(layer.route.route, layer.color) for layer in model.routes.layers],
-        id_to_channel=id_to_channel,
         step_info={"step_id": model.step_id, "step_label": model.step_label},
         uuid=model.uuid,
         editable=model.editable,

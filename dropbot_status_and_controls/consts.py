@@ -2,7 +2,7 @@ import os
 
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
-from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
+from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])

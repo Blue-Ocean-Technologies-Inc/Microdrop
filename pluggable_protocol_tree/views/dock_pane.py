@@ -52,7 +52,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
-from protocol_grid.services.experiment_manager import ExperimentManager
+from pluggable_protocol_tree.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.services.preferences import (
@@ -138,13 +138,14 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _preferences_default(self):
         return ProtocolPreferences(preferences=self.task.window.application.preferences)
 
-    def _sync_default(self):
-        return DeviceViewerSyncController(row_manager=self.manager)
-
     def _manager_default(self):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
+        # Create the sync controller eagerly (single source of truth — no
+        # _sync_default, so the controller + its dramatiq actor are never
+        # created twice).
+        self.sync = DeviceViewerSyncController(row_manager=self.manager)
         # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)
@@ -278,7 +279,19 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
-        nb.btn_stop.clicked.connect(self.executor.stop)
+
+        def _conditional_stop():
+            self.executor.pause()
+            result = confirm(
+                None,
+                "Select <b>YES</b> to force finish protocol..."
+
+            )
+
+            if result == YES:
+                self.executor.stop()
+
+        nb.btn_stop.clicked.connect(_conditional_stop)
 
         nb.set_phase_navigation_enabled(False, False)
         self._set_idle_button_state()

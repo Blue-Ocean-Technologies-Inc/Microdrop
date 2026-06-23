@@ -10,8 +10,10 @@ class DeviceViewerMessageModel(BaseModel):
     # List of (electrode_ids, color_string)
     routes: list[tuple[list[str], str]]
 
-    # Map electrode ID to channel number
-    id_to_channel: dict[str, int | None]
+    # # Map electrode ID to channel number. Optional since PPT-9 / #415: the
+    # # mapping is no longer sent on every state message — it is published once
+    # # (change-gated) on DEVICE_VIEWER_GEOMETRY_CHANGED and cached by consumers.
+    # id_to_channel: Optional[dict[str, int | None]] = None
 
     # Raw step info dictionary
     step_info: Optional[dict] = None
@@ -44,11 +46,12 @@ class DeviceViewerMessageModel(BaseModel):
     def get_routes_with_ids(self) -> list[list[str]]:
         return [route[0] for route in self.routes]
 
-    def get_routes_with_channels(self) -> list[list[int]]:
-        return [
-            [self.id_to_channel[electrode_id] for electrode_id in route_ids]
-            for route_ids in self.get_routes_with_ids()
-        ]
+    # def get_routes_with_channels(self) -> list[list[int]]:
+    #     # mapping = self.id_to_channel or {}
+    #     return [
+    #         [mapping[electrode_id] for electrode_id in route_ids]
+    #         for route_ids in self.get_routes_with_ids()
+    #     ]
 
     def serialize(self) -> str:
         return self.model_dump_json()
@@ -86,14 +89,14 @@ if __name__ == "__main__":
     test = DeviceViewerMessageModel(
         channels_activated=[1,5,5],
         routes=[(["a", "a"], "red")],
-        id_to_channel={"a": 1},
+        # id_to_channel={"a": 1},
         step_info=test_step_info,
         uuid=uuid.uuid4(),
         activated_electrodes_area_mm2=1324.314,
         svg_file=Path("test.svg"),
     )
 
-    print(f"Routes as Channels: {test.get_routes_with_channels()}")
+    # print(f"Routes as Channels: {test.get_routes_with_channels()}")
     print(f"Serialized: {test.serialize()}")
 
     # Proof of round-trip

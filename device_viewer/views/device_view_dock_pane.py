@@ -229,7 +229,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_chip_inserted_triggered(self, message):
         if message.lower() == "true" and self.model:
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            self.publish_model_message()
+            # self.publish_model_message()
 
     def _on_realtime_mode_updated_triggered(self, message):
         if self.model:
@@ -313,7 +313,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             channels_activated=channels_activated,
             routes=[(route, self.model.routes.get_available_color())
                     for route in msg.routes],
-            id_to_channel=id_to_channel,
             step_info={
                 "step_id": msg.step_id,
                 "step_label": msg.step_label,
@@ -461,11 +460,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Apply editable state
         self.model.editable = message_model.editable
 
-        # Apply electrode channel mapping
-        for electrode_id, electrode in self.model.electrodes.electrodes.items():
-            electrode.channel = message_model.id_to_channel.get(
-                electrode_id, electrode.channel
-            )
+        # Electrode->channel mapping is NOT carried on state messages (#415):
+        # electrodes keep their geometry-derived channels (reset() clears only
+        # actuation state, not channel assignments), so there is nothing to
+        # apply here.
 
         # Apply electrode on/off states
         self.model.electrodes.actuated_channels.update(
@@ -552,9 +550,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Re-baseline so the button goes back to disabled.
         self.model.routes.mark_params_committed()
 
-    def publish_model_message(self):
-        logger.debug(
-            f"Publishing message for updated viewer state {self.message_buffer}"
+    @observe("message_buffer")
+    def publish_model_message(self, event):
+        logger.info(
+            f"Buffering message for device viewer state change: {self.message_buffer}"
         )
         publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
 
@@ -573,6 +572,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         publish_message(
             topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
         )
+        logger.info(f"Device Viewer: Published geometry changed event. Current id to channel = {current}")
 
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.realtime_mode")
@@ -828,7 +828,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################### Determine Size for video #####################
         self.configure_camera_to_scene_size()
 
-        self.publish_model_message()
+        self.publish_model_message(event=None)
 
         # Layout init for device view and its property editor right-side bar
         # left side will house device viewer; right side a collapsible scrollable stack of collapsible widgets
@@ -1220,10 +1220,8 @@ class DeviceViewerDockPane(TraitsDockPane):
                 return
 
     @observe("model.routes.layers.items.route.route.items")  # When a route is modified
-    @observe("model.electrodes.electrodes.items.channel")  # When a electrode's channel is modified (i.e. using channel-edit mode)
     @observe("model.electrodes.actuated_channels.items")  # When an electrode changes state
     @observe("model.electrodes.disabled_channels.items")  # When an electrode is disabled/enabled
-    @observe("model.electrodes.electrode_editing")  # When an electrode is being edited
     def model_change_handler_with_message(self, event=None):
         """
         Handle changes to the model and send a message to the device viewer state change topic.
@@ -1241,11 +1239,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.debug("Processing device view model state change...")
             self.model_change_handler_with_timeout(event)
             self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            logger.info(
-                f"Buffering message for device viewer state change: {self.message_buffer}"
-            )
 
-            self.publish_model_message()
+            # self.publish_model_message()
 
         except Exception as e:
             logger.error(e, exc_info=True)
@@ -1274,7 +1269,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         if not self.model.electrodes.svg_model:
             return
         self.message_buffer = gui_models_to_message_model(self.model).serialize()
-        self.publish_model_message()
+        # self.publish_model_message()
 
     @observe(
         "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
