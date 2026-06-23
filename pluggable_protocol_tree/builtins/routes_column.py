@@ -51,6 +51,7 @@ from pluggable_protocol_tree.services.phase_math import (
     another_loop_fits, duration_loop_parts, iter_phases, loop_completion_fits,
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
+from microdrop_application.dialogs.pyface_wrapper import confirm, YES, NO
 
 
 logger = logging.getLogger(__name__)
@@ -127,17 +128,19 @@ def _prompt_time_expired():
       'next'   -> skip the rest of this step and advance to the next step now,
       'paused' -> stay paused on this step so the operator decides.
     """
-    from microdrop_application.dialogs.pyface_wrapper import confirm, YES, NO
     result = confirm(
         None,
         "The route-rep duration time has expired, but this step has not "
-        "finished and the electrodes are not back at their start position.\n\n"
-        "What would you like to do?",
+        "finished and the electrodes are not back at their start position.<br><br>"
+        "What would you like to do?<br><br>"
+        "<b> Pause </b> and decide next step manually; <br><br>"
+        "<b> Skip </b> to next step; <br> <br>"
+        "<b> Complete </b>: Complete rest of loop then proceed to next step. <br><br>",
         title="Route-rep time expired",
         cancel=True,
-        yes_label="Complete loop, then next step",
-        no_label="Skip to next step now",
-        cancel_label="Stay paused",
+        yes_label="Complete",
+        no_label="Skip",
+        cancel_label="Pause",
     )
     if result == YES:
         return "finish"
