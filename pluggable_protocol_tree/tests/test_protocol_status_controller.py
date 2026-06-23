@@ -171,6 +171,17 @@ def _row(path, name="S", **kw):
                            **kw)
 
 
+def test_dyn_phase_and_idle_signals_update_model():
+    ctrl, sigs, clock, rows = _make()
+    sigs.dyn_phase_started = (2, 4, 2.0)
+    assert ctrl.model.phase_index == 2
+    assert ctrl.model.phase_total == 5      # cycle_len + 1 trailing idle cell
+    assert ctrl.model.dyn_idle is False
+    sigs.dyn_idle_entered = 4
+    assert ctrl.model.dyn_idle is True
+    assert ctrl.model.phase_index == 5      # idle cell = cycle_len + 1
+
+
 def test_seek_to_calls_executor_and_updates_model():
     row = _row((0,), name="Wash", electrodes=[], routes=[], trail_length=1,
                trail_overlay=0, soft_start=False, soft_end=False,

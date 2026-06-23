@@ -779,13 +779,17 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     assert ctx.scratch.get(mod.DURATION_CONSUMED_KEY) is True
 
 
-def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
-    """Each phase emits phase_started with a monotonically increasing index
-    and phase_total == 0 (unknown while looping)."""
+def test_dynamic_vt_loop_drives_model_via_dyn_phase_started(qapp):
+    """The dynamic VT duration loop drives the model through dyn_phase_started
+    (cycle position within ONE loop), NOT the generic phase_started -- whose
+    handler clears dyn_loop_active, which would make the timeline/seek fall back
+    to the materialized predicted phase count instead of the single loop (#477).
+    """
     from unittest.mock import MagicMock, patch
     import threading
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
+    from pluggable_protocol_tree.execution.signals import ExecutorSignals
 
     handler = RoutesHandler()
     row = MagicMock()
@@ -822,6 +826,15 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
     ctx.phase_extension_total.return_value = 0.0
     ctx.wait_for = MagicMock()
 
+    # Real signals so we can observe what the loop actually emits (assignment
+    # to a Traits Event), rather than a mock that swallows the contract.
+    sigs = ExecutorSignals()
+    phase_started_calls = []
+    dyn_calls = []
+    sigs.observe(lambda e: phase_started_calls.append(e.new), "phase_started")
+    sigs.observe(lambda e: dyn_calls.append(e.new), "dyn_phase_started")
+    proto.signals = sigs
+
     clock = {"t": 0.0}
     with patch.object(mod, "_monotonic", lambda: clock["t"]), \
          patch.object(mod, "_cooperative_sleep",
@@ -829,11 +842,19 @@ def test_dynamic_vt_loop_emits_running_index_with_zero_total(qapp):
          patch.object(mod, "publish_message", lambda **kw: None):
         handler.on_step(row, ctx)
 
-    calls = proto.signals.phase_started.emit.call_args_list
-    indices = [c.args[0] for c in calls]
-    totals = [c.args[1] for c in calls]
-    assert indices == list(range(1, len(indices) + 1))   # 1,2,3,... no gaps
-    assert all(t == 0 for t in totals)                   # total unknown
+    # The generic phase_started must NOT fire from the dynamic loop: its handler
+    # clears dyn_loop_active, which the timeline/seek rely on to keep showing a
+    # single loop's unique phases rather than the materialized predicted count.
+    assert phase_started_calls == []
+    # The loop drives the model via dyn_phase_started instead: each payload is
+    # (cycle_pos 1-based, cycle_len, dwell) within ONE loop shape.
+    assert dyn_calls, "expected dyn_phase_started emissions"
+    cycle_lens = {payload[1] for payload in dyn_calls}
+    assert len(cycle_lens) == 1                           # one stable loop shape
+    (cycle_len,) = cycle_lens
+    positions = [payload[0] for payload in dyn_calls]
+    assert positions[0] == 1                              # each loop starts at 1
+    assert all(1 <= p <= cycle_len for p in positions)    # never the full total
 
 
 def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):

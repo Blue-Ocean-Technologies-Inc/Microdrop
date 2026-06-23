@@ -157,3 +157,58 @@ def test_seek_then_step_report_does_not_drift_index():
     m.on_step_start(3.0, 6, 9, (5,), "s6", "s7")
     assert m.step_index == 6                         # advances normally
     assert m.step_index <= m.step_total             # never exceeds total
+
+
+def test_on_dyn_phase_sets_unique_phase_plus_idle_total():
+    m = ProtocolStatusModel()
+    m.on_dyn_phase(now=0.0, cycle_pos=2, cycle_len=4, phase_target_s=2.0)
+    assert m.phase_index == 2
+    assert m.phase_total == 5          # 4 unique + 1 idle cell
+    assert m.dyn_idle is False
+    assert m.dyn_loop_active is True   # (#477) flags the live dynamic loop
+
+
+def test_on_dyn_idle_parks_on_idle_cell():
+    m = ProtocolStatusModel()
+    m.on_dyn_idle(now=0.0, cycle_len=4)
+    assert m.phase_index == 5          # idle cell is the last (1-based)
+    assert m.phase_total == 5
+    assert m.dyn_idle is True
+    assert m.dyn_loop_active is True   # idle cell is still mid-dynamic-loop
+
+
+def test_step_start_clears_stale_dyn_loop_state():
+    """Bug #477: advancing to the next step must drop the previous step's
+    dynamic-loop state, or a normal step inherits a stale idle cell."""
+    m = ProtocolStatusModel()
+    m.on_dyn_phase(now=0.0, cycle_pos=2, cycle_len=4, phase_target_s=2.0)
+    assert m.dyn_loop_active is True
+    m.on_step_start(1.0, 2, 3, (1,), "Step B", "Step C")
+    assert m.dyn_idle is False
+    assert m.dyn_loop_active is False
+
+
+def test_normal_phase_clears_dyn_loop_active():
+    m = ProtocolStatusModel()
+    m.on_dyn_phase(now=0.0, cycle_pos=2, cycle_len=4, phase_target_s=2.0)
+    assert m.dyn_loop_active is True
+    m.on_phase_start(now=1.0, phase_index=1, phase_total=2, phase_target_s=1.0)
+    assert m.dyn_loop_active is False
+    assert m.dyn_idle is False
+
+
+def test_seek_step_clears_dyn_loop_active():
+    m = ProtocolStatusModel()
+    m.on_dyn_idle(now=0.0, cycle_len=4)
+    assert m.dyn_loop_active is True
+    m.seek_step(1.0, 4, 5, (3,), "D", "E")
+    assert m.dyn_idle is False
+    assert m.dyn_loop_active is False
+
+
+def test_reset_clears_dyn_idle():
+    m = ProtocolStatusModel()
+    m.on_dyn_idle(now=0.0, cycle_len=4)
+    m.reset()
+    assert m.dyn_idle is False
+    assert m.dyn_loop_active is False
