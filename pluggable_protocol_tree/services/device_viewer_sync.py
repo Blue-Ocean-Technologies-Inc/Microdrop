@@ -11,8 +11,10 @@ Owns:
   - the unsaved-free-mode confirm dialog and the
     'Insert as new step' RowManager.add_step call
 
-This file is the skeleton: traits, bridge, actor, listener_routine.
-Per-handler logic is added in subsequent PPT-10.2 plan tasks.
+The worker-thread dramatiq listener sets per-topic trait Events; @observe
+handlers consume them (dispatch="ui" for the ones that mutate rows, so
+cell_changed -> QtTreeModel.dataChanged runs on the GUI thread). This replaces
+the former Qt QObject signal bridge.
 """
 
 from __future__ import annotations
@@ -21,10 +23,10 @@ from collections import defaultdict
 
 import dramatiq
 
-from pyface.qt.QtCore import QObject, Signal
+from pyface.qt.QtCore import QObject
 from pyface.qt.QtWidgets import QWidget
 
-from traits.api import Bool, Dict, HasTraits, Instance, Str, Property, List, observe, Set, Int
+from traits.api import Bool, Dict, HasTraits, Instance, Str, Property, List, observe, Set, Int, Event
 
 from device_viewer.consts import (
     DEVICE_VIEWER_GEOMETRY_CHANGED,
@@ -125,20 +127,9 @@ def _col_values_from_execution_params(params: dict) -> dict:
     return result
 
 
-class _Bridge(QObject):
-    """Qt signal bridge - Dramatiq actor runs on a worker thread, Qt
-    mutations must happen on the GUI thread."""
-
-    dv_state_received        = Signal(str)
-    geometry_changed         = Signal(str)
-    protocol_running_changed = Signal(bool)
-    step_params_committed    = Signal(str)
-
-
 class DeviceViewerSyncController(HasTraits):
     row_manager              = Instance(RowManager)
     parent_widget            = Instance(QWidget, allow_none=True)
-    bridge                   = Instance(_Bridge)
     dramatiq_actor           = Instance(dramatiq.Actor, allow_none=True)
     listener_name            = Str(SYNC_LISTENER_NAME)
 
@@ -166,11 +157,18 @@ class DeviceViewerSyncController(HasTraits):
     # starts with Advanced Mode already on must not read a stale False.
     advanced_mode = Bool()
 
+    # Events fired by the worker-thread dramatiq listener; observed below so
+    # the per-topic work runs on a trait notification instead of a Qt signal
+    # bridge. The row-mutating ones use dispatch="ui" to marshal onto the GUI
+    # thread (cell_changed -> QtTreeModel.dataChanged must run there); the
+    # Qt-free ones (geometry, realtime, advanced mode) run inline.
+    _geometry_changed_event       = Event(Str)
+    _dv_state_changed_event       = Event(Str)
+    _protocol_running_changed_event = Event(Bool)
+    _step_params_committed_event  = Event(Str)
+
     def _advanced_mode_default(self):
         return bool(is_advanced_mode())
-
-    def _bridge_default(self) -> _Bridge:
-        return _Bridge()
 
     def traits_init(self):
         logger.info(f"Starting Protocol Tree Device View Sync Controller listener")
@@ -188,39 +186,19 @@ class DeviceViewerSyncController(HasTraits):
     # --- public lifecycle ----------------------------------------------
 
     def attach(self, tree_widget) -> None:
-        """Bind the controller to a ProtocolTreeWidget instance."""
+        """Bind the controller to a ProtocolTreeWidget instance.
+
+        The dramatiq-topic handlers are wired declaratively via @observe on the
+        trait Events below (no Qt signal bridge); only the tree's own selection
+        signal is connected here."""
         self._tree_widget = tree_widget
-        self.bridge.geometry_changed.connect(self._on_geometry_qt)
-        self.bridge.dv_state_received.connect(self._on_dv_state_qt)
-        self.bridge.protocol_running_changed.connect(self._on_protocol_running_qt)
-        self.bridge.step_params_committed.connect(self._on_step_params_commit_qt)
         selection_model = tree_widget.tree.selectionModel()
         selection_model.currentChanged.connect(self._on_current_changed)
         self._selection_model = selection_model
 
     def detach(self) -> None:
-        """Disconnect Qt signal bindings. Dramatiq broker shutdown
-        handles actor teardown."""
-        try:
-            self.bridge.geometry_changed.disconnect(self._on_geometry_qt)
-        except (RuntimeError, TypeError):
-            pass
-        try:
-            self.bridge.dv_state_received.disconnect(self._on_dv_state_qt)
-        except (RuntimeError, TypeError):
-            pass
-        try:
-            self.bridge.protocol_running_changed.disconnect(
-                self._on_protocol_running_qt,
-            )
-        except (RuntimeError, TypeError):
-            pass
-        try:
-            self.bridge.step_params_committed.disconnect(
-                self._on_step_params_commit_qt,
-            )
-        except (RuntimeError, TypeError):
-            pass
+        """Disconnect the tree selection signal. The @observe handlers tear
+        down with the controller; dramatiq broker shutdown handles the actor."""
         try:
             if self._selection_model is not None:
                 self._selection_model.currentChanged.disconnect(
@@ -233,7 +211,8 @@ class DeviceViewerSyncController(HasTraits):
 
     # -------- trait observers --------------
     @observe("electrode_ids_channels_map")
-    def _update_metadata(self, event):
+    def _update_metadata(self, event=None):
+        logger.info(f"Protocol Tree Device View Sync: Updating metadata. Electrode Channels Change: {event.new}")
         self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
 
     @observe("row_manager:cell_changed")
@@ -301,14 +280,15 @@ class DeviceViewerSyncController(HasTraits):
     # --- worker-thread dispatch (no Qt / RowManager mutation here) -----
 
     def _listener_routine(self, message: str, topic: str) -> None:
+        logger.info(f"PROTOCOL TREE (Device Sync): Topic = {topic}; Message = {message}")
         if topic == DEVICE_VIEWER_STATE_CHANGED:
-            self.bridge.dv_state_received.emit(message)
+            self._dv_state_changed_event = message
         elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
-            self.bridge.geometry_changed.emit(message)
+            self._geometry_changed_event = message
         elif topic == PROTOCOL_RUNNING:
-            self.bridge.protocol_running_changed.emit(message.casefold() == "true")
+            self._protocol_running_changed_event = (message.casefold() == "true")
         elif topic == STEP_PARAMS_COMMIT:
-            self.bridge.step_params_committed.emit(message)
+            self._step_params_committed_event = message
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
         elif topic == ADVANCED_MODE_CHANGE:
@@ -316,21 +296,28 @@ class DeviceViewerSyncController(HasTraits):
             # the GUI-thread work (tree editability, live ctx update).
             self.advanced_mode = (message.casefold() == "true")
 
-    # --- Qt-thread handlers --------------------------------------------
+    # --- Qt-thread / trait Event handlers / observers --------------------------------------------
 
-    def _on_geometry_qt(self, payload: str) -> None:
+    @observe("_geometry_changed_event")
+    def _on_geometry_changed(self, event) -> None:
         """Receive DEVICE_VIEWER_GEOMETRY_CHANGED on the Qt thread."""
+        payload = event.new
         try:
             geo_change_msg = GeometryChangedMessage.deserialize(payload)
         except Exception as e:
             logger.warning(f"failed to parse geometry payload {payload!r}: {e}")
             return
+
+        logger.info("Device View Sync: Received geometry change")
         self.electrode_ids_channels_map = dict(geo_change_msg.id_to_channel)
 
-    def _on_dv_state_qt(self, payload: str) -> None:
-        """Receive DEVICE_VIEWER_STATE_CHANGED on the Qt thread. Captures
-        free-mode toggles into _free_mode_stash; clears stash for any
-        step-scoped or empty message."""
+    @observe("_dv_state_changed_event", dispatch="ui")
+    def _on_dv_state(self, event) -> None:
+        """DEVICE_VIEWER_STATE_CHANGED. dispatch="ui" so it runs on the GUI
+        thread: the step-scoped branch mutates rows, and row cell_changed ->
+        QtTreeModel.dataChanged must fire there. Captures free-mode toggles
+        into _free_mode_stash; clears stash for any step-scoped/empty message."""
+        payload = event.new
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
             logger.info(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
@@ -407,11 +394,13 @@ class DeviceViewerSyncController(HasTraits):
             "execution_params": dv_msg.execution_params,
         }
 
-    def _on_step_params_commit_qt(self, payload: str) -> None:
-        """Receive STEP_PARAMS_COMMIT on the Qt thread: the DV sidebar's
-        route-executor params pushed onto the step that owns them (the
-        DV commit button, or the commit choice of its step-transition
-        prompt)."""
+    @observe("_step_params_committed_event", dispatch="ui")
+    def _on_step_params_commit(self, event) -> None:
+        """STEP_PARAMS_COMMIT: the DV sidebar's route-executor params pushed
+        onto the step that owns them (the DV commit button, or the commit
+        choice of its step-transition prompt). dispatch="ui" — it mutates rows
+        (cell_changed -> QtTreeModel.dataChanged on the GUI thread)."""
+        payload = event.new
         try:
             commit_msg = StepParamsCommitMessage.deserialize(payload)
         except Exception as e:
@@ -546,8 +535,12 @@ class DeviceViewerSyncController(HasTraits):
         finally:
             self._suppress_publish = False
 
-    def _on_protocol_running_qt(self, running: bool) -> None:
-        self._protocol_running = bool(running)
+    @observe("_protocol_running_changed_event", dispatch="ui")
+    def _on_protocol_running(self, event) -> None:
+        # dispatch="ui" keeps this serialized on the GUI thread with the
+        # row-mutating handlers that read _protocol_running (matches the prior
+        # single-bridge ordering).
+        self._protocol_running = bool(event.new)
 
     def _on_current_changed(self, current, _previous) -> None:
         """Qt slot wired to selectionModel().currentChanged. Resolves the

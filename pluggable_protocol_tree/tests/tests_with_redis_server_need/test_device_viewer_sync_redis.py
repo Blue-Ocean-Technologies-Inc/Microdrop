@@ -51,16 +51,14 @@ def _make_manager():
 def dv_sync_ctrl():
     """One DeviceViewerSyncController + actor for the whole session.
 
-    The actor is registered against SYNC_LISTENER_NAME exactly once. Bridge
-    signals are wired directly (no tree_widget needed) so the Qt-thread
-    handlers fire when a Dramatiq worker dispatches a message.
+    The actor is registered against SYNC_LISTENER_NAME exactly once. The
+    per-topic handlers are wired declaratively via @observe on the controller's
+    trait Events, so they fire automatically when a Dramatiq worker dispatches a
+    message (no tree_widget / Qt signal bridge needed). The dispatch="ui"
+    handlers run when the test pumps the Qt event loop (qapp.processEvents()).
     """
     manager = _make_manager()
     ctrl = DeviceViewerSyncController(row_manager=manager)
-    # Wire bridge signals directly (attach() is for the full widget lifecycle).
-    ctrl.bridge.geometry_changed.connect(ctrl._on_geometry_qt)
-    ctrl.bridge.dv_state_received.connect(ctrl._on_dv_state_qt)
-    ctrl.bridge.protocol_running_changed.connect(ctrl._on_protocol_running_qt)
     return ctrl
 
 
