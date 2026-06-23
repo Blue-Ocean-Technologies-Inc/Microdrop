@@ -279,7 +279,19 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
-        nb.btn_stop.clicked.connect(self.executor.stop)
+
+        def _conditional_stop():
+            self.executor.pause()
+            result = confirm(
+                None,
+                "Select <b>YES</b> to force finish protocol..."
+
+            )
+
+            if result == YES:
+                self.executor.stop()
+
+        nb.btn_stop.clicked.connect(_conditional_stop)
 
         nb.set_phase_navigation_enabled(False, False)
         self._set_idle_button_state()
