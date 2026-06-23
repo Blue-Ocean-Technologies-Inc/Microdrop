@@ -336,7 +336,10 @@ class RoutesHandler(BaseColumnHandler):
                 if time_expired is not None and time_expired():
                     break
                 if pause_event.is_set():
-                    pause_event.wait_cleared()
+                    # Poll so a budget expiry DURING the hold-pause wakes us;
+                    # the top-of-loop time_expired check then breaks the hold so
+                    # the caller can raise the overrun prompt while paused.
+                    _wait_through_pause(pause_event, stop_event, time_expired)
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
                     continue
                 extra = _take_and_emit()
@@ -532,7 +535,12 @@ class RoutesHandler(BaseColumnHandler):
         while not stop_event.is_set():
             while i < cycle_len:
                 if pause_event.is_set():
-                    pause_event.wait_cleared()
+                    # Poll the budget so an expiry during a between-phase pause
+                    # is noticed: on wake the next phase's dwell breaks at once
+                    # (over budget) and the post-phase overrun check prompts.
+                    _wait_through_pause(
+                        pause_event, stop_event,
+                        lambda: not overrun_prompted and raw_elapsed() >= budget)
                     if stop_event.is_set():
                         return
                 if cursor.resume_target is not None:
@@ -658,14 +666,35 @@ class RoutesHandler(BaseColumnHandler):
             step_start = _monotonic()
             overrun_prompted = False
             skip_to_next = False
+            # The loop-origin phase for the "complete loop" overrun choice: it
+            # lets us stop as soon as the droplet is back at start instead of
+            # running ALL the remaining predetermined reps (#477 follow-up).
+            # Same origin the dynamic loop uses (zipped first window + static).
+            _dlp_ramp, _dlp_cycle, _dlp_ret = duration_loop_parts(
+                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                routes=list(getattr(row, "routes", []) or []),
+                trail_length=int(getattr(row, "trail_length", 1)),
+                trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                soft_start=bool(getattr(row, "soft_start", False)))
+            start_set = _dlp_cycle[0] if _dlp_cycle else None
+            finish_to_start = False
+            # Budget-expiry predicate: lets a paused/dwelling phase wake the
+            # instant the rep budget is crossed (so the prompt shows even while
+            # paused). Disabled once prompted so the loop-completion phases dwell
+            # normally. None in count mode (no budget).
+            time_expired = (
+                (lambda: not overrun_prompted
+                 and (_monotonic() - step_start) >= budget)
+                if (in_duration_mode and budget > 0) else None)
             while phase_i < total_phases:
                 if stop_event.is_set():
                     break
                 cursor.phase_index = phase_i
                 # Pause checkpoint (this loop owns it; _run_phase is called with
-                # honor_pause=False so it won't block again at its top).
+                # honor_pause=False so it won't block again at its top). Poll the
+                # budget so an expiry during a between-phase pause is noticed.
                 if pause_event.is_set():
-                    pause_event.wait_cleared()
+                    _wait_through_pause(pause_event, stop_event, time_expired)
                     if stop_event.is_set():
                         break
                 # Honor a pending seek whenever one is set -- covers a pause that
@@ -687,9 +716,15 @@ class RoutesHandler(BaseColumnHandler):
                         per_phase_dwell=per_phase_dwell, stop_event=stop_event,
                         pause_event=pause_event, signals=signals,
                         phase_index=phase_i + 1, phase_total=total_phases,
-                        hold_for_buffer=phase_hold, honor_pause=False):
+                        hold_for_buffer=phase_hold, honor_pause=False,
+                        time_expired=time_expired):
                     break
                 phase_i += 1
+                # "Complete loop" choice: stop the instant the droplet is back at
+                # the loop origin — don't run the remaining predetermined reps.
+                if (finish_to_start and start_set is not None
+                        and phases[phase_i - 1] == start_set):
+                    break
                 # Overrun guard (#477 follow-up): duration mode with the budget
                 # used up before the phases finished (e.g. the budget is shorter
                 # than one full set of phases). Ask the operator once. Skipped in
@@ -708,7 +743,14 @@ class RoutesHandler(BaseColumnHandler):
                         break
                     if decision == "paused":
                         ctx.protocol.pause()
-                    # 'finish'/external resume: keep running the remaining phases.
+                    elif decision == "finish":
+                        # Run only until the droplet is back at the loop origin,
+                        # then advance — NOT all the remaining reps. If it is
+                        # already there, advance now.
+                        if start_set is not None and phases[phase_i - 1] == start_set:
+                            skip_to_next = True
+                            break
+                        finish_to_start = True
             if seek_abort:
                 # Leave resume_target set; the executor re-enters the target step.
                 ctx.step_phases_done_event.set()
@@ -736,6 +778,19 @@ class RoutesHandler(BaseColumnHandler):
         # wait_for(ELECTRODES_STATE_CHANGE) for a next phase that will never
         # come would block the bucket's ThreadPoolExecutor indefinitely.
         ctx.step_phases_done_event.set()
+
+
+def _wait_through_pause(pause_event, stop_event, time_expired=None) -> None:
+    """Block while ``pause_event`` is set, polling each slice so a Stop or a
+    rep-duration budget expiry (``time_expired``) is noticed DURING the pause
+    rather than only when the operator resumes (#477 follow-up). Returns once
+    unpaused, on stop, or on time_expired — the caller re-checks those. Does
+    NOT itself clear the pause."""
+    while pause_event is not None and pause_event.is_set():
+        if pause_event.wait_cleared(timeout=_SLICE_S):
+            return                       # resumed
+        if stop_event.is_set() or (time_expired is not None and time_expired()):
+            return                       # caller re-checks stop / budget
 
 
 def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
@@ -773,11 +828,14 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
         if time_expired is not None and time_expired():
             return
         if pause_event is not None and pause_event.is_set():
-            pause_event.wait_cleared()
+            # Poll (not a blind block) so a budget expiry that lands DURING the
+            # pause wakes us — the top-of-loop time_expired check then returns,
+            # letting the caller raise the overrun prompt while still paused.
+            _wait_through_pause(pause_event, stop_event, time_expired)
             if stop_event.is_set():
                 return
-            # Re-check stop/seek/advance at the top before consuming more
-            # dwell; the resume may have a seek queued behind it.
+            # Re-check stop/seek/advance/time_expired at the top before consuming
+            # more dwell; the resume may have a seek queued behind it.
             continue
         if buffer_provider is not None:
             remaining += buffer_provider()
