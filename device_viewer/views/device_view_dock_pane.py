@@ -461,9 +461,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Apply editable state
         self.model.editable = message_model.editable
 
-        # Apply electrode channel mapping
+        # Apply electrode channel mapping. id_to_channel is optional on the wire
+        # now (PPT-9 / #415) — when absent, keep each electrode's existing
+        # (geometry-derived) channel. The protocol-tree adapter still supplies a
+        # local map, so this stays a no-op there.
+        msg_id_to_channel = message_model.id_to_channel or {}
         for electrode_id, electrode in self.model.electrodes.electrodes.items():
-            electrode.channel = message_model.id_to_channel.get(
+            electrode.channel = msg_id_to_channel.get(
                 electrode_id, electrode.channel
             )
 

@@ -338,15 +338,11 @@ class DeviceViewerSyncController(HasTraits):
             logger.warning(f"failed to parse DV state: {e}")
             return
 
-        # Cold-start seed: populate metadata if empty so reverse-lookup
-        # works. Non-empty metadata comes from GEOMETRY_CHANGED, which
-        # is authoritative; state msgs only fill the gap at cold-start.
-        if (not self.row_manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY)
-                and dv_msg.id_to_channel):
-
-            logger.info(f"Protocol Tree: Applying initial id_to_channel to metadata:  {dv_msg.id_to_channel} ")
-            self.electrode_ids_channels_map = dict(dv_msg.id_to_channel)
-
+        # The electrode->channel mapping is no longer carried on state messages
+        # (PPT-9 / #415): it arrives once, change-gated, on
+        # DEVICE_VIEWER_GEOMETRY_CHANGED (handled in _on_geometry_changed) and
+        # is the authoritative source for the metadata. The DV always publishes
+        # geometry on init, so no cold-start seed from state messages is needed.
         electrodes = set()
         for ch in dv_msg.channels_activated:
             if ch in self.channels_electrode_ids_map:
