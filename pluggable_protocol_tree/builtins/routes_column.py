@@ -157,7 +157,8 @@ class RoutesHandler(BaseColumnHandler):
     def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
                    step_label, preview_mode, per_phase_dwell, stop_event,
                    pause_event, signals, phase_index, phase_total,
-                   hold_for_buffer=False, honor_pause=True):
+                   hold_for_buffer=False, honor_pause=True,
+                   emit_phase_started=True):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -171,6 +172,11 @@ class RoutesHandler(BaseColumnHandler):
         columns a grace window to extend THIS phase (see the post-dwell hold
         below). Used for volume-threshold steps so a missed threshold can
         hold the phase open rather than advancing on schedule.
+
+        ``emit_phase_started``: the dynamic duration loop already emits its own
+        ``dyn_phase_started`` (which drives the model AND sets dyn_loop_active);
+        it passes False here so the generic ``phase_started`` — whose handler
+        clears dyn_loop_active — doesn't immediately undo that flag (#477).
         """
         # Fresh slate: a handler set in phase N-1 must NOT carry over into
         # phase N. Cleared before the stop/pause checks so a stale set
@@ -212,7 +218,7 @@ class RoutesHandler(BaseColumnHandler):
                     f"actuation channel skipped"
                 )
 
-        if signals is not None:
+        if signals is not None and emit_phase_started:
             signals.phase_started = (
                 phase_index, phase_total, per_phase_dwell,
             )
@@ -397,7 +403,7 @@ class RoutesHandler(BaseColumnHandler):
                 stop_event=stop_event, pause_event=pause_event,
                 signals=signals, phase_index=cycle_pos + 1,
                 phase_total=cycle_len + 1, hold_for_buffer=True,
-                honor_pause=False)
+                honor_pause=False, emit_phase_started=False)
 
         def _go_idle():
             # Explicit idle: electrodes off once, then hold to the budget. A
