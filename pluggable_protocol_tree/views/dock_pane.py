@@ -65,6 +65,7 @@ logger = get_logger(__name__)
 # logs so it doesn't flood the log.
 get_logger('apscheduler.executors.default').setLevel(level="WARNING")
 
+_EXITED = False
 
 class PluggableProtocolDockPane(TraitsDockPane):
     id = "pluggable_protocol_tree.dock_pane"
@@ -1004,18 +1005,25 @@ class PluggableProtocolDockPane(TraitsDockPane):
         """
         if not self.protocol_state_tracker.is_modified:
             return
-        user_choice = confirm(
-            None,  # the dock pane is not a QWidget — no dialog parent
-            "Current protocol has unsaved changes.\n"
-            "Exit without saving?",
-            title="Unsaved Protocol Changes",
-            cancel=False,
-        )
-        # Veto only an explicit "No" — dismissing the dialog via the
-        # window X maps to CANCEL and lets the exit proceed, matching
-        # the original pane behaviour.
-        if user_choice == NO:
-            event.new.veto = True
+
+        global _EXITED
+
+        if not _EXITED:
+
+            user_choice = confirm(
+                None,  # the dock pane is not a QWidget — no dialog parent
+                "Current protocol has unsaved changes.\n"
+                "Exit without saving?",
+                title="Unsaved Protocol Changes",
+                cancel=False,
+            )
+            # Veto only an explicit "No" — dismissing the dialog via the
+            # window X maps to CANCEL and lets the exit proceed, matching
+            # the original pane behaviour.
+            if user_choice == NO:
+                event.new.veto = True
+            else:
+                _EXITED = True
 
     # Wire the pane to the status model — the single source of truth for
     # the current step (issue #471). The tree's active-step highlight and the
