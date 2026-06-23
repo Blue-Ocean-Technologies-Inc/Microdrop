@@ -122,7 +122,10 @@ class MicrodropTask(Task):
 
         right = VSplitter(
             PaneItem("dropbot_status_and_controls.dock_pane"),
-            PaneItem("protocol_grid.dock_pane"), # we want this to take up as much space as it can
+            # PPT-9 (#371): the pluggable protocol tree replaces the deleted
+            # legacy protocol_grid dock pane. We want this to take up as much
+            # space as it can.
+            PaneItem("pluggable_protocol_tree.dock_pane"),
         )
 
         return TaskLayout(

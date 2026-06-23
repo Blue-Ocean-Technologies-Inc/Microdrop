@@ -146,16 +146,17 @@ class TestHardwareTopicsMatchConsts:
 
 
 class TestUITopicsMatchConsts:
-    """Cross-check API topic values against protocol_grid.consts."""
+    """Cross-check API topic values against device_viewer.consts (the canonical
+    home after PPT-9 deleted protocol_grid, #371)."""
 
     def test_ui_topics(self):
-        from protocol_grid.consts import (
+        from device_viewer.consts import (
             DEVICE_VIEWER_STATE_CHANGED, PROTOCOL_GRID_DISPLAY_STATE,
             CALIBRATION_DATA, DEVICE_VIEWER_SCREEN_CAPTURE,
             DEVICE_VIEWER_SCREEN_RECORDING, DEVICE_VIEWER_CAMERA_ACTIVE,
             DEVICE_VIEWER_MEDIA_CAPTURED, ROUTES_EXECUTING,
+            DEVICE_VIEWER_RECORDING_STATE,
         )
-        from device_viewer.consts import DEVICE_VIEWER_RECORDING_STATE
         assert UITopics.DEVICE_VIEWER_STATE_CHANGED == DEVICE_VIEWER_STATE_CHANGED
         assert UITopics.PROTOCOL_GRID_DISPLAY_STATE == PROTOCOL_GRID_DISPLAY_STATE
         assert UITopics.CALIBRATION_DATA == CALIBRATION_DATA
@@ -171,7 +172,7 @@ class TestApplicationTopicsMatchConsts:
 
     def test_application_topics(self):
         from microdrop_application.consts import ADVANCED_MODE_CHANGE
-        from protocol_grid.consts import PROTOCOL_RUNNING
+        from device_viewer.consts import PROTOCOL_RUNNING
         assert ApplicationTopics.ADVANCED_MODE_CHANGE == ADVANCED_MODE_CHANGE
         assert ApplicationTopics.PROTOCOL_RUNNING == PROTOCOL_RUNNING
 

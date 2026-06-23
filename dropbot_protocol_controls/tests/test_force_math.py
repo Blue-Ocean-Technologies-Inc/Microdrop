@@ -1,5 +1,8 @@
-"""Tests for force_math helpers — guards plus parity with the legacy
-ForceCalculationService that PPT-9 will eventually retire."""
+"""Tests for force_math helpers (guards + behaviour).
+
+The legacy ForceCalculationService parity tests were dropped in PPT-9 (#371)
+when protocol_grid was deleted; force_math is now the sole implementation and
+the behavioural cases below pin its outputs directly."""
 
 import pytest
 
@@ -8,9 +11,6 @@ from dropbot_protocol_controls.services.force_math import (
     full_electrode_capacitance_per_unit_area,
     current_full_electrode_capacitance_per_unit_area,
     force_for_step,
-)
-from protocol_grid.services.force_calculation_service import (
-    ForceCalculationService,
 )
 
 
@@ -79,35 +79,6 @@ def test_force_for_step_returns_positive_float():
     assert result is not None
     assert isinstance(result, float)
     assert result > 0
-
-
-@pytest.mark.parametrize("liquid,filler", [
-    (2.0, 0.5),
-    (3.5, 1.0),
-    (1.5, 0.25),
-    (5.0, 4.99),
-])
-def test_capacitance_per_unit_area_legacy_parity(liquid, filler):
-    assert full_electrode_capacitance_per_unit_area(liquid, filler) == pytest.approx(
-        ForceCalculationService.calculate_capacitance_per_unit_area(
-            liquid, filler,
-        ),
-        abs=1e-6,
-    )
-
-
-@pytest.mark.parametrize("voltage,c_per_a", [
-    (75, 1.5),
-    (100, 2.0),
-    (120, 0.8),
-    (50, 3.0),
-    (200, 1.25),
-])
-def test_force_for_step_legacy_parity(voltage, c_per_a):
-    assert force_for_step(voltage, c_per_a) == pytest.approx(
-        ForceCalculationService.calculate_force_for_step(voltage, c_per_a),
-        abs=1e-6,
-    )
 
 
 # ---------------------------------------------------------------------------
