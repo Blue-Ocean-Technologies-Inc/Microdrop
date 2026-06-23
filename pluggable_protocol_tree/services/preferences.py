@@ -12,7 +12,7 @@ from pathlib import Path
 # Enthought library imports.
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Bool, Dict, Directory, Enum, Float, Str
+from traits.api import Bool, Dict, Directory, Enum, Float, List, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, View, Item
 
@@ -94,6 +94,13 @@ class ProtocolPreferences(PreferencesHelper):
     # hidden_by_default flag; legacy col_name-keyed entries are read via
     # a fallback in the tree widget and rewritten on the next toggle.
     protocol_tree_column_visibility = Dict(Str, Bool)
+
+    # Programmatic preference (no Settings-dialog item): the visual left-to-
+    # right column order as a list of col_id, persisted when the user drags a
+    # header section. Keyed by the same stable col_id as visibility, so order
+    # survives display renames; col_ids absent from the saved list (columns
+    # added since) keep their natural position at the end on restore.
+    protocol_tree_column_order = List(Str)
 
     # {col_id: seconds} acknowledgement-wait time per wait-capable column
     # (issue #427), keyed by the stable col_id (base_id for compounds),
