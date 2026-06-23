@@ -67,16 +67,13 @@ FRONTEND_PLUGINS = [
     PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
-
-]
-
-EXPERIMENTAl_PLUGINS = [
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     PeripheralProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
+
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [

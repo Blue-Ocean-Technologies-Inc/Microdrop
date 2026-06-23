@@ -14,8 +14,7 @@ microdrop_runner_setup()
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
     DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, FRONTEND_APPLICATION, \
     BACKEND_APPLICATION, SERVER_CONTEXT, \
-    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS, \
-    EXPERIMENTAl_PLUGINS
+    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -129,13 +128,6 @@ if __name__ == "__main__":
             plugins += OPENDROP_BACKEND_PLUGINS
         elif args.device == "mock":
             plugins += MOCK_DROPBOT_BACKEND_PLUGINS
-
-    # The pluggable protocol tree + its contributing feature plugins are the
-    # protocol system after PPT-9 (#371) deleted the legacy protocol_grid.
-    # Loaded with the frontend (UI), appended last to match the prior
-    # experimental run order (preserves service-contribution priority).
-    if "frontend" in selected:
-        plugins += EXPERIMENTAl_PLUGINS
 
     # De-duplicate while preserving load order (matters for service priority).
     plugins = list(dict.fromkeys(plugins))
