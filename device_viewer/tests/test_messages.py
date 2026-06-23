@@ -8,6 +8,14 @@ def _base_kwargs():
     )
 
 
+def test_state_message_does_not_carry_id_to_channel():
+    """#415: the electrode->channel mapping is no longer sent on every state
+    message — it travels once (change-gated) on DEVICE_VIEWER_GEOMETRY_CHANGED."""
+    msg = DeviceViewerMessageModel(**_base_kwargs())
+    assert not hasattr(msg, "id_to_channel")
+    assert "id_to_channel" not in msg.serialize()
+
+
 def test_execution_params_defaults_to_none():
     msg = DeviceViewerMessageModel(**_base_kwargs())
     assert msg.execution_params is None
