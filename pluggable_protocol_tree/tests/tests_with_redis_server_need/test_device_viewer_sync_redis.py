@@ -157,7 +157,6 @@ def test_dv_state_to_stash_round_trip(
         message=DeviceViewerMessageModel(
             channels_activated={0, 1},
             routes=[],
-            id_to_channel={"e00": 0, "e01": 1},
             step_info={"step_id": None, "step_label": None,
                        "free_mode": True},
         ).serialize(),

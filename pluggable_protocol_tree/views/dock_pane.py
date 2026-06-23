@@ -145,6 +145,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
+        self.sync = DeviceViewerSyncController(row_manager=self.manager)
         # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)

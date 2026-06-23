@@ -5,7 +5,6 @@ def _base_kwargs():
     return dict(
         channels_activated=set(),
         routes=[],
-        id_to_channel={},
     )
 
 
