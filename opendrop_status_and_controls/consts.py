@@ -1,6 +1,6 @@
 import os
 
-from protocol_grid.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
+from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])

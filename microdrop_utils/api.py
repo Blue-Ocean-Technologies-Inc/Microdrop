@@ -77,7 +77,6 @@ from microdrop_utils.dramatiq_controller_base import (  # noqa: E402
 from dropbot_controller import consts as _dropbot
 from dropbot_protocol_controls import consts as _dpc
 from electrode_controller import consts as _electrode
-from protocol_grid import consts as _protocol
 from device_viewer import consts as _device_viewer
 from microdrop_application import consts as _app
 from peripheral_controller import consts as _peripheral
@@ -157,14 +156,14 @@ class HardwareTopics:
 
 
 # ---------------------------------------------------------------------------
-# UI Topics  (protocol_grid/consts.py, dropbot_preferences_ui/consts.py)
+# UI Topics  (device_viewer/consts.py, dropbot_preferences_ui/consts.py)
 # ---------------------------------------------------------------------------
 
 class UITopics:
     """Topics for UI state synchronisation between frontend plugins."""
 
     DEVICE_VIEWER_STATE_CHANGED     = _device_viewer.DEVICE_VIEWER_STATE_CHANGED
-    PROTOCOL_GRID_DISPLAY_STATE     = _protocol.PROTOCOL_GRID_DISPLAY_STATE
+    PROTOCOL_GRID_DISPLAY_STATE     = _device_viewer.PROTOCOL_GRID_DISPLAY_STATE
     CALIBRATION_DATA                = _device_viewer.CALIBRATION_DATA
     DROPLET_CHECK_DECISION_REQUEST  = _dpc.DROPLET_CHECK_DECISION_REQUEST
     DROPLET_CHECK_DECISION_RESPONSE = _dpc.DROPLET_CHECK_DECISION_RESPONSE
@@ -173,7 +172,7 @@ class UITopics:
     DEVICE_VIEWER_CAMERA_ACTIVE     = _device_viewer.DEVICE_VIEWER_CAMERA_ACTIVE
     DEVICE_VIEWER_MEDIA_CAPTURED    = _device_viewer.DEVICE_VIEWER_MEDIA_CAPTURED
     DEVICE_VIEWER_RECORDING_STATE   = device_viewer.consts.DEVICE_VIEWER_RECORDING_STATE
-    ROUTES_EXECUTING                = _protocol.ROUTES_EXECUTING
+    ROUTES_EXECUTING                = _device_viewer.ROUTES_EXECUTING
     VOLTAGE_FREQUENCY_RANGE_CHANGED = _prefs_ui.VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 
@@ -184,7 +183,7 @@ class UITopics:
 class ApplicationTopics:
     """Application-wide topics published by the core MicroDrop plugin."""
     ADVANCED_MODE_CHANGE    = _app.ADVANCED_MODE_CHANGE
-    PROTOCOL_RUNNING        = _protocol.PROTOCOL_RUNNING
+    PROTOCOL_RUNNING        = _device_viewer.PROTOCOL_RUNNING
 
 
 # ---------------------------------------------------------------------------

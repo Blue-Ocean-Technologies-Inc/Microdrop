@@ -31,6 +31,10 @@ DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
 DEVICE_VIEWER_RECORDING_STATE  = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
+# Sidebar route preview/playback is running (payload "True"/"False"). Published
+# by device_viewer's RouteExecutionService. Canonical home moved here from the
+# deleted protocol_grid.consts in PPT-9 (#371).
+ROUTES_EXECUTING               = "ui/device_viewer/routes_executing"
 CALIBRATION_DATA               = "ui/calibration_data"
 
 # Sidebar route-executor execution params -> the selected protocol step.

@@ -52,7 +52,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
-from protocol_grid.services.experiment_manager import ExperimentManager
+from pluggable_protocol_tree.services.experiment_manager import ExperimentManager
 
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.services.preferences import (
