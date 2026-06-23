@@ -138,13 +138,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _preferences_default(self):
         return ProtocolPreferences(preferences=self.task.window.application.preferences)
 
-    def _sync_default(self):
-        return DeviceViewerSyncController(row_manager=self.manager)
-
     def _manager_default(self):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
+        # Create the sync controller eagerly (single source of truth — no
+        # _sync_default, so the controller + its dramatiq actor are never
+        # created twice).
         self.sync = DeviceViewerSyncController(row_manager=self.manager)
         # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
