@@ -187,7 +187,7 @@ class RoutesHandler(BaseColumnHandler):
                    step_label, preview_mode, per_phase_dwell, stop_event,
                    pause_event, signals, phase_index, phase_total,
                    hold_for_buffer=False, honor_pause=True,
-                   emit_phase_started=True):
+                   emit_phase_started=True, time_expired=None):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -206,6 +206,13 @@ class RoutesHandler(BaseColumnHandler):
         ``dyn_phase_started`` (which drives the model AND sets dyn_loop_active);
         it passes False here so the generic ``phase_started`` — whose handler
         clears dyn_loop_active — doesn't immediately undo that flag (#477).
+
+        ``time_expired`` (optional zero-arg predicate): polled each slice during
+        the dwell AND the post-dwell hold; when it returns True the phase ends
+        at once. The dynamic duration loop passes it so a phase held open by
+        volume threshold (a stuck droplet) still yields the instant the rep-
+        duration budget is crossed, letting the caller raise the overrun prompt
+        rather than waiting for the hold to end on its own (#477 follow-up).
         """
         # Fresh slate: a handler set in phase N-1 must NOT carry over into
         # phase N. Cleared before the stop/pause checks so a stale set
@@ -285,7 +292,8 @@ class RoutesHandler(BaseColumnHandler):
 
         _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
                            phase_advance_event=ctx.phase_advance_event,
-                           seek_pending=_seek_pending)
+                           seek_pending=_seek_pending,
+                           time_expired=time_expired)
 
         # Consume any phase-time buffer a sibling column added (only relevant
         # when this step opted into holding — see below) and tell the status
@@ -322,6 +330,11 @@ class RoutesHandler(BaseColumnHandler):
                    and not ctx.phase_advance_event.is_set()):
                 if _seek_pending():
                     break
+                # Rep-duration budget crossed while holding (e.g. a stuck
+                # droplet held open by volume threshold): stop holding so the
+                # caller can raise the overrun prompt (#477 follow-up).
+                if time_expired is not None and time_expired():
+                    break
                 if pause_event.is_set():
                     pause_event.wait_cleared()
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
@@ -332,7 +345,8 @@ class RoutesHandler(BaseColumnHandler):
                         extra, stop_event, pause_event,
                         phase_advance_event=ctx.phase_advance_event,
                         buffer_provider=_take_and_emit,
-                        seek_pending=_seek_pending)
+                        seek_pending=_seek_pending,
+                        time_expired=time_expired)
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
                     continue
                 if time.monotonic() >= grace_deadline:
@@ -386,6 +400,12 @@ class RoutesHandler(BaseColumnHandler):
         cycle_len = len(unit_cycle)
         step_start = _monotonic()
         running_idx = 0
+        # Set once the time-expired prompt has been shown for this step (or the
+        # operator chose to finish the loop): it both suppresses re-prompting and
+        # disables the mid-phase budget wake, so the loop-completion phases dwell
+        # NORMALLY (the droplet must physically return to start) instead of
+        # strobing once we are knowingly over budget.
+        overrun_prompted = False
 
         def raw_elapsed():
             # RAW wall-clock since step start: pauses and holds count against
@@ -415,12 +435,21 @@ class RoutesHandler(BaseColumnHandler):
             came_from_seek = seek_phase > 0
         _, start_idle = dyn_resume_start(seek_phase, cycle_len)
 
-        def _run_cycle_phase(phase, cycle_pos):
+        def _run_cycle_phase(phase, cycle_pos, guard_budget=False):
             nonlocal running_idx
             running_idx += 1
             if signals is not None:
                 signals.dyn_phase_started = (cycle_pos + 1, cycle_len,
                                              per_phase_dwell)
+            # guard_budget: only the main active-loop phases pass True. It wakes
+            # the dwell/hold the instant the RAW budget is crossed (within a
+            # slice) so the overrun prompt fires even while a phase is held open
+            # by volume threshold (a stuck droplet). Gated on not-yet-prompted so
+            # the loop-completion phases (post-prompt) dwell normally. The
+            # ramp-up and seek-resume finishes pass False (never break early).
+            time_expired = (
+                (lambda: not overrun_prompted and raw_elapsed() >= budget)
+                if (guard_budget and budget > 0) else None)
             # hold_for_buffer=True: this loop only runs when a column requested
             # the phase-hold hook, so honour the same post-dwell hold/dialog as
             # the static path. honor_pause=False: this loop owns the pause/seek
@@ -432,7 +461,8 @@ class RoutesHandler(BaseColumnHandler):
                 stop_event=stop_event, pause_event=pause_event,
                 signals=signals, phase_index=cycle_pos + 1,
                 phase_total=cycle_len + 1, hold_for_buffer=True,
-                honor_pause=False, emit_phase_started=False)
+                honor_pause=False, emit_phase_started=False,
+                time_expired=time_expired)
 
         def _go_idle():
             # Explicit idle: electrodes off once, then hold to the budget. A
@@ -499,7 +529,6 @@ class RoutesHandler(BaseColumnHandler):
         # resume_target stuck, collapsing every remaining dwell to ~0 (strobing
         # the rest of the cycle) and skipping idle, so the step would race to
         # the next one (#477).
-        overrun_prompted = False
         while not stop_event.is_set():
             while i < cycle_len:
                 if pause_event.is_set():
@@ -518,7 +547,7 @@ class RoutesHandler(BaseColumnHandler):
                     if i is None:
                         return
                     continue
-                if not _run_cycle_phase(unit_cycle[i], i):
+                if not _run_cycle_phase(unit_cycle[i], i, guard_budget=True):
                     return
                 i += 1
                 # Overrun guard (#477 follow-up): the rep-duration budget ran
@@ -711,7 +740,7 @@ class RoutesHandler(BaseColumnHandler):
 
 def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
                        phase_advance_event=None, buffer_provider=None,
-                       seek_pending=None) -> None:
+                       seek_pending=None, time_expired=None) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
@@ -724,6 +753,11 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
     that returns seconds to ADD to the remaining dwell. Lets a sibling
     column extend the phase mid-dwell via
     ``StepContext.add_time_buffer_to_current_phase`` without restarting it.
+
+    ``time_expired`` (optional): a zero-arg predicate polled each slice;
+    returns early (cuts the dwell short) the first time it is True. Used by
+    the dynamic duration loop to yield the instant the rep-duration budget
+    is crossed, even mid-dwell/hold (#477 follow-up).
     """
     remaining = seconds
     while remaining > 0:
@@ -735,6 +769,8 @@ def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
         # step/phase) must abort the leftover dwell on resume — otherwise the
         # old step's remaining time runs before the redirect (#471).
         if seek_pending is not None and seek_pending():
+            return
+        if time_expired is not None and time_expired():
             return
         if pause_event is not None and pause_event.is_set():
             pause_event.wait_cleared()
