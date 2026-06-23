@@ -108,6 +108,14 @@ class ProtocolTreeWidget(QWidget):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self._on_header_context_menu)
 
+        # Let the user drag header sections to reorder columns, and persist
+        # that order (like visibility) so it survives a restart. Apply the
+        # saved order BEFORE connecting sectionMoved so the restore moves
+        # don't recursively re-persist.
+        header.setSectionsMovable(True)
+        self._apply_column_order()
+        header.sectionMoved.connect(self._persist_column_order)
+
         self.delegate = ProtocolItemDelegate(row_manager, parent=self.tree)
         self.tree.setItemDelegate(self.delegate)
 
@@ -282,6 +290,54 @@ class ProtocolTreeWidget(QWidget):
             self._preferences.protocol_tree_column_visibility = visibility
         except Exception as exc:
             logger.warning(f"Could not save column visibility preference: {exc}")
+
+    def _load_column_order(self) -> list:
+        """Return the persisted [col_id, ...] visual order ([] when nothing
+        was saved yet or the preference is unreadable)."""
+        try:
+            saved = self._preferences.protocol_tree_column_order
+            return [str(cid) for cid in (saved or [])]
+        except Exception as exc:
+            logger.warning(f"Could not read column order preference: {exc}")
+            return []
+
+    def _apply_column_order(self):
+        """Reorder the header's visual sections to the persisted col_id
+        sequence. Columns absent from the saved order (added since the last
+        save) keep their natural logical position at the end. No-op when
+        nothing is saved. Visibility is independent of order, so hidden
+        columns still occupy (and are moved within) the visual sequence."""
+        saved_order = self._load_column_order()
+        if not saved_order:
+            return
+        header = self.tree.header()
+        id_to_logical = {col.model.col_id: i
+                         for i, col in enumerate(self._manager.columns)}
+        target = [id_to_logical[cid] for cid in saved_order
+                  if cid in id_to_logical]
+        seen = set(target)
+        target += [i for i in range(len(self._manager.columns))
+                   if i not in seen]
+        blocked = header.blockSignals(True)
+        try:
+            for visual, logical in enumerate(target):
+                cur = header.visualIndex(logical)
+                if cur != visual:
+                    header.moveSection(cur, visual)
+        finally:
+            header.blockSignals(blocked)
+
+    def _persist_column_order(self, *args):
+        """Save the current visual column order as a [col_id, ...] list.
+        Connected to the header's ``sectionMoved`` signal (which passes the
+        moved section's indices — ignored; we re-read the whole order)."""
+        header = self.tree.header()
+        order = [self._manager.columns[header.logicalIndex(v)].model.col_id
+                 for v in range(header.count())]
+        try:
+            self._preferences.protocol_tree_column_order = order
+        except Exception as exc:
+            logger.warning(f"Could not save column order preference: {exc}")
 
     def _add_step_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
