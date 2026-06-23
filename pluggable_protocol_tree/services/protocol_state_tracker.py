@@ -97,7 +97,7 @@ class PluggableProtocolStateTracker(HasTraits):
 
     def display_name(self) -> str:
         tag = self.modified_tag if self.is_modified else ""
-        return f"{self.pkg_display_name} - {self.protocol_name}{tag}"
+        return f"{self.pkg_display_name}{"\t\t-\t\t"}{self.protocol_name}{tag}"
 
     def update_display_name(self) -> None:
         if self.dock_pane is None:
