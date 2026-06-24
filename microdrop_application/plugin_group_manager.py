@@ -20,11 +20,16 @@ appears/withdraws (the tree plugin opted into connect_extension_point_traits).
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str
 
 from microdrop_application.consts import (
-    MAGNET_PERIPHERALS_GROUP, PERIPHERALS_ENABLED_KEY,
+    MAGNET_BACKEND_GROUP, MAGNET_UI_GROUP,
+    PERIPHERAL_BACKEND_ENABLED_KEY, PERIPHERAL_UI_ENABLED_KEY,
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.tasks_runtime_helpers import (
-    add_dock_pane_live, remove_dock_pane_live,
+    add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
+)
+from peripheral_controller.consts import (
+    START_DEVICE_MONITORING as START_DEVICE_MONITORING_PERIPHERAL,
 )
 from logger.logger_service import get_logger
 
@@ -49,6 +54,11 @@ class PluginGroup(HasTraits):
     #: the same panes it added.
     dock_pane_ids = List(Str)
     loaded = Bool(False)
+    #: App-globals flag persisting this group's enabled state across runs.
+    enabled_key = Str()
+    #: Optional topic published (empty message) right after a successful
+    #: enable — e.g. the backend group kicks off the magnet connection search.
+    post_enable_publish_topic = Str()
 
 
 class PluginGroupManager(HasTraits):
@@ -70,21 +80,43 @@ class PluginGroupManager(HasTraits):
         )
         from peripherals_ui.plugin import PeripheralUiPlugin
 
-        magnet = PluginGroup(
-            name=MAGNET_PERIPHERALS_GROUP,
+        ui = PluginGroup(
+            name=MAGNET_UI_GROUP,
             plugin_factories=[
-                PeripheralControllerPlugin,        # backend (services + topics)
                 PeripheralProtocolControlsPlugin,  # magnet protocol column
-                PeripheralUiPlugin,                # dock pane + status icon
+                PeripheralUiPlugin,                # dock pane + status icon + tools submenu
             ],
+            enabled_key=PERIPHERAL_UI_ENABLED_KEY,
         )
-        return {magnet.name: magnet}
+        backend = PluginGroup(
+            name=MAGNET_BACKEND_GROUP,
+            plugin_factories=[PeripheralControllerPlugin],
+            enabled_key=PERIPHERAL_BACKEND_ENABLED_KEY,
+            post_enable_publish_topic=START_DEVICE_MONITORING_PERIPHERAL,
+        )
+        return {ui.name: ui, backend.name: backend}
 
     # --- public API --------------------------------------------------
 
     def is_loaded(self, group_name):
         group = self.groups.get(group_name)
         return bool(group is not None and group.loaded)
+
+    def apply(self, task, desired):
+        """Reconcile group load state to ``desired`` ({group_name: bool}).
+
+        Enables run backend-before-UI (services/topics exist before the column/
+        UI consume them); disables run UI-before-backend (UI dies before the
+        backend it observes). Only groups whose desired state differs from
+        their current state are touched."""
+        for group_name in (MAGNET_BACKEND_GROUP, MAGNET_UI_GROUP):
+            if desired.get(group_name) and not self.is_loaded(group_name):
+                self.enable(task, group_name)
+        for group_name in (MAGNET_UI_GROUP, MAGNET_BACKEND_GROUP):
+            if (group_name in desired
+                    and not desired[group_name]
+                    and self.is_loaded(group_name)):
+                self.disable(task, group_name)
 
     def enable(self, task, group_name):
         """Add + start every plugin in the group (in order), capture the
@@ -119,8 +151,26 @@ class PluginGroupManager(HasTraits):
 
         self._mount_dock_panes(task, group)
 
+        # The plugin's menu contributions (e.g. the peripheral Search Connection
+        # submenu) are gathered once at window creation; rebuild so they appear.
+        try:
+            rebuild_menu_bar_live(task.window, task, application)
+        except Exception:
+            logger.exception("enable: menu bar rebuild failed")
+
+        # Optional post-enable kick — the backend group starts the magnet search.
+        if group.post_enable_publish_topic:
+            try:
+                publish_message(topic=group.post_enable_publish_topic, message="")
+                logger.info(f"enable: published {group.post_enable_publish_topic}")
+            except Exception:
+                logger.exception(
+                    f"enable: failed to publish {group.post_enable_publish_topic}"
+                )
+
         group.loaded = True
-        app_globals[PERIPHERALS_ENABLED_KEY] = True
+        if group.enabled_key:
+            app_globals[group.enabled_key] = True
         logger.info(f"enable: group '{group_name}' loaded")
 
     def disable(self, task, group_name):
@@ -168,8 +218,14 @@ class PluginGroupManager(HasTraits):
                 logger.exception(f"disable: unregister_service failed for {service_id}")
         group.service_ids = []
 
+        try:
+            rebuild_menu_bar_live(window, task, application)
+        except Exception:
+            logger.exception("disable: menu bar rebuild failed")
+
         group.loaded = False
-        app_globals[PERIPHERALS_ENABLED_KEY] = False
+        if group.enabled_key:
+            app_globals[group.enabled_key] = False
         logger.info(f"disable: group '{group_name}' unloaded")
 
     # --- helpers -----------------------------------------------------
