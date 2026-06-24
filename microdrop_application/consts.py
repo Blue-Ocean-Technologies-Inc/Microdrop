@@ -19,6 +19,12 @@ ACTOR_TOPIC_DICT = {
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
+# Runtime plugin-group hot load/unload (the optional magnet-peripheral group).
+# PERIPHERALS_ENABLED_KEY is an app-globals flag the menu toggle reads to show
+# its checkmark and that activated() reads to auto-restore the group on launch.
+MAGNET_PERIPHERALS_GROUP = "magnet_peripherals"
+PERIPHERALS_ENABLED_KEY = "microdrop.peripherals_enabled"
+
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 application_home_directory = Path.home() / "Documents"/ "MicroDropNextGen"
