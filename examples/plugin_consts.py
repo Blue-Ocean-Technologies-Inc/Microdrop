@@ -59,17 +59,27 @@ from user_help_plugin.plugin import UserHelpPlugin
 # for any run script that launches the GUI.
 # ---------------------------------------------------------------------------
 
+# The optional magnet-peripheral group (PeripheralControllerPlugin +
+# PeripheralProtocolControlsPlugin + PeripheralUiPlugin) is intentionally NOT
+# in the default lists below. It is hot loaded/unloaded at runtime from the
+# Tools -> Peripherals toggle via PluginGroupManager (group
+# "magnet_peripherals"), so users without the magnet hardware aren't burdened
+# with its UI/services, and it auto-restores on launch from a persisted flag.
+MAGNET_PERIPHERAL_PLUGINS = [
+    PeripheralControllerPlugin,        # backend (services + topics)
+    PeripheralProtocolControlsPlugin,  # magnet protocol column
+    PeripheralUiPlugin,                # dock pane + status icon
+]
+
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     LoggerUIPlugin,
     DeviceViewerPlugin,
-    PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
-    PeripheralProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
@@ -96,7 +106,6 @@ OPENDROP_BACKEND_PLUGINS = [
 ]
 
 DROPBOT_BACKEND_PLUGINS = [
-    PeripheralControllerPlugin,
     DropbotControllerPlugin
 ]
 
