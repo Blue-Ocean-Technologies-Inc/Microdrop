@@ -64,6 +64,18 @@ class PeripheralControllerBase(HasTraits):
                 self.proxy = None
                 self.connection_active = False
 
+        # Release the Dramatiq listener actor handle. Routing to it is retracted
+        # by the message router when the plugin is removed; this drops our ref.
+        self.dramatiq_listener_actor = None
+
+        # Remove the connection-state app-global this controller owns, so no
+        # consumer reads a stale value after the controller is unloaded.
+        try:
+            if CONNECTION_STATE_KEY in app_globals:
+                del app_globals[CONNECTION_STATE_KEY]
+        except Exception as e:
+            logger.debug(f"Could not clear {CONNECTION_STATE_KEY} from app_globals: {e}")
+
     @observe("connection_active")
     def _mirror_connection_state_to_app_globals(self, event):
         """Mirror the connection state to app_globals so any plugin can read
