@@ -12,7 +12,7 @@ from traits.api import Instance, provides
 
 from electrode_controller.consts import electrode_disable_request_publisher, disabled_channels_changed_publisher
 # Local imports.
-from .consts import PKG
+from .consts import PKG, MAGNET_PERIPHERALS_GROUP
 from dropbot_controller.models.self_tests import TestEvent
 
 from microdrop_utils.pyface_helpers import StatusBarManager
@@ -25,7 +25,7 @@ from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
-from .menus import AdvancedModeAction
+from .menus import AdvancedModeAction, PeripheralsToggleAction, is_peripherals_enabled
 from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
@@ -81,7 +81,7 @@ class MicrodropTask(Task):
 
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
-        SMenu(id="Tools", name="&Tools"),
+        SMenu(PeripheralsToggleAction(), id="Tools", name="&Tools"),
 
         SMenu(TaskToggleGroup(), id="View", name="&View"),
 
@@ -105,6 +105,23 @@ class MicrodropTask(Task):
         if self.window.status_bar_manager is None:
             logger.info("Microdrop task: No status bar manager created: Adding now...")
             self._add_status_bar_to_window()
+        self._restore_peripherals_if_enabled()
+
+    def _restore_peripherals_if_enabled(self):
+        """Re-load the magnet-peripheral group on launch if the persisted
+        app-global flag says it was enabled last session — so the toggle's
+        checkmark (read from the same flag) matches what's actually loaded."""
+        if not is_peripherals_enabled():
+            return
+        from .plugin_group_manager import PluginGroupManager
+        manager = self.window.application.get_service(PluginGroupManager)
+        if manager is None:
+            logger.warning("peripherals restore: PluginGroupManager service not found")
+            return
+        if manager.is_loaded(MAGNET_PERIPHERALS_GROUP):
+            return
+        logger.info("Restoring magnet-peripheral group from persisted flag")
+        manager.enable(self, MAGNET_PERIPHERALS_GROUP)
 
     def _add_status_bar_to_window(self):
         logger.info(f"Adding status bar to Microdrop Task window.")
