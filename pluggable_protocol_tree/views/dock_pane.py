@@ -39,7 +39,7 @@ from pluggable_protocol_tree.services.phase_math import effective_repetitions_fo
 from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
 from pluggable_protocol_tree.services.protocol_status_controller import ProtocolStatusController
 from pyface.tasks.api import TraitsDockPane
-from traits.api import Any, Bool, Event, Float, Instance, List, Str, observe
+from traits.api import Any, Bool, Dict, Event, Float, Instance, List, Str, observe
 
 from logger.logger_service import get_logger
 from microdrop_utils.sticky_notes import StickyWindowManager
@@ -73,6 +73,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     columns = List(Instance(IColumn))
     manager = Instance(RowManager)
+
+    #: Per-row cell values stashed (keyed by row uuid) when a column set is
+    #: removed at runtime, so a later re-add of the same columns restores the
+    #: values the rebuilt tree would otherwise reset to defaults. Survives a
+    #: live remove -> re-add toggle because this pane outlives the unloaded
+    #: plugin. Maps uuid -> {col_id: value}.
+    _column_value_stash = Dict()
     sync = Instance(DeviceViewerSyncController)
     sticky_manager = Instance(StickyWindowManager)
     experiment_manager = Instance(ExperimentManager)
@@ -316,6 +323,69 @@ class PluggableProtocolDockPane(TraitsDockPane):
             except Exception as e:
                 logger.warning(f"poll scheduler shutdown failed: {e}")
         super().destroy()
+
+    # --- runtime column hot load/unload ------------------------------
+    def rebuild_columns(self, new_columns):
+        """Swap the protocol tree's column set in place at runtime.
+
+        Driven by the tree plugin when a column-contributing plugin is hot
+        loaded/unloaded (the magnet column). Preserves cell values for
+        columns common to the old and new sets via the manager's JSON
+        round-trip; for a remove -> re-add toggle, values for the dropped
+        columns are stashed (by row uuid) and restored when they return."""
+        old_ids = {c.model.col_id for c in self.columns}
+        new_ids = {c.model.col_id for c in new_columns}
+        removed = old_ids - new_ids
+        added = new_ids - old_ids
+
+        # Stash values for columns about to disappear, so a later re-add can
+        # restore them (the rebuilt tree gets trait defaults otherwise).
+        if removed:
+            self._stash_column_values(removed)
+
+        self.columns = list(new_columns)
+
+        def _mutate():
+            # Round-trips current values through JSON against the new column
+            # set; fires rows_changed (suppressed inside the model reset).
+            self.manager.set_columns(list(new_columns))
+            if added:
+                self._restore_stashed_column_values(added)
+
+        # The widget brackets the swap in a full model reset so the QTreeView
+        # picks up the changed column count and re-applies header state.
+        self._pane.widget.refresh_columns(_mutate)
+
+        # New columns bring their own wait-capable handlers — seed their ack
+        # grid entries and push any persisted ack waits into them.
+        self.preferences.seed_ack_times_from_columns(self.columns)
+        self._sync_handler_ack_times()
+        logger.info(
+            f"protocol columns rebuilt: +{sorted(added)} -{sorted(removed)}"
+        )
+
+    def _stash_column_values(self, col_ids):
+        """Snapshot the given columns' per-row values, keyed by row uuid, so a
+        later re-add restores them across a live remove -> re-add toggle."""
+        for row in self.manager.iter_all_rows():
+            bucket = self._column_value_stash.setdefault(row.uuid, {})
+            for col_id in col_ids:
+                if hasattr(row, col_id):
+                    bucket[col_id] = getattr(row, col_id)
+
+    def _restore_stashed_column_values(self, col_ids):
+        """Write stashed values back onto the rebuilt tree's rows (matched by
+        uuid) for the re-added columns. Rows with no stash entry (added while
+        the column was absent) keep their trait defaults. Silent — direct
+        setattr doesn't fire cell_changed, so it doesn't dirty the protocol;
+        the surrounding model reset repaints everything."""
+        for row in self.manager.iter_all_rows():
+            bucket = self._column_value_stash.get(row.uuid)
+            if not bucket:
+                continue
+            for col_id in col_ids:
+                if col_id in bucket and hasattr(row, col_id):
+                    setattr(row, col_id, bucket[col_id])
 
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog
