@@ -109,6 +109,32 @@ class PeripheralStatusDockPane(DockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar_with_device_status_icon(self, event):
+        # Normal-startup path: the pane exists before the status bar, so this
+        # observer fires when the bar is set. Delegate to the idempotent
+        # installer (the hot-mount path calls the same installer via
+        # on_live_mounted, where this observer never fires).
+        self._install_status_bar_icon()
+
+    def on_live_mounted(self):
+        """Hook called by add_dock_pane_live after the pane is mounted on a live
+        window. On a hot-mount the status bar already exists, so the
+        task:window:status_bar_manager observer never fires — install the icon
+        explicitly here."""
+        self._install_status_bar_icon()
+
+    def _install_status_bar_icon(self):
+        """Add the Z-Stage status icon (+ spacer) to the window status bar and
+        wire its connection-state colour + themed tooltip. Idempotent: no-op if
+        the icon is already installed or the window has no status bar yet."""
+        if self.status_bar_icon is not None:
+            return
+        window = self.task.window if self.task is not None else None
+        status_bar_manager = (
+            getattr(window, "status_bar_manager", None)
+            if window is not None else None
+        )
+        if status_bar_manager is None:
+            return
 
         _model = self.dramatiq_controller.ui.model
 
@@ -120,8 +146,8 @@ class PeripheralStatusDockPane(DockPane):
         device_status.setStyleSheet(f"color: {disconnected_color};")
 
         spacer = horizontal_spacer_widget(10)
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(spacer)
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_status)
+        status_bar_manager.status_bar.addPermanentWidget(spacer)
+        status_bar_manager.status_bar.addPermanentWidget(device_status)
         self._status_bar_spacer = spacer
 
         def set_status_color(event):
@@ -140,7 +166,7 @@ class PeripheralStatusDockPane(DockPane):
             self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
 
         _apply_theme_style()  # initial setting
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)  # track theme changes
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
         self._theme_callbacks.append(_apply_theme_style)
 
     def destroy(self):
