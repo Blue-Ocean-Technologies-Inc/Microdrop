@@ -59,16 +59,19 @@ from user_help_plugin.plugin import UserHelpPlugin
 # for any run script that launches the GUI.
 # ---------------------------------------------------------------------------
 
-# The optional magnet-peripheral group (PeripheralControllerPlugin +
-# PeripheralProtocolControlsPlugin + PeripheralUiPlugin) is intentionally NOT
-# in the default lists below. It is hot loaded/unloaded at runtime from the
-# Tools -> Peripherals toggle via PluginGroupManager (group
-# "magnet_peripherals"), so users without the magnet hardware aren't burdened
-# with its UI/services, and it auto-restores on launch from a persisted flag.
-MAGNET_PERIPHERAL_PLUGINS = [
-    PeripheralControllerPlugin,        # backend (services + topics)
+# The optional magnet peripheral is intentionally NOT in the default lists
+# below. It is hot loaded/unloaded at runtime from the Tools -> Manage
+# Peripherals dialog via PluginGroupManager, as TWO independent groups, so
+# users without the magnet hardware aren't burdened with its UI/services and
+# each group auto-restores on launch from its persisted flag.
+#   - magnet_ui      group: dock pane, status icon, magnet protocol column
+#   - magnet_backend group: controller (hardware + connection search)
+MAGNET_UI_PLUGINS = [
     PeripheralProtocolControlsPlugin,  # magnet protocol column
-    PeripheralUiPlugin,                # dock pane + status icon
+    PeripheralUiPlugin,                # dock pane + status icon + tools submenu
+]
+MAGNET_BACKEND_PLUGINS = [
+    PeripheralControllerPlugin,        # controller (services + topics + search)
 ]
 
 FRONTEND_PLUGINS = [
