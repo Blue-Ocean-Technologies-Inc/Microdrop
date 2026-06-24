@@ -19,11 +19,17 @@ ACTOR_TOPIC_DICT = {
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
-# Runtime plugin-group hot load/unload (the optional magnet-peripheral group).
-# PERIPHERALS_ENABLED_KEY is an app-globals flag the menu toggle reads to show
-# its checkmark and that activated() reads to auto-restore the group on launch.
-MAGNET_PERIPHERALS_GROUP = "magnet_peripherals"
-PERIPHERALS_ENABLED_KEY = "microdrop.peripherals_enabled"
+# Runtime plugin-group hot load/unload. The optional magnet peripheral is split
+# into two independently-toggled groups (see the Tools -> Manage Peripherals
+# dialog / PluginGroupManager): a UI group (dock pane, status icon, protocol
+# column) and a backend group (controller + connection search). The
+# *_ENABLED_KEY app-globals flags persist each group's state so the dialog
+# checkboxes and the launch-restore in MicrodropTask.activated() stay in sync
+# across runs.
+MAGNET_UI_GROUP = "magnet_ui"
+MAGNET_BACKEND_GROUP = "magnet_backend"
+PERIPHERAL_UI_ENABLED_KEY = "microdrop.peripheral_ui_enabled"
+PERIPHERAL_BACKEND_ENABLED_KEY = "microdrop.peripheral_backend_enabled"
 
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
