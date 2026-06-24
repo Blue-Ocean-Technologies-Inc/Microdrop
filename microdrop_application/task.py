@@ -12,7 +12,7 @@ from traits.api import Instance, provides
 
 from electrode_controller.consts import electrode_disable_request_publisher, disabled_channels_changed_publisher
 # Local imports.
-from .consts import PKG, MAGNET_PERIPHERALS_GROUP
+from .consts import PKG, MAGNET_UI_GROUP, MAGNET_BACKEND_GROUP
 from dropbot_controller.models.self_tests import TestEvent
 
 from microdrop_utils.pyface_helpers import StatusBarManager
@@ -25,7 +25,10 @@ from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
-from .menus import AdvancedModeAction, PeripheralsToggleAction, is_peripherals_enabled
+from .menus import (
+    AdvancedModeAction, ManagePeripheralsAction,
+    is_peripheral_ui_enabled, is_peripheral_backend_enabled,
+)
 from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
@@ -81,7 +84,7 @@ class MicrodropTask(Task):
 
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
-        SMenu(PeripheralsToggleAction(), id="Tools", name="&Tools"),
+        SMenu(ManagePeripheralsAction(), id="Tools", name="&Tools"),
 
         SMenu(TaskToggleGroup(), id="View", name="&View"),
 
@@ -108,20 +111,27 @@ class MicrodropTask(Task):
         self._restore_peripherals_if_enabled()
 
     def _restore_peripherals_if_enabled(self):
-        """Re-load the magnet-peripheral group on launch if the persisted
-        app-global flag says it was enabled last session — so the toggle's
-        checkmark (read from the same flag) matches what's actually loaded."""
-        if not is_peripherals_enabled():
+        """Re-load each magnet-peripheral group on launch if its persisted
+        app-global flag is set, so the dialog checkboxes (read from the same
+        flags) match what's actually loaded. Backend before UI (services/topics
+        exist before the column/UI consume them)."""
+        restore = [
+            (MAGNET_BACKEND_GROUP, is_peripheral_backend_enabled()),
+            (MAGNET_UI_GROUP, is_peripheral_ui_enabled()),
+        ]
+        if not any(enabled for _, enabled in restore):
             return
         from .plugin_group_manager import PluginGroupManager
         manager = self.window.application.get_service(PluginGroupManager)
         if manager is None:
             logger.warning("peripherals restore: PluginGroupManager service not found")
             return
-        if manager.is_loaded(MAGNET_PERIPHERALS_GROUP):
-            return
-        logger.info("Restoring magnet-peripheral group from persisted flag")
-        manager.enable(self, MAGNET_PERIPHERALS_GROUP)
+        for group_name, enabled in restore:
+            if enabled and not manager.is_loaded(group_name):
+                logger.info(
+                    f"Restoring peripheral group '{group_name}' from persisted flag"
+                )
+                manager.enable(self, group_name)
 
     def _add_status_bar_to_window(self):
         logger.info(f"Adding status bar to Microdrop Task window.")
