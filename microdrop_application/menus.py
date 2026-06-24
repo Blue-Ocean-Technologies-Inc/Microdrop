@@ -56,11 +56,7 @@ class ManagePeripheralsAction(TaskAction):
     id = "manage_peripherals_action"
     name = "&Manage Peripherals…"
 
-    def perform(self, event):
-        task = self.task
-        if task is None:
-            logger.error("Manage Peripherals: no task available")
-            return
+    def perform(self, event=None):
         # Local imports avoid pulling the orchestrator (and its Qt helper) and
         # the dialog in at menu-import time, and sidestep import cycles.
         from microdrop_application.plugin_group_manager import PluginGroupManager
@@ -68,7 +64,7 @@ class ManagePeripheralsAction(TaskAction):
             PeripheralsManagerModel,
         )
 
-        manager = task.window.application.get_service(PluginGroupManager)
+        manager = event.task.window.application.get_service(PluginGroupManager)
         if manager is None:
             logger.error("Manage Peripherals: PluginGroupManager service not found")
             return
@@ -80,10 +76,8 @@ class ManagePeripheralsAction(TaskAction):
         ui = model.edit_traits(kind="livemodal")
         if not ui.result:     # Cancel / closed -> no change
             return
-        try:
-            manager.apply(task, {
-                MAGNET_UI_GROUP: model.magnet_ui_enabled,
-                MAGNET_BACKEND_GROUP: model.magnet_backend_enabled,
-            })
-        except Exception:
-            logger.exception("Manage Peripherals: applying group changes failed")
+
+        manager.apply(event.task, {
+            MAGNET_UI_GROUP: model.magnet_ui_enabled,
+            MAGNET_BACKEND_GROUP: model.magnet_backend_enabled,
+        })
