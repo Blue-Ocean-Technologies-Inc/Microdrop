@@ -1,5 +1,5 @@
 # enthought imports
-from traits.api import observe
+from traits.api import observe, List, Any
 from pyface.tasks.dock_pane import DockPane
 
 from pyface.qt.QtGui import QFont, Qt
@@ -18,6 +18,9 @@ from .consts import PKG, PKG_name,DEVICE_NAME
 
 from dropbot_status_and_controls.consts import disconnected_color, connected_color
 
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
 
 class PeripheralStatusDockPane(DockPane):
     """
@@ -27,6 +30,16 @@ class PeripheralStatusDockPane(DockPane):
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
+
+    # Handles captured at construction so destroy() can fully tear down on a
+    # runtime hot-unload (the pane connects to the global QApplication theme
+    # signal and adds widgets to the shared status bar — none of which the
+    # pyface DockPane base knows about).
+    status_bar_icon = Any()
+    _status_bar_spacer = Any()
+    _theme_callbacks = List()
+    _status_model = Any()
+    _set_status_color = Any()
 
     def create_contents(self, parent):
         # Import all the components from your module
@@ -86,8 +99,10 @@ class PeripheralStatusDockPane(DockPane):
         # Apply initial theme styling
         _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
 
-        # Call theme application method whenever global theme changes occur as well
+        # Call theme application method whenever global theme changes occur as
+        # well. Track the callback so destroy() can disconnect it on hot-unload.
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
+        self._theme_callbacks.append(_apply_theme_style)
 
         # Return the scroll area directly
         return scroll_area
@@ -104,14 +119,19 @@ class PeripheralStatusDockPane(DockPane):
         device_status.setFont(_font)
         device_status.setStyleSheet(f"color: {disconnected_color};")
 
-        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        spacer = horizontal_spacer_widget(10)
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(spacer)
         self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_status)
+        self._status_bar_spacer = spacer
 
         def set_status_color(event):
             color = connected_color if event.new else disconnected_color
             device_status.setStyleSheet(f"color: {color}")
 
         _model.observe(set_status_color, "status")
+        # Keep refs so destroy() can drop this model observer on hot-unload.
+        self._status_model = _model
+        self._set_status_color = set_status_color
 
         self.status_bar_icon = device_status
 
@@ -121,6 +141,42 @@ class PeripheralStatusDockPane(DockPane):
 
         _apply_theme_style()  # initial setting
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)  # track theme changes
+        self._theme_callbacks.append(_apply_theme_style)
+
+    def destroy(self):
+        """Tear down everything create_contents / the status-bar setup wired
+        into shared, longer-lived objects (the global QApplication theme
+        signal, the window status bar, the device model), so a runtime
+        hot-unload leaves no dangling connections or lingering widgets."""
+        style_hints = QApplication.styleHints()
+        for callback in self._theme_callbacks:
+            try:
+                style_hints.colorSchemeChanged.disconnect(callback)
+            except (RuntimeError, TypeError):
+                pass
+        self._theme_callbacks = []
+
+        if self._status_model is not None and self._set_status_color is not None:
+            try:
+                self._status_model.observe(self._set_status_color, "status", remove=True)
+            except Exception as e:
+                logger.debug(f"Could not remove status-color observer: {e}")
+        self._status_model = None
+        self._set_status_color = None
+
+        window = self.task.window if self.task is not None else None
+        status_bar_manager = getattr(window, "status_bar_manager", None) if window is not None else None
+        status_bar = getattr(status_bar_manager, "status_bar", None)
+        if status_bar is not None:
+            for widget in (self.status_bar_icon, self._status_bar_spacer):
+                if widget is not None:
+                    status_bar.removeWidget(widget)
+                    widget.deleteLater()
+        self.status_bar_icon = None
+        self._status_bar_spacer = None
+
+        super().destroy()
+
 
 def get_status_icon_tooltip_themed():
     if is_dark_mode():
