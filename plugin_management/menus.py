@@ -98,18 +98,38 @@ class InstallPluginAction(TaskAction):
                            title="Install Plugin?", cancel=False) == YES
 
         try:
-            manifest = installer.install_from_zip(path, manager, confirm=_consent)
+            result = installer.install_from_zip(path, manager, confirm=_consent)
         except installer.InstallCancelled:
             return
         except Exception as e:
             error_dialog(parent=None, title="Install failed", message=str(e))
             return
 
-        information(
-            parent=None, title="Plugin installed",
-            message=f"Installed <b>{manifest.label}</b>.<br><br>"
-                    f"Enable it from Tools → Manage Plugins.",
-        )
+        label = escape_html_multiline(result.manifest.label)
+        if not result.requires_relaunch:
+            information(
+                parent=None, title="Plugin installed",
+                message=f"Installed <b>{label}</b>.<br><br>"
+                        f"Enable it from Tools → Manage Plugins.",
+            )
+            return
+
+        # The plugin pulled in dependencies that were just added to the
+        # environment; they only become importable after a relaunch.
+        if confirm(parent=None, title="Relaunch required",
+                   message=f"Installed <b>{label}</b>.<br><br>It needs additional "
+                           f"packages that were added to the environment — they "
+                           f"become available after a relaunch.<br><br>"
+                           f"Relaunch MicroDrop now?",
+                   cancel=False) == YES:
+            from plugin_management.relaunch import relaunch_into_plugins_env
+            relaunch_into_plugins_env(task.window.application)
+        else:
+            information(
+                parent=None, title="Relaunch later",
+                message=f"<b>{label}</b> will be available the next time you "
+                        f"launch MicroDrop.",
+            )
 
 
 class UninstallPluginAction(TaskAction):
