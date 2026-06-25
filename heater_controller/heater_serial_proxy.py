@@ -11,6 +11,7 @@ from .consts import (
     CONNECTED,
     DISCONNECTED,
     HEATERS_AVAILABLE,
+    TELEMETRY,
     BOARD_BAUDRATE,
     CONFIG_BEGIN,
     CONFIG_END,
@@ -78,12 +79,13 @@ class HeaterSerialProxy:
         logger.info(f"Heater connected on port {port} at {baudrate} baud")
         publish_message("connected", CONNECTED)
 
-        # Ask the board for its config so we can advertise the available heater
-        # channels. The response is captured by the reader thread.
-        try:
-            self.send_command("dump_config")
-        except Exception as e:
-            logger.warning(f"Could not request heater config on connect: {e}")
+        # Ask the board for its config (to advertise available heater channels)
+        # and its identity (WHOAMI). Responses are handled by the reader thread.
+        for query in ("dump_config", "whoami"):
+            try:
+                self.send_command(query)
+            except Exception as e:
+                logger.warning(f"Could not send '{query}' on connect: {e}")
 
     # ------------------------------------------------------------------
     # Background reader: logs plain text + §{json} telemetry
@@ -115,6 +117,7 @@ class HeaterSerialProxy:
                         logger.warning(f"Heater telemetry could not be parsed: {line}")
                     else:
                         logger.info(f"HEATER TELEMETRY [{frame}]: {pkt}")
+                        publish_message(json.dumps(pkt), TELEMETRY)
                 elif self._route_config_line(line):
                     continue  # consumed by the dump_config capture state machine
                 else:

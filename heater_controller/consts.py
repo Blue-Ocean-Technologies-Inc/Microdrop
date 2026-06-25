@@ -24,6 +24,8 @@ CONFIG_ERROR_PREFIX = "<<<CONFIG_ERROR"
 CONNECTED = connected_topic(DEVICE_NAME)
 DISCONNECTED = disconnected_topic(DEVICE_NAME)
 HEATERS_AVAILABLE = f"{DEVICE_NAME}/signals/heaters_available"
+# Parsed §<FRAME>{json} telemetry packets (temperatures, PWM, board id, events).
+TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
