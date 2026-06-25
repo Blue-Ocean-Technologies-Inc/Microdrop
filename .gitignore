@@ -19,4 +19,4 @@ demo*.dot
 
 # pyinstaller generated files
 **/dist
-**/build
+**/buildexamples/plugins/
