@@ -14,6 +14,8 @@
 **/plotly_*.html
 *.svg
 *.json
+# ...but plugin manifests are source, not artifacts — keep them tracked.
+!**/microdrop_plugin.json
 demo*.png
 demo*.dot
 
