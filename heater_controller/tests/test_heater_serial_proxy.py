@@ -28,3 +28,16 @@ def test_parse_telemetry_line_bad_json_returns_none():
     frame, pkt = HeaterSerialProxy.parse_telemetry_line('§INFO{not valid json}')
     assert frame == "INFO"
     assert pkt is None
+
+
+def test_parse_heaters_from_config_extracts_channel_names():
+    config = '{"heaters": {"tec1": {"type": "tec"}, "heater1": {"type": "resistive"}}}'
+    assert HeaterSerialProxy.parse_heaters_from_config(config) == ["tec1", "heater1"]
+
+
+def test_parse_heaters_from_config_no_heaters_section():
+    assert HeaterSerialProxy.parse_heaters_from_config('{"temperature_sensors": {}}') == []
+
+
+def test_parse_heaters_from_config_bad_json_returns_none():
+    assert HeaterSerialProxy.parse_heaters_from_config("not json") is None

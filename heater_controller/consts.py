@@ -10,14 +10,31 @@ DEVICE_NAME = "Heater"
 HEATER_HWID = "VID:PID=2E8A:0005"
 BOARD_BAUDRATE = 115200
 
-# Topics published by this plugin
+# Heater channel targeted when a command payload omits one (mirrors the old UI
+# fallback). The set of real channels is discovered on connect and published on
+# HEATERS_AVAILABLE so a frontend can offer a selection dropdown.
+DEFAULT_HEATER = "tec1"
+
+# Markers the firmware wraps its `dump_config` JSON response in.
+CONFIG_BEGIN = "<<<CONFIG_BEGIN>>>"
+CONFIG_END = "<<<CONFIG_END>>>"
+CONFIG_ERROR_PREFIX = "<<<CONFIG_ERROR"
+
+# Topics published by this plugin (signals)
 CONNECTED = connected_topic(DEVICE_NAME)
 DISCONNECTED = disconnected_topic(DEVICE_NAME)
+HEATERS_AVAILABLE = f"{DEVICE_NAME}/signals/heaters_available"
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
 RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
 SEND_COMMAND = f"{DEVICE_NAME}/requests/send_command"
+SET_TEMPERATURE = f"{DEVICE_NAME}/requests/set_temperature"
+SET_PWM = f"{DEVICE_NAME}/requests/set_pwm"
+SET_PID_MODE = f"{DEVICE_NAME}/requests/set_pid_mode"
+SET_STREAM = f"{DEVICE_NAME}/requests/set_stream"
+SET_FAN = f"{DEVICE_NAME}/requests/set_fan"
+ALL_OFF = f"{DEVICE_NAME}/requests/all_off"
 
 # Topics actor declared by plugin subscribes to. The listener-name key MUST match
 # HeaterControllerBase.listener_name.

@@ -24,8 +24,15 @@ from envisage.application import Application
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # plugin imports
+import json
+
 from heater_controller.plugin import HeaterControllerPlugin
-from heater_controller.consts import START_DEVICE_MONITORING, SEND_COMMAND
+from heater_controller.consts import (
+    START_DEVICE_MONITORING,
+    SEND_COMMAND,
+    SET_TEMPERATURE,
+    SET_PWM,
+)
 from message_router.plugin import MessageRouterPlugin
 
 # local helpers imports
@@ -45,14 +52,27 @@ def _demo_traffic():
     publish_message(message="", topic=START_DEVICE_MONITORING)
 
     time.sleep(DEMO_COMMAND_DELAY_S)
-    logger.info("Demo: sending 'whoami' to the heater")
+    logger.info("Demo: sending 'whoami' (generic raw command) to the heater")
     publish_message(message="whoami", topic=SEND_COMMAND)
+
+    # Typed commands. Heater channel defaults to tec1 when omitted; the available
+    # channels are published on Heater/signals/heaters_available at connect.
+    logger.info("Demo: setting PWM on tec1 to 25%")
+    publish_message(message=json.dumps({"heater": "tec1", "pwm": 25}), topic=SET_PWM)
+
+    time.sleep(2)
+    logger.info("Demo: setting tec1 PID setpoint to 40C")
+    publish_message(message=json.dumps({"heater": "tec1", "temperature": 40}), topic=SET_TEMPERATURE)
 
 
 def main(args):
     """Run the heater backend demo."""
     plugins = [CorePlugin(), MessageRouterPlugin(), HeaterControllerPlugin()]
     app = Application(plugins=plugins)
+
+    from logger.logger_service import init_logger
+
+    init_logger()
 
     with redis_server_context(), dramatiq_workers_context():
         app.start()
