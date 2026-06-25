@@ -37,6 +37,7 @@ broken or never-enabled plugin can never break startup or discovery.
 | `manage_dialog.py` / `uninstall_dialog.py` | TraitsUI dialog models (checkbox list / dropdown). |
 | `menus.py` | The three `TaskAction`s: Install, Uninstall, Manage. |
 | `plugin.py` | `PluginManagementPlugin` — offers the manager service, contributes the Tools actions, restores enabled groups on launch. |
+| `live_task_extensions.py` | `LiveTaskExtensionsController` — listens to the `TASK_EXTENSIONS` extension point and **reactively, debounced** mounts/unmounts dock panes + rebuilds the menu (via the helpers below) when plugins are loaded/unloaded at runtime. |
 | `microdrop_utils/tasks_runtime_helpers.py` | The hand-rolled Qt helpers to mount/unmount a dock pane and rebuild the menu bar on a **live** window (Pyface has no public API for this — see Part 3 §5). |
 
 ### 1.3 Discovery (every launch)
@@ -77,16 +78,19 @@ code on install — the consent gate is the backstop.
    fails — no partial load).
 2. Snapshot `service_registry._services` keys; for each factory: `application.add_plugin` +
    `application.start_plugin`; capture the **new** service ids (the before/after diff).
-3. `_mount_dock_panes` — mount each started plugin's `TaskExtension.dock_pane_factories`
-   **live** via `add_dock_pane_live` (Pyface gathered panes once at window creation).
-4. `rebuild_menu_bar_live` — so the plugin's own Tools/menu contributions appear.
-5. Publish `post_enable_publish_topic` if set (e.g. the magnet backend kicks off its
+3. Publish `post_enable_publish_topic` if set (e.g. the magnet backend kicks off its
    hardware search).
-6. Set the group's `enabled_key` app-global flag (persists the "on" state).
+4. Set the group's `enabled_key` app-global flag (persists the "on" state).
 
-**Disable** reverses it (UI before backend): remove dock panes → `stop_plugin` +
-`remove_plugin` in reverse → **unregister the captured services** → rebuild menu bar → clear
-the flag.
+The plugins' **dock panes and menu contributions are mounted/rebuilt reactively** — *not* in
+`enable()`. `add_plugin`/`start_plugin` makes each plugin's `TASK_EXTENSIONS` contribution
+appear; `LiveTaskExtensionsController` (a listener on that extension point) **debounces** and,
+on the next GUI-loop turn, mounts the new panes via `add_dock_pane_live` and rebuilds the menu
+**once** (see §1.8 and Part 3 §5). So `enable()` owns only plugin + service lifecycle.
+
+**Disable** reverses the lifecycle: `stop_plugin` + `remove_plugin` in reverse → **unregister
+the captured services** → clear the flag. Withdrawing each plugin's `TASK_EXTENSIONS` triggers
+the same reactive controller to unmount its panes and rebuild the menu.
 
 ### 1.6 Uninstall (`Tools → Uninstall Plugin…`)
 
@@ -113,7 +117,9 @@ Runtime add/remove of a plugin works, but three layers snapshot at startup and n
    `unregister_service` them on disable.
 2. **No runtime dock-pane / menu-bar API.** Pyface Tasks builds both once at window creation
    (`TaskWindow.add_task`). `tasks_runtime_helpers.py` drives Qt directly to add/remove a
-   pane and rebuild the menu bar on a live window.
+   pane and rebuild the menu bar on a live window — and we **trigger it reactively** from a
+   `TASK_EXTENSIONS` listener + debounce (`live_task_extensions.py`), not imperatively from the
+   manager.
 3. **Extension-point snapshots.** A plugin that *consumes* an extension point (the protocol
    tree consuming `PROTOCOL_COLUMNS`) only sees contributions present at its `start()` —
    **unless** it opts into live notifications with `connect_extension_point_traits()` and
@@ -350,8 +356,10 @@ Confirmed against `pyface/tasks/task_window.py`: dock panes + menu bar are built
 `set_layout`/`reset_layout` only rearrange **existing** panes; the dock-pane toggle group only
 flips **visibility**. So `microdrop_utils/tasks_runtime_helpers.py` (which reaches into
 `window._active_state`, `state.dock_panes`, `action_manager_builder_factory`, `_get_state`) is
-**necessary and unavoidable**. Caveat: it depends on **private Pyface internals** — re-verify
-on any Pyface upgrade.
+**necessary and unavoidable**. We *trigger* these helpers **reactively** from a debounced
+`TASK_EXTENSIONS` listener (`live_task_extensions.py`, §1.5/§1.8) instead of imperatively — the
+helpers stay; only the trigger became declarative. Caveat: the helpers depend on **private
+Pyface internals** — re-verify on any Pyface upgrade.
 
 ### §6 App-lifecycle hooks
 

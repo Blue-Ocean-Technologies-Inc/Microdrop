@@ -50,10 +50,14 @@ class PluginManagementPlugin(Plugin):
         registry mechanism connect_extension_point_traits() uses, applied as a
         consumer of the TasksApplication-owned TASK_EXTENSIONS extension point."""
         super().start()
-        from .live_task_extensions import LiveTaskExtensionsController
-        self._live_task_exts = LiveTaskExtensionsController(self.application)
-        self.application.add_extension_point_listener(
-            self._on_task_extensions_changed, TASK_EXTENSIONS)
+        # Guard against a double start() (envisage starts a plugin once, but
+        # add_extension_point_listener does not dedup — a second registration
+        # would fire two reconciles per delta).
+        if self._live_task_exts is None:
+            from .live_task_extensions import LiveTaskExtensionsController
+            self._live_task_exts = LiveTaskExtensionsController(self.application)
+            self.application.add_extension_point_listener(
+                self._on_task_extensions_changed, TASK_EXTENSIONS)
 
     def stop(self):
         super().stop()
