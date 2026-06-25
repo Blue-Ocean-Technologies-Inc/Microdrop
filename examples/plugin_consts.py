@@ -9,6 +9,7 @@ from microdrop_application.backend_application import MicrodropBackendApplicatio
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
+from heater_controls_ui.plugin import HeaterControlsUiPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
@@ -81,6 +82,7 @@ DROPBOT_FRONTEND_PLUGINS = [
     DropbotPreferencesPlugin,
     DropbotStatusAndControlsPlugin,
     DropbotToolsMenuPlugin,
+    HeaterControlsUiPlugin,
 ]
 
 OPENDROP_FRONTEND_PLUGINS = [
