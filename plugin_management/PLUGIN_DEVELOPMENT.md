@@ -319,22 +319,20 @@ the synthetic name. **Verdict:** this *is* the framework idiom — keep it.
 
 ### §3 Services — offer, look up, and decouple with an interface
 
-We offer `ServiceOffer(protocol="plugin_management.group_manager.PluginGroupManager",
-factory=…)` and look up `application.get_service(PluginGroupManager)`. The registry **lazily
-resolves and caches** factory results (`service_registry.py:251`), so a factory offer is
-already an effective singleton. Notes:
+We **decouple consumers from the implementation** with a traits interface: `PluginGroupManager`
+is `@provides(IPluginGroupManager)` (`i_plugin_group_manager.py`), the service is offered as
+`ServiceOffer(protocol=IPluginGroupManager, factory=…)`, and every consumer looks up
+`application.get_service(IPluginGroupManager)` — so the Tools actions, restore hook, and
+installer depend only on the interface. The registry **lazily resolves and caches** factory
+results (`service_registry.py:251`), so a factory offer is already an effective singleton.
+Notes:
+- Envisage matches a service by the protocol's **dotted name**, so the offer and every lookup
+  must use the *same* protocol object/string (here, `IPluginGroupManager`).
 - There is **no** `get_service_by_id` for cross-plugin lookup (`get_service_from_id` takes an
-  int assigned at registration). Use the protocol class/string.
-- Nothing auto-binds a service into an `Instance` trait — you must call `get_service` yourself.
-- **Optional decoupling refinement:** declare an interface and `@provides` it, then offer/look
-  up by the interface so callers don't depend on the concrete class:
-  ```python
-  @provides(IPluginGroupManager)
-  class PluginGroupManager(HasTraits): ...
-  # offer ServiceOffer(protocol="...IPluginGroupManager", …); lookup get_service(IPluginGroupManager)
-  ```
-  Today we couple to the concrete `PluginGroupManager` (works fine; this is a nicety, not a
-  fix).
+  int assigned at registration). Use the protocol class.
+- Nothing auto-binds a service into an `Instance` trait — call `get_service` yourself.
+- `Interface.providedBy(obj)` is a *zope* idiom, not traits — don't use it; envisage matching
+  is by protocol name, not adaptation.
 
 ### §4 Contribute menu actions to a Task
 
@@ -358,11 +356,12 @@ on any Pyface upgrade.
 ### §6 App-lifecycle hooks
 
 `TasksApplication` exposes (`envisage/ui/tasks/tasks_application.py`):
-`application_initialized` (Event, fired after the first windows + GUI loop exist — the right
-"GUI is ready" hook), `active_window` (Instance), and `window_created/opened/closing/closed`
-(Events). We observe `application:application_initialized` with an `active_window` fallback —
-correct. Minor tidy: `@observe("application:active_window")` (or `window_opened`) with a
-`None` guard expresses the same intent without the manual `on_trait_change` rewire.
+`application_initialized` (Event, fired after the first windows + GUI loop exist), `active_window`
+(Instance), and `window_created/opened/closing/closed` (Events). We restore enabled groups with
+a single **`@observe("application:active_window")`** (null-guarded) — it fires once the GUI
+window is available and, because the restore is idempotent (only enables flagged groups not
+already loaded), re-firing on a later window switch is a harmless no-op. This replaced an
+earlier `application_initialized` + manual `on_trait_change("active_window")` rewire.
 
 ### §7 Traits tricks worth knowing
 
@@ -386,10 +385,10 @@ correct. Minor tidy: `@observe("application:active_window")` (or `window_opened`
 |---|---|---|
 | Live extension-point reactions | No — `connect_extension_point_traits()` + `@on_trait_change("..._items")` *is* canonical | Keep |
 | Declare/contribute extension points | No | Keep |
-| Service offer + lookup | Partly — optional `@provides(IFoo)` interface for decoupling | Optional refinement |
+| Service offer + lookup | `@provides(IFoo)` interface for decoupling | **Applied** — offer/lookup by `IPluginGroupManager` |
 | Menu/action contributions | No — `TaskExtension`+`SchemaAddition`+`SGroup` | Keep; prefer `TaskAction.self.task` |
 | **Live menu/dock-pane mutation** | **None — Pyface builds once at window creation** | **Hand-rolled (necessary)** |
-| Lifecycle hooks | Mostly no; minor `@observe("application:active_window")` tidy | Keep |
+| Lifecycle hooks | `@observe("application:active_window")` over the manual rewire | **Applied** |
 | Traits tricks | n/a | Adopt `dispatch="ui"`, `Property`+`@cached_property`, `@provides` where useful |
 
 The architecture deliberately favors a **data manifest + lazy `module:Class` imports** over a

@@ -16,6 +16,7 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 from .consts import PKG, PKG_name
+from .i_plugin_group_manager import IPluginGroupManager
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -41,7 +42,7 @@ class PluginManagementPlugin(Plugin):
     def _my_service_offers_default(self):
         return [
             ServiceOffer(
-                protocol="plugin_management.group_manager.PluginGroupManager",
+                protocol=IPluginGroupManager,
                 factory=self._create_plugin_group_manager,
             )
         ]
@@ -85,19 +86,14 @@ class PluginManagementPlugin(Plugin):
 
     # --- launch restore ----------------------------------------------
 
-    @observe("application:application_initialized")
-    def _on_application_initialized(self, event):
-        """Restore enabled groups once the GUI window exists."""
-        window = self.application.active_window
-        if window is None:
-            self.application.on_trait_change(self._on_window_created, "active_window")
-        else:
-            self._restore_enabled_groups(window)
-
-    def _on_window_created(self, window):
+    @observe("application:active_window")
+    def _on_active_window(self, event):
+        """Restore enabled groups once a GUI window is available. Fires when
+        the active window changes; the restore is idempotent (it only enables
+        flagged groups not already loaded), so re-firing on a later window
+        switch is a harmless no-op."""
+        window = event.new
         if window is not None:
-            self.application.on_trait_change(
-                self._on_window_created, "active_window", remove=True)
             self._restore_enabled_groups(window)
 
     def _restore_enabled_groups(self, window):
@@ -105,10 +101,9 @@ class PluginManagementPlugin(Plugin):
         group whose persisted flag is set (registration order). So the Manage
         Plugins checkboxes match what's actually loaded after a relaunch."""
         from . import paths
-        from .group_manager import PluginGroupManager
 
         paths.ensure_on_sys_path()
-        manager = self.application.get_service(PluginGroupManager)
+        manager = self.application.get_service(IPluginGroupManager)
         if manager is None:
             logger.warning("plugin restore: PluginGroupManager service not found")
             return

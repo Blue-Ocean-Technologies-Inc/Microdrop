@@ -24,10 +24,10 @@ class ManagePluginsAction(TaskAction):
         if task is None:
             logger.error("Manage Plugins: no task available")
             return
-        from plugin_management.group_manager import PluginGroupManager
+        from plugin_management.i_plugin_group_manager import IPluginGroupManager
         from plugin_management.manage_dialog import PluginsManagerModel
 
-        manager = task.window.application.get_service(PluginGroupManager)
+        manager = task.window.application.get_service(IPluginGroupManager)
         if manager is None:
             logger.error("Manage Plugins: PluginGroupManager service not found")
             return
@@ -63,7 +63,7 @@ class InstallPluginAction(TaskAction):
             file_dialog, confirm, information, error as error_dialog, YES,
             escape_html_multiline,
         )
-        from plugin_management.group_manager import PluginGroupManager
+        from plugin_management.i_plugin_group_manager import IPluginGroupManager
         from plugin_management import installer
 
         path = file_dialog(
@@ -73,7 +73,7 @@ class InstallPluginAction(TaskAction):
         if not path:
             return
 
-        manager = task.window.application.get_service(PluginGroupManager)
+        manager = task.window.application.get_service(IPluginGroupManager)
         if manager is None:
             logger.error("Install Plugin: PluginGroupManager service not found")
             return
@@ -128,11 +128,11 @@ class UninstallPluginAction(TaskAction):
         from microdrop_application.dialogs.pyface_wrapper import (
             confirm, information, error as error_dialog, YES, escape_html_multiline,
         )
-        from plugin_management.group_manager import PluginGroupManager
+        from plugin_management.i_plugin_group_manager import IPluginGroupManager
         from plugin_management import installer
         from plugin_management.uninstall_dialog import UninstallPluginModel
 
-        manager = task.window.application.get_service(PluginGroupManager)
+        manager = task.window.application.get_service(IPluginGroupManager)
         if manager is None:
             logger.error("Uninstall Plugin: PluginGroupManager service not found")
             return

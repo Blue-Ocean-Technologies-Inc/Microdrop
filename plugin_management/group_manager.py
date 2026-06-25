@@ -18,11 +18,12 @@ enable/disable so plugin-contributed submenus appear/disappear live.
 import importlib
 from pathlib import Path
 
-from traits.api import Bool, Dict, HasTraits, Instance, List, Str
+from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from plugin_management import paths
 from plugin_management.manifest import load_manifest, ManifestError
+from plugin_management.i_plugin_group_manager import IPluginGroupManager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.tasks_runtime_helpers import (
     add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
@@ -64,6 +65,7 @@ class PluginGroup(HasTraits):
     source_dir = Str()
 
 
+@provides(IPluginGroupManager)
 class PluginGroupManager(HasTraits):
     """Discovers, loads, and unloads named plugin groups against a live
     application. Offered as an Envisage service by MicrodropPlugin; the
