@@ -27,10 +27,25 @@ def installed_plugins_dir() -> Path:
 
 
 def ensure_on_sys_path() -> None:
-    """Put the installed-plugins dir on sys.path so extracted packages import."""
-    path = str(installed_plugins_dir())
-    if path not in sys.path:
-        sys.path.append(path)
+    """Put each installed plugin's own directory on sys.path so its bundled
+    top-level package imports.
+
+    An archive nests its package under the install dir
+    (``installed_plugins/<name>/<package>/...``), because the installer's
+    allowlist requires every file to live under a declared-package dir. So the
+    import root is each ``<name>/`` dir, not the shared parent. The parent must
+    NOT be on sys.path: a plugin whose ``<name>`` equals its package name would
+    otherwise be shadowed by its own install dir resolving as a namespace
+    package (``import <name>`` finding ``installed_plugins/<name>/`` instead of
+    the real package nested one level deeper)."""
+    root = installed_plugins_dir()
+    if not root.is_dir():
+        return
+    for child in sorted(root.iterdir()):
+        if child.is_dir() and (child / MANIFEST_FILENAME).is_file():
+            path = str(child)
+            if path not in sys.path:
+                sys.path.append(path)
 
 
 def iter_manifest_dirs() -> Iterator[Path]:
