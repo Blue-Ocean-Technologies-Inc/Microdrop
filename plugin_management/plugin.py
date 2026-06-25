@@ -37,6 +37,42 @@ class PluginManagementPlugin(Plugin):
     #: Cached singleton orchestrator (lazily built by the service factory).
     _manager = Any()
 
+    #: View-layer controller that reactively mounts/unmounts dock panes +
+    #: rebuilds the menu bar when TASK_EXTENSIONS change at runtime.
+    _live_task_exts = Any()
+
+    # --- reactive dock-pane / menu mounting --------------------------
+
+    def start(self):
+        """Listen for runtime TASK_EXTENSIONS changes so a hot-loaded plugin's
+        dock panes get mounted and the menu bar rebuilt reactively (debounced),
+        rather than the group manager driving it imperatively. Uses the same
+        registry mechanism connect_extension_point_traits() uses, applied as a
+        consumer of the TasksApplication-owned TASK_EXTENSIONS extension point."""
+        super().start()
+        from .live_task_extensions import LiveTaskExtensionsController
+        self._live_task_exts = LiveTaskExtensionsController(self.application)
+        self.application.add_extension_point_listener(
+            self._on_task_extensions_changed, TASK_EXTENSIONS)
+
+    def stop(self):
+        super().stop()
+        try:
+            self.application.remove_extension_point_listener(
+                self._on_task_extensions_changed, TASK_EXTENSIONS)
+        except Exception:
+            pass
+        if self._live_task_exts is not None:
+            self._live_task_exts.dispose()
+
+    def _on_task_extensions_changed(self, registry, event):
+        """Extension-registry listener: ``listener(registry, event)`` where
+        ``event`` is an ExtensionPointChangedEvent carrying added/removed
+        TaskExtensions. Forward the delta to the debounced controller."""
+        if self._live_task_exts is not None:
+            self._live_task_exts.on_changed(
+                list(event.added), list(event.removed))
+
     # --- service offer -----------------------------------------------
 
     def _my_service_offers_default(self):

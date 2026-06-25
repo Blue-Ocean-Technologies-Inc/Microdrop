@@ -25,9 +25,6 @@ from plugin_management import paths
 from plugin_management.manifest import load_manifest, ManifestError
 from plugin_management.i_plugin_group_manager import IPluginGroupManager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.tasks_runtime_helpers import (
-    add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
-)
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -49,8 +46,6 @@ class PluginGroup(HasTraits):
     #: Service-registry ids registered while the group loaded, captured by a
     #: before/after snapshot so disable() can unregister exactly them.
     service_ids = List()
-    #: Ids of dock panes mounted live for this group.
-    dock_pane_ids = List(Str)
     loaded = Bool(False)
     #: App-globals flag persisting this group's enabled state across runs.
     enabled_key = Str()
@@ -196,9 +191,12 @@ class PluginGroupManager(HasTraits):
 
     def enable(self, task, group_name):
         """Resolve the group's plugin specs, add + start them, capture the
-        services they register, mount their dock panes, rebuild the menu bar,
-        and run the optional post-enable publish. Idempotent — a no-op if the
-        group is already loaded."""
+        services they register, and run the optional post-enable publish.
+        Idempotent — a no-op if the group is already loaded.
+
+        Dock panes + the menu bar are mounted/rebuilt **reactively** by
+        ``LiveTaskExtensionsController`` when these plugins contribute their
+        TASK_EXTENSIONS — this method no longer touches the view layer."""
         group = self.groups.get(group_name)
         if group is None:
             logger.warning(f"enable: unknown plugin group '{group_name}'")
@@ -235,15 +233,6 @@ class PluginGroupManager(HasTraits):
         group.service_ids = sorted(set(registry._services.keys()) - before)
         logger.info(f"enable: captured service ids {group.service_ids}")
 
-        self._mount_dock_panes(task, group)
-
-        # The plugin's menu contributions (e.g. the peripheral Search Connection
-        # submenu) are gathered once at window creation; rebuild so they appear.
-        try:
-            rebuild_menu_bar_live(task.window, task, application)
-        except Exception:
-            logger.exception("enable: menu bar rebuild failed")
-
         # Optional post-enable kick — the backend group starts the magnet search.
         if group.post_enable_publish_topic:
             try:
@@ -260,9 +249,13 @@ class PluginGroupManager(HasTraits):
         logger.info(f"enable: group '{group_name}' loaded")
 
     def disable(self, task, group_name):
-        """Reverse of enable: unmount dock panes, stop + remove every plugin
-        (reverse order), unregister the captured services, rebuild the menu
-        bar. Idempotent — a no-op if the group isn't loaded."""
+        """Reverse of enable: stop + remove every plugin (reverse order) and
+        unregister the captured services. Idempotent — a no-op if the group
+        isn't loaded.
+
+        The contributed dock panes are unmounted and the menu bar rebuilt
+        **reactively** by ``LiveTaskExtensionsController`` when ``remove_plugin``
+        withdraws each plugin's TASK_EXTENSIONS."""
         group = self.groups.get(group_name)
         if group is None:
             logger.warning(f"disable: unknown plugin group '{group_name}'")
@@ -272,15 +265,6 @@ class PluginGroupManager(HasTraits):
             return
 
         application = task.window.application
-        window = task.window
-
-        # UI first: drop the panes before the backend they observe goes away.
-        for pane_id in reversed(group.dock_pane_ids):
-            try:
-                remove_dock_pane_live(window, pane_id)
-            except Exception:
-                logger.exception(f"disable: failed to remove dock pane '{pane_id}'")
-        group.dock_pane_ids = []
 
         for plugin in reversed(group.instances):
             pid = getattr(plugin, "id", plugin)
@@ -303,11 +287,6 @@ class PluginGroupManager(HasTraits):
                 logger.exception(f"disable: unregister_service failed for {service_id}")
         group.service_ids = []
 
-        try:
-            rebuild_menu_bar_live(window, task, application)
-        except Exception:
-            logger.exception("disable: menu bar rebuild failed")
-
         group.loaded = False
         if group.enabled_key:
             app_globals[group.enabled_key] = False
@@ -324,25 +303,3 @@ class PluginGroupManager(HasTraits):
             module = importlib.import_module(module_path)
             factories.append(getattr(module, class_name))
         return factories
-
-    def _mount_dock_panes(self, task, group):
-        """Mount every dock pane the group's started plugins contribute for
-        this task. Pyface gathers panes once at window creation, so a plugin
-        loaded afterwards needs its pane mounted explicitly."""
-        window = task.window
-        for plugin in group.instances:
-            extensions = getattr(plugin, "contributed_task_extensions", None) or []
-            for extension in extensions:
-                ext_task_id = getattr(extension, "task_id", None)
-                if ext_task_id and ext_task_id != task.id:
-                    continue
-                for factory in getattr(extension, "dock_pane_factories", []) or []:
-                    try:
-                        pane = add_dock_pane_live(window, task, factory)
-                    except Exception:
-                        logger.exception(
-                            f"enable: failed to mount a dock pane for {plugin.id}"
-                        )
-                        continue
-                    if pane is not None:
-                        group.dock_pane_ids.append(pane.id)
