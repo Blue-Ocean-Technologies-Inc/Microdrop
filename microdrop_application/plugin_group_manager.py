@@ -16,6 +16,7 @@ enable/disable so plugin-contributed submenus appear/disappear live.
 """
 
 import importlib
+from pathlib import Path
 
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str
 
@@ -55,6 +56,12 @@ class PluginGroup(HasTraits):
     #: Optional topic published (empty message) right after a successful
     #: enable — e.g. the backend group kicks off the magnet search.
     post_enable_publish_topic = Str()
+    #: The owning manifest's name + label, and the directory the manifest was
+    #: discovered/installed from. Used to list and uninstall user-installed
+    #: plugins (those whose source_dir is under installed_plugins/).
+    manifest_name = Str()
+    manifest_label = Str()
+    source_dir = Str()
 
 
 class PluginGroupManager(HasTraits):
@@ -81,12 +88,14 @@ class PluginGroupManager(HasTraits):
             except ManifestError:
                 logger.exception(f"skipping invalid manifest at {manifest_path}")
                 continue
-            self._add_manifest_groups(manifest, into=groups)
+            self._add_manifest_groups(
+                manifest, source_dir=str(manifest_dir), into=groups)
         return groups
 
-    def _add_manifest_groups(self, manifest, into=None):
+    def _add_manifest_groups(self, manifest, source_dir="", into=None):
         """Create a PluginGroup per spec in ``manifest`` and put it in ``into``
-        (defaults to self.groups). Last writer wins on a name collision."""
+        (defaults to self.groups). ``source_dir`` is the dir the manifest came
+        from (recorded for uninstall). Last writer wins on a name collision."""
         target = self.groups if into is None else into
         for spec in manifest.groups:
             target[spec.name] = PluginGroup(
@@ -95,9 +104,12 @@ class PluginGroupManager(HasTraits):
                 plugin_specs=list(spec.plugins),
                 enabled_key=spec.enabled_key,
                 post_enable_publish_topic=spec.post_enable_publish_topic,
+                manifest_name=manifest.name,
+                manifest_label=manifest.label,
+                source_dir=source_dir,
             )
 
-    def register_manifest(self, manifest):
+    def register_manifest(self, manifest, source_dir=""):
         """Register a freshly-installed manifest's groups at runtime. Refuses
         (raises) if a colliding group name is currently loaded — the caller
         should ask the user to disable it first."""
@@ -108,7 +120,56 @@ class PluginGroupManager(HasTraits):
                     f"group '{spec.name}' is currently enabled; disable it "
                     f"before reinstalling"
                 )
-        self._add_manifest_groups(manifest)
+        self._add_manifest_groups(manifest, source_dir=source_dir)
+
+    def installed_plugins(self):
+        """User-installed plugins (whose source_dir sits directly under
+        installed_plugins/), one entry per distinct owning manifest, as
+        (name, label, source_dir, [group_names]) in discovery order. Bundled
+        (default_plugins/) plugins are excluded — they can't be uninstalled."""
+        try:
+            base = paths.installed_plugins_dir().resolve()
+        except OSError:
+            return []
+        out = {}
+        for group in self.groups.values():
+            if not group.source_dir:
+                continue
+            try:
+                under = Path(group.source_dir).resolve().parent == base
+            except OSError:
+                under = False
+            if not under:
+                continue
+            entry = out.get(group.manifest_name)
+            if entry is None:
+                entry = (group.manifest_name,
+                         group.manifest_label or group.manifest_name,
+                         group.source_dir, [])
+                out[group.manifest_name] = entry
+            entry[3].append(group.name)
+        return list(out.values())
+
+    def installed_plugin(self, manifest_name):
+        """The installed_plugins() entry for ``manifest_name``, or None if it
+        isn't a user-installed plugin."""
+        for entry in self.installed_plugins():
+            if entry[0] == manifest_name:
+                return entry
+        return None
+
+    def deregister_plugin(self, manifest_name):
+        """Drop every group owned by ``manifest_name`` from the registry and
+        clear its persisted enabled flag. Used by uninstall."""
+        for name in [n for n, g in self.groups.items()
+                     if g.manifest_name == manifest_name]:
+            group = self.groups.pop(name)
+            if group.enabled_key:
+                try:
+                    if group.enabled_key in app_globals:
+                        del app_globals[group.enabled_key]
+                except Exception as e:
+                    logger.debug(f"could not clear flag {group.enabled_key}: {e}")
 
     # --- public API --------------------------------------------------
 
