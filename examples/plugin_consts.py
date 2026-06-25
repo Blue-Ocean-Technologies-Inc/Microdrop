@@ -60,12 +60,10 @@ from user_help_plugin.plugin import UserHelpPlugin
 # ---------------------------------------------------------------------------
 
 # The optional magnet peripheral is intentionally NOT in the default lists
-# below. It is hot loaded/unloaded at runtime from the Tools -> Manage
-# Peripherals dialog via PluginGroupManager, as TWO independent groups, so
-# users without the magnet hardware aren't burdened with its UI/services and
-# each group auto-restores on launch from its persisted flag.
-#   - magnet_ui      group: dock pane, status icon, magnet protocol column
-#   - magnet_backend group: controller (hardware + connection search)
+# below. Its two groups (magnet_backend, magnet_ui) are declared by the bundled
+# manifest default_plugins/magnet_peripherals/microdrop_plugin.json and hot
+# loaded/unloaded at runtime via the Tools -> Manage Plugins dialog
+# (PluginGroupManager). The lists below mirror that manifest for documentation.
 MAGNET_UI_PLUGINS = [
     PeripheralProtocolControlsPlugin,  # magnet protocol column
     PeripheralUiPlugin,                # dock pane + status icon + tools submenu
