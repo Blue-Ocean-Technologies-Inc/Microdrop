@@ -4,6 +4,15 @@
 **Status:** Approved (design discussed + approved in conversation)
 **Refactors:** `plugin_management/` (`group_manager.py`, `plugin.py`) + a new view-layer controller.
 
+> **Revision (as implemented):** the controller is a **Qt-free `HasTraits`** object and defers
+> via **`pyface.api.GUI.invoke_later`** (toolkit-agnostic) coalesced by a `_scheduled: Bool`
+> guard — *not* a `QTimer`/`DEBOUNCE_MS`. Reason: `@observe(dispatch="ui")` runs the handler
+> **inline** when the change is already on the main thread (`traits/trait_notifiers.py`
+> `ui_dispatch`), so it can't defer/coalesce here; and a fired event during the synchronous
+> add+start loop must be deferred to the next event-loop turn, which `GUI.invoke_later` does.
+> Read every `QTimer`/`DEBOUNCE_MS`/"~50 ms" below as "one `GUI.invoke_later` per burst,
+> fired on the next event-loop turn."
+
 ## Problem & goal
 
 `PluginGroupManager.enable/disable` imperatively mounts dock panes (`_mount_dock_panes`) and

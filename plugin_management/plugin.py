@@ -55,7 +55,8 @@ class PluginManagementPlugin(Plugin):
         # would fire two reconciles per delta).
         if self._live_task_exts is None:
             from .live_task_extensions import LiveTaskExtensionsController
-            self._live_task_exts = LiveTaskExtensionsController(self.application)
+            self._live_task_exts = LiveTaskExtensionsController(
+                application=self.application)
             self.application.add_extension_point_listener(
                 self._on_task_extensions_changed, TASK_EXTENSIONS)
 
@@ -66,8 +67,6 @@ class PluginManagementPlugin(Plugin):
                 self._on_task_extensions_changed, TASK_EXTENSIONS)
         except Exception:
             pass
-        if self._live_task_exts is not None:
-            self._live_task_exts.dispose()
 
     def _on_task_extensions_changed(self, registry, event):
         """Extension-registry listener: ``listener(registry, event)`` where
