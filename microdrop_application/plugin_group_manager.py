@@ -1,35 +1,30 @@
-"""Runtime hot load/unload of a *named group* of Envisage plugins.
+"""Runtime hot load/unload of *named groups* of Envisage plugins.
+
+Groups are discovered from microdrop_plugin.json manifests — bundled ones in
+the repo's default_plugins/ and user-installed ones under the app-data
+installed_plugins/ dir (see microdrop_application.plugins). Each group names
+its plugin classes as dotted "module:Class" specs, resolved lazily at enable
+time so a broken/installed plugin never breaks startup or discovery.
 
 Envisage supports adding/removing plugins at runtime, but three layers don't
-self-heal (see the research notes): runtime ServiceOffers leak (CorePlugin
-discards their ids), Pyface Tasks never adds a dock pane after the window is
-shown, and a plugin's backend resources outlive a bare ``stop()``. This
-orchestrator fills the first two gaps generically (service-id capture +
-live dock-pane mount/unmount) and relies on each plugin's own ``stop()`` for
-the third.
-
-The pilot group is the optional magnet-peripheral trio. Ordering matters:
-load backend -> column -> ui so the controller's services/topics exist before
-the column/UI consume them; unload ui -> column -> backend so the pane and
-status icon (which watch the connection state) die before the backend they
-observe. The protocol tree's magnet column is NOT mounted here — it re-syncs
-automatically when the column plugin's PROTOCOL_COLUMNS contribution
-appears/withdraws (the tree plugin opted into connect_extension_point_traits).
+self-heal: runtime ServiceOffers leak (CorePlugin discards their ids), Pyface
+Tasks never adds a dock pane after the window is shown, and a plugin's backend
+resources outlive a bare stop(). This orchestrator fills the first two
+generically (service-id capture + live dock-pane mount/unmount) and relies on
+each plugin's own stop() for the third. The menu bar is rebuilt on each
+enable/disable so plugin-contributed submenus appear/disappear live.
 """
+
+import importlib
 
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str
 
-from microdrop_application.consts import (
-    MAGNET_BACKEND_GROUP, MAGNET_UI_GROUP,
-    PERIPHERAL_BACKEND_ENABLED_KEY, PERIPHERAL_UI_ENABLED_KEY,
-)
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from microdrop_application.plugins import paths
+from microdrop_application.plugins.manifest import load_manifest, ManifestError
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.tasks_runtime_helpers import (
     add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
-)
-from peripheral_controller.consts import (
-    START_DEVICE_MONITORING as START_DEVICE_MONITORING_PERIPHERAL,
 )
 from logger.logger_service import get_logger
 
@@ -42,59 +37,78 @@ class PluginGroup(HasTraits):
     """One named, ordered set of plugins that load/unload together."""
 
     name = Str()
-    #: Plugin classes in load order (unloaded in reverse).
-    plugin_factories = List()
+    #: User-visible label (shown in the Manage Plugins dialog).
+    label = Str()
+    #: Plugin classes as dotted "module:Class" specs, in load order (unloaded
+    #: in reverse). Resolved to classes lazily at enable time.
+    plugin_specs = List(Str)
     #: Live plugin instances while loaded (empty otherwise).
     instances = List()
     #: Service-registry ids registered while the group loaded, captured by a
-    #: before/after snapshot so disable() can unregister exactly them
-    #: (CorePlugin registers runtime ServiceOffers but discards their ids).
+    #: before/after snapshot so disable() can unregister exactly them.
     service_ids = List()
-    #: Ids of dock panes mounted live for this group, so disable() can remove
-    #: the same panes it added.
+    #: Ids of dock panes mounted live for this group.
     dock_pane_ids = List(Str)
     loaded = Bool(False)
     #: App-globals flag persisting this group's enabled state across runs.
     enabled_key = Str()
     #: Optional topic published (empty message) right after a successful
-    #: enable — e.g. the backend group kicks off the magnet connection search.
+    #: enable — e.g. the backend group kicks off the magnet search.
     post_enable_publish_topic = Str()
 
 
 class PluginGroupManager(HasTraits):
-    """Loads/unloads named plugin groups against a live application.
-
-    Offered as an Envisage service by MicrodropPlugin; the Tools -> Peripherals
-    toggle and the launch-restore hook fetch it via get_service and call
-    enable/disable.
-    """
+    """Discovers, loads, and unloads named plugin groups against a live
+    application. Offered as an Envisage service by MicrodropPlugin; the
+    Install/Manage Plugins actions and the launch-restore hook use it."""
 
     groups = Dict(Str, Instance(PluginGroup))
 
     def _groups_default(self):
-        # Importing plugin classes from a loader module is sanctioned here —
-        # examples/plugin_consts.py already does exactly this.
-        from peripheral_controller.plugin import PeripheralControllerPlugin
-        from peripheral_protocol_controls.plugin import (
-            PeripheralProtocolControlsPlugin,
-        )
-        from peripherals_ui.plugin import PeripheralUiPlugin
+        return self._discover_groups()
 
-        ui = PluginGroup(
-            name=MAGNET_UI_GROUP,
-            plugin_factories=[
-                PeripheralProtocolControlsPlugin,  # magnet protocol column
-                PeripheralUiPlugin,                # dock pane + status icon + tools submenu
-            ],
-            enabled_key=PERIPHERAL_UI_ENABLED_KEY,
-        )
-        backend = PluginGroup(
-            name=MAGNET_BACKEND_GROUP,
-            plugin_factories=[PeripheralControllerPlugin],
-            enabled_key=PERIPHERAL_BACKEND_ENABLED_KEY,
-            post_enable_publish_topic=START_DEVICE_MONITORING_PERIPHERAL,
-        )
-        return {ui.name: ui, backend.name: backend}
+    # --- discovery ---------------------------------------------------
+
+    def _discover_groups(self):
+        """Build the group map from every manifest in default_plugins/ and
+        installed_plugins/. Reads JSON only (no plugin imports), so a broken
+        installed plugin can't break discovery."""
+        groups = {}
+        for manifest_dir in paths.iter_manifest_dirs():
+            manifest_path = manifest_dir / paths.MANIFEST_FILENAME
+            try:
+                manifest = load_manifest(manifest_path)
+            except ManifestError:
+                logger.exception(f"skipping invalid manifest at {manifest_path}")
+                continue
+            self._add_manifest_groups(manifest, into=groups)
+        return groups
+
+    def _add_manifest_groups(self, manifest, into=None):
+        """Create a PluginGroup per spec in ``manifest`` and put it in ``into``
+        (defaults to self.groups). Last writer wins on a name collision."""
+        target = self.groups if into is None else into
+        for spec in manifest.groups:
+            target[spec.name] = PluginGroup(
+                name=spec.name,
+                label=spec.label,
+                plugin_specs=list(spec.plugins),
+                enabled_key=spec.enabled_key,
+                post_enable_publish_topic=spec.post_enable_publish_topic,
+            )
+
+    def register_manifest(self, manifest):
+        """Register a freshly-installed manifest's groups at runtime. Refuses
+        (raises) if a colliding group name is currently loaded — the caller
+        should ask the user to disable it first."""
+        for spec in manifest.groups:
+            existing = self.groups.get(spec.name)
+            if existing is not None and existing.loaded:
+                raise RuntimeError(
+                    f"group '{spec.name}' is currently enabled; disable it "
+                    f"before reinstalling"
+                )
+        self._add_manifest_groups(manifest)
 
     # --- public API --------------------------------------------------
 
@@ -104,24 +118,24 @@ class PluginGroupManager(HasTraits):
 
     def apply(self, task, desired):
         """Reconcile group load state to ``desired`` ({group_name: bool}).
-
-        Enables run backend-before-UI (services/topics exist before the column/
-        UI consume them); disables run UI-before-backend (UI dies before the
-        backend it observes). Only groups whose desired state differs from
-        their current state are touched."""
-        for group_name in (MAGNET_BACKEND_GROUP, MAGNET_UI_GROUP):
+        Enables newly-on groups in registration order; disables newly-off
+        groups in reverse. Only groups whose desired state differs are
+        touched."""
+        names = list(self.groups.keys())
+        for group_name in names:
             if desired.get(group_name) and not self.is_loaded(group_name):
                 self.enable(task, group_name)
-        for group_name in (MAGNET_UI_GROUP, MAGNET_BACKEND_GROUP):
+        for group_name in reversed(names):
             if (group_name in desired
                     and not desired[group_name]
                     and self.is_loaded(group_name)):
                 self.disable(task, group_name)
 
     def enable(self, task, group_name):
-        """Add + start every plugin in the group (in order), capture the
-        services they register, and mount their dock panes onto the live
-        window. Idempotent — a no-op if the group is already loaded."""
+        """Resolve the group's plugin specs, add + start them, capture the
+        services they register, mount their dock panes, rebuild the menu bar,
+        and run the optional post-enable publish. Idempotent — a no-op if the
+        group is already loaded."""
         group = self.groups.get(group_name)
         if group is None:
             logger.warning(f"enable: unknown plugin group '{group_name}'")
@@ -130,11 +144,20 @@ class PluginGroupManager(HasTraits):
             logger.info(f"enable: group '{group_name}' already loaded")
             return
 
+        try:
+            factories = self._resolve_factories(group)
+        except Exception:
+            logger.exception(
+                f"enable: could not import plugin classes for '{group_name}'; "
+                f"group not loaded"
+            )
+            return
+
         application = task.window.application
         registry = application.service_registry
         before = set(registry._services.keys())
 
-        for factory in group.plugin_factories:
+        for factory in factories:
             try:
                 plugin = factory()
                 application.add_plugin(plugin)
@@ -175,9 +198,8 @@ class PluginGroupManager(HasTraits):
 
     def disable(self, task, group_name):
         """Reverse of enable: unmount dock panes, stop + remove every plugin
-        (reverse order), and unregister the services captured at load. The
-        protocol column withdraws itself via its extension-point contribution.
-        Idempotent — a no-op if the group isn't loaded."""
+        (reverse order), unregister the captured services, rebuild the menu
+        bar. Idempotent — a no-op if the group isn't loaded."""
         group = self.groups.get(group_name)
         if group is None:
             logger.warning(f"disable: unknown plugin group '{group_name}'")
@@ -229,6 +251,16 @@ class PluginGroupManager(HasTraits):
         logger.info(f"disable: group '{group_name}' unloaded")
 
     # --- helpers -----------------------------------------------------
+
+    def _resolve_factories(self, group):
+        """Import each "module:Class" spec to a plugin class. Raises on the
+        first failure so the caller aborts the enable (no partial load)."""
+        factories = []
+        for spec in group.plugin_specs:
+            module_path, _, class_name = spec.partition(":")
+            module = importlib.import_module(module_path)
+            factories.append(getattr(module, class_name))
+        return factories
 
     def _mount_dock_panes(self, task, group):
         """Mount every dock pane the group's started plugins contribute for
