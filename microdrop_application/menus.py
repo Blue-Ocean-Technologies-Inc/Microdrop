@@ -45,7 +45,7 @@ class ManagePluginsAction(TaskAction):
     name = "&Manage Plugins…"
 
     def perform(self, event):
-        task = self.task
+        task = event.task
         if task is None:
             logger.error("Manage Plugins: no task available")
             return
@@ -80,7 +80,7 @@ class InstallPluginAction(TaskAction):
     name = "&Install Plugin…"
 
     def perform(self, event):
-        task = self.task
+        task = event.task
         if task is None:
             logger.error("Install Plugin: no task available")
             return
