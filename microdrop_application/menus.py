@@ -135,3 +135,55 @@ class InstallPluginAction(TaskAction):
             message=f"Installed <b>{manifest.label}</b>.<br><br>"
                     f"Enable it from Tools → Manage Plugins.",
         )
+
+
+class UninstallPluginAction(TaskAction):
+    """Tools-menu action: remove a user-installed plugin (its files, groups,
+    modules, and enabled flags), auto-disabling any loaded group first. Bundled
+    plugins are not listed."""
+
+    id = "uninstall_plugin_action"
+    name = "&Uninstall Plugin…"
+
+    def perform(self, event):
+        task = self.task
+        if task is None:
+            logger.error("Uninstall Plugin: no task available")
+            return
+        from microdrop_application.dialogs.pyface_wrapper import (
+            confirm, information, error as error_dialog, YES, escape_html_multiline,
+        )
+        from microdrop_application.plugin_group_manager import PluginGroupManager
+        from microdrop_application.plugins import installer
+        from microdrop_application.plugins_uninstall_dialog import UninstallPluginModel
+
+        manager = task.window.application.get_service(PluginGroupManager)
+        if manager is None:
+            logger.error("Uninstall Plugin: PluginGroupManager service not found")
+            return
+
+        installed = manager.installed_plugins()
+        if not installed:
+            information(parent=None, title="Uninstall Plugin",
+                       message="No user-installed plugins to uninstall.")
+            return
+
+        model = UninstallPluginModel(installed)
+        ui = model.edit_traits(kind="livemodal")
+        if not ui.result:
+            return
+        name = model.selected
+        label = {n: l for n, l, _d, _g in installed}.get(name, name)
+        safe_label = escape_html_multiline(label)
+        if confirm(parent=None,
+                   message=f"Uninstall <b>{safe_label}</b>?<br><br>"
+                           f"This deletes its installed files.",
+                   title="Uninstall Plugin?", cancel=False) != YES:
+            return
+        try:
+            installer.uninstall_plugin(task, manager, name)
+        except Exception as e:
+            error_dialog(parent=None, title="Uninstall failed", message=str(e))
+            return
+        information(parent=None, title="Plugin uninstalled",
+                   message=f"Uninstalled <b>{safe_label}</b>.")

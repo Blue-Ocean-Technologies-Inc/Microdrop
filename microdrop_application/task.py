@@ -25,7 +25,10 @@ from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
-from .menus import AdvancedModeAction, ManagePluginsAction, InstallPluginAction
+from .menus import (
+    AdvancedModeAction, ManagePluginsAction, InstallPluginAction,
+    UninstallPluginAction,
+)
 from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
@@ -81,7 +84,8 @@ class MicrodropTask(Task):
 
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
-        SMenu(InstallPluginAction(), ManagePluginsAction(), id="Tools", name="&Tools"),
+        SMenu(InstallPluginAction(), UninstallPluginAction(), ManagePluginsAction(),
+              id="Tools", name="&Tools"),
 
         SMenu(TaskToggleGroup(), id="View", name="&View"),
 
