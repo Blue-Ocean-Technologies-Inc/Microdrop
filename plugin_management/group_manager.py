@@ -2,7 +2,7 @@
 
 Groups are discovered from microdrop_plugin.json manifests — bundled ones in
 the repo's default_plugins/ and user-installed ones under the app-data
-installed_plugins/ dir (see microdrop_application.plugins). Each group names
+installed_plugins/ dir (see plugin_management). Each group names
 its plugin classes as dotted "module:Class" specs, resolved lazily at enable
 time so a broken/installed plugin never breaks startup or discovery.
 
@@ -21,8 +21,8 @@ from pathlib import Path
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-from microdrop_application.plugins import paths
-from microdrop_application.plugins.manifest import load_manifest, ManifestError
+from plugin_management import paths
+from plugin_management.manifest import load_manifest, ManifestError
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.tasks_runtime_helpers import (
     add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,

@@ -1,7 +1,7 @@
 # Standard library imports.
 from pathlib import Path
 
-from traits.api import Any, List
+from traits.api import List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 
 # Enthought library imports.
@@ -43,10 +43,6 @@ class MicrodropPlugin(Plugin):
     preferences = List(contributes_to=PREFERENCES)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
-
-    #: Cached singleton plugin-group hot load/unload orchestrator (lazily
-    #: built by the service factory below).
-    _plugin_group_manager = Any()
 
     ###########################################################################
     # Protected interface.
@@ -92,21 +88,7 @@ class MicrodropPlugin(Plugin):
             factory=self._create_preferences_dialog_service,
         )
 
-        plugin_group_manager_service_offer = ServiceOffer(
-            protocol="microdrop_application.plugin_group_manager.PluginGroupManager",
-            factory=self._create_plugin_group_manager_service,
-        )
-
-        return [preferences_dialog_service_offer, plugin_group_manager_service_offer]
-
-    def _create_plugin_group_manager_service(self):
-        """Factory for the runtime plugin-group hot load/unload orchestrator.
-        Cached on the plugin so every lookup shares one manager (and thus the
-        loaded-group state), independent of envisage's own service caching."""
-        if self._plugin_group_manager is None:
-            from .plugin_group_manager import PluginGroupManager
-            self._plugin_group_manager = PluginGroupManager()
-        return self._plugin_group_manager
+        return [preferences_dialog_service_offer]
 
     def _create_preferences_dialog_service(self):
         """Factory method for preferences dialog service."""

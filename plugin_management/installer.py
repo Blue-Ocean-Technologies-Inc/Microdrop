@@ -15,8 +15,8 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from microdrop_application.plugins import paths
-from microdrop_application.plugins.manifest import load_manifest, ManifestError
+from plugin_management import paths
+from plugin_management.manifest import load_manifest, ManifestError
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

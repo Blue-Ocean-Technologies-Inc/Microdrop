@@ -25,10 +25,7 @@ from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 
 from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
-from .menus import (
-    AdvancedModeAction, ManagePluginsAction, InstallPluginAction,
-    UninstallPluginAction,
-)
+from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
 
 logger = get_logger(__name__)
@@ -84,8 +81,7 @@ class MicrodropTask(Task):
 
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
-        SMenu(InstallPluginAction(), UninstallPluginAction(), ManagePluginsAction(),
-              id="Tools", name="&Tools"),
+        SMenu(id="Tools", name="&Tools"),
 
         SMenu(TaskToggleGroup(), id="View", name="&View"),
 
@@ -109,31 +105,6 @@ class MicrodropTask(Task):
         if self.window.status_bar_manager is None:
             logger.info("Microdrop task: No status bar manager created: Adding now...")
             self._add_status_bar_to_window()
-        self._restore_enabled_plugin_groups()
-
-    def _restore_enabled_plugin_groups(self):
-        """On launch, make installed plugins importable, then re-enable every
-        discovered plugin group whose persisted flag is set — so the Manage
-        Plugins checkboxes match what's actually loaded. Registration order
-        (bundled first; within the magnet manifest, backend before UI)."""
-        from microdrop_application.plugins import paths
-        from microdrop_application.helpers import get_microdrop_redis_globals_manager
-        from .plugin_group_manager import PluginGroupManager
-
-        paths.ensure_on_sys_path()
-        manager = self.window.application.get_service(PluginGroupManager)
-        if manager is None:
-            logger.warning("plugin restore: PluginGroupManager service not found")
-            return
-        app_globals = get_microdrop_redis_globals_manager()
-        for group_name, group in list(manager.groups.items()):
-            if (group.enabled_key
-                    and app_globals.get(group.enabled_key, False)
-                    and not manager.is_loaded(group_name)):
-                logger.info(
-                    f"Restoring plugin group '{group_name}' from persisted flag"
-                )
-                manager.enable(self, group_name)
 
     def _add_status_bar_to_window(self):
         logger.info(f"Adding status bar to Microdrop Task window.")

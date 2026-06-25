@@ -7,6 +7,7 @@ from manual_controls.plugin import ManualControlsPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
+from plugin_management.plugin import PluginManagementPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
@@ -74,6 +75,7 @@ MAGNET_BACKEND_PLUGINS = [
 
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
+    PluginManagementPlugin,
     TasksPlugin,
     LoggerUIPlugin,
     DeviceViewerPlugin,

@@ -8,7 +8,7 @@ from traits.etsconfig.api import ETSConfig
 
 # src/ — the dir microdrop_runner_setup puts on sys.path. Bundled default
 # plugin manifests live under default_plugins/ beside the source packages.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 MANIFEST_FILENAME = "microdrop_plugin.json"
 
