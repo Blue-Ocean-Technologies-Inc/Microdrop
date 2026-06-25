@@ -8,7 +8,9 @@ is extracted, and an injected ``confirm`` callback gates the install on
 informed user consent.
 """
 
+import os
 import shutil
+import sys
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -28,6 +30,17 @@ class InstallError(Exception):
 
 class InstallCancelled(Exception):
     """The user declined the install at the consent prompt."""
+
+
+def _purge_package_modules(packages):
+    """Drop already-imported modules for the given top-level packages from
+    sys.modules, so a reinstall's freshly-extracted source is imported on the
+    next enable rather than a cached older copy (e.g. a plugin enabled then
+    disabled earlier this session)."""
+    for pkg in packages:
+        for name in [m for m in sys.modules
+                     if m == pkg or m.startswith(pkg + ".")]:
+            del sys.modules[name]
 
 
 def _read_manifest_from_zip(zf):
@@ -99,15 +112,27 @@ def install_from_zip(zip_path, manager, *, confirm=None, dest_root=None):
         # Extract to a staging dir first so a mid-extract failure can't destroy a
         # previously-installed copy; only swap it in once extraction succeeds.
         staging = Path(tempfile.mkdtemp(dir=root, prefix=f".{manifest.name}.tmp-"))
+        backup = None
         try:
             zf.extractall(staging, members=members)
+            # Rename any prior install aside (not rmtree) so a failed swap can
+            # restore it — on Windows replace() can fail on a locked file, and
+            # rmtree-then-replace would otherwise leave no install at all.
             if target.exists():
-                shutil.rmtree(target)
+                backup = target.with_name(f".{manifest.name}.bak-{os.getpid()}")
+                if backup.exists():
+                    shutil.rmtree(backup)
+                target.replace(backup)
             staging.replace(target)
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
+            if backup is not None and not target.exists():
+                backup.replace(target)          # restore the prior install
             raise
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
 
+    _purge_package_modules(manifest.packages)
     paths.ensure_on_sys_path()
     manager.register_manifest(manifest)
     logger.info(f"installed plugin '{manifest.name}' to {target}")

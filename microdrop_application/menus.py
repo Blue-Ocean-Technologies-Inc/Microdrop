@@ -86,6 +86,7 @@ class InstallPluginAction(TaskAction):
             return
         from microdrop_application.dialogs.pyface_wrapper import (
             file_dialog, confirm, information, error as error_dialog, YES,
+            escape_html_multiline,
         )
         from microdrop_application.plugin_group_manager import PluginGroupManager
         from microdrop_application.plugins import installer
@@ -104,11 +105,14 @@ class InstallPluginAction(TaskAction):
 
         def _consent(manifest):
             classes = "<br>".join(
-                f"&nbsp;&nbsp;{p}" for g in manifest.groups for p in g.plugins
+                f"&nbsp;&nbsp;{escape_html_multiline(p)}"
+                for g in manifest.groups for p in g.plugins
             )
-            pkgs = ", ".join(manifest.packages)
+            pkgs = ", ".join(escape_html_multiline(p) for p in manifest.packages)
+            label = escape_html_multiline(manifest.label)
+            version = escape_html_multiline(manifest.version or "?")
             body = (
-                f"<b>{manifest.label}</b> (v{manifest.version or '?'})<br><br>"
+                f"<b>{label}</b> (v{version})<br><br>"
                 f"Packages: {pkgs}<br>"
                 f"Plugin classes that will become importable:<br>{classes}<br><br>"
                 f"<b>Warning:</b> installing runs third-party code that has not "
