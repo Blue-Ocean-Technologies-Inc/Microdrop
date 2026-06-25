@@ -10,6 +10,7 @@ from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
+from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
@@ -97,6 +98,7 @@ OPENDROP_BACKEND_PLUGINS = [
 
 DROPBOT_BACKEND_PLUGINS = [
     PeripheralControllerPlugin,
+    HeaterControllerPlugin,
     DropbotControllerPlugin
 ]
 
