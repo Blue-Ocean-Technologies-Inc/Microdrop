@@ -9,6 +9,7 @@ informed user consent.
 """
 
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -48,11 +49,13 @@ def _validate_entries(zf, manifest):
     members = []
     for info in zf.infolist():
         name = info.filename
-        if name.endswith("/"):
-            continue                                  # dir entry; created implicitly
         pure = PurePosixPath(name)
+        # Zip-slip checks apply to EVERY entry (including directory entries),
+        # so a crafted '../' or absolute entry is rejected loudly, not skipped.
         if pure.is_absolute() or ".." in pure.parts:
             raise InstallError(f"unsafe path in archive: {name!r}")
+        if name.endswith("/"):
+            continue                                  # dir entry; created implicitly
         if ((info.external_attr >> 16) & 0xF000) == _S_IFLNK:
             raise InstallError(f"symlink entries are not allowed: {name!r}")
         top = pure.parts[0] if pure.parts else ""
@@ -91,11 +94,19 @@ def install_from_zip(zip_path, manager, *, confirm=None, dest_root=None):
                 )
 
         root = Path(dest_root) if dest_root is not None else paths.installed_plugins_dir()
+        root.mkdir(parents=True, exist_ok=True)
         target = root / manifest.name
-        if target.exists():
-            shutil.rmtree(target)
-        target.mkdir(parents=True, exist_ok=True)
-        zf.extractall(target, members=members)
+        # Extract to a staging dir first so a mid-extract failure can't destroy a
+        # previously-installed copy; only swap it in once extraction succeeds.
+        staging = Path(tempfile.mkdtemp(dir=root, prefix=f".{manifest.name}.tmp-"))
+        try:
+            zf.extractall(staging, members=members)
+            if target.exists():
+                shutil.rmtree(target)
+            staging.replace(target)
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
 
     paths.ensure_on_sys_path()
     manager.register_manifest(manifest)
