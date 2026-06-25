@@ -134,6 +134,40 @@ def install_from_zip(zip_path, manager, *, confirm=None, dest_root=None):
 
     _purge_package_modules(manifest.packages)
     paths.ensure_on_sys_path()
-    manager.register_manifest(manifest)
+    manager.register_manifest(manifest, str(target))
     logger.info(f"installed plugin '{manifest.name}' to {target}")
     return manifest
+
+
+def uninstall_plugin(task, manager, manifest_name):
+    """Remove a user-installed plugin: auto-disable any of its loaded groups,
+    purge its modules, deregister its groups (clearing their enabled flags),
+    and delete its installed_plugins/<name>/ directory.
+
+    Raises InstallError if ``manifest_name`` isn't a user-installed plugin
+    (bundled or unknown)."""
+    info = manager.installed_plugin(manifest_name)
+    if info is None:
+        raise InstallError(f"'{manifest_name}' is not an installed plugin")
+    _name, _label, source_dir, group_names = info
+
+    # Read the declared packages (for the sys.modules purge) before removal.
+    try:
+        manifest = load_manifest(Path(source_dir) / paths.MANIFEST_FILENAME)
+        packages = manifest.packages
+    except Exception:
+        packages = []
+
+    # Auto-disable any loaded group (full hot-unload) before deleting files.
+    for group_name in group_names:
+        if manager.is_loaded(group_name):
+            manager.disable(task, group_name)
+
+    # Purge first so module/.pyd handles are released before rmtree (Windows).
+    _purge_package_modules(packages)
+    manager.deregister_plugin(manifest_name)
+
+    source = Path(source_dir)
+    if source.exists():
+        shutil.rmtree(source)
+    logger.info(f"uninstalled plugin '{manifest_name}' from {source_dir}")
