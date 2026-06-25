@@ -33,6 +33,31 @@ installs (archives are pure-Python source whose deps are already in the env), re
 distributed backend (unchanged limitation), sandboxing imported code (not feasible
 in-process).
 
+## Considered alternative: envisage's plugin managers
+
+Envisage ships `PackagePluginManager` (adds directories to `sys.path` and scans packages for
+`*_plugin.py`/`plugins.py`) and `EggPluginManager` (egg entry points). **Both are
+deprecated**, with the guidance: *"install plugin-containing packages into site-packages and
+advertise the plugins via entry points."* We evaluated and did **not** adopt that path:
+
+- MicroDrop uses **no** `PluginManager` — plugins are instantiated explicitly in
+  `plugin_consts.py` and hot-loaded via `application.add_plugin`. The deprecation targets
+  discovery managers we don't use.
+- The deprecated `PackagePluginManager` *discovers by importing every `*_plugin.py` and
+  guessing `XXXPlugin`*. Our manifest names `module:Class` **explicitly** and imports lazily
+  only on enable — it sidesteps the very scan-and-import anti-pattern the deprecation warns
+  about.
+- The recommended "entry points + site-packages" path means `pip install`-ing wheels into a
+  **pixi-managed env** at runtime (pixi owns that env; ad-hoc installs are clobbered on
+  `pixi install` and need a per-plugin build toolchain). Entry points also only exist for
+  installed *distributions* (`*.dist-info`), so a loose extracted package on `sys.path` has
+  none — incompatible with the "drop-in a file" UX.
+- Entry points don't model our **grouping** (ui vs backend, load order, enable-key,
+  post-enable search), so a manifest is needed regardless.
+
+Conclusion: the manifest + zip-to-plugin-dir model fits the pixi env and the share-a-file UX,
+and improves on the deprecated directory pattern rather than reusing it.
+
 ## Decisions (locked)
 
 - **Archive = a zip** with extension **`.microdrop_plugin`** and a **`microdrop_plugin.json`**
