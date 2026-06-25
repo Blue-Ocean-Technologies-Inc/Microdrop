@@ -11,9 +11,7 @@ Never invoke the mutating helpers outside a real install / a throwaway test
 project.
 """
 
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from logger.logger_service import get_logger
