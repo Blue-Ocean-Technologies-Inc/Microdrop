@@ -1,21 +1,17 @@
-"""Parse and validate a microdrop_plugin.json manifest.
+"""Parse and validate a plugin manifest.
 
-The manifest (at the root of a .microdrop_plugin archive, or in a
-default_plugins/<name>/ directory) declares the Python packages an archive
-carries and the plugin GROUP(s) they form, so PluginGroupManager can register
-and hot load/unload them. Pure inert data — no Traits, no Qt.
+Declares the plugin GROUP(s) a package forms so PluginGroupManager can
+register and hot load/unload them. Pure inert data — no Traits, no Qt.
 """
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Union
+from typing import List
 
 SCHEMA_VERSION = 1
 
 
 class ManifestError(ValueError):
-    """A microdrop_plugin.json is missing, malformed, or fails validation."""
+    """A plugin manifest is missing, malformed, or fails validation."""
 
 
 @dataclass
@@ -35,23 +31,6 @@ class PluginManifest:
     version: str
     packages: List[str]
     groups: List[PluginGroupSpec]
-
-
-def load_manifest(source: Union[str, bytes, Path]) -> PluginManifest:
-    """Parse + validate a manifest from a path, JSON string, or raw bytes.
-
-    Raises ManifestError with a clear message on any problem."""
-    try:
-        if isinstance(source, (str, Path)) and Path(str(source)).exists():
-            text = Path(source).read_text(encoding="utf-8")
-        elif isinstance(source, bytes):
-            text = source.decode("utf-8")
-        else:
-            text = str(source)
-        data = json.loads(text)
-    except (OSError, ValueError, UnicodeDecodeError) as e:
-        raise ManifestError(f"could not read manifest JSON: {e}") from e
-    return manifest_from_dict(data)
 
 
 def manifest_from_dict(data) -> PluginManifest:

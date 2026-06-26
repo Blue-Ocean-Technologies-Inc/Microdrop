@@ -8,9 +8,14 @@ environment mid-run, so we re-exec the same entry point under
 
 import os
 import sys
+from pathlib import Path
 
-from plugin_management.pixi_env import PLUGINS_ENV, WORKSPACE_DIR
 from logger.logger_service import get_logger
+
+#: The pixi workspace root (microdrop-py/, parent of src/) — has pyproject.toml.
+WORKSPACE_DIR = Path(__file__).resolve().parents[2]
+
+PLUGINS_ENV = "microdrop-plugins"
 
 logger = get_logger(__name__)
 

@@ -136,12 +136,9 @@ class PluginManagementPlugin(Plugin):
             self._restore_enabled_groups(window)
 
     def _restore_enabled_groups(self, window):
-        """Make installed plugins importable, then re-enable every discovered
-        group whose persisted flag is set (registration order). So the Manage
-        Plugins checkboxes match what's actually loaded after a relaunch."""
-        from . import paths
-
-        paths.ensure_on_sys_path()
+        """Re-enable every discovered group whose persisted flag is set
+        (registration order). Conda-installed plugins are already importable
+        from the environment; no sys.path manipulation is needed."""
         manager = self.application.get_service(IPluginGroupManager)
         if manager is None:
             logger.warning("plugin restore: PluginGroupManager service not found")
