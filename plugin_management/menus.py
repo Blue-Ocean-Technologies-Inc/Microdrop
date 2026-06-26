@@ -98,8 +98,8 @@ class InstallPluginAction(TaskAction):
                            f"available after a relaunch.<br><br>"
                            f"Relaunch MicroDrop now?",
                    cancel=False) == YES:
-            from plugin_management.relaunch import relaunch_into_plugins_env
-            relaunch_into_plugins_env(task.window.application)
+            from plugin_management.relaunch import relaunch_app
+            relaunch_app(task.window.application)
         else:
             information(parent=None, title="Relaunch later",
                        message=f"<b>{safe}</b> will be available the next time "
@@ -162,8 +162,8 @@ class UninstallPluginAction(TaskAction):
                    message=f"Uninstalled <b>{safe_label}</b>.<br><br>Relaunch "
                            f"MicroDrop now to finish removing it?",
                    cancel=False) == YES:
-            from plugin_management.relaunch import relaunch_into_plugins_env
-            relaunch_into_plugins_env(task.window.application)
+            from plugin_management.relaunch import relaunch_app
+            relaunch_app(task.window.application)
         else:
             information(parent=None, title="Relaunch later",
                        message=f"<b>{safe_label}</b> has been uninstalled and will "
